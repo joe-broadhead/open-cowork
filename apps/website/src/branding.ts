@@ -13,6 +13,15 @@ import {
 } from '@open-cowork/shared'
 import { escapeHtml } from './html-utils.ts'
 
+// Branding token values are emitted into a CSS declaration (`--token: <value>;`).
+// Strip any character that could terminate the value/declaration or open a new
+// rule, comment, string, or url() — a CSS-context sanitiser, since the HTML
+// escaper used elsewhere is wrong for this context. This is defence-in-depth on
+// top of the upstream charset validation in `publicBrandingCssToken`.
+function cssDeclarationSafe(value: string) {
+  return value.replace(/[;{}<>"'`\\@]/g, '')
+}
+
 export const DEFAULT_WEBSITE_PUBLIC_BRANDING: PublicBrandingConfig = {
   productName: 'Open Cowork Cloud',
   shortName: 'OC',
@@ -264,7 +273,7 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
   }
   return Object.entries(tokens)
     .filter(([, value]) => typeof value === 'string' && value.trim())
-    .map(([key, value]) => `      ${key}: ${escapeHtml(value || '')};`)
+    .map(([key, value]) => `      ${key}: ${cssDeclarationSafe(value || '')};`)
     .join('\n')
 }
 

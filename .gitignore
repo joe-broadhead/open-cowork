@@ -7,6 +7,7 @@ out/
 coverage/
 *.tsbuildinfo
 .open-cowork-test/
+.open-cowork-cloud/
 autoresearch-runs/
 index.html
 

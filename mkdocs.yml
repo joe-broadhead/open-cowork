@@ -157,6 +157,7 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
+      - Claw-Like Agent Operations: claw-like-agents.md
       - Contributing: contributing.md
       - First Contribution: first-contribution.md
 

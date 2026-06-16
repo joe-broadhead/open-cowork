@@ -1,0 +1,69 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  approvalsSurfaceCss,
+  artifactsSurfaceCss,
+  channelsSurfaceCss,
+  knowledgeGraphCss,
+  projectsSurfaceCss,
+  studioSurfaceStyles,
+  wikiSurfaceCss,
+} from '../packages/ui/src/surface-styles.ts'
+import { extractCssRules } from './helpers/css-rules.ts'
+
+// A CSS regression net for the single-sourced studio surfaces. The desktop
+// renderer injects `studioSurfaceStyles()` (the aggregate); Cloud Web embeds the
+// same individual `*SurfaceCss()` functions in its stylesheet. These tests prove
+// the two surfaces stay byte-identical and that the shared CSS parses into a
+// well-formed rule set — so a future CSS reorganization (e.g. single-sourcing
+// Channels/Projects, which splits grouped rules) can be shown output-preserving
+// by diffing the extracted rule maps before and after.
+
+const SURFACES = [
+  { name: 'artifacts', css: artifactsSurfaceCss() },
+  { name: 'approvals', css: approvalsSurfaceCss() },
+  { name: 'wiki', css: wikiSurfaceCss() },
+  { name: 'graph', css: knowledgeGraphCss() },
+  { name: 'channels', css: channelsSurfaceCss() },
+  { name: 'projects', css: projectsSurfaceCss() },
+] as const
+
+test('each shared surface stylesheet parses into well-formed, non-empty rules', () => {
+  for (const surface of SURFACES) {
+    const rules = extractCssRules(surface.css)
+    assert.ok(rules.size > 0, `${surface.name} surface should contribute CSS rules`)
+    for (const [selector, declarations] of rules) {
+      assert.ok(selector.trim().length > 0, `${surface.name}: encountered an empty selector`)
+      assert.ok(
+        declarations.length > 0 || selector.startsWith('@'),
+        `${surface.name}: rule "${selector}" parsed with no declarations (malformed CSS?)`,
+      )
+    }
+  }
+})
+
+test('studioSurfaceStyles embeds every shared surface verbatim — desktop⇄web CSS parity', () => {
+  // Desktop ships `studioSurfaceStyles()`; Cloud Web ships the same individual
+  // functions. Proving the aggregate contains each surface verbatim pins the two
+  // surfaces to byte-identical shared CSS (and catches a surface being dropped
+  // from the aggregate, or the aggregate drifting from the parts).
+  const aggregate = studioSurfaceStyles()
+  for (const surface of SURFACES) {
+    assert.ok(
+      aggregate.includes(surface.css),
+      `studioSurfaceStyles() must contain the ${surface.name} surface CSS that Cloud Web embeds`,
+    )
+  }
+})
+
+test('the extracted rule map round-trips selector grouping and media nesting', () => {
+  // Sanity-check the extractor on a known shape so the regression net is trustworthy.
+  const rules = extractCssRules(`
+    /* comment */
+    .a, .b { color: red; gap: 2px }
+    @media (max-width: 10px) { .a { color: blue } }
+  `)
+  assert.equal(rules.get('.a'), 'color: red; gap: 2px')
+  assert.equal(rules.get('.b'), 'color: red; gap: 2px')
+  assert.equal(rules.get('@media (max-width: 10px) .a'), 'color: blue')
+})

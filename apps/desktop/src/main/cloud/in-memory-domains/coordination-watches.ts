@@ -1,3 +1,7 @@
+import {
+  clone,
+  key,
+} from './store-helpers.ts'
 import type { CoordinationWatch } from '@open-cowork/shared'
 import type {
   CreateCloudCoordinationWatchInput,
@@ -57,10 +61,3 @@ export class InMemoryCoordinationWatchesDomain {
   }
 }
 
-function key(...parts: string[]) {
-  return parts.join('\0')
-}
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}

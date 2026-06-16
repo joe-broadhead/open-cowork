@@ -6,6 +6,12 @@
   "description": "Open Cowork Cloud hosted website and web workbench",
   "main": "dist/render.js",
   "types": "dist/render.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/render.ts",
+      "default": "./src/render.ts"
+    }
+  },
   "scripts": {
     "build": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && tsc --noEmit && vite build && node ../../scripts/minify-cloud-react-client.mjs",
     "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && tsc --noEmit",

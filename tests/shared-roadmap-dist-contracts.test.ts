@@ -14,6 +14,9 @@ import {
 } from '../packages/shared/dist/app-config.js'
 import {
   CAPABILITY_BUNDLE_FORMAT,
+  type CapabilityBundleManifest,
+} from '../packages/shared/dist/capabilities.js'
+import {
   applyCapabilityBundleInstall,
   applyCapabilityBundleUninstall,
   applyCapabilityBundleUpdate,
@@ -23,8 +26,7 @@ import {
   planCapabilityBundleUninstall,
   planCapabilityBundleUpdate,
   validateCapabilityBundleRuntimeSupport,
-  type CapabilityBundleManifest,
-} from '../packages/shared/dist/capabilities.js'
+} from '../apps/desktop/src/main/capability-bundle-engine.ts'
 import {
   cloudGatewayRegistrationAllowsEdgeWork,
   cloudGatewayRegistrationContract,

@@ -145,7 +145,7 @@ export function cloudWebsiteSharedUiStyles() {
     }
     .ui-diff-view__title p {
       margin: var(--space-1) 0 0;
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -188,7 +188,7 @@ export function cloudWebsiteSharedUiStyles() {
     }
     .ui-diff-view__file-meta {
       justify-content: flex-end;
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -200,7 +200,7 @@ export function cloudWebsiteSharedUiStyles() {
     }
     .ui-diff-view__estimate,
     .ui-diff-view__empty {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }`

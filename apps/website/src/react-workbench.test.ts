@@ -12,6 +12,7 @@ import {
   CloudThreadList,
 } from './react-workbench.ts'
 import { CLOUD_DELIVERABLE_APPROVAL_COPY, CloudConversationMeta } from './react-workbench-context.ts'
+import { canManageCloudKnowledge, cloudKnowledgeAuthorityRole, knowledgeCaptureSpace } from './react-workbench-knowledge-state.ts'
 import { makeSession, makeSessionView } from './browser-test-fixtures.ts'
 
 test('React workbench components render cloud-safe thread, timeline, runtime, and artifact markup', () => {
@@ -199,4 +200,41 @@ test('React workbench marks only post-prompt assistant messages as streaming', (
   const streamingHtml = renderToStaticMarkup(createElement(CloudChatTimeline, { view }))
   assert.match(streamingHtml, /data-streaming="true"/)
   assert.match(streamingHtml, /Streaming answer/)
+})
+
+test('React Cloud Knowledge capture ignores read-only spaces', () => {
+  assert.equal(knowledgeCaptureSpace([
+    {
+      id: 'space-reader',
+      name: 'Reader Space',
+      visibility: 'company',
+      role: 'Reader',
+    },
+  ]), null)
+
+  assert.equal(knowledgeCaptureSpace([
+    {
+      id: 'space-reader',
+      name: 'Reader Space',
+      visibility: 'company',
+      role: 'Reader',
+    },
+    {
+      id: 'space-contributor',
+      name: 'Contributor Space',
+      visibility: 'team',
+      role: 'Contributor',
+    },
+  ])?.id, 'space-contributor')
+})
+
+test('React Cloud Knowledge management follows owner and admin authority only', () => {
+  assert.equal(cloudKnowledgeAuthorityRole('viewer', {
+    principal: { role: 'admin' },
+    member: { role: 'member' },
+  }), 'admin')
+  assert.equal(canManageCloudKnowledge('owner', null), true)
+  assert.equal(canManageCloudKnowledge('member', { role: 'admin' }), true)
+  assert.equal(canManageCloudKnowledge('admin', { role: 'member' }), false)
+  assert.equal(canManageCloudKnowledge('viewer', { principal: { role: 'viewer' } }), false)
 })

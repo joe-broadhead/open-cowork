@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -29,6 +30,7 @@ import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolic
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
+import { setKnowledgeDatabaseForTests } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
@@ -445,6 +447,182 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
   } finally {
     await fixture.server.close()
+  }
+})
+
+test('cloud HTTP knowledge routes expose snapshot, proposal review, and version history', async () => {
+  const knowledgeDb = new DatabaseSync(':memory:')
+  setKnowledgeDatabaseForTests(knowledgeDb)
+  const ownerPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner',
+    authSource: 'user',
+  }
+  const memberPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'member-1',
+    accountId: 'member-1',
+    email: 'member@example.test',
+    role: 'member',
+    authSource: 'user',
+  }
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-role']) === 'member' ? memberPrincipal : ownerPrincipal,
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const snapshot = await readJson(await fetch(`${baseUrl}/api/knowledge`))
+    const spaces = asArray(snapshot.spaces).map(asRecord)
+    const pages = asArray(snapshot.pages).map(asRecord)
+    assert.equal(spaces[0]?.role, 'Maintainer')
+    assert.equal(pages[0]?.version, 1)
+    assert.equal(snapshot.limit, 100)
+    assert.equal(snapshot.truncated, false)
+    assert.ok(asArray(asRecord(snapshot.graph).nodes).some((node) => asRecord(node).label === 'Company OS'))
+
+    const unauthorizedProposal = await fetch(`${baseUrl}/api/knowledge/proposals`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({
+        spaceId: String(spaces[0]?.id),
+        pageId: String(pages[0]?.id),
+        pageTitle: String(pages[0]?.title),
+        by: 'member',
+        summary: 'Member should not bypass Cloud Knowledge proposal policy.',
+        body: [{ type: 'p', text: 'Blocked.' }],
+      }),
+    })
+    assert.equal(unauthorizedProposal.status, 403)
+    assert.match(String((await readJson(unauthorizedProposal)).error), /admin|proposal/i)
+
+    const proposalResponse = await fetch(`${baseUrl}/api/knowledge/proposals`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        spaceId: String(spaces[0]?.id),
+        pageId: String(pages[0]?.id),
+        pageTitle: String(pages[0]?.title),
+        by: 'you',
+        summary: 'Capture Cloud conversation decisions for review.',
+        links: [{ kind: 'thread', label: 'Cloud conversation', targetId: 'session-1' }],
+        body: [
+          { type: 'callout', text: 'Captured from Cloud Web for Knowledge review.' },
+          { type: 'p', text: 'The accepted result should publish as the next version.' },
+        ],
+      }),
+    })
+    assert.equal(proposalResponse.status, 201)
+    const proposal = await readJson(proposalResponse)
+    assert.equal(proposal.status, 'pending')
+    assert.equal(proposal.pageId, pages[0]?.id)
+    assert.equal(proposal.by, ownerPrincipal.email)
+
+    const unauthorizedReview = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({ reviewedBy: 'member' }),
+    })
+    assert.equal(unauthorizedReview.status, 403)
+    assert.match(String((await readJson(unauthorizedReview)).error), /admin|review/i)
+
+    const acceptedResponse = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'maintainer' }),
+    })
+    assert.equal(acceptedResponse.status, 200)
+    const accepted = await readJson(acceptedResponse)
+    assert.equal(asRecord(accepted.proposal).status, 'accepted')
+    assert.equal(asRecord(accepted.proposal).reviewedBy, ownerPrincipal.email)
+    assert.equal(asRecord(accepted.page).id, pages[0]?.id)
+    assert.equal(asRecord(accepted.page).pageId, pages[0]?.id)
+    assert.equal(asRecord(accepted.page).versionId, `version:${String(pages[0]?.id)}:2`)
+    assert.equal(asRecord(accepted.page).version, 2)
+    assert.equal(asRecord(accepted.page).proposalId, proposal.id)
+
+    const history = asArray(await readJson(await fetch(`${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/history`))).map(asRecord)
+    assert.deepEqual(history.map((entry) => entry.version), [2, 1])
+    assert.deepEqual(history.map((entry) => entry.id), [pages[0]?.id, pages[0]?.id])
+    const limitedHistory = asArray(await readJson(await fetch(`${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/history?limit=1`))).map(asRecord)
+    assert.deepEqual(limitedHistory.map((entry) => entry.version), [2])
+
+    const afterAccept = await readJson(await fetch(`${baseUrl}/api/knowledge`))
+    assert.equal(asArray(afterAccept.proposals).length, 0)
+    assert.equal(asArray(afterAccept.pages).map(asRecord).find((page) => page.id === pages[0]?.id)?.version, 2)
+
+    // Restoring a historical version requires review authority and publishes a new audited version.
+    const restoreUrl = `${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/restore`
+    const restoreVersionId = `version:${String(pages[0]?.id)}:1`
+    const unauthorizedRestore = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({ versionId: restoreVersionId }),
+    })
+    assert.equal(unauthorizedRestore.status, 403)
+
+    const restored = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ versionId: restoreVersionId }),
+    })
+    assert.equal(restored.status, 200)
+    const restoredPage = asRecord((await readJson(restored)).page)
+    assert.equal(restoredPage.version, 3)
+    assert.equal(restoredPage.versionId, `version:${String(pages[0]?.id)}:3`)
+    assert.equal(restoredPage.proposalId, null)
+
+    const afterRestore = asArray(await readJson(await fetch(`${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/history`))).map(asRecord)
+    assert.deepEqual(afterRestore.map((entry) => entry.version), [3, 2, 1])
+
+    // Restoring the version that is already current is a client error; unknown versions are not-found.
+    const alreadyCurrent = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ versionId: `version:${String(pages[0]?.id)}:3` }),
+    })
+    assert.equal(alreadyCurrent.status, 400)
+    const unknownVersion = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ versionId: `version:${String(pages[0]?.id)}:99` }),
+    })
+    assert.equal(unknownVersion.status, 404)
+    const missingVersionId = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(missingVersionId.status, 400)
+
+    const missing = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/decline`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'maintainer' }),
+    })
+    assert.equal(missing.status, 400)
+
+    fixture.store.upsertMembership({
+      orgId: ownerPrincipal.orgId || ownerPrincipal.tenantId,
+      accountId: ownerPrincipal.accountId || ownerPrincipal.userId,
+      role: 'member',
+      status: 'disabled',
+    })
+    const staleOwnerHeader = await fetch(`${baseUrl}/api/knowledge`, {
+      headers: { 'x-test-role': 'owner' },
+    })
+    assert.equal(staleOwnerHeader.status, 403)
+    assert.match(String((await readJson(staleOwnerHeader)).error), /membership is not active/i)
+  } finally {
+    await fixture.server.close()
+    setKnowledgeDatabaseForTests(null)
+    knowledgeDb.close()
   }
 })
 

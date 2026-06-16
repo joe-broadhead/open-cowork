@@ -31,9 +31,9 @@ export type StudioProductionAuditEntry = {
   evidence: string[]
 }
 
-export type OpenWikiDeferralContract = {
+export type OpenWikiKnowledgeContract = {
   id: 'openwiki-knowledge'
-  status: 'deferred'
+  status: 'native-module'
   routeIds: CloudWebRouteId[]
   visibleCtas: string[]
   runtimeDependencies: string[]
@@ -122,6 +122,17 @@ export const STUDIO_VISUAL_QA_MATRIX: StudioVisualQaEntry[] = [
     viewports: allViewports,
   },
   {
+    id: 'knowledge-and-capture',
+    label: 'Knowledge and capture',
+    routeIds: ['knowledge', 'chat'],
+    desktopSurface: 'Desktop Knowledge page, chat Capture to knowledge action, review queue, page history, and graph',
+    cloudCheck: 'Knowledge route renders Space rail, page reader, review queue, version history, graph navigation, and the Chat route exposes Capture to knowledge for reviewable proposals.',
+    states: ['loading', 'empty', 'error', 'disabled', 'permission-gated', 'retry'],
+    boundary: 'Knowledge is an app-owned native module; Cloud Web consumes Knowledge APIs only and never couples to a local OpenWiki checkout or owns OpenCode execution.',
+    evidence: ['apps/website/src/render.test.ts', 'apps/website/src/studio-production-qa.test.ts', 'tests/cloud-http-server.test.ts'],
+    viewports: allViewports,
+  },
+  {
     id: 'team-and-member-admin-boundary',
     label: 'Team and member admin boundary',
     routeIds: ['org', 'members', 'policy', 'usage'],
@@ -199,12 +210,12 @@ export const STUDIO_PRODUCTION_AUDIT_CHECKLIST: StudioProductionAuditEntry[] = [
   },
 ]
 
-export const OPENWIKI_DEFERRAL_CONTRACT: OpenWikiDeferralContract = {
+export const OPENWIKI_KNOWLEDGE_CONTRACT: OpenWikiKnowledgeContract = {
   id: 'openwiki-knowledge',
-  status: 'deferred',
-  routeIds: [],
-  visibleCtas: [],
-  runtimeDependencies: [],
-  contract: 'Knowledge/OpenWiki is intentionally deferred and ships with no Cloud Web route, no visible CTA, no runtime dependency, and no data-sync claim in this roadmap.',
-  releaseRequirement: 'Create a separate future roadmap before adding a Knowledge route, CTA, sync contract, local OpenWiki checkout dependency, or runtime integration.',
+  status: 'native-module',
+  routeIds: ['knowledge', 'chat'],
+  visibleCtas: ['Capture to knowledge'],
+  runtimeDependencies: ['native-knowledge-module'],
+  contract: 'Knowledge now ships as an app-owned native module with Cloud Web route, capture CTA, versioned pages, review workflow, and graph context; external OpenWiki embedding remains a later roadmap phase.',
+  releaseRequirement: 'Do not couple Cloud Web, Desktop, Gateway, or the Cloud API to a local OpenWiki checkout. Keep Knowledge a Cloud API client/native product module until an explicit OpenWiki embedding roadmap replaces this contract.',
 }

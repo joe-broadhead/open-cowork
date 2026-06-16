@@ -2,14 +2,21 @@ import { resolve } from 'node:path'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
-import { derivePublicBrandingThemeTokens, PUBLIC_BRANDING_THEME_TOKEN_KEYS, splitTrustedProxyCidrs, type PublicBrandingConfig } from '@open-cowork/shared'
-import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
+import { splitTrustedProxyCidrs } from '@open-cowork/shared'
+import { DEFAULT_CONFIG, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
 import {
+  DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
+  parseCloudDeploymentTier,
+  resolveCloudAbuseConfig,
+  resolveCloudAuthConfig,
+  resolveCloudBillingConfig,
   resolveCloudRuntimePolicy,
+  type CloudDeploymentTier,
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
+export { parseCloudDeploymentTier, resolveCloudAbuseConfig, resolveCloudAuthConfig, resolveCloudBillingConfig, type CloudDeploymentTier } from './cloud-config.ts'
 import type { ControlPlaneStore } from './control-plane-store.ts'
 import { InMemoryControlPlaneStore } from './in-memory-control-plane-store.ts'
 import {
@@ -66,12 +73,11 @@ import {
   type WorkspaceCheckpointStore,
 } from './workspace-checkpoint-store.ts'
 import type { WorkflowWebhookSecurityStore } from '../workflow/workflow-webhook-server.ts'
-
-type Env = Record<string, string | undefined>
+import { type Env, envValue, parseBoolean, parsePort, parsePositiveInt, resolveEnvRef } from './cloud-config-parse.ts'
+import { resolveCloudPublicBranding } from './cloud-branding-config.ts'
+export { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
-export type CloudDeploymentTier = 'local' | 'self_host_beta' | 'private_beta' | 'public_production'
-const DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS = 5 * 60 * 1000
 const HEADER_AUTH_SIGNED_HEADERS = [
   'x-open-cowork-tenant-id',
   'x-open-cowork-tenant-name',
@@ -166,149 +172,6 @@ export type CloudApp = {
 
 const DEFAULT_CLOUD_ROOT = '.open-cowork-cloud'
 
-function envValue(env: Env, key: string) {
-  const value = env[key]?.trim()
-  return value || null
-}
-
-function parsePort(value: string | null | undefined, fallback: number) {
-  if (!value) return fallback
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
-    throw new Error(`Invalid cloud port "${value}".`)
-  }
-  return parsed
-}
-
-function parsePositiveInt(value: string | null | undefined, fallback: number) {
-  if (!value) return fallback
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`Invalid positive integer "${value}".`)
-  }
-  return parsed
-}
-
-function parseOptionalPositiveInt(value: string | null | undefined, fallback: number | null) {
-  if (!value) return fallback
-  const parsed = Number(value)
-  if (parsed === 0) return null
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`Invalid non-negative integer "${value}".`)
-  }
-  return parsed
-}
-
-function parseBoolean(value: string | null | undefined, fallback: boolean) {
-  if (!value) return fallback
-  if (/^(1|true|yes|on)$/i.test(value)) return true
-  if (/^(0|false|no|off)$/i.test(value)) return false
-  throw new Error(`Invalid boolean "${value}".`)
-}
-
-function resolveEnvRef(ref: string | undefined, env: Env) {
-  if (!ref) return null
-  const envName = ref.startsWith('env:') ? ref.slice('env:'.length) : ref
-  return envValue(env, envName)
-}
-
-function parseCsv(value: string | null) {
-  return value?.split(',').map((entry) => entry.trim()).filter(Boolean) || null
-}
-
-function parseCsvArray(value: string | null, fallback: string[] | undefined) {
-  return parseCsv(value) || fallback
-}
-
-function parseSignupMode(value: string | null | undefined) {
-  if (value === 'disabled') return 'disabled'
-  if (value === 'closed' || value === 'invite' || value === 'domain' || value === 'open') return value
-  return null
-}
-
-export function parseCloudDeploymentTier(value: string | null | undefined): CloudDeploymentTier {
-  if (!value) return 'local'
-  if (value === 'local' || value === 'self_host_beta' || value === 'private_beta' || value === 'public_production') {
-    return value
-  }
-  throw new Error(`Invalid OPEN_COWORK_CLOUD_DEPLOYMENT_TIER "${value}". Expected local, self_host_beta, private_beta, or public_production.`)
-}
-
-function inferSignupMode(input: {
-  requestedSignupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open' | null
-  allowSelfServiceSignup: boolean
-  allowedEmailDomains?: string[] | null
-}) {
-  if (input.requestedSignupMode) return input.requestedSignupMode
-  if (!input.allowSelfServiceSignup) return 'invite'
-  return input.allowedEmailDomains?.length ? 'domain' : 'open'
-}
-
-export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = process.env): CloudAuthConfig {
-  const requestedMode = envValue(env, 'OPEN_COWORK_CLOUD_AUTH_MODE')
-  const mode = requestedMode === 'oidc' || requestedMode === 'header' || requestedMode === 'none'
-    ? requestedMode
-    : config.cloud.auth.mode
-  const requestedSelfService = envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP')
-  const allowedEmailDomains = parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains
-  const envSwitchedToOidc = mode === 'oidc' && requestedMode === 'oidc' && config.cloud.auth.mode !== 'oidc'
-  const requestedSignupMode = parseSignupMode(envValue(env, 'OPEN_COWORK_CLOUD_SIGNUP_MODE'))
-    || (envSwitchedToOidc ? null : parseSignupMode(config.cloud.auth.signupMode))
-  const allowSelfServiceSignup = requestedSelfService
-    ? parseBoolean(requestedSelfService, false)
-      : requestedSignupMode === 'open' || requestedSignupMode === 'domain'
-        ? true
-      : requestedSignupMode === 'disabled' || requestedSignupMode === 'closed' || requestedSignupMode === 'invite'
-        ? false
-        : envSwitchedToOidc
-          ? false
-          : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc'
-  return {
-    ...config.cloud.auth,
-    mode,
-    signupMode: inferSignupMode({
-      requestedSignupMode,
-      allowSelfServiceSignup,
-      allowedEmailDomains,
-    }),
-    headerSecret: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
-      || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || undefined, env)
-      || resolveEnvRef(config.cloud.auth.headerSecretRef, env)
-      || config.cloud.auth.headerSecret,
-    headerSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || config.cloud.auth.headerSecretRef,
-    headerAllowUnsigned: parseBoolean(
-      envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED'),
-      config.cloud.auth.headerAllowUnsigned || false,
-    ),
-    headerMaxSignatureAgeMs: parsePositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS'),
-      config.cloud.auth.headerMaxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
-    ),
-    issuerUrl: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_ISSUER_URL') || config.cloud.auth.issuerUrl,
-    clientId: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_ID') || config.cloud.auth.clientId,
-    clientSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef,
-    callbackPath: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH') || config.cloud.auth.callbackPath,
-    cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
-    allowedEmailDomains,
-    allowSelfServiceSignup,
-    apiTokens: {
-      ...(config.cloud.auth.apiTokens || {}),
-      defaultTtlMs: parsePositiveInt(
-        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS'),
-        config.cloud.auth.apiTokens?.defaultTtlMs || 90 * 24 * 60 * 60 * 1000,
-      ),
-      maxTtlMs: parsePositiveInt(
-        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS'),
-        config.cloud.auth.apiTokens?.maxTtlMs || 365 * 24 * 60 * 60 * 1000,
-      ),
-      allowedScopes: parseCsvArray(
-        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES'),
-        config.cloud.auth.apiTokens?.allowedScopes,
-      ),
-    },
-  }
-}
-
 async function resolveConfiguredSecretRef(ref: string | null | undefined, env: Env) {
   const value = ref?.trim()
   if (!value) return null
@@ -362,95 +225,6 @@ async function resolveCloudCookieSecretForRuntime(config: Pick<OpenCoworkConfig,
   const cloudSecret = envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
   if (cloudSecret) return cloudSecret
   return resolveConfiguredSecretRef(envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF'), env)
-}
-
-export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudAbuseConfig {
-  const defaults = config.cloud.abuse
-  return {
-    ...defaults,
-    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_ABUSE_ENABLED'), defaults.enabled),
-    maxConcurrentSessionsPerOrg: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG'),
-      defaults.maxConcurrentSessionsPerOrg,
-    ),
-    maxConcurrentWorkflowRunsPerOrg: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_WORKFLOW_RUNS_PER_ORG'),
-      defaults.maxConcurrentWorkflowRunsPerOrg,
-    ),
-    maxActiveWorkersPerOrg: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG'),
-      defaults.maxActiveWorkersPerOrg,
-    ),
-    maxQueuedCommandsPerOrg: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_QUEUED_COMMANDS_PER_ORG'),
-      defaults.maxQueuedCommandsPerOrg,
-    ),
-    maxQueueAgeMs: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_QUEUE_AGE_MS'),
-      defaults.maxQueueAgeMs,
-    ),
-    maxPromptsPerHour: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR'),
-      defaults.maxPromptsPerHour,
-    ),
-    maxWorkflowRunsPerHour: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKFLOW_RUNS_PER_HOUR'),
-      defaults.maxWorkflowRunsPerHour,
-    ),
-    maxGatewayPromptsPerHour: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_PROMPTS_PER_HOUR'),
-      defaults.maxGatewayPromptsPerHour,
-    ),
-    maxWorkerMinutesPerHour: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR'),
-      defaults.maxWorkerMinutesPerHour,
-    ),
-    maxGatewayDeliveriesPerHour: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR'),
-      defaults.maxGatewayDeliveriesPerHour,
-    ),
-    maxGatewayChannelBindingsPerOrg: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_CHANNEL_BINDINGS_PER_ORG'),
-      defaults.maxGatewayChannelBindingsPerOrg,
-    ),
-    maxArtifactBytesPerDay: parseOptionalPositiveInt(
-      envValue(env, 'OPEN_COWORK_CLOUD_MAX_ARTIFACT_BYTES_PER_DAY'),
-      defaults.maxArtifactBytesPerDay,
-    ),
-    httpRateLimit: {
-      ...defaults.httpRateLimit,
-      enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_ENABLED'), defaults.httpRateLimit.enabled),
-      windowMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_WINDOW_MS'), defaults.httpRateLimit.windowMs),
-      maxRequests: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_MAX_REQUESTS'), defaults.httpRateLimit.maxRequests),
-    },
-    authBackoff: {
-      ...defaults.authBackoff,
-      enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_ENABLED'), defaults.authBackoff.enabled),
-      windowMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_WINDOW_MS'), defaults.authBackoff.windowMs),
-      maxFailures: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MAX_FAILURES'), defaults.authBackoff.maxFailures),
-      backoffMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MS'), defaults.authBackoff.backoffMs),
-    },
-  }
-}
-
-export function resolveCloudBillingConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudBillingConfig {
-  const defaults = config.cloud.billing
-  const provider = envValue(env, 'OPEN_COWORK_CLOUD_BILLING_PROVIDER') || defaults.provider
-  return {
-    ...defaults,
-    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_BILLING_ENABLED'), defaults.enabled),
-    provider: provider === 'none' || provider === 'stub' || provider === 'stripe' ? provider : defaults.provider,
-    defaultPlanKey: envValue(env, 'OPEN_COWORK_CLOUD_BILLING_DEFAULT_PLAN') || defaults.defaultPlanKey,
-    stripe: {
-      ...(defaults.stripe || {}),
-      apiKeyRef: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_API_KEY_REF') || defaults.stripe?.apiKeyRef,
-      webhookSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF') || defaults.stripe?.webhookSecretRef,
-      defaultPriceId: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PRICE_ID') || defaults.stripe?.defaultPriceId,
-      successUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL') || defaults.stripe?.successUrl,
-      cancelUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL') || defaults.stripe?.cancelUrl,
-      portalReturnUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL') || defaults.stripe?.portalReturnUrl,
-    },
-  }
 }
 
 async function createBillingAdapterForCloud(input: {
@@ -536,142 +310,6 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     trustProxyHeaders: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS'), false),
     trustedProxyCidrs: splitTrustedProxyCidrs(envValue(env, 'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS')),
   }
-}
-
-function parsePublicBrandingJson(env: Env) {
-  const raw = envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON')
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Partial<PublicBrandingConfig>
-      : {}
-  } catch (error) {
-    throw new Error(`Invalid OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: ${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    })
-  }
-}
-
-function cleanBrandingObject(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([, entry]) => typeof entry === 'string' && entry.trim())
-      .map(([key, entry]) => [key, String(entry).trim()]),
-  )
-}
-
-function safePublicBrandingUrl(value: unknown, allowMailto = false) {
-  const text = typeof value === 'string' ? value.trim() : ''
-  if (!text) return undefined
-  try {
-    const url = new URL(text)
-    if (url.protocol === 'https:') return url.toString()
-    if (allowMailto && url.protocol === 'mailto:') return url.toString()
-  } catch {
-    return undefined
-  }
-  return undefined
-}
-
-const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>(PUBLIC_BRANDING_THEME_TOKEN_KEYS)
-const PUBLIC_BRANDING_DASHBOARD_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['dashboard']>>([
-  'title',
-  'subtitle',
-  'signInTitle',
-  'signInBody',
-  'byokDescription',
-  'connectionsDescription',
-  'gatewayDescription',
-  'billingDescription',
-  'usageDescription',
-])
-const PUBLIC_BRANDING_LABEL_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>([
-  'desktopToken',
-  'gatewayToken',
-  'apiToken',
-  'cloudUrl',
-])
-
-function pickBrandingStrings<T extends object>(value: unknown, allowedKeys: Set<keyof T>): Partial<T> {
-  const strings = cleanBrandingObject(value)
-  return Object.fromEntries(
-    Object.entries(strings).filter(([key]) => allowedKeys.has(key as keyof T)),
-  ) as Partial<T>
-}
-
-function cleanPublicBrandingEntry(entry: Partial<PublicBrandingConfig>) {
-  const cleaned: Partial<PublicBrandingConfig> = {}
-  if (typeof entry.productName === 'string' && entry.productName.trim()) cleaned.productName = entry.productName.trim()
-  if (typeof entry.shortName === 'string' && entry.shortName.trim()) cleaned.shortName = entry.shortName.trim()
-  const urls: Array<[keyof PublicBrandingConfig, boolean]> = [
-    ['logoUrl', false],
-    ['supportUrl', true],
-    ['privacyUrl', false],
-    ['securityUrl', false],
-    ['legalUrl', false],
-  ]
-  for (const [key, allowMailto] of urls) {
-    const safeUrl = safePublicBrandingUrl(entry[key], allowMailto)
-    if (safeUrl) cleaned[key] = safeUrl
-  }
-  const theme = pickBrandingStrings<NonNullable<PublicBrandingConfig['theme']>>(entry.theme, PUBLIC_BRANDING_THEME_KEYS)
-  const dashboard = pickBrandingStrings<NonNullable<PublicBrandingConfig['dashboard']>>(entry.dashboard, PUBLIC_BRANDING_DASHBOARD_KEYS)
-  const labels = pickBrandingStrings<NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>(
-    entry.managedOrgConnectionLabels,
-    PUBLIC_BRANDING_LABEL_KEYS,
-  )
-  if (Object.keys(theme).length > 0) cleaned.theme = theme
-  if (Object.keys(dashboard).length > 0) cleaned.dashboard = dashboard
-  if (Object.keys(labels).length > 0) cleaned.managedOrgConnectionLabels = labels
-  return cleaned
-}
-
-function mergePublicBranding(...entries: Array<Partial<PublicBrandingConfig> | undefined>): PublicBrandingConfig {
-  const merged = entries.reduce<PublicBrandingConfig>((current, entry) => {
-    if (!entry) return current
-    const cleanEntry = cleanPublicBrandingEntry(entry)
-    const theme = derivePublicBrandingThemeTokens(cleanBrandingObject(cleanEntry.theme))
-    return {
-      ...current,
-      ...cleanEntry,
-      theme: {
-        ...(current.theme || {}),
-        ...theme,
-      },
-      dashboard: {
-        ...(current.dashboard || {}),
-        ...cleanBrandingObject(cleanEntry.dashboard),
-      },
-      managedOrgConnectionLabels: {
-        ...(current.managedOrgConnectionLabels || {}),
-        ...cleanBrandingObject(cleanEntry.managedOrgConnectionLabels),
-      },
-    }
-  }, { ...DEFAULT_CONFIG.cloud.publicBranding })
-  return {
-    ...merged,
-    productName: merged.productName?.trim() || DEFAULT_CONFIG.cloud.publicBranding.productName,
-    shortName: merged.shortName?.trim() || DEFAULT_CONFIG.cloud.publicBranding.shortName,
-  }
-}
-
-export function resolveCloudPublicBranding(config: OpenCoworkConfig, env: Env = process.env): PublicBrandingConfig {
-  return mergePublicBranding(
-    DEFAULT_CONFIG.cloud.publicBranding,
-    config.cloud.publicBranding,
-    parsePublicBrandingJson(env),
-    {
-      productName: envValue(env, 'OPEN_COWORK_CLOUD_BRAND_NAME') || undefined,
-      shortName: envValue(env, 'OPEN_COWORK_CLOUD_BRAND_SHORT_NAME') || undefined,
-      logoUrl: envValue(env, 'OPEN_COWORK_CLOUD_BRAND_LOGO_URL') || undefined,
-      supportUrl: envValue(env, 'OPEN_COWORK_CLOUD_SUPPORT_URL') || undefined,
-      privacyUrl: envValue(env, 'OPEN_COWORK_CLOUD_PRIVACY_URL') || undefined,
-      securityUrl: envValue(env, 'OPEN_COWORK_CLOUD_SECURITY_URL') || undefined,
-      legalUrl: envValue(env, 'OPEN_COWORK_CLOUD_LEGAL_URL') || undefined,
-    },
-  )
 }
 
 function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {
@@ -1570,6 +1208,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         strictTransportSecurity: publicUrlEnablesStrictTransportSecurity(envOptions.publicUrl),
         trustProxyHeaders: envOptions.trustProxyHeaders,
         trustedProxyCidrs: envOptions.trustedProxyCidrs,
+        knowledgeDataDir: paths.getAppDataDir(),
         readiness: createCloudReadinessCheck({
           policy,
           store,

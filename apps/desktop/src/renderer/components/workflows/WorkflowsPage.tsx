@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger } from '@open-cowork/shared'
-import { formatDate as formatLocalizedDate } from '../../helpers/i18n'
+import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { Badge, Button, EmptyState, Skeleton, StudioPageHeader, type BadgeTone } from '../ui'
@@ -12,7 +12,7 @@ type Props = {
 const EMPTY_PAYLOAD: WorkflowListPayload = { workflows: [], runs: [] }
 
 function formatWorkflowDate(value?: string | null) {
-  if (!value) return 'Not scheduled'
+  if (!value) return t('workflows.notScheduled', 'Not scheduled')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return formatLocalizedDate(date, {
@@ -24,17 +24,17 @@ function formatWorkflowDate(value?: string | null) {
 }
 
 function triggerLabel(trigger: WorkflowTrigger) {
-  if (!trigger.enabled) return `${trigger.type} disabled`
-  if (trigger.type === 'manual') return 'Manual'
-  if (trigger.type === 'webhook') return 'Webhook'
+  if (!trigger.enabled) return t('workflows.triggerDisabled', '{{type}} disabled', { type: trigger.type })
+  if (trigger.type === 'manual') return t('workflows.triggerManual', 'Manual')
+  if (trigger.type === 'webhook') return t('workflows.triggerWebhook', 'Webhook')
   const schedule = trigger.schedule
-  if (!schedule) return 'Schedule'
-  if (schedule.type === 'one_time') return `Once ${formatWorkflowDate(schedule.startAt)}`
+  if (!schedule) return t('workflows.triggerSchedule', 'Schedule')
+  if (schedule.type === 'one_time') return t('workflows.triggerOnce', 'Once {{date}}', { date: formatWorkflowDate(schedule.startAt) })
   const minute = String(schedule.runAtMinute ?? 0).padStart(2, '0')
   const time = `${String(schedule.runAtHour ?? 9).padStart(2, '0')}:${minute}`
-  if (schedule.type === 'daily') return `Daily at ${time}`
-  if (schedule.type === 'weekly') return `Weekly at ${time}`
-  return `Monthly at ${time}`
+  if (schedule.type === 'daily') return t('workflows.triggerDaily', 'Daily at {{time}}', { time })
+  if (schedule.type === 'weekly') return t('workflows.triggerWeekly', 'Weekly at {{time}}', { time })
+  return t('workflows.triggerMonthly', 'Monthly at {{time}}', { time })
 }
 
 function statusTone(status: WorkflowSummary['status']): BadgeTone {
@@ -55,13 +55,13 @@ function runStatusTone(status?: WorkflowRun['status'] | null) {
 function workflowLastRunLabel(workflow: WorkflowSummary) {
   if (workflow.lastRunAt) return formatWorkflowDate(workflow.lastRunAt)
   if (workflow.latestRunStatus) return workflow.latestRunStatus
-  return 'never'
+  return t('workflows.lastRunNever', 'never')
 }
 
 function workflowDisplaySteps(workflow: WorkflowSummary) {
   return workflow.steps?.length
     ? workflow.steps
-    : [{ id: 'step-1', title: 'Run saved instructions', detail: workflow.instructions || null }]
+    : [{ id: 'step-1', title: t('workflows.defaultStepTitle', 'Run saved instructions'), detail: workflow.instructions || null }]
 }
 
 function activeWebhookSecret(workflow: WorkflowSummary) {
@@ -164,7 +164,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     setFeedback(null)
     try {
       if (workflowActionBlocked) {
-        setFeedback(workflowActionReason || 'Playbook runs are disabled by this workspace policy.')
+        setFeedback(workflowActionReason || t('workflows.runsDisabledPolicy', 'Playbook runs are disabled by this workspace policy.'))
         return
       }
       const result = await action()
@@ -183,11 +183,11 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
   const startDraft = async () => {
     if (!activeWorkspaceIsLocal) {
-      setFeedback('Cloud playbook creation is managed by the cloud workspace. Existing cloud playbooks can be run when policy allows it.')
+      setFeedback(t('workflows.cloudCreationManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing cloud playbooks can be run when policy allows it.'))
       return
     }
     if (workflowDraftBlocked) {
-      setFeedback('Switch OpenCode config source to In app before adding playbooks. Setup still uses Cowork’s Workflow Designer agent and Workflows tool.')
+      setFeedback(t('workflows.switchConfigInApp', 'Switch OpenCode config source to In app before adding playbooks. Setup still uses Cowork’s Workflow Designer agent and Workflows tool.'))
       return
     }
     setBusyId('new')
@@ -208,7 +208,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     if (!command) return
     try {
       await navigator.clipboard.writeText(command)
-      setFeedback(command === workflow.webhookUrl ? 'Webhook URL copied.' : 'Webhook curl copied.')
+      setFeedback(command === workflow.webhookUrl ? t('workflows.webhookUrlCopied', 'Webhook URL copied.') : t('workflows.webhookCurlCopied', 'Webhook curl copied.'))
     } catch {
       setFeedback(command)
     }
@@ -218,24 +218,24 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     <div className="flex h-full min-h-0 flex-col bg-base text-primary">
       <div className="border-b border-border px-6 py-5">
         <StudioPageHeader
-          eyebrow="Playbooks"
-          title="Playbooks"
-          description="Save repeatable work from a Workflow Designer setup chat, then run it manually, on a schedule, or from a webhook."
+          eyebrow={t('workflows.eyebrow', 'Playbooks')}
+          title={t('workflows.title', 'Playbooks')}
+          description={t('workflows.description', 'Save repeatable work from a Workflow Designer setup chat, then run it manually, on a schedule, or from a webhook.')}
           meta={(
             <div className="flex flex-wrap gap-2 text-2xs text-text-muted">
-              <span>{activeCount} active</span>
-              <span>{runningCount} running</span>
-              {archivedCount > 0 ? <span>{archivedCount} archived</span> : null}
+              <span>{t('workflows.metaActive', '{{count}} active', { count: activeCount })}</span>
+              <span>{t('workflows.metaRunning', '{{count}} running', { count: runningCount })}</span>
+              {archivedCount > 0 ? <span>{t('workflows.metaArchived', '{{count}} archived', { count: archivedCount })}</span> : null}
             </div>
           )}
           actions={[{
             id: 'add-playbook',
-            children: busyId === 'new' ? 'Starting...' : 'Add playbook',
+            children: busyId === 'new' ? t('workflows.startingButton', 'Starting...') : t('workflows.addButton', 'Add playbook'),
             onClick: () => void startDraft(),
             variant: 'primary',
             leftIcon: 'plus',
             disabled: busyId === 'new' || workflowDraftBlocked,
-            disabledReason: !activeWorkspaceIsLocal ? 'Cloud playbook creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Playbook setup requires the in-app OpenCode config source.' : null,
+            disabledReason: !activeWorkspaceIsLocal ? t('workflows.cloudCreationManagedShort', 'Cloud playbook creation is managed by this cloud workspace.') : workflowDraftBlocked ? t('workflows.setupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source.') : null,
           }]}
         />
         {feedback ? (
@@ -255,22 +255,22 @@ export function WorkflowsPage({ onOpenThread }: Props) {
         ) : activeWorkflows.length === 0 ? (
           <EmptyState
             icon="workflow"
-            title="No playbooks yet"
+            title={t('workflows.emptyTitle', 'No playbooks yet')}
             body={workflowListBlocked && workflowListReason
               ? workflowListReason
               : workflowDraftBlocked
                 ? activeWorkspaceIsLocal
-                  ? 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.'
-                  : 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.'
-                : 'Start with a setup chat. The Workflow Designer agent will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving anything.'}
+                  ? t('workflows.emptySetupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.')
+                  : t('workflows.emptyCloudManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.')
+                : t('workflows.emptyStartChat', 'Start with a setup chat. The Workflow Designer agent will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving anything.')}
             action={(
               <Button
                 variant="primary"
                 onClick={() => void startDraft()}
                 disabled={workflowDraftBlocked}
-                disabledReason={!activeWorkspaceIsLocal ? 'Cloud playbook creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Playbook setup requires the in-app OpenCode config source.' : null}
+                disabledReason={!activeWorkspaceIsLocal ? t('workflows.cloudCreationManagedShort', 'Cloud playbook creation is managed by this cloud workspace.') : workflowDraftBlocked ? t('workflows.setupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source.') : null}
               >
-                Add playbook
+                {t('workflows.addButton', 'Add playbook')}
               </Button>
             )}
           />
@@ -288,18 +288,18 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     </div>
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-secondary">{workflow.instructions}</p>
                     <div className="mt-3 text-xs font-medium text-muted">
-                      Runs as {workflow.agentName || 'build'} <span aria-hidden="true">·</span> last run {workflowLastRunLabel(workflow)}
+                      {t('workflows.runsAs', 'Runs as')} {workflow.agentName || 'build'} <span aria-hidden="true">·</span> {t('workflows.lastRun', 'last run')} {workflowLastRunLabel(workflow)}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {workflow.draftSessionId ? (
                       <Button size="sm" variant="secondary" onClick={() => onOpenThread(workflow.draftSessionId!)}>
-                        Open setup chat
+                        {t('workflows.openSetupChat', 'Open setup chat')}
                       </Button>
                     ) : null}
                     {workflow.latestRunSessionId ? (
                       <Button size="sm" variant="secondary" onClick={() => onOpenThread(workflow.latestRunSessionId!)}>
-                        Open latest run
+                        {t('workflows.openLatestRun', 'Open latest run')}
                       </Button>
                     ) : null}
                     <Button
@@ -311,38 +311,38 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.runNow(workflow.id)
                           : window.coworkApi.workflows.runNow(workflow.id, workspaceOptions)
-                      ), 'Playbook run started.')}
+                      ), t('workflows.runStarted', 'Playbook run started.'))}
                     >
-                      Run
+                      {t('workflows.runButton', 'Run')}
                     </Button>
                     {workflow.status === 'paused' ? (
                       <Button size="sm" variant="secondary" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.resume(workflow.id)
                           : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
-                      ), 'Playbook resumed.')}>
-                        Resume
+                      ), t('workflows.resumed', 'Playbook resumed.'))}>
+                        {t('workflows.resumeButton', 'Resume')}
                       </Button>
                     ) : (
                       <Button size="sm" variant="secondary" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.pause(workflow.id)
                           : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
-                      ), 'Playbook paused.')}>
-                        Pause
+                      ), t('workflows.paused', 'Playbook paused.'))}>
+                        {t('workflows.pauseButton', 'Pause')}
                       </Button>
                     )}
                     <Button size="sm" variant="danger" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
                       activeWorkspaceIsLocal
                         ? window.coworkApi.workflows.archive(workflow.id)
                         : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
-                    ), 'Playbook archived.')}>
-                      Archive
+                    ), t('workflows.archived', 'Playbook archived.'))}>
+                      {t('workflows.archiveButton', 'Archive')}
                     </Button>
                   </div>
                 </div>
 
-                <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={`${workflow.title} steps`}>
+                <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={t('workflows.stepsAriaLabel', '{{title}} steps', { title: workflow.title })}>
                   {workflowDisplaySteps(workflow).map((step, index) => (
                     <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border bg-base/40 p-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-accent/40 bg-accent/15 text-xs font-bold text-accent">
@@ -358,14 +358,14 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Lead coworker</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('workflows.leadCoworker', 'Lead coworker')}</div>
                     <div className="mt-1 text-sm text-primary">{workflow.agentName || 'build'}</div>
                     <div className="mt-1 text-xs text-muted">
-                      {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || 'Uses selected tools and skills from the setup chat'}
+                      {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || t('workflows.usesSelectedTools', 'Uses selected tools and skills from the setup chat')}
                     </div>
                   </div>
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Triggers</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('workflows.triggers', 'Triggers')}</div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {workflow.triggers.map((trigger) => (
                         <span key={trigger.id} className="rounded border border-border bg-muted px-2 py-0.5 text-xs text-secondary">
@@ -373,14 +373,14 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         </span>
                       ))}
                     </div>
-                    <div className="mt-2 text-xs text-muted">Next: {formatWorkflowDate(workflow.nextRunAt)}</div>
+                    <div className="mt-2 text-xs text-muted">{t('workflows.next', 'Next:')} {formatWorkflowDate(workflow.nextRunAt)}</div>
                   </div>
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Latest run</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('workflows.latestRun', 'Latest run')}</div>
                     <div className={`mt-1 text-sm ${runStatusTone(workflow.latestRunStatus)}`}>
-                      {workflow.latestRunStatus || 'No runs yet'}
+                      {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
                     </div>
-                    <div className="mt-1 line-clamp-2 text-xs text-muted">{workflow.latestRunSummary || `Last run: ${formatWorkflowDate(workflow.lastRunAt)}`}</div>
+                    <div className="mt-1 line-clamp-2 text-xs text-muted">{workflow.latestRunSummary || t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}</div>
                   </div>
                 </div>
 
@@ -388,11 +388,11 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                   <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border bg-base/40 p-3">
                     <code className="min-w-0 flex-1 truncate text-xs text-secondary">{workflow.webhookUrl}</code>
                     <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
-                      Copy curl
+                      {t('workflows.copyCurl', 'Copy curl')}
                     </Button>
                     {activeWorkspaceIsLocal ? (
-                      <Button size="sm" variant="secondary" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), 'Webhook secret regenerated.')}>
-                        Regenerate
+                      <Button size="sm" variant="secondary" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), t('workflows.webhookSecretRegenerated', 'Webhook secret regenerated.'))}>
+                        {t('workflows.regenerate', 'Regenerate')}
                       </Button>
                     ) : null}
                   </div>
@@ -402,7 +402,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
           </div>
         )}
         {archivedCount > 0 ? (
-          <div className="mt-4 text-xs text-muted">{archivedCount} archived playbook{archivedCount === 1 ? '' : 's'} hidden.</div>
+          <div className="mt-4 text-xs text-muted">{t('workflows.archivedHidden', '{{count}} archived playbook{{plural}} hidden.', { count: archivedCount, plural: archivedCount === 1 ? '' : 's' })}</div>
         ) : null}
       </div>
     </div>

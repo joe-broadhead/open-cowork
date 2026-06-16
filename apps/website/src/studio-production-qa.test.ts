@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { CLOUD_WEB_ROUTES } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
 import {
-  OPENWIKI_DEFERRAL_CONTRACT,
+  OPENWIKI_KNOWLEDGE_CONTRACT,
   STUDIO_PRODUCTION_AUDIT_CHECKLIST,
   STUDIO_VISUAL_QA_MATRIX,
   type StudioProductionAuditEntry,
@@ -55,7 +55,7 @@ test('studio production QA matrix covers every Cloud Web route, state class, and
 
   assert.match(doc, /Studio Production Visual QA Matrix/)
   assert.match(doc, /Production Audit Checklist/)
-  assert.equal(STUDIO_VISUAL_QA_MATRIX.length, 10)
+  assert.equal(STUDIO_VISUAL_QA_MATRIX.length, 11)
 
   for (const routeId of routeIds) {
     assert.ok(coveredRouteIds.has(routeId), `${routeId} has a Studio visual QA entry`)
@@ -103,7 +103,7 @@ test('studio production audit checklist is documented and points at real evidenc
   }
 })
 
-test('OpenWiki Knowledge is explicitly deferred without route, CTA, or runtime coupling', () => {
+test('Knowledge is enabled through the native module without local OpenWiki checkout coupling', () => {
   const doc = readFileSync(fileURLToPath(workbenchDocPath), 'utf8')
   const releaseChecklist = readFileSync(fileURLToPath(releaseChecklistPath), 'utf8')
   const html = cloudWebsiteHtml({
@@ -115,18 +115,15 @@ test('OpenWiki Knowledge is explicitly deferred without route, CTA, or runtime c
     },
   })
 
-  assert.equal(OPENWIKI_DEFERRAL_CONTRACT.status, 'deferred')
-  assert.deepEqual(OPENWIKI_DEFERRAL_CONTRACT.routeIds, [])
-  assert.deepEqual(OPENWIKI_DEFERRAL_CONTRACT.visibleCtas, [])
-  assert.deepEqual(OPENWIKI_DEFERRAL_CONTRACT.runtimeDependencies, [])
-  assert.match(doc, /OpenWiki\/Knowledge Deferral/)
-  assert.match(doc, /Knowledge\/OpenWiki is intentionally deferred/)
-  assert.match(doc, /no Cloud Web route,\s+no visible CTA, no runtime dependency, and no data-sync claim/)
-  assert.match(releaseChecklist, /OpenWiki\/Knowledge deferral/)
-  assert.doesNotMatch(html, /OpenWiki|Knowledge/)
-  assert.doesNotMatch(html, /data-route-panel="(?:knowledge|openwiki|wiki)"/i)
-  for (const route of CLOUD_WEB_ROUTES) {
-    assert.doesNotMatch(route.id, /knowledge|openwiki|wiki/i)
-    assert.doesNotMatch(route.label, /Knowledge|OpenWiki|Wiki/)
-  }
+  assert.equal(OPENWIKI_KNOWLEDGE_CONTRACT.status, 'native-module')
+  assert.deepEqual(OPENWIKI_KNOWLEDGE_CONTRACT.routeIds, ['knowledge', 'chat'])
+  assert.deepEqual(OPENWIKI_KNOWLEDGE_CONTRACT.visibleCtas, ['Capture to knowledge'])
+  assert.deepEqual(OPENWIKI_KNOWLEDGE_CONTRACT.runtimeDependencies, ['native-knowledge-module'])
+  assert.match(doc, /Knowledge\/OpenWiki Integration/)
+  assert.match(doc, /app-owned native module/)
+  assert.match(doc, /Do not couple Cloud Web, Desktop, Gateway, or the Cloud API to a local OpenWiki checkout/)
+  assert.match(releaseChecklist, /Knowledge\/OpenWiki integration verified/)
+  assert.match(html, /data-route-panel="knowledge"/)
+  assert.match(html, /Capture to knowledge/)
+  assert.ok(CLOUD_WEB_ROUTES.some((route) => route.id === 'knowledge' && route.label === 'Knowledge'))
 })

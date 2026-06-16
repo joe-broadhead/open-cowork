@@ -173,6 +173,14 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
     launchpad: {
       feed: (query) => request(`${endpoint('launchpadFeed', '/api/launchpad/feed')}${queryString(query)}`),
     },
+    knowledge: {
+      snapshot: (query) => request(withQuery(endpoint('knowledgeSnapshot', '/api/knowledge'), query || {})),
+      propose: (input) => request(endpoint('knowledgeProposalCreate', '/api/knowledge/proposals'), { method: 'POST', body: input }),
+      acceptProposal: (proposalId, input) => request(endpointPath('knowledgeProposalAccept', '/api/knowledge/proposals/:proposalId/accept', { proposalId }), { method: 'POST', body: input || {} }),
+      declineProposal: (proposalId, input) => request(endpointPath('knowledgeProposalDecline', '/api/knowledge/proposals/:proposalId/decline', { proposalId }), { method: 'POST', body: input || {} }),
+      history: (pageId, query) => request(withQuery(endpointPath('knowledgePageHistory', '/api/knowledge/pages/:pageId/history', { pageId }), query || {})),
+      restoreVersion: (pageId, versionId, input) => request(endpointPath('knowledgePageRestore', '/api/knowledge/pages/:pageId/restore', { pageId }), { method: 'POST', body: { ...(input as Record<string, unknown> || {}), versionId } }),
+    },
     capabilities: {
       catalog: () => request(endpoint('capabilitiesCatalog', '/api/capabilities')),
       tools: () => request(endpoint('capabilityTools', '/api/capabilities/tools')),

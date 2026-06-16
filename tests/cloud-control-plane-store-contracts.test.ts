@@ -8,6 +8,7 @@ import {
 } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
+import { createPglitePool } from './helpers/pglite-pool.ts'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
@@ -16,10 +17,45 @@ const POSTGRES_SKIP = POSTGRES_URL
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres control-plane contract tests.'
 
 runControlPlaneDomainContracts('in-memory', async () => new InMemoryControlPlaneStore())
+// Runs the *real* Postgres store SQL against an in-process PostgreSQL (pglite),
+// so the Postgres control plane is verified everywhere — no DB daemon required.
+runControlPlaneDomainContracts('pglite', async () => (
+  createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool: createPglitePool() })
+))
+// Runs against a real external Postgres when OPEN_COWORK_TEST_POSTGRES_URL is set.
 runControlPlaneDomainContracts('postgres', async () => {
   assert.ok(POSTGRES_URL)
   return createPostgresControlPlaneStore({ connectionString: POSTGRES_URL })
 }, POSTGRES_SKIP)
+
+// The WorkflowWebhookSecurityStore surface is implemented only by the Postgres store
+// (no in-memory peer), so it gets its own pglite-backed contract. `nowMs` is a real
+// epoch-ms (> int32) to guard the bigint blocked-until regression.
+test('pglite webhook security store enforces fail-closed rate limit / auth backoff / replay claims', async () => {
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool: createPglitePool() })
+  try {
+    const prefix = `webhook-${randomUUID()}`
+    const nowMs = 1_781_000_000_000
+
+    assert.equal(await store.claimRequest({ source: `${prefix}-src`, nowMs, windowMs: 60_000, limit: 2 }), true)
+    assert.equal(await store.claimRequest({ source: `${prefix}-src`, nowMs, windowMs: 60_000, limit: 2 }), true)
+    assert.equal(await store.claimRequest({ source: `${prefix}-src`, nowMs, windowMs: 60_000, limit: 2 }), false)
+
+    assert.equal(await store.checkAuthBackoff({ scope: `${prefix}-scope`, nowMs }), true)
+    await store.recordAuthFailure({ scope: `${prefix}-scope`, source: `${prefix}-src`, nowMs, windowMs: 60_000, limit: 1, backoffMs: 60_000 })
+    assert.equal(await store.checkAuthBackoff({ scope: `${prefix}-scope`, nowMs }), false)
+
+    const claim = await store.claimSignature({ key: `${prefix}-sig`, nowMs, windowMs: 60_000, cacheLimit: 100 })
+    assert.ok(claim)
+    assert.equal(await store.claimSignature({ key: `${prefix}-sig`, nowMs, windowMs: 60_000, cacheLimit: 100 }), null)
+    await claim?.release()
+    const reclaim = await store.claimSignature({ key: `${prefix}-sig`, nowMs, windowMs: 60_000, cacheLimit: 100 })
+    assert.ok(reclaim)
+    await reclaim?.accept()
+  } finally {
+    await store.close?.()
+  }
+})
 
 function runControlPlaneDomainContracts(
   name: string,
@@ -268,6 +304,127 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(binding.sessionId, sessionId)
       assert.equal((await store.getChannelIdentity(org.orgId, identity.identityId))?.role, 'approver')
+
+      // API tokens — issue (hashed, not stored plaintext, deduped scopes), resolve by
+      // plaintext, list, grant a channel binding, then revoke (resolution fails closed).
+      const issuedToken = await store.issueApiToken({
+        orgId: org.orgId,
+        accountId: account.accountId,
+        name: 'Contract token',
+        scopes: ['sessions:read', 'sessions:read'],
+      })
+      assert.deepEqual(issuedToken.token.scopes, ['sessions:read'])
+      assert.notEqual(issuedToken.token.tokenHash, issuedToken.plaintext)
+      assert.equal(issuedToken.token.last4, issuedToken.plaintext.slice(-4))
+      const resolvedToken = await store.findApiTokenByPlaintext(issuedToken.plaintext)
+      assert.equal(resolvedToken?.tokenId, issuedToken.token.tokenId)
+      assert.equal((await store.listApiTokens(org.orgId)).some((apiToken) => apiToken.tokenId === issuedToken.token.tokenId), true)
+      const grant = await store.grantApiTokenChannelBinding({
+        orgId: org.orgId,
+        tokenId: issuedToken.token.tokenId,
+        channelBindingId,
+      })
+      assert.equal(grant.channelBindingId, channelBindingId)
+      assert.deepEqual(
+        (await store.listApiTokenChannelBindingGrants({ orgId: org.orgId, tokenId: issuedToken.token.tokenId })).map((entry) => entry.channelBindingId),
+        [channelBindingId],
+      )
+      const revokedToken = await store.revokeApiToken({ orgId: org.orgId, tokenId: issuedToken.token.tokenId })
+      assert.ok(revokedToken?.revokedAt)
+      assert.equal(await store.findApiTokenByPlaintext(issuedToken.plaintext), null)
+
+      // Setting metadata — tenant-scoped vs user-scoped upsert/get/list stay isolated.
+      await store.setSettingMetadata({ tenantId, key: 'appearance', value: { theme: 'dark' } })
+      assert.deepEqual((await store.getSettingMetadata(tenantId, 'appearance'))?.value, { theme: 'dark' })
+      await store.setSettingMetadata({ tenantId, key: 'appearance', value: { theme: 'light' } })
+      assert.deepEqual((await store.getSettingMetadata(tenantId, 'appearance'))?.value, { theme: 'light' })
+      await store.setSettingMetadata({ tenantId, userId, key: 'editor', value: { fontSize: 14 } })
+      assert.equal(await store.getSettingMetadata(tenantId, 'editor'), null)
+      assert.deepEqual((await store.getSettingMetadata(tenantId, 'editor', userId))?.value, { fontSize: 14 })
+      assert.deepEqual((await store.listSettingMetadata(tenantId)).map((entry) => entry.key), ['appearance'])
+      assert.deepEqual((await store.listSettingMetadata(tenantId, userId)).map((entry) => entry.key), ['editor'])
+
+      // Rate limiting — allowed up to the limit within a window, then denied with a retry hint.
+      const rateLimitScope = `${prefix}-rate-limit`
+      const rateLimitArgs = { scope: rateLimitScope, source: 'contract', limit: 2, windowMs: 60_000, now: new Date('2026-03-01T00:00:00.000Z') }
+      assert.equal((await store.claimRateLimit(rateLimitArgs)).allowed, true)
+      assert.equal((await store.claimRateLimit(rateLimitArgs)).count, 2)
+      const rateLimitDenied = await store.claimRateLimit(rateLimitArgs)
+      assert.equal(rateLimitDenied.allowed, false)
+      assert.ok(rateLimitDenied.retryAfterMs > 0)
+
+      // Auth backoff — a clean scope is allowed; once the failure limit is hit it blocks (fail-closed).
+      const authBackoffScope = `${prefix}-auth-backoff`
+      assert.equal((await store.checkCloudAuthBackoff({ scope: authBackoffScope })).allowed, true)
+      await store.recordCloudAuthFailure({ scope: authBackoffScope, source: 'contract', limit: 1, windowMs: 60_000, backoffMs: 60_000 })
+      const authBlocked = await store.checkCloudAuthBackoff({ scope: authBackoffScope })
+      assert.equal(authBlocked.allowed, false)
+      assert.ok(authBlocked.retryAfterMs > 0)
+
+      // Worker heartbeats — upsert by worker id (active session ids deduped), then list.
+      await store.recordWorkerHeartbeat({ workerId: `${prefix}-hb-worker`, role: 'worker', activeSessionIds: [sessionId, sessionId] })
+      const workerHeartbeat = (await store.listWorkerHeartbeats()).find((entry) => entry.workerId === `${prefix}-hb-worker`)
+      assert.equal(workerHeartbeat?.role, 'worker')
+      assert.deepEqual(workerHeartbeat?.activeSessionIds, [sessionId])
+
+      // Thread tags + smart filters — create/list, apply to a session (metadata reflects
+      // it), remove (metadata clears), update, and smart-filter CRUD.
+      const threadTag = await store.createThreadTag({ tenantId, tagId: `${prefix}-tag`, name: 'Priority', color: '#2f6bf0' })
+      assert.equal(threadTag.name, 'Priority')
+      assert.deepEqual((await store.listThreadTags(tenantId)).map((entry) => entry.tagId), [`${prefix}-tag`])
+      await store.applyThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-tag`] })
+      const taggedMetadata = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
+      assert.deepEqual(taggedMetadata?.tags.map((entry) => entry.tagId), [`${prefix}-tag`])
+      await store.removeThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-tag`] })
+      const clearedMetadata = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
+      assert.deepEqual(clearedMetadata?.tags, [])
+      assert.equal((await store.updateThreadTag({ tenantId, tagId: `${prefix}-tag`, name: 'Urgent' }))?.name, 'Urgent')
+      const smartFilter = await store.createThreadSmartFilter({ tenantId, filterId: `${prefix}-filter`, name: 'Open', query: { status: ['active'] } })
+      assert.deepEqual(smartFilter.query, { status: ['active'] })
+      assert.deepEqual((await store.listThreadSmartFilters(tenantId)).map((entry) => entry.filterId), [`${prefix}-filter`])
+      assert.equal((await store.updateThreadSmartFilter({ tenantId, filterId: `${prefix}-filter`, name: 'Active' }))?.name, 'Active')
+      assert.equal(await store.deleteThreadSmartFilter(tenantId, `${prefix}-filter`), true)
+      assert.equal(await store.deleteThreadTag(tenantId, `${prefix}-tag`), true)
+
+      // Workflows — create a draft, list/get it, create a run, claim it (claim token +
+      // lease), then complete it (lease-token gated); the run reads back as completed.
+      const workflowId = `${prefix}-workflow`
+      await store.createWorkflow({
+        tenantId,
+        userId,
+        workflowId,
+        draft: { title: 'Contract workflow', instructions: 'Do the thing', agentName: 'default', triggers: [] },
+      })
+      assert.equal((await store.getWorkflow(tenantId, userId, workflowId))?.id, workflowId)
+      assert.deepEqual((await store.listWorkflows(tenantId, userId)).map((entry) => entry.id), [workflowId])
+      const workflowRun = await store.createWorkflowRun({
+        tenantId,
+        userId,
+        workflowId,
+        runId: `${prefix}-run`,
+        triggerType: 'manual',
+      })
+      assert.equal(workflowRun.status, 'queued')
+      const claimedRun = await store.claimDueWorkflowRun({ runId: `${prefix}-run`, claimedBy: `${prefix}-wf-worker`, leaseTtlMs: 30_000 })
+      assert.equal(claimedRun?.run.id, `${prefix}-run`)
+      assert.ok(claimedRun?.run.claimToken)
+      await store.attachWorkflowRunSession({
+        tenantId,
+        workflowId,
+        runId: `${prefix}-run`,
+        sessionId,
+        claimToken: claimedRun?.run.claimToken,
+      })
+      const completedRun = await store.completeWorkflowRun({
+        tenantId,
+        workflowId,
+        runId: `${prefix}-run`,
+        summary: 'done',
+        nextStatus: 'active',
+        nextRunAt: null,
+      })
+      assert.equal(completedRun?.status, 'completed')
+      assert.equal((await store.getWorkflowRun(tenantId, `${prefix}-run`))?.status, 'completed')
 
       const byok = await store.createByokSecret({
         secretId: `${prefix}-secret`,

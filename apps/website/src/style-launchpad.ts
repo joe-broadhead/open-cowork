@@ -58,7 +58,7 @@ export function cloudWebsiteLaunchpadStyles() {
     }
     .cloud-launchpad-suggestion__text span,
     .cloud-launchpad-suggestion__text small {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
       overflow-wrap: anywhere;
@@ -167,7 +167,7 @@ export function cloudWebsiteLaunchpadStyles() {
     .cloud-launchpad-motion-row__meta,
     .cloud-launchpad-motion-row__badge,
     .cloud-launchpad-motion-empty {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }

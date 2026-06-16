@@ -10,6 +10,7 @@ import { Badge, type BadgeTone } from './Badge.js'
 import { Button, type ButtonProps } from './Button.js'
 import { Card } from './Card.js'
 import { Icon, type IconName } from './Icon.js'
+import { knowledgeSpaceHue } from './knowledge-hues.js'
 import { cn } from './utils.js'
 
 export type StudioTone = 'lead' | 'strategist' | 'builder' | 'reviewer' | 'operator' | 'neutral'
@@ -612,11 +613,11 @@ export function KanbanTaskCard({ task, dragging = false, className, ...props }: 
       <div className="studio-kanban-task-card__top">
         <span className="studio-kanban-task-card__priority" aria-label={`${task.priority || 'medium'} priority`} />
         <div>
-          <h4>{task.title}</h4>
-          {task.description ? <p>{task.description}</p> : null}
+          <h4 className="studio-u-card-title">{task.title}</h4>
+          {task.description ? <p className="studio-u-card-text">{task.description}</p> : null}
         </div>
       </div>
-      <footer className="studio-kanban-task-card__foot">
+      <footer className="studio-kanban-task-card__foot studio-u-flex-center">
         {task.assignee ? (
           <>
             <CoworkerAvatar
@@ -899,7 +900,7 @@ export function ProjectCard({ progress, progressLabel, ...props }: ProjectCardPr
       className={cn('studio-object-card--project', props.className)}
       footer={progress !== undefined ? (
         <div className="studio-project-progress" aria-label={progressLabel || `${clampPercent(progress)}% complete`}>
-          <span><i style={percentStyle('--studio-progress', progress)} /></span>
+          <span className="studio-u-progress-track"><i className="studio-u-progress-fill" style={percentStyle('--studio-progress', progress)} /></span>
           <em>{progressLabel || `${clampPercent(progress)}%`}</em>
         </div>
       ) : undefined}
@@ -932,11 +933,11 @@ export function ChannelRow({
   ...props
 }: ChannelRowProps) {
   return (
-    <article {...props} className={cn('studio-channel-row', className)}>
-      <span className="studio-channel-row__icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
-      <div className="studio-channel-row__copy">
-        <h3>{title}</h3>
-        {description ? <p>{description}</p> : null}
+    <article {...props} className={cn('studio-channel-row studio-u-flex-center studio-u-row-surface', className)}>
+      <span className="studio-channel-row__icon studio-u-icon-chip" aria-hidden="true"><Icon name={icon} size={20} /></span>
+      <div className="studio-channel-row__copy studio-u-fill-min">
+        <h3 className="studio-u-card-title">{title}</h3>
+        {description ? <p className="studio-u-card-text">{description}</p> : null}
       </div>
       {meta ? <div className="studio-channel-row__meta">{meta}</div> : null}
       {status ? <Badge tone={statusToneMap[status.tone || 'neutral']}>{status.label}</Badge> : null}
@@ -1106,6 +1107,10 @@ export type WikiSpace = {
   id: string
   name: string
   icon?: IconName
+  /** Human-readable visibility label (e.g. "Company-wide", "Team", "Private"). */
+  visibility?: string
+  /** The viewer's role in this Space (e.g. "Maintainer", "Contributor", "Reader"). */
+  role?: string
   pages: Array<{
     id: string
     title: string
@@ -1116,20 +1121,29 @@ export type WikiSpaceRailProps = ComponentPropsWithoutRef<'aside'> & {
   spaces: WikiSpace[]
   activePageId?: string
   reviewAction?: ReactNode
+  /** A Pages/Graph view switch rendered at the top of the rail. */
+  viewToggle?: ReactNode
   onSelectPage?: (space: WikiSpace, page: WikiSpace['pages'][number]) => void
 }
 
-export function WikiSpaceRail({ spaces, activePageId, reviewAction, onSelectPage, className, ...props }: WikiSpaceRailProps) {
+export function WikiSpaceRail({ spaces, activePageId, reviewAction, viewToggle, onSelectPage, className, ...props }: WikiSpaceRailProps) {
   return (
     <aside {...props} className={cn('studio-wiki-rail', className)}>
+      {viewToggle ? <div className="studio-wiki-rail__view">{viewToggle}</div> : null}
       {reviewAction ? <div className="studio-wiki-rail__review">{reviewAction}</div> : null}
       <div className="studio-wiki-rail__spaces">
-        {spaces.map((space) => (
+        {spaces.map((space, spaceIndex) => (
           <section key={space.id} className="studio-wiki-space" aria-labelledby={`studio-wiki-space-${space.id}`}>
             <h3 id={`studio-wiki-space-${space.id}`}>
-              <span aria-hidden="true">{space.icon ? <Icon name={space.icon} size={16} /> : null}</span>
+              <span aria-hidden="true" style={{ background: knowledgeSpaceHue(spaceIndex) }}>{space.icon ? <Icon name={space.icon} size={16} /> : null}</span>
               {space.name}
             </h3>
+            {space.visibility || space.role ? (
+              <div className="studio-wiki-space__meta">
+                {space.visibility ? <span className="studio-wiki-space__visibility">{space.visibility}</span> : null}
+                {space.role ? <span className="studio-wiki-space__role">{space.role}</span> : null}
+              </div>
+            ) : null}
             <div>
               {space.pages.map((page) => (
                 <button
@@ -1159,6 +1173,8 @@ export type WikiPageProps = ComponentPropsWithoutRef<'article'> & {
   breadcrumbs?: string[]
   title: string
   meta?: ReactNode
+  /** Header-aligned actions (e.g. a "Propose edit" button), rendered top-right. */
+  actions?: ReactNode
   blocks: WikiPageBlock[]
   links?: Array<{
     id: string
@@ -1167,13 +1183,18 @@ export type WikiPageProps = ComponentPropsWithoutRef<'article'> & {
   }>
 }
 
-export function WikiPage({ breadcrumbs, title, meta, blocks, links, className, ...props }: WikiPageProps) {
+export function WikiPage({ breadcrumbs, title, meta, actions, blocks, links, className, ...props }: WikiPageProps) {
   return (
     <article {...props} className={cn('studio-wiki-page', className)}>
       {breadcrumbs?.length ? <div className="studio-wiki-page__crumbs">{breadcrumbs.join(' / ')}</div> : null}
       <header className="studio-wiki-page__head">
         <h1>{title}</h1>
-        {meta ? <div>{meta}</div> : null}
+        {actions || meta ? (
+          <div className="studio-wiki-page__head-side">
+            {actions ? <div className="studio-wiki-page__actions">{actions}</div> : null}
+            {meta ? <div>{meta}</div> : null}
+          </div>
+        ) : null}
       </header>
       <div className="studio-wiki-page__body">
         {blocks.map((block) => {
@@ -1191,6 +1212,7 @@ export function WikiPage({ breadcrumbs, title, meta, blocks, links, className, .
       </div>
       {links?.length ? (
         <footer className="studio-wiki-page__links">
+          <h5 className="studio-wiki-page__links-title">Knowledge trail <small>— the work this page came from, all auditable</small></h5>
           {links.map((link) => <span key={link.id}>{link.icon ? <Icon name={link.icon} size={16} /> : null}{link.label}</span>)}
         </footer>
       ) : null}

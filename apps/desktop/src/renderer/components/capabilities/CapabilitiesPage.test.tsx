@@ -336,8 +336,8 @@ describe('CapabilitiesPage', () => {
     expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
 
     await user.clear(toolSearch)
-    await user.click(screen.getByRole('tab', { name: 'Skills' }))
-    expect(await screen.findByPlaceholderText('Search skills, descriptions, or coworkers...')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Abilities' }))
+    expect(await screen.findByPlaceholderText('Search abilities, descriptions, or coworkers...')).toBeInTheDocument()
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
 
     api.unmount()
@@ -422,8 +422,8 @@ describe('CapabilitiesPage', () => {
     expect(screen.getByText('Shell tools')).toBeInTheDocument()
     expect(screen.queryByText('Research Skill')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: 'Skills' }))
-    const skillSearch = await screen.findByPlaceholderText('Search skills, descriptions, or coworkers...')
+    await user.click(screen.getByRole('tab', { name: 'Abilities' }))
+    const skillSearch = await screen.findByPlaceholderText('Search abilities, descriptions, or coworkers...')
     await user.clear(skillSearch)
     await user.type(skillSearch, 'chart mcp')
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
@@ -812,7 +812,7 @@ describe('CapabilitiesPage', () => {
     const user = userEvent.setup()
     const api = renderCapabilitiesPage()
 
-    await user.click(await screen.findByRole('tab', { name: 'Skills' }))
+    await user.click(await screen.findByRole('tab', { name: 'Abilities' }))
     await user.click(await screen.findByRole('button', { name: /Research Skill/ }))
 
     expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()

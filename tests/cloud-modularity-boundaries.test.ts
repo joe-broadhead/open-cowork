@@ -14,6 +14,7 @@ const postgresMigrations = readFileSync(join(cloudRoot, 'postgres-migrations.ts'
 const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
 const postgresChannelDeliveriesDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/channel-deliveries.ts'), 'utf8')
 const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
+const postgresWorkflowsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/workflows.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
 const lineThreshold = 2_000
@@ -175,7 +176,9 @@ test('postgres store delegates row mapping to domain modules', () => {
   assert.match(source, /postgres-domains\/sessions\.ts/)
   assert.match(source, /postgres-domains\/channels\.ts/)
   assert.match(source, /postgres-store-domains\/workers\.ts/)
-  assert.match(source, /postgres-domains\/workflows\.ts/)
+  assert.match(source, /postgres-store-domains\/workflows\.ts/)
+  // The workflow row mappers now live in the extracted workflows repository.
+  assert.match(postgresWorkflowsDomain, /postgres-domains\/workflows\.ts/)
 
   for (const file of sourceFiles(join(cloudRoot, 'postgres-domains'))) {
     const relativePath = relative(root, file)
@@ -272,7 +275,7 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assert.doesNotMatch(extractMethodSource(postgresStore, 'claimRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresChannelDeliveriesDomain, /async claimNext[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
-  assert.match(postgresStore, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
+  assert.match(postgresWorkflowsDomain, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
 })
 
 test('cloud and gateway OCI builds keep generated artifacts out of Docker context', () => {

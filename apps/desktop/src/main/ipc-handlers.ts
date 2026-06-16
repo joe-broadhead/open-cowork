@@ -31,6 +31,7 @@ import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
 import { registerLaunchpadHandlers } from './ipc/launchpad-handlers.ts'
+import { registerKnowledgeHandlers } from './ipc/knowledge-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCoordinationHandlers } from './ipc/coordination-handlers.ts'
@@ -58,6 +59,7 @@ import { resolvePrivateSessionArtifactPath } from './ipc-artifact-access.ts'
 import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
 import { getThreadIndexService } from './thread-index/thread-index-service.ts'
 import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
+import { configureKnowledgeService } from './knowledge/knowledge-service.ts'
 import { sdkErrorMessage } from './sdk-error.ts'
 import { createWorkspaceGateway } from './workspace-gateway.ts'
 import { createDesktopPairingService } from './desktop-pairing/service.ts'
@@ -380,6 +382,9 @@ export function setupIpcHandlers(
     actionListProvider: () => createSemanticUiLocalActionList('desktop-local'),
     actionExecutor: (actionId, input) => executeSemanticUiLocalAction(context, actionId, input),
   })
+  configureKnowledgeService({
+    getMainWindow,
+  })
 
   registerIpcInvoke(context, 'confirm:request-destructive', objectArg<DestructiveConfirmationRequest>('destructive confirmation request', validateDestructiveConfirmationRequest), async (_event, request) => {
     const confirmed = await showNativeConfirmation(getMainWindow(), destructiveConfirmationPrompt(request))
@@ -399,6 +404,7 @@ export function setupIpcHandlers(
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerLaunchpadHandlers(context)
+  registerKnowledgeHandlers(context)
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerWorkflowHandlers(context)

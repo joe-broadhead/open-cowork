@@ -78,6 +78,14 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
     launchpad: {
       feed: (query) => coworkApi.launchpad.feed(query as Parameters<CoworkAPI['launchpad']['feed']>[0]),
     },
+    knowledge: {
+      snapshot: (query) => coworkApi.knowledge.snapshot(query as Parameters<CoworkAPI['knowledge']['snapshot']>[0]),
+      propose: (input) => coworkApi.knowledge.propose(input as Parameters<CoworkAPI['knowledge']['propose']>[0]),
+      acceptProposal: (proposalId, input) => coworkApi.knowledge.acceptProposal(proposalId, input as Parameters<CoworkAPI['knowledge']['acceptProposal']>[1]),
+      declineProposal: (proposalId, input) => coworkApi.knowledge.declineProposal(proposalId, input as Parameters<CoworkAPI['knowledge']['declineProposal']>[1]),
+      history: (pageId, query) => coworkApi.knowledge.history(pageId, query as Parameters<CoworkAPI['knowledge']['history']>[1]),
+      restoreVersion: (pageId, versionId, input) => coworkApi.knowledge.restoreVersion(pageId, versionId, input as Parameters<CoworkAPI['knowledge']['restoreVersion']>[2]),
+    },
     capabilities: {
       catalog: () => Promise.all([coworkApi.capabilities.tools(), coworkApi.capabilities.skills()]),
       tools: () => coworkApi.capabilities.tools(),

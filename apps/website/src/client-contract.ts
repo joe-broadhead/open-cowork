@@ -19,12 +19,6 @@ export type CloudWebClientBootstrap = {
     defaultAccent?: string
     defaultDensity?: 'compact' | 'regular' | 'comfy'
     tenantBrandingLocked: boolean
-    presets: Array<{
-      id: string
-      label: string
-      description: string
-      swatches: string[]
-    }>
     accents?: Array<{
       id: string
       label: string

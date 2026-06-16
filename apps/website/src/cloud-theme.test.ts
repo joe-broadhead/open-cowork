@@ -44,7 +44,6 @@ function bootstrap(tenantBrandingLocked: boolean, includeSettingsApi = false): C
       defaultAccent: 'azure',
       defaultDensity: 'regular',
       tenantBrandingLocked,
-      presets: cloudThemePresetOptions(),
       accents: cloudAccentPresetOptions(),
     },
   }

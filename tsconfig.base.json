@@ -28,6 +28,8 @@
       "@open-cowork/gateway-testing/*": ["./packages/gateway-testing/src/*"],
       "@open-cowork/shared": ["./packages/shared/src/index.ts"],
       "@open-cowork/shared/*": ["./packages/shared/src/*"],
+      "@open-cowork/website": ["./apps/website/src/render.ts"],
+      "@open-cowork/website/*": ["./apps/website/src/*"],
       "@open-cowork/ui": ["./packages/ui/src/index.ts"],
       "@open-cowork/ui/app-api": ["./packages/ui/src/AppApiProvider.tsx"],
       "@open-cowork/ui/badge": ["./packages/ui/src/Badge.tsx"],

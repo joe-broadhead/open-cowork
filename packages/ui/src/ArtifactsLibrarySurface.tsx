@@ -261,8 +261,6 @@ export function ArtifactsLibrarySurface({
     () => filteredArtifacts.filter((artifact) => canExportArtifact !== false && actionAvailable(canExportArtifact, artifact)),
     [canExportArtifact, filteredArtifacts],
   )
-  const inReviewCount = artifacts.filter((artifact) => artifact.status === 'in-review').length
-  const finalCount = artifacts.filter((artifact) => artifact.status === 'final').length
   const knownTotal = total ?? artifacts.length
   const filterOptions = [...KIND_FILTERS, ...STATUS_FILTERS]
   const emptyTitle = truncated ? 'No loaded artifacts found' : 'No artifacts found'
@@ -272,11 +270,6 @@ export function ArtifactsLibrarySurface({
 
   return (
     <section {...props} className={cn('studio-artifacts-library', loading && 'studio-artifacts-library--loading', className)} aria-label="Artifact library">
-      <div className="studio-artifacts-summary" aria-label="Artifacts summary">
-        <div><span>Total</span><strong>{knownTotal}</strong></div>
-        <div><span>In review</span><strong>{inReviewCount}</strong></div>
-        <div><span>Final</span><strong>{finalCount}</strong></div>
-      </div>
       <div className="studio-artifacts-toolbar">
         <Input
           value={query}

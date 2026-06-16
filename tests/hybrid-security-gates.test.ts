@@ -130,6 +130,10 @@ test('hybrid security contract is grounded in code-level fail-closed behavior', 
   assert.match(standaloneNetworkPolicy, /public OpenCode endpoint/)
 
   const cloudHttpServer = read('apps/desktop/src/main/cloud/http-server.ts')
-  assert.match(cloudHttpServer, /Retry-After/)
   assert.match(cloudHttpServer, /quota_rejections/)
+  // The fail-closed Retry-After header lives in the shared error writer the HTTP
+  // server delegates to (extracted from http-server.ts during the cloud HTTP
+  // decomposition) — assert it there so the security contract stays grounded.
+  const cloudErrorWriter = read('apps/desktop/src/main/cloud/http-response-writers.ts')
+  assert.match(cloudErrorWriter, /Retry-After/)
 })

@@ -17,6 +17,9 @@ importers:
 
   .:
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.2
+        version: 0.5.2
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.4.1(jiti@2.7.0))
@@ -138,6 +141,9 @@ importers:
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@open-cowork/website':
+        specifier: workspace:*
+        version: link:../website
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.4(vite@8.0.10(@types/node@22.19.19)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
@@ -874,6 +880,9 @@ packages:
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
     engines: {node: '>= 8.9.0'}
+
+  '@electric-sql/pglite@0.5.2':
+    resolution: {integrity: sha512-y6ySdFE7FQB7BkVaSNaPINgY7mXCyvi+3GQB5ySX9WGwgrdh31WXMP5RM40oAyYff47lIr7xdcW8UbCW5NHDmw==}
 
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
@@ -5686,6 +5695,8 @@ snapshots:
     dependencies:
       ajv: 6.15.0
       ajv-keywords: 3.5.2(ajv@6.15.0)
+
+  '@electric-sql/pglite@0.5.2': {}
 
   '@electron/asar@3.4.1':
     dependencies:

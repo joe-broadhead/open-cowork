@@ -2,6 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   CAPABILITY_BUNDLE_FORMAT,
+  type CapabilityBundleManifest,
+} from '../packages/shared/dist/capabilities.js'
+import {
   applyCapabilityBundleInstall,
   applyCapabilityBundleUninstall,
   applyCapabilityBundleUpdate,
@@ -11,8 +14,7 @@ import {
   planCapabilityBundleUninstall,
   planCapabilityBundleUpdate,
   validateCapabilityBundleRuntimeSupport,
-  type CapabilityBundleManifest,
-} from '../packages/shared/src/capabilities.ts'
+} from '../apps/desktop/src/main/capability-bundle-engine.ts'
 
 function manifest(overrides: Partial<CapabilityBundleManifest> = {}): CapabilityBundleManifest {
   return {

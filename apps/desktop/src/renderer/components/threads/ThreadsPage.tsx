@@ -492,7 +492,7 @@ function DetailDrawer({
   }, [thread?.sessionId])
   if (!thread) return null
   return (
-    <aside aria-label="Project detail" className="threads-detail-panel shrink-0 border-s border-border-subtle bg-base">
+    <aside aria-label={t('threads.detailPanel', 'Project detail')} className="threads-detail-panel shrink-0 border-s border-border-subtle bg-base">
       <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <h2 className="min-w-0 truncate text-[14px] font-semibold text-text">{thread.title}</h2>
         <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[12px] text-text-muted hover:bg-surface-hover">Close</button>
@@ -677,7 +677,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
 
   return (
     <div className="threads-page-shell flex h-full min-h-0 bg-base text-text">
-      <aside aria-label="Project filters" className="threads-filter-panel flex shrink-0 flex-col border-e border-border-subtle bg-base">
+      <aside aria-label={t('threads.filterPanel', 'Project filters')} className="threads-filter-panel flex shrink-0 flex-col border-e border-border-subtle bg-base">
         <div className="border-b border-border-subtle px-3 py-3">
           <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Projects')}</div>
           <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search project chats, metadata, tags, and saved filters.')}</div>
@@ -773,7 +773,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
         <div className="scroll-shadow-x min-h-0 flex-1 overflow-auto">
           <div role="grid" aria-label={t('threads.resultsGrid', 'Project results')} className="min-w-[920px]">
             <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
-              <span role="columnheader" aria-label="Select" />
+              <span role="columnheader" aria-label={t('threads.selectColumn', 'Select')} />
               <span role="columnheader">Project chat</span>
               <span role="columnheader">Provider / model</span>
               <span role="columnheader">Tags</span>

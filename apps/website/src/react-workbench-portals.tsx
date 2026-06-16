@@ -16,6 +16,7 @@ import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane 
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
 import { CloudComposerPortal } from './react-workbench-composer.tsx'
 import { CloudLaunchpadPortal } from './react-workbench-launchpad.tsx'
+import { canManageCloudKnowledge } from './react-workbench-knowledge-state.ts'
 import { CloudWorkbenchSurfacePortals } from './react-workbench-surfaces.tsx'
 import { sessionTitle, setRouteHash, type ArtifactPanelState } from './react-workbench-controller.ts'
 import type { CloudWebCoworkerOption } from './surface-workbench.ts'
@@ -153,6 +154,7 @@ export function CloudWorkbenchPortals({
   onOpenLaunchpadArtifact,
 }: CloudWorkbenchPortalsProps) {
   const portals: ReactNode[] = []
+  const canCaptureKnowledge = canManageCloudKnowledge(bootstrap.role, workspace)
   const pushPortal = (target: HTMLElement | null, node: ReactNode) => {
     if (target) portals.push(createPortal(node, target))
   }
@@ -167,7 +169,7 @@ export function CloudWorkbenchPortals({
   pushPortal(targets.metaTarget, <CloudConversationMeta summary={chatMeta} taskContext={taskContext} onOpenBoard={taskContext ? () => setRouteHash('threads') : undefined} />)
   pushPortal(targets.managedActionsTarget, (
     <>
-      <CloudComposerActionCluster profileName={bootstrap.profileName} />
+      <CloudComposerActionCluster profileName={bootstrap.profileName} canCaptureKnowledge={canCaptureKnowledge} />
       <button className="ghost chat-inspector-toggle" id="chat-inspector-toggle" type="button" aria-controls="chat-inspector" aria-expanded="false">Review</button>
     </>
   ))

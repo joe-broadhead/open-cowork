@@ -150,7 +150,7 @@ async function defaultDnsResolver(hostname: string) {
 }
 
 export type McpUrlPolicyResult =
-  | { ok: true; url: URL }
+  | { ok: true; url: URL; resolvedAddresses?: string[] }
   | { ok: false; reason: string }
 
 // Classify a URL and return either the parsed URL for the caller to
@@ -217,6 +217,7 @@ export async function evaluateHttpMcpUrlResolved(
     return { ok: false, reason: `Could not resolve MCP hostname "${hostname}".` }
   }
 
+  const validatedAddresses: string[] = []
   for (const record of records) {
     const address = normalizeHostname(record.address)
     const blocked = classifyBlockedNetwork(address)
@@ -224,7 +225,14 @@ export async function evaluateHttpMcpUrlResolved(
       if (options.allowPrivateNetwork && blocked.kind !== 'cloud-metadata') continue
       return { ok: false, reason: rejectionReason(blocked, 'resolved') }
     }
+    validatedAddresses.push(record.address)
   }
 
-  return staticVerdict
+  // Surface the validated IPs so the MCP transport can pin the connection to a
+  // checked address (preserving the original Host header) and close the
+  // DNS-rebinding window between this check and connect time. If the transport
+  // reconnects by hostname the residual TOCTOU is bounded: cloud-metadata is
+  // always blocked regardless of allowPrivateNetwork, and the hostname must be
+  // one the operator explicitly configured.
+  return { ...staticVerdict, resolvedAddresses: validatedAddresses }
 }

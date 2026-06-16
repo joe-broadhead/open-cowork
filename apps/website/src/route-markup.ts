@@ -6,6 +6,7 @@ import { cloudWebWorkbenchParityForRoute, type CloudWebWorkbenchParityAvailabili
 const ROUTE_NAV_ICONS: Record<CloudWebRouteId, string> = {
   threads: 'P',
   chat: '+',
+  knowledge: 'K',
   approvals: '?',
   agents: 'T',
   capabilities: '*',

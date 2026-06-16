@@ -29,6 +29,7 @@ loading/empty/error state contract.
 | `workflows` | Studio | Member | `workflows`, `workflow`, `workflowRun`, `workflowPause`, `workflowResume`, `workflowArchive` | Playbook summary rendering is bounded to 100 playbooks and 50 recent runs in the browser; run-history cursoring is deferred. | Playbook controls disable when profile policy blocks workflows. Rows never expose worker credentials or local paths. |
 | `channels` | Studio | Member | `channelAgents`, `channelBindings`, `channelDeliveries` | Channel coworkers and bindings request `limit=100`; delivery status requests and renders the first 50 rows with member-facing bounded-list copy. Delivery stream cursoring stays with Gateway/admin flows. | User route is read-only and focused on reach, delivery status, and linked chats. Credential refs, payload secrets, signed URLs, tokens, and provider internals are stripped before rendering. |
 | `artifacts` | Studio | Member | `artifactsIndex`, `sessionArtifacts`, `sessionArtifact` | Cross-project artifact library rendering is bounded to 100 artifacts, with kind/status filters, author coworker, source project, Open, and Export actions. When truncated, search, filters, and bulk export are explicitly scoped to loaded results. | Artifact bodies fetch only after explicit action. Signed URLs, object keys, buckets, tokens, and object-store internals are stripped from metadata. |
+| `knowledge` | Studio | Member | `knowledgeSnapshot`, `knowledgeProposalCreate`, `knowledgeProposalAccept`, `knowledgeProposalDecline`, `knowledgePageHistory` | Knowledge loads a bounded workspace snapshot plus selected-page version history; cursoring is deferred until large Spaces require it. | Reader Spaces render read-only; proposal creation requires Contributor or Maintainer, and review controls require Maintainer. Knowledge backlinks expose safe task/thread/artifact labels only and never expose local paths, object-store internals, secrets, or runtime payloads. |
 | `settings` | Studio | Member | `authMe`, `config`, `workspace`, `settings`, `setting` | Not applicable; user settings use one bounded user-scoped metadata record plus bootstrap/workspace metadata. | Tenant-managed branding disables theme and accent controls. Provider keys, local machine runtime permissions, and organization policy internals never render in user settings. |
 | `org` | Admin | Public | `authMe`, `config`, `workspace` | Not applicable. | Org is an explicit public org/profile surface, not the signed-out fallback. Bootstrap JSON carries public branding, route metadata, endpoint metadata, and feature metadata only. |
 | `members` | Admin | Admin | `adminMembers`, `adminMemberInvite`, `adminMemberUpdate` | Members endpoint supports `q` and `limit`; the browser requests `limit=100` and renders at most 100 rows. | Member rows expose identity, role, and status only. Invite and role controls disable for non-admins and non-invite signup modes. |
@@ -62,6 +63,7 @@ keeping Cloud Web honest about cloud-only and desktop-only boundaries.
 | Tools & Skills | Shared with Desktop | `capabilities` | Show allowed tools, skills, MCP metadata, linked coworkers, and policy verdicts. | Cloud Web renders cloud-safe capability metadata; runtime execution remains owned by OpenCode workers. |
 | Objectives and Tasks | Shared with Desktop | `threads` | Show durable project objectives, task specs, stage chips, assignees, Cleo planning, and linked-session work targets. | Cloud Web consumes the coordination API only; it does not invent project/task state or execute task work in the browser. |
 | Artifacts | Shared with Desktop | `artifacts`, `chat` | Show an index-backed cross-project artifact library with kind/status filters, author coworker, source project, sanitized metadata, and explicit Open/Export actions. | Cloud Web reads artifact index metadata through Cloud APIs and fetches artifact bodies only after explicit user action while stripping object-store internals. |
+| Knowledge | Shared with Desktop | `knowledge`, `chat` | Show Spaces, versioned pages, reviewable proposals, knowledge-trail backlinks, graph navigation, and a Capture to knowledge action that creates pending proposals. | Cloud Web consumes the Knowledge API only; Open Cowork stores versioned product knowledge while OpenCode remains responsible for execution and chat events. |
 | Playbooks | Shared with Desktop | `workflows`, `chat` | Create, list, run, pause, resume, archive, and inspect Cloud playbook definitions and run chats. | Cloud Web runs saved playbooks through Cloud workflow APIs; local launch-at-login and native notifications remain Desktop settings. |
 | Channels | Shared with Desktop | `channels`, `chat` | Show provider reach, connected channel bindings, People roles, Watches, delivery status, and linked Cloud run chats with admin-gated setup controls. | Cloud Web reads channel state through tenant-scoped Cloud APIs; Gateway delivery, provider adapters, and OpenCode execution remain service-owned. |
 | User Settings | Shared with Desktop | `settings` | Show user-scoped Appearance, Notifications, Privacy, and read-only AI provider/profile status without exposing admin BYOK or local machine runtime controls. | Cloud Web persists durable user-scoped appearance, notification, and privacy preferences through the Cloud settings API; org secrets, provider keys, and local OpenCode runtime settings remain Admin/Desktop-owned. |
@@ -143,8 +145,8 @@ nonce boundary.
 
 There are no remaining vanilla feature scripts under `apps/website/src/client`.
 Projects, chat, coworkers, capabilities, playbooks, channels, artifacts,
-admin/settings surfaces, and the browser theme switcher are React-owned in the
-browser bundle.
+Knowledge, admin/settings surfaces, and the browser theme switcher are
+React-owned in the browser bundle.
 New feature work must use the shared `AppAPI` contract from
 `packages/shared/src/app-api.ts`, `AppApiProvider` / `useAppApi()` from
 `@open-cowork/ui/app-api`, and the Cloud fetch/SSE adapter in
@@ -222,6 +224,7 @@ the checklist cannot drift from the source contract.
 | Hire a coworker wizard boundary | `agents` | Desktop four-step Hire a coworker wizard with Role, Abilities, Brain, and Permissions | Agents route keeps the same coworker vocabulary and Start chat path while showing no local custom-agent editor; the parity matrix documents the Desktop-only reason. | `disabled`, `permission-gated` | Cloud Web cannot edit local custom-agent files, local provider settings, or machine OpenCode permission config. |
 | Playbooks and runs | `workflows` | Playbooks list, saved workflow setup chats, run controls, and run history | Playbook cards and selected details show numbered ordered steps, Runs as metadata, last-run status, run rows, pause/resume/archive actions, empty states, and blocked policy copy. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry`, `destructive-confirmation` | Cloud Web runs saved playbooks through Cloud workflow APIs; OpenCode-native agents still execute the work. |
 | Channels and artifacts | `channels`, `artifacts`, `chat` | Channel status, linked run chats, indexed artifact library cards, and review-first artifact previews | Connected channel coworkers, bindings, delivery status, searchable artifact library with status/provenance, sanitized metadata, explicit Open/Export actions, and selected-chat previews stay reachable without admin controls. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry` | Provider payloads, signed URLs, object-store internals, channel secrets, and delivery targets are stripped before rendering. |
+| Knowledge and capture | `knowledge`, `chat` | Desktop Knowledge page, chat Capture to knowledge action, review queue, page history, and graph | Knowledge route renders Space rail, page reader, review queue, version history, graph navigation, and the Chat route exposes Capture to knowledge for reviewable proposals. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `retry` | Knowledge is an app-owned native module; Cloud Web consumes Knowledge APIs only and never couples to a local OpenWiki checkout or owns OpenCode execution. |
 | Team and member admin boundary | `org`, `members`, `policy`, `usage` | Desktop account, Team context, Settings policy, Health Center, and usage summaries | Org profile, member rows, invite/role controls, policy summaries, usage quotas, and worker health are visually grouped under Admin without dominating the default Studio path. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `retry`, `destructive-confirmation` | Browser disabled controls are ergonomic only; Cloud API authorization remains server-side and tenant-scoped. |
 | User Settings | `settings` | Desktop Settings dialog: appearance, permissions, notifications, privacy, and profile status | Cloud Web exposes user-scoped Appearance, Notifications, Privacy, and read-only AI provider/profile status as a Studio route, while keeping BYOK and org policy in Admin. | `loading`, `disabled`, `permission-gated` | Cloud Web persists durable user-scoped preferences through Cloud settings metadata; provider keys, local machine runtime config, and org policy stay Desktop/Admin-owned. |
 | Secrets, Gateway, audit, and diagnostics | `byok`, `connections`, `billing`, `gateway`, `audit`, `diagnostics` | Desktop Cloud connection setup, Gateway pairing, provider credentials, billing, audit, and Health Center support bundle surfaces | BYOK write-only rotation, one-time token reveal, gateway delivery controls, billing portal actions, audit export, diagnostics redaction, confirmations, and settled disabled states are visible and keyboard-reachable. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry`, `destructive-confirmation`, `one-time-reveal` | Raw secrets, provider keys, auth headers, signed URLs, object-store internals, local paths, command lines, and environment variables must not render outside intentional safe reveal flows. |
@@ -231,8 +234,8 @@ the checklist cannot drift from the source contract.
 - Cards, panels, tables, rows, badges, notices, empty states, focus rings, and
   destructive/primary/secondary controls read like Desktop primitives.
 - Projects, chat, runtime status, approvals, questions, coworkers, tools,
-  skills, playbooks, channels, and artifacts map to the Desktop/Cloud parity
-  matrix.
+  skills, playbooks, channels, artifacts, and Knowledge map to the
+  Desktop/Cloud parity matrix.
 - Org, members, policy, BYOK, connections, gateway, billing, audit, usage, and
   diagnostics map to the admin/settings surface matrix.
 - `/assets/open-cowork-cloud-react.js` mounts the React controller for
@@ -267,13 +270,16 @@ be considered complete.
 | `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | `apps/website/src/performance.test.ts`, `apps/website/src/modularity.test.ts`, `docs/cloud-web-workbench.md` |
 | `docs-match-shipped-behavior` | Docs describe shipped behavior and explicit boundaries, not aspirational runtime behavior. | `docs/cloud-web-workbench.md`, `docs/release-checklist.md`, `apps/website/src/studio-production-qa.test.ts` |
 
-## OpenWiki/Knowledge Deferral
+## Knowledge/OpenWiki Integration
 
-Knowledge/OpenWiki is intentionally deferred and ships with no Cloud Web route,
-no visible CTA, no runtime dependency, and no data-sync claim in this roadmap.
-Do not add a placeholder that implies wiki content is synced, indexed, or
-available to OpenCode. Do not couple Cloud Web, Desktop, Gateway, or the Cloud
-API to a local OpenWiki checkout while this contract is in force.
+Knowledge now ships as an app-owned native module: Cloud Web exposes a
+Knowledge route, the Chat route includes a `Capture to knowledge` CTA, and both
+Desktop and Cloud Web consume the same Cloud/API-client contract for Spaces,
+versioned pages, pending proposals, review decisions, page history, and graph
+context.
 
-Create a separate future roadmap before adding a Knowledge route, CTA, sync
-contract, local OpenWiki checkout dependency, or runtime integration.
+This phase deliberately does not embed or depend on a local OpenWiki checkout.
+Do not couple Cloud Web, Desktop, Gateway, or the Cloud API to a local OpenWiki checkout.
+External OpenWiki embedding remains a later roadmap phase; until that roadmap
+replaces this contract, Knowledge stays a native Open Cowork product module
+layered around OpenCode sessions rather than a second runtime.

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Badge } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
@@ -332,15 +332,6 @@ function QuestionCard({
   )
 }
 
-function Stat({ label, value }: { label: ReactNode; value: number }) {
-  return (
-    <div className="studio-approvals-stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
 export function ApprovalsQueueSurface({
   items,
   loading = false,
@@ -355,17 +346,9 @@ export function ApprovalsQueueSurface({
   onRejectQuestion,
 }: ApprovalsQueueSurfaceProps) {
   const sortedItems = useMemo(() => [...items].sort((left, right) => (right.sortOrder || 0) - (left.sortOrder || 0)), [items])
-  const permissionCount = sortedItems.filter((item) => item.kind === 'permission').length
-  const questionCount = sortedItems.filter((item) => item.kind === 'question').length
-  const sessionCount = new Set(sortedItems.map((item) => item.sessionId)).size
 
   return (
     <section className={cn('studio-approvals-surface', loading && 'studio-approvals-surface--loading')} aria-label="Approvals queue">
-      <div className="studio-approvals-summary" aria-label="Approvals summary">
-        <Stat label="Permission requests" value={permissionCount} />
-        <Stat label="Questions" value={questionCount} />
-        <Stat label="Sessions waiting" value={sessionCount} />
-      </div>
       {error ? <p className="notice" data-kind="error">{error}</p> : null}
       {sortedItems.length ? (
         <div className="studio-approvals-list">

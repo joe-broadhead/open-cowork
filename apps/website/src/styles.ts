@@ -1,10 +1,12 @@
 import { cssColorLuminance, emitRootTokensCss, type PublicBrandingConfig } from '@open-cowork/shared'
+import { approvalsSurfaceCss, channelsSurfaceCss, knowledgeGraphCss, projectsSurfaceCss, wikiSurfaceCss } from '@open-cowork/ui'
 import { publicBrandingCss } from './branding.ts'
 import { cloudWebsiteAgentProfileStyles } from './style-agent-profile.ts'
 import { cloudWebsiteArtifactStyles } from './style-artifacts.ts'
 import { cloudWebsiteChatStyles } from './style-chat.ts'
 import { cloudWebsiteComponentStyles } from './style-components.ts'
 import { cloudWebsiteLaunchpadStyles } from './style-launchpad.ts'
+import { cloudWebsiteKnowledgeStyles } from './style-knowledge.ts'
 import { cloudWebsiteLibraryStyles } from './style-library.ts'
 import { cloudWebsiteLayoutStyles } from './style-layout.ts'
 import { cloudWebsitePrimitiveStyles } from './style-primitives.ts'
@@ -62,8 +64,8 @@ function cloudWebsiteBaseStyles(branding: PublicBrandingConfig) {
     :root {
       color-scheme: ${cloudWebsiteColorScheme(branding)};
 ${publicBrandingCss(branding)}
-      --cloud-shell-sidebar-w: 248px;
-      --cloud-shell-sidebar-rail-w: 64px;
+      --cloud-shell-sidebar-w: var(--studio-shell-sidebar-w);
+      --cloud-shell-sidebar-rail-w: var(--studio-shell-rail-w);
       --shadow: var(--shadow-card);
       --surface-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 5%, transparent);
       --field-bg: color-mix(in srgb, var(--color-base) 72%, var(--color-elevated) 28%);
@@ -103,29 +105,6 @@ ${publicBrandingCss(branding)}
       font-variant-numeric: tabular-nums;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
-    }
-    body::before,
-    body::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-    }
-    body::before {
-      inset: -24%;
-      background:
-        radial-gradient(42% 38% at 18% 10%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 62%),
-        radial-gradient(36% 40% at 82% 8%, color-mix(in srgb, var(--accent-strong) 14%, transparent), transparent 64%),
-        radial-gradient(48% 44% at 62% 108%, color-mix(in srgb, var(--color-info) 12%, transparent), transparent 62%);
-      filter: blur(20px);
-      opacity: 0.42;
-      animation: ui-atmosphere-drift 26s var(--ease-spring) infinite alternate;
-    }
-    body::after {
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      mix-blend-mode: overlay;
-      opacity: 0.026;
     }
     button, input, select, textarea {
       font: inherit;
@@ -169,10 +148,6 @@ ${publicBrandingCss(branding)}
       from { background-position: 220% 0; }
       to { background-position: -220% 0; }
     }
-    @keyframes ui-atmosphere-drift {
-      from { transform: translate3d(0, 0, 0) scale(1); }
-      to { transform: translate3d(2%, 1.5%, 0) scale(1.08); }
-    }
     @keyframes ui-stream-shimmer {
       to { background-position: -220% 0; }
     }
@@ -198,9 +173,6 @@ ${publicBrandingCss(branding)}
         scroll-behavior: auto !important;
         transition-duration: 0ms !important;
       }
-      body::before {
-        animation: none;
-      }
       ::view-transition-old(root),
       ::view-transition-new(root) {
         animation: none !important;
@@ -218,11 +190,17 @@ ${cloudWebsitePrimitiveStyles()}
 ${cloudWebsiteAgentProfileStyles()}
 ${cloudWebsiteArtifactStyles()}
 ${cloudWebsiteChatStyles()}
-${cloudWebsiteLaunchpadStyles()}
-${cloudWebsiteLibraryStyles()}
+    ${cloudWebsiteLaunchpadStyles()}
+    ${cloudWebsiteKnowledgeStyles()}
+    ${knowledgeGraphCss()}
+    ${wikiSurfaceCss()}
+    ${cloudWebsiteLibraryStyles()}
 ${cloudWebsiteSharedUiStyles()}
 ${cloudWebsiteSettingsStyles()}
 ${cloudWebsiteStudioPrimitiveStyles()}
+${channelsSurfaceCss()}
+${projectsSurfaceCss()}
 ${cloudWebsiteStudioUiStyles()}
+    ${approvalsSurfaceCss()}
 `
 }

@@ -1,6 +1,6 @@
 import { escapeHtml } from './html-utils.ts'
 import { routePanelAttrs, routeParityMarkup } from './route-markup.ts'
-import { cloudAccentPresetOptions, cloudDensityOptions, cloudThemePresetOptions } from './cloud-theme.ts'
+import { cloudAccentPresetOptions, cloudDensityOptions } from './cloud-theme.ts'
 
 type CloudSettingsSurfaceInput = {
   tenantBrandingLocked: boolean
@@ -77,11 +77,8 @@ export function cloudSettingsSurfaceMarkup(input: CloudSettingsSurfaceInput) {
             </div>
             <div class="settings-group">
               <div class="settings-row">
-                <div><strong>Theme</strong><span>Day or Mercury, plus shared theme presets.</span></div>
+                <div><strong>Theme</strong><span>Day or Mercury.</span></div>
                 <div class="settings-control-pair">
-                  <label><span>Preset</span><select data-cloud-theme-control="preset" data-tenant-branding-locked="${locked ? 'true' : 'false'}"${lockedAttrs}>
-                    ${cloudThemePresetOptions().map((preset) => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</option>`).join('')}
-                  </select></label>
                   <label><span>Mode</span><select data-cloud-theme-control="scheme" data-tenant-branding-locked="${locked ? 'true' : 'false'}"${lockedAttrs}>
                     <option value="dark">Mercury</option>
                     <option value="light">Day</option>

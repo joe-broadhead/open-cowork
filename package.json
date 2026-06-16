@@ -124,6 +124,7 @@
     }
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.2",
     "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",

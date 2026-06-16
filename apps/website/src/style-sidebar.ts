@@ -51,7 +51,7 @@ export function cloudWebsiteSidebarStyles() {
     .sidebar-presence-settings {
       width: var(--control-h-sm);
       height: var(--control-h-sm);
-      color: var(--muted);
+      color: var(--color-text-muted);
       text-decoration: none;
     }
     .sidebar-presence-settings:hover {
@@ -66,7 +66,7 @@ export function cloudWebsiteSidebarStyles() {
       flex: 0 0 auto;
       place-items: center;
       background: color-mix(in srgb, var(--color-surface-hover) 64%, transparent);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-family: var(--font-display);
       font-size: var(--text-2xs);
       font-weight: 800;
@@ -95,7 +95,7 @@ export function cloudWebsiteSidebarStyles() {
       align-items: center;
       justify-content: space-between;
       gap: var(--space-2);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-2xs);
       font-weight: 750;
       letter-spacing: 0.08em;

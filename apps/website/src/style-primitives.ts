@@ -118,7 +118,7 @@ export function cloudWebsitePrimitiveStyles() {
     }
     .ui-button--primary:hover:not(:disabled) {
       background: var(--color-accent-hover);
-      box-shadow: var(--glow-accent), var(--shadow-2), var(--specular-strong);
+      box-shadow: var(--shadow-2), var(--specular-strong);
       transform: translateY(calc(-1 * var(--border-width-1)));
     }
     .ui-button--primary:hover:not(:disabled)::after {

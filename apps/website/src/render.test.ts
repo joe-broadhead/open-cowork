@@ -40,8 +40,6 @@ import {
   cloudWebWorkbenchParityForRoute,
   cloudWebWorkbenchRouteSummary,
 } from './workbench-parity.ts'
-import { DEFAULT_WEBSITE_PUBLIC_BRANDING } from './branding.ts'
-import { cloudThemePresetOptions } from './cloud-theme.ts'
 
 const html = cloudWebsiteHtml({
   role: 'web',
@@ -152,11 +150,11 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /--accent: #2f6bf0;/)
   assert.match(html, /--accent-2: #5a8cf5;/)
   assert.match(html, /--accent-text: #5a8cf5;/)
-  assert.match(html, /--accent-action-foreground: #000000;/)
+  assert.match(html, /--accent-action-foreground: #ffffff;/)
   assert.match(html, /--accent-gradient: linear-gradient\(150deg,var\(--accent-2\),var\(--accent\)\);/)
-  assert.match(html, /--accent-action-fill: linear-gradient\(rgba\(255,255,255,0\.01\),rgba\(255,255,255,0\.01\)\), var\(--accent-gradient\);/)
-  assert.match(html, /--cloud-shell-sidebar-w: 248px;/)
-  assert.match(html, /--cloud-shell-sidebar-rail-w: 64px;/)
+  assert.match(html, /--accent-action-fill: linear-gradient\(rgba\(0,0,0,0\.17\),rgba\(0,0,0,0\.17\)\), var\(--accent-gradient\);/)
+  assert.match(html, /--cloud-shell-sidebar-w: var\(--studio-shell-sidebar-w\);/)
+  assert.match(html, /--cloud-shell-sidebar-rail-w: var\(--studio-shell-rail-w\);/)
   assert.match(html, /font-variant-numeric: tabular-nums;/)
   assert.match(html, /\.nav-links a\[data-active="true"\]/)
   assert.match(html, /body\[data-sidebar-rail="collapsed"\] \.shell/)
@@ -194,7 +192,7 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /id="cloud-settings-privacy"/)
   assert.match(html, /data-cloud-settings-target="cloud-settings-profile"/)
   assert.doesNotMatch(html, /href="#cloud-settings-profile"/)
-  assert.match(html, /data-cloud-theme-control="preset"/)
+  assert.match(html, /data-cloud-theme-control="scheme"/)
   assert.match(html, /data-cloud-theme-accent-button="azure"/)
   assert.match(html, /data-cloud-density-button="regular"/)
   assert.match(html, /data-cloud-user-setting="cloud-setting-notification-voice"/)
@@ -467,7 +465,7 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'billingPortal')?.path, '/api/billing/portal')
 })
 
-test('cloud website exposes shared theme presets with tenant branding precedence', () => {
+test('cloud website exposes the Mercury/Day theme identity with tenant branding precedence', () => {
   const match = html.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
   assert.ok(match)
   const bootstrap = JSON.parse(match[1])
@@ -476,32 +474,19 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   assert.equal(bootstrap.theme.defaultAccent, 'azure')
   assert.equal(bootstrap.theme.defaultDensity, 'regular')
   assert.equal(bootstrap.theme.tenantBrandingLocked, false)
-  assert.equal(bootstrap.theme.presets.length, 18)
   assert.equal(bootstrap.theme.accents.length, 6)
-  assert.deepEqual(bootstrap.theme.presets.map((preset: { id: string }) => preset.id), cloudThemePresetOptions().map((preset) => preset.id))
-  assert.match(html, /id="cloud-theme-preset"/)
+  // The editor-style theme presets are not user-facing on either surface; only
+  // the Mode (Mercury/Day), Accent, and Density controls ship.
+  assert.doesNotMatch(html, /id="cloud-theme-preset"/)
+  assert.doesNotMatch(html, /data-cloud-theme-control="preset"/)
   assert.match(html, /id="cloud-theme-scheme"/)
   assert.match(html, /id="cloud-theme-accent"/)
   assert.match(html, /id="cloud-theme-density"/)
-  assert.match(html, /<option value="mercury" selected>Mercury<\/option>/)
   assert.match(html, /<option value="dark" selected>Mercury<\/option>/)
   assert.match(html, /<option value="azure" selected>Azure<\/option>/)
   assert.match(html, /<option value="regular" selected>Regular<\/option>/)
-  assert.match(html, /<select(?=[^>]*data-cloud-theme-control="preset")(?=[^>]*data-tenant-branding-locked="false")[^>]*>/)
   assert.match(html, /<button type="button" class="settings-swatch" data-cloud-theme-accent-button="azure"/)
   assert.match(html, /<button type="button" data-cloud-density-button="regular">Regular<\/button>/)
-
-  const defaultedBranding = cloudWebsiteHtml({
-    role: 'owner',
-    profileName: 'default',
-    features: { chat: true },
-    publicBranding: DEFAULT_WEBSITE_PUBLIC_BRANDING,
-  })
-  const defaultedBrandingMatch = defaultedBranding.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
-  assert.ok(defaultedBrandingMatch)
-  assert.equal(JSON.parse(defaultedBrandingMatch[1]).theme.tenantBrandingLocked, false)
-  assert.doesNotMatch(defaultedBranding, /<select(?=[^>]*id="cloud-theme-preset")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
-  assert.doesNotMatch(defaultedBranding, /<select(?=[^>]*id="cloud-theme-density")(?=[^>]* disabled)[^>]*>/)
 
   const branded = cloudWebsiteHtml({
     role: 'owner',
@@ -514,8 +499,8 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   const brandedMatch = branded.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
   assert.ok(brandedMatch)
   assert.equal(JSON.parse(brandedMatch[1]).theme.tenantBrandingLocked, true)
-  assert.match(branded, /<select(?=[^>]*id="cloud-theme-preset")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
-  assert.doesNotMatch(branded, /<select(?=[^>]*id="cloud-theme-density")(?=[^>]* disabled)[^>]*>/)
+  // Locked tenant branding disables the live theme controls (verified via Mode).
+  assert.match(branded, /<select(?=[^>]*data-cloud-theme-control="scheme")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
 })
 
 test('cloud website keeps existing admin dashboard surfaces available', () => {

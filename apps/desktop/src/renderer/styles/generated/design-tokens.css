@@ -65,12 +65,12 @@
   --shadow-3: var(--shadow-elevated);
   --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26);
   --shadow-elevated: 0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32);
-  --bg-image: radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.045), transparent 62%);
+  --bg-image: none;
   --accent: #2f6bf0;
   --accent-2: #5a8cf5;
   --accent-text: #5a8cf5;
-  --accent-action-foreground: #000000;
-  --accent-action-fill: linear-gradient(rgba(255,255,255,0.01),rgba(255,255,255,0.01)), var(--accent-gradient);
+  --accent-action-foreground: #ffffff;
+  --accent-action-fill: linear-gradient(rgba(0,0,0,0.17),rgba(0,0,0,0.17)), var(--accent-gradient);
   --accent-soft: color-mix(in srgb,var(--accent) 15%,transparent);
   --accent-line: color-mix(in srgb,var(--accent) 38%,transparent);
   --accent-gradient: linear-gradient(150deg,var(--accent-2),var(--accent));

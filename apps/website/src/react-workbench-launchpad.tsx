@@ -136,6 +136,7 @@ type MotionColumnProps<TItem> = {
   icon: string
   total: number
   truncated: boolean
+  accent?: boolean
   items: TItem[]
   empty: string
   badge: (item: TItem) => string
@@ -147,6 +148,7 @@ function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingIt
   icon,
   total,
   truncated,
+  accent,
   items,
   empty,
   badge,
@@ -156,7 +158,7 @@ function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingIt
     <div className="cloud-launchpad-motion-col">
       <div className="cloud-launchpad-motion-col__head">
         <span><span aria-hidden="true">{icon}</span> {title}</span>
-        <span className="pill">{truncated ? `${total}+` : total}</span>
+        <span className="pill" data-kind={accent && total > 0 ? 'accent' : undefined}>{truncated ? `${total}+` : total}</span>
       </div>
       <div className="cloud-launchpad-motion-list">
         {items.length ? items.map((item) => (
@@ -246,6 +248,7 @@ export function CloudLaunchpadPortal({
             icon="!"
             total={feed.totals.waitingOnYou}
             truncated={feed.truncated.waitingOnYou}
+            accent
             items={feed.waitingOnYou.slice(0, 3)}
             empty="No approvals or questions waiting."
             badge={(item) => item.kind === 'permission' ? 'Approval' : 'Question'}

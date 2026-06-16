@@ -154,9 +154,34 @@ import {
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
 import { CloudChannelDomainService } from './services/channel-domain-service.ts'
 import {
-  principalHasOrgAdminRole,
-  principalHasPrivilegedTokenScope,
-} from './principal-access.ts'
+  principalCanManageApiTokens,
+  principalCanManageBilling,
+  principalCanManageOrg,
+  principalCanViewDiagnostics,
+  principalCanViewOperations,
+  principalEmailDomain,
+} from './session-principal-access.ts'
+import {
+  toWorkflowRun,
+  toWorkflowSummary,
+  workflowRunTerminal,
+  workflowWebhookReplayKey,
+} from './session-workflow-mappers.ts'
+import { runOnAbort, throwIfAborted } from './cloud-abort-helpers.ts'
+import { boundedImportText, normalizeImportCounts } from './session-import-validation.ts'
+import {
+  asRecord,
+  boundedOptionalText,
+  boundedText,
+  includesAllowed,
+  normalizeControlPlaneRole,
+  normalizeEmailAddress,
+  normalizeMembershipStatus,
+  normalizedCloudListLimit,
+  readNullableString,
+  readString,
+  stableCloudId,
+} from './session-input-validation.ts'
 import { normalizeChannelProviderId } from './channel-provider-utils.ts'
 import { log } from '../logger.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
@@ -406,7 +431,6 @@ type ChannelInteractionResolutionInput = ChannelActorInput & {
 
 const WORKFLOW_MAX_TEXT = 50_000
 const SESSION_IMPORT_MAX_MESSAGES = 2_000
-const SESSION_IMPORT_MAX_TEXT = 1_000_000
 const WORKFLOW_TITLE_MAX_LENGTH = 512
 const WORKFLOW_FIELD_MAX_LENGTH = 4096
 const WORKFLOW_MAX_LIST_VALUES = 100
@@ -443,102 +467,6 @@ const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   },
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-}
-
-function readString(value: unknown, fallback = '') {
-  return typeof value === 'string' && value.trim() ? value : fallback
-}
-
-function readNullableString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function normalizeEmailAddress(value: unknown) {
-  const email = typeof value === 'string' ? value.trim().toLowerCase() : ''
-  if (!email || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    throw new CloudServiceError(400, 'A valid member email address is required.')
-  }
-  return email
-}
-
-function normalizeControlPlaneRole(value: unknown, fallback: ControlPlaneRole = 'member'): ControlPlaneRole {
-  if (value === 'owner' || value === 'admin' || value === 'member') return value
-  return fallback
-}
-
-function normalizeMembershipStatus(
-  value: unknown,
-  fallback: ControlPlaneMembershipStatus = 'active',
-): ControlPlaneMembershipStatus {
-  if (value === 'active' || value === 'invited' || value === 'disabled') return value
-  return fallback
-}
-
-
-function stableCloudId(prefix: string, ...parts: string[]) {
-  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
-}
-
-
-function principalCanManageBilling(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
-}
-
-function principalCanManageApiTokens(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
-}
-
-function principalCanManageOrg(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
-}
-
-function principalEmailDomain(email: string | null | undefined) {
-  const normalized = email?.trim().toLowerCase()
-  const at = normalized?.lastIndexOf('@') ?? -1
-  return normalized && at >= 0 ? normalized.slice(at + 1) : null
-}
-
-
-function principalCanViewOperations(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') {
-    return Boolean(
-      principal.tokenScopes?.includes('worker-internal')
-      || (principalHasOrgAdminRole(principal) && principal.tokenScopes?.includes('operator'))
-    )
-  }
-  return false
-}
-
-function principalCanViewDiagnostics(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') {
-    return principalHasOrgAdminRole(principal) && Boolean(principal.tokenScopes?.includes('operator'))
-  }
-  return false
-}
-
-function boundedText(value: unknown, label: string, maxLength: number) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const normalized = value.trim()
-  if (normalized.length > maxLength) throw new Error(`${label} exceeds ${maxLength} characters.`)
-  return normalized
-}
-
-function boundedOptionalText(value: unknown, label: string, maxLength: number) {
-  if (value === undefined || value === null || value === '') return null
-  return boundedText(value, label, maxLength)
-}
 
 function normalizeWorkflowStringList(value: unknown, label: string) {
   if (value === undefined || value === null) return []
@@ -550,89 +478,12 @@ function promptParts(text: string): CloudRuntimePromptPart[] {
   return [{ type: 'text', text }]
 }
 
-function includesAllowed(value: string | null | undefined, allowed: string[] | null) {
-  return !allowed || Boolean(value && allowed.includes(value))
-}
-
-function toWorkflowSummary(record: CloudWorkflowRecord) {
-  const { tenantId: _tenantId, userId: _userId, ...workflow } = record
-  return workflow
-}
-
-function toWorkflowRun(record: CloudWorkflowRunRecord): WorkflowRun {
-  const {
-    tenantId: _tenantId,
-    userId: _userId,
-    claimedBy: _claimedBy,
-    claimToken: _claimToken,
-    claimExpiresAt: _claimExpiresAt,
-    attemptCount: _attemptCount,
-    idempotencyKey: _idempotencyKey,
-    checkpointVersion: _checkpointVersion,
-    lastErrorCode: _lastErrorCode,
-    lastErrorSummary: _lastErrorSummary,
-    ...run
-  } = record
-  return run
-}
-
-function workflowRunTerminal(status: WorkflowRun['status']) {
-  return status === 'completed' || status === 'failed' || status === 'cancelled'
-}
-
-function workflowWebhookReplayKey(workflowId: string, auth: Extract<WorkflowWebhookAuth, { kind: 'signature' }>) {
-  const workflowKey = createHash('sha256').update(workflowId).digest('hex').slice(0, 16)
-  return `${workflowKey}:${auth.timestamp}:${auth.signature}`
-}
-
-function normalizeImportCounts(value: Partial<SessionImportItemCounts> | undefined): SessionImportItemCounts {
-  const numberValue = (entry: unknown) => typeof entry === 'number' && Number.isFinite(entry) && entry > 0 ? Math.floor(entry) : 0
-  return {
-    messages: numberValue(value?.messages),
-    artifacts: numberValue(value?.artifacts),
-    attachments: numberValue(value?.attachments),
-    projectSource: numberValue(value?.projectSource),
-    excluded: numberValue(value?.excluded),
-  }
-}
-
-function boundedImportText(value: unknown, label: string, maxLength = SESSION_IMPORT_MAX_TEXT) {
-  if (typeof value !== 'string') return ''
-  if (value.length > maxLength) throw new CloudServiceError(400, `${label} exceeds ${maxLength} characters.`)
-  return value
-}
-
-function normalizedCloudListLimit(value: number | null | undefined, fallback = 100, max = 500) {
-  if (!Number.isFinite(value)) return fallback
-  return Math.max(1, Math.min(max, Math.floor(value || fallback)))
-}
-
 function importAuditActor(principal: CloudPrincipal): { actorType: 'user' | 'api_token', actorId: string, accountId: string | null } {
   return {
     actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
     actorId: principal.tokenId || principal.userId,
     accountId: principal.accountId || principal.userId,
   }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined) {
-  if (!signal?.aborted) return
-  const reason = signal.reason
-  if (reason instanceof Error) throw reason
-  throw new Error(typeof reason === 'string' && reason.trim() ? reason : 'Cloud worker command execution was aborted.')
-}
-
-function runOnAbort(signal: AbortSignal | undefined, callback: () => Promise<void> | void) {
-  if (!signal) return () => undefined
-  const abort = () => {
-    void Promise.resolve(callback()).catch(() => undefined)
-  }
-  if (signal.aborted) {
-    abort()
-    return () => undefined
-  }
-  signal.addEventListener('abort', abort, { once: true })
-  return () => signal.removeEventListener('abort', abort)
 }
 
 export class CloudSessionService {

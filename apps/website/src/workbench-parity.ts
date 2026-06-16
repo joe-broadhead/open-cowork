@@ -15,6 +15,7 @@ export type CloudWebWorkbenchConceptId =
   | 'hire-coworker'
   | 'tools-skills'
   | 'artifacts'
+  | 'knowledge'
   | 'workflows'
   | 'channels'
   | 'settings'
@@ -135,6 +136,17 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     boundary: 'Cloud Web reads artifact index metadata through Cloud APIs and fetches artifact bodies only after explicit user action while stripping object-store internals.',
     disabledReason: 'Artifact actions disable when no artifact id or Cloud chat is available.',
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
+  },
+  {
+    conceptId: 'knowledge',
+    label: 'Knowledge',
+    availability: 'shared',
+    desktopSurface: 'Desktop Knowledge page and chat capture action',
+    cloudRouteIds: ['knowledge', 'chat'],
+    cloudAffordance: 'Show Spaces, versioned pages, reviewable proposals, knowledge-trail backlinks, graph navigation, and a Capture to knowledge action that creates pending proposals.',
+    boundary: 'Cloud Web consumes the Knowledge API only; Open Cowork stores versioned product knowledge while OpenCode remains responsible for execution and chat events.',
+    disabledReason: 'Capture requires a writable Space role; review requires a Maintainer Space role plus an owner/admin Cloud role or admin-scoped API token. Reader Spaces remain read-only.',
+    tests: ['render.test.ts', 'browser-e2e.test.ts', 'studio-production-qa.test.ts'],
   },
   {
     conceptId: 'workflows',

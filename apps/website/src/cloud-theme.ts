@@ -39,13 +39,10 @@ export function cloudDensityOptions(): Array<{ id: CloudDensity; label: string }
 
 export function cloudThemePresetSelectMarkup(tenantBrandingLocked: boolean) {
   const lockedAttrs = tenantBrandingLocked ? ' disabled title="Theme is managed by this cloud workspace"' : ''
+  // The product ships a single brand identity — Mercury (dark) / Day (light) —
+  // chosen via the Mode control below; the editor-style theme presets are not
+  // user-facing on either surface (the desktop has no theme picker either).
   return `<div class="cloud-theme-controls" data-tenant-branding-locked="${tenantBrandingLocked ? 'true' : 'false'}">
-          <label class="cloud-theme-switcher">
-            <span>Theme</span>
-            <select id="cloud-theme-preset" aria-label="Theme preset" data-tenant-branding-locked="${tenantBrandingLocked ? 'true' : 'false'}"${lockedAttrs}>
-              ${cloudThemePresetOptions().map((preset) => `<option value="${escapeHtml(preset.id)}"${preset.id === DEFAULT_CLOUD_THEME_PRESET ? ' selected' : ''}>${escapeHtml(preset.label)}</option>`).join('')}
-            </select>
-          </label>
           <label class="cloud-theme-switcher">
             <span>Mode</span>
             <select id="cloud-theme-scheme" aria-label="Theme mode" data-tenant-branding-locked="${tenantBrandingLocked ? 'true' : 'false'}"${lockedAttrs}>

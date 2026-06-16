@@ -1,12 +1,14 @@
 import {
   CAPABILITY_BUNDLE_FORMAT,
-  normalizeCapabilityBundleManifest,
-  validateCapabilityBundleRuntimeSupport,
   type CapabilityBundleIssue,
   type CapabilityBundleManifest,
   type CapabilityBundleProductMode,
   type CapabilityBundleRuntimeSupportReport,
 } from '@open-cowork/shared'
+import {
+  normalizeCapabilityBundleManifest,
+  validateCapabilityBundleRuntimeSupport,
+} from './capability-bundle-engine.ts'
 import { getInstalledCapabilityBundleManifests } from './capability-bundle-store.ts'
 import { getConfiguredCapabilityBundlesFromConfig } from './config-loader.ts'
 import { log } from './logger.ts'

@@ -157,6 +157,14 @@ import type {
   LaunchpadFeedPayload,
   LaunchpadFeedRequest,
 } from './launchpad.js'
+import type {
+  KnowledgePageVersion,
+  KnowledgeProposal,
+  KnowledgeProposalInput,
+  KnowledgeReviewInput,
+  KnowledgeSnapshotOptions,
+  KnowledgeSnapshotPayload,
+} from './knowledge.js'
 
 export * from './app-config.js'
 export * from './app-api.js'
@@ -177,6 +185,7 @@ export * from './events.js'
 export * from './explorer.js'
 export * from './http-client-source.js'
 export * from './jsonc.js'
+export * from './knowledge.js'
 export * from './launchpad.js'
 export * from './providers.js'
 export * from './project-source.js'
@@ -280,6 +289,14 @@ export interface CoworkAPI {
   channels: ChannelApiSurface
   launchpad: {
     feed: (request?: LaunchpadFeedRequest) => Promise<LaunchpadFeedPayload>
+  }
+  knowledge: {
+    snapshot: (options?: KnowledgeSnapshotOptions) => Promise<KnowledgeSnapshotPayload>
+    propose: (input: KnowledgeProposalInput) => Promise<KnowledgeProposal>
+    acceptProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<{ proposal: KnowledgeProposal; page: KnowledgePageVersion }>
+    declineProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<KnowledgeProposal>
+    history: (pageId: string, options?: KnowledgeSnapshotOptions) => Promise<KnowledgePageVersion[]>
+    restoreVersion: (pageId: string, versionId: string, input?: KnowledgeReviewInput) => Promise<{ page: KnowledgePageVersion }>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
@@ -506,6 +523,7 @@ export interface CoworkAPI {
     workspaceSessionsUpdated: (callback: (data: WorkspaceSessionsUpdatedEvent) => void) => () => void
     workflowUpdated: (callback: () => void) => () => void
     coordinationUpdated: (callback: () => void) => () => void
+    knowledgeUpdated: (callback: () => void) => () => void
   }
 }
 

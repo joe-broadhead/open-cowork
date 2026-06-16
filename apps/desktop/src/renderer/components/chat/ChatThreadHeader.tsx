@@ -12,8 +12,11 @@ type ChatThreadHeaderProps = {
   taskContext?: ConversationTaskContext | null
   onOpenParent: () => void
   onOpenBoard?: () => void
+  onCaptureToKnowledge?: () => void
   onToggleInspector: () => void
   onUnrevert: () => void
+  captureToKnowledgePending?: boolean
+  captureToKnowledgeDone?: boolean
 }
 
 export function ChatThreadHeader({
@@ -25,8 +28,11 @@ export function ChatThreadHeader({
   taskContext = null,
   onOpenParent,
   onOpenBoard,
+  onCaptureToKnowledge,
   onToggleInspector,
   onUnrevert,
+  captureToKnowledgePending = false,
+  captureToKnowledgeDone = false,
 }: ChatThreadHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
@@ -111,6 +117,15 @@ export function ChatThreadHeader({
         label={t('chat.threadActions', 'Chat actions')}
         className="desktop-thread-action-cluster shrink-0"
         items={[
+          {
+            id: 'capture-knowledge',
+            label: captureToKnowledgeDone ? 'Captured' : 'Capture to knowledge',
+            icon: captureToKnowledgeDone ? 'check' : 'book-open',
+            disabled: captureToKnowledgePending,
+            hidden: !onCaptureToKnowledge,
+            title: 'Create a reviewable Knowledge proposal from this conversation',
+            onAction: onCaptureToKnowledge,
+          },
           {
             id: 'context',
             label: inspectorOpen ? 'Hide Review' : 'Show Review',

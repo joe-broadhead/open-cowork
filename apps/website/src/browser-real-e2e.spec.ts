@@ -435,36 +435,29 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', { ti
       await page.waitForSelector('body[data-react-shell="active"]', { timeout: 10_000 })
       await page.waitForSelector('body[data-react-workbench-surfaces="active"]', { timeout: 10_000 })
       await page.waitForSelector('body[data-react-admin-surfaces="active"]', { timeout: 10_000 })
-      await page.locator('#cloud-theme-preset').selectOption('frappe')
+      // The product ships a single Mercury/Day identity — exercise the Mode
+      // (scheme) control rather than the removed editor-preset select.
+      await page.locator('#cloud-theme-scheme').selectOption('light')
       try {
-        await page.waitForFunction(({ accent, accentId }: { accent: string, accentId: string }) => {
-          const accentSelect = document.getElementById('cloud-theme-accent') as HTMLSelectElement | null
-          return document.documentElement.dataset.uiTheme === 'frappe'
-            && accentSelect?.value === accentId
-            && document.documentElement.style.getPropertyValue('--color-accent') === accent
-        }, { accent: UI_ACCENT_PRESETS[DEFAULT_UI_ACCENT_PRESET_ID].accent, accentId: DEFAULT_UI_ACCENT_PRESET_ID })
+        await page.waitForFunction(() => document.documentElement.dataset.colorScheme === 'light'
+          && document.documentElement.dataset.uiTheme === 'mercury')
       } catch (error) {
         const debug = await page.evaluate(() => {
-          const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement | null
-          const accentSelect = document.getElementById('cloud-theme-accent') as HTMLSelectElement | null
+          const schemeSelect = document.getElementById('cloud-theme-scheme') as HTMLSelectElement | null
           return {
             theme: document.documentElement.dataset.uiTheme || null,
-            accent: document.documentElement.style.getPropertyValue('--color-accent') || null,
-            selectValue: select?.value || null,
-            selectDisabled: select?.disabled || false,
-            selectLocked: select?.dataset.tenantBrandingLocked || null,
-            accentSelectValue: accentSelect?.value || null,
-            accentSelectDisabled: accentSelect?.disabled || false,
-            accentSelectLocked: accentSelect?.dataset.tenantBrandingLocked || null,
-            storedTheme: localStorage.getItem('open-cowork-cloud-ui-theme'),
-            storedAccent: localStorage.getItem('open-cowork-cloud-ui-accent'),
+            scheme: document.documentElement.dataset.colorScheme || null,
+            schemeValue: schemeSelect?.value || null,
+            schemeDisabled: schemeSelect?.disabled || false,
+            storedScheme: localStorage.getItem('open-cowork-cloud-color-scheme'),
           }
         })
-        throw new Error(`Cloud Web real browser smoke did not apply selected theme: ${JSON.stringify(debug)}`, {
+        throw new Error(`Cloud Web real browser smoke did not apply selected mode: ${JSON.stringify(debug)}`, {
           cause: error,
         })
       }
-      assert.equal(await page.evaluate(() => document.documentElement.dataset.uiTheme), 'frappe')
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.colorScheme), 'light')
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.uiTheme), 'mercury')
       assert.equal(await page.locator('#cloud-theme-accent').inputValue(), DEFAULT_UI_ACCENT_PRESET_ID)
       assert.equal(
         await page.evaluate(() => document.documentElement.style.getPropertyValue('--color-accent')),

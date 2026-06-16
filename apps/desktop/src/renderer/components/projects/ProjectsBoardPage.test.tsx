@@ -74,7 +74,8 @@ describe('ProjectsBoardPage', () => {
     fireEvent.click(within(stageGroup).getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(moveTask).toHaveBeenCalledWith('task-1', { column: 'done' }))
 
-    fireEvent.change(screen.getByLabelText('Coworker'), { target: { value: 'chief-of-staff' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Coworker' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Chief Of Staff' }))
     await waitFor(() => expect(assignTask).toHaveBeenCalledWith('task-1', { assigneeAgent: 'chief-of-staff' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Open the work' }))

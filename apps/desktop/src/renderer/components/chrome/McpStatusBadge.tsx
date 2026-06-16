@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { mcpStatusTone, summarizeMcpConnections } from '../../helpers/mcp-status-summary'
+import { t } from '../../helpers/i18n'
 
 const toneColor = {
   muted: 'var(--color-text-muted)',
@@ -47,7 +48,7 @@ export function McpStatusBadge() {
         aria-expanded={open}
         aria-label={badgeLabel}
         className="inline-flex h-[20px] items-center gap-1.5 rounded-md border border-border-subtle px-2 text-[10px] text-text-muted hover:bg-surface-hover"
-        title="MCP status"
+        title={t('mcpStatus.badgeTitle', 'MCP status')}
       >
         <span
           className="h-1.5 w-1.5 rounded-full"

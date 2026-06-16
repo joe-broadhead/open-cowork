@@ -51,6 +51,7 @@
     "apps/website": {
       "entry": [
         "src/render.ts",
+        "src/react-client.tsx",
         "src/*.test.ts"
       ],
       "project": [

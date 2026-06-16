@@ -1,3 +1,12 @@
+import {
+  clone,
+  normalizeListLimit,
+  normalizeNonNegativeInteger,
+  normalizeNullableText,
+  normalizeText,
+  nowIso,
+  stableJson,
+} from './store-helpers.ts'
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import type {
   CreateManagedWorkerPoolInput,
@@ -398,17 +407,8 @@ export function generateManagedWorkerCredential(input: { credentialId?: string, 
   }
 }
 
-function nowIso(now: Date | undefined) {
-  return (now || new Date()).toISOString()
-}
-
 function stableId(prefix: string, ...parts: string[]) {
   return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
-}
-
-function normalizeListLimit(value: number | null | undefined, fallback = 100, max = 500) {
-  if (!Number.isFinite(value)) return fallback
-  return Math.max(1, Math.min(max, Math.floor(value || fallback)))
 }
 
 function normalizeNullablePositiveInteger(value: number | null | undefined, label: string): number | null {
@@ -485,26 +485,6 @@ function normalizeRecord(value: unknown, label: string, maxBytes: number): Recor
   return record
 }
 
-function normalizeText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const normalized = value.trim()
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} exceeds ${maxLength} characters.`)
-  }
-  return normalized
-}
-
-function normalizeNullableText(value: unknown, maxLength: number, label: string): string | null {
-  if (value === undefined || value === null || value === '') return null
-  return normalizeText(value, maxLength, label)
-}
-
-function normalizeNonNegativeInteger(value: unknown, label: string) {
-  const parsed = Number(value ?? 0)
-  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative integer.`)
-  return parsed
-}
-
 function redactOperationalText(value: unknown, maxLength: number, label: string) {
   return normalizeText(value, maxLength, label)
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
@@ -514,21 +494,6 @@ function redactOperationalText(value: unknown, maxLength: number, label: string)
     .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
     .replace(/\b(ocw_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
     .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, entry]) => `${JSON.stringify(field)}:${stableJson(entry)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
 }
 
 function constantTimeStringEquals(left: string, right: string) {

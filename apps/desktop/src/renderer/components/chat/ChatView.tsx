@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from 'react'
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   buildTaskRunAgentBySourceSession,
@@ -8,6 +8,7 @@ import {
 } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../../app-types'
 import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -45,9 +46,12 @@ type ChatViewProps = {
 export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const currentView = useSessionStore((s) => s.currentView)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const sessions = useSessionStore((s) => s.sessions)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const [unrevertingSessionId, setUnrevertingSessionId] = useState<string | null>(null)
+  const [capturePending, setCapturePending] = useState(false)
+  const [capturedSessionId, setCapturedSessionId] = useState<string | null>(null)
   const messages = currentView.messages
   const toolCalls = currentView.toolCalls
   const taskRuns = currentView.taskRuns
@@ -66,6 +70,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const agentRunFiltersEnabled = useMemo(() => isAgentRunFiltersEnabled(), [])
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
+  const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === currentSessionId) || null,
     [sessions, currentSessionId],
@@ -93,6 +98,60 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
     () => buildTaskRunAgentBySourceSession(taskRuns),
     [taskRuns],
   )
+
+  const captureToKnowledge = useCallback(async () => {
+    if (!currentSessionId || !currentSession) return
+    if (!activeWorkspaceIsLocal) {
+      addGlobalError('Capture to knowledge is available in the Local desktop workspace. Use Cloud Web for Cloud Knowledge capture.')
+      return
+    }
+    setCapturePending(true)
+    try {
+      const snapshot = await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId })
+      const space = snapshot.spaces.find((candidate) => candidate.role === 'Maintainer' || candidate.role === 'Contributor') || snapshot.spaces[0]
+      if (!space) throw new Error('No Knowledge Space is available for capture.')
+      const title = currentSession.title || `Chat ${currentSessionId.slice(0, 8)}`
+      const transcriptHighlights = messages
+        .filter((message) => message.role === 'user' || message.role === 'assistant')
+        .slice(-6)
+        .map((message) => `${message.role}: ${message.content || ''}`.slice(0, 240))
+        .filter((line) => line.trim().length > 8)
+      await window.coworkApi.knowledge.propose({
+        workspaceId: activeWorkspaceId,
+        spaceId: space.id,
+        pageTitle: `Conversation: ${title}`,
+        by: 'you',
+        summary: `Capture accepted context from "${title}" for Knowledge review.`,
+        add: Math.max(1, transcriptHighlights.length + 2),
+        del: 0,
+        links: [{
+          kind: 'thread',
+          label: title,
+          targetId: currentSessionId,
+        }],
+        body: [
+          {
+            id: 'capture-summary',
+            type: 'callout',
+            text: `Captured from chat ${currentSessionId}. Review before publishing this as durable knowledge.`,
+          },
+          {
+            id: 'capture-context',
+            type: 'h',
+            text: 'Conversation context',
+          },
+          ...(transcriptHighlights.length
+            ? [{ id: 'capture-highlights', type: 'list' as const, items: transcriptHighlights }]
+            : [{ id: 'capture-placeholder', type: 'p' as const, text: 'No transcript highlights were available yet.' }]),
+        ],
+      })
+      setCapturedSessionId(currentSessionId)
+    } catch (error) {
+      addGlobalError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setCapturePending(false)
+    }
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, addGlobalError, currentSession, currentSessionId, messages])
 
   useEffect(() => {
     let disposed = false
@@ -413,6 +472,9 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
             }
           }}
           onOpenBoard={taskContext ? () => onNavigate?.('projects') : undefined}
+          onCaptureToKnowledge={activeWorkspaceIsLocal ? captureToKnowledge : undefined}
+          captureToKnowledgePending={capturePending}
+          captureToKnowledgeDone={capturedSessionId === currentSessionId}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           onUnrevert={() => {
             setUnrevertingSessionId(currentSessionId)

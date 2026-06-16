@@ -296,26 +296,6 @@ function ReachCards() {
   )
 }
 
-function SummaryRows({
-  agents,
-  bindings,
-  deliveries,
-  watches,
-  people,
-}: Pick<ChannelsGatewaySurfaceProps, 'agents' | 'bindings' | 'deliveries' | 'watches' | 'people'>) {
-  const activeBindings = bindings.filter((binding) => binding.status === 'active').length
-  const attentionDeliveries = deliveries.filter((delivery) => ['failed', 'dead', 'error'].includes(delivery.status)).length
-  return (
-    <div className="studio-channel-summary" id="channel-summary-list">
-      <div className="row compact"><strong>Channel coworkers</strong><span>{agents.length}</span></div>
-      <div className="row compact"><strong>Connected channels</strong><span>{activeBindings}/{bindings.length}</span></div>
-      <div className="row compact"><strong>People</strong><span>{people.length}</span></div>
-      <div className="row compact"><strong>Active watches</strong><span>{watches.filter((watch) => watch.status === 'active').length}/{watches.length}</span></div>
-      <div className="row compact"><strong>Needs attention</strong><span>{attentionDeliveries}</span></div>
-    </div>
-  )
-}
-
 function ConnectedChannels({
   bindings,
   agents,
@@ -769,7 +749,6 @@ export function ChannelsGatewaySurface({
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
   const providerStatuses = useMemo(() => displayProviders(providers, bindings, allowProviderFallback), [allowProviderFallback, bindings, providers])
-  const connectedCount = bindings.filter((binding) => binding.status === 'active').length
 
   const runAction = async (busyKey: string, successMessage: string, action: () => Promise<unknown> | unknown) => {
     setBusy(busyKey)
@@ -846,16 +825,6 @@ export function ChannelsGatewaySurface({
       <ChannelsNotice notice={notice} error={error} />
       <ReachCards />
       <div className="studio-channel-dashboard">
-        <div className="studio-channel-panel studio-channel-panel--summary">
-          <div className="studio-channel-panel__head">
-            <div>
-              <h2>Reach</h2>
-              <p>{connectedCount} active channel(s), {watches.length} watch(es).</p>
-            </div>
-            <Badge tone={loading ? 'warning' : 'neutral'}>{loading ? 'Loading' : 'Live'}</Badge>
-          </div>
-          <SummaryRows agents={agents} bindings={bindings} deliveries={deliveries} watches={watches} people={people} />
-        </div>
         <div className="studio-channel-panel">
           <div className="studio-channel-panel__head">
             <div>

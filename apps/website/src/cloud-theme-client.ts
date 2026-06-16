@@ -446,7 +446,10 @@ export function installCloudThemePresetControls(bootstrap: CloudWebClientBootstr
   const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement | null
   const schemeSelect = document.getElementById('cloud-theme-scheme') as HTMLSelectElement | null
   const accentSelect = document.getElementById('cloud-theme-accent') as HTMLSelectElement | null
-  if (!select) return
+  // The editor-preset select is no longer rendered in production (single Mercury/
+  // Day identity), so anchor on the Mode/scheme control. The preset-handling code
+  // below is preserved and is a no-op when no preset select is present.
+  if (!schemeSelect && !select) return
   const locked = Boolean(bootstrap.theme?.tenantBrandingLocked)
   cloudUserPreferenceState(document)
   for (const control of [select, schemeSelect, accentSelect]) {
@@ -463,9 +466,10 @@ export function installCloudThemePresetControls(bootstrap: CloudWebClientBootstr
   applyStoredUserSettingToggles(document)
 
   if (locked) {
-    select.title = 'Theme is managed by this cloud workspace'
-    if (schemeSelect) schemeSelect.title = select.title
-    if (accentSelect) accentSelect.title = select.title
+    const lockedTitle = 'Theme is managed by this cloud workspace'
+    if (select) select.title = lockedTitle
+    if (schemeSelect) schemeSelect.title = lockedTitle
+    if (accentSelect) accentSelect.title = lockedTitle
     syncThemeControls(document, {
       presetId: DEFAULT_CLOUD_THEME_PRESET,
       scheme: DEFAULT_CLOUD_THEME_SCHEME,

@@ -1,3 +1,10 @@
+import {
+  clone,
+  normalizeNullableText,
+  normalizeText,
+  nowIso,
+  stableJson,
+} from './store-helpers.ts'
 import { quotaExceeded } from '../control-plane-errors.ts'
 import { normalizeChannelProviderId as normalizeProvider } from '../channel-provider-utils.ts'
 import type {
@@ -10,7 +17,7 @@ import type {
   HeadlessAgentRecord,
   ListChannelDeliveriesInput,
   QuotaConsumptionRecord,
-} from '../in-memory-control-plane-store.ts'
+} from '../control-plane-store.ts'
 
 const CHANNEL_TEXT_MAX_LENGTH = 256
 const CHANNEL_METADATA_MAX_BYTES = 16_384
@@ -154,28 +161,6 @@ export class InMemoryChannelDeliveriesDomain {
   }
 }
 
-function nowIso(now: Date | undefined) {
-  return (now || new Date()).toISOString()
-}
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
-function normalizeText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const normalized = value.trim()
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} exceeds ${maxLength} characters.`)
-  }
-  return normalized
-}
-
-function normalizeNullableText(value: unknown, maxLength: number, label: string): string | null {
-  if (value === undefined || value === null || value === '') return null
-  return normalizeText(value, maxLength, label)
-}
-
 function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
   const record = value && typeof value === 'object' && !Array.isArray(value)
     ? clone(value as Record<string, unknown>)
@@ -185,17 +170,6 @@ function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METAD
     throw new Error(`${label} exceeds ${maxBytes} bytes.`)
   }
   return record
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, entry]) => `${JSON.stringify(field)}:${stableJson(entry)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value)
 }
 
 function redactOperationalText(value: unknown, maxLength: number, label: string) {

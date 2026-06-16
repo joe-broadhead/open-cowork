@@ -1,6 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
-import { normalizeCloudProjectSource, normalizeWorkflowSteps, summarizeCloudProjectSource, type CloudProjectSourceSummary, type CoordinationWatch, type WorkflowDraft, type WorkflowRun, type WorkflowRunStatus, type WorkflowStatus, type WorkflowSummary, type WorkflowTriggerType } from '@open-cowork/shared'
-import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
+import { normalizeCloudProjectSource, summarizeCloudProjectSource, type CoordinationWatch } from '@open-cowork/shared'
 import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
   CreateManagedWorkerPoolInput,
@@ -25,20 +23,176 @@ import { InMemoryChannelProviderEventsDomain } from './in-memory-domains/channel
 import { InMemoryChannelDeliveriesDomain } from './in-memory-domains/channel-deliveries.ts'
 import { InMemoryCoordinationWatchesDomain } from './in-memory-domains/coordination-watches.ts'
 import { InMemoryChannelIdentitiesDomain } from './in-memory-domains/channel-identities.ts'
-import { redactAuditMetadata } from './audit-redaction.ts'
+import { InMemoryByokSecretsDomain } from './in-memory-domains/byok-secrets.ts'
+import { InMemoryBillingDomain } from './in-memory-domains/billing.ts'
+import { InMemoryUsageDomain } from './in-memory-domains/usage-events.ts'
+import { InMemoryHeadlessAgentsDomain } from './in-memory-domains/headless-agents.ts'
+import { InMemorySmartFiltersDomain } from './in-memory-domains/thread-smart-filters.ts'
+import { InMemoryThreadTagsDomain } from './in-memory-domains/thread-tags.ts'
+import { InMemorySchemaMigrationsDomain } from './in-memory-domains/schema-migrations.ts'
+import { InMemoryWorkerHeartbeatsDomain } from './in-memory-domains/worker-heartbeats.ts'
+import { InMemoryAuthBackoffDomain } from './in-memory-domains/auth-backoff.ts'
+import { InMemoryRateLimitsDomain } from './in-memory-domains/rate-limits.ts'
+import { InMemoryUsageQuotaDomain } from './in-memory-domains/usage-quota.ts'
+import { InMemoryWorkspaceEventsDomain } from './in-memory-domains/workspace-events.ts'
+import { InMemoryAuditDomain } from './in-memory-domains/audit.ts'
+import { InMemoryChannelBindingsDomain } from './in-memory-domains/channel-bindings.ts'
+import { InMemoryIdentityDomain } from './in-memory-domains/identity.ts'
+import { InMemoryApiTokensDomain } from './in-memory-domains/api-tokens.ts'
+import { InMemorySettingsDomain } from './in-memory-domains/settings.ts'
+import { InMemoryWorkflowsDomain } from './in-memory-domains/workflows.ts'
+import {
+  clone,
+  key,
+  normalizeListLimit,
+  normalizeNonNegativeInteger,
+  normalizeNullableText,
+  normalizeText,
+  nowIso,
+  stableJson,
+} from './in-memory-domains/store-helpers.ts'
 import {
   generateChannelInteractionToken,
-  generateCloudApiToken,
   hashChannelInteractionToken,
-  hashCloudApiToken,
-  plaintextMatchesCloudApiTokenId,
-  verifyCloudApiTokenHash,
 } from './control-plane-tokens.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page-cursor.ts'
-import { workspaceEventCursor, type WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
+import type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 import { channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import type { ChannelProviderEventClaimResult, ChannelProviderEventRecord, ChannelProviderId, ClaimChannelProviderEventInput, CompleteChannelProviderEventInput } from './channel-provider-types.ts'
 import type { CreateCloudCoordinationWatchInput, ListCloudCoordinationWatchesInput, ListMatchingCloudCoordinationWatchesInput, UpdateCloudCoordinationWatchInput } from './coordination-watch-records.ts'
+import type {
+  ControlPlaneRole,
+  ControlPlaneSessionStatus,
+  WorkReaperAction,
+  WorkerRole,
+} from './control-plane-enums.ts'
+import type {
+  AccountRecord,
+  MembershipRecord,
+  OrgMemberRecord,
+  OrgRecord,
+  PrincipalMembershipRecord,
+  TenantRecord,
+  UserRecord,
+} from './control-plane-records.ts'
+import type {
+  BillingSubscriptionRecord,
+  CloudAuthBackoffRecord,
+  QuotaConsumptionRecord,
+  RateLimitClaimRecord,
+  UsageEventRecord,
+  UsageQuotaCounterRecord,
+} from './control-plane-usage-records.ts'
+import type {
+  ChannelBindingRecord,
+  ChannelDeliveryRecord,
+  ChannelIdentityRecord,
+  ChannelInteractionRecord,
+  ChannelSessionBindingRecord,
+  IssuedChannelInteractionRecord,
+} from './control-plane-channel-records.ts'
+import type {
+  ApiTokenChannelBindingGrantRecord,
+  ApiTokenRecord,
+  AuditEventRecord,
+  ByokSecretRecord,
+  HeadlessAgentRecord,
+  IssuedApiTokenRecord,
+} from './control-plane-auth-records.ts'
+import type {
+  ListSessionsPageInput,
+  ListSessionsPageRecord,
+  SessionEventRecord,
+  SessionProjectionRecord,
+  SessionRecord,
+  WorkerLeaseRecord,
+  WorkspaceEventRecord,
+} from './control-plane-session-records.ts'
+import type {
+  ClaimedWorkflowRunRecord,
+  CloudWorkflowRecord,
+  CloudWorkflowRunRecord,
+  SchemaMigrationRecord,
+  SettingMetadataRecord,
+  ThreadMetadataRecord,
+  ThreadSmartFilterRecord,
+  ThreadTagRecord,
+} from './control-plane-workspace-records.ts'
+import type {
+  ClaimRunnableSessionsInput,
+  ListRunnableSessionsInput,
+  ReapExpiredSessionLeasesInput,
+  ReapExpiredWorkflowClaimsInput,
+  ReapedSessionLeaseRecord,
+  ReapedWorkflowClaimRecord,
+  RunnableSessionClaimRecord,
+  RunnableSessionListRecord,
+  SessionCommandRecord,
+  WorkerHeartbeatRecord,
+} from './control-plane-worker-records.ts'
+import type {
+  CreateAccountInput,
+  CreateByokSecretInput,
+  DisableByokSecretInput,
+  GrantApiTokenChannelBindingInput,
+  IssueApiTokenInput,
+  ListApiTokenChannelBindingGrantsInput,
+  RecordAuditEventInput,
+  RecordByokSecretValidationInput,
+  RevokeApiTokenInput,
+  UpsertMembershipInput,
+} from './control-plane-account-inputs.ts'
+import type {
+  CheckCloudAuthBackoffInput,
+  ClaimRateLimitInput,
+  ConsumeUsageQuotaInput,
+  CreateSessionInput,
+  RecordCloudAuthFailureInput,
+  RecordUsageEventInput,
+  UpsertBillingSubscriptionInput,
+} from './control-plane-usage-inputs.ts'
+import type {
+  AppendEventInput,
+  AppendWorkspaceEventInput,
+  CommandQueueQuota,
+  EnqueueCommandInput,
+  WriteProjectionInput,
+} from './control-plane-event-inputs.ts'
+import type {
+  AckChannelDeliveryInput,
+  BindChannelSessionInput,
+  ChannelCursorUpdateResult,
+  ClaimChannelDeliveryInput,
+  CreateChannelBindingInput,
+  CreateChannelDeliveryInput,
+  CreateChannelInteractionInput,
+  FindChannelInteractionInput,
+  ListChannelDeliveriesInput,
+  ListChannelIdentitiesInput,
+  ResolveChannelInteractionInput,
+  ResolveChannelInteractionWithCommandInput,
+  UpdateChannelBindingInput,
+  UpdateChannelCursorInput,
+  UpsertChannelIdentityInput,
+} from './control-plane-channel-inputs.ts'
+import type {
+  AttachWorkflowRunSessionInput,
+  ClaimDueWorkflowRunInput,
+  CompleteWorkflowRunInput,
+  CreateHeadlessAgentInput,
+  CreateThreadSmartFilterInput,
+  CreateThreadTagInput,
+  CreateWorkflowInput,
+  CreateWorkflowRunInput,
+  FailWorkflowRunInput,
+  ThreadTagLinkInput,
+  UpdateHeadlessAgentInput,
+  UpdateThreadSmartFilterInput,
+  UpdateThreadTagInput,
+  UpdateWorkflowStatusInput,
+} from './control-plane-workflow-inputs.ts'
+import type { ControlPlaneStore } from './control-plane-store-contract.ts'
+export type { ControlPlaneStore, MaybePromise } from './control-plane-store-contract.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
 export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
@@ -71,535 +225,6 @@ export {
   verifyCloudApiTokenHash,
 } from './control-plane-tokens.ts'
 
-export type ControlPlaneRole = 'owner' | 'admin' | 'member'
-export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
-export type ApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'operator' | 'worker-internal'
-export type AuditActorType = 'user' | 'api_token' | 'system'
-export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
-export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
-export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
-export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
-export type WorkReaperAction = 'retried' | 'failed' | 'released'
-export type HeadlessAgentStatus = 'active' | 'disabled'
-export type ChannelBindingStatus = 'active' | 'disabled' | 'auth_required' | 'error'
-export type ChannelIdentityRole = ControlPlaneRole | 'approver' | 'viewer'
-export type ChannelIdentityStatus = 'active' | 'disabled' | 'pending'
-export type ChannelSessionBindingStatus = 'active' | 'archived'
-export type ChannelInteractionKind = 'permission' | 'question'
-export type ChannelInteractionStatus = 'pending' | 'used' | 'expired' | 'revoked'
-export type ChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
-export type ByokSecretStatus = 'pending_validation' | 'active' | 'disabled' | 'expired' | 'invalid' | 'unsupported'
-export type UsageEventType =
-  | 'session.created'
-  | 'prompt.enqueued'
-  | 'work.queued'
-  | 'work.claimed'
-  | 'worker.execution_started'
-  | 'worker.execution_completed'
-  | 'worker.execution_failed'
-  | 'worker.minute'
-  | 'artifact.uploaded'
-  | 'artifact.downloaded'
-  | 'gateway.delivery.claimed'
-export type UsageUnit = 'count' | 'byte' | 'minute'
-export type BillingSubscriptionStatus = CloudSubscriptionStatus
-
-export type UsageEventRecord = {
-  eventId: string
-  orgId: string
-  accountId: string | null
-  eventType: UsageEventType | string
-  quantity: number
-  unit: UsageUnit | string
-  metadata: Record<string, unknown>
-  createdAt: string
-}
-
-export type BillingSubscriptionRecord = {
-  orgId: string
-  planKey: string
-  providerId: string
-  providerCustomerId: string | null
-  providerSubscriptionId: string | null
-  status: BillingSubscriptionStatus
-  seats: number
-  entitlements: CloudBillingEntitlements
-  currentPeriodEnd: string | null
-  cancelAtPeriodEnd: boolean
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export type QuotaConsumptionRecord = {
-  allowed: boolean
-  orgId: string
-  quotaKey: string
-  limit: number
-  used: number
-  remaining: number
-  resetAt: string
-  retryAfterMs: number
-  policyCode?: QuotaPolicyCode | string
-}
-
-export type UsageQuotaCounterRecord = {
-  orgId: string
-  quotaKey: string
-  windowStartedAtMs: number
-  quantity: number
-}
-
-export type RateLimitClaimRecord = {
-  allowed: boolean
-  scope: string
-  source: string
-  limit: number
-  count: number
-  resetAt: string
-  retryAfterMs: number
-  policyCode?: QuotaPolicyCode | string
-}
-
-export type CloudAuthBackoffRecord = {
-  allowed: boolean
-  scope: string
-  source: string
-  failureCount: number
-  blockedUntilMs: number
-  retryAfterMs: number
-}
-
-export type TenantRecord = {
-  tenantId: string
-  name: string
-  createdAt: string
-}
-
-export type UserRecord = {
-  tenantId: string
-  userId: string
-  email: string
-  role: ControlPlaneRole
-  createdAt: string
-}
-
-export type OrgRecord = {
-  orgId: string
-  tenantId: string
-  name: string
-  planKey: string | null
-  status: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type AccountRecord = {
-  accountId: string
-  idpSubject: string | null
-  email: string
-  displayName: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type MembershipRecord = {
-  orgId: string
-  accountId: string
-  role: ControlPlaneRole
-  status: ControlPlaneMembershipStatus
-  createdAt: string
-  updatedAt: string
-}
-
-export type OrgMemberRecord = {
-  orgId: string
-  accountId: string
-  email: string
-  displayName: string | null
-  role: ControlPlaneRole
-  status: ControlPlaneMembershipStatus
-  createdAt: string
-  updatedAt: string
-}
-
-export type PrincipalMembershipRecord = {
-  org: OrgRecord
-  account: AccountRecord
-  membership: MembershipRecord
-}
-
-export type ApiTokenRecord = {
-  tokenId: string
-  orgId: string
-  accountId: string | null
-  name: string
-  tokenHash: string
-  scopes: ApiTokenScope[]
-  last4: string
-  expiresAt: string | null
-  revokedAt: string | null
-  lastUsedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type ApiTokenChannelBindingGrantRecord = {
-  orgId: string
-  tokenId: string
-  channelBindingId: string
-  createdAt: string
-}
-
-export type IssuedApiTokenRecord = {
-  token: ApiTokenRecord
-  plaintext: string
-}
-
-export type AuditEventRecord = {
-  eventId: string
-  orgId: string
-  accountId: string | null
-  actorType: AuditActorType
-  actorId: string | null
-  eventType: string
-  targetType: string | null
-  targetId: string | null
-  metadata: Record<string, unknown>
-  createdAt: string
-}
-
-export type ByokSecretRecord = {
-  secretId: string
-  orgId: string
-  providerId: string
-  status: ByokSecretStatus
-  ciphertext: string | null
-  kmsRef: string | null
-  last4: string
-  keyFingerprint: string
-  createdByAccountId: string | null
-  rotatedFromSecretId: string | null
-  lastValidatedAt: string | null
-  validationError: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type HeadlessAgentRecord = {
-  agentId: string
-  orgId: string
-  tenantId: string
-  profileName: string
-  name: string
-  status: HeadlessAgentStatus
-  managed: boolean
-  createdByAccountId: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type ChannelBindingRecord = {
-  bindingId: string
-  orgId: string
-  agentId: string
-  provider: ChannelProviderId
-  externalWorkspaceId: string | null
-  displayName: string
-  status: ChannelBindingStatus
-  credentialRef: string | null
-  settings: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export type ChannelIdentityRecord = {
-  identityId: string
-  orgId: string
-  provider: ChannelProviderId
-  externalWorkspaceId: string | null
-  externalUserId: string
-  accountId: string | null
-  role: ChannelIdentityRole
-  status: ChannelIdentityStatus
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export type ChannelSessionBindingRecord = {
-  bindingId: string
-  orgId: string
-  agentId: string
-  channelBindingId: string
-  provider: ChannelProviderId
-  externalWorkspaceId: string | null
-  externalThreadId: string
-  externalChatId: string
-  sessionId: string
-  lastEventSequence: number
-  lastWorkspaceSequence: number
-  lastChatMessageId: string | null
-  status: ChannelSessionBindingStatus
-  createdAt: string
-  updatedAt: string
-}
-
-export type ChannelInteractionRecord = {
-  interactionId: string
-  orgId: string
-  agentId: string
-  sessionId: string
-  provider: ChannelProviderId
-  externalInteractionId: string | null
-  tokenHash: string
-  kind: ChannelInteractionKind
-  targetId: string
-  status: ChannelInteractionStatus
-  createdByIdentityId: string | null
-  expiresAt: string
-  usedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type IssuedChannelInteractionRecord = {
-  interaction: ChannelInteractionRecord
-  plaintextToken: string
-}
-
-export type ChannelDeliveryRecord = {
-  deliveryId: string
-  orgId: string
-  agentId: string
-  channelBindingId: string
-  sessionBindingId: string | null
-  provider: ChannelProviderId
-  target: Record<string, unknown>
-  eventType: string
-  payload: Record<string, unknown>
-  status: ChannelDeliveryStatus
-  attemptCount: number
-  claimedBy: string | null
-  lastClaimedBy: string | null
-  claimExpiresAt: string | null
-  nextAttemptAt: string
-  lastError: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type SessionRecord = {
-  tenantId: string
-  userId: string
-  sessionId: string
-  opencodeSessionId: string
-  profileName: string
-  status: ControlPlaneSessionStatus
-  title: string | null
-  createdAt: string
-  updatedAt: string
-  projectSource?: CloudProjectSourceSummary | null
-}
-
-export type ListSessionsPageInput = {
-  tenantId: string
-  userId: string
-  limit?: number | null
-  cursor?: string | null
-  status?: ControlPlaneSessionStatus | null
-  profileName?: string | null
-  query?: string | null
-}
-
-export type ListSessionsPageRecord = {
-  items: SessionRecord[]
-  nextCursor: string | null
-  totalEstimate: number
-}
-
-export type SessionEventRecord = {
-  tenantId: string
-  sessionId: string
-  eventId: string
-  sequence: number
-  type: string
-  payload: Record<string, unknown>
-  createdAt: string
-}
-
-export type WorkspaceEventRecord = {
-  tenantId: string
-  userId: string
-  sessionId: string | null
-  eventId: string
-  sequence: number
-  entityType: string
-  entityId: string
-  operation: string
-  projectionVersion: number
-  type: string
-  payload: Record<string, unknown>
-  createdAt: string
-}
-export type SessionProjectionRecord = {
-  tenantId: string
-  sessionId: string
-  sequence: number
-  view: Record<string, unknown>
-  updatedAt: string
-}
-
-export type WorkerLeaseRecord = {
-  tenantId: string
-  sessionId: string
-  leasedBy: string
-  leaseToken: string
-  leaseExpiresAt: number
-  checkpointVersion: number
-}
-
-export type ClaimRunnableSessionsInput = {
-  workerId: string
-  limit?: number | null
-  now?: Date
-  ttlMs?: number
-}
-export type ListRunnableSessionsInput = { limit?: number | null, now?: Date }
-export type RunnableSessionRecord = { tenantId: string, sessionId: string }
-export type RunnableSessionListRecord = { sessions: RunnableSessionRecord[], pendingSessionCountEstimate: number }
-export type RunnableSessionClaimRecord = {
-  leases: WorkerLeaseRecord[]
-  pendingSessionCountEstimate: number
-}
-
-export type ReapExpiredSessionLeasesInput = {
-  now?: Date
-  maxCommandAttempts?: number | null
-  limit?: number | null
-}
-
-export type ReapedSessionLeaseRecord = {
-  tenantId: string
-  sessionId: string
-  leaseToken: string
-  leasedBy: string
-  action: WorkReaperAction
-  retriedCommandIds: string[]
-  failedCommandIds: string[]
-  reapedAt: string
-}
-
-export type ReapExpiredWorkflowClaimsInput = {
-  now?: Date
-  maxAttempts?: number | null
-  limit?: number | null
-}
-
-export type ReapedWorkflowClaimRecord = {
-  tenantId: string
-  workflowId: string
-  runId: string
-  claimToken: string
-  claimedBy: string
-  action: WorkReaperAction
-  reapedAt: string
-}
-
-export type SessionCommandRecord = {
-  commandId: string
-  tenantId: string
-  userId: string
-  sessionId: string
-  kind: ControlPlaneCommandKind
-  payload: Record<string, unknown>
-  targetLeaseToken: string | null
-  createdSequence: number
-  createdAt: string
-  status: ControlPlaneCommandStatus
-  claimedBy: string | null
-  claimedLeaseToken: string | null
-  attemptCount: number
-  availableAt: string | null
-  lastErrorCode: string | null
-  lastErrorSummary: string | null
-  ackedAt: string | null
-  error: string | null
-}
-
-export type WorkerHeartbeatRecord = {
-  workerId: string
-  role: WorkerRole
-  activeSessionIds: string[]
-  lastSeenAt: string
-}
-
-export type SettingMetadataRecord = {
-  tenantId: string
-  userId: string | null
-  key: string
-  value: Record<string, unknown>
-  updatedAt: string
-}
-
-export type ThreadTagRecord = {
-  tenantId: string
-  tagId: string
-  name: string
-  color: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type ThreadSmartFilterRecord = {
-  tenantId: string
-  filterId: string
-  name: string
-  query: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export type ThreadMetadataRecord = {
-  tenantId: string
-  userId: string
-  sessionId: string
-  title: string | null
-  profileName: string
-  status: ControlPlaneSessionStatus
-  createdAt: string
-  updatedAt: string
-  tags: ThreadTagRecord[]
-}
-
-export type CloudWorkflowRecord = WorkflowSummary & {
-  tenantId: string
-  userId: string
-}
-
-export type CloudWorkflowRunRecord = WorkflowRun & {
-  tenantId: string
-  userId: string
-  claimedBy: string | null
-  claimToken: string | null
-  claimExpiresAt: string | null
-  attemptCount: number
-  idempotencyKey: string | null
-  checkpointVersion: number
-  lastErrorCode: string | null
-  lastErrorSummary: string | null
-}
-
-export type ClaimedWorkflowRunRecord = {
-  workflow: CloudWorkflowRecord
-  run: CloudWorkflowRunRecord
-}
-
-export type SchemaMigrationRecord = {
-  id: string
-  appliedAt: string
-}
-
 type SessionState = {
   record: SessionRecord
   nextEventSequence: number
@@ -611,829 +236,9 @@ type SessionState = {
   commands: SessionCommandRecord[]
 }
 
-type WorkflowState = {
-  record: CloudWorkflowRecord
-  runs: CloudWorkflowRunRecord[]
-}
-
-export type CreateSessionInput = {
-  tenantId: string
-  userId: string
-  sessionId: string
-  opencodeSessionId: string
-  profileName: string
-  title?: string | null
-  createdAt?: Date
-  quota?: {
-    orgId?: string | null
-    maxConcurrentSessionsPerOrg?: number | null
-    policyCode?: QuotaPolicyCode | string
-  } | null
-}
-
-export type ConsumeUsageQuotaInput = {
-  orgId: string
-  quotaKey: string
-  limit: number
-  quantity?: number
-  windowMs: number
-  now?: Date
-  policyCode?: QuotaPolicyCode | string
-}
-
-export type RecordUsageEventInput = {
-  eventId?: string
-  orgId: string
-  accountId?: string | null
-  eventType: UsageEventType | string
-  quantity?: number
-  unit?: UsageUnit | string
-  metadata?: Record<string, unknown>
-  createdAt?: Date
-}
-
-export type UpsertBillingSubscriptionInput = {
-  orgId: string
-  planKey: string
-  providerId: string
-  providerCustomerId?: string | null
-  providerSubscriptionId?: string | null
-  status: BillingSubscriptionStatus
-  seats?: number
-  entitlements?: CloudBillingEntitlements
-  currentPeriodEnd?: Date | string | null
-  cancelAtPeriodEnd?: boolean
-  metadata?: Record<string, unknown>
-  updatedAt?: Date
-}
-
-export type ClaimRateLimitInput = {
-  scope: string
-  source: string
-  limit: number
-  windowMs: number
-  now?: Date
-  policyCode?: QuotaPolicyCode | string
-}
-
-export type CheckCloudAuthBackoffInput = {
-  scope: string
-  source?: string
-  now?: Date
-}
-
-export type RecordCloudAuthFailureInput = {
-  scope: string
-  source: string
-  windowMs: number
-  limit: number
-  backoffMs: number
-  now?: Date
-}
-
-export type CreateAccountInput = {
-  accountId: string
-  idpSubject?: string | null
-  email: string
-  displayName?: string | null
-  createdAt?: Date
-}
-
-export type UpsertMembershipInput = {
-  orgId: string
-  accountId: string
-  role: ControlPlaneRole
-  status?: ControlPlaneMembershipStatus
-  updatedAt?: Date
-  actor?: AuditActorInput
-}
-
-export type AuditActorInput = {
-  actorType: AuditActorType
-  actorId?: string | null
-  accountId?: string | null
-}
-
-export type IssueApiTokenInput = {
-  orgId: string
-  accountId?: string | null
-  name: string
-  scopes: ApiTokenScope[]
-  expiresAt?: Date | null
-  createdAt?: Date
-  tokenId?: string
-  secret?: string
-  actor?: AuditActorInput
-}
-
-export type RevokeApiTokenInput = {
-  tokenId: string
-  orgId?: string | null
-  revokedAt?: Date
-  actor?: AuditActorInput
-}
-
-export type GrantApiTokenChannelBindingInput = {
-  orgId: string
-  tokenId: string
-  channelBindingId: string
-  createdAt?: Date
-  actor?: AuditActorInput
-}
-
-export type ListApiTokenChannelBindingGrantsInput = {
-  orgId: string
-  tokenId: string
-}
-
-export type RecordAuditEventInput = {
-  eventId?: string
-  orgId: string
-  accountId?: string | null
-  actorType: AuditActorType
-  actorId?: string | null
-  eventType: string
-  targetType?: string | null
-  targetId?: string | null
-  metadata?: Record<string, unknown>
-  createdAt?: Date
-}
-
-export type CreateByokSecretInput = {
-  secretId: string
-  orgId: string
-  providerId: string
-  status?: ByokSecretStatus
-  ciphertext?: string | null
-  kmsRef?: string | null
-  last4: string
-  keyFingerprint: string
-  createdByAccountId?: string | null
-  rotatedFromSecretId?: string | null
-  createdAt?: Date
-  actor?: AuditActorInput
-}
-
-export type DisableByokSecretInput = {
-  orgId: string
-  providerId: string
-  secretId?: string | null
-  disabledAt?: Date
-  actor?: AuditActorInput
-}
-
-export type RecordByokSecretValidationInput = {
-  orgId: string
-  providerId: string
-  secretId?: string | null
-  status?: ByokSecretStatus
-  validationError?: string | null
-  validatedAt?: Date
-  actor?: AuditActorInput
-}
-
-export type CreateHeadlessAgentInput = {
-  agentId: string
-  orgId: string
-  tenantId: string
-  profileName: string
-  name: string
-  status?: HeadlessAgentStatus
-  managed?: boolean
-  createdByAccountId?: string | null
-  createdAt?: Date
-}
-
-export type UpdateHeadlessAgentInput = {
-  orgId: string
-  agentId: string
-  profileName?: string
-  name?: string
-  status?: HeadlessAgentStatus
-  managed?: boolean
-  updatedAt?: Date
-  actor?: AuditActorInput
-}
-
-export type CreateChannelBindingInput = {
-  bindingId: string
-  orgId: string
-  agentId: string
-  provider: ChannelProviderId
-  externalWorkspaceId?: string | null
-  displayName: string
-  status?: ChannelBindingStatus
-  credentialRef?: string | null
-  settings?: Record<string, unknown>
-  createdAt?: Date
-  quota?: {
-    maxGatewayChannelBindingsPerOrg?: number | null
-    policyCode?: string
-  } | null
-}
-
-export type UpdateChannelBindingInput = {
-  orgId: string
-  bindingId: string
-  displayName?: string
-  status?: ChannelBindingStatus
-  credentialRef?: string | null
-  settings?: Record<string, unknown>
-  updatedAt?: Date
-  actor?: AuditActorInput
-}
-
-export type UpsertChannelIdentityInput = {
-  identityId?: string
-  orgId: string
-  provider: ChannelProviderId
-  externalWorkspaceId?: string | null
-  externalUserId: string
-  accountId?: string | null
-  role?: ChannelIdentityRole
-  status?: ChannelIdentityStatus
-  metadata?: Record<string, unknown>
-  updatedAt?: Date
-}
-
-export type ListChannelIdentitiesInput = {
-  provider?: ChannelProviderId | null
-  externalWorkspaceId?: string | null
-  role?: ChannelIdentityRole | null
-  status?: ChannelIdentityStatus | null
-  limit?: number | null
-}
-
-export type BindChannelSessionInput = {
-  bindingId: string
-  orgId: string
-  agentId: string
-  channelBindingId: string
-  provider: ChannelProviderId
-  externalWorkspaceId?: string | null
-  externalThreadId: string
-  externalChatId: string
-  sessionId: string
-  lastEventSequence?: number
-  lastWorkspaceSequence?: number
-  lastChatMessageId?: string | null
-  status?: ChannelSessionBindingStatus
-  createdAt?: Date
-}
-
-export type UpdateChannelCursorInput = {
-  orgId: string
-  bindingId: string
-  lastEventSequence: number
-  lastWorkspaceSequence: number
-  lastChatMessageId?: string | null
-  updatedAt?: Date
-}
-
-export type ChannelCursorUpdateResult = { ok: true, binding: ChannelSessionBindingRecord } | { ok: false, reason: 'stale', binding: ChannelSessionBindingRecord } | { ok: false, reason: 'not_found' }
-
-export type CreateChannelInteractionInput = {
-  interactionId: string
-  orgId: string
-  agentId: string
-  sessionId: string
-  provider: ChannelProviderId
-  externalInteractionId?: string | null
-  kind: ChannelInteractionKind
-  targetId: string
-  createdByIdentityId?: string | null
-  expiresAt: Date
-  tokenSecret?: string
-  createdAt?: Date
-}
-
-export type ResolveChannelInteractionInput = {
-  orgId: string
-  token?: string | null
-  externalInteractionId?: string | null
-  provider?: ChannelProviderId | null
-  identityId: string
-  usedAt?: Date
-}
-
-export type FindChannelInteractionInput = Omit<ResolveChannelInteractionInput, 'identityId' | 'usedAt'> & {
-  now?: Date
-}
-
-export type ResolveChannelInteractionWithCommandInput = ResolveChannelInteractionInput & {
-  command: EnqueueCommandInput
-}
-
-export type CreateChannelDeliveryInput = {
-  deliveryId: string
-  orgId: string
-  agentId: string
-  channelBindingId: string
-  sessionBindingId?: string | null
-  provider: ChannelProviderId
-  target: Record<string, unknown>
-  eventType: string
-  payload: Record<string, unknown>
-  status?: ChannelDeliveryStatus
-  nextAttemptAt?: Date
-  createdAt?: Date
-}
-
-export type ClaimChannelDeliveryInput = {
-  orgId: string
-  claimedBy: string
-  lastClaimedBy?: string | null
-  channelBindingIds?: readonly string[] | null
-  now?: Date
-  ttlMs?: number
-  quota?: Omit<ConsumeUsageQuotaInput, 'orgId'> | null
-}
-
-export type AckChannelDeliveryInput = {
-  orgId: string
-  deliveryId: string
-  channelBindingIds?: readonly string[] | null
-  claimedBy?: string | null
-  lastClaimedBy?: string | null
-  status: Extract<ChannelDeliveryStatus, 'sent' | 'failed' | 'dead'>
-  lastError?: string | null
-  nextAttemptAt?: Date | null
-  updatedAt?: Date
-}
-
-export type ListChannelDeliveriesInput = {
-  orgId: string
-  deliveryId?: string | null
-  status?: ChannelDeliveryStatus | null
-  channelBindingId?: string | null
-  channelBindingIds?: readonly string[] | null
-  lastClaimedBy?: string | null
-  limit?: number | null
-}
-
-export type AppendEventInput = {
-  tenantId: string
-  sessionId: string
-  eventId?: string
-  type: string
-  payload?: Record<string, unknown>
-  leaseToken?: string | null
-  createdAt?: Date
-}
-
-export type AppendWorkspaceEventInput = {
-  tenantId: string
-  userId: string
-  sessionId?: string | null
-  eventId?: string
-  entityType?: string
-  entityId?: string
-  operation?: string
-  projectionVersion?: number
-  type: string
-  payload?: Record<string, unknown>
-  createdAt?: Date
-}
-
-export type WriteProjectionInput = {
-  tenantId: string
-  sessionId: string
-  sequence: number
-  view: Record<string, unknown>
-  leaseToken?: string | null
-  updatedAt?: Date
-}
-
-export type CommandQueueQuota = {
-  orgId?: string | null
-  maxQueuedCommandsPerOrg?: number | null
-  maxQueueAgeMs?: number | null
-  policyCode?: QuotaPolicyCode | string
-  queueAgePolicyCode?: QuotaPolicyCode | string
-}
-
-export type WorkflowRunQuota = {
-  orgId?: string | null
-  maxConcurrentWorkflowRunsPerOrg?: number | null
-  maxWorkflowRunsPerHour?: number | null
-  policyCode?: QuotaPolicyCode | string
-  workflowRunsPolicyCode?: QuotaPolicyCode | string
-}
-
-export type EnqueueCommandInput = {
-  commandId: string
-  tenantId: string
-  userId: string
-  sessionId: string
-  kind: ControlPlaneCommandKind
-  payload?: Record<string, unknown>
-  targetLeaseToken?: string | null
-  createdAt?: Date
-  quota?: CommandQueueQuota | null
-  usageQuotas?: ConsumeUsageQuotaInput[]
-}
-
-export type CreateWorkflowInput = {
-  tenantId: string
-  userId: string
-  workflowId: string
-  draft: WorkflowDraft
-  nextRunAt?: string | null
-  createdAt?: Date
-}
-
-export type CreateWorkflowRunInput = {
-  tenantId: string
-  userId: string
-  workflowId: string
-  runId: string
-  triggerType: WorkflowTriggerType
-  triggerPayload?: Record<string, unknown> | null
-  claimedBy?: string | null
-  leaseTtlMs?: number | null
-  createdAt?: Date
-  quota?: WorkflowRunQuota | null
-}
-
-export type UpdateWorkflowStatusInput = {
-  tenantId: string
-  userId: string
-  workflowId: string
-  status: WorkflowStatus
-  nextRunAt?: string | null
-  updatedAt?: Date
-}
-
-export type ClaimDueWorkflowRunInput = {
-  runId: string
-  claimedBy?: string | null
-  leaseTtlMs?: number | null
-  now?: Date
-  quota?: WorkflowRunQuota | null
-}
-
-export type AttachWorkflowRunSessionInput = {
-  tenantId: string
-  workflowId: string
-  runId: string
-  sessionId: string
-  claimToken?: string | null
-  startedAt?: Date
-}
-
-export type CompleteWorkflowRunInput = {
-  tenantId: string
-  workflowId: string
-  runId: string
-  summary: string | null
-  nextStatus: WorkflowStatus
-  nextRunAt: string | null
-  leaseToken?: string | null
-  finishedAt?: Date
-}
-
-export type FailWorkflowRunInput = {
-  tenantId: string
-  workflowId: string
-  runId: string
-  error: string
-  nextStatus: WorkflowStatus
-  nextRunAt: string | null
-  leaseToken?: string | null
-  finishedAt?: Date
-}
-
-export type CreateThreadTagInput = {
-  tenantId: string
-  tagId: string
-  name: string
-  color?: string | null
-  createdAt?: Date
-}
-
-export type UpdateThreadTagInput = {
-  tenantId: string
-  tagId: string
-  name?: string
-  color?: string | null
-  updatedAt?: Date
-}
-
-export type ThreadTagLinkInput = {
-  tenantId: string
-  sessionIds: string[]
-  tagIds: string[]
-  createdAt?: Date
-}
-
-export type CreateThreadSmartFilterInput = {
-  tenantId: string
-  filterId: string
-  name: string
-  query: Record<string, unknown>
-  createdAt?: Date
-}
-
-export type UpdateThreadSmartFilterInput = {
-  tenantId: string
-  filterId: string
-  name?: string
-  query?: Record<string, unknown>
-  updatedAt?: Date
-}
-
-export type MaybePromise<T> = T | Promise<T>
-
-export type ControlPlaneStore = {
-  createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }): MaybePromise<TenantRecord>
-  ensureUser(input: {
-    tenantId: string
-    userId: string
-    email: string
-    role?: ControlPlaneRole
-    createdAt?: Date
-  }): MaybePromise<UserRecord>
-  ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }): MaybePromise<OrgRecord>
-  createAccount(input: CreateAccountInput): MaybePromise<AccountRecord>
-  findAccountBySubject(idpSubject: string): MaybePromise<AccountRecord | null>
-  findAccountByEmail(email: string): MaybePromise<AccountRecord | null>
-  upsertMembership(input: UpsertMembershipInput): MaybePromise<MembershipRecord>
-  listOrgMembers(orgId: string, input?: { query?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
-  listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
-  resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
-  issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
-  listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>
-  findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
-  revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
-  grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): MaybePromise<ApiTokenChannelBindingGrantRecord>
-  listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): MaybePromise<ApiTokenChannelBindingGrantRecord[]>
-  createManagedWorkerPool(input: CreateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord>
-  updateManagedWorkerPool(input: UpdateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord | null>
-  getManagedWorkerPool(orgId: string, poolId: string): MaybePromise<ManagedWorkerPoolRecord | null>
-  listManagedWorkerPools(orgId: string, input?: { status?: ManagedWorkerPoolStatus | null, limit?: number | null }): MaybePromise<ManagedWorkerPoolRecord[]>
-  registerManagedWorker(input: RegisterManagedWorkerInput): MaybePromise<ManagedWorkerRecord>
-  updateManagedWorkerStatus(input: UpdateManagedWorkerStatusInput): MaybePromise<ManagedWorkerRecord | null>
-  getManagedWorker(orgId: string, workerId: string): MaybePromise<ManagedWorkerRecord | null>
-  listManagedWorkers(orgId: string, input?: {
-    poolId?: string | null
-    status?: ManagedWorkerStatus | null
-    limit?: number | null
-  }): MaybePromise<ManagedWorkerRecord[]>
-  issueManagedWorkerCredential(input: IssueManagedWorkerCredentialInput): MaybePromise<IssuedManagedWorkerCredentialRecord>
-  listManagedWorkerCredentials(orgId: string, workerId: string): MaybePromise<ManagedWorkerCredentialRecord[]>
-  findManagedWorkerCredentialByPlaintext(plaintext: string, now?: Date): MaybePromise<ResolvedManagedWorkerCredentialRecord | null>
-  revokeManagedWorkerCredential(input: RevokeManagedWorkerCredentialInput): MaybePromise<ManagedWorkerCredentialRecord | null>
-  recordManagedWorkerHeartbeat(input: RecordManagedWorkerHeartbeatInput): MaybePromise<ManagedWorkerHeartbeatRecord>
-  listManagedWorkerHeartbeats(orgId: string, input?: { workerId?: string | null, limit?: number | null }): MaybePromise<ManagedWorkerHeartbeatRecord[]>
-  recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
-  listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
-  consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
-  listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
-  recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
-  listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
-  upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>
-  getBillingSubscription(orgId: string): MaybePromise<BillingSubscriptionRecord | null>
-  findBillingSubscriptionByProvider(input: {
-    providerId: string
-    providerCustomerId?: string | null
-    providerSubscriptionId?: string | null
-  }): MaybePromise<BillingSubscriptionRecord | null>
-  claimRateLimit(input: ClaimRateLimitInput): MaybePromise<RateLimitClaimRecord>
-  checkCloudAuthBackoff(input: CheckCloudAuthBackoffInput): MaybePromise<CloudAuthBackoffRecord>
-  recordCloudAuthFailure(input: RecordCloudAuthFailureInput): MaybePromise<CloudAuthBackoffRecord>
-  createByokSecret(input: CreateByokSecretInput): MaybePromise<ByokSecretRecord>
-  getByokSecret(orgId: string, providerId: string): MaybePromise<ByokSecretRecord | null>
-  getActiveByokSecret(orgId: string, providerId: string): MaybePromise<ByokSecretRecord | null>
-  listByokSecrets(orgId: string): MaybePromise<ByokSecretRecord[]>
-  disableByokSecret(input: DisableByokSecretInput): MaybePromise<ByokSecretRecord | null>
-  recordByokSecretValidation(input: RecordByokSecretValidationInput): MaybePromise<ByokSecretRecord | null>
-  createHeadlessAgent(input: CreateHeadlessAgentInput): MaybePromise<HeadlessAgentRecord>
-  updateHeadlessAgent(input: UpdateHeadlessAgentInput): MaybePromise<HeadlessAgentRecord | null>
-  getHeadlessAgent(orgId: string, agentId: string): MaybePromise<HeadlessAgentRecord | null>
-  listHeadlessAgents(orgId: string): MaybePromise<HeadlessAgentRecord[]>
-  createChannelBinding(input: CreateChannelBindingInput): MaybePromise<ChannelBindingRecord>
-  updateChannelBinding(input: UpdateChannelBindingInput): MaybePromise<ChannelBindingRecord | null>
-  getChannelBinding(orgId: string, bindingId: string): MaybePromise<ChannelBindingRecord | null>
-  listChannelBindings(orgId: string, agentId?: string | null): MaybePromise<ChannelBindingRecord[]>
-  upsertChannelIdentity(input: UpsertChannelIdentityInput): MaybePromise<ChannelIdentityRecord>
-  getChannelIdentity(orgId: string, identityId: string): MaybePromise<ChannelIdentityRecord | null>
-  listChannelIdentities(orgId: string, input?: ListChannelIdentitiesInput): MaybePromise<ChannelIdentityRecord[]>
-  findChannelIdentity(input: {
-    orgId: string
-    provider: ChannelProviderId
-    externalWorkspaceId?: string | null
-    externalUserId: string
-  }): MaybePromise<ChannelIdentityRecord | null>
-  bindChannelSession(input: BindChannelSessionInput): MaybePromise<ChannelSessionBindingRecord>
-  getChannelSessionBinding(orgId: string, bindingId: string): MaybePromise<ChannelSessionBindingRecord | null>
-  findChannelSessionBindingByThread(input: {
-    orgId: string
-    provider: ChannelProviderId
-    externalWorkspaceId?: string | null
-    externalChatId: string
-    externalThreadId: string
-  }): MaybePromise<ChannelSessionBindingRecord | null>
-  listChannelSessionBindingsForSession(orgId: string, sessionId: string): MaybePromise<ChannelSessionBindingRecord[]>
-  updateChannelCursor(input: UpdateChannelCursorInput): MaybePromise<ChannelCursorUpdateResult>
-  createChannelInteraction(input: CreateChannelInteractionInput): MaybePromise<IssuedChannelInteractionRecord>
-  findChannelInteraction(input: FindChannelInteractionInput): MaybePromise<ChannelInteractionRecord | null>
-  resolveChannelInteraction(input: ResolveChannelInteractionInput): MaybePromise<ChannelInteractionRecord | null>
-  resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput): MaybePromise<{
-    interaction: ChannelInteractionRecord
-    command: SessionCommandRecord
-  } | null>
-  createChannelDelivery(input: CreateChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord>
-  listChannelDeliveries(input: ListChannelDeliveriesInput): MaybePromise<ChannelDeliveryRecord[]>
-  claimNextChannelDelivery(input: ClaimChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
-  ackChannelDelivery(input: AckChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
-  createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch>
-  updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch | null>
-  getCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<CoordinationWatch | null>
-  listCloudCoordinationWatches(input: ListCloudCoordinationWatchesInput): MaybePromise<CoordinationWatch[]>
-  listMatchingCloudCoordinationWatches(input: ListMatchingCloudCoordinationWatchesInput): MaybePromise<CoordinationWatch[]>
-  deleteCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<boolean>
-  claimChannelProviderEvent(input: ClaimChannelProviderEventInput): MaybePromise<ChannelProviderEventClaimResult>
-  completeChannelProviderEvent(input: CompleteChannelProviderEventInput): MaybePromise<ChannelProviderEventRecord | null>
-  createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
-  getSession(tenantId: string, userId: string, sessionId: string): MaybePromise<SessionRecord | null>
-  getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
-  findSession(sessionId: string): MaybePromise<SessionRecord | null>
-  listSessions(tenantId: string, userId: string): MaybePromise<SessionRecord[]>
-  listSessionsPage(input: ListSessionsPageInput): MaybePromise<ListSessionsPageRecord>
-  listAllSessions(): MaybePromise<SessionRecord[]>
-  listRunnableSessions(input: ListRunnableSessionsInput): MaybePromise<RunnableSessionListRecord>
-  claimRunnableSessions(input: ClaimRunnableSessionsInput): MaybePromise<RunnableSessionClaimRecord>
-  bindSessionRuntime(input: {
-    tenantId: string
-    sessionId: string
-    opencodeSessionId: string
-    title?: string | null
-    leaseToken?: string | null
-    updatedAt?: Date
-  }): MaybePromise<SessionRecord>
-  updateSessionStatus(input: {
-    tenantId: string
-    sessionId: string
-    status: ControlPlaneSessionStatus
-    title?: string | null
-    leaseToken?: string | null
-    updatedAt?: Date
-  }): MaybePromise<SessionRecord>
-  appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
-  listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number): MaybePromise<SessionEventRecord[]>
-  appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
-  getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
-  listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number): MaybePromise<WorkspaceEventRecord[]>
-  writeSessionProjection(input: WriteProjectionInput): MaybePromise<SessionProjectionRecord>
-  getSessionProjection(tenantId: string, sessionId: string): MaybePromise<SessionProjectionRecord | null>
-  claimSessionLease(
-    tenantId: string,
-    sessionId: string,
-    workerId: string,
-    now?: Date,
-    ttlMs?: number,
-    quota?: {
-      orgId?: string | null
-      maxActiveWorkersPerOrg?: number | null
-      policyCode?: QuotaPolicyCode | string
-    } | null,
-  ): MaybePromise<WorkerLeaseRecord | null>
-  releaseSessionLease(lease: WorkerLeaseRecord, now?: Date): MaybePromise<boolean>
-  renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
-  checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
-  reapExpiredSessionLeases(input?: ReapExpiredSessionLeasesInput): MaybePromise<ReapedSessionLeaseRecord[]>
-  assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): MaybePromise<void>
-  enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
-  claimNextSessionCommand(lease: WorkerLeaseRecord, now?: Date): MaybePromise<SessionCommandRecord | null>
-  ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
-  failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): MaybePromise<SessionCommandRecord>
-  recordWorkerHeartbeat(input: {
-    workerId: string
-    role: WorkerRole
-    activeSessionIds?: string[]
-    now?: Date
-  }): MaybePromise<WorkerHeartbeatRecord>
-  listWorkerHeartbeats(): MaybePromise<WorkerHeartbeatRecord[]>
-  setSettingMetadata(input: {
-    tenantId: string
-    userId?: string | null
-    key: string
-    value: Record<string, unknown>
-    updatedAt?: Date
-  }): MaybePromise<SettingMetadataRecord>
-  getSettingMetadata(tenantId: string, keyName: string, userId?: string | null): MaybePromise<SettingMetadataRecord | null>
-  listSettingMetadata(tenantId: string, userId?: string | null): MaybePromise<SettingMetadataRecord[]>
-  createWorkflow(input: CreateWorkflowInput): MaybePromise<CloudWorkflowRecord>
-  findWorkflow(workflowId: string): MaybePromise<CloudWorkflowRecord | null>
-  listWorkflows(tenantId: string, userId: string): MaybePromise<CloudWorkflowRecord[]>
-  getWorkflow(tenantId: string, userId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
-  getWorkflowForTenant(tenantId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
-  updateWorkflowStatus(input: UpdateWorkflowStatusInput): MaybePromise<CloudWorkflowRecord | null>
-  listWorkflowRuns(tenantId: string, workflowId: string, limit?: number): MaybePromise<CloudWorkflowRunRecord[]>
-  createWorkflowRun(input: CreateWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord>
-  claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): MaybePromise<ClaimedWorkflowRunRecord | null>
-  reapExpiredWorkflowClaims(input?: ReapExpiredWorkflowClaimsInput): MaybePromise<ReapedWorkflowClaimRecord[]>
-  attachWorkflowRunSession(input: AttachWorkflowRunSessionInput): MaybePromise<CloudWorkflowRunRecord | null>
-  completeWorkflowRun(input: CompleteWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord | null>
-  failWorkflowRun(input: FailWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord | null>
-  getWorkflowRun(tenantId: string, runId: string): MaybePromise<CloudWorkflowRunRecord | null>
-  getWorkflowRunBySession(tenantId: string, sessionId: string): MaybePromise<CloudWorkflowRunRecord | null>
-  listThreadTags(tenantId: string): MaybePromise<ThreadTagRecord[]>
-  createThreadTag(input: CreateThreadTagInput): MaybePromise<ThreadTagRecord>
-  updateThreadTag(input: UpdateThreadTagInput): MaybePromise<ThreadTagRecord | null>
-  deleteThreadTag(tenantId: string, tagId: string): MaybePromise<boolean>
-  applyThreadTags(input: ThreadTagLinkInput): MaybePromise<void>
-  removeThreadTags(input: ThreadTagLinkInput): MaybePromise<void>
-  listThreadSmartFilters(tenantId: string): MaybePromise<ThreadSmartFilterRecord[]>
-  createThreadSmartFilter(input: CreateThreadSmartFilterInput): MaybePromise<ThreadSmartFilterRecord>
-  updateThreadSmartFilter(input: UpdateThreadSmartFilterInput): MaybePromise<ThreadSmartFilterRecord | null>
-  deleteThreadSmartFilter(tenantId: string, filterId: string): MaybePromise<boolean>
-  listThreadMetadata(input: {
-    tenantId: string
-    userId: string
-    tagIds?: string[]
-    limit?: number
-  }): MaybePromise<ThreadMetadataRecord[]>
-  recordSchemaMigration(id: string, appliedAt?: Date): MaybePromise<SchemaMigrationRecord>
-  listSchemaMigrations(): MaybePromise<SchemaMigrationRecord[]>
-  close?(): MaybePromise<void>
-}
-
-const THREAD_TAG_NAME_MAX_LENGTH = 48
-const THREAD_SMART_FILTER_NAME_MAX_LENGTH = 64
-const THREAD_DEFAULT_TAG_COLOR = '#64748b'
 const THREAD_FILTER_MAX_VALUES = 50
 const THREAD_BULK_MAX_SESSION_IDS = 500
-const SMART_FILTER_QUERY_MAX_BYTES = 16_384
-const WORKFLOW_RUN_LIST_LIMIT = 100
 const CHANNEL_TEXT_MAX_LENGTH = 256
-const CHANNEL_METADATA_MAX_BYTES = 16_384
-const BYOK_PROVIDER_ID_MAX_LENGTH = 64
-const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
-const BILLING_TEXT_MAX_LENGTH = 256
-const BILLING_METADATA_MAX_BYTES = 16_384
-const BILLING_SUBSCRIPTION_STATUSES = new Set<BillingSubscriptionStatus>([
-  'trialing',
-  'active',
-  'past_due',
-  'canceled',
-  'incomplete',
-])
-
-function nowIso(now: Date | undefined) {
-  return (now || new Date()).toISOString()
-}
-
-function normalizeListLimit(value: number | null | undefined, fallback = 100, max = 500) {
-  if (!Number.isFinite(value)) return fallback
-  return Math.max(1, Math.min(max, Math.floor(value || fallback)))
-}
-
-function stableId(prefix: string, ...parts: string[]) {
-  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
-}
-
-function createWorkClaimToken(tenantId: string, workId: string, claimedBy: string) {
-  return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, entry]) => `${JSON.stringify(field)}:${stableJson(entry)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
-function key(...parts: string[]) {
-  return parts.join('\0')
-}
-
-function workspaceOperationFromType(type: string) {
-  if (/\b(created|submitted|uploaded|started)\b/.test(type)) return 'create'
-  if (/\b(deleted|removed|archived)\b/.test(type)) return 'delete'
-  return 'update'
-}
-
-function optionalTrimmedText(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
-function normalizeText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const normalized = value.trim()
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} exceeds ${maxLength} characters.`)
-  }
-  return normalized
-}
 
 function redactOperationalText(value: unknown, maxLength: number, label: string) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
@@ -1446,154 +251,40 @@ function redactOperationalText(value: unknown, maxLength: number, label: string)
   return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength <= 3 ? maxLength : maxLength - 3)}${maxLength <= 3 ? '' : '...'}`
 }
 
-function normalizeOptionalText(value: unknown, maxLength: number, label: string) {
-  if (value === undefined) return undefined
-  return normalizeText(value, maxLength, label)
-}
-
-function normalizeTagColor(value: unknown) {
-  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value.trim())
-    ? value.trim()
-    : THREAD_DEFAULT_TAG_COLOR
-}
-
 function normalizeIdList(values: readonly unknown[], label: string, maxLength: number) {
   if (!Array.isArray(values)) throw new Error(`${label} must be an array.`)
   if (values.length > maxLength) throw new Error(`${label} exceeds ${maxLength} entries.`)
   return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
 }
 
-function normalizeThreadQuery(value: unknown) {
-  const query = value && typeof value === 'object' && !Array.isArray(value)
-    ? clone(value as Record<string, unknown>)
-    : {}
-  const serialized = stableJson(query)
-  if (Buffer.byteLength(serialized, 'utf8') > SMART_FILTER_QUERY_MAX_BYTES) {
-    throw new Error(`Smart filter query exceeds ${SMART_FILTER_QUERY_MAX_BYTES} bytes.`)
-  }
-  return query
-}
-
-function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
-  const record = value && typeof value === 'object' && !Array.isArray(value)
-    ? clone(value as Record<string, unknown>)
-    : {}
-  const serialized = stableJson(record)
-  if (Buffer.byteLength(serialized, 'utf8') > maxBytes) {
-    throw new Error(`${label} exceeds ${maxBytes} bytes.`)
-  }
-  return record
-}
-
-function normalizeNullableText(value: unknown, maxLength: number, label: string): string | null {
-  if (value === undefined || value === null || value === '') return null
-  return normalizeText(value, maxLength, label)
-}
-
-function normalizeNonNegativeInteger(value: unknown, label: string) {
-  const parsed = Number(value ?? 0)
-  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative integer.`)
-  return parsed
-}
-
-function normalizePositiveInteger(value: unknown, label: string) {
-  const parsed = Number(value ?? 0)
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${label} must be a positive integer.`)
-  return parsed
-}
-
-function windowStart(nowMs: number, windowMs: number) {
-  return Math.floor(nowMs / windowMs) * windowMs
-}
-function quotaRetryAfterMs(nowMs: number, startedAtMs: number, windowMs: number) {
-  return Math.max(1, startedAtMs + windowMs - nowMs)
-}
-
-function normalizeBillingStatus(value: unknown): BillingSubscriptionStatus {
-  const status = normalizeText(value || 'incomplete', 32, 'Billing subscription status') as BillingSubscriptionStatus
-  return BILLING_SUBSCRIPTION_STATUSES.has(status) ? status : 'incomplete'
-}
-
-function billingProviderKey(providerId: string, providerRecordId: string | null | undefined) {
-  return key(normalizeText(providerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider id'), providerRecordId || '')
-}
-
-function isoNullable(value: Date | string | null | undefined) {
-  if (!value) return null
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
-}
-
-function normalizeByokProviderId(value: unknown) {
-  const providerId = normalizeText(value, BYOK_PROVIDER_ID_MAX_LENGTH, 'BYOK provider id').toLowerCase()
-  if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) throw new Error(`Unsupported BYOK provider id ${providerId}.`)
-  return providerId
-}
-
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
-  private readonly tenants = new Map<string, TenantRecord>()
-  private readonly users = new Map<string, UserRecord>()
-  private readonly orgs = new Map<string, OrgRecord>()
-  private readonly orgsByTenant = new Map<string, string>()
-  private readonly accounts = new Map<string, AccountRecord>()
-  private readonly accountsBySubject = new Map<string, string>()
-  private readonly accountsByEmail = new Map<string, string>()
-  private readonly memberships = new Map<string, MembershipRecord>()
-  private readonly apiTokens = new Map<string, ApiTokenRecord>()
-  private readonly apiTokenChannelBindingGrants = new Map<string, ApiTokenChannelBindingGrantRecord>()
-  private readonly auditEvents = new Map<string, AuditEventRecord>()
-  private readonly usageEvents = new Map<string, UsageEventRecord>()
-  private readonly billingSubscriptions = new Map<string, BillingSubscriptionRecord>()
-  private readonly billingSubscriptionsByProviderSubscription = new Map<string, string>()
-  private readonly billingSubscriptionsByProviderCustomer = new Map<string, string>()
-  private readonly usageCounters = new Map<string, { windowStartedAtMs: number, quantity: number }>()
-  private readonly rateLimits = new Map<string, { windowStartedAtMs: number, count: number }>()
-  private readonly authFailures = new Map<string, CloudAuthBackoffRecord>()
-  private readonly authFailureWindows = new Map<string, number>()
-  private readonly byokSecrets = new Map<string, ByokSecretRecord>()
-  private readonly headlessAgents = new Map<string, HeadlessAgentRecord>()
-  private readonly channelBindings = new Map<string, ChannelBindingRecord>()
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
   private readonly channelInteractionsByTokenHash = new Map<string, string>()
   private readonly channelInteractionsByExternal = new Map<string, string>()
   private readonly sessions = new Map<string, SessionState>()
-  private readonly heartbeats = new Map<string, WorkerHeartbeatRecord>()
-  private readonly settings = new Map<string, SettingMetadataRecord>()
-  private readonly workflows = new Map<string, WorkflowState>()
-  private readonly workflowRuns = new Map<string, CloudWorkflowRunRecord>()
-  private readonly threadTags = new Map<string, ThreadTagRecord>()
-  private readonly threadTagLinks = new Map<string, Set<string>>()
-  private readonly threadSmartFilters = new Map<string, ThreadSmartFilterRecord>()
-  private readonly migrations = new Map<string, SchemaMigrationRecord>()
-  private readonly workspaceEvents = new Map<string, { nextSequence: number, events: WorkspaceEventRecord[] }>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
-    orgTenantId: (orgId) => this.orgs.get(orgId)?.tenantId || null,
+    orgTenantId: (orgId) => this.orgTenantId(orgId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
   private readonly quotaDomain = new InMemoryQuotaDomain({
-    resolveOrgId: (tenantId) => this.orgsByTenant.get(tenantId) || tenantId,
+    resolveOrgId: (tenantId) => this.orgIdForTenant(tenantId),
     sessions: () => this.sessions.values(),
-    workflowRuns: () => this.workflowRuns.values(),
+    workflowRuns: () => this.workflowsDomain.allRuns(),
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
   })
   private readonly channelProviderEventsDomain = new InMemoryChannelProviderEventsDomain({
-    orgExists: (orgId) => this.orgs.has(orgId),
+    orgExists: (orgId) => this.orgExists(orgId),
   })
   private readonly channelIdentitiesDomain = new InMemoryChannelIdentitiesDomain({
-    orgExists: (orgId) => this.orgs.has(orgId),
-    accountExists: (accountId) => this.accounts.has(accountId),
+    orgExists: (orgId) => this.orgExists(orgId),
+    accountExists: (accountId) => this.accountExists(accountId),
   })
   private readonly channelDeliveriesDomain = new InMemoryChannelDeliveriesDomain({
-    orgExists: (orgId) => this.orgs.has(orgId),
-    getHeadlessAgent: (orgId, agentId) => {
-      const agent = this.headlessAgents.get(agentId)
-      return agent?.orgId === orgId ? agent : null
-    },
-    getChannelBinding: (orgId, bindingId) => {
-      const binding = this.channelBindings.get(bindingId)
-      return binding?.orgId === orgId ? binding : null
-    },
+    orgExists: (orgId) => this.orgExists(orgId),
+    getHeadlessAgent: (orgId, agentId) => this.getHeadlessAgent(orgId, agentId),
+    getChannelBinding: (orgId, bindingId) => this.getChannelBinding(orgId, bindingId),
     getChannelSessionBinding: (orgId, bindingId) => {
       const binding = this.channelSessionBindings.get(bindingId)
       return binding?.orgId === orgId ? binding : null
@@ -1601,25 +292,72 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
   })
   private readonly coordinationWatchesDomain = new InMemoryCoordinationWatchesDomain()
-
-  private orgIdForTenant(tenantId: string) {
-    return this.orgsByTenant.get(tenantId) || tenantId
-  }
+  private readonly workflowsDomain = new InMemoryWorkflowsDomain({
+    requireTenant: (tenantId) => { this.requireTenant(tenantId) },
+    requireTenantUser: (tenantId, userId) => { this.requireTenantUser(tenantId, userId) },
+    assertWorkflowRunQuota: (input) => { this.quotaDomain.assertWorkflowRunQuota(input) },
+    sessionHasCommands: (tenantId, sessionId) => this.sessionHasCommands(tenantId, sessionId),
+    assertSessionLease: (tenantId, sessionId, leaseToken) => { this.assertSessionLease(tenantId, sessionId, leaseToken) },
+  })
+  private readonly settingsDomain = new InMemorySettingsDomain({
+    requireTenant: (tenantId) => { this.requireTenant(tenantId) },
+    requireTenantUser: (tenantId, userId) => { this.requireTenantUser(tenantId, userId) },
+  })
+  private readonly apiTokensDomain = new InMemoryApiTokensDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    accountExists: (accountId) => this.accountExists(accountId),
+    getChannelBinding: (orgId, bindingId) => this.getChannelBinding(orgId, bindingId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly schemaMigrationsDomain = new InMemorySchemaMigrationsDomain()
+  private readonly workerHeartbeatsDomain = new InMemoryWorkerHeartbeatsDomain()
+  private readonly authBackoffDomain = new InMemoryAuthBackoffDomain()
+  private readonly rateLimitsDomain = new InMemoryRateLimitsDomain()
+  private readonly identityDomain = new InMemoryIdentityDomain({
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly channelBindingsDomain = new InMemoryChannelBindingsDomain({
+    getHeadlessAgent: (orgId, agentId) => this.getHeadlessAgent(orgId, agentId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly auditDomain = new InMemoryAuditDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+  })
+  private readonly workspaceEventsDomain = new InMemoryWorkspaceEventsDomain({
+    requireTenantUser: (tenantId, userId) => { this.requireTenantUser(tenantId, userId) },
+    assertSessionBelongsToUser: (tenantId, sessionId, userId) => { this.assertSessionBelongsToUser(tenantId, sessionId, userId) },
+  })
+  private readonly usageQuotaDomain = new InMemoryUsageQuotaDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+  })
+  private readonly threadTagsDomain = new InMemoryThreadTagsDomain({
+    requireTenant: (tenantId) => { this.requireTenant(tenantId) },
+    requireSession: (tenantId, sessionId) => { this.requireSession(tenantId, sessionId) },
+  })
+  private readonly smartFiltersDomain = new InMemorySmartFiltersDomain({
+    requireTenant: (tenantId) => { this.requireTenant(tenantId) },
+  })
+  private readonly headlessAgentsDomain = new InMemoryHeadlessAgentsDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    accountExists: (accountId) => this.accountExists(accountId),
+    requireTenant: (tenantId) => { this.requireTenant(tenantId) },
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly usageDomain = new InMemoryUsageDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+  })
+  private readonly billingDomain = new InMemoryBillingDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly byokSecretsDomain = new InMemoryByokSecretsDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    accountExists: (accountId) => this.accountExists(accountId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
 
   createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }): TenantRecord {
-    const existing = this.tenants.get(input.tenantId)
-    if (existing) {
-      this.ensureOrgForTenant({ tenantId: input.tenantId, name: existing.name, orgId: input.orgId, createdAt: input.createdAt })
-      return clone(existing)
-    }
-    const record: TenantRecord = {
-      tenantId: input.tenantId,
-      name: input.name,
-      createdAt: nowIso(input.createdAt),
-    }
-    this.tenants.set(input.tenantId, record)
-    this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, orgId: input.orgId, createdAt: input.createdAt })
-    return clone(record)
+    return this.identityDomain.createTenant(input)
   }
 
   ensureUser(input: {
@@ -1629,292 +367,91 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     role?: ControlPlaneRole
     createdAt?: Date
   }): UserRecord {
-    this.requireTenant(input.tenantId)
-    const userKey = key(input.tenantId, input.userId)
-    const existing = this.users.get(userKey)
-    if (existing) return clone(existing)
-    const record: UserRecord = {
-      tenantId: input.tenantId,
-      userId: input.userId,
-      email: input.email,
-      role: input.role || 'member',
-      createdAt: nowIso(input.createdAt),
-    }
-    this.users.set(userKey, record)
-    const org = this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId, createdAt: input.createdAt })
-    const account = this.createAccount({
-      accountId: input.userId,
-      idpSubject: input.userId,
-      email: input.email,
-      createdAt: input.createdAt,
-    })
-    this.upsertMembership({
-      orgId: org.orgId,
-      accountId: account.accountId,
-      role: input.role || 'member',
-      status: 'active',
-      updatedAt: input.createdAt,
-      actor: { actorType: 'system', actorId: 'compat.ensureUser' },
-    })
-    return clone(record)
+    return this.identityDomain.ensureUser(input)
   }
 
   ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }): OrgRecord {
-    const existingOrgId = this.orgsByTenant.get(input.tenantId)
-    if (existingOrgId) return clone(this.orgs.get(existingOrgId) as OrgRecord)
-    const createdAt = nowIso(input.createdAt)
-    const orgId = input.orgId || input.tenantId
-    const record: OrgRecord = {
-      orgId,
-      tenantId: input.tenantId,
-      name: input.name,
-      planKey: input.planKey ?? null,
-      status: input.status || 'active',
-      createdAt,
-      updatedAt: createdAt,
-    }
-    this.orgs.set(orgId, record)
-    this.orgsByTenant.set(input.tenantId, orgId)
-    return clone(record)
+    return this.identityDomain.ensureOrgForTenant(input)
   }
 
   createAccount(input: CreateAccountInput): AccountRecord {
-    const bySubject = input.idpSubject ? this.accountsBySubject.get(input.idpSubject) : null
-    const byEmail = this.accountsByEmail.get(input.email.toLowerCase())
-    const existing = this.accounts.get(bySubject || byEmail || input.accountId)
-    if (existing) {
-      let changed = false
-      if (input.idpSubject && !existing.idpSubject) {
-        existing.idpSubject = input.idpSubject
-        this.accountsBySubject.set(input.idpSubject, existing.accountId)
-        changed = true
-      }
-      if (input.displayName && !existing.displayName) {
-        existing.displayName = input.displayName
-        changed = true
-      }
-      if (changed) existing.updatedAt = nowIso(input.createdAt)
-      return clone(existing)
-    }
-    const createdAt = nowIso(input.createdAt)
-    const record: AccountRecord = {
-      accountId: input.accountId,
-      idpSubject: input.idpSubject || null,
-      email: input.email.toLowerCase(),
-      displayName: input.displayName || null,
-      createdAt,
-      updatedAt: createdAt,
-    }
-    this.accounts.set(record.accountId, record)
-    if (record.idpSubject) this.accountsBySubject.set(record.idpSubject, record.accountId)
-    this.accountsByEmail.set(record.email, record.accountId)
-    return clone(record)
+    return this.identityDomain.createAccount(input)
   }
 
   findAccountBySubject(idpSubject: string): AccountRecord | null {
-    const accountId = this.accountsBySubject.get(idpSubject)
-    return accountId ? clone(this.accounts.get(accountId) || null) : null
+    return this.identityDomain.findAccountBySubject(idpSubject)
   }
 
   findAccountByEmail(email: string): AccountRecord | null {
-    const accountId = this.accountsByEmail.get(email.toLowerCase())
-    return accountId ? clone(this.accounts.get(accountId) || null) : null
+    return this.identityDomain.findAccountByEmail(email)
   }
 
   upsertMembership(input: UpsertMembershipInput): MembershipRecord {
-    const org = this.orgs.get(input.orgId)
-    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
-    if (!this.accounts.has(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
-    const membershipKey = key(input.orgId, input.accountId)
-    const existing = this.memberships.get(membershipKey)
-    const now = nowIso(input.updatedAt)
-    const record: MembershipRecord = {
-      orgId: input.orgId,
-      accountId: input.accountId,
-      role: input.role,
-      status: input.status || 'active',
-      createdAt: existing?.createdAt || now,
-      updatedAt: now,
-    }
-    this.memberships.set(membershipKey, record)
-    this.recordAuditEvent({
-      orgId: input.orgId,
-      accountId: input.accountId,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: existing ? 'membership.updated' : 'membership.created',
-      targetType: 'membership',
-      targetId: membershipKey,
-      metadata: { role: record.role, status: record.status },
-      createdAt: input.updatedAt,
-    })
-    return clone(record)
+    return this.identityDomain.upsertMembership(input)
   }
 
   listOrgMembers(orgId: string, input: { query?: string | null, limit?: number | null } = {}): OrgMemberRecord[] {
-    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
-    const queryText = input.query?.trim().toLowerCase() || ''
-    const limit = Math.max(1, Math.min(input.limit || 100, 500))
-    return Array.from(this.memberships.values())
-      .filter((membership) => membership.orgId === orgId)
-      .map((membership) => {
-        const account = this.accounts.get(membership.accountId)
-        if (!account) return null
-        return {
-          orgId: membership.orgId,
-          accountId: membership.accountId,
-          email: account.email,
-          displayName: account.displayName,
-          role: membership.role,
-          status: membership.status,
-          createdAt: membership.createdAt,
-          updatedAt: membership.updatedAt,
-        } satisfies OrgMemberRecord
-      })
-      .filter((member): member is OrgMemberRecord => Boolean(member))
-      .filter((member) => {
-        if (!queryText) return true
-        return [
-          member.accountId,
-          member.email,
-          member.displayName,
-          member.role,
-          member.status,
-        ].filter(Boolean).join(' ').toLowerCase().includes(queryText)
-      })
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.email.localeCompare(right.email))
-      .slice(0, limit)
-      .map((member) => clone(member))
+    return this.identityDomain.listOrgMembers(orgId, input)
   }
 
   listMembershipsForAccount(accountId: string): MembershipRecord[] {
-    return Array.from(this.memberships.values())
-      .filter((membership) => membership.accountId === accountId)
-      .map((membership) => clone(membership))
+    return this.identityDomain.listMembershipsForAccount(accountId)
   }
 
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): PrincipalMembershipRecord | null {
-    const orgId = this.orgsByTenant.get(input.tenantId) || (this.orgs.has(input.tenantId) ? input.tenantId : undefined)
-    if (!orgId) return null
-    const org = this.orgs.get(orgId)
-    const account = (input.accountId ? this.accounts.get(input.accountId) : null)
-      || (input.idpSubject ? this.findAccountBySubject(input.idpSubject) : null)
-      || (input.email ? this.findAccountByEmail(input.email) : null)
-      || (input.userId ? this.accounts.get(input.userId) : null)
-    if (!org || !account) return null
-    const membership = this.memberships.get(key(org.orgId, account.accountId))
-    return membership ? { org: clone(org), account: clone(account), membership: clone(membership) } : null
+    return this.identityDomain.resolvePrincipalMembership(input)
+  }
+
+  orgExists(orgId: string): boolean {
+    return this.identityDomain.orgExists(orgId)
+  }
+
+  accountExists(accountId: string): boolean {
+    return this.identityDomain.accountExists(accountId)
+  }
+
+  private requireTenant(tenantId: string) {
+    return this.identityDomain.requireTenant(tenantId)
+  }
+
+  private requireTenantUser(tenantId: string, userId: string) {
+    return this.identityDomain.requireTenantUser(tenantId, userId)
+  }
+
+  private orgIdForTenant(tenantId: string) {
+    return this.identityDomain.orgIdForTenant(tenantId)
+  }
+
+  private orgTenantId(orgId: string): string | null {
+    return this.identityDomain.orgTenantId(orgId)
+  }
+
+  private resolveOrgIdOrNull(tenantId: string): string | null {
+    return this.identityDomain.resolveOrgIdOrNull(tenantId)
   }
 
   issueApiToken(input: IssueApiTokenInput): IssuedApiTokenRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    if (input.accountId && !this.accounts.has(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
-    const generated = generateCloudApiToken(input)
-    const now = nowIso(input.createdAt)
-    const record: ApiTokenRecord = {
-      tokenId: generated.tokenId,
-      orgId: input.orgId,
-      accountId: input.accountId || null,
-      name: normalizeText(input.name, 96, 'API token name'),
-      tokenHash: hashCloudApiToken(generated.plaintext),
-      scopes: [...new Set(input.scopes)],
-      last4: generated.plaintext.slice(-4),
-      expiresAt: input.expiresAt ? input.expiresAt.toISOString() : null,
-      revokedAt: null,
-      lastUsedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    this.apiTokens.set(record.tokenId, record)
-    this.recordAuditEvent({
-      orgId: input.orgId,
-      accountId: input.accountId || null,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'api_token.created',
-      targetType: 'api_token',
-      targetId: record.tokenId,
-      metadata: { name: record.name, scopes: record.scopes, last4: record.last4 },
-      createdAt: input.createdAt,
-    })
-    return { token: clone(record), plaintext: generated.plaintext }
+    return this.apiTokensDomain.issueApiToken(input)
   }
 
   listApiTokens(orgId: string): ApiTokenRecord[] {
-    return [...this.apiTokens.values()]
-      .filter((token) => token.orgId === orgId)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .map((token) => clone(token))
+    return this.apiTokensDomain.listApiTokens(orgId)
   }
 
   findApiTokenByPlaintext(plaintext: string, now = new Date()): ApiTokenRecord | null {
-    for (const token of this.apiTokens.values()) {
-      if (!plaintextMatchesCloudApiTokenId(plaintext, token.tokenId)) continue
-      if (!verifyCloudApiTokenHash(plaintext, token.tokenHash)) continue
-      if (token.revokedAt) return null
-      if (token.expiresAt && new Date(token.expiresAt).getTime() <= now.getTime()) return null
-      token.lastUsedAt = now.toISOString()
-      token.updatedAt = token.lastUsedAt
-      return clone(token)
-    }
-    return null
+    return this.apiTokensDomain.findApiTokenByPlaintext(plaintext, now)
   }
 
   revokeApiToken(input: RevokeApiTokenInput): ApiTokenRecord | null {
-    const existing = this.apiTokens.get(input.tokenId)
-    if (!existing) return null
-    if (input.orgId && existing.orgId !== input.orgId) return null
-    const revokedAt = nowIso(input.revokedAt)
-    existing.revokedAt = existing.revokedAt || revokedAt
-    existing.updatedAt = revokedAt
-    this.recordAuditEvent({
-      orgId: existing.orgId,
-      accountId: existing.accountId,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'api_token.revoked',
-      targetType: 'api_token',
-      targetId: existing.tokenId,
-      metadata: { name: existing.name, scopes: existing.scopes, last4: existing.last4 },
-      createdAt: input.revokedAt,
-    })
-    return clone(existing)
+    return this.apiTokensDomain.revokeApiToken(input)
   }
 
   grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): ApiTokenChannelBindingGrantRecord {
-    const token = this.apiTokens.get(input.tokenId)
-    if (!token || token.orgId !== input.orgId) throw new Error(`Unknown API token ${input.tokenId}.`)
-    const binding = this.channelBindings.get(input.channelBindingId)
-    if (!binding || binding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
-    const grantKey = key(input.orgId, input.tokenId, input.channelBindingId)
-    const existing = this.apiTokenChannelBindingGrants.get(grantKey)
-    if (existing) return clone(existing)
-    const record: ApiTokenChannelBindingGrantRecord = {
-      orgId: input.orgId,
-      tokenId: input.tokenId,
-      channelBindingId: input.channelBindingId,
-      createdAt: nowIso(input.createdAt),
-    }
-    this.apiTokenChannelBindingGrants.set(grantKey, record)
-    this.recordAuditEvent({
-      orgId: input.orgId,
-      accountId: input.actor?.accountId || token.accountId,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'api_token.channel_binding_granted',
-      targetType: 'api_token',
-      targetId: input.tokenId,
-      metadata: { channelBindingId: input.channelBindingId },
-      createdAt: input.createdAt,
-    })
-    return clone(record)
+    return this.apiTokensDomain.grantApiTokenChannelBinding(input)
   }
 
   listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): ApiTokenChannelBindingGrantRecord[] {
-    return [...this.apiTokenChannelBindingGrants.values()]
-      .filter((grant) => grant.orgId === input.orgId && grant.tokenId === input.tokenId)
-      .sort((left, right) => left.channelBindingId.localeCompare(right.channelBindingId))
-      .map((grant) => clone(grant))
+    return this.apiTokensDomain.listApiTokenChannelBindingGrants(input)
   }
 
   createManagedWorkerPool(input: CreateManagedWorkerPoolInput): ManagedWorkerPoolRecord {
@@ -1974,184 +511,35 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   recordAuditEvent(input: RecordAuditEventInput): AuditEventRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    const eventId = input.eventId || stableId('audit', input.orgId, input.eventType, String(this.auditEvents.size + 1), nowIso(input.createdAt))
-    const existing = this.auditEvents.get(eventId)
-    if (existing) return clone(existing)
-    const record: AuditEventRecord = {
-      eventId,
-      orgId: input.orgId,
-      accountId: input.accountId || null,
-      actorType: input.actorType,
-      actorId: input.actorId || null,
-      eventType: input.eventType,
-      targetType: input.targetType || null,
-      targetId: input.targetId || null,
-      metadata: redactAuditMetadata(input.metadata),
-      createdAt: nowIso(input.createdAt),
-    }
-    this.auditEvents.set(eventId, record)
-    return clone(record)
+    return this.auditDomain.recordAuditEvent(input)
   }
 
   listAuditEvents(orgId: string, limit = 100): AuditEventRecord[] {
-    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
-    return Array.from(this.auditEvents.values())
-      .filter((event) => event.orgId === orgId)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .slice(0, limit)
-      .map((event) => clone(event))
+    return this.auditDomain.listAuditEvents(orgId, limit)
   }
 
   consumeUsageQuota(input: ConsumeUsageQuotaInput): QuotaConsumptionRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    const limit = normalizePositiveInteger(input.limit, 'Quota limit')
-    const quantity = normalizePositiveInteger(input.quantity || 1, 'Quota quantity')
-    const windowMs = normalizePositiveInteger(input.windowMs, 'Quota window')
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const startedAtMs = windowStart(nowMs, windowMs)
-    const counterKey = key(input.orgId, input.quotaKey)
-    const existing = this.usageCounters.get(counterKey)
-    const current = existing && existing.windowStartedAtMs === startedAtMs ? existing.quantity : 0
-    const next = current + quantity
-    const retryAfterMs = quotaRetryAfterMs(nowMs, startedAtMs, windowMs)
-    const resetAt = new Date(nowMs + retryAfterMs).toISOString()
-    if (next > limit) {
-      return {
-        allowed: false,
-        orgId: input.orgId,
-        quotaKey: input.quotaKey,
-        limit,
-        used: current,
-        remaining: Math.max(0, limit - current),
-        resetAt,
-        retryAfterMs,
-        policyCode: input.policyCode,
-      }
-    }
-    this.usageCounters.set(counterKey, { windowStartedAtMs: startedAtMs, quantity: next })
-    return {
-      allowed: true,
-      orgId: input.orgId,
-      quotaKey: input.quotaKey,
-      limit,
-      used: next,
-      remaining: Math.max(0, limit - next),
-      resetAt,
-      retryAfterMs,
-      policyCode: input.policyCode,
-    }
+    return this.usageQuotaDomain.consumeUsageQuota(input)
   }
 
   listUsageQuotaCounters(orgId: string): UsageQuotaCounterRecord[] {
-    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
-    return Array.from(this.usageCounters.entries())
-      .map(([counterKey, counter]) => {
-        const [counterOrgId, quotaKey] = counterKey.split('\0', 2)
-        return {
-          orgId: counterOrgId,
-          quotaKey,
-          windowStartedAtMs: counter.windowStartedAtMs,
-          quantity: counter.quantity,
-        }
-      })
-      .filter((counter) => counter.orgId === orgId)
-      .sort((left, right) => left.quotaKey.localeCompare(right.quotaKey))
-      .map((counter) => clone(counter))
+    return this.usageQuotaDomain.listUsageQuotaCounters(orgId)
   }
 
   recordUsageEvent(input: RecordUsageEventInput): UsageEventRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    const eventId = input.eventId || stableId('usage', input.orgId, input.eventType, String(this.usageEvents.size + 1), nowIso(input.createdAt))
-    const existing = this.usageEvents.get(eventId)
-    if (existing) return clone(existing)
-    const record: UsageEventRecord = {
-      eventId,
-      orgId: input.orgId,
-      accountId: input.accountId || null,
-      eventType: input.eventType,
-      quantity: normalizePositiveInteger(input.quantity || 1, 'Usage quantity'),
-      unit: input.unit || 'count',
-      metadata: redactAuditMetadata(input.metadata),
-      createdAt: nowIso(input.createdAt),
-    }
-    this.usageEvents.set(eventId, record)
-    return clone(record)
+    return this.usageDomain.recordUsageEvent(input)
   }
 
   listUsageEvents(orgId: string, limit = 100): UsageEventRecord[] {
-    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
-    return Array.from(this.usageEvents.values())
-      .filter((event) => event.orgId === orgId)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .slice(0, limit)
-      .map((event) => clone(event))
+    return this.usageDomain.listUsageEvents(orgId, limit)
   }
 
   upsertBillingSubscription(input: UpsertBillingSubscriptionInput): BillingSubscriptionRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    const existing = this.billingSubscriptions.get(input.orgId)
-    const now = nowIso(input.updatedAt)
-    const providerId = normalizeText(input.providerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider id')
-    const providerCustomerId = normalizeNullableText(input.providerCustomerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider customer id')
-    const providerSubscriptionId = normalizeNullableText(input.providerSubscriptionId, BILLING_TEXT_MAX_LENGTH, 'Billing provider subscription id')
-    const record: BillingSubscriptionRecord = {
-      orgId: input.orgId,
-      planKey: normalizeText(input.planKey || existing?.planKey, BILLING_TEXT_MAX_LENGTH, 'Billing plan key'),
-      providerId,
-      providerCustomerId,
-      providerSubscriptionId,
-      status: normalizeBillingStatus(input.status),
-      seats: normalizePositiveInteger(input.seats || existing?.seats || 1, 'Billing seats'),
-      entitlements: normalizeRecord(input.entitlements, 'Billing entitlements', BILLING_METADATA_MAX_BYTES) as CloudBillingEntitlements,
-      currentPeriodEnd: isoNullable(input.currentPeriodEnd),
-      cancelAtPeriodEnd: input.cancelAtPeriodEnd === undefined ? existing?.cancelAtPeriodEnd || false : input.cancelAtPeriodEnd === true,
-      metadata: redactAuditMetadata(normalizeRecord(input.metadata, 'Billing metadata', BILLING_METADATA_MAX_BYTES)),
-      createdAt: existing?.createdAt || now,
-      updatedAt: now,
-    }
-    if (existing?.providerSubscriptionId) {
-      this.billingSubscriptionsByProviderSubscription.delete(billingProviderKey(existing.providerId, existing.providerSubscriptionId))
-    }
-    if (existing?.providerCustomerId) {
-      this.billingSubscriptionsByProviderCustomer.delete(billingProviderKey(existing.providerId, existing.providerCustomerId))
-    }
-    this.billingSubscriptions.set(record.orgId, record)
-    if (record.providerSubscriptionId) {
-      this.billingSubscriptionsByProviderSubscription.set(billingProviderKey(record.providerId, record.providerSubscriptionId), record.orgId)
-    }
-    if (record.providerCustomerId) {
-      this.billingSubscriptionsByProviderCustomer.set(billingProviderKey(record.providerId, record.providerCustomerId), record.orgId)
-    }
-    this.recordAuditEvent({
-      orgId: record.orgId,
-      actorType: 'system',
-      actorId: 'billing.subscription.upsert',
-      eventType: existing ? 'billing.subscription.updated' : 'billing.subscription.created',
-      targetType: 'billing_subscription',
-      targetId: record.providerSubscriptionId || record.orgId,
-      metadata: {
-        providerId: record.providerId,
-        previousPlanKey: existing?.planKey || null,
-        previousStatus: existing?.status || null,
-        previousEntitlementsHash: existing ? stableJson(existing.entitlements) : null,
-        planKey: record.planKey,
-        status: record.status,
-        entitlementsHash: stableJson(record.entitlements),
-        seats: record.seats,
-        providerCustomerId: record.providerCustomerId,
-        providerSubscriptionId: record.providerSubscriptionId,
-        providerEventId: input.metadata?.stripeEventId || input.metadata?.eventId || null,
-      },
-      createdAt: input.updatedAt,
-    })
-    return clone(record)
+    return this.billingDomain.upsertBillingSubscription(input)
   }
 
   getBillingSubscription(orgId: string): BillingSubscriptionRecord | null {
-    const subscription = this.billingSubscriptions.get(orgId)
-    return subscription ? clone(subscription) : null
+    return this.billingDomain.getBillingSubscription(orgId)
   }
 
   findBillingSubscriptionByProvider(input: {
@@ -2159,460 +547,75 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     providerCustomerId?: string | null
     providerSubscriptionId?: string | null
   }): BillingSubscriptionRecord | null {
-    const providerId = normalizeText(input.providerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider id')
-    const bySubscription = input.providerSubscriptionId
-      ? this.billingSubscriptionsByProviderSubscription.get(billingProviderKey(providerId, input.providerSubscriptionId))
-      : null
-    const byCustomer = input.providerCustomerId
-      ? this.billingSubscriptionsByProviderCustomer.get(billingProviderKey(providerId, input.providerCustomerId))
-      : null
-    const subscription = this.billingSubscriptions.get(bySubscription || byCustomer || '')
-    return subscription ? clone(subscription) : null
+    return this.billingDomain.findBillingSubscriptionByProvider(input)
   }
 
   claimRateLimit(input: ClaimRateLimitInput): RateLimitClaimRecord {
-    const limit = normalizePositiveInteger(input.limit, 'Rate limit')
-    const windowMs = normalizePositiveInteger(input.windowMs, 'Rate-limit window')
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const startedAtMs = windowStart(nowMs, windowMs)
-    const rateKey = key(input.scope, input.source)
-    const existing = this.rateLimits.get(rateKey)
-    const count = existing && existing.windowStartedAtMs === startedAtMs ? existing.count + 1 : 1
-    this.rateLimits.set(rateKey, { windowStartedAtMs: startedAtMs, count })
-    const retryAfterMs = quotaRetryAfterMs(nowMs, startedAtMs, windowMs)
-    return {
-      allowed: count <= limit,
-      scope: input.scope,
-      source: input.source,
-      limit,
-      count,
-      resetAt: new Date(nowMs + retryAfterMs).toISOString(),
-      retryAfterMs,
-      policyCode: input.policyCode,
-    }
+    return this.rateLimitsDomain.claimRateLimit(input)
   }
 
   checkCloudAuthBackoff(input: CheckCloudAuthBackoffInput): CloudAuthBackoffRecord {
-    const nowMs = (input.now || new Date()).getTime()
-    const existing = this.authFailures.get(input.scope)
-    return {
-      allowed: !existing || existing.blockedUntilMs <= nowMs,
-      scope: input.scope,
-      source: input.source || existing?.source || input.scope,
-      failureCount: existing?.failureCount || 0,
-      blockedUntilMs: existing?.blockedUntilMs || 0,
-      retryAfterMs: existing ? Math.max(0, existing.blockedUntilMs - nowMs) : 0,
-    }
+    return this.authBackoffDomain.checkCloudAuthBackoff(input)
   }
 
   recordCloudAuthFailure(input: RecordCloudAuthFailureInput): CloudAuthBackoffRecord {
-    const windowMs = normalizePositiveInteger(input.windowMs, 'Auth backoff window')
-    const limit = normalizePositiveInteger(input.limit, 'Auth failure limit')
-    const backoffMs = normalizePositiveInteger(input.backoffMs, 'Auth backoff duration')
-    const nowMs = (input.now || new Date()).getTime()
-    const existing = this.authFailures.get(input.scope)
-    const currentWindowStartedAtMs = windowStart(nowMs, windowMs)
-    const existingWindowStartedAtMs = this.authFailureWindows.get(input.scope)
-    const failureCount = existing && existingWindowStartedAtMs === currentWindowStartedAtMs
-      ? existing.failureCount + 1
-      : 1
-    const blockedUntilMs = failureCount >= limit
-      ? Math.max(existing?.blockedUntilMs || 0, nowMs + backoffMs)
-      : existing?.blockedUntilMs || 0
-    const record: CloudAuthBackoffRecord = {
-      allowed: blockedUntilMs <= nowMs,
-      scope: input.scope,
-      source: input.source,
-      failureCount,
-      blockedUntilMs,
-      retryAfterMs: Math.max(0, blockedUntilMs - nowMs),
-    }
-    this.authFailures.set(input.scope, record)
-    this.authFailureWindows.set(input.scope, currentWindowStartedAtMs)
-    return clone(record)
+    return this.authBackoffDomain.recordCloudAuthFailure(input)
   }
 
   createByokSecret(input: CreateByokSecretInput): ByokSecretRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    if (input.createdByAccountId && !this.accounts.has(input.createdByAccountId)) {
-      throw new Error(`Unknown account ${input.createdByAccountId}.`)
-    }
-    const providerId = normalizeByokProviderId(input.providerId)
-    const ciphertext = normalizeNullableText(input.ciphertext, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK ciphertext')
-    const kmsRef = normalizeNullableText(input.kmsRef, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK KMS ref')
-    if ((ciphertext && kmsRef) || (!ciphertext && !kmsRef)) {
-      throw new Error('BYOK secret requires exactly one of ciphertext or kmsRef.')
-    }
-    const now = nowIso(input.createdAt)
-    const status = input.status || 'pending_validation'
-    const priorActive = this.getActiveByokSecret(input.orgId, providerId)
-    if (priorActive && status === 'active') {
-      const previous = this.byokSecrets.get(priorActive.secretId)
-      if (previous) {
-        previous.status = 'disabled'
-        previous.updatedAt = now
-      }
-    }
-    const record: ByokSecretRecord = {
-      secretId: normalizeText(input.secretId, CHANNEL_TEXT_MAX_LENGTH, 'BYOK secret id'),
-      orgId: input.orgId,
-      providerId,
-      status,
-      ciphertext,
-      kmsRef,
-      last4: normalizeText(input.last4, 32, 'BYOK secret last4'),
-      keyFingerprint: normalizeText(input.keyFingerprint, 128, 'BYOK key fingerprint'),
-      createdByAccountId: input.createdByAccountId || null,
-      rotatedFromSecretId: input.rotatedFromSecretId || priorActive?.secretId || null,
-      lastValidatedAt: null,
-      validationError: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    if (this.byokSecrets.has(record.secretId)) throw new Error(`BYOK secret ${record.secretId} already exists.`)
-    this.byokSecrets.set(record.secretId, record)
-    this.recordAuditEvent({
-      orgId: record.orgId,
-      accountId: record.createdByAccountId,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: priorActive
-        ? status === 'active'
-          ? 'byok_secret.rotated'
-          : 'byok_secret.rotation_started'
-        : 'byok_secret.created',
-      targetType: 'byok_secret',
-      targetId: record.secretId,
-      metadata: {
-        providerId: record.providerId,
-        status: record.status,
-        last4: record.last4,
-        keyFingerprint: record.keyFingerprint,
-        rotatedFromSecretId: record.rotatedFromSecretId,
-      },
-      createdAt: input.createdAt,
-    })
-    return clone(record)
+    return this.byokSecretsDomain.createByokSecret(input)
   }
 
   getByokSecret(orgId: string, providerId: string): ByokSecretRecord | null {
-    const normalizedProviderId = normalizeByokProviderId(providerId)
-    return Array.from(this.byokSecrets.values())
-      .filter((secret) => secret.orgId === orgId && secret.providerId === normalizedProviderId)
-      .sort((left, right) => (
-        right.updatedAt.localeCompare(left.updatedAt)
-        || right.createdAt.localeCompare(left.createdAt)
-        || right.secretId.localeCompare(left.secretId)
-      ))
-      .map((secret) => clone(secret))[0] || null
+    return this.byokSecretsDomain.getByokSecret(orgId, providerId)
   }
 
   getActiveByokSecret(orgId: string, providerId: string): ByokSecretRecord | null {
-    const normalizedProviderId = normalizeByokProviderId(providerId)
-    const secret = Array.from(this.byokSecrets.values())
-      .filter((candidate) => (
-        candidate.orgId === orgId
-        && candidate.providerId === normalizedProviderId
-        && candidate.status === 'active'
-      ))
-      .sort((left, right) => (
-        right.updatedAt.localeCompare(left.updatedAt)
-        || right.createdAt.localeCompare(left.createdAt)
-        || right.secretId.localeCompare(left.secretId)
-      ))[0]
-    return secret ? clone(secret) : null
+    return this.byokSecretsDomain.getActiveByokSecret(orgId, providerId)
   }
 
   listByokSecrets(orgId: string): ByokSecretRecord[] {
-    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
-    return Array.from(this.byokSecrets.values())
-      .filter((secret) => secret.orgId === orgId)
-      .sort((left, right) => (
-        right.updatedAt.localeCompare(left.updatedAt)
-        || right.createdAt.localeCompare(left.createdAt)
-        || left.providerId.localeCompare(right.providerId)
-        || right.secretId.localeCompare(left.secretId)
-      ))
-      .map((secret) => clone(secret))
+    return this.byokSecretsDomain.listByokSecrets(orgId)
   }
 
   disableByokSecret(input: DisableByokSecretInput): ByokSecretRecord | null {
-    const providerId = normalizeByokProviderId(input.providerId)
-    const selected = input.secretId
-      ? [this.byokSecrets.get(input.secretId)].filter((secret): secret is ByokSecretRecord => Boolean(secret))
-      : Array.from(this.byokSecrets.values())
-        .filter((secret) => (
-          secret.orgId === input.orgId
-          && secret.providerId === providerId
-          && secret.status !== 'disabled'
-        ))
-        .sort((left, right) => (
-          right.updatedAt.localeCompare(left.updatedAt)
-          || right.createdAt.localeCompare(left.createdAt)
-          || right.secretId.localeCompare(left.secretId)
-        ))
-    const matching = selected.filter((secret) => secret.orgId === input.orgId && secret.providerId === providerId && secret.status !== 'disabled')
-    if (matching.length === 0) return null
-    const disabledAt = nowIso(input.disabledAt)
-    for (const secret of matching) {
-      secret.status = 'disabled'
-      secret.updatedAt = disabledAt
-      this.recordAuditEvent({
-        orgId: secret.orgId,
-        accountId: input.actor?.accountId || secret.createdByAccountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'byok_secret.disabled',
-        targetType: 'byok_secret',
-        targetId: secret.secretId,
-        metadata: { providerId: secret.providerId, status: secret.status, last4: secret.last4, keyFingerprint: secret.keyFingerprint },
-        createdAt: input.disabledAt,
-      })
-    }
-    return clone(matching[0])
+    return this.byokSecretsDomain.disableByokSecret(input)
   }
 
   recordByokSecretValidation(input: RecordByokSecretValidationInput): ByokSecretRecord | null {
-    const providerId = normalizeByokProviderId(input.providerId)
-    const existing = input.secretId
-      ? this.byokSecrets.get(input.secretId)
-      : Array.from(this.byokSecrets.values()).find((secret) => (
-        secret.orgId === input.orgId
-        && secret.providerId === providerId
-        && secret.status === 'active'
-      ))
-    if (!existing || existing.orgId !== input.orgId || existing.providerId !== providerId) return null
-    existing.lastValidatedAt = nowIso(input.validatedAt)
-    existing.validationError = input.validationError || null
-    const priorActive = input.status === 'active'
-      ? Array.from(this.byokSecrets.values()).find((candidate) => (
-        candidate.secretId !== existing.secretId
-        && candidate.orgId === existing.orgId
-        && candidate.providerId === existing.providerId
-        && candidate.status === 'active'
-      )) || null
-      : null
-    if (input.status === 'active') {
-      if (!existing.rotatedFromSecretId && priorActive) {
-        existing.rotatedFromSecretId = priorActive.secretId
-      }
-      for (const candidate of this.byokSecrets.values()) {
-        if (
-          candidate.secretId !== existing.secretId
-          && candidate.orgId === existing.orgId
-          && candidate.providerId === existing.providerId
-          && candidate.status === 'active'
-        ) {
-          candidate.status = 'disabled'
-          candidate.updatedAt = existing.lastValidatedAt
-        }
-      }
-    }
-    if (input.status) existing.status = input.status
-    existing.updatedAt = existing.lastValidatedAt
-    this.recordAuditEvent({
-      orgId: existing.orgId,
-      accountId: input.actor?.accountId || existing.createdByAccountId,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'byok_secret.validated',
-      targetType: 'byok_secret',
-      targetId: existing.secretId,
-      metadata: {
-        providerId: existing.providerId,
-        status: existing.status,
-        last4: existing.last4,
-        keyFingerprint: existing.keyFingerprint,
-        validationError: existing.validationError,
-      },
-      createdAt: input.validatedAt,
-    })
-    if (input.status === 'active' && (priorActive || existing.rotatedFromSecretId)) {
-      this.recordAuditEvent({
-        orgId: existing.orgId,
-        accountId: input.actor?.accountId || existing.createdByAccountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'byok_secret.rotated',
-        targetType: 'byok_secret',
-        targetId: existing.secretId,
-        metadata: {
-          providerId: existing.providerId,
-          status: existing.status,
-          last4: existing.last4,
-          keyFingerprint: existing.keyFingerprint,
-          rotatedFromSecretId: existing.rotatedFromSecretId || priorActive?.secretId || null,
-        },
-        createdAt: input.validatedAt,
-      })
-    }
-    return clone(existing)
+    return this.byokSecretsDomain.recordByokSecretValidation(input)
   }
 
   createHeadlessAgent(input: CreateHeadlessAgentInput): HeadlessAgentRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    this.requireTenant(input.tenantId)
-    if (input.createdByAccountId && !this.accounts.has(input.createdByAccountId)) {
-      throw new Error(`Unknown account ${input.createdByAccountId}.`)
-    }
-    const existing = this.headlessAgents.get(input.agentId)
-    if (existing) return clone(existing)
-    const now = nowIso(input.createdAt)
-    const record: HeadlessAgentRecord = {
-      agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
-      orgId: input.orgId,
-      tenantId: input.tenantId,
-      profileName: normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
-      name: normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
-      status: input.status || 'active',
-      managed: input.managed === true,
-      createdByAccountId: input.createdByAccountId || null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    this.headlessAgents.set(record.agentId, record)
-    this.recordAuditEvent({
-      orgId: record.orgId,
-      accountId: record.createdByAccountId,
-      actorType: 'system',
-      actorId: 'headless_agent.create',
-      eventType: 'headless_agent.created',
-      targetType: 'headless_agent',
-      targetId: record.agentId,
-      metadata: { name: record.name, profileName: record.profileName, managed: record.managed },
-      createdAt: input.createdAt,
-    })
-    return clone(record)
+    return this.headlessAgentsDomain.createHeadlessAgent(input)
   }
 
   updateHeadlessAgent(input: UpdateHeadlessAgentInput): HeadlessAgentRecord | null {
-    const existing = this.headlessAgents.get(input.agentId)
-    if (!existing || existing.orgId !== input.orgId) return null
-    const updatedAt = nowIso(input.updatedAt)
-    existing.profileName = input.profileName === undefined ? existing.profileName : normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile')
-    existing.name = input.name === undefined ? existing.name : normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name')
-    existing.status = input.status || existing.status
-    existing.managed = input.managed === undefined ? existing.managed : input.managed
-    existing.updatedAt = updatedAt
-    this.recordAuditEvent({
-      orgId: input.orgId,
-      accountId: input.actor?.accountId || null,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'headless_agent.updated',
-      targetType: 'headless_agent',
-      targetId: existing.agentId,
-      metadata: {
-        profileName: existing.profileName,
-        name: existing.name,
-        status: existing.status,
-        managed: existing.managed,
-      },
-      createdAt: input.updatedAt,
-    })
-    return clone(existing)
+    return this.headlessAgentsDomain.updateHeadlessAgent(input)
   }
 
   getHeadlessAgent(orgId: string, agentId: string): HeadlessAgentRecord | null {
-    const agent = this.headlessAgents.get(agentId)
-    return agent && agent.orgId === orgId ? clone(agent) : null
+    return this.headlessAgentsDomain.getHeadlessAgent(orgId, agentId)
   }
 
   listHeadlessAgents(orgId: string): HeadlessAgentRecord[] {
-    return Array.from(this.headlessAgents.values())
-      .filter((agent) => agent.orgId === orgId)
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.agentId.localeCompare(right.agentId))
-      .map((agent) => clone(agent))
+    return this.headlessAgentsDomain.listHeadlessAgents(orgId)
   }
 
   createChannelBinding(input: CreateChannelBindingInput): ChannelBindingRecord {
-    const agent = this.headlessAgents.get(input.agentId)
-    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
-    const existing = this.channelBindings.get(input.bindingId)
-    if (existing) return clone(existing)
-    const bindingLimit = input.quota?.maxGatewayChannelBindingsPerOrg
-    if (bindingLimit && bindingLimit > 0) {
-      const activeBindings = Array.from(this.channelBindings.values())
-        .filter((binding) => binding.orgId === input.orgId && binding.status !== 'disabled')
-        .length
-      if (activeBindings >= bindingLimit) {
-        quotaExceeded({
-          message: 'Gateway channel binding quota exceeded.',
-          policyCode: input.quota?.policyCode || 'quota.gateway_channel_bindings_exceeded',
-          retryAfterMs: 60_000,
-          limit: bindingLimit,
-          used: activeBindings,
-          resetAt: new Date(Date.now() + 60_000).toISOString(),
-        })
-      }
-    }
-    const now = nowIso(input.createdAt)
-    const record: ChannelBindingRecord = {
-      bindingId: normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
-      orgId: input.orgId,
-      agentId: input.agentId,
-      provider: normalizeProvider(input.provider),
-      externalWorkspaceId: normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id'),
-      displayName: normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
-      status: input.status || 'active',
-      credentialRef: normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
-      settings: normalizeRecord(input.settings, 'Channel binding settings'),
-      createdAt: now,
-      updatedAt: now,
-    }
-    this.channelBindings.set(record.bindingId, record)
-    this.recordAuditEvent({
-      orgId: record.orgId,
-      actorType: 'system',
-      actorId: 'channel_binding.create',
-      eventType: 'channel_binding.created',
-      targetType: 'channel_binding',
-      targetId: record.bindingId,
-      metadata: { provider: record.provider, displayName: record.displayName, credentialRefConfigured: Boolean(record.credentialRef) },
-      createdAt: input.createdAt,
-    })
-    return clone(record)
+    return this.channelBindingsDomain.createChannelBinding(input)
   }
 
   updateChannelBinding(input: UpdateChannelBindingInput): ChannelBindingRecord | null {
-    const existing = this.channelBindings.get(input.bindingId)
-    if (!existing || existing.orgId !== input.orgId) return null
-    existing.displayName = input.displayName === undefined ? existing.displayName : normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name')
-    existing.status = input.status || existing.status
-    existing.credentialRef = input.credentialRef === undefined ? existing.credentialRef : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref')
-    existing.settings = input.settings === undefined ? existing.settings : normalizeRecord(input.settings, 'Channel binding settings')
-    existing.updatedAt = nowIso(input.updatedAt)
-    this.recordAuditEvent({
-      orgId: input.orgId,
-      accountId: input.actor?.accountId || null,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'channel_binding.updated',
-      targetType: 'channel_binding',
-      targetId: existing.bindingId,
-      metadata: {
-        provider: existing.provider,
-        displayName: existing.displayName,
-        status: existing.status,
-        credentialRefConfigured: Boolean(existing.credentialRef),
-        settingsChanged: input.settings !== undefined,
-      },
-      createdAt: input.updatedAt,
-    })
-    return clone(existing)
+    return this.channelBindingsDomain.updateChannelBinding(input)
   }
 
   getChannelBinding(orgId: string, bindingId: string): ChannelBindingRecord | null {
-    const binding = this.channelBindings.get(bindingId)
-    return binding && binding.orgId === orgId ? clone(binding) : null
+    return this.channelBindingsDomain.getChannelBinding(orgId, bindingId)
   }
 
   listChannelBindings(orgId: string, agentId?: string | null): ChannelBindingRecord[] {
-    return Array.from(this.channelBindings.values())
-      .filter((binding) => binding.orgId === orgId && (!agentId || binding.agentId === agentId))
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.bindingId.localeCompare(right.bindingId))
-      .map((binding) => clone(binding))
+    return this.channelBindingsDomain.listChannelBindings(orgId, agentId)
   }
 
   upsertChannelIdentity(input: UpsertChannelIdentityInput): ChannelIdentityRecord {
@@ -2632,10 +635,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   bindChannelSession(input: BindChannelSessionInput): ChannelSessionBindingRecord {
-    const channelBinding = this.channelBindings.get(input.channelBindingId)
-    if (!channelBinding || channelBinding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
-    const agent = this.headlessAgents.get(input.agentId)
-    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const channelBinding = this.getChannelBinding(input.orgId, input.channelBindingId)
+    if (!channelBinding) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
+    const agent = this.getHeadlessAgent(input.orgId, input.agentId)
+    if (!agent) throw new Error(`Unknown headless agent ${input.agentId}.`)
     if (channelBinding.agentId !== agent.agentId) throw new Error('Channel session binding agent does not match channel binding.')
     const provider = normalizeProvider(input.provider)
     if (channelBinding.provider !== provider) throw new Error('Channel session binding provider does not match channel binding.')
@@ -2645,7 +648,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const threadKey = key(input.orgId, channelThreadKey(provider, externalWorkspaceId, externalChatId, externalThreadId))
     const existingId = this.channelSessionBindingsByThread.get(threadKey)
     if (existingId) return clone(this.channelSessionBindings.get(existingId) as ChannelSessionBindingRecord)
-    const session = this.getSessionForTenant(this.orgs.get(input.orgId)?.tenantId || input.orgId, input.sessionId)
+    const session = this.getSessionForTenant(this.orgTenantId(input.orgId) || input.orgId, input.sessionId)
     if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
     const now = nowIso(input.createdAt)
     const record: ChannelSessionBindingRecord = {
@@ -2716,11 +719,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   createChannelInteraction(input: CreateChannelInteractionInput): IssuedChannelInteractionRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    const org = this.orgs.get(input.orgId)
-    const agent = this.headlessAgents.get(input.agentId)
-    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
-    const session = this.getSessionForTenant(org?.tenantId || input.orgId, input.sessionId)
+    if (!this.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const agent = this.getHeadlessAgent(input.orgId, input.agentId)
+    if (!agent) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const session = this.getSessionForTenant(this.orgTenantId(input.orgId) || input.orgId, input.sessionId)
     if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
     if (input.createdByIdentityId) {
       const identity = this.channelIdentitiesDomain.get(input.orgId, input.createdByIdentityId)
@@ -3111,73 +1113,17 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    if (input.sessionId) {
-      const session = this.requireSession(input.tenantId, input.sessionId)
-      if (session.record.userId !== input.userId) {
-        throw new Error(`Session ${input.sessionId} does not belong to user ${input.userId}.`)
-      }
-    }
-    const workspaceKey = `${input.tenantId}:${input.userId}`
-    const state = this.workspaceEvents.get(workspaceKey) || { nextSequence: 0, events: [] }
-    const payload = input.payload || {}
-    const eventId = input.eventId || `${input.userId}:${state.nextSequence + 1}`
-    const sequence = state.nextSequence + 1
-    const entityType = optionalTrimmedText(input.entityType) || (input.sessionId ? 'session' : 'workspace')
-    const entityId = optionalTrimmedText(input.entityId) || input.sessionId || input.userId
-    const operation = optionalTrimmedText(input.operation) || workspaceOperationFromType(input.type)
-    const projectionVersion = Number.isFinite(input.projectionVersion)
-      ? Math.max(0, Math.floor(input.projectionVersion || 0))
-      : sequence
-    const existing = state.events.find((event) => event.eventId === eventId)
-    if (existing) {
-      const expectedProjectionVersion = Number.isFinite(input.projectionVersion)
-        ? projectionVersion
-        : existing.projectionVersion
-      if (
-        existing.type !== input.type
-        || stableJson(existing.payload) !== stableJson(payload)
-        || (existing.sessionId || null) !== (input.sessionId || null)
-        || existing.entityType !== entityType
-        || existing.entityId !== entityId
-        || existing.operation !== operation
-        || existing.projectionVersion !== expectedProjectionVersion
-      ) {
-        throw new Error(`Workspace event id ${eventId} was reused with different content.`)
-      }
-      return clone(existing)
-    }
-    const event: WorkspaceEventRecord = {
-      tenantId: input.tenantId,
-      userId: input.userId,
-      sessionId: input.sessionId || null,
-      eventId,
-      sequence,
-      entityType,
-      entityId,
-      operation,
-      projectionVersion,
-      type: input.type,
-      payload,
-      createdAt: nowIso(input.createdAt),
-    }
-    state.nextSequence = sequence
-    state.events.push(event)
-    this.workspaceEvents.set(workspaceKey, state)
-    return clone(event)
+    return this.workspaceEventsDomain.appendWorkspaceEvent(input)
   }
 
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0): WorkspaceEventRecord[] {
-    this.requireTenantUser(tenantId, userId)
-    const workspaceKey = `${tenantId}:${userId}`
-    return (this.workspaceEvents.get(workspaceKey)?.events || [])
-      .filter((event) => event.sequence > afterSequence)
-      .map((event) => clone(event))
+    return this.workspaceEventsDomain.listWorkspaceEvents(tenantId, userId, afterSequence)
   }
+
   getWorkspaceEventCursor(tenantId: string, userId: string): WorkspaceEventCursorRecord {
-    this.requireTenantUser(tenantId, userId)
-    return workspaceEventCursor(this.workspaceEvents.get(`${tenantId}:${userId}`)?.events || [])
+    return this.workspaceEventsDomain.getWorkspaceEventCursor(tenantId, userId)
   }
+
   writeSessionProjection(input: WriteProjectionInput): SessionProjectionRecord {
     const session = this.requireSession(input.tenantId, input.sessionId)
     if (session.lease && session.lease.leaseToken !== input.leaseToken) {
@@ -3337,7 +1283,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         failedCommandIds,
         reapedAt: nowIsoValue,
       }
-      const orgId = this.orgsByTenant.get(lease.tenantId) || (this.orgs.has(lease.tenantId) ? lease.tenantId : null)
+      const orgId = this.resolveOrgIdOrNull(lease.tenantId)
       if (orgId) {
         this.recordAuditEvent({
           orgId,
@@ -3382,7 +1328,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     }
     this.assertSessionCommandQueueQuota({ tenantId: input.tenantId, quota: input.quota, now: input.createdAt })
     if (input.usageQuotas?.length) {
-      const countersSnapshot = new Map(this.usageCounters)
+      const countersSnapshot = this.usageQuotaDomain.snapshotCounters()
       try {
         for (const quota of input.usageQuotas) {
           const result = this.consumeUsageQuota(quota)
@@ -3398,7 +1344,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
           }
         }
       } catch (error) {
-        this.usageCounters.clear(); for (const [counterKey, counter] of countersSnapshot) this.usageCounters.set(counterKey, counter); throw error
+        this.usageQuotaDomain.restoreCounters(countersSnapshot); throw error
       }
     }
     const command: SessionCommandRecord = {
@@ -3481,18 +1427,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     activeSessionIds?: string[]
     now?: Date
   }): WorkerHeartbeatRecord {
-    const record: WorkerHeartbeatRecord = {
-      workerId: input.workerId,
-      role: input.role,
-      activeSessionIds: [...new Set(input.activeSessionIds || [])],
-      lastSeenAt: nowIso(input.now),
-    }
-    this.heartbeats.set(input.workerId, record)
-    return clone(record)
+    return this.workerHeartbeatsDomain.recordWorkerHeartbeat(input)
   }
 
   listWorkerHeartbeats(): WorkerHeartbeatRecord[] {
-    return Array.from(this.heartbeats.values()).map((record) => clone(record))
+    return this.workerHeartbeatsDomain.listWorkerHeartbeats()
   }
 
   setSettingMetadata(input: {
@@ -3502,521 +1441,123 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     value: Record<string, unknown>
     updatedAt?: Date
   }): SettingMetadataRecord {
-    this.requireTenant(input.tenantId)
-    if (input.userId) this.requireTenantUser(input.tenantId, input.userId)
-    const record: SettingMetadataRecord = {
-      tenantId: input.tenantId,
-      userId: input.userId || null,
-      key: input.key,
-      value: input.value,
-      updatedAt: nowIso(input.updatedAt),
-    }
-    this.settings.set(key(input.tenantId, input.userId || '', input.key), record)
-    return clone(record)
+    return this.settingsDomain.setSettingMetadata(input)
   }
 
   getSettingMetadata(tenantId: string, keyName: string, userId?: string | null): SettingMetadataRecord | null {
-    this.requireTenant(tenantId)
-    return clone(this.settings.get(key(tenantId, userId || '', keyName)) || null)
+    return this.settingsDomain.getSettingMetadata(tenantId, keyName, userId)
   }
 
   listSettingMetadata(tenantId: string, userId?: string | null): SettingMetadataRecord[] {
-    this.requireTenant(tenantId)
-    if (userId) this.requireTenantUser(tenantId, userId)
-    return Array.from(this.settings.values())
-      .filter((setting) => setting.tenantId === tenantId && setting.userId === (userId || null))
-      .sort((left, right) => left.key.localeCompare(right.key))
-      .map((setting) => clone(setting))
+    return this.settingsDomain.listSettingMetadata(tenantId, userId)
   }
 
   createWorkflow(input: CreateWorkflowInput): CloudWorkflowRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const workflowKey = key(input.tenantId, input.workflowId)
-    const existing = this.workflows.get(workflowKey)
-    if (existing) return clone(existing.record)
-    const createdAt = nowIso(input.createdAt)
-    const draft = clone(input.draft)
-    const record: CloudWorkflowRecord = {
-      tenantId: input.tenantId,
-      userId: input.userId,
-      id: input.workflowId,
-      title: draft.title,
-      instructions: draft.instructions,
-      agentName: draft.agentName,
-      skillNames: [...(draft.skillNames || [])],
-      toolIds: [...(draft.toolIds || [])],
-      steps: normalizeWorkflowSteps(draft.steps, {
-        instructions: draft.instructions,
-        agentName: draft.agentName,
-        skillNames: draft.skillNames,
-        toolIds: draft.toolIds,
-      }),
-      status: 'active',
-      projectDirectory: draft.projectDirectory || null,
-      draftSessionId: draft.draftSessionId || null,
-      triggers: clone(draft.triggers),
-      createdAt,
-      updatedAt: createdAt,
-      nextRunAt: input.nextRunAt ?? null,
-      lastRunAt: null,
-      latestRunId: null,
-      latestRunStatus: null,
-      latestRunSessionId: null,
-      latestRunSummary: null,
-      webhookUrl: null,
-    }
-    this.workflows.set(workflowKey, { record, runs: [] })
-    return clone(record)
+    return this.workflowsDomain.createWorkflow(input)
   }
 
   findWorkflow(workflowId: string): CloudWorkflowRecord | null {
-    for (const workflow of this.workflows.values()) {
-      if (workflow.record.id === workflowId) return clone(workflow.record)
-    }
-    return null
+    return this.workflowsDomain.findWorkflow(workflowId)
   }
 
   listWorkflows(tenantId: string, userId: string): CloudWorkflowRecord[] {
-    this.requireTenantUser(tenantId, userId)
-    return Array.from(this.workflows.values())
-      .filter((workflow) => workflow.record.tenantId === tenantId && workflow.record.userId === userId)
-      .sort((left, right) => right.record.updatedAt.localeCompare(left.record.updatedAt))
-      .map((workflow) => clone(workflow.record))
+    return this.workflowsDomain.listWorkflows(tenantId, userId)
   }
 
   getWorkflow(tenantId: string, userId: string, workflowId: string): CloudWorkflowRecord | null {
-    this.requireTenantUser(tenantId, userId)
-    const workflow = this.workflows.get(key(tenantId, workflowId))?.record || null
-    if (!workflow || workflow.userId !== userId) return null
-    return clone(workflow)
+    return this.workflowsDomain.getWorkflow(tenantId, userId, workflowId)
   }
 
   getWorkflowForTenant(tenantId: string, workflowId: string): CloudWorkflowRecord | null {
-    this.requireTenant(tenantId)
-    return clone(this.workflows.get(key(tenantId, workflowId))?.record || null)
+    return this.workflowsDomain.getWorkflowForTenant(tenantId, workflowId)
   }
 
   updateWorkflowStatus(input: UpdateWorkflowStatusInput): CloudWorkflowRecord | null {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const workflow = this.workflows.get(key(input.tenantId, input.workflowId))
-    if (!workflow || workflow.record.userId !== input.userId) return null
-    workflow.record.status = input.status
-    workflow.record.nextRunAt = input.nextRunAt ?? null
-    workflow.record.updatedAt = nowIso(input.updatedAt)
-    return clone(workflow.record)
+    return this.workflowsDomain.updateWorkflowStatus(input)
   }
 
   listWorkflowRuns(tenantId: string, workflowId: string, limit = 25): CloudWorkflowRunRecord[] {
-    this.requireTenant(tenantId)
-    const workflow = this.requireWorkflow(tenantId, workflowId)
-    return workflow.runs
-      .slice()
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .slice(0, Math.min(Math.max(1, limit), WORKFLOW_RUN_LIST_LIMIT))
-      .map((run) => clone(run))
+    return this.workflowsDomain.listWorkflowRuns(tenantId, workflowId, limit)
   }
 
   createWorkflowRun(input: CreateWorkflowRunInput): CloudWorkflowRunRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
-    if (workflow.record.userId !== input.userId) throw new Error(`Unknown workflow ${input.workflowId}.`)
-    this.assertWorkflowRunnable(workflow.record)
-    const runKey = key(input.tenantId, input.runId)
-    const existing = this.workflowRuns.get(runKey)
-    if (existing) return clone(existing)
-    this.quotaDomain.assertWorkflowRunQuota({ tenantId: input.tenantId, quota: input.quota, now: input.createdAt })
-    const createdAt = nowIso(input.createdAt)
-    const claimedBy = input.claimedBy?.trim() || null
-    const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
-    const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
-    const run: CloudWorkflowRunRecord = {
-      tenantId: input.tenantId,
-      userId: input.userId,
-      id: input.runId,
-      workflowId: input.workflowId,
-      sessionId: null,
-      triggerType: input.triggerType,
-      triggerPayload: input.triggerPayload || null,
-      status: 'queued',
-      title: `Run ${workflow.record.title}`,
-      summary: null,
-      error: null,
-      createdAt,
-      startedAt: null,
-      finishedAt: null,
-      claimedBy,
-      claimToken,
-      claimExpiresAt: claimToken ? new Date(new Date(createdAt).getTime() + leaseTtlMs).toISOString() : null,
-      attemptCount: claimToken ? 1 : 0,
-      idempotencyKey: null,
-      checkpointVersion: 0,
-      lastErrorCode: null,
-      lastErrorSummary: null,
-    }
-    workflow.runs.push(run)
-    this.workflowRuns.set(runKey, run)
-    workflow.record.status = 'running'
-    workflow.record.latestRunId = run.id
-    workflow.record.latestRunStatus = run.status
-    workflow.record.updatedAt = createdAt
-    return clone(run)
+    return this.workflowsDomain.createWorkflowRun(input)
   }
 
   claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): ClaimedWorkflowRunRecord | null {
-    const now = input.now || new Date()
-    const claimedAt = now.toISOString()
-    const claimedBy = input.claimedBy?.trim() || 'scheduler'
-    const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
-    const retryRun = Array.from(this.workflowRuns.values())
-      .filter((run) => (
-        this.workflows.get(key(run.tenantId, run.workflowId))?.record.status === 'running'
-        &&
-        (
-          (run.status === 'queued' && run.sessionId === null)
-          || (run.status === 'running' && run.sessionId !== null && !this.sessionHasCommands(run.tenantId, run.sessionId))
-        )
-        && run.claimToken === null
-      ))
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))[0]
-    if (retryRun) {
-      const workflow = this.requireWorkflow(retryRun.tenantId, retryRun.workflowId)
-      retryRun.claimedBy = claimedBy
-      retryRun.claimToken = createWorkClaimToken(retryRun.tenantId, retryRun.id, claimedBy)
-      retryRun.claimExpiresAt = new Date(now.getTime() + leaseTtlMs).toISOString()
-      retryRun.attemptCount += 1
-      retryRun.lastErrorCode = null
-      retryRun.lastErrorSummary = null
-      workflow.record.status = 'running'
-      workflow.record.latestRunId = retryRun.id
-      workflow.record.latestRunStatus = retryRun.status
-      workflow.record.latestRunSessionId = retryRun.sessionId
-      workflow.record.updatedAt = claimedAt
-      return {
-        workflow: clone(workflow.record),
-        run: clone(retryRun),
-      }
-    }
-    const workflow = Array.from(this.workflows.values())
-      .filter((entry) => (
-        entry.record.status === 'active'
-        && entry.record.nextRunAt !== null
-        && entry.record.nextRunAt <= claimedAt
-      ))
-      .sort((left, right) => String(left.record.nextRunAt).localeCompare(String(right.record.nextRunAt)))[0]
-    if (!workflow) return null
-    const scheduledFor = workflow.record.nextRunAt
-    this.quotaDomain.assertWorkflowRunQuota({ tenantId: workflow.record.tenantId, quota: input.quota, now })
-    const claimToken = createWorkClaimToken(workflow.record.tenantId, input.runId, claimedBy)
-    const run: CloudWorkflowRunRecord = {
-      tenantId: workflow.record.tenantId,
-      userId: workflow.record.userId,
-      id: input.runId,
-      workflowId: workflow.record.id,
-      sessionId: null,
-      triggerType: 'schedule',
-      triggerPayload: {
-        source: 'schedule',
-        scheduledFor,
-      },
-      status: 'queued',
-      title: `Run ${workflow.record.title}`,
-      summary: null,
-      error: null,
-      createdAt: claimedAt,
-      startedAt: null,
-      finishedAt: null,
-      claimedBy,
-      claimToken,
-      claimExpiresAt: new Date(now.getTime() + leaseTtlMs).toISOString(),
-      attemptCount: 1,
-      idempotencyKey: `schedule:${workflow.record.id}:${scheduledFor}`,
-      checkpointVersion: 0,
-      lastErrorCode: null,
-      lastErrorSummary: null,
-    }
-    workflow.runs.push(run)
-    this.workflowRuns.set(key(run.tenantId, run.id), run)
-    workflow.record.status = 'running'
-    workflow.record.latestRunId = run.id
-    workflow.record.latestRunStatus = run.status
-    workflow.record.updatedAt = claimedAt
-    return {
-      workflow: clone(workflow.record),
-      run: clone(run),
-    }
+    return this.workflowsDomain.claimDueWorkflowRun(input)
   }
 
   reapExpiredWorkflowClaims(input: ReapExpiredWorkflowClaimsInput = {}): ReapedWorkflowClaimRecord[] {
-    const now = input.now || new Date()
-    const nowIsoValue = now.toISOString()
-    const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 3))
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    const reaped: ReapedWorkflowClaimRecord[] = []
-    const candidates = Array.from(this.workflowRuns.values())
-      .filter((run) => (
-        Boolean(run.claimToken) && Boolean(run.claimExpiresAt)
-        && Date.parse(run.claimExpiresAt || '') <= now.getTime()
-        && ((run.status === 'queued' && run.sessionId === null) || (run.status === 'running' && run.sessionId !== null && !this.sessionHasCommands(run.tenantId, run.sessionId)))
-      ))
-      .sort((left, right) => (
-        Date.parse(left.claimExpiresAt || '') - Date.parse(right.claimExpiresAt || '')
-        || left.tenantId.localeCompare(right.tenantId) || left.workflowId.localeCompare(right.workflowId) || left.id.localeCompare(right.id)
-      ))
-      .slice(0, limit)
-    for (const run of candidates) {
-      const claimToken = run.claimToken
-      const workflow = this.workflows.get(key(run.tenantId, run.workflowId))
-      if (!workflow || !claimToken) continue
-      const claimedBy = run.claimedBy || 'unknown'
-      const action: WorkReaperAction = run.attemptCount >= maxAttempts ? 'failed' : 'retried'
-      if (action === 'failed') {
-        run.status = 'failed'
-        run.error = 'Workflow run claim expired after the maximum retry attempts.'
-        run.summary = run.error
-        run.finishedAt = nowIsoValue
-        run.lastErrorCode = 'claim_expired_max_attempts'
-        run.lastErrorSummary = run.error
-        run.claimedBy = null
-        run.claimToken = null
-        run.claimExpiresAt = null
-        workflow.record.status = 'failed'
-        workflow.record.latestRunStatus = 'failed'
-        workflow.record.latestRunSummary = run.error
-        workflow.record.nextRunAt = null
-      } else {
-        run.claimedBy = null
-        run.claimToken = null
-        run.claimExpiresAt = null
-        run.lastErrorCode = 'claim_expired'
-        run.lastErrorSummary = run.sessionId
-          ? 'Workflow run claim expired before command enqueue.'
-          : 'Workflow run claim expired before session attachment.'
-        workflow.record.status = 'running'
-        workflow.record.latestRunStatus = run.status
-        workflow.record.latestRunSessionId = run.sessionId
-      }
-      workflow.record.latestRunId = run.id
-      workflow.record.updatedAt = nowIsoValue
-      reaped.push({
-        tenantId: run.tenantId,
-        workflowId: run.workflowId,
-        runId: run.id,
-        claimToken,
-        claimedBy,
-        action,
-        reapedAt: nowIsoValue,
-      })
-    }
-    return reaped
+    return this.workflowsDomain.reapExpiredWorkflowClaims(input)
   }
 
   attachWorkflowRunSession(input: AttachWorkflowRunSessionInput): CloudWorkflowRunRecord | null {
-    const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
-    const run = this.workflowRuns.get(key(input.tenantId, input.runId))
-    if (!run || run.workflowId !== input.workflowId) return null
-    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
-      throw new Error('Workflow run is not attachable.')
-    }
-    if (run.status !== 'queued' && !(run.status === 'running' && run.sessionId === input.sessionId)) {
-      throw new Error('Workflow run is not attachable.')
-    }
-    if (run.sessionId && run.sessionId !== input.sessionId) throw new Error('Workflow run is already attached to another session.')
-    if (run.claimToken) {
-      if (run.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
-      if (run.claimExpiresAt && Date.parse(run.claimExpiresAt) <= Date.now()) throw new Error('Workflow run claim is stale.')
-    } else if (input.claimToken) {
-      throw new Error('Workflow run claim is stale.')
-    }
-    const startedAt = nowIso(input.startedAt)
-    run.sessionId = input.sessionId
-    run.status = 'running'
-    run.startedAt ||= startedAt
-    run.claimedBy = null
-    run.claimToken = null
-    run.claimExpiresAt = null
-    workflow.record.status = 'running'
-    workflow.record.latestRunId = run.id
-    workflow.record.latestRunStatus = run.status
-    workflow.record.latestRunSessionId = input.sessionId
-    workflow.record.updatedAt = startedAt
-    return clone(run)
+    return this.workflowsDomain.attachWorkflowRunSession(input)
   }
 
   completeWorkflowRun(input: CompleteWorkflowRunInput): CloudWorkflowRunRecord | null {
-    return this.finishWorkflowRun({
-      tenantId: input.tenantId,
-      workflowId: input.workflowId,
-      runId: input.runId,
-      status: 'completed',
-      summary: input.summary,
-      error: null,
-      nextStatus: input.nextStatus,
-      nextRunAt: input.nextRunAt,
-      leaseToken: input.leaseToken,
-      finishedAt: input.finishedAt,
-    })
+    return this.workflowsDomain.completeWorkflowRun(input)
   }
 
   failWorkflowRun(input: FailWorkflowRunInput): CloudWorkflowRunRecord | null {
-    return this.finishWorkflowRun({
-      tenantId: input.tenantId,
-      workflowId: input.workflowId,
-      runId: input.runId,
-      status: 'failed',
-      summary: input.error,
-      error: input.error,
-      nextStatus: input.nextStatus,
-      nextRunAt: input.nextRunAt,
-      leaseToken: input.leaseToken,
-      finishedAt: input.finishedAt,
-    })
+    return this.workflowsDomain.failWorkflowRun(input)
   }
 
   getWorkflowRun(tenantId: string, runId: string): CloudWorkflowRunRecord | null {
-    this.requireTenant(tenantId)
-    return clone(this.workflowRuns.get(key(tenantId, runId)) || null)
+    return this.workflowsDomain.getWorkflowRun(tenantId, runId)
   }
 
   getWorkflowRunBySession(tenantId: string, sessionId: string): CloudWorkflowRunRecord | null {
-    this.requireTenant(tenantId)
-    for (const run of this.workflowRuns.values()) {
-      if (run.tenantId === tenantId && run.sessionId === sessionId) return clone(run)
-    }
-    return null
+    return this.workflowsDomain.getWorkflowRunBySession(tenantId, sessionId)
   }
 
   listThreadTags(tenantId: string): ThreadTagRecord[] {
-    this.requireTenant(tenantId)
-    return Array.from(this.threadTags.values())
-      .filter((tag) => tag.tenantId === tenantId)
-      .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
-      .map((tag) => clone(tag))
+    return this.threadTagsDomain.listThreadTags(tenantId)
   }
 
   createThreadTag(input: CreateThreadTagInput): ThreadTagRecord {
-    this.requireTenant(input.tenantId)
-    const tagKey = key(input.tenantId, input.tagId)
-    const name = normalizeText(input.name, THREAD_TAG_NAME_MAX_LENGTH, 'Tag name')
-    const color = normalizeTagColor(input.color)
-    const existing = this.threadTags.get(tagKey)
-    if (existing) {
-      if (existing.name !== name || existing.color !== color) {
-        throw new Error(`Tag id ${input.tagId} was reused with different content.`)
-      }
-      return clone(existing)
-    }
-    this.assertUniqueThreadTagName(input.tenantId, input.tagId, name)
-    const createdAt = nowIso(input.createdAt)
-    const record: ThreadTagRecord = {
-      tenantId: input.tenantId,
-      tagId: input.tagId,
-      name,
-      color,
-      createdAt,
-      updatedAt: createdAt,
-    }
-    this.threadTags.set(tagKey, record)
-    return clone(record)
+    return this.threadTagsDomain.createThreadTag(input)
   }
 
   updateThreadTag(input: UpdateThreadTagInput): ThreadTagRecord | null {
-    this.requireTenant(input.tenantId)
-    const tag = this.threadTags.get(key(input.tenantId, input.tagId))
-    if (!tag) return null
-    const name = normalizeOptionalText(input.name, THREAD_TAG_NAME_MAX_LENGTH, 'Tag name') ?? tag.name
-    this.assertUniqueThreadTagName(input.tenantId, input.tagId, name)
-    tag.name = name
-    if (input.color !== undefined) tag.color = normalizeTagColor(input.color)
-    tag.updatedAt = nowIso(input.updatedAt)
-    return clone(tag)
+    return this.threadTagsDomain.updateThreadTag(input)
   }
 
   deleteThreadTag(tenantId: string, tagId: string): boolean {
-    this.requireTenant(tenantId)
-    const deleted = this.threadTags.delete(key(tenantId, tagId))
-    for (const [linkKey, tags] of this.threadTagLinks.entries()) {
-      if (!linkKey.startsWith(`${tenantId}\0`)) continue
-      tags.delete(tagId)
-      if (tags.size === 0) this.threadTagLinks.delete(linkKey)
-    }
-    return deleted
+    return this.threadTagsDomain.deleteThreadTag(tenantId, tagId)
   }
 
   applyThreadTags(input: ThreadTagLinkInput): void {
-    this.requireTenant(input.tenantId)
-    const sessionIds = normalizeIdList(input.sessionIds, 'sessionIds', THREAD_BULK_MAX_SESSION_IDS)
-    const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-    for (const sessionId of sessionIds) this.requireSession(input.tenantId, sessionId)
-    for (const tagId of tagIds) this.requireThreadTag(input.tenantId, tagId)
-    for (const sessionId of sessionIds) {
-      const linkKey = key(input.tenantId, sessionId)
-      const tags = this.threadTagLinks.get(linkKey) || new Set<string>()
-      for (const tagId of tagIds) tags.add(tagId)
-      this.threadTagLinks.set(linkKey, tags)
-    }
+    this.threadTagsDomain.applyThreadTags(input)
   }
 
   removeThreadTags(input: ThreadTagLinkInput): void {
-    this.requireTenant(input.tenantId)
-    const sessionIds = normalizeIdList(input.sessionIds, 'sessionIds', THREAD_BULK_MAX_SESSION_IDS)
-    const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-    for (const sessionId of sessionIds) this.requireSession(input.tenantId, sessionId)
-    for (const tagId of tagIds) this.requireThreadTag(input.tenantId, tagId)
-    for (const sessionId of sessionIds) {
-      const linkKey = key(input.tenantId, sessionId)
-      const tags = this.threadTagLinks.get(linkKey)
-      if (!tags) continue
-      for (const tagId of tagIds) tags.delete(tagId)
-      if (tags.size === 0) this.threadTagLinks.delete(linkKey)
-    }
+    this.threadTagsDomain.removeThreadTags(input)
+  }
+
+  private sessionTagLinkIds(tenantId: string, sessionId: string): ReadonlySet<string> | undefined {
+    return this.threadTagsDomain.sessionTagLinkIds(tenantId, sessionId)
+  }
+
+  private tagsForSession(tenantId: string, sessionId: string): ThreadTagRecord[] {
+    return this.threadTagsDomain.tagsForSession(tenantId, sessionId)
   }
 
   listThreadSmartFilters(tenantId: string): ThreadSmartFilterRecord[] {
-    this.requireTenant(tenantId)
-    return Array.from(this.threadSmartFilters.values())
-      .filter((filter) => filter.tenantId === tenantId)
-      .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
-      .map((filter) => clone(filter))
+    return this.smartFiltersDomain.listThreadSmartFilters(tenantId)
   }
 
   createThreadSmartFilter(input: CreateThreadSmartFilterInput): ThreadSmartFilterRecord {
-    this.requireTenant(input.tenantId)
-    const filterKey = key(input.tenantId, input.filterId)
-    const name = normalizeText(input.name, THREAD_SMART_FILTER_NAME_MAX_LENGTH, 'Smart filter name')
-    const query = normalizeThreadQuery(input.query)
-    const existing = this.threadSmartFilters.get(filterKey)
-    if (existing) {
-      if (existing.name !== name || stableJson(existing.query) !== stableJson(query)) {
-        throw new Error(`Smart filter id ${input.filterId} was reused with different content.`)
-      }
-      return clone(existing)
-    }
-    const createdAt = nowIso(input.createdAt)
-    const record: ThreadSmartFilterRecord = {
-      tenantId: input.tenantId,
-      filterId: input.filterId,
-      name,
-      query,
-      createdAt,
-      updatedAt: createdAt,
-    }
-    this.threadSmartFilters.set(filterKey, record)
-    return clone(record)
+    return this.smartFiltersDomain.createThreadSmartFilter(input)
   }
 
   updateThreadSmartFilter(input: UpdateThreadSmartFilterInput): ThreadSmartFilterRecord | null {
-    this.requireTenant(input.tenantId)
-    const filter = this.threadSmartFilters.get(key(input.tenantId, input.filterId))
-    if (!filter) return null
-    filter.name = normalizeOptionalText(input.name, THREAD_SMART_FILTER_NAME_MAX_LENGTH, 'Smart filter name') ?? filter.name
-    if (input.query !== undefined) filter.query = normalizeThreadQuery(input.query)
-    filter.updatedAt = nowIso(input.updatedAt)
-    return clone(filter)
+    return this.smartFiltersDomain.updateThreadSmartFilter(input)
   }
 
   deleteThreadSmartFilter(tenantId: string, filterId: string): boolean {
-    this.requireTenant(tenantId)
-    return this.threadSmartFilters.delete(key(tenantId, filterId))
+    return this.smartFiltersDomain.deleteThreadSmartFilter(tenantId, filterId)
   }
 
   listThreadMetadata(input: {
@@ -4036,7 +1577,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .filter((session) => session.record.tenantId === input.tenantId && session.record.userId === input.userId)
       .filter((session) => {
         if (tagIds.length === 0) return true
-        const sessionTagIds = this.threadTagLinks.get(key(input.tenantId, session.record.sessionId))
+        const sessionTagIds = this.sessionTagLinkIds(input.tenantId, session.record.sessionId)
         return Boolean(sessionTagIds && tagIds.some((tagId) => sessionTagIds.has(tagId)))
       })
       .sort((left, right) => right.record.updatedAt.localeCompare(left.record.updatedAt))
@@ -4055,31 +1596,20 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   recordSchemaMigration(id: string, appliedAt = new Date()): SchemaMigrationRecord {
-    const existing = this.migrations.get(id)
-    if (existing) return clone(existing)
-    const record: SchemaMigrationRecord = {
-      id,
-      appliedAt: appliedAt.toISOString(),
-    }
-    this.migrations.set(id, record)
-    return clone(record)
+    return this.schemaMigrationsDomain.recordSchemaMigration(id, appliedAt)
   }
 
   listSchemaMigrations(): SchemaMigrationRecord[] {
-    return Array.from(this.migrations.values()).map((record) => clone(record))
+    return this.schemaMigrationsDomain.listSchemaMigrations()
   }
 
-  private requireTenant(tenantId: string) {
-    const tenant = this.tenants.get(tenantId)
-    if (!tenant) throw new Error(`Unknown tenant ${tenantId}.`)
-    return tenant
-  }
-
-  private requireTenantUser(tenantId: string, userId: string) {
-    this.requireTenant(tenantId)
-    const user = this.users.get(key(tenantId, userId))
-    if (!user) throw new Error(`User ${userId} does not belong to tenant ${tenantId}.`)
-    return user
+  // Centralized identity-existence checks — the single abstraction every domain's
+  // host wiring and the store's own methods call, so the org/account maps can later
+  // move into an identity domain behind these (delegate) methods.
+  private requireCommand(session: SessionState, commandId: string) {
+    const command = session.commands.find((entry) => entry.commandId === commandId)
+    if (!command) throw new Error(`Unknown command ${commandId}.`)
+    return command
   }
 
   private requireSession(tenantId: string, sessionId: string) {
@@ -4089,65 +1619,18 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return session
   }
 
-  private requireWorkflow(tenantId: string, workflowId: string) {
-    this.requireTenant(tenantId)
-    const workflow = this.workflows.get(key(tenantId, workflowId))
-    if (!workflow) throw new Error(`Unknown workflow ${workflowId}.`)
-    return workflow
+  // Resolve a session and (if a lease token is supplied) fence it.
+  private assertSessionLease(tenantId: string, sessionId: string, leaseToken: string | null | undefined) {
+    const session = this.requireSession(tenantId, sessionId)
+    this.assertLeaseTokenIfPresent(session, leaseToken)
   }
 
-  private assertWorkflowRunnable(workflow: CloudWorkflowRecord) {
-    if (workflow.status === 'archived') throw new Error('Archived workflows cannot run.')
-    if (workflow.status === 'paused') throw new Error('Paused workflows cannot run.')
-    if (workflow.status === 'running') throw new Error('Workflow is already running.')
-  }
-
-  private finishWorkflowRun(input: {
-    tenantId: string
-    workflowId: string
-    runId: string
-    status: Extract<WorkflowRunStatus, 'completed' | 'failed'>
-    summary: string | null
-    error: string | null
-    nextStatus: WorkflowStatus
-    nextRunAt: string | null
-    leaseToken?: string | null
-    finishedAt?: Date
-  }) {
-    const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
-    const run = this.workflowRuns.get(key(input.tenantId, input.runId))
-    if (!run || run.workflowId !== input.workflowId) return null
-    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return clone(run)
-    if (input.leaseToken !== undefined) {
-      if (!run.sessionId) throw new Error('Workflow run has no execution session to fence.')
-      const session = this.requireSession(input.tenantId, run.sessionId)
-      this.assertLeaseTokenIfPresent(session, input.leaseToken)
+  // Assert a session exists and belongs to the user (no SessionState leak to callers).
+  private assertSessionBelongsToUser(tenantId: string, sessionId: string, userId: string) {
+    const session = this.requireSession(tenantId, sessionId)
+    if (session.record.userId !== userId) {
+      throw new Error(`Session ${sessionId} does not belong to user ${userId}.`)
     }
-    const finishedAt = nowIso(input.finishedAt)
-    run.status = input.status
-    run.summary = input.summary
-    run.error = input.error
-    run.finishedAt = finishedAt
-    workflow.record.status = input.nextStatus
-    workflow.record.latestRunId = run.id
-    workflow.record.latestRunStatus = run.status
-    workflow.record.latestRunSummary = input.summary
-    workflow.record.lastRunAt = input.status === 'completed' ? finishedAt : workflow.record.lastRunAt
-    workflow.record.nextRunAt = input.nextRunAt
-    workflow.record.updatedAt = finishedAt
-    return clone(run)
-  }
-
-  private requireThreadTag(tenantId: string, tagId: string) {
-    const tag = this.threadTags.get(key(tenantId, tagId))
-    if (!tag) throw new Error(`Unknown thread tag ${tagId}.`)
-    return tag
-  }
-
-  private requireCommand(session: SessionState, commandId: string) {
-    const command = session.commands.find((entry) => entry.commandId === commandId)
-    if (!command) throw new Error(`Unknown command ${commandId}.`)
-    return command
   }
 
   private sessionHasCommands(tenantId: string, sessionId: string) {
@@ -4155,25 +1638,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return Boolean(session?.commands.length)
   }
 
-  private assertUniqueThreadTagName(tenantId: string, tagId: string, name: string) {
-    const normalized = name.toLocaleLowerCase()
-    const duplicate = Array.from(this.threadTags.values()).find((tag) => (
-      tag.tenantId === tenantId
-      && tag.tagId !== tagId
-      && tag.name.toLocaleLowerCase() === normalized
-    ))
-    if (duplicate) throw new Error(`Thread tag "${name}" already exists.`)
-  }
-
-  private tagsForSession(tenantId: string, sessionId: string) {
-    const tagIds = this.threadTagLinks.get(key(tenantId, sessionId))
-    if (!tagIds) return []
-    return Array.from(tagIds)
-      .map((tagId) => this.threadTags.get(key(tenantId, tagId)))
-      .filter((tag): tag is ThreadTagRecord => Boolean(tag))
-      .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
-      .map((tag) => clone(tag))
-  }
+  // The raw tag-id link set for a session, for session-listing's tag filter —
+  // lets the session methods query thread-tag links without reaching into the
+  // thread-tags map directly (so that map can move to its own domain).
 
   private assertCurrentLease(session: SessionState, lease: WorkerLeaseRecord, nowMs = Date.now()) {
     if (!session.lease || session.lease.leaseToken !== lease.leaseToken || session.lease.leaseExpiresAt <= nowMs) {

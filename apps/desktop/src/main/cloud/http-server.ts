@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import {
@@ -6,7 +6,6 @@ import {
   createCloudProjectionFenceToken,
   isCloudSessionEventType,
   normalizeCloudProjectSource,
-  resolveHttpClientSource,
   type CloudProjectionFenceToken,
   type CloudSessionEventType,
   type CloudProjectSourceInput,
@@ -32,6 +31,7 @@ import { handleByokApiRoute } from './http-routes/byok.ts'
 import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
 import { handleCoordinationApiRoute } from './http-routes/coordination.ts'
+import { handleKnowledgeApiRoute } from './http-routes/knowledge.ts'
 import { handleLaunchpadApiRoute } from './http-routes/launchpad.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
@@ -39,6 +39,45 @@ import { handleSessionArtifactsApiRoute } from './http-routes/session-artifacts.
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService, type CloudSessionView } from './session-service.ts'
+import {
+  firstHeader,
+  parseAfterSequence,
+  parseLimit,
+  parseSessionStatus,
+  parseTagIds,
+  readApiTokenScopes,
+  readChannelProvider,
+  readEnum,
+  readNonNegativeInteger,
+  readRecord,
+  readString,
+  readStringArray,
+} from './http-request-parsers.ts'
+import {
+  methodRequiresCsrf,
+  writeBinary,
+  writeCorsHeaders,
+  writeError,
+  writeHtml,
+  writeJson,
+  writePolicyError,
+  writeRedirect,
+  writeSecurityHeaders,
+} from './http-response-writers.ts'
+import { internalTokenIsValid } from './http-auth-helpers.ts'
+import {
+  publicChannelInteraction,
+  writeSnapshotRequiredEvent,
+  writeSseEvent,
+} from './http-sse-helpers.ts'
+import {
+  authFailureScopes,
+  extractSignatureWebhookAuth,
+  requestCorsOrigin,
+  requestHeaderRecord,
+  requestSource,
+  webhookAuthScope,
+} from './http-request-context.ts'
 import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
@@ -47,9 +86,6 @@ import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
 import { resolveCloudWebStaticAsset } from './web-static-assets.ts'
 import type {
-  ApiTokenScope,
-  ChannelProviderId,
-  ControlPlaneSessionStatus,
   SessionEventRecord,
   SessionCommandRecord,
   WorkspaceEventRecord,
@@ -59,7 +95,6 @@ import type { CloudCookieSession, CloudSessionCookieManager } from './session-co
 import {
   InMemoryWorkflowWebhookSecurityStore,
   WebhookHttpError,
-  type WorkflowWebhookAuth,
   type WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
 
@@ -112,6 +147,7 @@ export type CloudHttpServerOptions = {
   trustProxyHeaders?: boolean
   trustedProxyCidrs?: readonly string[] | null
   readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
+  knowledgeDataDir?: string | null
 }
 
 export class CloudHttpError extends Error {
@@ -174,142 +210,6 @@ function defaultAuthResolver(): CloudPrincipal {
   return DEFAULT_PRINCIPAL
 }
 
-function readHeader(req: IncomingMessage, name: string) {
-  const value = req.headers[name.toLowerCase()]
-  if (Array.isArray(value)) return value[0] || null
-  return value || null
-}
-
-function constantTimeEquals(left: string, right: string) {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-}
-
-function internalTokenIsValid(req: IncomingMessage, expected: string | null | undefined) {
-  if (!expected) return false
-  const provided = readHeader(req, 'x-open-cowork-internal-token')
-  return typeof provided === 'string' && constantTimeEquals(provided, expected)
-}
-
-function writeSecurityHeaders(res: ServerResponse, options: { strictTransportSecurity?: boolean } = {}) {
-  res.setHeader('X-Content-Type-Options', 'nosniff')
-  res.setHeader('Referrer-Policy', 'no-referrer')
-  res.setHeader('X-Frame-Options', 'DENY')
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  if (options.strictTransportSecurity) {
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-  }
-}
-
-function writeCorsHeaders(res: ServerResponse, origin: string | null | undefined) {
-  if (!origin) return
-  res.setHeader('Vary', 'Origin')
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-CSRF-Token')
-}
-
-function writeJson(res: ServerResponse, status: number, body: unknown, origin?: string | null) {
-  writeCorsHeaders(res, origin)
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-  })
-  res.end(JSON.stringify(body))
-}
-
-function writeHtml(res: ServerResponse, status: number, body: string, origin?: string | null, nonce?: string | null) {
-  const scriptSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
-  const styleSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
-  writeCorsHeaders(res, origin)
-  res.writeHead(status, {
-    'content-type': 'text/html; charset=utf-8',
-    'cache-control': 'no-store',
-    'content-security-policy': [
-      "default-src 'self'",
-      "connect-src 'self'",
-      "font-src 'self'",
-      "img-src 'self' data: https:",
-      `style-src ${styleSrc}`,
-      `script-src ${scriptSrc}`,
-      "object-src 'none'",
-      "base-uri 'none'",
-      "frame-ancestors 'none'",
-      "form-action 'self'",
-    ].join('; '),
-  })
-  res.end(body)
-}
-
-function writeBinary(res: ServerResponse, body: Buffer, contentType: string, cacheControl: string, origin?: string | null) {
-  writeCorsHeaders(res, origin)
-  res.writeHead(200, {
-    'content-type': contentType,
-    'cache-control': cacheControl,
-    'content-length': String(body.byteLength),
-  })
-  res.end(body)
-}
-
-function writeError(
-  res: ServerResponse,
-  status: number,
-  message: string,
-  origin?: string | null,
-  details: { policyCode?: string | null, retryAfterMs?: number | null } = {},
-) {
-  if (details.retryAfterMs && details.retryAfterMs > 0) {
-    res.setHeader('Retry-After', String(Math.max(1, Math.ceil(details.retryAfterMs / 1000))))
-  }
-  const body: Record<string, unknown> = { error: message }
-  if (details.retryAfterMs && details.retryAfterMs > 0) body.retryAfterMs = details.retryAfterMs
-  if (details.policyCode) {
-    body.verdict = {
-      allowed: false,
-      reason: message,
-      policyCode: details.policyCode,
-    }
-  }
-  writeJson(res, status, body, origin)
-}
-
-function writePolicyError(
-  res: ServerResponse,
-  status: number,
-  message: string,
-  policyCode: string,
-  origin?: string | null,
-) {
-  writeJson(res, status, {
-    error: message,
-    verdict: {
-      allowed: false,
-      reason: message,
-      policyCode,
-    },
-  }, origin)
-}
-
-function writeRedirect(
-  res: ServerResponse,
-  location: string,
-  setCookieHeaders: string[] | undefined,
-  origin?: string | null,
-) {
-  writeCorsHeaders(res, origin)
-  if (setCookieHeaders?.length) res.setHeader('Set-Cookie', setCookieHeaders)
-  res.writeHead(302, {
-    location,
-    'cache-control': 'no-store',
-  })
-  res.end()
-}
-
-function methodRequiresCsrf(method: string | undefined) {
-  return method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
-}
 
 async function readJsonBodyWithRaw(req: IncomingMessage, maxBodyBytes: number) {
   const chunks: Buffer[] = []
@@ -340,10 +240,6 @@ async function readJsonBody(req: IncomingMessage, maxBodyBytes: number) {
   return (await readJsonBodyWithRaw(req, maxBodyBytes)).body
 }
 
-function readString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : null
-}
-
 function readOptionalCloudProjectSource(body: Record<string, unknown>): CloudProjectSourceInput | null | undefined {
   if (!Object.prototype.hasOwnProperty.call(body, 'projectSource')) return undefined
   const raw = body.projectSource
@@ -351,59 +247,6 @@ function readOptionalCloudProjectSource(body: Record<string, unknown>): CloudPro
   const normalized = normalizeCloudProjectSource(raw)
   if (!normalized) throw new CloudHttpError(400, 'Cloud project source is invalid.')
   return normalized
-}
-
-function readStringArray(value: unknown) {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
-    ? value
-    : null
-}
-
-function readApiTokenScopes(value: unknown): ApiTokenScope[] | null {
-  const scopes = readStringArray(value)
-  if (!scopes) return null
-  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'operator', 'worker-internal'])
-  if (scopes.some((scope) => !allowed.has(scope as ApiTokenScope))) return null
-  const normalized = [...new Set(scopes as ApiTokenScope[])]
-  return normalized.length > 0 ? normalized : null
-}
-
-function readRecord(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
-
-function parseSequenceValue(raw: string | null | undefined) {
-  if (!raw) return 0
-  const parsed = Number(raw)
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0
-}
-
-function parseAfterSequence(req: IncomingMessage, url: URL) {
-  const fromQuery = parseSequenceValue(url.searchParams.get('after'))
-  if (fromQuery > 0) return fromQuery
-  return parseSequenceValue(firstHeader(req.headers['last-event-id']).trim())
-}
-
-function parseLimit(url: URL) {
-  const raw = url.searchParams.get('limit')
-  if (!raw) return undefined
-  const parsed = Number(raw)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
-}
-
-function parseSessionStatus(value: string | null): ControlPlaneSessionStatus | null {
-  if (!value) return null
-  if (value === 'idle' || value === 'running' || value === 'closed' || value === 'errored') return value
-  throw new CloudServiceError(400, 'Unsupported session status filter.', {
-    policyCode: 'sessions.status.invalid',
-  })
-}
-
-function readNonNegativeInteger(value: unknown, fallback = 0) {
-  const parsed = Number(value ?? fallback)
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 function readOptionalDate(value: unknown) {
@@ -414,143 +257,6 @@ function readOptionalDate(value: unknown) {
   return date
 }
 
-function readEnum<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
-  const raw = readString(value)
-  return raw && (allowed as readonly string[]).includes(raw) ? raw as T : undefined
-}
-
-function readChannelProvider(value: unknown): ChannelProviderId | undefined {
-  const provider = readString(value)
-  if (!provider) return undefined
-  if (['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
-    return provider as ChannelProviderId
-  }
-  return /^[a-z][a-z0-9_-]{1,63}$/.test(provider) && provider.includes('-')
-    ? provider as ChannelProviderId
-    : undefined
-}
-
-function parseTagIds(url: URL) {
-  const repeated = url.searchParams.getAll('tagId')
-  const csv = url.searchParams.get('tagIds')?.split(',') || []
-  return [...repeated, ...csv].map((value) => value.trim()).filter(Boolean)
-}
-
-function firstHeader(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] || '' : value || ''
-}
-
-function workflowScopeKey(workflowId: string) {
-  return createHash('sha256').update(workflowId || 'unknown-workflow').digest('hex').slice(0, 16)
-}
-
-function requestSource(
-  req: IncomingMessage,
-  trustProxyHeaders = false,
-  trustedProxyCidrs: readonly string[] | null | undefined = null,
-) {
-  return resolveHttpClientSource({
-    socketAddress: req.socket.remoteAddress,
-    headers: req.headers,
-    policy: { trustProxyHeaders, trustedProxyCidrs },
-  })
-}
-
-function requestCorsOrigin(req: IncomingMessage, configuredOrigin: string | null | undefined) {
-  const configured = configuredOrigin?.trim()
-  if (!configured) return null
-  const origin = firstHeader(req.headers.origin).trim()
-  return origin === configured ? configured : null
-}
-
-function requestHeaderRecord(req: IncomingMessage): Record<string, string | undefined> {
-  const headers: Record<string, string | undefined> = {}
-  for (const [name, value] of Object.entries(req.headers)) {
-    headers[name.toLowerCase()] = Array.isArray(value) ? value[0] : value
-  }
-  return headers
-}
-
-function authFailureScopes(
-  req: IncomingMessage,
-  trustProxyHeaders = false,
-  trustedProxyCidrs: readonly string[] | null | undefined = null,
-) {
-  const source = requestSource(req, trustProxyHeaders, trustedProxyCidrs)
-  const authorization = firstHeader(req.headers.authorization).trim()
-  const scopes = [`ip:${source}`]
-  if (!authorization) return scopes
-  const tokenHash = createHash('sha256').update(authorization).digest('hex').slice(0, 16)
-  scopes.push(`auth:${tokenHash}`)
-  return scopes
-}
-
-function webhookAuthScope(source: string, workflowId: string) {
-  return `${source}:${workflowScopeKey(workflowId)}`
-}
-
-function extractSignatureWebhookAuth(req: IncomingMessage, rawBody: string): WorkflowWebhookAuth {
-  const timestamp = firstHeader(req.headers['x-open-cowork-timestamp']).trim()
-  const signature = firstHeader(req.headers['x-open-cowork-signature']).trim()
-  if (!timestamp || !signature) {
-    throw new WebhookHttpError(401, 'Workflow webhook signature authorization is required.')
-  }
-  return { kind: 'signature', timestamp, signature, rawBody }
-}
-
-function writeSseEvent(res: ServerResponse, event: {
-  tenantId?: string
-  userId?: string
-  sessionId?: string | null
-  sequence: number
-  entityType?: string
-  entityId?: string
-  operation?: string
-  projectionVersion?: number
-  type: CloudSessionEventType
-  eventId: string
-  payload: Record<string, unknown>
-  createdAt?: string
-}) {
-  const publicEvent = {
-    ...event,
-    payload: publicSsePayload(event.type, event.payload),
-  }
-  res.write(`id: ${event.sequence}\n`)
-  res.write(`event: ${event.type}\n`)
-  res.write(`data: ${JSON.stringify(publicEvent)}\n\n`)
-}
-
-function publicSsePayload(type: string, payload: Record<string, unknown>) {
-  if (type !== 'artifact.created' && type !== 'artifact.updated') return payload
-  const record = { ...payload }
-  delete record.key
-  return record
-}
-
-function publicChannelInteraction(value: unknown) {
-  const record = { ...(readRecord(value) || {}) }
-  delete record.tokenHash
-  return record
-}
-
-function writeSnapshotRequiredEvent(
-  res: ServerResponse,
-  afterSequence: number,
-  payload: Record<string, unknown>,
-) {
-  writeSseEvent(res, {
-    sequence: afterSequence,
-    type: 'snapshot.required',
-    eventId: `snapshot-required:${afterSequence}`,
-    entityType: 'workspace',
-    entityId: 'workspace',
-    operation: 'snapshot_required',
-    projectionVersion: afterSequence,
-    createdAt: new Date().toISOString(),
-    payload,
-  })
-}
 
 function ssePollMs(options: CloudHttpServerOptions) {
   const value = options.ssePollMs ?? 1000
@@ -1175,6 +881,21 @@ async function handleApiRequest(
 
   if (resource === 'coordination') {
     await handleCoordinationApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
+  if (resource === 'knowledge') {
+    await handleKnowledgeApiRoute({
       req,
       res,
       options,

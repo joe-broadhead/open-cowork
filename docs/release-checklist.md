@@ -203,10 +203,10 @@ and linked from the release Go/No-Go report.
       primitives, shared product vocabulary, Cloud API client-only browser
       boundary, secondary Admin path, safe redaction, honest performance
       budgets, and docs that describe shipped behavior only.
-- [ ] OpenWiki/Knowledge deferral verified: no Cloud Web route, no visible CTA,
-      no runtime dependency, no data-sync claim, no local OpenWiki checkout
-      coupling, and a separate future roadmap exists before any Knowledge work
-      starts.
+- [ ] Knowledge/OpenWiki integration verified: the Cloud Web Knowledge route,
+      `Capture to knowledge` CTA, native Knowledge API contract, review queue,
+      version history, graph, and no-local-OpenWiki-checkout boundary all match
+      `apps/website/src/studio-production-qa.ts`.
 
 ## Tagged release
 

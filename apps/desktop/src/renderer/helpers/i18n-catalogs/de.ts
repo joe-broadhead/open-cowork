@@ -317,7 +317,7 @@ const strings: Record<string, string> = {
   'agents.openCapabilities': 'Brauchst du mehr Tools oder Fähigkeiten?',
   'agents.openCapabilitiesLink': 'Tools & Skills öffnen',
 
-  'capabilities.tab.tools': 'Tools',
+  'capabilities.tab.tools': 'Verbindungen',
   'capabilities.tab.skills': 'Fähigkeiten',
   'capabilities.addMcp': 'MCP hinzufügen',
   'capabilities.addSkill': 'Fähigkeit hinzufügen',
@@ -484,9 +484,9 @@ const strings: Record<string, string> = {
 
   'capabilities.title': 'Tools & Skills',
   'capabilities.subtitle': 'Inspiziere die im aktuellen OpenCode-Kontext verfügbaren Tools und Fähigkeitspakete, einschließlich integrierter, maschinen-, projekt- und benutzerdefinierter Ergänzungen.',
-  'capabilities.addTool': 'Tool hinzufügen',
+  'capabilities.addTool': 'Verbindung hinzufügen',
   'capabilities.addSkillButton': 'Fähigkeit hinzufügen',
-  'capabilities.searchTools': 'Tools, Beschreibungen oder Kollegen suchen…',
+  'capabilities.searchTools': 'Verbindungen, Beschreibungen oder Kollegen suchen…',
   'capabilities.searchSkills': 'Fähigkeiten, Beschreibungen oder Kollegen suchen…',
   'capabilities.details': 'Details',
   'capabilities.connection': 'Verbindung',

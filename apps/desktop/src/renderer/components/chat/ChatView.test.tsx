@@ -236,6 +236,27 @@ function installChatViewApi(options: {
     coordination: {
       board: vi.fn(async () => options.coordinationBoard ?? { projects: [], tasks: [] }),
     },
+    knowledge: {
+      snapshot: vi.fn(async () => ({
+        spaces: [{ id: 'space-local', name: 'Company OS', visibility: 'company', role: 'Maintainer' }],
+        pages: [],
+        proposals: [],
+        graph: { nodes: [], edges: [] },
+      })),
+      propose: vi.fn(async () => ({
+        id: 'proposal-1',
+        spaceId: 'space-local',
+        pageTitle: 'Conversation',
+        by: 'you',
+        when: '2026-06-15T00:00:00.000Z',
+        summary: 'Capture',
+        add: 1,
+        del: 0,
+        status: 'pending',
+        links: [],
+        body: [{ id: 'body', type: 'p', text: 'Captured.' }],
+      })),
+    },
   })
 }
 
@@ -375,6 +396,18 @@ describe('ChatView', () => {
     expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show Review' }))
     expect(screen.getByTestId('session-inspector')).toBeInTheDocument()
+  })
+
+  it('hides desktop Knowledge capture for cloud workspaces', async () => {
+    installChatViewApi()
+    seedCurrentSession()
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
+
+    render(<ChatView />)
+
+    await screen.findByRole('toolbar', { name: 'Chat actions' })
+    expect(screen.queryByRole('button', { name: 'Capture to knowledge' })).not.toBeInTheDocument()
+    expect(document.querySelector('[data-action-id="capture-knowledge"]')).not.toBeInTheDocument()
   })
 
   it('shows linked project and task context only when coordination links the session', async () => {

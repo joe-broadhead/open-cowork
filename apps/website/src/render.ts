@@ -16,18 +16,20 @@ import { cloudWebsiteStyles } from './styles.ts'
 import { cloudSettingsRouteMarkup } from './cloud-settings-markup.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
+import { cloudKnowledgeRouteMarkup } from './cloud-knowledge-markup.ts'
 import { cloudLaunchpadStaticMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
-import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
+import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
+// Re-exported so the desktop cloud host consumes it via the @open-cowork/website boundary.
+export { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
 export type WebsiteBootstrapPolicy = { role: string; profileName: string; features: Record<string, boolean>; publicBranding?: PublicBrandingConfig | null }
 
 export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
   const rawBranding = publicBranding || policy.publicBranding
   const branding = resolvePublicBranding(rawBranding)
   const tenantBrandingLocked = hasPublicBrandingThemeOverride(rawBranding)
-  const themePresets = cloudThemePresetOptions()
   const accentPresets = cloudAccentPresetOptions()
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
   const labels = branding.managedOrgConnectionLabels || DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}
@@ -42,7 +44,6 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
       defaultAccent: DEFAULT_CLOUD_THEME_ACCENT_PRESET,
       defaultDensity: DEFAULT_CLOUD_THEME_DENSITY,
       tenantBrandingLocked,
-      presets: themePresets,
       accents: accentPresets,
     },
     routes: CLOUD_WEB_ROUTES,
@@ -193,6 +194,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
                     <button class="ui-action-cluster__item" type="button" data-action-id="cloud-model" data-managed-control="true" disabled title="Model selection is managed by this cloud workspace">Cloud model</button>
                     <button class="ui-action-cluster__item" type="button" data-action-id="reasoning" data-managed-control="true" disabled title="Reasoning is managed by this cloud workspace">Think Auto</button>
                     <button class="ui-action-cluster__item" type="button" data-action-id="profile" data-managed-control="true" disabled title="Active cloud profile">${escapeHtml(policy.profileName)}</button>
+                    <button class="ui-action-cluster__item signed-in-only" id="chat-capture-knowledge" type="button" data-action-id="capture-knowledge" data-admin-control="true" disabled title="Knowledge capture requires an org owner or admin role">Capture to knowledge</button>
                   </div>
                   <button class="ghost chat-inspector-toggle" id="chat-inspector-toggle" type="button" aria-controls="chat-inspector" aria-expanded="false">Review</button>
                 </div>
@@ -243,6 +245,8 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
             </aside>
           </div>
         </section>
+
+        ${cloudKnowledgeRouteMarkup()}
 
         <section ${routePanelAttrs('approvals')}>
           <div class="section-header">

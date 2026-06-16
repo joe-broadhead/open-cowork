@@ -1,20 +1,28 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 import {
-  ControlPlaneQuotaExceededError,
+  nowIso,
+  stableJson,
+  workspaceOperationFromType,
+} from './postgres-store-id-helpers.ts'
+import {
+  normalizeNonNegativeInteger,
+  normalizeNullableText,
+  normalizePositiveInteger,
+  normalizeText,
+  optionalTrimmedText,
+  redactOperationalText,
+  retryAfterMs,
+  windowStart,
+} from './postgres-store-normalizers.ts'
+import {
   generateChannelInteractionToken,
-  generateCloudApiToken,
   hashChannelInteractionToken,
-  hashCloudApiToken,
-  verifyCloudApiTokenHash,
   decodeSessionPageCursor,
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
-import { normalizeWorkflowSteps } from '@open-cowork/shared'
 import type {
-  WorkflowRunStatus,
-  WorkflowStatus,
   CoordinationWatch,
 } from '@open-cowork/shared'
 import type {
@@ -23,15 +31,12 @@ import type {
   AuditEventRecord,
   AckChannelDeliveryInput,
   BindChannelSessionInput,
-  ByokSecretRecord,
   ChannelProviderId,
   ClaimDueWorkflowRunInput,
   ClaimChannelDeliveryInput,
   ClaimChannelProviderEventInput,
   ClaimRateLimitInput,
   ClaimedWorkflowRunRecord,
-  CloudWorkflowRecord,
-  CloudWorkflowRunRecord,
   CommandQueueQuota,
   CompleteChannelProviderEventInput,
   ConsumeUsageQuotaInput,
@@ -70,7 +75,6 @@ import type {
   ManagedWorkerRecord,
   ManagedWorkerStatus,
   ListChannelDeliveriesInput,
-  OrgMemberRecord,
   PrincipalMembershipRecord,
   RecordManagedWorkerHeartbeatInput,
   RecordAuditEventInput,
@@ -121,17 +125,10 @@ import type {
 import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
 import { workspaceEventCursorFromRow } from './workspace-event-cursor.ts'
 import { normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
-import { usageEventFromRow, billingSubscriptionFromRow } from './postgres-domains/billing.ts'
-import { byokSecretFromRow } from './postgres-domains/byok.ts'
-import { channelBindingFromRow, channelIdentityFromRow, channelInteractionFromRow, channelSessionBindingFromRow, headlessAgentFromRow } from './postgres-domains/channels.ts'
+import { usageEventFromRow } from './postgres-domains/billing.ts'
+import { channelInteractionFromRow, channelSessionBindingFromRow } from './postgres-domains/channels.ts'
 import {
-  accountFromRow,
-  apiTokenChannelBindingGrantFromRow,
-  apiTokenFromRow,
   auditEventFromRow,
-  cloudAuthBackoffFromRow,
-  membershipFromRow,
-  orgFromRow,
   tenantFromRow,
   userFromRow,
 } from './postgres-domains/identity.ts'
@@ -139,19 +136,28 @@ import { migrationFromRow } from './postgres-domains/schema.ts'
 import {
   commandFromRow,
   eventFromRow,
-  heartbeatFromRow,
   leaseFromRow,
   projectionFromRow,
   sessionFromRow,
   sessionFromRowWithProjectSource,
-  settingFromRow,
   workspaceEventFromRow,
 } from './postgres-domains/sessions.ts'
-import { iso, jsonRecord, numberValue, type QueryResult, type QueryRow } from './postgres-domains/shared.ts'
-import { threadSmartFilterFromRow, threadTagFromRow } from './postgres-domains/thread-index.ts'
-import { webhookAuthFailureFromRow } from './postgres-domains/webhooks.ts'
-import { workflowFromRow, workflowRunFromRow } from './postgres-domains/workflows.ts'
-import { assertPostgresCommandEnqueueQuotas, assertPostgresCommandQueueQuota, assertPostgresConcurrentSessionQuota, assertPostgresWorkflowRunQuota, checkPostgresActiveWorkerQuota, listPostgresRunnableSessions } from './postgres-store-domains/quotas.ts'
+import { numberValue, type QueryResult, type QueryRow } from './postgres-domains/shared.ts'
+import { assertPostgresCommandEnqueueQuotas, assertPostgresCommandQueueQuota, assertPostgresConcurrentSessionQuota, checkPostgresActiveWorkerQuota, listPostgresRunnableSessions } from './postgres-store-domains/quotas.ts'
+import { PostgresBillingRepository } from './postgres-store-domains/billing.ts'
+import { PostgresByokSecretsRepository } from './postgres-store-domains/byok.ts'
+import { PostgresApiTokensRepository } from './postgres-store-domains/api-tokens.ts'
+import { PostgresAuthBackoffRepository } from './postgres-store-domains/auth-backoff.ts'
+import { PostgresRateLimitsRepository } from './postgres-store-domains/rate-limits.ts'
+import { PostgresThreadIndexRepository } from './postgres-store-domains/thread-index.ts'
+import { PostgresWebhooksRepository } from './postgres-store-domains/webhooks.ts'
+import { PostgresWorkflowsRepository } from './postgres-store-domains/workflows.ts'
+import { PostgresWorkerHeartbeatsRepository } from './postgres-store-domains/worker-heartbeats.ts'
+import { PostgresSettingsRepository } from './postgres-store-domains/settings.ts'
+import { PostgresChannelBindingsRepository } from './postgres-store-domains/channel-bindings.ts'
+import { PostgresHeadlessAgentsRepository } from './postgres-store-domains/headless-agents.ts'
+import { PostgresChannelIdentitiesRepository } from './postgres-store-domains/channel-identities.ts'
+import { PostgresIdentityRepository } from './postgres-store-domains/identity.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
 import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/channel-deliveries.ts'
@@ -171,142 +177,29 @@ export type PostgresControlPlaneStoreOptions = {
 
 const require = createRequire(import.meta.url)
 
-const THREAD_TAG_NAME_MAX_LENGTH = 48
-const THREAD_SMART_FILTER_NAME_MAX_LENGTH = 64
-const THREAD_DEFAULT_TAG_COLOR = '#64748b'
-const THREAD_FILTER_MAX_VALUES = 50
-const THREAD_BULK_MAX_SESSION_IDS = 500
-const SMART_FILTER_QUERY_MAX_BYTES = 16_384
-const WORKFLOW_RUN_LIST_LIMIT = 100
 const CHANNEL_TEXT_MAX_LENGTH = 256
-const CHANNEL_METADATA_MAX_BYTES = 16_384
-const BYOK_PROVIDER_ID_MAX_LENGTH = 64
-const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
 function loadPgPool(connectionString: string): PgPool {
   const pg = require('pg') as { Pool: new (options: { connectionString: string }) => PgPool }
   return new pg.Pool({ connectionString })
 }
 
-function nowIso(now: Date | undefined) {
-  return (now || new Date()).toISOString()
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, entry]) => `${JSON.stringify(field)}:${stableJson(entry)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
-function stableId(prefix: string, ...parts: string[]) {
-  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
-}
-
-function createWorkClaimToken(tenantId: string, workId: string, claimedBy: string) {
-  return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
-}
-
-function workspaceOperationFromType(type: string) {
-  if (/\b(created|submitted|uploaded|started)\b/.test(type)) return 'create'
-  if (/\b(deleted|removed|archived)\b/.test(type)) return 'delete'
-  return 'update'
-}
-
-function optionalTrimmedText(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function normalizeText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const normalized = value.trim()
-  if (normalized.length > maxLength) throw new Error(`${label} exceeds ${maxLength} characters.`)
-  return normalized
-}
-
-function redactOperationalText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const redacted = value.trim()
-    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
-    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
-    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
-    .replace(/\b(?:sk-[A-Za-z0-9._-]{6,}|oc[wc]_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
-    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
-  return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength <= 3 ? maxLength : maxLength - 3)}${maxLength <= 3 ? '' : '...'}`
-}
-
-function normalizeOptionalText(value: unknown, maxLength: number, label: string) {
-  if (value === undefined) return undefined
-  return normalizeText(value, maxLength, label)
-}
-
-function normalizeTagColor(value: unknown) {
-  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value.trim())
-    ? value.trim()
-    : THREAD_DEFAULT_TAG_COLOR
-}
-
-function normalizeIdList(values: readonly unknown[], label: string, maxLength: number) {
-  if (!Array.isArray(values)) throw new Error(`${label} must be an array.`)
-  if (values.length > maxLength) throw new Error(`${label} exceeds ${maxLength} entries.`)
-  return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
-}
-
-function normalizeThreadQuery(value: unknown) {
-  const query = jsonRecord(value)
-  const serialized = stableJson(query)
-  if (Buffer.byteLength(serialized, 'utf8') > SMART_FILTER_QUERY_MAX_BYTES) {
-    throw new Error(`Smart filter query exceeds ${SMART_FILTER_QUERY_MAX_BYTES} bytes.`)
-  }
-  return query
-}
-
-function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
-  const record = jsonRecord(value)
-  const serialized = stableJson(record)
-  if (Buffer.byteLength(serialized, 'utf8') > maxBytes) {
-    throw new Error(`${label} exceeds ${maxBytes} bytes.`)
-  }
-  return record
-}
-
-function normalizeNullableText(value: unknown, maxLength: number, label: string): string | null {
-  if (value === undefined || value === null || value === '') return null
-  return normalizeText(value, maxLength, label)
-}
-
-function normalizeNonNegativeInteger(value: unknown, label: string) {
-  const parsed = Number(value ?? 0)
-  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative integer.`)
-  return parsed
-}
-
-function normalizePositiveInteger(value: unknown, label: string) {
-  const parsed = Number(value ?? 0)
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${label} must be a positive integer.`)
-  return parsed
-}
-
-function windowStart(nowMs: number, windowMs: number) {
-  return Math.floor(nowMs / windowMs) * windowMs
-}
-
-function retryAfterMs(nowMs: number, windowStartedAtMs: number, windowMs: number) {
-  return Math.max(1, windowStartedAtMs + windowMs - nowMs)
-}
-
-function normalizeByokProviderId(value: unknown) {
-  const providerId = normalizeText(value, BYOK_PROVIDER_ID_MAX_LENGTH, 'BYOK provider id').toLowerCase()
-  if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) throw new Error(`Unsupported BYOK provider id ${providerId}.`)
-  return providerId
-}
-
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
   private readonly pool: PgPool
   private readonly ownsPool: boolean
+  private readonly identity: PostgresIdentityRepository
+  private readonly apiTokens: PostgresApiTokensRepository
+  private readonly rateLimits: PostgresRateLimitsRepository
+  private readonly authBackoff: PostgresAuthBackoffRepository
+  private readonly workerHeartbeats: PostgresWorkerHeartbeatsRepository
+  private readonly threadIndex: PostgresThreadIndexRepository
+  private readonly webhooks: PostgresWebhooksRepository
+  private readonly workflows: PostgresWorkflowsRepository
+  private readonly settings: PostgresSettingsRepository
+  private readonly channelBindings: PostgresChannelBindingsRepository
+  private readonly headlessAgents: PostgresHeadlessAgentsRepository
+  private readonly channelIdentities: PostgresChannelIdentitiesRepository
+  private readonly billing: PostgresBillingRepository
+  private readonly byokSecrets: PostgresByokSecretsRepository
   private readonly managedWorkers: PostgresManagedWorkersRepository
   private readonly channelProviderEvents: PostgresChannelProviderEventsRepository
   private readonly channelDeliveries: PostgresChannelDeliveriesRepository
@@ -319,6 +212,66 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private constructor(pool: PgPool, ownsPool: boolean) {
     this.pool = pool
     this.ownsPool = ownsPool
+    this.identity = new PostgresIdentityRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+      requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+    })
+    this.apiTokens = new PostgresApiTokensRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.settings = new PostgresSettingsRepository({
+      pool: this.pool,
+      requireTenant: (tenantId) => this.requireTenant(tenantId),
+      requireTenantUser: (tenantId, userId) => this.requireTenantUser(tenantId, userId),
+    })
+    this.rateLimits = new PostgresRateLimitsRepository({ pool: this.pool })
+    this.authBackoff = new PostgresAuthBackoffRepository({ pool: this.pool })
+    this.workerHeartbeats = new PostgresWorkerHeartbeatsRepository({ pool: this.pool })
+    this.threadIndex = new PostgresThreadIndexRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+      requireSession: (tenantId, sessionId, executor) => this.requireSession(tenantId, sessionId, executor),
+    })
+    this.webhooks = new PostgresWebhooksRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+    })
+    this.workflows = new PostgresWorkflowsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+      assertLeaseTokenIfPresent: (tenantId, sessionId, leaseToken, executor) => this.assertLeaseTokenIfPresent(tenantId, sessionId, leaseToken, executor),
+      quotaDeps: this.quotaDeps,
+    })
+    this.channelBindings = new PostgresChannelBindingsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+      lockQuota: (executor, orgId, quotaKey, now) => this.lockQuota(executor, orgId, quotaKey, now),
+    })
+    this.headlessAgents = new PostgresHeadlessAgentsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.channelIdentities = new PostgresChannelIdentitiesRepository({ pool: this.pool })
+    this.billing = new PostgresBillingRepository({
+      pool: this.pool,
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.byokSecrets = new PostgresByokSecretsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
     this.managedWorkers = new PostgresManagedWorkersRepository({
       pool: this.pool,
       withTransaction: (fn) => this.withTransaction(fn),
@@ -352,14 +305,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }) {
-    await this.pool.query(
-      `INSERT INTO cloud_tenants (tenant_id, name, created_at)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (tenant_id) DO NOTHING`,
-      [input.tenantId, input.name, nowIso(input.createdAt)],
-    )
-    await this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, orgId: input.orgId, createdAt: input.createdAt })
-    return this.requireTenant(input.tenantId)
+    return this.identity.createTenant(input)
   }
 
   async ensureUser(input: {
@@ -369,405 +315,63 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     role?: ControlPlaneRole
     createdAt?: Date
   }) {
-    await this.requireTenant(input.tenantId)
-    const existing = await this.maybeOne(
-      `SELECT * FROM cloud_users WHERE tenant_id = $1 AND user_id = $2`,
-      [input.tenantId, input.userId],
-    )
-    if (existing) return userFromRow(existing)
-    await this.pool.query(
-      `INSERT INTO cloud_users (tenant_id, user_id, email, role, created_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (tenant_id, user_id) DO NOTHING`,
-      [input.tenantId, input.userId, input.email, input.role || 'member', nowIso(input.createdAt)],
-    )
-    const org = await this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId, createdAt: input.createdAt })
-    const account = await this.createAccount({
-      accountId: input.userId,
-      idpSubject: input.userId,
-      email: input.email,
-      createdAt: input.createdAt,
-    })
-    await this.upsertMembership({
-      orgId: org.orgId,
-      accountId: account.accountId,
-      role: input.role || 'member',
-      status: 'active',
-      updatedAt: input.createdAt,
-      actor: { actorType: 'system', actorId: 'compat.ensureUser' },
-    })
-    return this.requireTenantUser(input.tenantId, input.userId)
+    return this.identity.ensureUser(input)
   }
 
   async ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }) {
-    const now = nowIso(input.createdAt)
-    const result = await this.pool.query(
-      `INSERT INTO cloud_orgs (org_id, tenant_id, name, plan_key, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $6)
-       ON CONFLICT (tenant_id) DO UPDATE
-       SET name = COALESCE(NULLIF(EXCLUDED.name, ''), cloud_orgs.name),
-           plan_key = COALESCE(EXCLUDED.plan_key, cloud_orgs.plan_key),
-           status = cloud_orgs.status,
-           updated_at = EXCLUDED.updated_at
-       RETURNING *`,
-      [input.orgId || input.tenantId, input.tenantId, input.name, input.planKey ?? null, input.status || 'active', now],
-    )
-    return orgFromRow(result.rows[0])
+    return this.identity.ensureOrgForTenant(input)
   }
 
   async createAccount(input: CreateAccountInput) {
-    const now = nowIso(input.createdAt)
-    const existing = await this.maybeOne(
-      `SELECT * FROM cloud_accounts
-       WHERE ($1::text IS NOT NULL AND idp_subject = $1)
-          OR lower(email) = lower($2)
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-      [input.idpSubject || null, input.email],
-    )
-    if (existing) {
-      const result = await this.pool.query(
-        `UPDATE cloud_accounts
-         SET idp_subject = COALESCE(cloud_accounts.idp_subject, $2),
-             email = lower($3),
-             display_name = COALESCE($4, cloud_accounts.display_name),
-             updated_at = $5
-         WHERE account_id = $1
-         RETURNING *`,
-        [
-          existing.account_id,
-          input.idpSubject || null,
-          input.email,
-          input.displayName || null,
-          now,
-        ],
-      )
-      return accountFromRow(result.rows[0])
-    }
-    const result = await this.pool.query(
-      `INSERT INTO cloud_accounts (account_id, idp_subject, email, display_name, created_at, updated_at)
-       VALUES ($1, $2, lower($3), $4, $5, $5)
-       ON CONFLICT (account_id) DO UPDATE
-       SET idp_subject = COALESCE(cloud_accounts.idp_subject, EXCLUDED.idp_subject),
-           email = EXCLUDED.email,
-           display_name = COALESCE(EXCLUDED.display_name, cloud_accounts.display_name),
-           updated_at = EXCLUDED.updated_at
-       RETURNING *`,
-      [input.accountId, input.idpSubject || null, input.email, input.displayName || null, now],
-    )
-    return accountFromRow(result.rows[0])
+    return this.identity.createAccount(input)
   }
 
   async findAccountBySubject(idpSubject: string) {
-    const row = await this.maybeOne(`SELECT * FROM cloud_accounts WHERE idp_subject = $1`, [idpSubject])
-    return row ? accountFromRow(row) : null
+    return this.identity.findAccountBySubject(idpSubject)
   }
 
   async findAccountByEmail(email: string) {
-    const row = await this.maybeOne(`SELECT * FROM cloud_accounts WHERE lower(email) = lower($1)`, [email])
-    return row ? accountFromRow(row) : null
+    return this.identity.findAccountByEmail(email)
   }
 
   async upsertMembership(input: UpsertMembershipInput) {
-    return this.withTransaction(async (client) => {
-      const existing = await this.maybeOne(
-        `SELECT * FROM cloud_memberships WHERE org_id = $1 AND account_id = $2`,
-        [input.orgId, input.accountId],
-        client,
-      )
-      const now = nowIso(input.updatedAt)
-      const result = await client.query(
-        `INSERT INTO cloud_memberships (org_id, account_id, role, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $5)
-         ON CONFLICT (org_id, account_id) DO UPDATE
-         SET role = EXCLUDED.role,
-             status = EXCLUDED.status,
-             updated_at = EXCLUDED.updated_at
-         RETURNING *`,
-        [input.orgId, input.accountId, input.role, input.status || 'active', now],
-      )
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: input.orgId,
-        accountId: input.accountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: existing ? 'membership.updated' : 'membership.created',
-        targetType: 'membership',
-        targetId: `${input.orgId}:${input.accountId}`,
-        metadata: { role: input.role, status: input.status || 'active' },
-        createdAt: input.updatedAt,
-      })
-      return membershipFromRow(result.rows[0])
-    })
+    return this.identity.upsertMembership(input)
   }
 
   async listOrgMembers(orgId: string, input: { query?: string | null, limit?: number | null } = {}) {
-    const queryText = input.query?.trim() || null
-    const result = await this.pool.query(
-      `SELECT
-         m.org_id,
-         m.account_id,
-         a.email,
-         a.display_name,
-         m.role,
-         m.status,
-         m.created_at,
-         m.updated_at
-       FROM cloud_memberships m
-       JOIN cloud_accounts a ON a.account_id = m.account_id
-       WHERE m.org_id = $1
-         AND (
-           $2::text IS NULL
-           OR m.account_id ILIKE '%' || $2 || '%'
-           OR a.email ILIKE '%' || $2 || '%'
-           OR COALESCE(a.display_name, '') ILIKE '%' || $2 || '%'
-           OR m.role ILIKE '%' || $2 || '%'
-           OR m.status ILIKE '%' || $2 || '%'
-         )
-       ORDER BY m.updated_at DESC, a.email ASC
-       LIMIT $3`,
-      [orgId, queryText, Math.max(1, Math.min(input.limit || 100, 500))],
-    )
-    return result.rows.map((row): OrgMemberRecord => ({
-      orgId: String(row.org_id),
-      accountId: String(row.account_id),
-      email: String(row.email),
-      displayName: row.display_name ? String(row.display_name) : null,
-      role: row.role as OrgMemberRecord['role'],
-      status: row.status as OrgMemberRecord['status'],
-      createdAt: iso(row.created_at),
-      updatedAt: iso(row.updated_at),
-    }))
+    return this.identity.listOrgMembers(orgId, input)
   }
 
   async listMembershipsForAccount(accountId: string) {
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_memberships WHERE account_id = $1 ORDER BY updated_at DESC, org_id`,
-      [accountId],
-    )
-    return result.rows.map(membershipFromRow)
+    return this.identity.listMembershipsForAccount(accountId)
   }
 
   async resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): Promise<PrincipalMembershipRecord | null> {
-    const row = await this.maybeOne(
-      `SELECT
-         o.org_id, o.tenant_id, o.name AS org_name, o.plan_key, o.status AS org_status,
-         o.created_at AS org_created_at, o.updated_at AS org_updated_at,
-         a.account_id, a.idp_subject, a.email, a.display_name,
-         a.created_at AS account_created_at, a.updated_at AS account_updated_at,
-         m.role, m.status AS membership_status,
-         m.created_at AS membership_created_at, m.updated_at AS membership_updated_at
-       FROM cloud_orgs o
-       JOIN cloud_memberships m ON m.org_id = o.org_id
-       JOIN cloud_accounts a ON a.account_id = m.account_id
-       WHERE (o.tenant_id = $1 OR o.org_id = $1)
-         AND (
-           ($2::text IS NOT NULL AND a.account_id = $2)
-           OR ($3::text IS NOT NULL AND a.idp_subject = $3)
-           OR ($4::text IS NOT NULL AND lower(a.email) = lower($4))
-           OR ($5::text IS NOT NULL AND a.account_id = $5)
-         )
-       ORDER BY
-         CASE
-           WHEN $2::text IS NOT NULL AND a.account_id = $2 THEN 0
-           WHEN $3::text IS NOT NULL AND a.idp_subject = $3 THEN 1
-           WHEN $4::text IS NOT NULL AND lower(a.email) = lower($4) THEN 2
-           WHEN $5::text IS NOT NULL AND a.account_id = $5 THEN 3
-           ELSE 4
-         END,
-         m.updated_at DESC
-       LIMIT 1`,
-      [input.tenantId, input.accountId || null, input.idpSubject || null, input.email || null, input.userId || null],
-    )
-    if (!row) return null
-    return {
-      org: orgFromRow({
-        org_id: row.org_id,
-        tenant_id: row.tenant_id,
-        name: row.org_name,
-        plan_key: row.plan_key,
-        status: row.org_status,
-        created_at: row.org_created_at,
-        updated_at: row.org_updated_at,
-      }),
-      account: accountFromRow({
-        account_id: row.account_id,
-        idp_subject: row.idp_subject,
-        email: row.email,
-        display_name: row.display_name,
-        created_at: row.account_created_at,
-        updated_at: row.account_updated_at,
-      }),
-      membership: membershipFromRow({
-        org_id: row.org_id,
-        account_id: row.account_id,
-        role: row.role,
-        status: row.membership_status,
-        created_at: row.membership_created_at,
-        updated_at: row.membership_updated_at,
-      }),
-    }
+    return this.identity.resolvePrincipalMembership(input)
   }
 
   async issueApiToken(input: IssueApiTokenInput): Promise<IssuedApiTokenRecord> {
-    return this.withTransaction(async (client) => {
-      const generated = generateCloudApiToken(input)
-      const now = nowIso(input.createdAt)
-      const result = await client.query(
-        `INSERT INTO cloud_api_tokens (
-          token_id, org_id, account_id, name, token_hash, scopes, last4,
-          expires_at, revoked_at, last_used_at, created_at, updated_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, NULL, NULL, $9, $9)
-         RETURNING *`,
-        [
-          generated.tokenId,
-          input.orgId,
-          input.accountId || null,
-          normalizeText(input.name, 96, 'API token name'),
-          hashCloudApiToken(generated.plaintext),
-          JSON.stringify([...new Set(input.scopes)]),
-          generated.plaintext.slice(-4),
-          input.expiresAt ? input.expiresAt.toISOString() : null,
-          now,
-        ],
-      )
-      const token = apiTokenFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: input.orgId,
-        accountId: input.accountId || null,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'api_token.created',
-        targetType: 'api_token',
-        targetId: token.tokenId,
-        metadata: { name: token.name, scopes: token.scopes, last4: token.last4 },
-        createdAt: input.createdAt,
-      })
-      return { token, plaintext: generated.plaintext }
-    })
+    return this.apiTokens.issueApiToken(input)
   }
 
   async findApiTokenByPlaintext(plaintext: string, now = new Date()) {
-    const nowText = nowIso(now)
-    const candidates = await this.pool.query(
-      `SELECT *
-       FROM cloud_api_tokens
-       WHERE left($1, length('occ_' || token_id || '_')) = ('occ_' || token_id || '_')
-         AND revoked_at IS NULL
-         AND (expires_at IS NULL OR expires_at > $2)
-       ORDER BY created_at DESC`,
-      [plaintext, nowText],
-    )
-    const matched = candidates.rows.find((row) => verifyCloudApiTokenHash(plaintext, String(row.token_hash)))
-    if (!matched) return null
-    const result = await this.pool.query(
-      `UPDATE cloud_api_tokens
-       SET last_used_at = $2, updated_at = $2
-       WHERE token_id = $1
-         AND revoked_at IS NULL
-         AND (expires_at IS NULL OR expires_at > $2)
-       RETURNING *`,
-      [String(matched.token_id), nowText],
-    )
-    return result.rows[0] ? apiTokenFromRow(result.rows[0]) : null
+    return this.apiTokens.findApiTokenByPlaintext(plaintext, now)
   }
 
   async listApiTokens(orgId: string) {
-    const result = await this.pool.query(
-      `SELECT *
-       FROM cloud_api_tokens
-       WHERE org_id = $1
-       ORDER BY created_at DESC`,
-      [orgId],
-    )
-    return result.rows.map(apiTokenFromRow)
+    return this.apiTokens.listApiTokens(orgId)
   }
 
   async revokeApiToken(input: RevokeApiTokenInput) {
-    return this.withTransaction(async (client) => {
-      const now = nowIso(input.revokedAt)
-      const result = await client.query(
-        `UPDATE cloud_api_tokens
-         SET revoked_at = COALESCE(revoked_at, $2), updated_at = $2
-         WHERE token_id = $1
-           AND ($3::text IS NULL OR org_id = $3)
-         RETURNING *`,
-        [input.tokenId, now, input.orgId || null],
-      )
-      if (!result.rows[0]) return null
-      const token = apiTokenFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: token.orgId,
-        accountId: token.accountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'api_token.revoked',
-        targetType: 'api_token',
-        targetId: token.tokenId,
-        metadata: { name: token.name, scopes: token.scopes, last4: token.last4 },
-        createdAt: input.revokedAt,
-      })
-      return token
-    })
+    return this.apiTokens.revokeApiToken(input)
   }
 
   async grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): Promise<ApiTokenChannelBindingGrantRecord> {
-    return this.withTransaction(async (client) => {
-      const tokenRow = await this.maybeOne(
-        `SELECT * FROM cloud_api_tokens WHERE org_id = $1 AND token_id = $2`,
-        [input.orgId, input.tokenId],
-        client,
-      )
-      if (!tokenRow) throw new Error(`Unknown API token ${input.tokenId}.`)
-      const bindingRow = await this.maybeOne(
-        `SELECT * FROM cloud_channel_bindings WHERE org_id = $1 AND binding_id = $2`,
-        [input.orgId, input.channelBindingId],
-        client,
-      )
-      if (!bindingRow) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
-      const createdAt = nowIso(input.createdAt)
-      const result = await client.query(
-        `INSERT INTO cloud_api_token_channel_binding_grants (
-          org_id, token_id, channel_binding_id, created_at
-         )
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (org_id, token_id, channel_binding_id) DO NOTHING
-         RETURNING *`,
-        [input.orgId, input.tokenId, input.channelBindingId, createdAt],
-      )
-      const row = result.rows[0] || await this.one(
-        `SELECT * FROM cloud_api_token_channel_binding_grants
-         WHERE org_id = $1 AND token_id = $2 AND channel_binding_id = $3`,
-        [input.orgId, input.tokenId, input.channelBindingId],
-        client,
-      )
-      if (result.rows[0]) {
-        const token = apiTokenFromRow(tokenRow)
-        await this.recordAuditEventWithExecutor(client, {
-          orgId: input.orgId,
-          accountId: input.actor?.accountId || token.accountId,
-          actorType: input.actor?.actorType || 'system',
-          actorId: input.actor?.actorId || null,
-          eventType: 'api_token.channel_binding_granted',
-          targetType: 'api_token',
-          targetId: input.tokenId,
-          metadata: { channelBindingId: input.channelBindingId },
-          createdAt: input.createdAt,
-        })
-      }
-      return apiTokenChannelBindingGrantFromRow(row)
-    })
+    return this.apiTokens.grantApiTokenChannelBinding(input)
   }
 
   async listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): Promise<ApiTokenChannelBindingGrantRecord[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_api_token_channel_binding_grants
-       WHERE org_id = $1 AND token_id = $2
-       ORDER BY channel_binding_id`,
-      [input.orgId, input.tokenId],
-    )
-    return result.rows.map(apiTokenChannelBindingGrantFromRow)
+    return this.apiTokens.listApiTokenChannelBindingGrants(input)
   }
 
   async createManagedWorkerPool(input: CreateManagedWorkerPoolInput): Promise<ManagedWorkerPoolRecord> {
@@ -877,80 +481,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async upsertBillingSubscription(input: UpsertBillingSubscriptionInput) {
-    await this.requireOrg(input.orgId)
-    const now = nowIso(input.updatedAt)
-    const priorRow = await this.maybeOne(
-      `SELECT * FROM cloud_subscriptions WHERE org_id = $1`,
-      [input.orgId],
-    )
-    const prior = priorRow ? billingSubscriptionFromRow(priorRow) : null
-    const result = await this.pool.query(
-      `INSERT INTO cloud_subscriptions (
-        org_id, plan_key, provider_id, provider_customer_id, provider_subscription_id,
-        status, seats, entitlements, current_period_end, cancel_at_period_end,
-        metadata, created_at, updated_at
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $12)
-       ON CONFLICT (org_id) DO UPDATE
-       SET plan_key = EXCLUDED.plan_key,
-           provider_id = EXCLUDED.provider_id,
-           provider_customer_id = EXCLUDED.provider_customer_id,
-           provider_subscription_id = EXCLUDED.provider_subscription_id,
-           status = EXCLUDED.status,
-           seats = EXCLUDED.seats,
-           entitlements = EXCLUDED.entitlements,
-           current_period_end = EXCLUDED.current_period_end,
-           cancel_at_period_end = EXCLUDED.cancel_at_period_end,
-           metadata = EXCLUDED.metadata,
-           updated_at = EXCLUDED.updated_at
-       RETURNING *`,
-      [
-        input.orgId,
-        normalizeText(input.planKey, CHANNEL_TEXT_MAX_LENGTH, 'Billing plan key'),
-        normalizeText(input.providerId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider id'),
-        input.providerCustomerId ? normalizeText(input.providerCustomerId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider customer id') : null,
-        input.providerSubscriptionId ? normalizeText(input.providerSubscriptionId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider subscription id') : null,
-        input.status,
-        normalizePositiveInteger(input.seats || 1, 'Billing seats'),
-        JSON.stringify(jsonRecord(input.entitlements)),
-        input.currentPeriodEnd ? (input.currentPeriodEnd instanceof Date ? input.currentPeriodEnd.toISOString() : new Date(input.currentPeriodEnd).toISOString()) : null,
-        input.cancelAtPeriodEnd === true,
-        JSON.stringify(redactAuditMetadata(input.metadata)),
-        now,
-      ],
-    )
-    const subscription = billingSubscriptionFromRow(result.rows[0])
-    await this.recordAuditEvent({
-      orgId: subscription.orgId,
-      actorType: 'system',
-      actorId: 'billing.subscription.upsert',
-      eventType: prior ? 'billing.subscription.updated' : 'billing.subscription.created',
-      targetType: 'billing_subscription',
-      targetId: subscription.providerSubscriptionId || subscription.orgId,
-      metadata: {
-        providerId: subscription.providerId,
-        previousPlanKey: prior?.planKey || null,
-        previousStatus: prior?.status || null,
-        previousEntitlementsHash: prior ? stableJson(prior.entitlements) : null,
-        planKey: subscription.planKey,
-        status: subscription.status,
-        entitlementsHash: stableJson(subscription.entitlements),
-        seats: subscription.seats,
-        providerCustomerId: subscription.providerCustomerId,
-        providerSubscriptionId: subscription.providerSubscriptionId,
-        providerEventId: input.metadata?.stripeEventId || input.metadata?.eventId || null,
-      },
-      createdAt: input.updatedAt,
-    })
-    return subscription
+    return this.billing.upsertBillingSubscription(input)
   }
 
   async getBillingSubscription(orgId: string) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_subscriptions WHERE org_id = $1`,
-      [orgId],
-    )
-    return row ? billingSubscriptionFromRow(row) : null
+    return this.billing.getBillingSubscription(orgId)
   }
 
   async findBillingSubscriptionByProvider(input: {
@@ -958,683 +493,91 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     providerCustomerId?: string | null
     providerSubscriptionId?: string | null
   }) {
-    const providerId = normalizeText(input.providerId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider id')
-    const row = input.providerSubscriptionId
-      ? await this.maybeOne(
-        `SELECT * FROM cloud_subscriptions
-         WHERE provider_id = $1 AND provider_subscription_id = $2`,
-        [providerId, input.providerSubscriptionId],
-      )
-      : input.providerCustomerId
-        ? await this.maybeOne(
-          `SELECT * FROM cloud_subscriptions
-           WHERE provider_id = $1 AND provider_customer_id = $2
-           ORDER BY updated_at DESC
-           LIMIT 1`,
-          [providerId, input.providerCustomerId],
-        )
-        : null
-    return row ? billingSubscriptionFromRow(row) : null
+    return this.billing.findBillingSubscriptionByProvider(input)
   }
 
   async claimRateLimit(input: ClaimRateLimitInput) {
-    const limit = normalizePositiveInteger(input.limit, 'Rate limit')
-    const windowMs = normalizePositiveInteger(input.windowMs, 'Rate-limit window')
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const startedAtMs = windowStart(nowMs, windowMs)
-    const result = await this.pool.query(
-      `INSERT INTO cloud_rate_limits (scope, source, window_started_at_ms, count)
-       VALUES ($1, $2, $3, 1)
-       ON CONFLICT (scope, source) DO UPDATE
-       SET window_started_at_ms = CASE
-             WHEN cloud_rate_limits.window_started_at_ms = $3 THEN cloud_rate_limits.window_started_at_ms
-             ELSE $3
-           END,
-           count = CASE
-             WHEN cloud_rate_limits.window_started_at_ms = $3 THEN cloud_rate_limits.count + 1
-             ELSE 1
-           END
-       RETURNING count, window_started_at_ms`,
-      [input.scope, input.source, startedAtMs],
-    )
-    const count = numberValue(result.rows[0]?.count)
-    const resetMs = retryAfterMs(nowMs, numberValue(result.rows[0]?.window_started_at_ms), windowMs)
-    return {
-      allowed: count <= limit,
-      scope: input.scope,
-      source: input.source,
-      limit,
-      count,
-      resetAt: new Date(nowMs + resetMs).toISOString(),
-      retryAfterMs: resetMs,
-      policyCode: input.policyCode,
-    }
+    return this.rateLimits.claimRateLimit(input)
   }
 
   async checkCloudAuthBackoff(input: { scope: string, source?: string, now?: Date }) {
-    const nowMs = (input.now || new Date()).getTime()
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_auth_failures WHERE scope = $1`,
-      [input.scope],
-    )
-    if (!row) {
-      return {
-        allowed: true,
-        scope: input.scope,
-        source: input.source || input.scope,
-        failureCount: 0,
-        blockedUntilMs: 0,
-        retryAfterMs: 0,
-      }
-    }
-    return cloudAuthBackoffFromRow(row, nowMs)
+    return this.authBackoff.checkCloudAuthBackoff(input)
   }
 
   async recordCloudAuthFailure(input: RecordCloudAuthFailureInput) {
-    const nowMs = (input.now || new Date()).getTime()
-    const windowMs = normalizePositiveInteger(input.windowMs, 'Auth backoff window')
-    const limit = normalizePositiveInteger(input.limit, 'Auth failure limit')
-    const backoffMs = normalizePositiveInteger(input.backoffMs, 'Auth backoff duration')
-    const startedAtMs = windowStart(nowMs, windowMs)
-    const blockedUntilMs = nowMs + backoffMs
-    const result = await this.pool.query(
-      `INSERT INTO cloud_auth_failures (
-        scope, source, auth_window_started_at_ms, auth_failure_count, blocked_until_ms
-       )
-       VALUES ($1, $2, $3, 1, CASE WHEN $4 <= 1 THEN $5 ELSE 0 END)
-       ON CONFLICT (scope) DO UPDATE
-       SET source = EXCLUDED.source,
-           auth_window_started_at_ms = CASE
-             WHEN cloud_auth_failures.auth_window_started_at_ms = $3 THEN cloud_auth_failures.auth_window_started_at_ms
-             ELSE $3
-           END,
-           auth_failure_count = CASE
-             WHEN cloud_auth_failures.auth_window_started_at_ms = $3 THEN cloud_auth_failures.auth_failure_count + 1
-             ELSE 1
-           END,
-           blocked_until_ms = CASE
-             WHEN (
-               CASE
-                 WHEN cloud_auth_failures.auth_window_started_at_ms = $3 THEN cloud_auth_failures.auth_failure_count + 1
-                 ELSE 1
-               END
-             ) >= $4 THEN GREATEST(cloud_auth_failures.blocked_until_ms, $5)
-             ELSE cloud_auth_failures.blocked_until_ms
-           END
-       RETURNING *`,
-      [input.scope, input.source, startedAtMs, limit, blockedUntilMs],
-    )
-    return cloudAuthBackoffFromRow(result.rows[0], nowMs)
+    return this.authBackoff.recordCloudAuthFailure(input)
   }
 
   async createByokSecret(input: CreateByokSecretInput) {
-    return this.withTransaction(async (client) => {
-      const providerId = normalizeByokProviderId(input.providerId)
-      const ciphertext = normalizeNullableText(input.ciphertext, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK ciphertext')
-      const kmsRef = normalizeNullableText(input.kmsRef, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK KMS ref')
-      if ((ciphertext && kmsRef) || (!ciphertext && !kmsRef)) {
-        throw new Error('BYOK secret requires exactly one of ciphertext or kmsRef.')
-      }
-      const status = input.status || 'pending_validation'
-      const now = nowIso(input.createdAt)
-      const prior = status === 'active'
-        ? await client.query(
-          `UPDATE cloud_byok_secrets
-           SET status = 'disabled', updated_at = $3
-           WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
-           RETURNING *`,
-          [input.orgId, providerId, now],
-        )
-        : await client.query(
-          `SELECT * FROM cloud_byok_secrets
-           WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
-           LIMIT 1`,
-          [input.orgId, providerId],
-        )
-      const priorActive = prior.rows[0] ? byokSecretFromRow(prior.rows[0]) : null
-      const result = await client.query(
-        `INSERT INTO cloud_byok_secrets (
-          secret_id, org_id, provider_id, status, ciphertext, kms_ref, last4,
-          key_fingerprint, created_by_account_id, rotated_from_secret_id,
-          last_validated_at, validation_error, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, NULL, $11, $11)
-        RETURNING *`,
-        [
-          normalizeText(input.secretId, CHANNEL_TEXT_MAX_LENGTH, 'BYOK secret id'),
-          input.orgId,
-          providerId,
-          status,
-          ciphertext,
-          kmsRef,
-          normalizeText(input.last4, 32, 'BYOK secret last4'),
-          normalizeText(input.keyFingerprint, 128, 'BYOK key fingerprint'),
-          input.createdByAccountId || null,
-          input.rotatedFromSecretId || priorActive?.secretId || null,
-          now,
-        ],
-      )
-      const secret = byokSecretFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: secret.orgId,
-        accountId: secret.createdByAccountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: priorActive
-          ? status === 'active'
-            ? 'byok_secret.rotated'
-            : 'byok_secret.rotation_started'
-          : 'byok_secret.created',
-        targetType: 'byok_secret',
-        targetId: secret.secretId,
-        metadata: {
-          providerId: secret.providerId,
-          status: secret.status,
-          last4: secret.last4,
-          keyFingerprint: secret.keyFingerprint,
-          rotatedFromSecretId: secret.rotatedFromSecretId,
-        },
-        createdAt: input.createdAt,
-      })
-      return secret
-    })
+    return this.byokSecrets.createByokSecret(input)
   }
 
   async getByokSecret(orgId: string, providerId: string) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_byok_secrets
-       WHERE org_id = $1 AND provider_id = $2
-       ORDER BY updated_at DESC, created_at DESC, secret_id DESC
-       LIMIT 1`,
-      [orgId, normalizeByokProviderId(providerId)],
-    )
-    return row ? byokSecretFromRow(row) : null
+    return this.byokSecrets.getByokSecret(orgId, providerId)
   }
 
   async getActiveByokSecret(orgId: string, providerId: string) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_byok_secrets
-       WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
-       ORDER BY updated_at DESC, created_at DESC, secret_id DESC
-       LIMIT 1`,
-      [orgId, normalizeByokProviderId(providerId)],
-    )
-    return row ? byokSecretFromRow(row) : null
+    return this.byokSecrets.getActiveByokSecret(orgId, providerId)
   }
 
   async listByokSecrets(orgId: string) {
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_byok_secrets
-       WHERE org_id = $1
-       ORDER BY updated_at DESC, created_at DESC, provider_id, secret_id DESC`,
-      [orgId],
-    )
-    return result.rows.map(byokSecretFromRow)
+    return this.byokSecrets.listByokSecrets(orgId)
   }
 
   async disableByokSecret(input: DisableByokSecretInput) {
-    return this.withTransaction(async (client) => {
-      const providerId = normalizeByokProviderId(input.providerId)
-      const now = nowIso(input.disabledAt)
-      const result = await client.query(
-        `UPDATE cloud_byok_secrets
-         SET status = 'disabled', updated_at = $4
-         WHERE org_id = $1
-           AND provider_id = $2
-           AND ($3::text IS NULL OR secret_id = $3)
-           AND status <> 'disabled'
-         RETURNING *`,
-        [input.orgId, providerId, input.secretId || null, now],
-      )
-      if (!result.rows[0]) return null
-      const secrets = result.rows
-        .map(byokSecretFromRow)
-        .sort((left, right) => (
-          right.updatedAt.localeCompare(left.updatedAt)
-          || right.createdAt.localeCompare(left.createdAt)
-          || right.secretId.localeCompare(left.secretId)
-        ))
-      for (const secret of secrets) {
-        await this.recordAuditEventWithExecutor(client, {
-          orgId: secret.orgId,
-          accountId: input.actor?.accountId || secret.createdByAccountId,
-          actorType: input.actor?.actorType || 'system',
-          actorId: input.actor?.actorId || null,
-          eventType: 'byok_secret.disabled',
-          targetType: 'byok_secret',
-          targetId: secret.secretId,
-          metadata: { providerId: secret.providerId, status: secret.status, last4: secret.last4, keyFingerprint: secret.keyFingerprint },
-          createdAt: input.disabledAt,
-        })
-      }
-      return secrets[0]
-    })
+    return this.byokSecrets.disableByokSecret(input)
   }
 
   async recordByokSecretValidation(input: RecordByokSecretValidationInput) {
-    return this.withTransaction(async (client) => {
-      const providerId = normalizeByokProviderId(input.providerId)
-      const now = nowIso(input.validatedAt)
-      let priorActive: ByokSecretRecord | null = null
-      let targetSecretId = input.secretId || null
-      if (input.status === 'active') {
-        const target = await client.query(
-          `SELECT * FROM cloud_byok_secrets
-           WHERE org_id = $1
-             AND provider_id = $2
-             AND ($3::text IS NULL OR secret_id = $3)
-             AND ($3::text IS NOT NULL OR status = 'active')
-           ORDER BY updated_at DESC, created_at DESC, secret_id DESC
-           LIMIT 1
-           FOR UPDATE`,
-          [input.orgId, providerId, targetSecretId],
-        )
-        if (!target.rows[0]) return null
-        targetSecretId = String(target.rows[0].secret_id)
-        const prior = await client.query(
-          `UPDATE cloud_byok_secrets
-           SET status = 'disabled', updated_at = $4
-           WHERE org_id = $1
-             AND provider_id = $2
-             AND secret_id <> $3
-             AND status = 'active'
-           RETURNING *`,
-          [input.orgId, providerId, targetSecretId, now],
-        )
-        priorActive = prior.rows
-          .map(byokSecretFromRow)
-          .sort((left, right) => (
-            right.updatedAt.localeCompare(left.updatedAt)
-            || right.createdAt.localeCompare(left.createdAt)
-            || right.secretId.localeCompare(left.secretId)
-          ))[0] || null
-      }
-      const result = await client.query(
-        `UPDATE cloud_byok_secrets
-         SET status = COALESCE($4, status),
-             last_validated_at = $5,
-             validation_error = $6,
-             rotated_from_secret_id = COALESCE(rotated_from_secret_id, $7),
-             updated_at = $5
-         WHERE org_id = $1
-           AND provider_id = $2
-           AND ($3::text IS NULL OR secret_id = $3)
-           AND ($3::text IS NOT NULL OR status = 'active')
-         RETURNING *`,
-        [
-          input.orgId,
-          providerId,
-          targetSecretId,
-          input.status || null,
-          now,
-          input.validationError || null,
-          input.status === 'active' ? priorActive?.secretId || null : null,
-        ],
-      )
-      if (!result.rows[0]) return null
-      const secret = byokSecretFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: secret.orgId,
-        accountId: input.actor?.accountId || secret.createdByAccountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'byok_secret.validated',
-        targetType: 'byok_secret',
-        targetId: secret.secretId,
-        metadata: {
-          providerId: secret.providerId,
-          status: secret.status,
-          last4: secret.last4,
-          keyFingerprint: secret.keyFingerprint,
-          validationError: secret.validationError,
-        },
-        createdAt: input.validatedAt,
-      })
-      if (input.status === 'active' && (priorActive || secret.rotatedFromSecretId)) {
-        await this.recordAuditEventWithExecutor(client, {
-          orgId: secret.orgId,
-          accountId: input.actor?.accountId || secret.createdByAccountId,
-          actorType: input.actor?.actorType || 'system',
-          actorId: input.actor?.actorId || null,
-          eventType: 'byok_secret.rotated',
-          targetType: 'byok_secret',
-          targetId: secret.secretId,
-          metadata: {
-            providerId: secret.providerId,
-            status: secret.status,
-            last4: secret.last4,
-            keyFingerprint: secret.keyFingerprint,
-            rotatedFromSecretId: secret.rotatedFromSecretId || priorActive?.secretId || null,
-          },
-          createdAt: input.validatedAt,
-        })
-      }
-      return secret
-    })
+    return this.byokSecrets.recordByokSecretValidation(input)
   }
 
   async createHeadlessAgent(input: CreateHeadlessAgentInput) {
-    return this.withTransaction(async (client) => {
-      const now = nowIso(input.createdAt)
-      const result = await client.query(
-        `INSERT INTO headless_agents (
-          agent_id, org_id, tenant_id, profile_name, name, status, managed,
-          created_by_account_id, created_at, updated_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-         ON CONFLICT (agent_id) DO NOTHING
-         RETURNING *`,
-        [
-          normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
-          input.orgId,
-          input.tenantId,
-          normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
-          normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
-          input.status || 'active',
-          input.managed === true,
-          input.createdByAccountId || null,
-          now,
-        ],
-      )
-      const row = result.rows[0] || await this.one(
-        `SELECT * FROM headless_agents WHERE agent_id = $1 AND org_id = $2`,
-        [input.agentId, input.orgId],
-        client,
-      )
-      const agent = headlessAgentFromRow(row)
-      if (result.rows[0]) {
-        await this.recordAuditEventWithExecutor(client, {
-          orgId: agent.orgId,
-          accountId: agent.createdByAccountId,
-          actorType: 'system',
-          actorId: 'headless_agent.create',
-          eventType: 'headless_agent.created',
-          targetType: 'headless_agent',
-          targetId: agent.agentId,
-          metadata: { name: agent.name, profileName: agent.profileName, managed: agent.managed },
-          createdAt: input.createdAt,
-        })
-      }
-      return agent
-    })
+    return this.headlessAgents.createHeadlessAgent(input)
   }
 
   async updateHeadlessAgent(input: UpdateHeadlessAgentInput) {
-    return this.withTransaction(async (client) => {
-      const result = await client.query(
-        `UPDATE headless_agents
-         SET profile_name = CASE WHEN $3::boolean THEN $4 ELSE profile_name END,
-             name = CASE WHEN $5::boolean THEN $6 ELSE name END,
-             status = COALESCE($7, status),
-             managed = CASE WHEN $8::boolean THEN $9 ELSE managed END,
-             updated_at = $10
-         WHERE org_id = $1 AND agent_id = $2
-         RETURNING *`,
-        [
-          input.orgId,
-          input.agentId,
-          input.profileName !== undefined,
-          input.profileName === undefined ? null : normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
-          input.name !== undefined,
-          input.name === undefined ? null : normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
-          input.status || null,
-          input.managed !== undefined,
-          input.managed ?? null,
-          nowIso(input.updatedAt),
-        ],
-      )
-      if (!result.rows[0]) return null
-      const agent = headlessAgentFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: input.orgId,
-        accountId: input.actor?.accountId || null,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'headless_agent.updated',
-        targetType: 'headless_agent',
-        targetId: agent.agentId,
-        metadata: {
-          profileName: agent.profileName,
-          name: agent.name,
-          status: agent.status,
-          managed: agent.managed,
-        },
-        createdAt: input.updatedAt,
-      })
-      return agent
-    })
+    return this.headlessAgents.updateHeadlessAgent(input)
   }
 
   async getHeadlessAgent(orgId: string, agentId: string) {
-    const row = await this.maybeOne(`SELECT * FROM headless_agents WHERE org_id = $1 AND agent_id = $2`, [orgId, agentId])
-    return row ? headlessAgentFromRow(row) : null
+    return this.headlessAgents.getHeadlessAgent(orgId, agentId)
   }
 
   async listHeadlessAgents(orgId: string) {
-    const result = await this.pool.query(
-      `SELECT * FROM headless_agents WHERE org_id = $1 ORDER BY updated_at DESC, agent_id`,
-      [orgId],
-    )
-    return result.rows.map(headlessAgentFromRow)
+    return this.headlessAgents.listHeadlessAgents(orgId)
   }
 
   async createChannelBinding(input: CreateChannelBindingInput) {
-    return this.withTransaction(async (client) => {
-      const now = nowIso(input.createdAt)
-      const bindingLimit = input.quota?.maxGatewayChannelBindingsPerOrg
-      if (bindingLimit && bindingLimit > 0) {
-        await this.lockQuota(client, input.orgId, 'gateway_channel_bindings')
-        const countRow = await this.one(
-          `SELECT count(*)::int AS count
-           FROM cloud_channel_bindings
-           WHERE org_id = $1 AND status <> 'disabled'`,
-          [input.orgId],
-          client,
-        )
-        const activeBindings = numberValue(countRow.count)
-        if (activeBindings >= bindingLimit) {
-          throw new ControlPlaneQuotaExceededError({
-            message: 'Gateway channel binding quota exceeded.',
-            policyCode: input.quota?.policyCode || 'quota.gateway_channel_bindings_exceeded',
-            retryAfterMs: 60_000,
-            limit: bindingLimit,
-            used: activeBindings,
-            resetAt: new Date(Date.now() + 60_000).toISOString(),
-          })
-        }
-      }
-      const result = await client.query(
-        `INSERT INTO cloud_channel_bindings (
-          binding_id, org_id, agent_id, provider, external_workspace_id,
-          display_name, status, credential_ref, settings, created_at, updated_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)
-         ON CONFLICT (binding_id) DO NOTHING
-         RETURNING *`,
-        [
-          normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
-          input.orgId,
-          input.agentId,
-          normalizeProvider(input.provider),
-          normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id'),
-          normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
-          input.status || 'active',
-          normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
-          JSON.stringify(normalizeRecord(input.settings, 'Channel binding settings')),
-          now,
-        ],
-      )
-      const row = result.rows[0] || await this.one(
-        `SELECT * FROM cloud_channel_bindings WHERE org_id = $1 AND binding_id = $2`,
-        [input.orgId, input.bindingId],
-        client,
-      )
-      const binding = channelBindingFromRow(row)
-      if (result.rows[0]) {
-        await this.recordAuditEventWithExecutor(client, {
-          orgId: binding.orgId,
-          actorType: 'system',
-          actorId: 'channel_binding.create',
-          eventType: 'channel_binding.created',
-          targetType: 'channel_binding',
-          targetId: binding.bindingId,
-          metadata: { provider: binding.provider, displayName: binding.displayName, credentialRefConfigured: Boolean(binding.credentialRef) },
-          createdAt: input.createdAt,
-        })
-      }
-      return binding
-    })
+    return this.channelBindings.createChannelBinding(input)
   }
 
   async updateChannelBinding(input: UpdateChannelBindingInput) {
-    return this.withTransaction(async (client) => {
-      const result = await client.query(
-        `UPDATE cloud_channel_bindings
-         SET display_name = CASE WHEN $3::boolean THEN $4 ELSE display_name END,
-             status = COALESCE($5, status),
-             credential_ref = CASE WHEN $6::boolean THEN $7 ELSE credential_ref END,
-             settings = CASE WHEN $8::boolean THEN $9::jsonb ELSE settings END,
-             updated_at = $10
-         WHERE org_id = $1 AND binding_id = $2
-         RETURNING *`,
-        [
-          input.orgId,
-          input.bindingId,
-          input.displayName !== undefined,
-          input.displayName === undefined ? null : normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
-          input.status || null,
-          input.credentialRef !== undefined,
-          input.credentialRef === undefined ? null : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
-          input.settings !== undefined,
-          input.settings === undefined ? null : JSON.stringify(normalizeRecord(input.settings, 'Channel binding settings')),
-          nowIso(input.updatedAt),
-        ],
-      )
-      if (!result.rows[0]) return null
-      const binding = channelBindingFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: input.orgId,
-        accountId: input.actor?.accountId || null,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'channel_binding.updated',
-        targetType: 'channel_binding',
-        targetId: binding.bindingId,
-        metadata: {
-          provider: binding.provider,
-          displayName: binding.displayName,
-          status: binding.status,
-          credentialRefConfigured: Boolean(binding.credentialRef),
-          settingsChanged: input.settings !== undefined,
-        },
-        createdAt: input.updatedAt,
-      })
-      return binding
-    })
+    return this.channelBindings.updateChannelBinding(input)
   }
 
   async getChannelBinding(orgId: string, bindingId: string) {
-    const row = await this.maybeOne(`SELECT * FROM cloud_channel_bindings WHERE org_id = $1 AND binding_id = $2`, [orgId, bindingId])
-    return row ? channelBindingFromRow(row) : null
+    return this.channelBindings.getChannelBinding(orgId, bindingId)
   }
 
   async listChannelBindings(orgId: string, agentId?: string | null) {
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_channel_bindings
-       WHERE org_id = $1 AND ($2::text IS NULL OR agent_id = $2)
-       ORDER BY updated_at DESC, binding_id`,
-      [orgId, agentId || null],
-    )
-    return result.rows.map(channelBindingFromRow)
+    return this.channelBindings.listChannelBindings(orgId, agentId)
   }
 
   async upsertChannelIdentity(input: UpsertChannelIdentityInput) {
-    const now = nowIso(input.updatedAt)
-    const provider = normalizeProvider(input.provider)
-    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
-    const externalUserId = normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id')
-    const result = await this.pool.query(
-      `INSERT INTO cloud_channel_identities (
-        identity_id, org_id, provider, external_workspace_id, external_user_id,
-        account_id, role, status, metadata, created_at, updated_at
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)
-       ON CONFLICT (org_id, provider, (COALESCE(external_workspace_id, '')), external_user_id) DO UPDATE
-       SET account_id = CASE
-             WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_id
-             ELSE cloud_channel_identities.account_id
-           END,
-           role = EXCLUDED.role,
-           status = EXCLUDED.status,
-           metadata = EXCLUDED.metadata,
-           updated_at = EXCLUDED.updated_at
-       RETURNING *`,
-      [
-        input.identityId || `chid_${provider}_${externalUserId}`,
-        input.orgId,
-        provider,
-        externalWorkspaceId,
-        externalUserId,
-        input.accountId || null,
-        input.role || 'viewer',
-        input.status || 'pending',
-        JSON.stringify(normalizeRecord(input.metadata, 'Channel identity metadata')),
-        now,
-      ],
-    )
-    return channelIdentityFromRow(result.rows[0])
+    return this.channelIdentities.upsertChannelIdentity(input)
   }
 
   async getChannelIdentity(orgId: string, identityId: string) {
-    const row = await this.maybeOne(`SELECT * FROM cloud_channel_identities WHERE org_id = $1 AND identity_id = $2`, [orgId, identityId])
-    return row ? channelIdentityFromRow(row) : null
+    return this.channelIdentities.getChannelIdentity(orgId, identityId)
   }
 
   async listChannelIdentities(orgId: string, input: ListChannelIdentitiesInput = {}) {
-    const provider = input.provider ? normalizeProvider(input.provider) : null
-    const externalWorkspaceIdSpecified = input.externalWorkspaceId !== undefined
-    const externalWorkspaceId = externalWorkspaceIdSpecified
-      ? normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
-      : null
-    const role = input.role && ['owner', 'admin', 'member', 'approver', 'viewer'].includes(input.role)
-      ? input.role
-      : null
-    const status = input.status && ['active', 'disabled', 'pending'].includes(input.status)
-      ? input.status
-      : null
-    const limit = Number.isInteger(input.limit) && Number(input.limit) > 0
-      ? Math.min(Number(input.limit), 500)
-      : 100
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_channel_identities
-       WHERE org_id = $1
-         AND ($2::text IS NULL OR provider = $2)
-         AND ($3::boolean = false OR COALESCE(external_workspace_id, '') = COALESCE($4, ''))
-         AND ($5::text IS NULL OR role = $5)
-         AND ($6::text IS NULL OR status = $6)
-       ORDER BY updated_at DESC, identity_id
-       LIMIT $7`,
-      [orgId, provider, externalWorkspaceIdSpecified, externalWorkspaceId, role, status, limit],
-    )
-    return result.rows.map(channelIdentityFromRow)
+    return this.channelIdentities.listChannelIdentities(orgId, input)
   }
 
   async findChannelIdentity(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalUserId: string }) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_channel_identities
-       WHERE org_id = $1
-         AND provider = $2
-         AND COALESCE(external_workspace_id, '') = COALESCE($3, '')
-         AND external_user_id = $4`,
-      [
-        input.orgId,
-        normalizeProvider(input.provider),
-        normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id'),
-        normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id'),
-      ],
-    )
-    return row ? channelIdentityFromRow(row) : null
+    return this.channelIdentities.findChannelIdentity(input)
   }
 
   async bindChannelSession(input: BindChannelSessionInput) {
@@ -2912,29 +1855,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     activeSessionIds?: string[]
     now?: Date
   }) {
-    const result = await this.pool.query(
-      `INSERT INTO cloud_worker_heartbeats (worker_id, role, active_session_ids, last_seen_at)
-       VALUES ($1, $2, $3::jsonb, $4)
-       ON CONFLICT (worker_id) DO UPDATE
-       SET role = EXCLUDED.role,
-           active_session_ids = EXCLUDED.active_session_ids,
-           last_seen_at = EXCLUDED.last_seen_at
-       RETURNING *`,
-      [
-        input.workerId,
-        input.role,
-        JSON.stringify([...new Set(input.activeSessionIds || [])]),
-        nowIso(input.now),
-      ],
-    )
-    return heartbeatFromRow(result.rows[0])
+    return this.workerHeartbeats.recordWorkerHeartbeat(input)
   }
 
   async listWorkerHeartbeats() {
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_worker_heartbeats ORDER BY worker_id`,
-    )
-    return result.rows.map(heartbeatFromRow)
+    return this.workerHeartbeats.listWorkerHeartbeats()
   }
 
   async setSettingMetadata(input: {
@@ -2944,746 +1869,115 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     value: Record<string, unknown>
     updatedAt?: Date
   }) {
-    await this.requireTenant(input.tenantId)
-    if (input.userId) await this.requireTenantUser(input.tenantId, input.userId)
-    const result = await this.pool.query(
-      `INSERT INTO cloud_setting_metadata (
-        tenant_id, user_scope, user_id, key, value, updated_at
-       )
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6)
-       ON CONFLICT (tenant_id, user_scope, key) DO UPDATE
-       SET user_id = EXCLUDED.user_id,
-           value = EXCLUDED.value,
-           updated_at = EXCLUDED.updated_at
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.userId || '',
-        input.userId || null,
-        input.key,
-        JSON.stringify(input.value),
-        nowIso(input.updatedAt),
-      ],
-    )
-    return settingFromRow(result.rows[0])
+    return this.settings.setSettingMetadata(input)
   }
 
   async getSettingMetadata(tenantId: string, keyName: string, userId?: string | null) {
-    await this.requireTenant(tenantId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_setting_metadata
-       WHERE tenant_id = $1 AND user_scope = $2 AND key = $3`,
-      [tenantId, userId || '', keyName],
-    )
-    return row ? settingFromRow(row) : null
+    return this.settings.getSettingMetadata(tenantId, keyName, userId)
   }
 
   async listSettingMetadata(tenantId: string, userId?: string | null) {
-    await this.requireTenant(tenantId)
-    if (userId) await this.requireTenantUser(tenantId, userId)
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_setting_metadata
-       WHERE tenant_id = $1 AND user_scope = $2
-       ORDER BY key`,
-      [tenantId, userId || ''],
-    )
-    return result.rows.map(settingFromRow)
+    return this.settings.listSettingMetadata(tenantId, userId)
   }
 
   async createWorkflow(input: CreateWorkflowInput) {
-    await this.requireTenantUser(input.tenantId, input.userId)
-    const createdAt = nowIso(input.createdAt)
-    const draft = input.draft
-    const skillNames = draft.skillNames || []
-    const toolIds = draft.toolIds || []
-    const steps = normalizeWorkflowSteps(draft.steps, {
-      instructions: draft.instructions,
-      agentName: draft.agentName,
-      skillNames,
-      toolIds,
-    })
-    await this.pool.query(
-      `INSERT INTO cloud_workflows (
-        tenant_id, workflow_id, user_id, title, instructions, agent_name,
-        skill_names, tool_ids, steps, status, project_directory, draft_session_id,
-        triggers, created_at, updated_at, next_run_at, last_run_at,
-        latest_run_id, latest_run_status, latest_run_session_id, latest_run_summary
-       )
-       VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7::jsonb, $8::jsonb, $9::jsonb, 'active', $10, $11,
-        $12::jsonb, $13, $13, $14, NULL,
-        NULL, NULL, NULL, NULL
-       )
-       ON CONFLICT (tenant_id, workflow_id) DO NOTHING`,
-      [
-        input.tenantId,
-        input.workflowId,
-        input.userId,
-        draft.title,
-        draft.instructions,
-        draft.agentName,
-        JSON.stringify(skillNames),
-        JSON.stringify(toolIds),
-        JSON.stringify(steps),
-        draft.projectDirectory || null,
-        draft.draftSessionId || null,
-        JSON.stringify(draft.triggers),
-        createdAt,
-        input.nextRunAt || null,
-      ],
-    )
-    return workflowFromRow(await this.requireWorkflow(input.tenantId, input.workflowId))
+    return this.workflows.createWorkflow(input)
   }
 
   async findWorkflow(workflowId: string) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows
-       WHERE workflow_id = $1
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-      [workflowId],
-    )
-    return row ? workflowFromRow(row) : null
+    return this.workflows.findWorkflow(workflowId)
   }
 
   async listWorkflows(tenantId: string, userId: string) {
-    await this.requireTenantUser(tenantId, userId)
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_workflows
-       WHERE tenant_id = $1 AND user_id = $2
-       ORDER BY updated_at DESC, workflow_id`,
-      [tenantId, userId],
-    )
-    return result.rows.map(workflowFromRow)
+    return this.workflows.listWorkflows(tenantId, userId)
   }
 
   async getWorkflow(tenantId: string, userId: string, workflowId: string) {
-    await this.requireTenantUser(tenantId, userId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows
-       WHERE tenant_id = $1 AND user_id = $2 AND workflow_id = $3`,
-      [tenantId, userId, workflowId],
-    )
-    return row ? workflowFromRow(row) : null
+    return this.workflows.getWorkflow(tenantId, userId, workflowId)
   }
 
   async getWorkflowForTenant(tenantId: string, workflowId: string) {
-    await this.requireTenant(tenantId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows WHERE tenant_id = $1 AND workflow_id = $2`,
-      [tenantId, workflowId],
-    )
-    return row ? workflowFromRow(row) : null
+    return this.workflows.getWorkflowForTenant(tenantId, workflowId)
   }
 
   async updateWorkflowStatus(input: UpdateWorkflowStatusInput) {
-    await this.requireTenantUser(input.tenantId, input.userId)
-    const result = await this.pool.query(
-      `UPDATE cloud_workflows
-       SET status = $4,
-           next_run_at = $5,
-           updated_at = $6
-       WHERE tenant_id = $1 AND user_id = $2 AND workflow_id = $3
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.userId,
-        input.workflowId,
-        input.status,
-        input.nextRunAt || null,
-        nowIso(input.updatedAt),
-      ],
-    )
-    return result.rows[0] ? workflowFromRow(result.rows[0]) : null
+    return this.workflows.updateWorkflowStatus(input)
   }
 
   async listWorkflowRuns(tenantId: string, workflowId: string, limit = 25) {
-    await this.requireWorkflow(tenantId, workflowId)
-    const boundedLimit = Math.min(Math.max(1, limit), WORKFLOW_RUN_LIST_LIMIT)
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_workflow_runs
-       WHERE tenant_id = $1 AND workflow_id = $2
-       ORDER BY created_at DESC, run_id
-       LIMIT $3`,
-      [tenantId, workflowId, boundedLimit],
-    )
-    return result.rows.map(workflowRunFromRow)
+    return this.workflows.listWorkflowRuns(tenantId, workflowId, limit)
   }
 
   async createWorkflowRun(input: CreateWorkflowRunInput) {
-    return this.withTransaction(async (client) => {
-      await this.requireTenantUser(input.tenantId, input.userId, client)
-      const workflow = workflowFromRow(await this.requireWorkflow(input.tenantId, input.workflowId, client, true))
-      if (workflow.userId !== input.userId) throw new Error(`Unknown workflow ${input.workflowId}.`)
-      const existing = await this.maybeOne(
-        `SELECT * FROM cloud_workflow_runs WHERE tenant_id = $1 AND run_id = $2`,
-        [input.tenantId, input.runId],
-        client,
-      )
-      if (existing) return workflowRunFromRow(existing)
-      this.assertWorkflowRunnable(workflow)
-      const createdAt = nowIso(input.createdAt)
-      await assertPostgresWorkflowRunQuota(client, {
-        tenantId: input.tenantId,
-        quota: input.quota,
-        now: new Date(createdAt),
-      }, this.quotaDeps)
-      const claimedBy = input.claimedBy?.trim() || null
-      const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
-      const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
-      const claimExpiresAt = claimToken ? new Date(new Date(createdAt).getTime() + leaseTtlMs).toISOString() : null
-      const result = await client.query(
-        `INSERT INTO cloud_workflow_runs (
-          tenant_id, run_id, workflow_id, user_id, session_id, trigger_type,
-          trigger_payload, status, title, summary, error, created_at, started_at, finished_at,
-          claimed_by, claim_token, claim_expires_at, attempt_count, idempotency_key,
-          checkpoint_version, last_error_code, last_error_summary
-         )
-         VALUES (
-          $1, $2, $3, $4, NULL, $5, $6::jsonb, 'queued', $7, NULL, NULL, $8, NULL, NULL,
-          $9, $10, $11, $12, NULL, 0, NULL, NULL
-         )
-         RETURNING *`,
-        [
-          input.tenantId,
-          input.runId,
-          input.workflowId,
-          input.userId,
-          input.triggerType,
-          input.triggerPayload ? JSON.stringify(input.triggerPayload) : null,
-          `Run ${workflow.title}`,
-          createdAt,
-          claimedBy,
-          claimToken,
-          claimExpiresAt,
-          claimToken ? 1 : 0,
-        ],
-      )
-      await client.query(
-        `UPDATE cloud_workflows
-         SET status = 'running',
-             latest_run_id = $3,
-             latest_run_status = 'queued',
-             updated_at = $4
-         WHERE tenant_id = $1 AND workflow_id = $2`,
-        [input.tenantId, input.workflowId, input.runId, createdAt],
-      )
-      return workflowRunFromRow(result.rows[0])
-    })
+    return this.workflows.createWorkflowRun(input)
   }
 
   async claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): Promise<ClaimedWorkflowRunRecord | null> {
-    return this.withTransaction(async (client) => {
-      const now = input.now || new Date()
-      const claimedAt = now.toISOString()
-      const claimedBy = input.claimedBy?.trim() || 'scheduler'
-      const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
-      const claimExpiresAt = new Date(now.getTime() + leaseTtlMs).toISOString()
-      const retryRow = await this.maybeOne(
-        `SELECT runs.*, workflows.tenant_id AS workflow_tenant_id
-         FROM cloud_workflow_runs runs
-         JOIN cloud_workflows workflows
-           ON workflows.tenant_id = runs.tenant_id
-          AND workflows.workflow_id = runs.workflow_id
-         WHERE runs.claim_token IS NULL
-           AND (
-             (runs.status = 'queued' AND runs.session_id IS NULL)
-             OR (
-               runs.status = 'running'
-               AND runs.session_id IS NOT NULL
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM cloud_session_commands commands
-                 WHERE commands.tenant_id = runs.tenant_id
-                   AND commands.session_id = runs.session_id
-               )
-             )
-           )
-           AND workflows.status = 'running'
-         ORDER BY runs.created_at ASC, runs.run_id
-         FOR UPDATE OF runs, workflows SKIP LOCKED
-         LIMIT 1`,
-        [],
-        client,
-      )
-      if (retryRow) {
-        const runId = String(retryRow.run_id)
-        const tenantId = String(retryRow.tenant_id)
-        const workflowId = String(retryRow.workflow_id)
-        const retryStatus = String(retryRow.status)
-        const retrySessionId = retryRow.session_id ? String(retryRow.session_id) : null
-        const claimToken = createWorkClaimToken(tenantId, runId, claimedBy)
-        const updatedRun = await client.query(
-          `UPDATE cloud_workflow_runs
-           SET claimed_by = $4,
-               claim_token = $5,
-               claim_expires_at = $6,
-               attempt_count = attempt_count + 1,
-               last_error_code = NULL,
-               last_error_summary = NULL
-           WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
-           RETURNING *`,
-          [tenantId, workflowId, runId, claimedBy, claimToken, claimExpiresAt],
-        )
-        const updatedWorkflow = await client.query(
-          `UPDATE cloud_workflows
-           SET status = 'running',
-               latest_run_id = $3,
-               latest_run_status = $4,
-               latest_run_session_id = $5,
-               updated_at = $6
-           WHERE tenant_id = $1 AND workflow_id = $2
-           RETURNING *`,
-          [tenantId, workflowId, runId, retryStatus, retrySessionId, claimedAt],
-        )
-        return {
-          workflow: workflowFromRow(updatedWorkflow.rows[0]),
-          run: workflowRunFromRow(updatedRun.rows[0]),
-        }
-      }
-      const row = await this.maybeOne(
-        `SELECT * FROM cloud_workflows
-         WHERE status = 'active'
-           AND next_run_at IS NOT NULL
-           AND next_run_at <= $1
-         ORDER BY next_run_at ASC, tenant_id, workflow_id
-         FOR UPDATE SKIP LOCKED
-         LIMIT 1`,
-        [claimedAt],
-        client,
-      )
-      if (!row) return null
-      const workflow = workflowFromRow(row)
-      await assertPostgresWorkflowRunQuota(client, {
-        tenantId: workflow.tenantId,
-        quota: input.quota,
-        now,
-      }, this.quotaDeps)
-      const claimToken = createWorkClaimToken(workflow.tenantId, input.runId, claimedBy)
-      const result = await client.query(
-        `INSERT INTO cloud_workflow_runs (
-          tenant_id, run_id, workflow_id, user_id, session_id, trigger_type,
-          trigger_payload, status, title, summary, error, created_at, started_at, finished_at,
-          claimed_by, claim_token, claim_expires_at, attempt_count, idempotency_key,
-          checkpoint_version, last_error_code, last_error_summary
-         )
-         VALUES (
-          $1, $2, $3, $4, NULL, 'schedule',
-          $5::jsonb, 'queued', $6, NULL, NULL, $7, NULL, NULL,
-          $8, $9, $10, 1, $11, 0, NULL, NULL
-         )
-         RETURNING *`,
-        [
-          workflow.tenantId,
-          input.runId,
-          workflow.id,
-          workflow.userId,
-          JSON.stringify({ source: 'schedule', scheduledFor: workflow.nextRunAt }),
-          `Run ${workflow.title}`,
-          claimedAt,
-          claimedBy,
-          claimToken,
-          claimExpiresAt,
-          `schedule:${workflow.id}:${workflow.nextRunAt}`,
-        ],
-      )
-      const updatedWorkflow = await client.query(
-        `UPDATE cloud_workflows
-         SET status = 'running',
-             latest_run_id = $3,
-             latest_run_status = 'queued',
-             updated_at = $4
-         WHERE tenant_id = $1 AND workflow_id = $2
-         RETURNING *`,
-        [workflow.tenantId, workflow.id, input.runId, claimedAt],
-      )
-      return {
-        workflow: workflowFromRow(updatedWorkflow.rows[0]),
-        run: workflowRunFromRow(result.rows[0]),
-      }
-    })
+    return this.workflows.claimDueWorkflowRun(input)
   }
 
   async reapExpiredWorkflowClaims(input: ReapExpiredWorkflowClaimsInput = {}): Promise<ReapedWorkflowClaimRecord[]> {
-    const now = input.now || new Date()
-    const nowIsoValue = now.toISOString()
-    const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 3))
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    return this.withTransaction(async (client) => {
-      const expired = await client.query(
-        `SELECT *
-         FROM cloud_workflow_runs
-         WHERE claim_token IS NOT NULL
-           AND claim_expires_at IS NOT NULL
-           AND claim_expires_at <= $1
-           AND (
-             (status = 'queued' AND session_id IS NULL)
-             OR (
-               status = 'running'
-               AND session_id IS NOT NULL
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM cloud_session_commands commands
-                 WHERE commands.tenant_id = cloud_workflow_runs.tenant_id
-                   AND commands.session_id = cloud_workflow_runs.session_id
-               )
-             )
-           )
-         ORDER BY claim_expires_at ASC, tenant_id, workflow_id, run_id
-         LIMIT $2
-         FOR UPDATE SKIP LOCKED`,
-        [nowIsoValue, limit],
-      )
-      const reaped: ReapedWorkflowClaimRecord[] = []
-      for (const row of expired.rows) {
-        const run = workflowRunFromRow(row)
-        await this.requireWorkflow(run.tenantId, run.workflowId, client, true)
-        const claimToken = run.claimToken
-        if (!claimToken) continue
-        const claimedBy = run.claimedBy || 'unknown'
-        const action: ReapedWorkflowClaimRecord['action'] = run.attemptCount >= maxAttempts ? 'failed' : 'retried'
-        if (action === 'failed') {
-          const summary = 'Workflow run claim expired after the maximum retry attempts.'
-          await client.query(
-            `UPDATE cloud_workflow_runs
-             SET status = 'failed',
-                 summary = $4,
-                 error = $4,
-                 finished_at = $5,
-                 claimed_by = NULL,
-                 claim_token = NULL,
-                 claim_expires_at = NULL,
-                 last_error_code = 'claim_expired_max_attempts',
-                 last_error_summary = $4
-             WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3`,
-            [run.tenantId, run.workflowId, run.id, summary, nowIsoValue],
-          )
-          await client.query(
-            `UPDATE cloud_workflows
-             SET status = 'failed',
-                 latest_run_id = $3,
-                 latest_run_status = 'failed',
-                 latest_run_summary = $4,
-                 next_run_at = NULL,
-                 updated_at = $5
-             WHERE tenant_id = $1 AND workflow_id = $2`,
-            [run.tenantId, run.workflowId, run.id, summary, nowIsoValue],
-          )
-        } else {
-          await client.query(
-            `UPDATE cloud_workflow_runs
-             SET claimed_by = NULL,
-                 claim_token = NULL,
-                 claim_expires_at = NULL,
-                 last_error_code = 'claim_expired',
-                 last_error_summary = $4
-             WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3`,
-            [
-              run.tenantId,
-              run.workflowId,
-              run.id,
-              run.sessionId
-                ? 'Workflow run claim expired before command enqueue.'
-                : 'Workflow run claim expired before session attachment.',
-            ],
-          )
-          await client.query(
-            `UPDATE cloud_workflows
-             SET status = 'running',
-                 latest_run_id = $3,
-                 latest_run_status = $4,
-                 latest_run_session_id = $5,
-                 updated_at = $6
-             WHERE tenant_id = $1 AND workflow_id = $2`,
-            [run.tenantId, run.workflowId, run.id, run.status, run.sessionId, nowIsoValue],
-          )
-        }
-        reaped.push({
-          tenantId: run.tenantId,
-          workflowId: run.workflowId,
-          runId: run.id,
-          claimToken,
-          claimedBy,
-          action,
-          reapedAt: nowIsoValue,
-        })
-      }
-      return reaped
-    })
+    return this.workflows.reapExpiredWorkflowClaims(input)
   }
 
   async attachWorkflowRunSession(input: AttachWorkflowRunSessionInput) {
-    return this.withTransaction(async (client) => {
-      await this.requireWorkflow(input.tenantId, input.workflowId, client, true)
-      const runRow = await this.maybeOne(
-        `SELECT * FROM cloud_workflow_runs
-         WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
-         FOR UPDATE`,
-        [input.tenantId, input.workflowId, input.runId],
-        client,
-      )
-      if (!runRow) return null
-      const current = workflowRunFromRow(runRow)
-      if (current.status === 'completed' || current.status === 'failed' || current.status === 'cancelled') {
-        throw new Error('Workflow run is not attachable.')
-      }
-      if (current.status !== 'queued' && !(current.status === 'running' && current.sessionId === input.sessionId)) {
-        throw new Error('Workflow run is not attachable.')
-      }
-      if (current.sessionId && current.sessionId !== input.sessionId) throw new Error('Workflow run is already attached to another session.')
-      if (current.claimToken) {
-        if (current.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
-        if (current.claimExpiresAt && Date.parse(current.claimExpiresAt) <= Date.now()) {
-          throw new Error('Workflow run claim is stale.')
-        }
-      } else if (input.claimToken) {
-        throw new Error('Workflow run claim is stale.')
-      }
-      const startedAt = nowIso(input.startedAt)
-      const result = await client.query(
-        `UPDATE cloud_workflow_runs
-         SET session_id = $4,
-             status = 'running',
-             started_at = COALESCE(started_at, $5),
-             claimed_by = NULL,
-             claim_token = NULL,
-             claim_expires_at = NULL
-         WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
-         RETURNING *`,
-        [input.tenantId, input.workflowId, input.runId, input.sessionId, startedAt],
-      )
-      if (!result.rows[0]) return null
-      await client.query(
-        `UPDATE cloud_workflows
-         SET status = 'running',
-             latest_run_id = $3,
-             latest_run_status = 'running',
-             latest_run_session_id = $4,
-             updated_at = $5
-         WHERE tenant_id = $1 AND workflow_id = $2`,
-        [input.tenantId, input.workflowId, input.runId, input.sessionId, startedAt],
-      )
-      return workflowRunFromRow(result.rows[0])
-    })
+    return this.workflows.attachWorkflowRunSession(input)
   }
 
   async completeWorkflowRun(input: CompleteWorkflowRunInput) {
-    return this.finishWorkflowRun({
-      tenantId: input.tenantId,
-      workflowId: input.workflowId,
-      runId: input.runId,
-      status: 'completed',
-      summary: input.summary,
-      error: null,
-      nextStatus: input.nextStatus,
-      nextRunAt: input.nextRunAt,
-      leaseToken: input.leaseToken,
-      finishedAt: input.finishedAt,
-    })
+    return this.workflows.completeWorkflowRun(input)
   }
 
   async failWorkflowRun(input: FailWorkflowRunInput) {
-    return this.finishWorkflowRun({
-      tenantId: input.tenantId,
-      workflowId: input.workflowId,
-      runId: input.runId,
-      status: 'failed',
-      summary: input.error,
-      error: input.error,
-      nextStatus: input.nextStatus,
-      nextRunAt: input.nextRunAt,
-      leaseToken: input.leaseToken,
-      finishedAt: input.finishedAt,
-    })
+    return this.workflows.failWorkflowRun(input)
   }
 
   async getWorkflowRun(tenantId: string, runId: string) {
-    await this.requireTenant(tenantId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflow_runs WHERE tenant_id = $1 AND run_id = $2`,
-      [tenantId, runId],
-    )
-    return row ? workflowRunFromRow(row) : null
+    return this.workflows.getWorkflowRun(tenantId, runId)
   }
 
   async getWorkflowRunBySession(tenantId: string, sessionId: string) {
-    await this.requireTenant(tenantId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflow_runs
-       WHERE tenant_id = $1 AND session_id = $2
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [tenantId, sessionId],
-    )
-    return row ? workflowRunFromRow(row) : null
+    return this.workflows.getWorkflowRunBySession(tenantId, sessionId)
   }
 
   async listThreadTags(tenantId: string) {
-    await this.requireTenant(tenantId)
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_thread_tags
-       WHERE tenant_id = $1
-       ORDER BY lower(name), tag_id`,
-      [tenantId],
-    )
-    return result.rows.map(threadTagFromRow)
+    return this.threadIndex.listThreadTags(tenantId)
   }
 
   async createThreadTag(input: CreateThreadTagInput) {
-    await this.requireTenant(input.tenantId)
-    const name = normalizeText(input.name, THREAD_TAG_NAME_MAX_LENGTH, 'Tag name')
-    const color = normalizeTagColor(input.color)
-    const createdAt = nowIso(input.createdAt)
-    const existing = await this.maybeOne(
-      `SELECT * FROM cloud_thread_tags WHERE tenant_id = $1 AND tag_id = $2`,
-      [input.tenantId, input.tagId],
-    )
-    if (existing) {
-      const tag = threadTagFromRow(existing)
-      if (tag.name !== name || tag.color !== color) {
-        throw new Error(`Tag id ${input.tagId} was reused with different content.`)
-      }
-      return tag
-    }
-    const result = await this.pool.query(
-      `INSERT INTO cloud_thread_tags (tenant_id, tag_id, name, color, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $5)
-       RETURNING *`,
-      [input.tenantId, input.tagId, name, color, createdAt],
-    )
-    return threadTagFromRow(result.rows[0])
+    return this.threadIndex.createThreadTag(input)
   }
 
   async updateThreadTag(input: UpdateThreadTagInput) {
-    await this.requireTenant(input.tenantId)
-    const name = normalizeOptionalText(input.name, THREAD_TAG_NAME_MAX_LENGTH, 'Tag name')
-    const color = input.color === undefined ? undefined : normalizeTagColor(input.color)
-    const result = await this.pool.query(
-      `UPDATE cloud_thread_tags
-       SET name = COALESCE($3, name),
-           color = COALESCE($4, color),
-           updated_at = $5
-       WHERE tenant_id = $1 AND tag_id = $2
-       RETURNING *`,
-      [input.tenantId, input.tagId, name ?? null, color ?? null, nowIso(input.updatedAt)],
-    )
-    return result.rows[0] ? threadTagFromRow(result.rows[0]) : null
+    return this.threadIndex.updateThreadTag(input)
   }
 
   async deleteThreadTag(tenantId: string, tagId: string) {
-    await this.requireTenant(tenantId)
-    const result = await this.pool.query(
-      `DELETE FROM cloud_thread_tags WHERE tenant_id = $1 AND tag_id = $2`,
-      [tenantId, tagId],
-    ) as QueryResult & { rowCount?: number }
-    return Number(result.rowCount || 0) > 0
+    return this.threadIndex.deleteThreadTag(tenantId, tagId)
   }
 
   async applyThreadTags(input: ThreadTagLinkInput) {
-    await this.withTransaction(async (client) => {
-      await this.requireTenant(input.tenantId, client)
-      const sessionIds = normalizeIdList(input.sessionIds, 'sessionIds', THREAD_BULK_MAX_SESSION_IDS)
-      const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-      for (const sessionId of sessionIds) await this.requireSession(input.tenantId, sessionId, client)
-      for (const tagId of tagIds) await this.requireThreadTag(input.tenantId, tagId, client)
-      const createdAt = nowIso(input.createdAt)
-      for (const sessionId of sessionIds) {
-        for (const tagId of tagIds) {
-          await client.query(
-            `INSERT INTO cloud_thread_tag_links (tenant_id, session_id, tag_id, created_at)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (tenant_id, session_id, tag_id) DO NOTHING`,
-            [input.tenantId, sessionId, tagId, createdAt],
-          )
-        }
-      }
-    })
+    return this.threadIndex.applyThreadTags(input)
   }
 
   async removeThreadTags(input: ThreadTagLinkInput) {
-    await this.withTransaction(async (client) => {
-      await this.requireTenant(input.tenantId, client)
-      const sessionIds = normalizeIdList(input.sessionIds, 'sessionIds', THREAD_BULK_MAX_SESSION_IDS)
-      const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-      for (const sessionId of sessionIds) await this.requireSession(input.tenantId, sessionId, client)
-      for (const tagId of tagIds) await this.requireThreadTag(input.tenantId, tagId, client)
-      if (sessionIds.length === 0 || tagIds.length === 0) return
-      await client.query(
-        `DELETE FROM cloud_thread_tag_links
-         WHERE tenant_id = $1
-           AND session_id = ANY($2::text[])
-           AND tag_id = ANY($3::text[])`,
-        [input.tenantId, sessionIds, tagIds],
-      )
-    })
+    return this.threadIndex.removeThreadTags(input)
   }
 
   async listThreadSmartFilters(tenantId: string) {
-    await this.requireTenant(tenantId)
-    const result = await this.pool.query(
-      `SELECT * FROM cloud_thread_smart_filters
-       WHERE tenant_id = $1
-       ORDER BY lower(name), filter_id`,
-      [tenantId],
-    )
-    return result.rows.map(threadSmartFilterFromRow)
+    return this.threadIndex.listThreadSmartFilters(tenantId)
   }
 
   async createThreadSmartFilter(input: CreateThreadSmartFilterInput) {
-    await this.requireTenant(input.tenantId)
-    const name = normalizeText(input.name, THREAD_SMART_FILTER_NAME_MAX_LENGTH, 'Smart filter name')
-    const query = normalizeThreadQuery(input.query)
-    const createdAt = nowIso(input.createdAt)
-    const existing = await this.maybeOne(
-      `SELECT * FROM cloud_thread_smart_filters WHERE tenant_id = $1 AND filter_id = $2`,
-      [input.tenantId, input.filterId],
-    )
-    if (existing) {
-      const filter = threadSmartFilterFromRow(existing)
-      if (filter.name !== name || stableJson(filter.query) !== stableJson(query)) {
-        throw new Error(`Smart filter id ${input.filterId} was reused with different content.`)
-      }
-      return filter
-    }
-    const result = await this.pool.query(
-      `INSERT INTO cloud_thread_smart_filters (tenant_id, filter_id, name, query, created_at, updated_at)
-       VALUES ($1, $2, $3, $4::jsonb, $5, $5)
-       RETURNING *`,
-      [input.tenantId, input.filterId, name, JSON.stringify(query), createdAt],
-    )
-    return threadSmartFilterFromRow(result.rows[0])
+    return this.threadIndex.createThreadSmartFilter(input)
   }
 
   async updateThreadSmartFilter(input: UpdateThreadSmartFilterInput) {
-    await this.requireTenant(input.tenantId)
-    const name = normalizeOptionalText(input.name, THREAD_SMART_FILTER_NAME_MAX_LENGTH, 'Smart filter name')
-    const query = input.query === undefined ? undefined : normalizeThreadQuery(input.query)
-    const result = await this.pool.query(
-      `UPDATE cloud_thread_smart_filters
-       SET name = COALESCE($3, name),
-           query = COALESCE($4::jsonb, query),
-           updated_at = $5
-       WHERE tenant_id = $1 AND filter_id = $2
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.filterId,
-        name ?? null,
-        query === undefined ? null : JSON.stringify(query),
-        nowIso(input.updatedAt),
-      ],
-    )
-    return result.rows[0] ? threadSmartFilterFromRow(result.rows[0]) : null
+    return this.threadIndex.updateThreadSmartFilter(input)
   }
 
   async deleteThreadSmartFilter(tenantId: string, filterId: string) {
-    await this.requireTenant(tenantId)
-    const result = await this.pool.query(
-      `DELETE FROM cloud_thread_smart_filters WHERE tenant_id = $1 AND filter_id = $2`,
-      [tenantId, filterId],
-    ) as QueryResult & { rowCount?: number }
-    return Number(result.rowCount || 0) > 0
+    return this.threadIndex.deleteThreadSmartFilter(tenantId, filterId)
   }
 
   async listThreadMetadata(input: {
@@ -3692,49 +1986,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     tagIds?: string[]
     limit?: number
   }): Promise<ThreadMetadataRecord[]> {
-    await this.requireTenantUser(input.tenantId, input.userId)
-    const tagIds = input.tagIds
-      ? normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-      : []
-    const limit = Number.isInteger(input.limit) && input.limit && input.limit > 0
-      ? Math.min(input.limit, THREAD_BULK_MAX_SESSION_IDS)
-      : THREAD_BULK_MAX_SESSION_IDS
-    const result = tagIds.length > 0
-      ? await this.pool.query(
-        `SELECT * FROM cloud_sessions s
-         WHERE s.tenant_id = $1
-           AND s.user_id = $2
-           AND EXISTS (
-             SELECT 1 FROM cloud_thread_tag_links link
-             WHERE link.tenant_id = s.tenant_id
-               AND link.session_id = s.session_id
-               AND link.tag_id = ANY($3::text[])
-           )
-         ORDER BY s.updated_at DESC, s.session_id
-         LIMIT $4`,
-        [input.tenantId, input.userId, tagIds, limit],
-      )
-      : await this.pool.query(
-        `SELECT * FROM cloud_sessions
-         WHERE tenant_id = $1 AND user_id = $2
-         ORDER BY updated_at DESC, session_id
-         LIMIT $3`,
-        [input.tenantId, input.userId, limit],
-      )
-    return Promise.all(result.rows.map(async (row) => {
-      const session = sessionFromRow(row)
-      return {
-        tenantId: session.tenantId,
-        userId: session.userId,
-        sessionId: session.sessionId,
-        title: session.title,
-        profileName: session.profileName,
-        status: session.status,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        tags: await this.listThreadTagsForSession(session.tenantId, session.sessionId),
-      }
-    }))
+    return this.threadIndex.listThreadMetadata(input)
   }
 
   async recordSchemaMigration(id: string, appliedAt = new Date()) {
@@ -3764,30 +2016,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     windowMs: number
     limit: number
   }) {
-    const result = await this.pool.query(
-      `INSERT INTO cloud_webhook_rate_limits (source, window_started_at_ms, count)
-       VALUES ($1, $2, 1)
-       ON CONFLICT (source) DO UPDATE
-       SET window_started_at_ms = CASE
-             WHEN $2 - cloud_webhook_rate_limits.window_started_at_ms > $3 THEN $2
-             ELSE cloud_webhook_rate_limits.window_started_at_ms
-           END,
-           count = CASE
-             WHEN $2 - cloud_webhook_rate_limits.window_started_at_ms > $3 THEN 1
-             ELSE cloud_webhook_rate_limits.count + 1
-           END
-       RETURNING count`,
-      [input.source, input.nowMs, input.windowMs],
-    )
-    return numberValue(result.rows[0]?.count) <= input.limit
+    return this.webhooks.claimRequest(input)
   }
 
   async checkAuthBackoff(input: { scope: string, nowMs: number }) {
-    const row = await this.maybeOne(
-      `SELECT blocked_until_ms FROM cloud_webhook_auth_failures WHERE scope = $1`,
-      [input.scope],
-    )
-    return !row || numberValue(row.blocked_until_ms) <= input.nowMs
+    return this.webhooks.checkAuthBackoff(input)
   }
 
   async recordAuthFailure(input: {
@@ -3798,35 +2031,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     limit: number
     backoffMs: number
   }) {
-    const blockedUntil = input.nowMs + input.backoffMs
-    const result = await this.pool.query(
-      `INSERT INTO cloud_webhook_auth_failures (
-        scope, source, auth_window_started_at_ms, auth_failure_count, blocked_until_ms
-       )
-       VALUES ($1, $2, $3, 1, CASE WHEN $5 <= 1 THEN $6 ELSE 0 END)
-       ON CONFLICT (scope) DO UPDATE
-       SET source = EXCLUDED.source,
-           auth_window_started_at_ms = CASE
-             WHEN $3 - cloud_webhook_auth_failures.auth_window_started_at_ms > $4 THEN $3
-             ELSE cloud_webhook_auth_failures.auth_window_started_at_ms
-           END,
-           auth_failure_count = CASE
-             WHEN $3 - cloud_webhook_auth_failures.auth_window_started_at_ms > $4 THEN 1
-             ELSE cloud_webhook_auth_failures.auth_failure_count + 1
-           END,
-           blocked_until_ms = CASE
-             WHEN (
-               CASE
-                 WHEN $3 - cloud_webhook_auth_failures.auth_window_started_at_ms > $4 THEN 1
-                 ELSE cloud_webhook_auth_failures.auth_failure_count + 1
-               END
-             ) >= $5 THEN GREATEST(cloud_webhook_auth_failures.blocked_until_ms, $6)
-             ELSE cloud_webhook_auth_failures.blocked_until_ms
-           END
-       RETURNING *`,
-      [input.scope, input.source, input.nowMs, input.windowMs, input.limit, blockedUntil],
-    )
-    return webhookAuthFailureFromRow(result.rows[0])
+    return this.webhooks.recordAuthFailure(input)
   }
 
   async claimSignature(input: {
@@ -3835,53 +2040,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     windowMs: number
     cacheLimit: number
   }): Promise<WorkflowWebhookReplayClaim | null> {
-    const claimed = await this.withTransaction(async (client) => {
-      await client.query(
-        `DELETE FROM cloud_webhook_replay_claims WHERE $1 - seen_at_ms > $2`,
-        [input.nowMs, input.windowMs],
-      )
-      const result = await client.query(
-        `INSERT INTO cloud_webhook_replay_claims (replay_key, seen_at_ms, status)
-         VALUES ($1, $2, 'pending')
-         ON CONFLICT (replay_key) DO NOTHING
-         RETURNING replay_key`,
-        [input.key, input.nowMs],
-      )
-      await client.query(
-        `DELETE FROM cloud_webhook_replay_claims
-         WHERE replay_key IN (
-           SELECT replay_key
-           FROM cloud_webhook_replay_claims
-           ORDER BY seen_at_ms ASC
-           OFFSET $1
-         )`,
-        [input.cacheLimit],
-      )
-      return Boolean(result.rows[0])
-    })
-    if (!claimed) return null
-    let active = true
-    return {
-      accept: async () => {
-        if (!active) return
-        active = false
-        await this.pool.query(
-          `UPDATE cloud_webhook_replay_claims
-           SET status = 'accepted'
-           WHERE replay_key = $1`,
-          [input.key],
-        )
-      },
-      release: async () => {
-        if (!active) return
-        active = false
-        await this.pool.query(
-          `DELETE FROM cloud_webhook_replay_claims
-           WHERE replay_key = $1 AND status = 'pending'`,
-          [input.key],
-        )
-      },
-    }
+    return this.webhooks.claimSignature(input)
   }
 
   async clear() {
@@ -4051,16 +2210,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return tenantFromRow(row)
   }
 
-  private async requireOrg(orgId: string, executor: PgExecutor = this.pool) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_orgs WHERE org_id = $1`,
-      [orgId],
-      executor,
-    )
-    if (!row) throw new Error(`Unknown org ${orgId}.`)
-    return orgFromRow(row)
-  }
-
   private async requireTenantUser(
     tenantId: string,
     userId: string,
@@ -4091,135 +2240,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     )
     if (!row) throw new Error(`Unknown session ${sessionId}.`)
     return row
-  }
-
-  private async requireWorkflow(
-    tenantId: string,
-    workflowId: string,
-    executor: PgExecutor = this.pool,
-    forUpdate = false,
-  ) {
-    await this.requireTenant(tenantId, executor)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows
-       WHERE tenant_id = $1 AND workflow_id = $2${forUpdate ? ' FOR UPDATE' : ''}`,
-      [tenantId, workflowId],
-      executor,
-    )
-    if (!row) throw new Error(`Unknown workflow ${workflowId}.`)
-    return row
-  }
-
-  private assertWorkflowRunnable(workflow: CloudWorkflowRecord) {
-    if (workflow.status === 'archived') throw new Error('Archived workflows cannot run.')
-    if (workflow.status === 'paused') throw new Error('Paused workflows cannot run.')
-    if (workflow.status === 'running') throw new Error('Workflow is already running.')
-  }
-
-  private async finishWorkflowRun(input: {
-    tenantId: string
-    workflowId: string
-    runId: string
-    status: Extract<WorkflowRunStatus, 'completed' | 'failed'>
-    summary: string | null
-    error: string | null
-    nextStatus: WorkflowStatus
-    nextRunAt: string | null
-    leaseToken?: string | null
-    finishedAt?: Date
-  }): Promise<CloudWorkflowRunRecord | null> {
-    return this.withTransaction(async (client) => {
-      await this.requireWorkflow(input.tenantId, input.workflowId, client, true)
-      const runRow = await this.maybeOne(
-        `SELECT * FROM cloud_workflow_runs
-         WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
-         FOR UPDATE`,
-        [input.tenantId, input.workflowId, input.runId],
-        client,
-      )
-      if (!runRow) return null
-      const current = workflowRunFromRow(runRow)
-      if (current.status === 'completed' || current.status === 'failed' || current.status === 'cancelled') {
-        return current
-      }
-      if (input.leaseToken !== undefined) {
-        if (!current.sessionId) throw new Error('Workflow run has no execution session to fence.')
-        await this.assertLeaseTokenIfPresent(input.tenantId, current.sessionId, input.leaseToken, client)
-      }
-      const finishedAt = nowIso(input.finishedAt)
-      const result = await client.query(
-        `UPDATE cloud_workflow_runs
-         SET status = $4,
-             summary = $5,
-             error = $6,
-             finished_at = $7
-         WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
-         RETURNING *`,
-        [
-          input.tenantId,
-          input.workflowId,
-          input.runId,
-          input.status,
-          input.summary,
-          input.error,
-          finishedAt,
-        ],
-      )
-      await client.query(
-        `UPDATE cloud_workflows
-         SET status = $4,
-             latest_run_id = $3,
-             latest_run_status = $5,
-             latest_run_summary = $6,
-             last_run_at = CASE WHEN $5 = 'completed' THEN $7 ELSE last_run_at END,
-             next_run_at = $8,
-             updated_at = $7
-         WHERE tenant_id = $1 AND workflow_id = $2`,
-        [
-          input.tenantId,
-          input.workflowId,
-          input.runId,
-          input.nextStatus,
-          input.status,
-          input.summary,
-          finishedAt,
-          input.nextRunAt,
-        ],
-      )
-      return workflowRunFromRow(result.rows[0])
-    })
-  }
-
-  private async requireThreadTag(
-    tenantId: string,
-    tagId: string,
-    executor: PgExecutor = this.pool,
-  ) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_thread_tags WHERE tenant_id = $1 AND tag_id = $2`,
-      [tenantId, tagId],
-      executor,
-    )
-    if (!row) throw new Error(`Unknown thread tag ${tagId}.`)
-    return threadTagFromRow(row)
-  }
-
-  private async listThreadTagsForSession(
-    tenantId: string,
-    sessionId: string,
-    executor: PgExecutor = this.pool,
-  ) {
-    const result = await executor.query(
-      `SELECT tag.*
-       FROM cloud_thread_tags tag
-       JOIN cloud_thread_tag_links link
-         ON link.tenant_id = tag.tenant_id
-        AND link.tag_id = tag.tag_id
-       WHERE link.tenant_id = $1 AND link.session_id = $2
-       ORDER BY lower(tag.name), tag.tag_id`,
-      [tenantId, sessionId],
-    )
-    return result.rows.map(threadTagFromRow)
   }
 
   private async requireCommand(commandId: string, executor: PgExecutor, forUpdate = false) {

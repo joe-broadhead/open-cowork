@@ -53,21 +53,6 @@ function StudioPageShell({ children }: { children: ReactNode }) {
   )
 }
 
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon: 'circle-help' | 'file' | 'activity' }) {
-  return (
-    <Card padding="md">
-      <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-lg border border-border-subtle bg-surface text-text-secondary">
-          <Icon name={icon} size={16} />
-        </span>
-        <div>
-          <div className="text-2xs font-semibold uppercase tracking-widest text-text-muted">{label}</div>
-          <div className="mt-1 text-xl font-semibold tabular-nums text-text">{value}</div>
-        </div>
-      </div>
-    </Card>
-  )
-}
 
 export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
@@ -395,12 +380,6 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
           disabledReason: currentSessionId ? undefined : t('studio.artifacts.noActiveChat', 'Open or start a chat before reviewing artifacts.'),
         }]}
       />
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <StatCard label={t('studio.artifacts.total', 'Artifacts')} value={artifactTotal} icon="file" />
-        <StatCard label={t('studio.artifacts.inReview', 'In review')} value={artifacts.filter((artifact) => artifact.status === 'in-review').length} icon="circle-help" />
-        <StatCard label={t('studio.artifacts.workspace', 'Workspace')} value={activeWorkspaceId} icon="activity" />
-      </div>
 
       <ArtifactsLibrarySurface
         artifacts={artifacts}

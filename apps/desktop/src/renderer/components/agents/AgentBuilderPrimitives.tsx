@@ -276,7 +276,7 @@ export function InferenceTab({
               disabled={readOnly || (models.length === 0 && !uncatalogedModelId)}
               onChange={(event) => chooseModel(event.target.value)}
               className={selectClass}
-              aria-label="Model"
+              aria-label={t('agentBuilder.modelSelect', 'Model')}
             >
               <option value="">Inherit session default</option>
               {uncatalogedModelId ? (
@@ -330,7 +330,7 @@ export function InferenceTab({
             disabled={readOnly}
             onChange={(event) => onChange({ variant: event.target.value.trim() === '' ? null : event.target.value })}
             className={selectClass}
-            aria-label="Variant"
+            aria-label={t('agentBuilder.variantSelect', 'Variant')}
           >
             <option value="">Provider default</option>
             {variants.map((variant) => (
@@ -358,7 +358,7 @@ export function InferenceTab({
               readOnly={readOnly}
               onChange={(event) => onChange({ model: event.target.value.trim() === '' ? null : event.target.value })}
               placeholder="openrouter/anthropic/claude-sonnet-4"
-              aria-label="Advanced model ID"
+              aria-label={t('agentBuilder.advancedModelId', 'Advanced model ID')}
               className={inputClass}
             />
             <span className="mt-1 block text-2xs text-text-muted">
@@ -372,7 +372,7 @@ export function InferenceTab({
                   readOnly={readOnly}
                   onChange={(event) => onChange({ variant: event.target.value.trim() === '' ? null : event.target.value })}
                   placeholder="reasoning"
-                  aria-label="Advanced variant"
+                  aria-label={t('agentBuilder.advancedVariant', 'Advanced variant')}
                   className={inputClass}
                 />
                 <span className="mt-1 block text-2xs text-text-muted">
@@ -396,7 +396,7 @@ export function InferenceTab({
             onChange({ temperature: parsed !== null && Number.isFinite(parsed) ? parsed : null })
           }}
           placeholder="0.0 - 2.0"
-          aria-label="Temperature"
+          aria-label={t('agentBuilder.temperature', 'Temperature')}
           className={inputClass}
         />
       </Field>
@@ -412,7 +412,7 @@ export function InferenceTab({
             onChange({ steps: parsed !== null && Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null })
           }}
           placeholder="20"
-          aria-label="Max steps"
+          aria-label={t('agentBuilder.maxSteps', 'Max steps')}
           className={inputClass}
         />
       </Field>

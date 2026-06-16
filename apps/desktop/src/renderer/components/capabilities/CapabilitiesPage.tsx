@@ -311,11 +311,11 @@ export function CapabilitiesPage({
     : tab === 'relationships'
       ? t('capabilities.searchRelationships', 'Search capabilities, coworkers, playbooks, risks, credentials, or policies...')
       : tab === 'tools'
-        ? t('capabilities.searchTools', 'Search tools, descriptions, or coworkers...')
-        : t('capabilities.searchSkills', 'Search skills, descriptions, or coworkers...')
+        ? t('capabilities.searchTools', 'Search connections, descriptions, or coworkers...')
+        : t('capabilities.searchSkills', 'Search abilities, descriptions, or coworkers...')
   const addButtonLabel = tab === 'skills'
-    ? t('capabilities.addSkillButton', 'Add skill')
-    : t('capabilities.addTool', 'Add tool')
+    ? t('capabilities.addSkillButton', 'Add ability')
+    : t('capabilities.addTool', 'Add connection')
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="feature-page-shell">
@@ -359,8 +359,8 @@ export function CapabilitiesPage({
                 : value === 'relationships'
                   ? t('capabilities.tab.relationships', 'Relationships')
                   : value === 'tools'
-                    ? t('capabilities.tab.tools', 'Tools')
-                    : t('capabilities.tab.skills', 'Skills'),
+                    ? t('capabilities.tab.tools', 'Connections')
+                    : t('capabilities.tab.skills', 'Abilities'),
             }))}
           />
           <Button

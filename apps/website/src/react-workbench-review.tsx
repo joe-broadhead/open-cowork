@@ -179,7 +179,13 @@ export function CloudArtifactReviewDetail({ artifactPanel }: { artifactPanel: Ar
   )
 }
 
-export function CloudComposerActionCluster({ profileName }: { profileName: string }) {
+export function CloudComposerActionCluster({
+  profileName,
+  canCaptureKnowledge,
+}: {
+  profileName: string
+  canCaptureKnowledge: boolean
+}) {
   return (
     <ActionCluster
       label="Cloud chat actions"
@@ -205,6 +211,15 @@ export function CloudComposerActionCluster({ profileName }: { profileName: strin
           icon: 'settings-2',
           disabled: true,
           title: 'Active cloud profile',
+        },
+        {
+          id: 'capture-knowledge',
+          label: 'Capture to knowledge',
+          icon: 'book-open',
+          disabled: !canCaptureKnowledge,
+          title: canCaptureKnowledge
+            ? 'Create a reviewable Knowledge proposal from this chat'
+            : 'Knowledge capture requires an org owner or admin role',
         },
       ]}
     />

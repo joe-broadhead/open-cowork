@@ -47,7 +47,7 @@ export function cloudWebsiteLayoutStyles() {
       color: var(--accent-action-foreground);
       font-family: var(--font-display);
       font-weight: 800;
-      box-shadow: var(--glow-soft), var(--specular);
+      box-shadow: var(--specular);
     }
     .brand-logo {
       object-fit: contain;
@@ -82,7 +82,7 @@ export function cloudWebsiteLayoutStyles() {
       line-height: var(--lh-md);
     }
     .meta, small {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -153,7 +153,7 @@ export function cloudWebsiteLayoutStyles() {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-2xs);
       font-weight: 750;
       line-height: var(--lh-2xs);
@@ -235,7 +235,7 @@ export function cloudWebsiteLayoutStyles() {
     }
     .manage-nav summary small {
       overflow: hidden;
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-2xs);
       font-weight: 600;
       text-overflow: ellipsis;
@@ -258,7 +258,7 @@ export function cloudWebsiteLayoutStyles() {
     .manage-nav summary::after,
     .admin-nav summary::after {
       content: '+';
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-family: var(--font-mono);
       font-size: var(--text-sm);
       line-height: var(--lh-sm);
@@ -283,7 +283,7 @@ export function cloudWebsiteLayoutStyles() {
       display: none;
     }
     .nav-heading {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-2xs);
       font-weight: 750;
       letter-spacing: 0.08em;
@@ -328,7 +328,7 @@ export function cloudWebsiteLayoutStyles() {
       box-shadow: var(--ring-selected), var(--ring-focus);
     }
     .nav-links a[data-locked="true"] {
-      color: var(--muted);
+      color: var(--color-text-muted);
     }
     .brand-links {
       display: flex;
@@ -373,7 +373,7 @@ export function cloudWebsiteLayoutStyles() {
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 650;
     }
@@ -391,7 +391,7 @@ export function cloudWebsiteLayoutStyles() {
       border: var(--border-width-1) solid var(--color-border-subtle);
       border-radius: var(--radius-full);
       background: var(--tone-neutral-bg);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 650;
       line-height: var(--lh-xs);

@@ -125,7 +125,7 @@ export function cloudWebsiteChatStyles() {
     }
     .home-eyebrow {
       margin-bottom: var(--space-2);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 700;
       line-height: var(--lh-xs);
@@ -235,7 +235,6 @@ export function cloudWebsiteChatStyles() {
       border-color: color-mix(in srgb, var(--color-accent) 36%, var(--color-border) 64%);
       background: var(--color-surface-active);
       color: var(--text);
-      box-shadow: var(--glow-soft);
     }
     .composer-toolbar {
       display: flex;
@@ -259,7 +258,7 @@ export function cloudWebsiteChatStyles() {
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -281,7 +280,7 @@ export function cloudWebsiteChatStyles() {
     .toolbar-status {
       display: inline-flex;
       align-items: center;
-      color: var(--muted);
+      color: var(--color-text-muted);
     }
     .icon-button,
     .composer-send {
@@ -304,7 +303,7 @@ export function cloudWebsiteChatStyles() {
       background: var(--accent-action-fill);
       border-color: var(--accent-line);
       color: var(--accent-action-foreground);
-      box-shadow: var(--glow-soft), var(--specular);
+      box-shadow: var(--specular);
     }
     .chat-inspector {
       min-width: 0;
@@ -349,9 +348,9 @@ export function cloudWebsiteChatStyles() {
       line-height: var(--lh-sm);
     }
     .cloud-specialist-lane__subline, .cloud-conversation-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
-    .studio-handoff-chip, .cloud-conversation-meta__context { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; max-width: 100%; border: var(--border-width-1) solid var(--color-border-subtle); border-radius: var(--radius-full); background: color-mix(in srgb, var(--color-elevated) 84%, transparent); color: var(--muted); font-size: var(--text-2xs); line-height: var(--lh-2xs); padding: var(--space-1) var(--space-2); }
+    .studio-handoff-chip, .cloud-conversation-meta__context { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; max-width: 100%; border: var(--border-width-1) solid var(--color-border-subtle); border-radius: var(--radius-full); background: color-mix(in srgb, var(--color-elevated) 84%, transparent); color: var(--color-text-muted); font-size: var(--text-2xs); line-height: var(--lh-2xs); padding: var(--space-1) var(--space-2); }
     .studio-handoff-chip span, .cloud-conversation-meta__context span { overflow: hidden; max-width: 160px; color: var(--text); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-    .cloud-conversation-meta__summary { color: var(--muted); }
+    .cloud-conversation-meta__summary { color: var(--color-text-muted); }
     .cloud-conversation-meta__board { min-height: var(--control-h-sm); padding: 0 var(--space-2); font-size: var(--text-2xs); }
     .cloud-specialist-lane__tools {
       display: grid;
@@ -386,7 +385,7 @@ export function cloudWebsiteChatStyles() {
     }
     .cloud-review-summary p,
     .cloud-review-summary__list {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -456,7 +455,7 @@ export function cloudWebsiteChatStyles() {
     }
     .message-bubble[data-streaming="true"] {
       border-color: color-mix(in srgb, var(--accent) 34%, var(--color-border) 66%);
-      box-shadow: var(--glow-soft), var(--shadow-2), var(--specular-strong);
+      box-shadow: var(--shadow-2), var(--specular-strong);
     }
     .message-bubble[data-role="assistant"][data-streaming="true"] {
       border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-xs);
@@ -480,7 +479,6 @@ export function cloudWebsiteChatStyles() {
       transform: translateY(0.16em);
       border-radius: var(--radius-xs);
       background: var(--accent);
-      box-shadow: var(--glow-soft);
       animation: ui-stream-caret 1s steps(2, start) infinite;
     }
     .message-bubble[data-role="system"] {
@@ -492,7 +490,7 @@ export function cloudWebsiteChatStyles() {
       background: var(--tone-danger-bg);
     }
     .message-heading {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 750;
       line-height: var(--lh-xs);

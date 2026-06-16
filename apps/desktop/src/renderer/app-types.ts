@@ -2,6 +2,7 @@ export type AppView =
   | 'home'
   | 'chat'
   | 'projects'
+  | 'knowledge'
   | 'approvals'
   | 'playbooks'
   | 'team'
@@ -19,6 +20,7 @@ const APP_VIEWS: readonly AppView[] = [
   'home',
   'chat',
   'projects',
+  'knowledge',
   'approvals',
   'playbooks',
   'team',

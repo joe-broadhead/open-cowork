@@ -726,7 +726,10 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(buildScript, /cloudElectronShimPlugin/)
   assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
   assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
-  assert.match(browserApp, /website\/src\/render\.ts/)
+  // The desktop/cloud host consumes the website SSR renderer through the declared
+  // @open-cowork/website package boundary (resolved to source, bundled by the cloud
+  // esbuild build) rather than a relative cross-app reach into apps/website/src.
+  assert.match(browserApp, /@open-cowork\/website/)
   assert.match(websitePackage, /"test:browser"/)
   assert.match(websitePackage, /"test:a11y"/)
   assert.match(websitePackage, /"perf:check"/)

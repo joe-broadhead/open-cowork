@@ -39,6 +39,7 @@ import type {
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import { sessionCheckpointLatestKey } from '../apps/desktop/src/main/cloud/workspace-checkpoint-store.ts'
+import { clearKnowledgeStoreCache } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
 
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 const STRONG_CLOUD_SECRET = 'Pp4J9_kV2rTq8YzLmN6bHwC3sDxF7uAaG1eOiR5v'
@@ -983,6 +984,41 @@ test('cloud web role starts transport without processing worker commands inline'
     assert.equal(runtime.prompts.length, 0)
   } finally {
     await app.close()
+  }
+})
+
+test('cloud app stores Knowledge data under the configured cloud app data root', async () => {
+  const runtime = new FakeRuntime()
+  const paths = createCloudPathProvider(await mkdtemp(join(tmpdir(), 'open-cowork-cloud-knowledge-')))
+  const app = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    runtime,
+    paths,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+
+  try {
+    assert.ok(app.url)
+    const response = await fetch(`${app.url}/api/knowledge`, {
+      headers: {
+        'x-open-cowork-tenant-id': 'tenant-knowledge',
+        'x-open-cowork-user-id': 'user-knowledge',
+        'x-open-cowork-user-email': 'knowledge@example.test',
+        'x-open-cowork-user-role': 'owner',
+      },
+    })
+    assert.equal(response.status, 200)
+    const dbStat = await stat(join(paths.getAppDataDir(), 'knowledge.sqlite'))
+    assert.equal(dbStat.isFile(), true)
+  } finally {
+    await app.close()
+    clearKnowledgeStoreCache()
   }
 })
 

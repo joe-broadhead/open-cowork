@@ -1,9 +1,5 @@
 import { join } from 'path'
 import {
-  applyCapabilityBundleInstall,
-  applyCapabilityBundleUninstall,
-  applyCapabilityBundleUpdate,
-  createEmptyCapabilityBundleLifecycleState,
   type CapabilityBundleInstallPlan,
   type CapabilityBundleLifecycleApplyResult,
   type CapabilityBundleLifecycleState,
@@ -12,6 +8,12 @@ import {
   type CapabilityBundleUninstallPlan,
   type CapabilityBundleUpdatePlan,
 } from '@open-cowork/shared'
+import {
+  applyCapabilityBundleInstall,
+  applyCapabilityBundleUninstall,
+  applyCapabilityBundleUpdate,
+  createEmptyCapabilityBundleLifecycleState,
+} from './capability-bundle-engine.ts'
 import { getAppDataDir } from './config-loader.ts'
 import { readJsoncFile, writeJsonFile } from './jsonc.ts'
 import { log } from './logger.ts'

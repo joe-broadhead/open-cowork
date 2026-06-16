@@ -14,14 +14,14 @@ export function cloudWebsiteLibraryStyles() {
       min-height: var(--control-h-sm);
       border-color: transparent;
       background: transparent;
-      color: var(--muted);
+      color: var(--color-text-muted);
       padding: 0 var(--space-3);
     }
     .segmented-control button[aria-selected="true"] {
       border-color: var(--accent-line);
       background: var(--color-surface-active);
       color: var(--text);
-      box-shadow: var(--glow-soft), var(--specular);
+      box-shadow: var(--specular);
     }
     .agent-config-spec {
       display: grid;
@@ -45,7 +45,7 @@ export function cloudWebsiteLibraryStyles() {
       font-style: normal;
     }
     .agent-config-spec strong {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -98,7 +98,7 @@ export function cloudWebsiteLibraryStyles() {
     }
     .workflow-step small {
       margin-top: var(--space-1);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }

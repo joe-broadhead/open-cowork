@@ -4,6 +4,7 @@ import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { CloudArtifactSurfacePortals } from './react-workbench-artifacts.tsx'
 import { CloudChannelSurfacePortals } from './react-workbench-channels.tsx'
+import { CloudKnowledgeSurfacePortals } from './react-workbench-knowledge.tsx'
 import { CloudProjectBoardPortal } from './react-workbench-projects.tsx'
 import type { CloudRuntimeActionProps } from './react-workbench.ts'
 import { asRecord, errorMessage, setRouteHash } from './react-workbench-controller.ts'
@@ -386,6 +387,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
       <CloudProjectBoardPortal target={targets.projectBoard} bootstrap={bootstrap} agents={projectAgentNames} onSelectSession={onSelectSession} />
       <CloudArtifactSurfacePortals selectedView={selectedView} artifactActions={artifactActions} />
       <CloudChannelSurfacePortals bootstrap={bootstrap} workspace={workspace} onSelectSession={onSelectSession} />
+      <CloudKnowledgeSurfacePortals selectedView={selectedView} bootstrap={bootstrap} workspace={workspace} />
     </>
   )
 }

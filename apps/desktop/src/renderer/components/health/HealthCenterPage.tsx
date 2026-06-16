@@ -12,6 +12,7 @@ import {
   type WorkspaceExecutionAuthority,
   type WorkspaceInfo,
 } from '@open-cowork/shared'
+import { t } from '../../helpers/i18n'
 
 type WorkspaceHealth = {
   workspace: WorkspaceInfo
@@ -88,10 +89,10 @@ function workspaceAuthority(workspace: WorkspaceInfo): WorkspaceExecutionAuthori
 function supportSummary(support: WorkspaceApiSupport[]) {
   const blocked = support.filter((entry) => entry.status === 'blocked_by_policy' || entry.status === 'not_supported')
   const readOnly = support.filter((entry) => entry.status === 'read_only')
-  if (blocked.length > 0) return `${blocked.length} blocked`
-  if (readOnly.length > 0) return `${readOnly.length} read-only`
-  if (support.length > 0) return `${support.length} supported`
-  return 'support unknown'
+  if (blocked.length > 0) return t('health.supportBlocked', '{{count}} blocked', { count: blocked.length })
+  if (readOnly.length > 0) return t('health.supportReadOnly', '{{count}} read-only', { count: readOnly.length })
+  if (support.length > 0) return t('health.supportSupported', '{{count}} supported', { count: support.length })
+  return t('health.supportUnknown', 'support unknown')
 }
 
 function workspaceAction(workspace: WorkspaceInfo) {
@@ -230,9 +231,9 @@ export function HealthCenterPage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="font-display text-role-page-title font-bold text-text">Health Center</h1>
+            <h1 className="font-display text-role-page-title font-bold text-text">{t('health.title', 'Health Center')}</h1>
             <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-text-muted">
-              Setup paths, execution authority, sync state, and operator recovery checks for Desktop, Cloud, and Gateway.
+              {t('health.subtitle', 'Setup paths, execution authority, sync state, and operator recovery checks for Desktop, Cloud, and Gateway.')}
             </p>
           </div>
           <button
@@ -241,7 +242,7 @@ export function HealthCenterPage() {
             disabled={loading}
             className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-60"
           >
-            {loading ? 'Refreshing...' : 'Refresh'}
+            {loading ? t('health.refreshing', 'Refreshing...') : t('health.refreshButton', 'Refresh')}
           </button>
         </div>
 
@@ -274,24 +275,24 @@ export function HealthCenterPage() {
             <Card>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-role-card-title font-bold text-text">Desktop Runtime</h2>
+                  <h2 className="font-display text-role-card-title font-bold text-text">{t('health.desktopRuntimeTitle', 'Desktop Runtime')}</h2>
                   <p className="mt-1 text-[11px] text-text-muted">
-                    Local execution authority and provider selection. No raw credential values are shown.
+                    {t('health.desktopRuntimeDescription', 'Local execution authority and provider selection. No raw credential values are shown.')}
                   </p>
                 </div>
                 <StatusPill status={snapshot.runtime?.ready ? 'ready' : 'action_required'} />
               </div>
               <dl className="mt-3 grid gap-2 text-[11px]">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-text-muted">Provider</dt>
-                  <dd className="truncate text-text-secondary">{snapshot.runtimeInputs?.providerName || snapshot.runtimeInputs?.providerId || 'not configured'}</dd>
+                  <dt className="text-text-muted">{t('health.providerLabel', 'Provider')}</dt>
+                  <dd className="truncate text-text-secondary">{snapshot.runtimeInputs?.providerName || snapshot.runtimeInputs?.providerId || t('health.notConfigured', 'not configured')}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-text-muted">Model</dt>
-                  <dd className="truncate text-text-secondary">{snapshot.runtimeInputs?.runtimeModel || snapshot.runtimeInputs?.modelId || 'not configured'}</dd>
+                  <dt className="text-text-muted">{t('health.modelLabel', 'Model')}</dt>
+                  <dd className="truncate text-text-secondary">{snapshot.runtimeInputs?.runtimeModel || snapshot.runtimeInputs?.modelId || t('health.notConfigured', 'not configured')}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-text-muted">Credential keys</dt>
+                  <dt className="text-text-muted">{t('health.credentialKeysLabel', 'Credential keys')}</dt>
                   <dd className="text-text-secondary">{snapshot.runtimeInputs?.credentialOverrideKeys.length ?? 0}</dd>
                 </div>
                 {snapshot.runtime?.error ? (
@@ -306,17 +307,17 @@ export function HealthCenterPage() {
                 disabled={busyAction === 'runtime:restart'}
                 className="mt-3 rounded-md border border-border-subtle px-3 py-1.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-60"
               >
-                {busyAction === 'runtime:restart' ? 'Restarting...' : 'Restart runtime'}
+                {busyAction === 'runtime:restart' ? t('health.restarting', 'Restarting...') : t('health.restartRuntimeButton', 'Restart runtime')}
               </button>
             </Card>
 
             <Card>
-              <h2 className="font-display text-role-card-title font-bold text-text">Runtime Capability Provenance</h2>
-              <p className="mt-1 text-[11px] text-text-muted">Source, winner, and reason-code diagnostics for runtime inputs. Evidence is redacted before it reaches the renderer.</p>
+              <h2 className="font-display text-role-card-title font-bold text-text">{t('health.capabilityProvenanceTitle', 'Runtime Capability Provenance')}</h2>
+              <p className="mt-1 text-[11px] text-text-muted">{t('health.capabilityProvenanceDescription', 'Source, winner, and reason-code diagnostics for runtime inputs. Evidence is redacted before it reaches the renderer.')}</p>
               <div className="mt-3 flex flex-col gap-2">
                 {runtimeCapabilities.length === 0 ? (
                   <div className="rounded border border-border-subtle bg-base px-3 py-2 text-[11px] text-text-muted">
-                    No runtime capability diagnostics returned.
+                    {t('health.capabilityProvenanceEmpty', 'No runtime capability diagnostics returned.')}
                   </div>
                 ) : runtimeCapabilities.map((capability) => {
                   const evidence = Object.entries(capability.evidence || {}).slice(0, 4)
@@ -351,13 +352,13 @@ export function HealthCenterPage() {
               </div>
               {runtimeConflicts.length > 0 ? (
                 <div className="mt-4">
-                  <div className="text-[11px] font-semibold text-text-secondary">Conflicts</div>
+                  <div className="text-[11px] font-semibold text-text-secondary">{t('health.conflictsHeading', 'Conflicts')}</div>
                   <div className="mt-2 flex flex-col gap-2">
                     {runtimeConflicts.map((conflict) => (
                       <div key={`${conflict.kind}:${conflict.id}:${conflict.reasonCode}`} className="rounded border border-amber-500/25 bg-amber-500/10 px-3 py-2">
                         <div className="text-[11px] font-medium text-amber-100">{conflict.kind}: {conflict.id}</div>
                         <div className="mt-1 text-[10px] text-amber-100/80">
-                          winner {conflict.winnerSource} · losers {conflict.loserSources.join(', ')}
+                          {t('health.conflictWinnerLosers', 'winner {{winner}} · losers {{losers}}', { winner: conflict.winnerSource, losers: conflict.loserSources.join(', ') })}
                         </div>
                         <div className="mt-1 break-all font-mono text-[10px] text-amber-100/80">{conflict.reasonCode}</div>
                       </div>
@@ -368,12 +369,12 @@ export function HealthCenterPage() {
             </Card>
 
             <Card>
-              <h2 className="font-display text-role-card-title font-bold text-text">Pairings</h2>
-              <p className="mt-1 text-[11px] text-text-muted">Outbound Desktop pairings stay local-authority unless remote policy explicitly allows more.</p>
+              <h2 className="font-display text-role-card-title font-bold text-text">{t('health.pairingsTitle', 'Pairings')}</h2>
+              <p className="mt-1 text-[11px] text-text-muted">{t('health.pairingsDescription', 'Outbound Desktop pairings stay local-authority unless remote policy explicitly allows more.')}</p>
               <div className="mt-3 flex flex-col gap-2">
                 {snapshot.pairings.length === 0 ? (
                   <div className="rounded border border-border-subtle bg-base px-3 py-2 text-[11px] text-text-muted">
-                    No pairings configured.
+                    {t('health.pairingsEmpty', 'No pairings configured.')}
                   </div>
                 ) : snapshot.pairings.map((pairing) => (
                   <div key={pairing.id} className="rounded border border-border-subtle bg-base px-3 py-2">
@@ -382,7 +383,10 @@ export function HealthCenterPage() {
                       <span className="rounded border border-border-subtle px-2 py-0.5 text-[10px] text-text-secondary">{pairing.status}</span>
                     </div>
                     <div className="mt-1 text-[10px] text-text-muted">
-                      Last heartbeat: {pairing.lastHeartbeatAt || 'never'} · token: {pairing.credential.hasToken ? 'stored' : 'missing'}
+                      {t('health.pairingHeartbeatToken', 'Last heartbeat: {{heartbeat}} · token: {{token}}', {
+                        heartbeat: pairing.lastHeartbeatAt || t('health.pairingHeartbeatNever', 'never'),
+                        token: pairing.credential.hasToken ? t('health.pairingTokenStored', 'stored') : t('health.pairingTokenMissing', 'missing'),
+                      })}
                     </div>
                   </div>
                 ))}
@@ -392,12 +396,12 @@ export function HealthCenterPage() {
 
           <div className="flex flex-col gap-4">
             <Card>
-              <h2 className="font-display text-role-card-title font-bold text-text">Workspaces And Authorities</h2>
-              <p className="mt-1 text-[11px] text-text-muted">Each thread must belong to exactly one workspace and one execution authority.</p>
+              <h2 className="font-display text-role-card-title font-bold text-text">{t('health.workspacesTitle', 'Workspaces And Authorities')}</h2>
+              <p className="mt-1 text-[11px] text-text-muted">{t('health.workspacesDescription', 'Each thread must belong to exactly one workspace and one execution authority.')}</p>
               <div className="mt-3 grid gap-2">
                 {snapshot.workspaces.length === 0 ? (
                   <div className="rounded border border-border-subtle bg-base px-3 py-2 text-[11px] text-text-muted">
-                    No workspaces were returned by the Desktop gateway.
+                    {t('health.workspacesEmpty', 'No workspaces were returned by the Desktop gateway.')}
                   </div>
                 ) : snapshot.workspaces.map(({ workspace, support }) => {
                   const authority = workspaceAuthority(workspace)
@@ -419,16 +423,20 @@ export function HealthCenterPage() {
                               disabled={busyAction === `${workspace.id}:${action}`}
                               className="rounded border border-border-subtle px-2 py-1 text-[10px] text-text-secondary hover:bg-surface-hover hover:text-text disabled:opacity-60"
                             >
-                              {busyAction === `${workspace.id}:${action}` ? 'Working...' : action}
+                              {busyAction === `${workspace.id}:${action}`
+                                ? t('health.workspaceActionWorking', 'Working...')
+                                : action === 'Sign in'
+                                  ? t('health.workspaceActionSignIn', 'Sign in')
+                                  : t('health.workspaceActionSync', 'Sync')}
                             </button>
                           ) : null}
                         </div>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
                         <span>{supportSummary(support)}</span>
-                        <span>approvals: {contract.defaultApprovals}</span>
-                        <span>questions: {contract.defaultQuestions}</span>
-                        <span>paths: {contract.defaultPathExposure}</span>
+                        <span>{t('health.workspaceApprovals', 'approvals: {{value}}', { value: contract.defaultApprovals })}</span>
+                        <span>{t('health.workspaceQuestions', 'questions: {{value}}', { value: contract.defaultQuestions })}</span>
+                        <span>{t('health.workspacePaths', 'paths: {{value}}', { value: contract.defaultPathExposure })}</span>
                       </div>
                       {workspace.error ? (
                         <div className="mt-2 rounded border border-red-400/25 bg-red-500/10 px-2 py-1 text-[10px] text-red-100">{workspace.error}</div>
@@ -440,8 +448,8 @@ export function HealthCenterPage() {
             </Card>
 
             <Card>
-              <h2 className="font-display text-role-card-title font-bold text-text">Operator Checks</h2>
-              <p className="mt-1 text-[11px] text-text-muted">Doctor, smoke, durability, and recovery checks before routing real users or public webhooks.</p>
+              <h2 className="font-display text-role-card-title font-bold text-text">{t('health.operatorChecksTitle', 'Operator Checks')}</h2>
+              <p className="mt-1 text-[11px] text-text-muted">{t('health.operatorChecksDescription', 'Doctor, smoke, durability, and recovery checks before routing real users or public webhooks.')}</p>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {visibleChecks.map(({ check, status }) => (
                   <div key={check.id} className="rounded border border-border-subtle bg-base px-3 py-2">
@@ -459,7 +467,9 @@ export function HealthCenterPage() {
         </div>
 
         <div className="rounded-lg border border-border-subtle bg-elevated px-4 py-3 text-[11px] text-text-muted">
-          {snapshot.loadedAt ? `Last refreshed ${snapshot.loadedAt}` : 'Health data has not loaded yet.'}
+          {snapshot.loadedAt
+            ? t('health.lastRefreshed', 'Last refreshed {{timestamp}}', { timestamp: snapshot.loadedAt })
+            : t('health.notLoadedYet', 'Health data has not loaded yet.')}
         </div>
       </div>
     </div>

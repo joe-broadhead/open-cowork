@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { DatabaseSync } from 'node:sqlite'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
@@ -16,6 +18,7 @@ import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspac
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
 import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coordination-handlers.ts'
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
+import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 import {
   createCoordinationProject,
@@ -26,6 +29,8 @@ import {
   getCoordinationWatch,
   setCoordinationDatabaseForTests,
 } from '../apps/desktop/src/main/coordination/coordination-store.ts'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearKnowledgeStoreCache } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
@@ -115,6 +120,7 @@ test('IPC handler modules register their core channels', () => {
   registerWorkflowHandlers(context)
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
+  registerKnowledgeHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -172,6 +178,12 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('channels:bindings:connect'), true)
   assert.equal(handlers.has('channels:people:list'), true)
   assert.equal(handlers.has('channels:watches:create'), true)
+  assert.equal(handlers.has('knowledge:snapshot'), true)
+  assert.equal(handlers.has('knowledge:proposal:create'), true)
+  assert.equal(handlers.has('knowledge:proposal:accept'), true)
+  assert.equal(handlers.has('knowledge:proposal:decline'), true)
+  assert.equal(handlers.has('knowledge:page:history'), true)
+  assert.equal(handlers.has('knowledge:page:restore'), true)
   assert.equal(handlers.has('threads:tags:apply'), true)
   assert.equal(handlers.has('threads:smart-filters:create'), true)
   assert.equal(handlers.has('threads:suggestions:accept'), true)
@@ -188,6 +200,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerWorkflowHandlers(context)
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
+  registerKnowledgeHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -313,6 +326,110 @@ test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
   } finally {
     setCoordinationDatabaseForTests(null)
     db.close()
+  }
+})
+
+test('knowledge proposal IPC ignores renderer-controlled storage directories', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const appDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-knowledge-ipc-app-'))
+  const rendererStorageDir = mkdtempSync(join(tmpdir(), 'open-cowork-knowledge-ipc-renderer-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = appDataDir
+  clearConfigCaches()
+  clearKnowledgeStoreCache()
+
+  try {
+    const { context, handlers } = createTestContext()
+    registerKnowledgeHandlers(context)
+
+    const snapshotHandler = handlers.get('knowledge:snapshot') as (
+      event: unknown,
+      options?: unknown,
+    ) => Promise<Record<string, unknown>>
+    const createProposal = handlers.get('knowledge:proposal:create') as (
+      event: unknown,
+      input: unknown,
+    ) => Promise<Record<string, unknown>>
+
+    const snapshot = await snapshotHandler(null, {})
+    const spaces = snapshot.spaces as Array<{ id: string }>
+    const pages = snapshot.pages as Array<{ id: string, title: string }>
+    assert.ok(spaces[0]?.id)
+    assert.ok(pages[0]?.id)
+
+    const proposal = await createProposal(null, {
+      storageDataDir: rendererStorageDir,
+      spaceId: spaces[0].id,
+      pageId: pages[0].id,
+      pageTitle: pages[0].title,
+      by: 'renderer',
+      summary: 'Renderer storageDataDir must not select the Knowledge database path.',
+      body: [{ type: 'p', text: 'The proposal should be stored in local app data.' }],
+    })
+
+    assert.equal(proposal.status, 'pending')
+    assert.equal(existsSync(join(appDataDir, 'knowledge.sqlite')), true)
+    assert.equal(existsSync(join(rendererStorageDir, 'knowledge.sqlite')), false)
+  } finally {
+    clearKnowledgeStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(appDataDir, { recursive: true, force: true })
+    rmSync(rendererStorageDir, { recursive: true, force: true })
+  }
+})
+
+test('knowledge restore IPC restores a prior version, pins local storage, and validates ids', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const appDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-knowledge-restore-app-'))
+  const rendererStorageDir = mkdtempSync(join(tmpdir(), 'open-cowork-knowledge-restore-renderer-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = appDataDir
+  clearConfigCaches()
+  clearKnowledgeStoreCache()
+
+  try {
+    const { context, handlers } = createTestContext()
+    registerKnowledgeHandlers(context)
+
+    const snapshotHandler = handlers.get('knowledge:snapshot') as (event: unknown, options?: unknown) => Promise<Record<string, unknown>>
+    const createProposal = handlers.get('knowledge:proposal:create') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const acceptProposal = handlers.get('knowledge:proposal:accept') as (event: unknown, id: unknown, input?: unknown) => Promise<Record<string, unknown>>
+    const restoreVersion = handlers.get('knowledge:page:restore') as (event: unknown, pageId: unknown, versionId: unknown, input?: unknown) => Promise<Record<string, unknown>>
+
+    const snapshot = await snapshotHandler(null, {})
+    const pages = snapshot.pages as Array<{ id: string, title: string, version: number }>
+    const spaces = snapshot.spaces as Array<{ id: string }>
+    const page = pages[0]
+    assert.equal(page.version, 1)
+
+    const proposal = await createProposal(null, {
+      spaceId: spaces[0].id,
+      pageId: page.id,
+      pageTitle: page.title,
+      summary: 'Rewrite the page so there is a v2 to roll back from.',
+      body: [{ type: 'p', text: 'Replacement body.' }],
+    })
+    const accepted = await acceptProposal(null, proposal.id as string, {})
+    assert.equal((accepted.page as { version: number }).version, 2)
+
+    // Restore v1 through the IPC handler; the renderer-supplied storageDataDir must be ignored.
+    const restored = await restoreVersion(null, page.id, `version:${page.id}:1`, { storageDataDir: rendererStorageDir })
+    const restoredPage = (restored as { page: { version: number, versionId: string, proposalId: string | null } }).page
+    assert.equal(restoredPage.version, 3)
+    assert.equal(restoredPage.versionId, `version:${page.id}:3`)
+    assert.equal(restoredPage.proposalId, null)
+    assert.equal(existsSync(join(appDataDir, 'knowledge.sqlite')), true)
+    assert.equal(existsSync(join(rendererStorageDir, 'knowledge.sqlite')), false)
+
+    // The handler's arg schema rejects a blank version id before touching the store.
+    await assert.rejects(() => restoreVersion(null, page.id, '   '), /version id/i)
+  } finally {
+    clearKnowledgeStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(appDataDir, { recursive: true, force: true })
+    rmSync(rendererStorageDir, { recursive: true, force: true })
   }
 })
 

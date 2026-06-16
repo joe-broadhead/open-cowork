@@ -109,6 +109,5 @@ export function cloudWebsiteAgentProfileStyles() {
       height: 100%;
       border-radius: inherit;
       background: var(--accent-gradient);
-      box-shadow: var(--glow-soft);
     }`
 }

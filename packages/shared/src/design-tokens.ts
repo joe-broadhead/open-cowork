@@ -118,8 +118,17 @@ function accentActionPlanForColors(accent: string, accent2: string | undefined) 
       overlayAlpha: 0.01,
     }
   }
-  if (white.overlayAlpha !== black.overlayAlpha) return white.overlayAlpha < black.overlayAlpha ? white : black
-  return white.score >= black.score ? white : black
+  // Honor the brand ink: the action fill is a solid accent button, so the text
+  // colour should follow the accent's own contrast (white on a dark accent,
+  // black on a light one) rather than whichever colour reaches the WCAG target
+  // with the least overlay. A small overlay then keeps the chosen ink readable
+  // across the gradient, so the result stays accessible while looking on-brand.
+  const preferredForeground = accentForegroundForColor(accent) as '#000000' | '#ffffff'
+  const preferred = preferredForeground === '#ffffff' ? white : black
+  const alternate = preferredForeground === '#ffffff' ? black : white
+  if (preferred.score >= 4.5) return preferred
+  if (alternate.score >= 4.5) return alternate
+  return preferred.score >= alternate.score ? preferred : alternate
 }
 
 export function accentActionForegroundForColors(accent: string, accent2: string | undefined) {
@@ -218,7 +227,7 @@ export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
   accentForeground: '#ffffff',
   shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
   shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.045), transparent 62%)',
+  bgImage: 'none',
 }
 
 export const DEFAULT_LIGHT_BRAND_THEME: BrandThemeTokens = {
@@ -245,7 +254,7 @@ export const DEFAULT_LIGHT_BRAND_THEME: BrandThemeTokens = {
   accentForeground: '#ffffff',
   shadowCard: '0 1px 1px rgba(42, 37, 32, 0.08), 0 10px 24px rgba(42, 37, 32, 0.08)',
   shadowElevated: '0 2px 6px rgba(42, 37, 32, 0.10), 0 20px 48px rgba(42, 37, 32, 0.12)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.06), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.04), transparent 62%)',
+  bgImage: 'none',
 }
 
 export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [

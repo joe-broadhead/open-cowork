@@ -339,8 +339,8 @@ const strings: Record<string, string> = {
   'agents.openCapabilitiesLink': 'Abrir Herramientas y habilidades',
 
   // Capabilities
-  'capabilities.tab.tools': 'Herramientas',
-  'capabilities.tab.skills': 'Habilidades',
+  'capabilities.tab.tools': 'Conexiones',
+  'capabilities.tab.skills': 'Aptitudes',
   'capabilities.addMcp': 'Añadir un MCP',
   'capabilities.addSkill': 'Añadir una habilidad',
   'capabilities.noTools': 'Aún no hay herramientas. Añade un MCP desde la página Capacidades.',
@@ -518,10 +518,10 @@ const strings: Record<string, string> = {
 
   'capabilities.title': 'Herramientas y habilidades',
   'capabilities.subtitle': 'Inspecciona las herramientas y paquetes de habilidades disponibles en el contexto actual de OpenCode, incluyendo los añadidos integrados, de máquina, de proyecto y personalizados.',
-  'capabilities.addTool': 'Añadir herramienta',
-  'capabilities.addSkillButton': 'Añadir habilidad',
-  'capabilities.searchTools': 'Buscar herramientas, descripciones o compañeros…',
-  'capabilities.searchSkills': 'Buscar habilidades, descripciones o compañeros…',
+  'capabilities.addTool': 'Añadir conexión',
+  'capabilities.addSkillButton': 'Añadir aptitud',
+  'capabilities.searchTools': 'Buscar conexiones, descripciones o compañeros…',
+  'capabilities.searchSkills': 'Buscar aptitudes, descripciones o compañeros…',
   'capabilities.details': 'Detalles',
   'capabilities.connection': 'Conexión',
   'capabilities.linkedAgents': 'Agentes vinculados',

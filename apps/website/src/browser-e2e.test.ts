@@ -453,7 +453,6 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     }
     assert.match(harness.document.querySelector('#channel-watch-list')?.textContent || '', /project \/ project-1/)
     assert.match(harness.document.querySelector('#channel-watch-list')?.textContent || '', /Approver/)
-    assert.match(harness.document.querySelector('#channel-summary-list')?.textContent || '', /Connected channels|People|Active watches/)
     assert.doesNotMatch(channelSurfaceText, /credentials|dead-letter|retries|leaked-secret|signed\?token=|secret:\/\//i)
     assert.ok(harness.document.querySelector('#channel-delivery-list .row'))
     const pauseWatchButton = [...harness.document.querySelectorAll('#channel-watch-list button')]
@@ -529,9 +528,14 @@ test('cloud web browser renders and mutates the Projects Kanban board through co
       assert.equal((move?.body as Record<string, unknown>)?.column, 'done')
     })
 
-    const assignee = harness.document.querySelector('.studio-select-row select') as HTMLSelectElement
-    assignee.value = 'data-analyst'
-    assignee.dispatchEvent(new harness.window.Event('change', { bubbles: true }))
+    const assigneeTrigger = harness.document.querySelector('.studio-select-row .ui-menu-trigger') as HTMLButtonElement
+    assert.ok(assigneeTrigger)
+    assigneeTrigger.click()
+    await waitFor(() => assert.ok(harness.document.querySelector('.studio-select-row .ui-popover')))
+    const dataAnalystOption = (Array.from(harness.document.querySelectorAll('.studio-select-row .ui-popover [role="menuitem"]')) as HTMLButtonElement[])
+      .find((option) => (option.textContent || '').includes('Data Analyst'))
+    assert.ok(dataAnalystOption)
+    dataAnalystOption.click()
     await waitFor(() => {
       const assign = harness.lastRequest((request) => request.method === 'POST' && /\/api\/coordination\/tasks\/task-3\/assign$/.test(request.path))
       assert.equal((assign?.body as Record<string, unknown>)?.assigneeAgent, 'data-analyst')

@@ -84,12 +84,6 @@ describe('StudioApprovalsPage', () => {
 
     render(<StudioApprovalsPage onOpenChat={vi.fn()} onOpenHome={vi.fn()} />)
 
-    const summary = screen.getByLabelText('Approvals summary')
-    expect(within(summary).getByText('Permission requests')).toBeInTheDocument()
-    expect(within(summary).getByText('Questions')).toBeInTheDocument()
-    expect(within(summary).getByText('Sessions waiting')).toBeInTheDocument()
-    expect(within(summary).getAllByText('1')).toHaveLength(2)
-    expect(within(summary).getByText('2')).toBeInTheDocument()
     expect(screen.getByText('Run command')).toBeInTheDocument()
     expect(screen.getAllByText('Continue?').length).toBeGreaterThan(0)
     expect(screen.queryByText('Other workspace command')).toBeNull()

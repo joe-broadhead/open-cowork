@@ -87,7 +87,7 @@ export function cloudWebsiteComponentStyles() {
     button.primary:hover:not(:disabled) {
       background: var(--accent-action-fill);
       border-color: var(--accent-line);
-      box-shadow: var(--glow-accent), var(--shadow-2), var(--specular-strong);
+      box-shadow: var(--shadow-2), var(--specular-strong);
       transform: translateY(calc(-1 * var(--border-width-1)));
     }
     button.primary:hover:not(:disabled)::after {
@@ -140,7 +140,7 @@ export function cloudWebsiteComponentStyles() {
       border-color: var(--color-border);
     }
     input::placeholder, textarea::placeholder {
-      color: var(--muted);
+      color: var(--color-text-muted);
     }
     textarea {
       min-height: 112px;
@@ -155,7 +155,7 @@ export function cloudWebsiteComponentStyles() {
     label {
       display: grid;
       gap: var(--space-1);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
       min-width: 0;
@@ -344,7 +344,7 @@ export function cloudWebsiteComponentStyles() {
     .table-head {
       min-height: var(--control-h-md);
       background: var(--color-surface-hover);
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       font-weight: 750;
       line-height: var(--lh-xs);
@@ -379,13 +379,13 @@ export function cloudWebsiteComponentStyles() {
     }
         .thread-row[data-selected="true"] {
           background: var(--color-surface-active);
-          box-shadow: var(--glow-soft), inset 3px 0 0 var(--accent);
+          box-shadow: inset 3px 0 0 var(--accent);
         }
         .thread-row-meta {
           display: block;
           margin-top: 1px;
           overflow: hidden;
-          color: var(--muted);
+          color: var(--color-text-muted);
           text-overflow: ellipsis;
           white-space: nowrap;
         }
@@ -411,7 +411,7 @@ export function cloudWebsiteComponentStyles() {
       text-decoration: underline;
     }
     .empty-row {
-      color: var(--muted);
+      color: var(--color-text-muted);
     }
     .row {
       position: relative;
@@ -527,6 +527,11 @@ export function cloudWebsiteComponentStyles() {
       border-color: var(--tone-info-border);
       background: var(--tone-info-bg);
     }
+    .pill[data-kind="accent"] {
+      color: var(--accent-action-foreground);
+      border-color: transparent;
+      background: var(--accent-action-fill);
+    }
     .notice {
       border: var(--border-width-1) solid var(--tone-warn-border);
       border-radius: var(--radius-sm);
@@ -538,7 +543,7 @@ export function cloudWebsiteComponentStyles() {
     }
     .empty {
       margin: 0;
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-sm);
       line-height: var(--lh-sm);
     }

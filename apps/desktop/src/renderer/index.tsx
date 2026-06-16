@@ -1,8 +1,22 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { studioSurfaceStyles } from '@open-cowork/ui'
 import { App } from './App'
 import { applyAppearancePreferences } from './helpers/theme'
 import './styles/globals.css'
+
+// The shared @open-cowork/ui surface stylesheet is the single source of truth for
+// Studio surface CSS across the desktop renderer and Cloud Web. Inject it once,
+// after globals.css, so the desktop styles those surfaces identically to the web.
+function injectStudioSurfaceStyles() {
+  const id = 'cowork-ui-surface-styles'
+  if (document.getElementById(id)) return
+  const style = document.createElement('style')
+  style.id = id
+  style.textContent = studioSurfaceStyles()
+  document.head.appendChild(style)
+}
+injectStudioSurfaceStyles()
 
 function formatStartupError(error: unknown) {
   if (error instanceof Error) {

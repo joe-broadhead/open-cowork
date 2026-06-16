@@ -27,7 +27,7 @@ export function cloudWebsiteSettingsStyles() {
       border-color: transparent;
       border-radius: var(--radius-sm);
       background: transparent;
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-sm);
       font-weight: 650;
       padding: var(--space-2) var(--space-3);
@@ -80,7 +80,7 @@ export function cloudWebsiteSettingsStyles() {
       line-height: var(--lh-sm);
     }
     .settings-row span {
-      color: var(--muted);
+      color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
@@ -122,7 +122,7 @@ export function cloudWebsiteSettingsStyles() {
       min-height: var(--control-h-sm);
       border-color: transparent;
       background: transparent;
-      color: var(--muted);
+      color: var(--color-text-muted);
     }
     .settings-segment button.on,
     .settings-segment button[aria-pressed="true"] {
@@ -147,7 +147,7 @@ export function cloudWebsiteSettingsStyles() {
       width: 16px;
       height: 16px;
       border-radius: var(--radius-full);
-      background: var(--muted);
+      background: var(--color-text-muted);
       transition: transform var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
     }
     .settings-toggle.on,

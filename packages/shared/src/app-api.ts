@@ -69,6 +69,14 @@ export type AppAPI = AppApiEndpointResolver & {
   launchpad: {
     feed: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
   }
+  knowledge: {
+    snapshot: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    propose: (input: unknown) => Promise<unknown>
+    acceptProposal: (proposalId: string, input?: unknown) => Promise<unknown>
+    declineProposal: (proposalId: string, input?: unknown) => Promise<unknown>
+    history: (pageId: string, query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    restoreVersion: (pageId: string, versionId: string, input?: unknown) => Promise<unknown>
+  }
   capabilities: {
     catalog: () => Promise<unknown>
     tools: () => Promise<unknown>

@@ -6,6 +6,7 @@ export type CloudWebSurface = 'workbench' | 'admin'
 export type CloudWebRouteId =
   | 'threads'
   | 'chat'
+  | 'knowledge'
   | 'approvals'
   | 'agents'
   | 'capabilities'
@@ -58,6 +59,14 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     requiresAuth: true,
     requiresAdmin: false,
     summary: cloudWebWorkbenchRouteSummary('threads', 'Recent chats and project-backed Cloud work.'),
+  },
+  {
+    id: 'knowledge',
+    label: 'Knowledge',
+    surface: 'workbench',
+    requiresAuth: true,
+    requiresAdmin: false,
+    summary: cloudWebWorkbenchRouteSummary('knowledge', 'Versioned Spaces, proposals, review, and graph context.'),
   },
   {
     id: 'approvals',
@@ -201,7 +210,7 @@ export const CLOUD_WEB_ROUTE_GROUPS: CloudWebRouteGroup[] = [
   {
     id: 'studio',
     label: 'Studio',
-    routes: CLOUD_WEB_ROUTES.filter((route) => route.id === 'chat' || route.id === 'threads' || route.id === 'approvals'),
+    routes: CLOUD_WEB_ROUTES.filter((route) => route.id === 'chat' || route.id === 'threads' || route.id === 'knowledge' || route.id === 'approvals'),
   },
   {
     id: 'manage',

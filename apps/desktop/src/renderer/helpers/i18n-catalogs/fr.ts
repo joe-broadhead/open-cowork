@@ -368,8 +368,8 @@ const strings: Record<string, string> = {
   // ────────────────────────────────────────────────────────────
   // Tools & Skills page
   // ────────────────────────────────────────────────────────────
-  'capabilities.tab.tools': 'Outils',
-  'capabilities.tab.skills': 'Compétences',
+  'capabilities.tab.tools': 'Connexions',
+  'capabilities.tab.skills': 'Capacités',
   'capabilities.addMcp': 'Ajouter un MCP',
   'capabilities.addSkill': 'Ajouter une compétence',
   'capabilities.noTools': 'Aucun outil disponible pour le moment. Ajoutez un MCP depuis la page Capacités.',
@@ -565,10 +565,10 @@ const strings: Record<string, string> = {
   // Tools & Skills page
   'capabilities.title': 'Outils et compétences',
   'capabilities.subtitle': 'Inspectez les outils et bundles de compétences disponibles dans le contexte OpenCode actuel, y compris les ajouts intégrés, machine, projet et personnalisés.',
-  'capabilities.addTool': 'Ajouter un outil',
-  'capabilities.addSkillButton': 'Ajouter une compétence',
-  'capabilities.searchTools': 'Rechercher parmi les outils, descriptions ou coéquipiers…',
-  'capabilities.searchSkills': 'Rechercher parmi les compétences, descriptions ou coéquipiers…',
+  'capabilities.addTool': 'Ajouter une connexion',
+  'capabilities.addSkillButton': 'Ajouter une capacité',
+  'capabilities.searchTools': 'Rechercher parmi les connexions, descriptions ou coéquipiers…',
+  'capabilities.searchSkills': 'Rechercher parmi les capacités, descriptions ou coéquipiers…',
   'capabilities.details': 'Détails',
   'capabilities.connection': 'Connexion',
   'capabilities.linkedAgents': 'Agents liés',

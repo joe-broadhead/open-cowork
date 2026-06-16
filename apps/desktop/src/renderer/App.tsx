@@ -15,6 +15,7 @@ import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const ProjectsBoardPage = lazy(() => import('./components/projects/ProjectsBoardPage').then((m) => ({ default: m.ProjectsBoardPage })))
+const KnowledgePage = lazy(() => import('./components/studio/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
 const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
@@ -46,6 +47,9 @@ import {
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 const UI_PRIMITIVES_HASH = '#/ui-primitives'
+// The primitive gallery is an internal visual-QA surface; only expose it in dev
+// builds so it never ships as a reachable route in production.
+const UI_PRIMITIVES_ENABLED = import.meta.env.DEV
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => unknown
@@ -59,7 +63,7 @@ function canUseViewTransition() {
 }
 
 function initialAppView(): AppView {
-  if (typeof window !== 'undefined' && window.location.hash === UI_PRIMITIVES_HASH) return 'ui-primitives'
+  if (UI_PRIMITIVES_ENABLED && typeof window !== 'undefined' && window.location.hash === UI_PRIMITIVES_HASH) return 'ui-primitives'
   return 'home'
 }
 
@@ -452,7 +456,7 @@ export function App() {
 
   useEffect(() => {
     const listener = () => {
-      if (window.location.hash === UI_PRIMITIVES_HASH) navigateView('ui-primitives')
+      if (UI_PRIMITIVES_ENABLED && window.location.hash === UI_PRIMITIVES_HASH) navigateView('ui-primitives')
     }
     window.addEventListener('hashchange', listener)
     return () => window.removeEventListener('hashchange', listener)
@@ -720,6 +724,11 @@ export function App() {
             {view === 'projects' && (
               <Suspense fallback={null}>
                 <ProjectsBoardPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
+              </Suspense>
+            )}
+            {view === 'knowledge' && (
+              <Suspense fallback={null}>
+                <KnowledgePage />
               </Suspense>
             )}
             {view === 'approvals' && (

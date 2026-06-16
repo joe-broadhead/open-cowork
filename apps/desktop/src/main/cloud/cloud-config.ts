@@ -9,12 +9,16 @@ import {
 import { DEFAULT_CONFIG } from '../config-types.ts'
 import type {
   BundleMcp,
+  CloudAbuseConfig,
+  CloudAuthConfig,
+  CloudBillingConfig,
   CloudFeatureConfig,
   CloudProfileConfig,
   CloudProjectSourcePolicyConfig,
   CloudRole,
   OpenCoworkConfig,
 } from '../config-types.ts'
+import { parseBoolean, parseCsv, parseCsvArray, parseOptionalPositiveInt, parsePositiveInt, parseSignupMode, resolveEnvRef } from './cloud-config-parse.ts'
 import { isSupportedCloudSecretRef } from './secret-ref-policy.ts'
 
 type Env = Record<string, string | undefined>
@@ -312,4 +316,185 @@ export function evaluateCloudProjectSourcePolicy(
     return { allowed: false, reason: 'Uploaded snapshot is too large.', policyCode: 'project_source.snapshot.too_large' }
   }
   return { allowed: true, reason: null }
+}
+
+// Abuse/quota and billing config resolvers (config defaults + env overrides → typed
+// config). Pure: no secrets read, no runtime adapters created. Extracted from
+// cloud/app.ts (which re-exports them for compatibility).
+export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudAbuseConfig {
+  const defaults = config.cloud.abuse
+  return {
+    ...defaults,
+    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_ABUSE_ENABLED'), defaults.enabled),
+    maxConcurrentSessionsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG'),
+      defaults.maxConcurrentSessionsPerOrg,
+    ),
+    maxConcurrentWorkflowRunsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_WORKFLOW_RUNS_PER_ORG'),
+      defaults.maxConcurrentWorkflowRunsPerOrg,
+    ),
+    maxActiveWorkersPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG'),
+      defaults.maxActiveWorkersPerOrg,
+    ),
+    maxQueuedCommandsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_QUEUED_COMMANDS_PER_ORG'),
+      defaults.maxQueuedCommandsPerOrg,
+    ),
+    maxQueueAgeMs: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_QUEUE_AGE_MS'),
+      defaults.maxQueueAgeMs,
+    ),
+    maxPromptsPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR'),
+      defaults.maxPromptsPerHour,
+    ),
+    maxWorkflowRunsPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKFLOW_RUNS_PER_HOUR'),
+      defaults.maxWorkflowRunsPerHour,
+    ),
+    maxGatewayPromptsPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_PROMPTS_PER_HOUR'),
+      defaults.maxGatewayPromptsPerHour,
+    ),
+    maxWorkerMinutesPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR'),
+      defaults.maxWorkerMinutesPerHour,
+    ),
+    maxGatewayDeliveriesPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR'),
+      defaults.maxGatewayDeliveriesPerHour,
+    ),
+    maxGatewayChannelBindingsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_CHANNEL_BINDINGS_PER_ORG'),
+      defaults.maxGatewayChannelBindingsPerOrg,
+    ),
+    maxArtifactBytesPerDay: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_ARTIFACT_BYTES_PER_DAY'),
+      defaults.maxArtifactBytesPerDay,
+    ),
+    httpRateLimit: {
+      ...defaults.httpRateLimit,
+      enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_ENABLED'), defaults.httpRateLimit.enabled),
+      windowMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_WINDOW_MS'), defaults.httpRateLimit.windowMs),
+      maxRequests: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_MAX_REQUESTS'), defaults.httpRateLimit.maxRequests),
+    },
+    authBackoff: {
+      ...defaults.authBackoff,
+      enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_ENABLED'), defaults.authBackoff.enabled),
+      windowMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_WINDOW_MS'), defaults.authBackoff.windowMs),
+      maxFailures: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MAX_FAILURES'), defaults.authBackoff.maxFailures),
+      backoffMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MS'), defaults.authBackoff.backoffMs),
+    },
+  }
+}
+
+export function resolveCloudBillingConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudBillingConfig {
+  const defaults = config.cloud.billing
+  const provider = envValue(env, 'OPEN_COWORK_CLOUD_BILLING_PROVIDER') || defaults.provider
+  return {
+    ...defaults,
+    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_BILLING_ENABLED'), defaults.enabled),
+    provider: provider === 'none' || provider === 'stub' || provider === 'stripe' ? provider : defaults.provider,
+    defaultPlanKey: envValue(env, 'OPEN_COWORK_CLOUD_BILLING_DEFAULT_PLAN') || defaults.defaultPlanKey,
+    stripe: {
+      ...(defaults.stripe || {}),
+      apiKeyRef: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_API_KEY_REF') || defaults.stripe?.apiKeyRef,
+      webhookSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF') || defaults.stripe?.webhookSecretRef,
+      defaultPriceId: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PRICE_ID') || defaults.stripe?.defaultPriceId,
+      successUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL') || defaults.stripe?.successUrl,
+      cancelUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL') || defaults.stripe?.cancelUrl,
+      portalReturnUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL') || defaults.stripe?.portalReturnUrl,
+    },
+  }
+}
+
+// Default max age for a signed header-auth signature (5 minutes). Exported because
+// the header-auth verification path in app.ts also enforces it.
+export const DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS = 5 * 60 * 1000
+
+export type CloudDeploymentTier = 'local' | 'self_host_beta' | 'private_beta' | 'public_production'
+
+export function parseCloudDeploymentTier(value: string | null | undefined): CloudDeploymentTier {
+  if (!value) return 'local'
+  if (value === 'local' || value === 'self_host_beta' || value === 'private_beta' || value === 'public_production') {
+    return value
+  }
+  throw new Error(`Invalid OPEN_COWORK_CLOUD_DEPLOYMENT_TIER "${value}". Expected local, self_host_beta, private_beta, or public_production.`)
+}
+
+function inferSignupMode(input: {
+  requestedSignupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open' | null
+  allowSelfServiceSignup: boolean
+  allowedEmailDomains?: string[] | null
+}) {
+  if (input.requestedSignupMode) return input.requestedSignupMode
+  if (!input.allowSelfServiceSignup) return 'invite'
+  return input.allowedEmailDomains?.length ? 'domain' : 'open'
+}
+
+export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = process.env): CloudAuthConfig {
+  const requestedMode = envValue(env, 'OPEN_COWORK_CLOUD_AUTH_MODE')
+  const mode = requestedMode === 'oidc' || requestedMode === 'header' || requestedMode === 'none'
+    ? requestedMode
+    : config.cloud.auth.mode
+  const requestedSelfService = envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP')
+  const allowedEmailDomains = parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains
+  const envSwitchedToOidc = mode === 'oidc' && requestedMode === 'oidc' && config.cloud.auth.mode !== 'oidc'
+  const requestedSignupMode = parseSignupMode(envValue(env, 'OPEN_COWORK_CLOUD_SIGNUP_MODE'))
+    || (envSwitchedToOidc ? null : parseSignupMode(config.cloud.auth.signupMode))
+  const allowSelfServiceSignup = requestedSelfService
+    ? parseBoolean(requestedSelfService, false)
+      : requestedSignupMode === 'open' || requestedSignupMode === 'domain'
+        ? true
+      : requestedSignupMode === 'disabled' || requestedSignupMode === 'closed' || requestedSignupMode === 'invite'
+        ? false
+        : envSwitchedToOidc
+          ? false
+          : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc'
+  return {
+    ...config.cloud.auth,
+    mode,
+    signupMode: inferSignupMode({
+      requestedSignupMode,
+      allowSelfServiceSignup,
+      allowedEmailDomains,
+    }),
+    headerSecret: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
+      || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || undefined, env)
+      || resolveEnvRef(config.cloud.auth.headerSecretRef, env)
+      || config.cloud.auth.headerSecret,
+    headerSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || config.cloud.auth.headerSecretRef,
+    headerAllowUnsigned: parseBoolean(
+      envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED'),
+      config.cloud.auth.headerAllowUnsigned || false,
+    ),
+    headerMaxSignatureAgeMs: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS'),
+      config.cloud.auth.headerMaxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
+    ),
+    issuerUrl: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_ISSUER_URL') || config.cloud.auth.issuerUrl,
+    clientId: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_ID') || config.cloud.auth.clientId,
+    clientSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef,
+    callbackPath: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH') || config.cloud.auth.callbackPath,
+    cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
+    allowedEmailDomains,
+    allowSelfServiceSignup,
+    apiTokens: {
+      ...(config.cloud.auth.apiTokens || {}),
+      defaultTtlMs: parsePositiveInt(
+        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS'),
+        config.cloud.auth.apiTokens?.defaultTtlMs || 90 * 24 * 60 * 60 * 1000,
+      ),
+      maxTtlMs: parsePositiveInt(
+        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS'),
+        config.cloud.auth.apiTokens?.maxTtlMs || 365 * 24 * 60 * 60 * 1000,
+      ),
+      allowedScopes: parseCsvArray(
+        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES'),
+        config.cloud.auth.apiTokens?.allowedScopes,
+      ),
+    },
+  }
 }
