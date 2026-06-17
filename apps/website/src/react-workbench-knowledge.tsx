@@ -4,9 +4,12 @@ import { useAppApi } from '@open-cowork/ui/app-api'
 import {
   Badge,
   Button,
+  Dialog,
   EmptyState,
+  Input,
   KnowledgeGraph,
   SegmentedControl,
+  Select,
   WikiPage,
   WikiProposeEditDialog,
   type WikiProposeEditSubmit,
@@ -23,11 +26,23 @@ import type {
   KnowledgeProposal,
   KnowledgeSnapshotPayload,
   KnowledgeSpace,
+  KnowledgeSpaceVisibility,
 } from '@open-cowork/shared'
 import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
-import { canManageCloudKnowledge, knowledgeCaptureSpace } from './react-workbench-knowledge-state.ts'
+import {
+  KNOWLEDGE_DEFAULT_VISIBILITY,
+  KNOWLEDGE_VISIBILITY_OPTIONS,
+  canManageCloudKnowledge,
+  knowledgeCaptureSpace,
+} from './react-workbench-knowledge-state.ts'
+import { asRecord } from './react-workbench-controller.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
+
+// Bounds for capturing a conversation transcript into a knowledge proposal (keeps the proposal
+// body within the store's byte limits even for long chats).
+const KNOWLEDGE_CAPTURE_MESSAGE_LIMIT = 40
+const KNOWLEDGE_CAPTURE_MESSAGE_CHARS = 2000
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
   spaces: [],
@@ -103,6 +118,71 @@ function currentThreadId(selectedView: CloudWebThreadView | null) {
   return selectedView?.session?.sessionId || null
 }
 
+function KnowledgeNewSpaceDialog({
+  busy,
+  error,
+  onCreate,
+  onClose,
+}: {
+  busy: boolean
+  error: string | null
+  onCreate: (input: { name: string; visibility: KnowledgeSpaceVisibility }) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState('')
+  const [visibility, setVisibility] = useState<KnowledgeSpaceVisibility>(KNOWLEDGE_DEFAULT_VISIBILITY)
+  const trimmed = name.trim()
+  const canCreate = Boolean(trimmed) && !busy
+
+  return (
+    <Dialog
+      title="New Space"
+      size="sm"
+      onClose={onClose}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            variant="primary"
+            leftIcon="plus"
+            disabled={!canCreate}
+            disabledReason={!trimmed ? 'Add a name' : undefined}
+            onClick={() => onCreate({ name: trimmed, visibility })}
+          >
+            {busy ? 'Creating' : 'Create'}
+          </Button>
+        </>
+      )}
+    >
+      <div className="studio-wiki-propose">
+        <p className="studio-wiki-propose__hint">
+          A Space groups related pages. You become its Maintainer and can publish the first page from a proposal.
+        </p>
+        <label className="studio-wiki-propose__field">
+          <span>Name</span>
+          <Input
+            value={name}
+            placeholder="e.g. Engineering, Onboarding"
+            disabled={busy}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label className="studio-wiki-propose__field">
+          <span>Visibility</span>
+          <Select
+            label="Space visibility"
+            value={visibility}
+            options={KNOWLEDGE_VISIBILITY_OPTIONS}
+            disabled={busy}
+            onChange={(next) => setVisibility(next as KnowledgeSpaceVisibility)}
+          />
+        </label>
+        {error ? <p role="alert" className="studio-wiki-propose__error">{error}</p> : null}
+      </div>
+    </Dialog>
+  )
+}
+
 function KnowledgeReviewQueue({
   snapshot,
   canReviewKnowledge,
@@ -171,6 +251,9 @@ export function CloudKnowledgeSurfacePortals({
   const [proposeOpen, setProposeOpen] = useState(false)
   const [proposeBusy, setProposeBusy] = useState(false)
   const [proposeError, setProposeError] = useState<string | null>(null)
+  const [newSpaceOpen, setNewSpaceOpen] = useState(false)
+  const [newSpaceBusy, setNewSpaceBusy] = useState(false)
+  const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
   const [error, setError] = useState<string | null>(null)
   const targets = {
@@ -273,7 +356,9 @@ export function CloudKnowledgeSurfacePortals({
     }
   }, [api, loadSnapshot, loadHistory])
 
-  const canProposeEdit = canReviewKnowledge && Boolean(selectedSpace && knowledgeRoleCanPropose(selectedSpace.role))
+  // Proposing is governed by the Space role (Contributor/Maintainer), not the Cloud owner/admin
+  // role — matching the server route + the documented contract. Review stays Cloud-admin gated.
+  const canProposeEdit = Boolean(selectedSpace && knowledgeRoleCanPropose(selectedSpace.role))
 
   const submitProposal = useCallback(async ({ summary, body }: WikiProposeEditSubmit) => {
     if (!selectedPage || !selectedSpace) return
@@ -298,38 +383,68 @@ export function CloudKnowledgeSurfacePortals({
     }
   }, [api, loadSnapshot, selectedPage, selectedSpace])
 
-  const captureCurrentThread = useCallback(async () => {
-    if (!canReviewKnowledge) {
-      setError('Knowledge capture requires an owner/admin Cloud role.')
-      return
+  const createSpace = useCallback(async ({ name, visibility }: { name: string; visibility: KnowledgeSpaceVisibility }) => {
+    setNewSpaceBusy(true)
+    setNewSpaceError(null)
+    try {
+      const created = await api.knowledge.createSpace({ name, visibility }) as KnowledgeSpace | null
+      // Re-fetch on the same path proposals use; then select a page in the new Space if one exists
+      // (a fresh Space starts empty, so it simply appears in the rail until its first page is published).
+      const next = await api.knowledge.snapshot() as KnowledgeSnapshotPayload
+      setSnapshot(next)
+      const createdId = created?.id || null
+      const firstInNewSpace = createdId ? next.pages.find((page) => page.spaceId === createdId) : undefined
+      if (firstInNewSpace) setSelectedPageId(firstInNewSpace.id)
+      setNewSpaceOpen(false)
+    } catch (createError) {
+      const status = (createError as { status?: number } | null)?.status
+      setNewSpaceError(status === 403
+        ? 'You need admin access to create a space.'
+        : errorMessage(createError))
+    } finally {
+      setNewSpaceBusy(false)
     }
+  }, [api])
+
+  const captureCurrentThread = useCallback(async () => {
+    // Capture creates a *pending proposal*, so it is propose-gated (a Space the user can contribute
+    // to), not review-gated — knowledgeCaptureSpace only returns a Contributor/Maintainer Space.
     const space = knowledgeCaptureSpace(snapshot.spaces)
     if (!space) {
-      setError('No writable Knowledge Space is available for capture.')
+      setError('No Knowledge Space you can contribute to is available for capture.')
       return
     }
     const threadTitle = currentThreadTitle(selectedView)
     const threadId = currentThreadId(selectedView)
+    // Include the real conversation transcript (not a placeholder) — the same content desktop
+    // captures. Bounded to the most recent messages + per-message length to respect store limits.
+    const projectionView = asRecord(selectedView?.projection?.view)
+    const rawMessages = Array.isArray(projectionView.messages) ? projectionView.messages : []
+    const transcript = rawMessages
+      .map((message) => asRecord(message))
+      .filter((message) => typeof message.content === 'string' && (message.content as string).trim())
+      .slice(-KNOWLEDGE_CAPTURE_MESSAGE_LIMIT)
+      .map((message) => `${String(message.role || 'message')}: ${(message.content as string).trim().slice(0, KNOWLEDGE_CAPTURE_MESSAGE_CHARS)}`)
     try {
       await api.knowledge.propose({
         spaceId: space.id,
         pageTitle: `Conversation: ${threadTitle}`,
         by: 'you',
         summary: `Capture Cloud chat context from "${threadTitle}" for Knowledge review.`,
-        add: 3,
-        del: 0,
         links: threadId ? [{ kind: 'thread', label: threadTitle, targetId: threadId }] : [],
         body: [
           { id: 'capture-summary', type: 'callout', text: 'Captured from Cloud Web. Review before publishing this as durable knowledge.' },
-          { id: 'capture-context', type: 'h', text: 'Conversation context' },
-          { id: 'capture-body', type: 'p', text: `Source chat: ${threadTitle}` },
+          { id: 'capture-context', type: 'h', text: `Conversation: ${threadTitle}` },
+          ...(transcript.length
+            ? [{ id: 'capture-transcript', type: 'list', items: transcript }]
+            : [{ id: 'capture-empty', type: 'p', text: `Source chat: ${threadTitle} (no messages were available to capture).` }]),
         ],
       })
       await loadSnapshot()
     } catch (captureError) {
       setError(captureError instanceof Error ? captureError.message : 'Unable to capture this conversation to Knowledge.')
     }
-  }, [api, canReviewKnowledge, loadSnapshot, selectedView, snapshot.spaces])
+  }, [api, loadSnapshot, selectedView, snapshot.spaces])
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -365,7 +480,19 @@ export function CloudKnowledgeSurfacePortals({
               ]}
             />
           )}
-          reviewAction={<Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length} pending</Badge>}
+          reviewAction={(
+            <div className="knowledge-rail-actions">
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon="plus"
+                onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+              >
+                New Space
+              </Button>
+              <Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length} pending</Badge>
+            </div>
+          )}
           onSelectPage={(_, page) => setSelectedPageId(page.id)}
         />
       ), targets.rail) : null}
@@ -443,6 +570,15 @@ export function CloudKnowledgeSurfacePortals({
             : <KnowledgeGraph graph={snapshot.graph} selectedPageId={selectedPage?.id || null} onSelectPage={setSelectedPageId} />}
         </div>
       ), targets.graph) : null}
+
+      {newSpaceOpen ? (
+        <KnowledgeNewSpaceDialog
+          busy={newSpaceBusy}
+          error={newSpaceError}
+          onCreate={(input) => void createSpace(input)}
+          onClose={() => setNewSpaceOpen(false)}
+        />
+      ) : null}
 
       {proposeOpen && selectedPage && selectedSpace ? (
         <WikiProposeEditDialog

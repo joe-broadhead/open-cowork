@@ -71,6 +71,7 @@ export type AppAPI = AppApiEndpointResolver & {
   }
   knowledge: {
     snapshot: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    createSpace: (input: unknown) => Promise<unknown>
     propose: (input: unknown) => Promise<unknown>
     acceptProposal: (proposalId: string, input?: unknown) => Promise<unknown>
     declineProposal: (proposalId: string, input?: unknown) => Promise<unknown>
@@ -147,6 +148,7 @@ export type AppAPI = AppApiEndpointResolver & {
       list: () => Promise<unknown>
       save: (providerId: string, input: unknown) => Promise<unknown>
       validate: (providerId: string) => Promise<unknown>
+      override: (providerId: string, reason: string) => Promise<unknown>
       disable: (providerId: string) => Promise<unknown>
     }
     apiTokens: {

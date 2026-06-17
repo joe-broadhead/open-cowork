@@ -49,7 +49,7 @@ function makeViews(sessions: CloudWebThreadSession[]): Record<string, CloudWebTh
   return Object.fromEntries(entries)
 }
 
-test('cloud web thread filtering handles 10k sessions within bounded budgets', () => {
+void test('cloud web thread filtering handles 10k sessions within bounded budgets', () => {
   const sessions = makeSessions(THREAD_COUNT)
   const views = makeViews(sessions)
 
@@ -70,7 +70,7 @@ test('cloud web thread filtering handles 10k sessions within bounded budgets', (
   assert.ok(approvals.every((session) => Number(session.sessionId.replace('session-', '')) % 100 === 0))
 })
 
-test('cloud web capability and agent fixtures handle hundreds of custom surfaces', () => {
+void test('cloud web capability and agent fixtures handle hundreds of custom surfaces', () => {
   const tools = Array.from({ length: 600 }, (_, index) => ({
     id: `tool-${index}`,
     label: `Tool ${index}`,
@@ -100,7 +100,7 @@ test('cloud web capability and agent fixtures handle hundreds of custom surfaces
   assert.ok(filtered.every((item) => String(item.source).includes('custom') && item.agentNames?.some((name) => name.includes('agent-7'))))
 })
 
-test('cloud web browser renders 10k session lists with bounded DOM work', async () => {
+void test('cloud web browser renders 10k session lists with bounded DOM work', async () => {
   const start = performance.now()
   const harness = await createCloudWebBrowserHarness({
     role: 'admin',
@@ -138,7 +138,7 @@ test('cloud web browser renders 10k session lists with bounded DOM work', async 
   }
 })
 
-test('cloud web browser keeps large admin surfaces bounded across route transitions', async () => {
+void test('cloud web browser keeps large admin surfaces bounded across route transitions', async () => {
   const start = performance.now()
   const harness = await createCloudWebBrowserHarness({
     role: 'admin',

@@ -19,6 +19,7 @@ export function createMainWindowController(options: {
   app: App
   appDirname: string
   brandName: string
+  appIconPath?: string | null
   getAppIsQuitting: () => boolean
   canOpenMainWindowFromLoading?: () => boolean
   log: (category: string, message: string) => void
@@ -210,7 +211,7 @@ export function createMainWindowController(options: {
       resizable: false,
       fullscreenable: false,
       maximizable: false,
-      icon: getPackagedResourcePath('icon.png'),
+      icon: options.appIconPath || getPackagedResourcePath('icon.png'),
       title: `${options.brandName} is starting`,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 14, y: 12 },
@@ -248,7 +249,7 @@ export function createMainWindowController(options: {
       minWidth: 800,
       minHeight: 600,
       show: true,
-      icon: getPackagedResourcePath('icon.png'),
+      icon: options.appIconPath || getPackagedResourcePath('icon.png'),
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 14, y: 12 },
       backgroundColor: '#00000000',

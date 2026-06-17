@@ -73,8 +73,8 @@ export class InMemoryUsageQuotaDomain {
       .map(([counterKey, counter]) => {
         const [counterOrgId, quotaKey] = counterKey.split('\0', 2)
         return {
-          orgId: counterOrgId,
-          quotaKey,
+          orgId: counterOrgId ?? '',
+          quotaKey: quotaKey ?? '',
           windowStartedAtMs: counter.windowStartedAtMs,
           quantity: counter.quantity,
         }

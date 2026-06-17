@@ -233,6 +233,14 @@
         "src/**/*.ts"
       ]
     },
+    "mcps/knowledge": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "mcps/semantic-ui": {
       "entry": [
         "src/index.ts"

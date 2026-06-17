@@ -244,7 +244,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
                 }
                 try {
                   const dir = await window.coworkApi.dialog.selectDirectory()
-                  if (dir) createThread(dir)
+                  if (dir) void createThread(dir)
                   else setShowMenu(false)
                 } catch (err) {
                   addGlobalError(t('newThread.projectPickerFailed', 'Could not open the project picker. Please try again.'))

@@ -265,6 +265,7 @@ export function CoworkerAvatar({
       {children}
       {presenceState ? (
         <span
+          role="img"
           className={cn(
             'studio-presence-dot',
             `studio-presence-dot--${presenceState.status}`,
@@ -611,7 +612,7 @@ export function KanbanTaskCard({ task, dragging = false, className, ...props }: 
       style={{ ...priorityStyle(task.priority), ...props.style }}
     >
       <div className="studio-kanban-task-card__top">
-        <span className="studio-kanban-task-card__priority" aria-label={`${task.priority || 'medium'} priority`} />
+        <span role="img" className="studio-kanban-task-card__priority" aria-label={`${task.priority || 'medium'} priority`} />
         <div>
           <h4 className="studio-u-card-title">{task.title}</h4>
           {task.description ? <p className="studio-u-card-text">{task.description}</p> : null}

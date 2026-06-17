@@ -10,11 +10,12 @@ import { createSdkOpenCodeAdapter } from "./opencode.js";
 import { createStandaloneGatewayPostgresRepository } from "./postgres-repository.js";
 import { createStandaloneProviderRegistry } from "./provider-registry.js";
 import { runStandaloneGatewayRetention } from "./retention.js";
-import { normalizeIdentityRole, normalizeIdentityStatus } from "./repository.js";
+import { InMemoryStandaloneGatewayRepository, normalizeIdentityRole, normalizeIdentityStatus } from "./repository.js";
 import { createStandaloneGatewayRuntime } from "./runtime.js";
 import { createStandaloneGatewayServer } from "./server.js";
 import { runStandaloneGatewaySmoke } from "./smoke.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
+import type { StandaloneGatewayConfig } from "./types.js";
 
 const command = process.argv[2] || "serve";
 const daemonLeaseId = "standalone-gateway:daemon";
@@ -34,14 +35,14 @@ if (command === "smoke") {
     const databaseSecurityIssue = standaloneGatewayProductionDatabaseSecurityIssue(config);
     const repository = databaseSecurityIssue
       ? skippedDoctorRepository(databaseSecurityIssue)
-      : await createMigratedRepository(config.database);
+      : await createMigratedRepository(config);
     const result = await runStandaloneGatewayDoctor({ config, repository, opencode });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     await repository.close?.();
     process.exitCode = result.ok ? 0 : 1;
   } else if (command === "identity") {
     assertStandaloneGatewayProductionDatabaseSecurity(config);
-    const repository = await createStandaloneGatewayPostgresRepository(config.database);
+    const repository = await createStandaloneGatewayRepository(config);
     await repository.migrate();
     const action = process.argv[3] || "";
     if (action !== "upsert") {
@@ -63,7 +64,7 @@ if (command === "smoke") {
     await repository.close?.();
   } else if (command === "serve") {
     assertStandaloneGatewayProductionDatabaseSecurity(config);
-    const repository = await createStandaloneGatewayPostgresRepository(config.database);
+    const repository = await createStandaloneGatewayRepository(config);
     await repository.migrate();
     const ownerId = `${hostname()}:${process.pid}`;
     const lease = await repository.acquireDaemonLease({
@@ -142,10 +143,16 @@ if (command === "smoke") {
   }
 }
 
-async function createMigratedRepository(
-  database: Parameters<typeof createStandaloneGatewayPostgresRepository>[0],
-): Promise<StandaloneGatewayRepository> {
-  const repository = await createStandaloneGatewayPostgresRepository(database);
+// Single store-construction choke point: "memory" uses the in-process repository (dev/embedded),
+// "postgres" (default) uses the durable Postgres adapter. The rest of the daemon depends only on
+// the StandaloneGatewayRepository interface, so nothing else changes.
+async function createStandaloneGatewayRepository(config: StandaloneGatewayConfig): Promise<StandaloneGatewayRepository> {
+  if (config.store === "memory") return new InMemoryStandaloneGatewayRepository();
+  return createStandaloneGatewayPostgresRepository(config.database);
+}
+
+async function createMigratedRepository(config: StandaloneGatewayConfig): Promise<StandaloneGatewayRepository> {
+  const repository = await createStandaloneGatewayRepository(config);
   await repository.migrate();
   return repository;
 }

@@ -18,11 +18,14 @@ const postgresWorkflowsDomain = readFileSync(join(cloudRoot, 'postgres-store-dom
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
 const lineThreshold = 2_000
+// Budgets are ratcheted to just above the current size so a decomposed file cannot
+// silently re-grow (previously they sat 600-2,000+ lines above actuals). Lower these
+// (never raise) whenever a file shrinks further.
 const documentedLargeFileBudgets = new Map([
-  ['apps/desktop/src/main/cloud/http-server.ts', 2_100],
-  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 4_300],
-  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_500],
-  ['apps/desktop/src/main/cloud/session-service.ts', 4_200],
+  ['apps/desktop/src/main/cloud/http-server.ts', 1_800],
+  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 1_750],
+  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 2_550],
+  ['apps/desktop/src/main/cloud/session-service.ts', 3_950],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {

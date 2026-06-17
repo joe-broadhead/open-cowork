@@ -25,6 +25,36 @@ describe('Sidebar', () => {
     })
   })
 
+  it('hides nav items for features the deployment disables', () => {
+    const { container } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        features={{ knowledge: false, channels: false }}
+      />,
+    )
+
+    // PRIMARY item gated off is removed; an un-gated sibling stays.
+    expect(container.querySelector('[data-nav-view="knowledge"]')).toBeNull()
+    expect(container.querySelector('[data-nav-view="projects"]')).not.toBeNull()
+    // MANAGE item gated off is removed; an un-gated sibling stays.
+    expect(container.querySelector('[data-nav-view="channels"]')).toBeNull()
+    expect(container.querySelector('[data-nav-view="team"]')).not.toBeNull()
+  })
+
+  it('renders every nav item when no feature flags are supplied', () => {
+    const { container } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    for (const view of ['projects', 'knowledge', 'approvals', 'team', 'playbooks', 'channels', 'tools', 'artifacts']) {
+      expect(container.querySelector(`[data-nav-view="${view}"]`)).not.toBeNull()
+    }
+  })
+
   it('ignores stale workspace activation responses', async () => {
     const slowActivation = deferred<{
       id: string

@@ -8,11 +8,10 @@ import {
   DEFAULT_WEBSITE_PUBLIC_BRANDING,
   brandLinksMarkup,
   brandLogoMarkup,
-  hasPublicBrandingThemeOverride,
-  resolvePublicBranding,
+  cloudHeadMetaMarkup,
 } from './branding.ts'
 import { escapeHtml, jsonScript } from './html-utils.ts'
-import { cloudWebsiteStyles } from './styles.ts'
+import { resolveBrandingRender } from './render-branding-cache.ts'
 import { cloudSettingsRouteMarkup } from './cloud-settings-markup.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
@@ -28,8 +27,8 @@ export type WebsiteBootstrapPolicy = { role: string; profileName: string; featur
 
 export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
   const rawBranding = publicBranding || policy.publicBranding
-  const branding = resolvePublicBranding(rawBranding)
-  const tenantBrandingLocked = hasPublicBrandingThemeOverride(rawBranding)
+  // Per-branding resolve + CSS are memoised (see render-branding-cache); only the nonce varies.
+  const { branding, css: brandingCss, themeLocked: tenantBrandingLocked } = resolveBrandingRender(rawBranding)
   const accentPresets = cloudAccentPresetOptions()
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
   const labels = branding.managedOrgConnectionLabels || DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}
@@ -784,8 +783,9 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(branding.productName)}</title>
+  ${cloudHeadMetaMarkup(branding)}
   <style${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>
-${cloudWebsiteStyles(branding)}
+${brandingCss}
   </style>
 </head>
 <body data-auth="loading">

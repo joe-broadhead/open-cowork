@@ -54,7 +54,7 @@ function contrast(left: string, right: string) {
   return (lighter + 0.05) / (darker + 0.05)
 }
 
-test('cloud web static shell has labelled controls, landmarks, and valid interactive table semantics', () => {
+void test('cloud web static shell has labelled controls, landmarks, and valid interactive table semantics', () => {
   const document = staticDocument()
 
   assert.ok(document.querySelector('main.main'), 'main landmark exists')
@@ -91,7 +91,7 @@ test('cloud web static shell has labelled controls, landmarks, and valid interac
   }
 })
 
-test('cloud web CSS keeps focus, reduced motion, responsive layout, and default color contrast gates', () => {
+void test('cloud web CSS keeps focus, reduced motion, responsive layout, and default color contrast gates', () => {
   const document = staticDocument()
   const css = cssText(document)
   assert.match(css, /a:focus-visible/)
@@ -108,7 +108,7 @@ test('cloud web CSS keeps focus, reduced motion, responsive layout, and default 
   assert.ok(contrast('#ffffff', '#2f6bf0') >= 4.5, 'primary button text contrasts with signature accent fill')
 })
 
-test('cloud web hydrated shell manages route focus state and admin visibility for keyboard users', async () => {
+void test('cloud web hydrated shell manages route focus state and admin visibility for keyboard users', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     const chatLink = harness.document.querySelector('[data-route-link="chat"]')

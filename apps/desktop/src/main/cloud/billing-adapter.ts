@@ -1,6 +1,7 @@
 import type {
   CloudBillingConfig,
   CloudBillingEntitlements,
+  CloudFeatureKey,
   CloudSubscriptionStatus,
 } from '../config-types.ts'
 import type {
@@ -22,6 +23,21 @@ export type BillingEntitlementVerdict = {
   status?: number
   reason?: string | null
   policyCode?: string | null
+}
+
+// Maps each billing-metered action to the product feature its plan must
+// include. A plan's `entitlements.features` can exclude a feature per-tenant
+// (independently of the deployment-wide `policy.features` gate). Only an
+// explicit `false` denies — an unset feature stays allowed, so plans without a
+// `features` block keep their existing behaviour.
+const BILLING_ACTION_FEATURE: Partial<Record<BillingAction, CloudFeatureKey>> = {
+  'session.create': 'chat',
+  'prompt.enqueue': 'chat',
+  'worker.execute': 'workflows',
+  'artifact.upload': 'artifacts',
+  'byok.provider': 'byok',
+  'channel.manage': 'channels',
+  'gateway.session.bind': 'channels',
 }
 
 export type BillingCheckoutInput = {
@@ -157,6 +173,17 @@ export function evaluateBillingEntitlement(input: {
   }
 
   const entitlements = resolvedBillingEntitlements(input.config, input.subscription)
+
+  const gatedFeature = BILLING_ACTION_FEATURE[input.action]
+  if (gatedFeature && entitlements.features?.[gatedFeature] === false) {
+    return {
+      allowed: false,
+      status: 402,
+      reason: `The "${gatedFeature}" feature is not included in this plan.`,
+      policyCode: 'billing.feature_not_entitled',
+    }
+  }
+
   const allowedProfiles = entitlementList(entitlements.allowedProfiles)
   if (input.profileName && allowedProfiles && !allowedProfiles.has(input.profileName)) {
     return {

@@ -1105,19 +1105,20 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(event)
   }
 
-  listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0): SessionEventRecord[] {
+  listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number): SessionEventRecord[] {
     const session = this.requireSession(tenantId, sessionId)
-    return session.events
+    const matching = session.events
       .filter((event) => event.sequence > afterSequence)
       .map((event) => clone(event))
+    return Number.isInteger(limit) && (limit as number) > 0 ? matching.slice(0, limit) : matching
   }
 
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {
     return this.workspaceEventsDomain.appendWorkspaceEvent(input)
   }
 
-  listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0): WorkspaceEventRecord[] {
-    return this.workspaceEventsDomain.listWorkspaceEvents(tenantId, userId, afterSequence)
+  listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
+    return this.workspaceEventsDomain.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
   }
 
   getWorkspaceEventCursor(tenantId: string, userId: string): WorkspaceEventCursorRecord {

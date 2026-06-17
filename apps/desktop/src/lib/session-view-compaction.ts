@@ -70,7 +70,7 @@ export function finishCompactionNotice(
   }
 
   for (let index = notices.length - 1; index >= 0; index -= 1) {
-    const notice = notices[index]
+    const notice = notices[index]!
     if (notice.status !== 'compacting') continue
     if (input.sourceSessionId && notice.sourceSessionId && notice.sourceSessionId !== input.sourceSessionId) continue
     return notices.map((entry, entryIndex) => entryIndex === index

@@ -117,7 +117,7 @@ function questionButtons(
 ): ChannelButton[][] | null {
   if (questions.length !== 1) return null
   const question = questions[0]
-  if (question.multiple || question.options.length === 0) return null
+  if (!question || question.multiple || question.options.length === 0) return null
   const buttons: ChannelButton[][] = [question.options.map((option) => ({
     label: sanitizeChannelText(option.label, 40),
     token: answerToken(token, option.label),

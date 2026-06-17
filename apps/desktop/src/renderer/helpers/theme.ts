@@ -104,7 +104,7 @@ function readColorScheme(): ColorScheme {
 function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
   if (isUiTheme(stored)) return stored
-  if (stored && stored in LEGACY_THEME_MAP) return LEGACY_THEME_MAP[stored]
+  if (stored && stored in LEGACY_THEME_MAP) return LEGACY_THEME_MAP[stored]!
   return getDefaultThemeId()
 }
 

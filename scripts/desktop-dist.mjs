@@ -11,6 +11,10 @@ const branding = {
   APP_ID: process.env.APP_ID || 'com.opencowork.desktop',
   APP_ARTIFACT_PREFIX: process.env.APP_ARTIFACT_PREFIX || 'Open-Cowork',
   APP_MAINTAINER: process.env.APP_MAINTAINER || 'Open Cowork Maintainers <joe-broadhead@users.noreply.github.com>',
+  // Build-time OS icons baked into the binary. Override to white-label the installer/bundle
+  // icon without editing electron-builder.yml; defaults to the bundled Open Cowork assets.
+  APP_ICON_MAC: process.env.APP_ICON_MAC || 'resources/icon.icns',
+  APP_ICON_LINUX: process.env.APP_ICON_LINUX || 'resources/icon.png',
 }
 
 function cleanReleaseOutput() {

@@ -7,8 +7,9 @@ export function parseGithubRepo(url: string): { owner: string; repo: string } | 
     const segments = parsed.pathname.split('/').filter(Boolean)
     if (segments.length < 2) return null
     const [owner, repoRaw] = segments
+    if (!owner || !repoRaw) return null
     const repo = repoRaw.replace(/\.git$/, '')
-    if (!owner || !repo) return null
+    if (!repo) return null
     return { owner, repo }
   } catch {
     return null

@@ -193,6 +193,8 @@ export function buildPublicAppConfig(
     // `config.i18n` via the public-config IPC. Absent block is treated
     // as "use inline English + host locale."
     ...(config.i18n ? { i18n: config.i18n } : {}),
+    // Per-deployment desktop feature flags drive sidebar/route gating in the renderer.
+    ...(config.features ? { features: config.features } : {}),
   }
 }
 

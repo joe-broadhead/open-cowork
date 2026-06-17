@@ -83,7 +83,7 @@ export class PostgresThreadIndexRepository {
        RETURNING *`,
       [input.tenantId, input.tagId, name, color, createdAt],
     )
-    return threadTagFromRow(result.rows[0])
+    return threadTagFromRow(result.rows[0]!)
   }
 
   async updateThreadTag(input: UpdateThreadTagInput) {
@@ -183,7 +183,7 @@ export class PostgresThreadIndexRepository {
        RETURNING *`,
       [input.tenantId, input.filterId, name, JSON.stringify(query), createdAt],
     )
-    return threadSmartFilterFromRow(result.rows[0])
+    return threadSmartFilterFromRow(result.rows[0]!)
   }
 
   async updateThreadSmartFilter(input: UpdateThreadSmartFilterInput) {
@@ -252,19 +252,20 @@ export class PostgresThreadIndexRepository {
          LIMIT $3`,
         [input.tenantId, input.userId, limit],
       )
-    return Promise.all(result.rows.map(async (row) => {
-      const session = sessionFromRow(row)
-      return {
-        tenantId: session.tenantId,
-        userId: session.userId,
-        sessionId: session.sessionId,
-        title: session.title,
-        profileName: session.profileName,
-        status: session.status,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        tags: await this.listThreadTagsForSession(session.tenantId, session.sessionId),
-      }
+    const sessions = result.rows.map(sessionFromRow)
+    // Batch the tag lookup for the whole page in one query (was an N+1: one query per
+    // returned session, up to THREAD_BULK_MAX_SESSION_IDS queries per call).
+    const tagsBySession = await this.listThreadTagsForSessions(input.tenantId, sessions.map((session) => session.sessionId))
+    return sessions.map((session) => ({
+      tenantId: session.tenantId,
+      userId: session.userId,
+      sessionId: session.sessionId,
+      title: session.title,
+      profileName: session.profileName,
+      status: session.status,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      tags: tagsBySession.get(session.sessionId) || [],
     }))
   }
 
@@ -282,22 +283,29 @@ export class PostgresThreadIndexRepository {
     return threadTagFromRow(row)
   }
 
-  private async listThreadTagsForSession(
+  private async listThreadTagsForSessions(
     tenantId: string,
-    sessionId: string,
-    executor: PgExecutor = this.options.pool,
-  ) {
-    const result = await executor.query(
-      `SELECT tag.*
+    sessionIds: string[],
+  ): Promise<Map<string, ReturnType<typeof threadTagFromRow>[]>> {
+    const bySession = new Map<string, ReturnType<typeof threadTagFromRow>[]>()
+    if (sessionIds.length === 0) return bySession
+    const result = await this.options.pool.query(
+      `SELECT link.session_id AS link_session_id, tag.*
        FROM cloud_thread_tags tag
        JOIN cloud_thread_tag_links link
          ON link.tenant_id = tag.tenant_id
         AND link.tag_id = tag.tag_id
-       WHERE link.tenant_id = $1 AND link.session_id = $2
+       WHERE link.tenant_id = $1 AND link.session_id = ANY($2::text[])
        ORDER BY lower(tag.name), tag.tag_id`,
-      [tenantId, sessionId],
+      [tenantId, sessionIds],
     )
-    return result.rows.map(threadTagFromRow)
+    for (const row of result.rows) {
+      const sessionId = String(row.link_session_id)
+      const list = bySession.get(sessionId) || []
+      list.push(threadTagFromRow(row))
+      bySession.set(sessionId, list)
+    }
+    return bySession
   }
 
   private async maybeOne<Row extends QueryRow = QueryRow>(

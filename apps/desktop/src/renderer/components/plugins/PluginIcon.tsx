@@ -68,7 +68,7 @@ const icons: Record<string, (size: number) => ReactElement> = {
       <circle cx="12" cy="12" r="1.6" fill="#22B8A5"/>
     </svg>
   ),
-  'github-mcp': (s) => icons.github(s),
+  'github-mcp': (s) => icons.github!(s),
   'google-sheets': (s) => (
     <svg width={s * 0.55} height={s * 0.55} viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" fill="#0F9D58"/><path d="M14.5 2v5.5H20L14.5 2z" fill="#87CEAC"/><rect x="7" y="12" width="10" height="1.5" rx=".3" fill="#fff" opacity=".7"/><rect x="7" y="15" width="10" height="1.5" rx=".3" fill="#fff" opacity=".7"/><rect x="11.5" y="12" width="1.5" height="4.5" rx=".3" fill="#fff" opacity=".5"/></svg>
   ),
@@ -84,7 +84,7 @@ const icons: Record<string, (size: number) => ReactElement> = {
   gmail: (s) => (
     <svg width={s * 0.55} height={s * 0.55} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" fill="#fff"/><path d="M2 7l10 6 10-6" stroke="#EA4335" strokeWidth="1.5" fill="none"/><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="#D93025" strokeWidth=".5"/></svg>
   ),
-  'google-gmail': (s) => icons.gmail(s),
+  'google-gmail': (s) => icons.gmail!(s),
   'google-calendar': (s) => (
     <svg width={s * 0.55} height={s * 0.55} viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2" fill="#fff" stroke="#4285F4" strokeWidth="1"/><rect x="3" y="4" width="18" height="5" rx="2" fill="#4285F4"/><text x="12" y="17" textAnchor="middle" fill="#4285F4" fontSize="8" fontWeight="bold" fontFamily="Arial">31</text></svg>
   ),
@@ -125,7 +125,7 @@ export function PluginIcon({ icon, size = 40 }: { icon: string; size?: number })
   }
   return (
     <div className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0 text-text-muted" style={{ width: size, height: size, fontSize: size * 0.4 }}>
-      {icon.length <= 2 ? icon : icon[0].toUpperCase()}
+      {icon.length <= 2 ? icon : icon[0]!.toUpperCase()}
     </div>
   )
 }

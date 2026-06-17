@@ -80,6 +80,7 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
     },
     knowledge: {
       snapshot: (query) => coworkApi.knowledge.snapshot(query as Parameters<CoworkAPI['knowledge']['snapshot']>[0]),
+      createSpace: (input) => coworkApi.knowledge.createSpace(input as Parameters<CoworkAPI['knowledge']['createSpace']>[0]),
       propose: (input) => coworkApi.knowledge.propose(input as Parameters<CoworkAPI['knowledge']['propose']>[0]),
       acceptProposal: (proposalId, input) => coworkApi.knowledge.acceptProposal(proposalId, input as Parameters<CoworkAPI['knowledge']['acceptProposal']>[1]),
       declineProposal: (proposalId, input) => coworkApi.knowledge.declineProposal(proposalId, input as Parameters<CoworkAPI['knowledge']['declineProposal']>[1]),
@@ -136,6 +137,7 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
         list: unsupported('Cloud BYOK'),
         save: unsupported('Cloud BYOK save'),
         validate: unsupported('Cloud BYOK validate'),
+        override: unsupported('Cloud BYOK override'),
         disable: unsupported('Cloud BYOK disable'),
       },
       apiTokens: {

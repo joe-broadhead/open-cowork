@@ -78,7 +78,7 @@ export function AgentsPage({
 
   const refresh = useCallback(() => {
     setLoading(true)
-    Promise.all([
+    void Promise.all([
       window.coworkApi.agents.list(contextOptions),
       window.coworkApi.agents.catalog(contextOptions),
       window.coworkApi.app.builtinAgents(),

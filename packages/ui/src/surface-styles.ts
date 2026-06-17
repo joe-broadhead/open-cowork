@@ -57,6 +57,10 @@ export function artifactsSurfaceCss(): string {
       background: var(--accent-soft);
       color: var(--accent-text);
     }
+    .studio-artifacts-filter:focus-visible {
+      outline: none;
+      box-shadow: var(--ring-focus);
+    }
     .studio-artifacts-notice {
       margin: 0;
       border: var(--border-width-1) solid color-mix(in srgb, var(--color-info) 42%, var(--color-border) 58%);
@@ -344,6 +348,10 @@ export function approvalsSurfaceCss(): string {
       padding: var(--space-2) var(--space-3);
       text-align: start;
     }
+    .studio-question-option:focus-visible {
+      outline: none;
+      box-shadow: var(--ring-focus);
+    }
     .studio-question-option:hover:not(:disabled) {
       border-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border));
       background: var(--color-surface-hover);
@@ -450,6 +458,10 @@ export function wikiSurfaceCss(): string {
     .studio-wiki-space button[data-active="true"] {
       background: var(--color-elevated);
       color: var(--color-text);
+    }
+    .studio-wiki-space button:focus-visible {
+      outline: none;
+      box-shadow: var(--ring-focus);
     }
     .studio-wiki-page {
       min-width: 0;
@@ -1021,6 +1033,11 @@ export function projectsSurfaceCss(): string {
   cursor: pointer;
 }
 
+.studio-projects-list .studio-object-card:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
 .studio-projects-list .studio-object-card[data-selected="true"] {
   border-color: var(--accent-line);
   background: color-mix(in srgb, var(--color-accent) 7%, var(--color-elevated) 93%);
@@ -1235,6 +1252,11 @@ export function projectsSurfaceCss(): string {
   font-weight: 700;
 }
 
+.studio-stage-chips button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
 .studio-stage-chips button[data-active="true"] {
   border-color: var(--accent-line);
   background: var(--accent-soft);
@@ -1287,6 +1309,193 @@ export function projectsSurfaceCss(): string {
 `
 }
 
+// Shared base styles for the cross-app UI primitives (EmptyState, Skeleton). These
+// were previously defined only in the desktop globals.css, so the shared EmptyState /
+// Skeleton components rendered fully styled on desktop but as bare unstyled <div>s on
+// web. Single-sourced here so both apps render them identically.
+export function primitivesSurfaceCss(): string {
+  return `
+.ui-empty-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-3);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-accent) 20%, var(--color-border-subtle));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 60%),
+    color-mix(in srgb, var(--color-surface) 72%, transparent);
+  box-shadow: var(--shadow-1), var(--specular);
+  color: var(--color-text-secondary);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.ui-empty-state__icon {
+  display: grid;
+  place-items: center;
+  width: var(--control-h-xl);
+  height: var(--control-h-xl);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  box-shadow: var(--specular);
+}
+
+.ui-empty-state__title {
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-lg);
+}
+
+.ui-empty-state__body {
+  max-width: 42ch;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.ui-skeleton {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-surface) 80%, transparent),
+    color-mix(in srgb, var(--color-surface-hover) 82%, transparent),
+    color-mix(in srgb, var(--color-surface) 80%, transparent)
+  );
+  background-size: 200% 100%;
+  animation: ui-skeleton-shimmer 1.2s var(--ease-out) infinite;
+}
+
+.ui-skeleton--text {
+  width: 100%;
+  height: var(--lh-sm);
+}
+
+.ui-skeleton--block {
+  width: 100%;
+  min-height: calc(var(--space-12) * 2);
+}
+
+.ui-skeleton--card {
+  width: 100%;
+  min-height: calc(var(--space-12) * 3);
+  border-radius: var(--radius-md);
+}
+
+.ui-skeleton--row {
+  width: 100%;
+  min-height: var(--control-h-xl);
+  border-radius: var(--radius-sm);
+}
+
+.ui-skeleton--message {
+  width: min(72ch, 100%);
+  min-height: calc(var(--space-12) * 2);
+  border-radius: var(--radius-lg);
+}
+
+.ui-skeleton--table {
+  width: 100%;
+  min-height: calc(var(--space-12) * 4);
+  border-radius: var(--radius-md);
+}
+
+@keyframes ui-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton { animation: none; }
+}
+`
+}
+
+// UI animation keyframes shared verbatim by the desktop renderer and the website. The
+// declarations are token-driven (`--space-*`, `--dur-*`, `--ease-*`) so they resolve
+// identically in both apps. Desktop-only keyframes (`ui-spin`, `ui-disclosure-in`) and each
+// app's `prefers-reduced-motion` guard stay local — only the cross-app set lives here.
+export function sharedKeyframesCss(): string {
+  return `
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ui-popover-in {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--space-1))) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes ui-view-transition-in {
+  from { opacity: 0; transform: translateY(var(--space-2)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-view-transition-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); }
+}
+
+::view-transition-old(root) {
+  animation: ui-view-transition-out var(--dur-2) var(--ease-out) both;
+}
+
+::view-transition-new(root) {
+  animation: ui-view-transition-in var(--dur-3) var(--ease-spring) both;
+}
+
+@keyframes ui-dialog-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(var(--space-3)) scale(0.985); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@keyframes ui-drawer-in {
+  from { opacity: 0.6; transform: translateX(var(--space-6)); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ui-drawer-left-in {
+  from { opacity: 0.6; transform: translateX(calc(-1 * var(--space-6))); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ui-primary-sheen {
+  from { transform: skewX(-18deg) translateX(0); }
+  to { transform: skewX(-18deg) translateX(430%); }
+}
+
+@keyframes ui-status-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 42%, transparent); }
+  70% { box-shadow: 0 0 0 var(--space-2) transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes ui-progress-shimmer {
+  from { background-position: 220% 0; }
+  to { background-position: -220% 0; }
+}
+
+@keyframes ui-stream-shimmer {
+  to { background-position: -220% 0; }
+}
+
+@keyframes ui-stream-caret {
+  50% { opacity: 0; }
+}
+
+@keyframes ui-polish-row-in {
+  from { opacity: 0; transform: translateX(calc(-1 * var(--space-2))); }
+  to { opacity: 1; transform: translateX(0); }
+}
+`
+}
+
 export function studioSurfaceStyles(): string {
-  return [artifactsSurfaceCss(), knowledgeGraphCss(), approvalsSurfaceCss(), wikiSurfaceCss(), channelsSurfaceCss(), projectsSurfaceCss()].join('\n')
+  return [sharedKeyframesCss(), primitivesSurfaceCss(), artifactsSurfaceCss(), knowledgeGraphCss(), approvalsSurfaceCss(), wikiSurfaceCss(), channelsSurfaceCss(), projectsSurfaceCss()].join('\n')
 }

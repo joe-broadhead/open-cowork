@@ -151,6 +151,7 @@ describe("EmailProvider", () => {
     expect(sent[0]).toMatchObject({
       from: "agent@example.test",
       to: "alice@example.test",
+      subject: "Open Cowork update",
       inReplyTo: "<m1@example.test>",
       references: ["<m1@example.test>"],
       text: "Use /approve p:token to continue.",
@@ -159,6 +160,20 @@ describe("EmailProvider", () => {
       label: "Approve",
       token: "p:token",
     }]])).rejects.toThrow("inline buttons");
+  });
+
+  it("uses a configured outbound subject when provided (downstream rebranding)", async () => {
+    const sent: EmailMessage[] = [];
+    const provider = new EmailProvider({
+      from: "agent@example.test",
+      inboundSecret: "inbound-secret",
+      subject: "Northwind Assistant",
+      transport: fakeTransport(sent),
+    });
+
+    await provider.sendText({ provider: "email", chatId: "alice@example.test" }, "hello");
+
+    expect(sent[0]?.subject).toBe("Northwind Assistant");
   });
 });
 

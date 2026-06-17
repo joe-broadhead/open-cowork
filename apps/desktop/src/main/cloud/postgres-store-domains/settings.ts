@@ -53,7 +53,7 @@ export class PostgresSettingsRepository {
         nowIso(input.updatedAt),
       ],
     )
-    return settingFromRow(result.rows[0])
+    return settingFromRow(result.rows[0]!)
   }
 
   async getSettingMetadata(tenantId: string, keyName: string, userId?: string | null) {

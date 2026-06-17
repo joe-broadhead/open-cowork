@@ -234,6 +234,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     requiredRole: 'member',
     endpointIds: [
       'knowledgeSnapshot',
+      'knowledgeSpaceCreate',
       'knowledgeProposalCreate',
       'knowledgeProposalAccept',
       'knowledgeProposalDecline',
@@ -245,7 +246,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
       empty: 'No readable pages; the route explains that accepted proposals publish the first page.',
       error: 'Knowledge route and review failures stay in the Knowledge surface without mutating browser-only state.',
     },
-    disabledBehavior: 'Reader Spaces render read-only; proposal creation requires Contributor or Maintainer. Review controls require a Maintainer Space role plus an owner/admin Cloud role or admin-scoped API token.',
+    disabledBehavior: 'Reader Spaces render read-only; proposal creation requires Contributor or Maintainer. Creating a Space and reviewing proposals require an owner/admin Cloud role or admin-scoped API token; non-admins see an inline access error.',
     pagination: 'Knowledge loads a bounded workspace snapshot plus selected-page version history; cursoring is deferred until large Spaces require it.',
     paginationContract: paginationContract('bounded-page', 'deferred', 100),
     redaction: 'Knowledge backlinks expose safe task/thread/artifact labels only and never expose local paths, object-store internals, secrets, or runtime payloads.',

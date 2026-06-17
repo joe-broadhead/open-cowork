@@ -29,6 +29,15 @@ export type GatewaySessionStreamManager = {
 export type GatewaySessionStreamManagerOptions = {
   retryDelayMs?: number
   maxRenderAttempts?: number
+  // Live stream subscriptions are a bounded cache: each holds an upstream SSE
+  // connection (a file descriptor) + render state. `ensure()` is called on every
+  // inbound message, so an evicted idle stream re-subscribes from its persisted
+  // cursor on the next message with no event loss. Without these bounds the map
+  // (and FDs) grow O(all channel sessions ever seen) for the process lifetime.
+  maxStreams?: number
+  idleTtlMs?: number
+  sweepIntervalMs?: number
+  now?: () => number
 }
 
 type StreamState = {
@@ -43,6 +52,7 @@ type StreamState = {
   queue: Promise<void>
   closed: boolean
   generation: number
+  lastActivityMs: number
   retryTimer?: ReturnType<typeof setTimeout>
 }
 
@@ -54,6 +64,48 @@ export function createGatewaySessionStreamManager(
   const streams = new Map<string, StreamState>()
   const retryDelayMs = options.retryDelayMs ?? 250
   const maxRenderAttempts = options.maxRenderAttempts ?? 5
+  const maxStreams = Math.max(1, options.maxStreams ?? 2_000)
+  const idleTtlMs = options.idleTtlMs ?? 30 * 60_000
+  const sweepIntervalMs = Math.max(1_000, options.sweepIntervalMs ?? 60_000)
+  const now = options.now ?? (() => Date.now())
+  let sweepTimer: ReturnType<typeof setInterval> | undefined
+
+  function evict(bindingId: string) {
+    const state = streams.get(bindingId)
+    if (!state) return
+    closeState(state)
+    streams.delete(bindingId)
+  }
+
+  function sweepIdle() {
+    if (idleTtlMs <= 0) return
+    const cutoff = now() - idleTtlMs
+    for (const [bindingId, state] of [...streams]) {
+      if (state.lastActivityMs <= cutoff) evict(bindingId)
+    }
+  }
+
+  function evictUntilUnderCap() {
+    while (streams.size >= maxStreams) {
+      let oldestId: string | undefined
+      let oldestActivity = Number.POSITIVE_INFINITY
+      for (const [bindingId, state] of streams) {
+        if (state.lastActivityMs < oldestActivity) {
+          oldestActivity = state.lastActivityMs
+          oldestId = bindingId
+        }
+      }
+      if (!oldestId) break
+      metrics.streamEvictions += 1
+      evict(oldestId)
+    }
+  }
+
+  function ensureSweepTimer() {
+    if (sweepTimer || idleTtlMs <= 0) return
+    sweepTimer = setInterval(sweepIdle, sweepIntervalMs)
+    sweepTimer.unref?.()
+  }
 
   const manager: GatewaySessionStreamManager = {
     ensure(input) {
@@ -64,8 +116,14 @@ export function createGatewaySessionStreamManager(
         existing.lastEventSequence = Math.max(existing.lastEventSequence, input.binding.lastEventSequence)
         existing.lastWorkspaceSequence = Math.max(existing.lastWorkspaceSequence, input.binding.lastWorkspaceSequence)
         existing.lastChatMessageId = input.binding.lastChatMessageId ?? existing.lastChatMessageId
+        existing.lastActivityMs = now()
         return
       }
+
+      // Free idle/over-cap subscriptions before opening a new one so the live-stream
+      // map (and its upstream SSE file descriptors) stay bounded.
+      sweepIdle()
+      evictUntilUnderCap()
 
       const state: StreamState = {
         binding: input.binding,
@@ -79,19 +137,22 @@ export function createGatewaySessionStreamManager(
         queue: Promise.resolve(),
         closed: false,
         generation: 0,
+        lastActivityMs: now(),
       }
       streams.set(input.binding.bindingId, state)
+      ensureSweepTimer()
       subscribe(state)
     },
     close(bindingId) {
-      const state = streams.get(bindingId)
-      if (!state) return
-      closeState(state)
-      streams.delete(bindingId)
+      evict(bindingId)
     },
     closeAll() {
       for (const state of streams.values()) closeState(state)
       streams.clear()
+      if (sweepTimer) {
+        clearInterval(sweepTimer)
+        sweepTimer = undefined
+      }
     },
     activeCount() {
       return streams.size
@@ -136,6 +197,7 @@ export function createGatewaySessionStreamManager(
   async function handleEvent(state: StreamState, event: CloudTransportSessionEvent, generation: number) {
     if (state.closed) return
     if (generation !== state.generation) return
+    state.lastActivityMs = now()
     if (event.type === 'snapshot.required') {
       try {
         await hydrateSnapshot(state, event)

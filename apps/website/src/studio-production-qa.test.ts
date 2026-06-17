@@ -36,7 +36,7 @@ function repoEvidenceExists(path: string) {
   return existsSync(fileURLToPath(new URL(path, repoRoot)))
 }
 
-test('studio production QA matrix covers every Cloud Web route, state class, and documented row', () => {
+void test('studio production QA matrix covers every Cloud Web route, state class, and documented row', () => {
   const doc = readFileSync(fileURLToPath(workbenchDocPath), 'utf8')
   const routeIds = new Set(CLOUD_WEB_ROUTES.map((route) => route.id))
   const coveredRouteIds = new Set(STUDIO_VISUAL_QA_MATRIX.flatMap((entry) => entry.routeIds))
@@ -80,7 +80,7 @@ test('studio production QA matrix covers every Cloud Web route, state class, and
   }
 })
 
-test('studio production audit checklist is documented and points at real evidence', () => {
+void test('studio production audit checklist is documented and points at real evidence', () => {
   const doc = readFileSync(fileURLToPath(workbenchDocPath), 'utf8')
   const checklistIds = new Set(STUDIO_PRODUCTION_AUDIT_CHECKLIST.map((entry) => entry.id))
   const requiredIds = [
@@ -103,7 +103,7 @@ test('studio production audit checklist is documented and points at real evidenc
   }
 })
 
-test('Knowledge is enabled through the native module without local OpenWiki checkout coupling', () => {
+void test('Knowledge is enabled through the native module without local OpenWiki checkout coupling', () => {
   const doc = readFileSync(fileURLToPath(workbenchDocPath), 'utf8')
   const releaseChecklist = readFileSync(fileURLToPath(releaseChecklistPath), 'utf8')
   const html = cloudWebsiteHtml({

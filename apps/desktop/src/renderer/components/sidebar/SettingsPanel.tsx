@@ -233,7 +233,10 @@ export function SettingsPanel({
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
-  const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
+  const workspaceOptions = useMemo(
+    () => (activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }),
+    [activeWorkspaceIsLocal, workspaceSupport.workspaceId],
+  )
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -270,7 +273,7 @@ export function SettingsPanel({
         reportSettingsPanelError(err, 'Failed to load settings panel')
       })
     return () => { cancelled = true }
-  }, [activeWorkspaceIsLocal, addGlobalError, workspaceOptions?.workspaceId])
+  }, [activeWorkspaceIsLocal, addGlobalError, workspaceOptions])
 
   useEffect(() => {
     if (!activeWorkspaceIsLocal) return

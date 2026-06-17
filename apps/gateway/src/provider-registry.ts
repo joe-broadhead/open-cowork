@@ -211,6 +211,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
     return new EmailProvider({
       providerId: channelProviderConfigId(config),
       from: requiredSetting(config, 'from'),
+      subject: settingString(config, 'subject') || undefined,
       inboundSecret: requiredCredential(config, 'inboundSecret'),
       maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
       smtp: {

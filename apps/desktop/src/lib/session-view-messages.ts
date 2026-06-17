@@ -170,8 +170,9 @@ function moveLivePlaceholderStateToMessage(
   const liveSegmentIds = liveMessage.segmentIds.slice()
   const liveReasoningIds = liveMessage.reasoningIds.slice()
 
-  if (liveSegmentIds.length === 1 && isLivePlaceholderSegmentId(liveSegmentIds[0], input.role) && liveSegmentIds[0] !== input.segmentId) {
-    const liveSegment = messagePartsById[liveSegmentIds[0]]
+  const onlyLiveSegmentId = liveSegmentIds.length === 1 ? liveSegmentIds[0] : undefined
+  if (onlyLiveSegmentId && isLivePlaceholderSegmentId(onlyLiveSegmentId, input.role) && onlyLiveSegmentId !== input.segmentId) {
+    const liveSegment = messagePartsById[onlyLiveSegmentId]
     if (liveSegment) {
       const targetSegment = messagePartsById[input.segmentId]
       messagePartsById[input.segmentId] = targetSegment
@@ -184,7 +185,7 @@ function moveLivePlaceholderStateToMessage(
             ...liveSegment,
             id: input.segmentId,
           }
-      delete messagePartsById[liveSegmentIds[0]]
+      delete messagePartsById[onlyLiveSegmentId]
       liveSegmentIds[0] = input.segmentId
     }
   }

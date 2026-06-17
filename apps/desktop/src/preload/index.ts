@@ -77,6 +77,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'artifact:cleanup',
   'launchpad:feed',
   'knowledge:snapshot',
+  'knowledge:space:create',
   'knowledge:proposal:create',
   'knowledge:proposal:accept',
   'knowledge:proposal:decline',
@@ -353,6 +354,7 @@ const api: CoworkAPI = {
   },
   knowledge: {
     snapshot: (options) => options ? invoke('knowledge:snapshot', options) : invoke('knowledge:snapshot'),
+    createSpace: (input) => invoke('knowledge:space:create', input),
     propose: (input) => invoke('knowledge:proposal:create', input),
     acceptProposal: (proposalId, input) => input ? invoke('knowledge:proposal:accept', proposalId, input) : invoke('knowledge:proposal:accept', proposalId),
     declineProposal: (proposalId, input) => input ? invoke('knowledge:proposal:decline', proposalId, input) : invoke('knowledge:proposal:decline', proposalId),

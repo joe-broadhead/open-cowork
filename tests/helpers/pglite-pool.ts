@@ -9,13 +9,19 @@ import { PGlite } from '@electric-sql/pglite'
 // this narrow shape, so this adapter lets the previously-skipped Postgres
 // contract suite execute everywhere. Test-only: pglite never ships in the app.
 //
-// Two adaptations are required because pglite is a single embedded backend:
+// Three adaptations are required because pglite is a single embedded backend:
 //   1. CONCURRENTLY — `CREATE/DROP INDEX CONCURRENTLY` is a no-op concept on a
 //      single connection and pglite rejects it, so it is rewritten to a plain
 //      index statement. Index *identity* and *effect* are unchanged.
 //   2. A transaction mutex — `withTransaction` runs BEGIN…COMMIT over a checked
 //      out client; the mutex stops pool-level queries from interleaving into an
 //      open transaction (real Postgres isolates these across connections).
+//   3. Parameterless multi-statement SQL (e.g. a whole migration file executed
+//      in one `.query()` call) can't use the extended/prepared protocol —
+//      that path is one-command-only on both pglite's `db.query` and
+//      node-postgres-with-params. node-postgres runs such a query over the
+//      *simple* protocol; pglite's equivalent is `db.exec`. We route to it and
+//      return the final statement's rows, matching `pg`.
 
 type QueryRow = Record<string, unknown>
 type QueryResult<Row extends QueryRow = QueryRow> = { rows: Row[], rowCount?: number }
@@ -32,6 +38,11 @@ function rewriteSql(text: string): string {
   return text.replace(/\bINDEX\s+CONCURRENTLY\b/gi, 'INDEX')
 }
 
+function isMultiStatement(sql: string): boolean {
+  // A ';' followed by more SQL (not just trailing whitespace) ⇒ multiple commands.
+  return /;\s*\S/.test(sql.trim())
+}
+
 export function createPglitePool(): PglitePool {
   const db = new PGlite()
 
@@ -40,7 +51,17 @@ export function createPglitePool(): PglitePool {
   let mutex: Promise<void> = Promise.resolve()
 
   async function runQuery<Row extends QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> {
-    const result = await db.query<Row>(rewriteSql(text), values as unknown[] | undefined)
+    const sql = rewriteSql(text)
+    if ((!values || values.length === 0) && isMultiStatement(sql)) {
+      // Parameterless multi-statement SQL → simple protocol (see adaptation #3).
+      const results = await db.exec(sql)
+      const last = results[results.length - 1]
+      return {
+        rows: (last?.rows ?? []) as Row[],
+        rowCount: typeof last?.affectedRows === 'number' ? last.affectedRows : (last?.rows?.length ?? 0),
+      }
+    }
+    const result = await db.query<Row>(sql, values as unknown[] | undefined)
     // node-postgres exposes `rowCount` (affected rows for DML, returned rows for SELECT);
     // pglite calls it `affectedRows` and only sets it for DML. Mirror node-pg so the
     // store's `result.rowCount` checks (e.g. DELETE → boolean) behave identically.

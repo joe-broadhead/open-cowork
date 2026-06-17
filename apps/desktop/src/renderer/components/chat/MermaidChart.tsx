@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { t } from '../../helpers/i18n'
@@ -98,9 +98,13 @@ export function MermaidChart({ diagram, title }: Props) {
       mainBkg: surface,
       nodeBorder: border,
     }
+    // themeVersion is an intentional cache-buster: it is bumped by the
+    // theme MutationObserver above to force a recompute of the CSS-variable
+    // snapshot when the UI theme changes, even though it isn't read here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeVersion])
 
-  function applyReadableLabelColors(svgNode: SVGSVGElement) {
+  const applyReadableLabelColors = useCallback((svgNode: SVGSVGElement) => {
     const defaultTextColor = ensureReadableTextColor(chartTheme.textColor, chartTheme.mainBkg)
 
     const setNodeTextColor = (root: Element, color: string) => {
@@ -141,7 +145,7 @@ export function MermaidChart({ diagram, title }: Props) {
     svgNode.querySelectorAll('.edgeLabel').forEach((edgeLabel) => {
       setNodeTextColor(edgeLabel, defaultTextColor)
     })
-  }
+  }, [chartTheme])
 
   useEffect(() => {
     if (!ref.current || !diagram) return
@@ -207,13 +211,13 @@ export function MermaidChart({ diagram, title }: Props) {
       }
     }
 
-    render()
+    void render()
 
     return () => {
       cancelled = true
       container.innerHTML = ''
     }
-  }, [chartTheme, diagram])
+  }, [applyReadableLabelColors, chartTheme, diagram])
 
   useEffect(() => {
     const viewport = viewportRef.current

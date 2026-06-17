@@ -201,12 +201,12 @@ function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
 function parseToolIdsFromFrontmatter(content: string): string[] {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match) return []
-  const frontmatter = match[1]
+  const frontmatter = match[1]!
 
   // Inline array: `toolIds: [a, b, c]` or `toolIds: ["a","b"]`.
   const inlineMatch = frontmatter.match(/^\s*toolIds\s*:\s*\[([^\]]*)\]/m)
   if (inlineMatch) {
-    return inlineMatch[1]
+    return inlineMatch[1]!
       .split(',')
       .map((entry) => entry.trim().replace(/^['"]|['"]$/g, ''))
       .filter((entry) => entry.length > 0)
@@ -218,7 +218,7 @@ function parseToolIdsFromFrontmatter(content: string): string[] {
   //     - b
   const blockMatch = frontmatter.match(/^\s*toolIds\s*:\s*\n((?:[ \t]*-[^\n]*\n?)+)/m)
   if (blockMatch) {
-    return blockMatch[1]
+    return blockMatch[1]!
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.startsWith('-'))
@@ -242,7 +242,7 @@ function writeToolIdsIntoFrontmatter(content: string, toolIds: string[]): string
     return `---\n${serialized}\n---\n\n${content.replace(/^[\s]+/, '')}`
   }
 
-  const frontmatter = frontmatterMatch[1]
+  const frontmatter = frontmatterMatch[1]!
   const rest = content.slice(frontmatterMatch[0].length)
   // Remove any existing `toolIds:` entry (inline AND block form). We
   // strip the line plus any subsequent indented `- value` lines that

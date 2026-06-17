@@ -189,6 +189,8 @@ export function MarkdownContent({
     const container = rootRef.current
     if (!container) return
 
+    const timers = copyResetTimersRef.current
+
     const handleClick = async (event: MouseEvent) => {
       const target = event.target
       if (!(target instanceof Element)) return
@@ -212,8 +214,8 @@ export function MarkdownContent({
     container.addEventListener('click', handleClick)
     return () => {
       container.removeEventListener('click', handleClick)
-      for (const timer of copyResetTimersRef.current.values()) window.clearTimeout(timer)
-      copyResetTimersRef.current.clear()
+      for (const timer of timers.values()) window.clearTimeout(timer)
+      timers.clear()
     }
   }, [])
 

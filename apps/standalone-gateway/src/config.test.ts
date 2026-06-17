@@ -117,3 +117,60 @@ test("standalone gateway supports multiple provider instances without Cloud", ()
 
   assert.deepEqual(config.providers.map((provider) => provider.id), ["telegram-prod", "webhook-ci"]);
 });
+
+test("standalone gateway defaults to the postgres store and requires a database url", () => {
+  assert.equal(loadStandaloneGatewayConfig(baseEnv).store, "postgres");
+  assert.throws(
+    () => loadStandaloneGatewayConfig({ ...baseEnv, OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: undefined }),
+    /DATABASE_URL is required/,
+  );
+});
+
+test("standalone gateway can run on an in-memory store without Postgres", () => {
+  const config = loadStandaloneGatewayConfig({
+    ...baseEnv,
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: undefined,
+    OPEN_COWORK_STANDALONE_GATEWAY_STORE: "memory",
+    OPEN_COWORK_STANDALONE_GATEWAY_DEPLOYMENT_MODE: "team",
+  });
+
+  assert.equal(config.store, "memory");
+  assert.equal(config.database.url, "");
+  // The Postgres TLS gate is N/A for the in-memory store, even in team/enterprise mode.
+  assert.equal(standaloneGatewayProductionDatabaseSecurityIssue(config), null);
+  assert.doesNotThrow(() => assertStandaloneGatewayProductionDatabaseSecurity(config));
+});
+
+test("standalone gateway rejects an unknown store kind", () => {
+  assert.throws(
+    () => loadStandaloneGatewayConfig({ ...baseEnv, OPEN_COWORK_STANDALONE_GATEWAY_STORE: "sqlite" }),
+    /Unsupported OPEN_COWORK_STANDALONE_GATEWAY_STORE/,
+  );
+});
+
+test("standalone gateway merges file config with env vars taking precedence", () => {
+  const fileJson = JSON.stringify({
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://file@127.0.0.1:5432/from-file",
+    OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "file-admin-token",
+    OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_JOB_DAYS: 7,
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "file-webhook-secret",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
+  });
+  const config = loadStandaloneGatewayConfig({
+    OPEN_COWORK_STANDALONE_GATEWAY_CONFIG_JSON: fileJson,
+    // Env overrides the file's database url; file-only keys (opencode, retention) still apply.
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://env@127.0.0.1:5432/from-env",
+  });
+
+  assert.equal(config.database.url, "postgres://env@127.0.0.1:5432/from-env");
+  assert.equal(config.opencode.baseUrl, "http://127.0.0.1:4096");
+  assert.equal(config.retention.jobDays, 7);
+});
+
+test("standalone gateway rejects a non-object config file", () => {
+  assert.throws(
+    () => loadStandaloneGatewayConfig({ ...baseEnv, OPEN_COWORK_STANDALONE_GATEWAY_CONFIG_JSON: "[1, 2, 3]" }),
+    /must be a JSON object/,
+  );
+});

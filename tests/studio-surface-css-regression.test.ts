@@ -56,6 +56,30 @@ test('studioSurfaceStyles embeds every shared surface verbatim — desktop⇄web
   }
 })
 
+test('every keyboard-focusable surface control carries a :focus-visible ring (WCAG 2.4.7)', () => {
+  // Clickable cards/rows/chips must show a visible keyboard-focus ring on both
+  // apps. Each rule lives in the shared `*SurfaceCss()` so desktop and web get it.
+  // The ring reuses the shared `var(--ring-focus)` token (no bespoke outlines).
+  const focusable: ReadonlyArray<{ surface: string, css: string, selector: string }> = [
+    { surface: 'artifacts', css: artifactsSurfaceCss(), selector: '.studio-artifacts-filter:focus-visible' },
+    { surface: 'approvals', css: approvalsSurfaceCss(), selector: '.studio-question-option:focus-visible' },
+    { surface: 'wiki', css: wikiSurfaceCss(), selector: '.studio-wiki-space button:focus-visible' },
+    { surface: 'projects', css: projectsSurfaceCss(), selector: '.studio-projects-list .studio-object-card:focus-visible' },
+    { surface: 'projects', css: projectsSurfaceCss(), selector: '.studio-stage-chips button:focus-visible' },
+    { surface: 'projects', css: projectsSurfaceCss(), selector: '.studio-kanban-task-button:focus-visible' },
+    { surface: 'graph', css: knowledgeGraphCss(), selector: '.studio-graph-node:focus-visible circle' },
+  ]
+  for (const { surface, css, selector } of focusable) {
+    const rules = extractCssRules(css)
+    const declarations = rules.get(selector)
+    assert.ok(declarations !== undefined, `${surface}: missing focus ring rule "${selector}"`)
+    assert.ok(
+      declarations.includes('--ring-focus') || declarations.includes('stroke'),
+      `${surface}: "${selector}" must paint a visible focus ring (var(--ring-focus) or stroke)`,
+    )
+  }
+})
+
 test('the extracted rule map round-trips selector grouping and media nesting', () => {
   // Sanity-check the extractor on a known shape so the regression net is trustworthy.
   const rules = extractCssRules(`

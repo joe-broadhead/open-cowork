@@ -151,6 +151,17 @@
       "askPatterns": ["mcp__workflows__create_workflow"]
     },
     {
+      "id": "knowledge",
+      "name": "Knowledge",
+      "icon": "book-open",
+      "description": "Propose edits to the Open Cowork knowledge wiki; proposals stay pending until a human Maintainer reviews them.",
+      "kind": "built-in",
+      "namespace": "knowledge",
+      "writeAccess": true,
+      "patterns": ["mcp__knowledge__*"],
+      "askPatterns": ["mcp__knowledge__propose_knowledge_edit"]
+    },
+    {
       "id": "semantic-ui",
       "name": "UI Status",
       "icon": "monitor",
@@ -242,6 +253,13 @@
       "description": "Preview and save Open Cowork workflows from Workflow Designer setup threads.",
       "authMode": "none",
       "packageName": "workflows"
+    },
+    {
+      "name": "knowledge",
+      "type": "local",
+      "description": "Propose knowledge wiki edits for human review.",
+      "authMode": "none",
+      "packageName": "knowledge"
     },
     {
       "name": "semantic-ui",

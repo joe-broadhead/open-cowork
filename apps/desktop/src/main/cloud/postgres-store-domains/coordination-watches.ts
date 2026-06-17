@@ -34,7 +34,7 @@ export class PostgresCoordinationWatchesRepository {
       RETURNING *`,
       watchParams(watch),
     )
-    return coordinationWatchFromRow(result.rows[0])
+    return coordinationWatchFromRow(result.rows[0]!)
   }
 
   async update(input: UpdateCloudCoordinationWatchInput): Promise<CoordinationWatch | null> {

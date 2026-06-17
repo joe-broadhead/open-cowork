@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
-import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -31,7 +32,7 @@ import { useAppGlobalEvents } from './hooks/useAppGlobalEvents'
 import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
 import { useRuntimeHealth } from './hooks/useRuntimeHealth'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
-import { setBrandName } from './helpers/brand'
+import { setBrandName, setDocsBaseUrl } from './helpers/brand'
 import { configureI18n, subscribeLocale } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
@@ -147,6 +148,10 @@ export function App() {
   const navigateView = useCallback((target: AppNavigationTarget) => {
     const nextView = normalizeAppView(target)
     if (!nextView || nextView === 'settings') return
+    // Block navigating to a product area this deployment has disabled (defence in depth
+    // behind the sidebar already hiding it). Non-gated views are never in `features`, so
+    // isDesktopFeatureEnabled returns true for them.
+    if (!isDesktopFeatureEnabled(config?.features, nextView as DesktopFeatureKey)) return
     const apply = () => setView(nextView)
     if (canUseViewTransition()) {
       ;(document as ViewTransitionDocument).startViewTransition?.(() => {
@@ -155,7 +160,7 @@ export function App() {
       return
     }
     apply()
-  }, [])
+  }, [config?.features])
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
@@ -506,6 +511,7 @@ export function App() {
         setMetadata(appMetadata)
         setPreviewNoticeDismissed(previewDismissed(appMetadata.version))
         setBrandName(appConfig?.branding?.name)
+        setDocsBaseUrl(appConfig?.branding?.docsBaseUrl)
         void configureI18n(appConfig?.i18n)
         registerExtraThemes(appConfig?.branding?.themes)
         setDefaultThemeId(appConfig?.branding?.defaultTheme)
@@ -702,6 +708,7 @@ export function App() {
           searchRequestNonce={sidebarSearchNonce}
           settingsRequestNonce={sidebarSettingsNonce}
           branding={config.branding.sidebar}
+          features={config.features}
           collapsed={sidebarCollapsed}
           onExpandSidebar={ensureSidebarVisible}
         />

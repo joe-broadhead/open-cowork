@@ -64,7 +64,7 @@ export class PostgresApiTokensRepository {
           now,
         ],
       )
-      const token = apiTokenFromRow(result.rows[0])
+      const token = apiTokenFromRow(result.rows[0]!)
       await this.options.recordAuditEvent(client, {
         orgId: input.orgId,
         accountId: input.accountId || null,
@@ -82,15 +82,30 @@ export class PostgresApiTokensRepository {
 
   async findApiTokenByPlaintext(plaintext: string, now = new Date()) {
     const nowText = nowIso(now)
-    const candidates = await this.options.pool.query(
-      `SELECT *
-       FROM cloud_api_tokens
-       WHERE left($1, length('occ_' || token_id || '_')) = ('occ_' || token_id || '_')
-         AND revoked_at IS NULL
-         AND (expires_at IS NULL OR expires_at > $2)
-       ORDER BY created_at DESC`,
-      [plaintext, nowText],
-    )
+    // Fast path: standard tokens are `occ_<tokenId>_<secret>` with a fixed-shape
+    // `tok_`+16-base64url id, so resolve by primary key (index seek) instead of
+    // scanning every live token across all orgs on the auth hot path. The hash is
+    // still verified below, so a forged/guessed id cannot authenticate. A token whose
+    // id doesn't match the standard shape (legacy/custom) falls back to the prior scan.
+    const standardTokenId = /^occ_(tok_[A-Za-z0-9_-]{16})_/.exec(plaintext)?.[1]
+    const candidates = standardTokenId
+      ? await this.options.pool.query(
+        `SELECT *
+         FROM cloud_api_tokens
+         WHERE token_id = $1
+           AND revoked_at IS NULL
+           AND (expires_at IS NULL OR expires_at > $2)`,
+        [standardTokenId, nowText],
+      )
+      : await this.options.pool.query(
+        `SELECT *
+         FROM cloud_api_tokens
+         WHERE left($1, length('occ_' || token_id || '_')) = ('occ_' || token_id || '_')
+           AND revoked_at IS NULL
+           AND (expires_at IS NULL OR expires_at > $2)
+         ORDER BY created_at DESC`,
+        [plaintext, nowText],
+      )
     const matched = candidates.rows.find((row) => verifyCloudApiTokenHash(plaintext, String(row.token_hash)))
     if (!matched) return null
     const result = await this.options.pool.query(

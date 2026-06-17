@@ -56,14 +56,14 @@ describe('MarkdownContent', () => {
     })
     expect(button.getAttribute('aria-label')).toBe('Copied')
 
-    act(() => vi.advanceTimersByTime(1500))
+    await act(() => vi.advanceTimersByTime(1500))
     await act(async () => {
       fireEvent.click(button)
     })
-    act(() => vi.advanceTimersByTime(1999))
+    await act(() => vi.advanceTimersByTime(1999))
     expect(button.getAttribute('aria-label')).toBe('Copied')
 
-    act(() => vi.advanceTimersByTime(1))
+    await act(() => vi.advanceTimersByTime(1))
     expect(button.getAttribute('aria-label')).toBe('Copy code')
   })
 

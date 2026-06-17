@@ -96,7 +96,7 @@ export function ChatInputReasoningMenu({
       setHighlightIndex(options.length - 1)
     } else if (event.key === 'Enter') {
       event.preventDefault()
-      onSelect(options[highlightIndex])
+      onSelect(options[highlightIndex] ?? null)
       onClose()
     } else if (event.key === 'Escape') {
       event.preventDefault()

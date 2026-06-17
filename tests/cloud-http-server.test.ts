@@ -26,7 +26,7 @@ import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object
 import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy, type CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudIdentityPolicy, type CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
@@ -119,6 +119,8 @@ function createFixture(options: {
   webhookSecurity?: WorkflowWebhookSecurityStore | null
   trustProxyHeaders?: boolean
   trustedProxyCidrs?: readonly string[] | null
+  inviteSigningSecret?: string | null
+  emailSender?: CloudEmailSender | null
 } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -131,7 +133,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null, options.inviteSigningSecret ?? null, options.emailSender ?? null)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -487,7 +489,28 @@ test('cloud HTTP knowledge routes expose snapshot, proposal review, and version 
     assert.equal(snapshot.truncated, false)
     assert.ok(asArray(asRecord(snapshot.graph).nodes).some((node) => asRecord(node).label === 'Company OS'))
 
-    const unauthorizedProposal = await fetch(`${baseUrl}/api/knowledge/proposals`, {
+    // Creating a Space is org-admin gated (structural). A member cannot; the org admin can, and the
+    // new Space is tenant-scoped and appears in the snapshot — making the Space model usable.
+    const memberSpace = await fetch(`${baseUrl}/api/knowledge/spaces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({ name: 'Member space', visibility: 'team' }),
+    })
+    assert.equal(memberSpace.status, 403)
+    const createdSpace = await fetch(`${baseUrl}/api/knowledge/spaces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Engineering', visibility: 'team', icon: 'blocks' }),
+    })
+    assert.equal(createdSpace.status, 201)
+    assert.equal(asRecord(await readJson(createdSpace)).name, 'Engineering')
+    assert.ok(asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/knowledge`))).spaces)
+      .map(asRecord).some((space) => space.name === 'Engineering'))
+
+    // A member with a contributor/maintainer Space role MAY propose — the space role governs (the
+    // store's assertCanPropose), not the Cloud org-admin role. Proposals stay pending until a
+    // Maintainer reviews, so the "Contributor can propose" path is reachable on cloud.
+    const memberProposal = await fetch(`${baseUrl}/api/knowledge/proposals`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
       body: JSON.stringify({
@@ -495,12 +518,19 @@ test('cloud HTTP knowledge routes expose snapshot, proposal review, and version 
         pageId: String(pages[0]?.id),
         pageTitle: String(pages[0]?.title),
         by: 'member',
-        summary: 'Member should not bypass Cloud Knowledge proposal policy.',
-        body: [{ type: 'p', text: 'Blocked.' }],
+        summary: 'A member contributor proposes a Cloud Knowledge change.',
+        body: [{ type: 'p', text: 'Member proposal pending review.' }],
       }),
     })
-    assert.equal(unauthorizedProposal.status, 403)
-    assert.match(String((await readJson(unauthorizedProposal)).error), /admin|proposal/i)
+    assert.equal(memberProposal.status, 201)
+    const memberProposalId = String(asRecord(await readJson(memberProposal)).id)
+    // Reviewing still requires admin authority — decline it as the org admin so it does not linger.
+    const memberProposalDecline = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(memberProposalId)}/decline`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'maintainer' }),
+    })
+    assert.equal(memberProposalDecline.status, 200)
 
     const proposalResponse = await fetch(`${baseUrl}/api/knowledge/proposals`, {
       method: 'POST',
@@ -4033,6 +4063,87 @@ test('cloud HTTP admin APIs manage invited members and expose redacted audit', a
   }
 })
 
+test('cloud HTTP issues a signed team invite, emails it, and accepts it via the public endpoint', async () => {
+  const emails: Array<{ to: string, subject: string }> = []
+  const fixture = createFixture({
+    identityPolicy: { allowSelfServiceSignup: false, signupMode: 'invite', allowedEmailDomains: ['example.test'] },
+    inviteSigningSecret: 'cloud-http-invite-signing-secret-key',
+    emailSender: { send: async (message) => { emails.push({ to: message.to, subject: message.subject }) } },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Admin invites → response carries a single-use invite token + expiry, and the email seam fires.
+    const invitedResponse = await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'invitee@example.test', role: 'member' }),
+    })
+    assert.equal(invitedResponse.status, 201)
+    const invitedBody = asRecord(await readJson(invitedResponse))
+    assert.equal(asRecord(invitedBody.member).status, 'invited')
+    const token = String(invitedBody.inviteToken)
+    assert.ok(token.length > 0)
+    assert.equal(typeof invitedBody.inviteExpiresAt, 'string')
+    assert.deepEqual(emails, [{ to: 'invitee@example.test', subject: 'You have been invited to a team' }])
+
+    // The public, pre-auth accept endpoint activates the membership (the token is the credential).
+    const acceptResponse = await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    assert.equal(acceptResponse.status, 200)
+    assert.equal(asRecord(asRecord(await readJson(acceptResponse)).membership).status, 'active')
+
+    // The member now shows active in the admin list.
+    const members = asArray((await readJson(await fetch(`${baseUrl}/api/admin/members?q=invitee`))).members)
+    assert.equal(asRecord(members[0]).status, 'active')
+
+    // Accepting again is idempotent; a garbage token is rejected.
+    assert.equal((await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }),
+    })).status, 200)
+    assert.equal((await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'not-a-valid-token' }),
+    })).status, 400)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects an invite accept after the membership is revoked', async () => {
+  const fixture = createFixture({
+    identityPolicy: { allowSelfServiceSignup: false, signupMode: 'invite', allowedEmailDomains: ['example.test'] },
+    inviteSigningSecret: 'cloud-http-invite-signing-secret-key',
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const invitedBody = asRecord(await readJson(await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'revoked@example.test', role: 'member' }),
+    })))
+    const token = String(invitedBody.inviteToken)
+    const accountId = String(asRecord(invitedBody.member).accountId)
+
+    // Admin revokes (disables) the invited membership before it is accepted.
+    await fetch(`${baseUrl}/api/admin/members/${encodeURIComponent(accountId)}/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'disabled', confirm: accountId }),
+    })
+
+    const accept = await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    assert.equal(accept.status, 403)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat auth', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -6247,6 +6358,122 @@ test('cloud HTTP rejects settings APIs when the cloud profile disables them', as
       reason: 'Settings are disabled for this cloud profile.',
       policyCode: 'settings.disabled',
     })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects knowledge APIs when the cloud profile disables them', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        knowledge: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/knowledge`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Knowledge is disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Knowledge is disabled for this cloud profile.',
+      policyCode: 'knowledge.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects channel APIs when the cloud profile disables them', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        channels: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/channels`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Channels are disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Channels are disabled for this cloud profile.',
+      policyCode: 'channels.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects BYOK APIs when the cloud profile disables them', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        byok: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Bring-your-own-key is disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Bring-your-own-key is disabled for this cloud profile.',
+      policyCode: 'byok.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP enforces the deployer agent allowlist on the prompt path', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: { ...basePolicy, allowedAgents: ['plan'] },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    // An agent outside the deployer allowlist is rejected — without this gate a
+    // caller could name any agent on a prompt and bypass a restricted profile.
+    const blocked = await fetch(`${baseUrl}/api/sessions/oc-session-1/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'hello', agent: 'build' }),
+    })
+    assert.equal(blocked.status, 403)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'policy.agent_not_enabled')
+
+    // An allowlisted agent is accepted.
+    const allowed = await fetch(`${baseUrl}/api/sessions/oc-session-1/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'hello', agent: 'plan' }),
+    })
+    assert.equal(allowed.status, 202)
   } finally {
     await fixture.server.close()
   }

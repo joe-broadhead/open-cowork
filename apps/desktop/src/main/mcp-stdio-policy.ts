@@ -108,7 +108,7 @@ const SHELL_METACHARS = /[;&|`$><]|\$\(|&&|\|\||<\(|>\(/
 
 function basename(path: string) {
   const parts = path.split(/[\\/]/)
-  return parts[parts.length - 1]
+  return parts[parts.length - 1]!
 }
 
 export function validateCustomMcpStdioCommand(custom: Pick<CustomMcpConfig, 'name' | 'scope' | 'directory' | 'command' | 'args'>) {

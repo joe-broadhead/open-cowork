@@ -28,13 +28,32 @@ const SINGLE_SOURCED_PREFIXES = [
   '.studio-wiki-rail',
   '.studio-wiki-space',
   '.studio-wiki-propose',
+  '.ui-empty-state',
+  '.ui-skeleton',
+  // Cross-app animation keyframes (defined once in sharedKeyframesCss). Desktop-only
+  // `ui-spin`/`ui-disclosure-in` are intentionally NOT listed — they stay in globals.css.
+  '@keyframes ui-fade-in',
+  '@keyframes ui-popover-in',
+  '@keyframes ui-view-transition-in',
+  '@keyframes ui-view-transition-out',
+  '@keyframes ui-dialog-in',
+  '@keyframes ui-drawer-in',
+  '@keyframes ui-drawer-left-in',
+  '@keyframes ui-primary-sheen',
+  '@keyframes ui-status-pulse',
+  '@keyframes ui-progress-shimmer',
+  '@keyframes ui-stream-shimmer',
+  '@keyframes ui-stream-caret',
+  '@keyframes ui-polish-row-in',
 ]
 
 const sharedCss = readFileSync(join(root, 'packages/ui/src/surface-styles.ts'), 'utf8')
 const desktopCss = readFileSync(join(root, 'apps/desktop/src/renderer/styles/globals.css'), 'utf8')
 const websiteStyleCss = [
+  'styles.ts',
   'style-studio-ui.ts',
   'style-studio-primitives.ts',
+  'style-primitives.ts',
   'style-artifacts.ts',
   'style-components.ts',
   'style-chat.ts',

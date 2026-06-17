@@ -73,6 +73,31 @@ URLs, and does not echo provided secrets to stdout when `--output` is used. Use
 `--print` only for placeholder examples unless you explicitly pass
 `--allow-secret-print` in a controlled terminal.
 
+### Persistence backend
+
+`OPEN_COWORK_STANDALONE_GATEWAY_STORE` selects the store:
+
+- `postgres` (default) — durable, multi-replica Gateway Postgres. Requires
+  `OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL` and verified TLS for team/enterprise
+  deployments.
+- `memory` — an ephemeral in-process store for local development or embedded
+  single-process deployments. No database URL is required and the Postgres TLS
+  gate does not apply. **Data is lost on restart and is not shared across
+  replicas**, so it is not suitable for production team/enterprise use.
+
+### File config
+
+Every `OPEN_COWORK_STANDALONE_GATEWAY_*` value can be supplied from a JSON (or
+JSONC) file instead of, or in addition to, the environment. Environment
+variables always override file values.
+
+```bash
+# A flat JSON object keyed by the same env var names:
+OPEN_COWORK_STANDALONE_GATEWAY_CONFIG=/etc/open-cowork/standalone-gateway.json
+# …or inline JSON:
+OPEN_COWORK_STANDALONE_GATEWAY_CONFIG_JSON='{"OPEN_COWORK_STANDALONE_GATEWAY_STORE":"memory", ...}'
+```
+
 ### Postgres TLS
 
 Solo/local deployments may run against a local Postgres listener without TLS.

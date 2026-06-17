@@ -181,7 +181,7 @@ export class PostgresChannelDeliveriesRepository {
           input.lastClaimedBy ? normalizeText(input.lastClaimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Delivery owner') : null,
         ],
       )
-      return channelDeliveryFromRow(result.rows[0])
+      return channelDeliveryFromRow(result.rows[0]!)
     })
   }
 

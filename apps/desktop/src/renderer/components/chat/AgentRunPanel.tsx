@@ -155,7 +155,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
   const taskSummary = useMemo(() => {
     const total = taskRuns.length
     if (total === 1) {
-      return formatAgentName(taskRuns[0].agent)
+      return formatAgentName(taskRuns[0]!.agent)
     }
     if (uniqueAgents.length === 1) {
       return `${total} ${formatAgentName(uniqueAgents[0])} tasks`

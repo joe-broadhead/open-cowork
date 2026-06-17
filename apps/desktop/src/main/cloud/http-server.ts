@@ -65,6 +65,8 @@ import {
   writeSecurityHeaders,
 } from './http-response-writers.ts'
 import { internalTokenIsValid } from './http-auth-helpers.ts'
+import type { KnowledgeStore } from '../knowledge/knowledge-store-contract.ts'
+import { createSqliteKnowledgeStore } from '../knowledge/knowledge-store.ts'
 import {
   publicChannelInteraction,
   writeSnapshotRequiredEvent,
@@ -148,6 +150,14 @@ export type CloudHttpServerOptions = {
   trustedProxyCidrs?: readonly string[] | null
   readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
   knowledgeDataDir?: string | null
+  /**
+   * Backend for cloud knowledge wiki reads/writes. When omitted, the server
+   * falls back to a SQLite store rooted at {@link knowledgeDataDir} (desktop /
+   * local / in-memory). The cloud app injects a Postgres-backed store when the
+   * control plane is Postgres so knowledge shares the durable control plane
+   * rather than a node-local SQLite file.
+   */
+  knowledgeStore?: KnowledgeStore
 }
 
 export class CloudHttpError extends Error {
@@ -262,6 +272,16 @@ function ssePollMs(options: CloudHttpServerOptions) {
   const value = options.ssePollMs ?? 1000
   return Number.isInteger(value) && value > 0 ? value : 1000
 }
+
+// Bounds each SSE replay-poll read so a topic never drags an unbounded event history
+// per poll; the replay hub paginates by advancing its cursor (and re-polls immediately
+// when a full batch is returned), so delivery stays complete.
+const SSE_REPLAY_BATCH = 1_000
+
+// Hard cap on per-connection outbound SSE bytes buffered in Node's writable queue. A
+// client that drains slower than events arrive would otherwise grow this without bound
+// (heap pressure); past the cap the connection is dropped (cleanup unsubscribes on close).
+const SSE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024
 
 async function processCommandIfConfigured(
   options: CloudHttpServerOptions,
@@ -566,6 +586,7 @@ async function handleSse(
     const type: CloudSessionEventType = event.type
     writeSseEvent(res, { ...event, type })
     lastSequence = event.sequence
+    if (res.writableLength > SSE_MAX_BUFFERED_BYTES) res.destroy()
   }
   for (const event of await options.service.listEvents(context.principal, sessionId, afterSequence)) {
     writeIfNew(event)
@@ -582,8 +603,9 @@ async function handleSse(
     key: `session:${context.principal.tenantId}:${context.principal.userId}:${sessionId}`,
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
-    loadEvents: (sequence) => options.service.listEvents(context.principal, sessionId, sequence),
+    loadEvents: (sequence) => options.service.listEvents(context.principal, sessionId, sequence, SSE_REPLAY_BATCH),
     listener: (event) => writeIfNew(event as SessionEventRecord),
+    batchSize: SSE_REPLAY_BATCH,
   }) ?? null
   keepAliveTimer = setInterval(() => {
     if (cleaned || res.destroyed) return
@@ -642,6 +664,7 @@ async function handleWorkspaceSse(
     const type: CloudSessionEventType = event.type
     writeSseEvent(res, { ...event, type })
     lastSequence = event.sequence
+    if (res.writableLength > SSE_MAX_BUFFERED_BYTES) res.destroy()
   }
 
   const cursor = await options.service.getWorkspaceEventCursor(context.principal)
@@ -677,8 +700,9 @@ async function handleWorkspaceSse(
     key: `workspace:${context.principal.tenantId}:${context.principal.userId}`,
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
-    loadEvents: (sequence) => options.service.listWorkspaceEvents(context.principal, sequence),
+    loadEvents: (sequence) => options.service.listWorkspaceEvents(context.principal, sequence, SSE_REPLAY_BATCH),
     listener: (event) => writeIfNew(event as WorkspaceEventRecord),
+    batchSize: SSE_REPLAY_BATCH,
   }) ?? null
   keepAliveTimer = setInterval(() => {
     if (cleaned || res.destroyed) return
@@ -895,10 +919,16 @@ async function handleApiRequest(
   }
 
   if (resource === 'knowledge') {
+    // Resolve the effective knowledge backend once per request: the injected
+    // store (Postgres in cloud) when present, otherwise a SQLite store rooted at
+    // knowledgeDataDir. Thread it through so the route always sees a concrete
+    // KnowledgeStore on `input.options.knowledgeStore`.
+    const knowledgeStore = options.knowledgeStore
+      ?? createSqliteKnowledgeStore({ storageDataDir: options.knowledgeDataDir })
     await handleKnowledgeApiRoute({
       req,
       res,
-      options,
+      options: { ...options, knowledgeStore },
       context,
       resource,
       itemId: sessionId,
@@ -925,6 +955,10 @@ async function handleApiRequest(
   }
 
   if (resource === 'channels') {
+    if (!options.policy.features.channels) {
+      writePolicyError(res, 403, 'Channels are disabled for this cloud profile.', 'channels.disabled', options.corsOrigin)
+      return
+    }
     const handled = await handleChannelsApiRoute({
       req,
       res,
@@ -1613,6 +1647,20 @@ export class CloudHttpServer {
       }
 
       await this.enforceIpRateLimit(req)
+
+      // Public, pre-auth: the signed invite token is the bearer credential (like the billing
+      // webhook above), so an invitee can accept before they have a session. IP-rate-limited.
+      if (url.pathname === '/api/invites/accept' && req.method === 'POST') {
+        const body = await readJsonBody(req, this.options.maxBodyBytes || 1024 * 1024)
+        const token = readString(body.token)
+        if (!token) {
+          writeError(res, 400, 'An invite token is required.', requestOptions.corsOrigin)
+          return
+        }
+        const membership = await this.options.service.acceptMembershipInvite(token)
+        writeJson(res, 200, { membership }, requestOptions.corsOrigin)
+        return
+      }
 
       if (url.pathname.startsWith('/auth/') || this.options.browserAuth?.isCallbackPath(url.pathname)) {
         const auth = this.options.auth || defaultAuthResolver

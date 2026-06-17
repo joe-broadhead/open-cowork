@@ -290,7 +290,7 @@ export class PostgresManagedWorkersRepository {
           now,
         ],
       )
-      const credential = managedWorkerCredentialFromRow(result.rows[0])
+      const credential = managedWorkerCredentialFromRow(result.rows[0]!)
       await this.options.recordAuditEvent(client, {
         orgId: credential.orgId,
         accountId: input.actor?.accountId || null,
@@ -372,7 +372,7 @@ export class PostgresManagedWorkersRepository {
         [credential.credentialId, nowText],
       )
       return {
-        credential: managedWorkerCredentialFromRow(updatedCredentialRow.rows[0]),
+        credential: managedWorkerCredentialFromRow(updatedCredentialRow.rows[0]!),
         worker: managedWorkerFromRow(workerRow),
         pool: managedWorkerPoolFromRow(poolRow),
       }
@@ -491,7 +491,7 @@ export class PostgresManagedWorkersRepository {
           now,
         ],
       )
-      return managedWorkerHeartbeatFromRow(result.rows[0])
+      return managedWorkerHeartbeatFromRow(result.rows[0]!)
     })
   }
 

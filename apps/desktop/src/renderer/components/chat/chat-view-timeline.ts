@@ -138,7 +138,7 @@ export function buildChatTimeline({
   const flushTaskGroup = () => {
     if (taskGroup.length === 0) return
     if (taskGroup.length === 1) {
-      result.push({ kind: 'task', data: taskGroup[0] })
+      result.push({ kind: 'task', data: taskGroup[0]! })
     } else {
       result.push({ kind: 'task_group', data: [...taskGroup] })
     }

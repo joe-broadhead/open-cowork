@@ -68,7 +68,7 @@ describe('SessionQuestionDock', () => {
     const request: PendingQuestion = {
       ...baseRequest,
       questions: [
-        baseRequest.questions[0],
+        baseRequest.questions[0]!,
         {
           header: 'Choose checks',
           question: 'Which validation should run?',

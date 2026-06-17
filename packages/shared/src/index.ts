@@ -164,6 +164,8 @@ import type {
   KnowledgeReviewInput,
   KnowledgeSnapshotOptions,
   KnowledgeSnapshotPayload,
+  KnowledgeSpace,
+  KnowledgeSpaceInput,
 } from './knowledge.js'
 
 export * from './app-config.js'
@@ -292,6 +294,7 @@ export interface CoworkAPI {
   }
   knowledge: {
     snapshot: (options?: KnowledgeSnapshotOptions) => Promise<KnowledgeSnapshotPayload>
+    createSpace: (input: KnowledgeSpaceInput) => Promise<KnowledgeSpace>
     propose: (input: KnowledgeProposalInput) => Promise<KnowledgeProposal>
     acceptProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<{ proposal: KnowledgeProposal; page: KnowledgePageVersion }>
     declineProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<KnowledgeProposal>

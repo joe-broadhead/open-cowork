@@ -36,12 +36,12 @@ function parseHex(value: string): Rgba | null {
 function parseRgb(value: string): Rgba | null {
   const match = value.match(/rgba?\(([^)]+)\)/i)
   if (!match) return null
-  const parts = match[1].split(',').map((part) => part.trim())
+  const parts = match[1]!.split(',').map((part) => part.trim())
   if (parts.length < 3) return null
 
-  const r = clampChannel(Number.parseFloat(parts[0]))
-  const g = clampChannel(Number.parseFloat(parts[1]))
-  const b = clampChannel(Number.parseFloat(parts[2]))
+  const r = clampChannel(Number.parseFloat(parts[0]!))
+  const g = clampChannel(Number.parseFloat(parts[1]!))
+  const b = clampChannel(Number.parseFloat(parts[2]!))
   const a = parts[3] !== undefined ? Math.max(0, Math.min(1, Number.parseFloat(parts[3]))) : 1
 
   if (![r, g, b, a].every((entry) => Number.isFinite(entry))) return null

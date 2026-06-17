@@ -1,11 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
   BrandingSidebarConfig,
   BrandingSidebarLowerConfig,
   BrandingSidebarTopConfig,
+  DesktopFeatureFlags,
+  DesktopFeatureKey,
   WorkspaceApiSupport,
   WorkspaceInfo,
 } from '@open-cowork/shared'
+import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
@@ -24,6 +27,7 @@ interface Props {
   branding?: BrandingSidebarConfig
   collapsed?: boolean
   onExpandSidebar?: () => void
+  features?: DesktopFeatureFlags
 }
 
 const SettingsPanel = lazy(() =>
@@ -35,22 +39,28 @@ type SidebarNavItem = {
   icon: IconName
   labelKey: string
   fallback: string
+  // When set, the item is hidden if the deployment disables this feature flag.
+  feature?: DesktopFeatureKey
 }
 
 const PRIMARY_NAV_ITEMS: SidebarNavItem[] = [
   { view: 'home', icon: 'home', labelKey: 'sidebar.home', fallback: 'Home' },
-  { view: 'projects', icon: 'folder', labelKey: 'sidebar.projects', fallback: 'Projects' },
-  { view: 'knowledge', icon: 'book-open', labelKey: 'sidebar.knowledge', fallback: 'Knowledge' },
-  { view: 'approvals', icon: 'circle-help', labelKey: 'sidebar.approvals', fallback: 'Approvals' },
+  { view: 'projects', icon: 'folder', labelKey: 'sidebar.projects', fallback: 'Projects', feature: 'projects' },
+  { view: 'knowledge', icon: 'book-open', labelKey: 'sidebar.knowledge', fallback: 'Knowledge', feature: 'knowledge' },
+  { view: 'approvals', icon: 'circle-help', labelKey: 'sidebar.approvals', fallback: 'Approvals', feature: 'approvals' },
 ]
 
 const MANAGE_NAV_ITEMS: SidebarNavItem[] = [
-  { view: 'team', icon: 'users', labelKey: 'sidebar.team', fallback: 'Team' },
-  { view: 'playbooks', icon: 'workflow', labelKey: 'sidebar.playbooks', fallback: 'Playbooks' },
-  { view: 'channels', icon: 'activity', labelKey: 'sidebar.channels', fallback: 'Channels' },
-  { view: 'tools', icon: 'blocks', labelKey: 'sidebar.toolsSkills', fallback: 'Tools & Skills' },
-  { view: 'artifacts', icon: 'file', labelKey: 'sidebar.artifacts', fallback: 'Artifacts' },
+  { view: 'team', icon: 'users', labelKey: 'sidebar.team', fallback: 'Team', feature: 'team' },
+  { view: 'playbooks', icon: 'workflow', labelKey: 'sidebar.playbooks', fallback: 'Playbooks', feature: 'playbooks' },
+  { view: 'channels', icon: 'activity', labelKey: 'sidebar.channels', fallback: 'Channels', feature: 'channels' },
+  { view: 'tools', icon: 'blocks', labelKey: 'sidebar.toolsSkills', fallback: 'Tools & Skills', feature: 'tools' },
+  { view: 'artifacts', icon: 'file', labelKey: 'sidebar.artifacts', fallback: 'Artifacts', feature: 'artifacts' },
 ]
+
+function visibleNavItems(items: SidebarNavItem[], features: DesktopFeatureFlags | undefined): SidebarNavItem[] {
+  return items.filter((item) => !item.feature || isDesktopFeatureEnabled(features, item.feature))
+}
 
 function safeLogoDataUrl(value: string | undefined) {
   const trimmed = value?.trim()
@@ -338,26 +348,26 @@ function WorkspaceSwitcher() {
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
 
-  const refreshSupport = async (listedWorkspaces: WorkspaceInfo[], cancelled: () => boolean) => {
+  const refreshSupport = useCallback(async (listedWorkspaces: WorkspaceInfo[], cancelled: () => boolean) => {
     const entries = await Promise.all(listedWorkspaces.map(async (workspace) => ({
       workspace,
       support: await loadWorkspaceSupport(workspace.id, { force: true }).catch(() => []),
     })))
     if (cancelled()) return
     return entries
-  }
+  }, [loadWorkspaceSupport])
 
-  const workspaceCanListSessions = (workspace: WorkspaceInfo, support: WorkspaceApiSupport[] | undefined) => {
+  const workspaceCanListSessions = useCallback((workspace: WorkspaceInfo, support: WorkspaceApiSupport[] | undefined) => {
     if (workspace.kind === 'local') return true
     if (!support) return false
     const entry = supportEntry(support, 'sessions.list')
     return Boolean(entry) && supportAllows(entry)
-  }
+  }, [])
 
-  const loadSessionsForWorkspace = async (workspace: WorkspaceInfo, support?: WorkspaceApiSupport[]) => {
+  const loadSessionsForWorkspace = useCallback(async (workspace: WorkspaceInfo, support?: WorkspaceApiSupport[]) => {
     if (!workspaceCanListSessions(workspace, support)) return []
     return window.coworkApi.session.list({ workspaceId: workspace.id })
-  }
+  }, [workspaceCanListSessions])
 
   useEffect(() => {
     let cancelled = false
@@ -382,7 +392,7 @@ function WorkspaceSwitcher() {
     return () => {
       cancelled = true
     }
-  }, [loadWorkspaceSupport, setActiveWorkspace, setSessions])
+  }, [loadSessionsForWorkspace, refreshSupport, setActiveWorkspace, setSessions])
 
   const activateWorkspace = async (workspace: WorkspaceInfo) => {
     const generation = activationGenerationRef.current + 1
@@ -582,6 +592,7 @@ function SidebarNavButton({
   return (
     <button
       type="button"
+      data-nav-view={item.view}
       onClick={() => onViewChange(item.view)}
       aria-label={collapsed ? label : undefined}
       aria-current={active ? 'page' : undefined}
@@ -651,7 +662,10 @@ export function Sidebar({
   branding,
   collapsed = false,
   onExpandSidebar,
+  features,
 }: Props) {
+  const primaryNavItems = visibleNavItems(PRIMARY_NAV_ITEMS, features)
+  const manageNavItems = visibleNavItems(MANAGE_NAV_ITEMS, features)
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
@@ -669,7 +683,7 @@ export function Sidebar({
     currentSessionId,
     currentView: sessionView,
   }).length, [activeWorkspaceId, sessionsByWorkspace, sessionStateById, currentSessionId, sessionView])
-  const manageActive = MANAGE_NAV_ITEMS.some((item) => item.view === currentView)
+  const manageActive = manageNavItems.some((item) => item.view === currentView)
 
   useEffect(() => {
     if (searchRequestNonce === 0) return
@@ -746,7 +760,7 @@ export function Sidebar({
 
           <div className={`min-h-0 overflow-y-auto px-2 pt-2 pb-1 ${collapsed ? 'max-h-none' : 'max-h-[40vh]'}`}>
             {!collapsed ? <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div> : null}
-            {PRIMARY_NAV_ITEMS.map((item) => (
+            {primaryNavItems.map((item) => (
               <SidebarNavButton
                 key={item.view}
                 item={item}
@@ -771,7 +785,7 @@ export function Sidebar({
                     <span className="truncate font-semibold uppercase tracking-widest text-[10px]">{t('sidebar.manage', 'Manage')}</span>
                     <span className="min-w-0 flex-1 truncate text-end text-[10px] normal-case tracking-normal text-text-muted">
                       {manageActive
-                        ? t(MANAGE_NAV_ITEMS.find((item) => item.view === currentView)?.labelKey || 'sidebar.manage', MANAGE_NAV_ITEMS.find((item) => item.view === currentView)?.fallback || 'Manage')
+                        ? t(manageNavItems.find((item) => item.view === currentView)?.labelKey || 'sidebar.manage', manageNavItems.find((item) => item.view === currentView)?.fallback || 'Manage')
                         : t('sidebar.manageHint', 'Team · Playbooks · Tools')}
                     </span>
                   </>
@@ -779,7 +793,7 @@ export function Sidebar({
               </button>
               {manageOpen ? (
                 <div className={collapsed ? 'mt-1' : 'mt-1'}>
-                  {MANAGE_NAV_ITEMS.map((item) => (
+                  {manageNavItems.map((item) => (
                     <SidebarNavButton
                       key={item.view}
                       item={item}

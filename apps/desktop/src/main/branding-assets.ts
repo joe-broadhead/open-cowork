@@ -57,6 +57,15 @@ export function resolveBrandingAssetFile(assetPath: string | undefined, root = g
   }
 }
 
+// Resolves the configured OS window/dock icon (`branding.appIcon`, a branding-relative
+// path) to a real file path usable by `BrowserWindow({ icon })` / `nativeImage`. Returns
+// null when unset or invalid (path traversal, unsupported type, missing file) so callers
+// fall back to the bundled default icon.
+export function resolveAppIconFile(appIcon: string | null | undefined, root = getBrandingAssetRoot()) {
+  if (!appIcon) return null
+  return resolveBrandingAssetFile(appIcon, root)
+}
+
 export function brandingAssetUrl(assetPath: string | undefined, root = getBrandingAssetRoot()) {
   const file = resolveBrandingAssetFile(assetPath, root)
   if (!file) return undefined

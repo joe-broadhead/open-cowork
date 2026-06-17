@@ -118,13 +118,13 @@ function waitForAsyncClientWork() {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-test('cloud theme exposes the shared 18-preset catalog', () => {
+void test('cloud theme exposes the shared 18-preset catalog', () => {
   const options = cloudThemePresetOptions()
   assert.equal(options.length, 18)
   assert.deepEqual(options.map((option) => option.id), Object.keys(UI_THEME_PRESETS))
 })
 
-test('cloud theme switcher applies and persists shared preset tokens when unlocked', () => withThemeDom((dom) => {
+void test('cloud theme switcher applies and persists shared preset tokens when unlocked', () => withThemeDom((dom) => {
   localStorage.setItem(CLOUD_THEME_STORAGE_KEY, 'tokyostorm')
   localStorage.setItem(CLOUD_THEME_SCHEME_STORAGE_KEY, 'light')
   localStorage.setItem(CLOUD_THEME_ACCENT_STORAGE_KEY, 'teal')
@@ -209,7 +209,7 @@ test('cloud theme switcher applies and persists shared preset tokens when unlock
   assert.equal(dom.window.location.hash, '#settings')
 }))
 
-test('cloud settings load and save durable user preferences through the settings API', async () => withThemeDomAsync(async () => {
+void test('cloud settings load and save durable user preferences through the settings API', async () => withThemeDomAsync(async () => {
   const originalFetch = globalThis.fetch
   const calls: Array<{ path: string, method: string, headers: Record<string, string>, body: unknown }> = []
   document.cookie = 'open_cowork_cloud_csrf=csrf-token'
@@ -300,7 +300,7 @@ test('cloud settings load and save durable user preferences through the settings
   }
 }))
 
-test('cloud settings roll back user preference toggles when durable save fails', async () => withThemeDomAsync(async () => {
+void test('cloud settings roll back user preference toggles when durable save fails', async () => withThemeDomAsync(async () => {
   const originalFetch = globalThis.fetch
   const calls: Array<{ path: string, method: string, body: unknown }> = []
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -364,7 +364,7 @@ test('cloud settings roll back user preference toggles when durable save fails',
   }
 }))
 
-test('cloud settings do not save stale defaults before durable preferences hydrate', async () => withThemeDomAsync(async () => {
+void test('cloud settings do not save stale defaults before durable preferences hydrate', async () => withThemeDomAsync(async () => {
   const originalFetch = globalThis.fetch
   let resolveGet: ((response: Response) => void) | null = null
   const calls: Array<{ path: string, method: string }> = []
@@ -419,7 +419,7 @@ test('cloud settings do not save stale defaults before durable preferences hydra
   }
 }))
 
-test('cloud settings serialize durable preference saves so later choices win', async () => withThemeDomAsync(async () => {
+void test('cloud settings serialize durable preference saves so later choices win', async () => withThemeDomAsync(async () => {
   const originalFetch = globalThis.fetch
   const saves: Array<{ body: { value: unknown }, resolve: (response: Response) => void }> = []
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -506,7 +506,7 @@ test('cloud settings serialize durable preference saves so later choices win', a
   }
 }))
 
-test('cloud settings ignore stale failed saves after newer preference changes', async () => withThemeDomAsync(async () => {
+void test('cloud settings ignore stale failed saves after newer preference changes', async () => withThemeDomAsync(async () => {
   const originalFetch = globalThis.fetch
   const saves: Array<{ body: { value: unknown }, resolve: (response: Response) => void }> = []
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -579,7 +579,7 @@ test('cloud settings ignore stale failed saves after newer preference changes', 
   }
 }))
 
-test('cloud theme switcher survives React hydration replacing the select node', () => withThemeDom((dom) => {
+void test('cloud theme switcher survives React hydration replacing the select node', () => withThemeDom((dom) => {
   installCloudThemePresetControls(bootstrap(false))
   const options = cloudThemePresetOptions()
     .map((preset) => `<option value="${preset.id}">${preset.label}</option>`)
@@ -615,7 +615,7 @@ test('cloud theme switcher survives React hydration replacing the select node', 
   assert.equal(document.documentElement.style.getPropertyValue('--accent-text'), '#966127')
 }))
 
-test('cloud theme switcher preserves tenant branding when locked', () => withThemeDom(() => {
+void test('cloud theme switcher preserves tenant branding when locked', () => withThemeDom(() => {
   localStorage.setItem(CLOUD_THEME_STORAGE_KEY, 'frappe')
   installCloudThemePresetControls(bootstrap(true))
   const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement
@@ -631,7 +631,7 @@ test('cloud theme switcher preserves tenant branding when locked', () => withThe
   assert.equal(document.documentElement.dataset.density, 'regular')
 }))
 
-test('cloud theme applies preset tokens directly', () => withThemeDom(() => {
+void test('cloud theme applies preset tokens directly', () => withThemeDom(() => {
   applyCloudThemePreset('gruvbox', 'light', 'plum')
   assert.equal(document.documentElement.dataset.uiTheme, 'gruvbox')
   assert.equal(document.documentElement.dataset.colorScheme, 'light')
@@ -643,7 +643,7 @@ test('cloud theme applies preset tokens directly', () => withThemeDom(() => {
   assert.equal(document.documentElement.style.getPropertyValue('--focus'), focusTokenForAccent('#8b7cf0'))
 }))
 
-test('cloud density applies directly with a regular fallback', () => withThemeDom(() => {
+void test('cloud density applies directly with a regular fallback', () => withThemeDom(() => {
   applyCloudDensity('compact')
   assert.equal(document.documentElement.dataset.density, 'compact')
   applyCloudDensity('wide')

@@ -101,7 +101,7 @@ export class PostgresIdentityRepository {
        RETURNING *`,
       [input.orgId || input.tenantId, input.tenantId, input.name, input.planKey ?? null, input.status || 'active', now],
     )
-    return orgFromRow(result.rows[0])
+    return orgFromRow(result.rows[0]!)
   }
 
   async createAccount(input: CreateAccountInput) {
@@ -131,7 +131,7 @@ export class PostgresIdentityRepository {
           now,
         ],
       )
-      return accountFromRow(result.rows[0])
+      return accountFromRow(result.rows[0]!)
     }
     const result = await this.options.pool.query(
       `INSERT INTO cloud_accounts (account_id, idp_subject, email, display_name, created_at, updated_at)
@@ -144,7 +144,7 @@ export class PostgresIdentityRepository {
        RETURNING *`,
       [input.accountId, input.idpSubject || null, input.email, input.displayName || null, now],
     )
-    return accountFromRow(result.rows[0])
+    return accountFromRow(result.rows[0]!)
   }
 
   async findAccountBySubject(idpSubject: string) {
@@ -186,7 +186,7 @@ export class PostgresIdentityRepository {
         metadata: { role: input.role, status: input.status || 'active' },
         createdAt: input.updatedAt,
       })
-      return membershipFromRow(result.rows[0])
+      return membershipFromRow(result.rows[0]!)
     })
   }
 

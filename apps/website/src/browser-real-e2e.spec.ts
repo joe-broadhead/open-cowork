@@ -358,7 +358,7 @@ function browserMocksScript(state: ReturnType<typeof makeMockState>) {
 })();`
 }
 
-test('cloud web workbench passes a real Chromium desktop and mobile smoke', { timeout: REAL_BROWSER_TEST_TIMEOUT_MS }, async () => {
+void test('cloud web workbench passes a real Chromium desktop and mobile smoke', { timeout: REAL_BROWSER_TEST_TIMEOUT_MS }, async () => {
   const chromium = await loadChromium()
   if (!chromium) return
 

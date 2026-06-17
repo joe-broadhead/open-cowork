@@ -84,7 +84,7 @@ function normalizeRepositoryAllowKey(url: URL) {
   const pathname = url.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '')
   const parts = pathname.split('/').filter(Boolean)
   if (parts.length < 2) return null
-  return `${normalizeHost(url.hostname)}/${parts[0].toLowerCase()}/${parts[1].toLowerCase()}`
+  return `${normalizeHost(url.hostname)}/${parts[0]!.toLowerCase()}/${parts[1]!.toLowerCase()}`
 }
 
 function isSafeSubdirectory(subdirectory: string | null | undefined) {

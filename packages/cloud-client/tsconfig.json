@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
     "outDir": "dist",
     "rootDir": "src",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

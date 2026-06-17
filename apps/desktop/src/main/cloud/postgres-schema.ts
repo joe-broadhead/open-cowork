@@ -812,6 +812,95 @@ export const CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_STATEMENTS = [
     ADD COLUMN IF NOT EXISTS steps jsonb NOT NULL DEFAULT '[]'::jsonb`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_KNOWLEDGE_MIGRATION_ID = '016_cloud_knowledge'
+
+// Cloud-backed knowledge wiki. Mirrors the desktop SQLite schema
+// (knowledge_spaces / knowledge_pages / knowledge_page_versions /
+// knowledge_proposals) one-for-one, but every table is tenant-scoped by
+// workspace_id: it is the leading column of every PRIMARY KEY and the leading
+// column of every index, so a query that filters on workspace_id can never
+// cross a tenant boundary. Timestamps and the *_json payloads are stored as
+// text (ISO-8601 / serialized JSON), not timestamptz/jsonb, to preserve
+// byte-identical content with the SQLite store — the values are
+// produced/validated by the shared knowledge serializer, so the cloud and
+// desktop revision hashes match and the shared row→domain mappers work
+// unchanged against both backends.
+export const CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_knowledge_spaces (
+    workspace_id text NOT NULL,
+    id text NOT NULL,
+    name text NOT NULL,
+    icon text,
+    hue text,
+    visibility text NOT NULL,
+    role text NOT NULL,
+    created_at text NOT NULL,
+    updated_at text NOT NULL,
+    PRIMARY KEY (workspace_id, id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_knowledge_pages (
+    workspace_id text NOT NULL,
+    id text NOT NULL,
+    space_id text NOT NULL,
+    title text NOT NULL,
+    updated_by text NOT NULL,
+    updated_at text NOT NULL,
+    version integer NOT NULL,
+    revision text NOT NULL,
+    links_json text NOT NULL,
+    body_json text NOT NULL,
+    created_at text NOT NULL,
+    PRIMARY KEY (workspace_id, id),
+    FOREIGN KEY (workspace_id, space_id)
+      REFERENCES cloud_knowledge_spaces (workspace_id, id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_knowledge_page_versions (
+    workspace_id text NOT NULL,
+    id text NOT NULL,
+    page_id text NOT NULL,
+    space_id text NOT NULL,
+    title text NOT NULL,
+    updated_by text NOT NULL,
+    updated_at text NOT NULL,
+    version integer NOT NULL,
+    revision text NOT NULL,
+    proposal_id text,
+    links_json text NOT NULL,
+    body_json text NOT NULL,
+    PRIMARY KEY (workspace_id, id),
+    FOREIGN KEY (workspace_id, page_id)
+      REFERENCES cloud_knowledge_pages (workspace_id, id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_knowledge_proposals (
+    workspace_id text NOT NULL,
+    id text NOT NULL,
+    space_id text NOT NULL,
+    page_id text,
+    page_title text NOT NULL,
+    by_name text NOT NULL,
+    created_at text NOT NULL,
+    summary text NOT NULL,
+    add_count integer NOT NULL,
+    del_count integer NOT NULL,
+    status text NOT NULL,
+    reviewed_at text,
+    reviewed_by text,
+    links_json text NOT NULL,
+    body_json text NOT NULL,
+    PRIMARY KEY (workspace_id, id),
+    FOREIGN KEY (workspace_id, space_id)
+      REFERENCES cloud_knowledge_spaces (workspace_id, id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_knowledge_spaces_workspace_idx
+    ON cloud_knowledge_spaces (workspace_id, name)`,
+  `CREATE INDEX IF NOT EXISTS cloud_knowledge_pages_workspace_idx
+    ON cloud_knowledge_pages (workspace_id, space_id, title)`,
+  `CREATE INDEX IF NOT EXISTS cloud_knowledge_page_versions_page_idx
+    ON cloud_knowledge_page_versions (workspace_id, page_id, version DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_knowledge_proposals_workspace_idx
+    ON cloud_knowledge_proposals (workspace_id, status, created_at)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -874,5 +963,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_KNOWLEDGE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS,
   },
 ] as const

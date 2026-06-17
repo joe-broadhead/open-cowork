@@ -47,7 +47,9 @@ import {
   type OidcCloudAuthResolverOptions,
 } from './oidc-auth.ts'
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
-import { createPostgresControlPlaneStore } from './postgres-control-plane-store.ts'
+import { createPostgresControlPlaneStore, loadPgPool } from './postgres-control-plane-store.ts'
+import { createPostgresKnowledgeStore } from '../knowledge/postgres-knowledge-store.ts'
+import type { KnowledgeStore } from '../knowledge/knowledge-store-contract.ts'
 import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createCloudReadinessCheck } from './readiness.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
@@ -60,7 +62,7 @@ import {
 } from './secret-adapter.ts'
 import { isManagedCloudSecretRef } from './secret-ref-policy.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy, type CloudPrincipal } from './session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
 import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
@@ -78,6 +80,8 @@ import { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 export { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
+const ALLOW_EPHEMERAL_STORAGE_ENV = 'OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE'
+const RUN_MIGRATIONS_ENV = 'OPEN_COWORK_CLOUD_RUN_MIGRATIONS'
 const HEADER_AUTH_SIGNED_HEADERS = [
   'x-open-cowork-tenant-id',
   'x-open-cowork-tenant-name',
@@ -127,10 +131,14 @@ export type CloudAppOptions = {
   env?: Env
   store?: ControlPlaneStore
   storeFactory?: CloudControlPlaneStoreFactory
+  // Optional override for the cloud knowledge backend. Omitted ⇒ a Postgres
+  // knowledge store is built when the control plane resolves to Postgres,
+  // otherwise the HTTP server falls back to its SQLite store.
+  knowledgeStore?: KnowledgeStore
   objectStore?: ObjectStoreAdapter
   objectStoreFactory?: CloudObjectStoreFactory
   secretAdapter?: SecretAdapter
-  byokSecretStoreOptions?: Pick<ByokSecretStoreOptions, 'kmsRefResolver' | 'validators'>
+  byokSecretStoreOptions?: Pick<ByokSecretStoreOptions, 'kmsRefResolver' | 'validators' | 'activateUnvalidatedProviders'>
   byokPolicy?: ByokManagementPolicy
   billingAdapter?: BillingAdapter | null
   runtime?: CloudRuntimeAdapter
@@ -139,6 +147,9 @@ export type CloudAppOptions = {
   checkpointStore?: WorkspaceCheckpointStore | null
   checkpointsEnabled?: boolean
   sessionCookies?: CloudSessionCookieManager | null
+  // Optional host-injected email sender so the cloud can deliver team-invite links. Null/omitted
+  // ⇒ no email is sent; the admin still receives the invite token in the API response to share.
+  emailSender?: CloudEmailSender | null
   observability?: CloudObservabilityAdapter | null
   auth?: CloudAuthResolver
   browserAuth?: CloudBrowserAuthProvider | null
@@ -273,7 +284,13 @@ export async function createControlPlaneStoreForCloud(
     if (!url) {
       throw new Error('Cloud control plane is configured for Postgres but no connection URL is available.')
     }
-    return createPostgresControlPlaneStore({ connectionString: url })
+    // Allow change-managed rollouts to boot instances with embedded migrations
+    // disabled (OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false) and run `cloud:migrate`
+    // as a separate step. Defaults to true so the embedded path is unchanged.
+    return createPostgresControlPlaneStore({
+      connectionString: url,
+      runMigrations: parseBoolean(envValue(input.env, RUN_MIGRATIONS_ENV), true),
+    })
   }
   return new InMemoryControlPlaneStore()
 }
@@ -744,6 +761,30 @@ function assertCloudProductionCoreAdaptersSafe(input: {
   }
 }
 
+// Non-`local` tiers that resolve to in-memory control-plane or filesystem/unavailable
+// object storage silently lose all state on restart. `public_production` is already
+// hard-blocked above; the `self_host_beta`/`private_beta` tiers legitimately MAY run
+// ephemeral (the production asserts call those backends "local/self-host-beta only"),
+// so we warn loudly rather than throw — unless the operator has acknowledged the
+// trade-off with OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE=true. Returns the risk
+// descriptor to log, or null when storage is durable / acknowledged / not applicable.
+export function describeUnacknowledgedEphemeralStorage(input: {
+  tier: CloudDeploymentTier
+  store: ControlPlaneStore
+  objectStore: ObjectStoreAdapter
+  env: Env
+}): { controlPlane: 'in-memory' | 'durable', objectStore: ObjectStoreAdapter['kind'] } | null {
+  if (input.tier !== 'self_host_beta' && input.tier !== 'private_beta') return null
+  const ephemeralControlPlane = input.store instanceof InMemoryControlPlaneStore
+  const ephemeralObjectStore = input.objectStore.kind === 'filesystem' || input.objectStore.kind === 'unavailable'
+  if (!ephemeralControlPlane && !ephemeralObjectStore) return null
+  if (parseBoolean(envValue(input.env, ALLOW_EPHEMERAL_STORAGE_ENV), false)) return null
+  return {
+    controlPlane: ephemeralControlPlane ? 'in-memory' : 'durable',
+    objectStore: input.objectStore.kind,
+  }
+}
+
 function assertCloudProductionRoleRuntimeSafe(input: {
   tier: CloudDeploymentTier
   role: CloudRuntimePolicy['role']
@@ -956,6 +997,25 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     : createCloudObservabilityFromEnv(env)
   const paths = options.paths || createCloudPathProvider(envOptions.root)
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
+  // When the control plane resolves to Postgres (same condition as
+  // createControlPlaneStoreForCloud), back cloud knowledge with the same Postgres
+  // (016_cloud_knowledge tables) so it is durable + shared across replicas rather
+  // than a node-local SQLite file. Owns its own pool so it is closed on shutdown.
+  // Only auto-built on the default control-plane path; an injected store/factory
+  // (e.g. tests) makes the backend unknown, so we leave knowledge to the HTTP
+  // server's SQLite fallback unless explicitly overridden.
+  const knowledgeControlPlaneUrl = resolveCloudControlPlaneUrl(config, env)
+  const usesDefaultPostgresControlPlane = !options.store
+    && !options.storeFactory
+    && (config.cloud.storage.controlPlane.kind === 'postgres' || Boolean(knowledgeControlPlaneUrl))
+  // Only the store we mint here owns a pool we must close; an injected override is
+  // the caller's responsibility.
+  const ownedKnowledgeStore: KnowledgeStore | null = !options.knowledgeStore
+    && usesDefaultPostgresControlPlane
+    && knowledgeControlPlaneUrl
+    ? createPostgresKnowledgeStore(loadPgPool(knowledgeControlPlaneUrl), { ownsPool: true })
+    : null
+  const knowledgeStore: KnowledgeStore | null = options.knowledgeStore ?? ownedKnowledgeStore
   const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
   const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env, {
     requireStrongKeyMaterial: envOptions.deploymentTier === 'public_production',
@@ -966,6 +1026,27 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     objectStore,
     secretAdapter,
   })
+  const ephemeralStorageRisk = describeUnacknowledgedEphemeralStorage({
+    tier: envOptions.deploymentTier,
+    store,
+    objectStore,
+    env,
+  })
+  if (ephemeralStorageRisk) {
+    await recordCloudLog(observability, {
+      level: 'warn',
+      name: 'cloud.storage.ephemeral',
+      message: `Cloud deployment tier "${envOptions.deploymentTier}" resolved to ephemeral storage `
+        + `(control-plane=${ephemeralStorageRisk.controlPlane}, object-store=${ephemeralStorageRisk.objectStore}) `
+        + `that loses all state on restart. Configure durable Postgres control-plane + provider-backed object `
+        + `storage, or set ${ALLOW_EPHEMERAL_STORAGE_ENV}=true to acknowledge this trade-off and silence this warning.`,
+      attributes: {
+        deployment_tier: envOptions.deploymentTier,
+        control_plane: ephemeralStorageRisk.controlPlane,
+        object_store: ephemeralStorageRisk.objectStore,
+      },
+    })
+  }
   const billingAdapter = Object.prototype.hasOwnProperty.call(options, 'billingAdapter')
     ? options.billingAdapter || null
     : await createBillingAdapterForCloud({ config: billingConfig, env })
@@ -1033,6 +1114,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     objectStore,
     credentialResolver: (credentialRef) => resolveCloudSecretRef(credentialRef, { env }),
   })
+  // Resolved before the service so the same signing secret powers both session cookies and the
+  // stateless team-invite tokens. Invites are a cloud-web capability; null for non-web roles.
+  const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
+  const cookieSecret = shouldRunCloudWeb(policy.role)
+    ? await resolveCloudCookieSecretForRuntime(resolvedAuthConfig, env)
+    : null
   const service = new CloudSessionService(
     store,
     runtime,
@@ -1054,12 +1141,10 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       apiTokenAllowedScopes: authConfig.apiTokens?.allowedScopes,
     },
     projectSources,
+    cookieSecret,
+    options.emailSender ?? null,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
-  const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
-  const cookieSecret = shouldRunCloudWeb(policy.role)
-    ? await resolveCloudCookieSecretForRuntime(resolvedAuthConfig, env)
-    : null
   const sessionCookies = shouldRunCloudWeb(policy.role)
     ? hasSessionCookieOverride
       ? options.sessionCookies || null
@@ -1209,6 +1294,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         trustProxyHeaders: envOptions.trustProxyHeaders,
         trustedProxyCidrs: envOptions.trustedProxyCidrs,
         knowledgeDataDir: paths.getAppDataDir(),
+        knowledgeStore: knowledgeStore ?? undefined,
         readiness: createCloudReadinessCheck({
           policy,
           store,
@@ -1260,6 +1346,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       }
       await runtime.close?.()
       await objectStore.close?.()
+      await ownedKnowledgeStore?.close?.()
       await store.close?.()
     },
   }

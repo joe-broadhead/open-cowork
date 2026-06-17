@@ -279,7 +279,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       for (const [key, entry] of runtimes.entries()) {
         if (entry.unsubscribe) continue
         const [tenantId, sessionId] = key.split('\0')
-        entry.unsubscribe = await subscribeRuntimeEvents({ tenantId, sessionId }, entry.adapter)
+        entry.unsubscribe = await subscribeRuntimeEvents({ tenantId: tenantId!, sessionId: sessionId! }, entry.adapter)
       }
       return unsubscribeListener
     },

@@ -184,10 +184,10 @@ function signingInput(token: string) {
     unauthorized('Cloud authentication token is malformed.')
   }
   return {
-    header: parseJwtPart<JwtHeader>(parts[0]),
-    claims: parseJwtPart<JwtClaims>(parts[1]),
+    header: parseJwtPart<JwtHeader>(parts[0]!),
+    claims: parseJwtPart<JwtClaims>(parts[1]!),
     signed: `${parts[0]}.${parts[1]}`,
-    signature: base64UrlDecode(parts[2]),
+    signature: base64UrlDecode(parts[2]!),
   }
 }
 
@@ -431,7 +431,7 @@ function normalizeCallbackPath(value: string | undefined) {
 function requestOrigin(req: IncomingMessage) {
   const host = Array.isArray(req.headers.host) ? req.headers.host[0] : req.headers.host
   if (!host) return 'http://localhost'
-  return `http://${String(host).split(',')[0].trim()}`
+  return `http://${String(host).split(',')[0]!.trim()}`
 }
 
 function redirectUri(req: IncomingMessage, publicUrl: string | null | undefined, callbackPath: string) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger } from '@open-cowork/shared'
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
@@ -98,7 +98,10 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   const refreshGenerationRef = useRef(0)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
-  const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
+  const workspaceOptions = useMemo(
+    () => (activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }),
+    [activeWorkspaceIsLocal, workspaceSupport.workspaceId],
+  )
   const workflowListBlocked = !workspaceSupport.flags.canListWorkflows
   const workflowListReason = workflowListBlocked ? workspaceSupport.flags.reasons.listWorkflows : null
 
@@ -116,7 +119,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     [activeWorkflows],
   )
 
-  const refresh = async (generation = refreshGenerationRef.current + 1) => {
+  const refresh = useCallback(async (generation = refreshGenerationRef.current + 1) => {
     refreshGenerationRef.current = generation
     const isCurrentRefresh = () => refreshGenerationRef.current === generation
     setLoading(true)
@@ -132,7 +135,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     } finally {
       if (isCurrentRefresh()) setLoading(false)
     }
-  }
+  }, [activeWorkspaceIsLocal, workflowListBlocked, workspaceOptions])
 
   useEffect(() => {
     const generation = refreshGenerationRef.current + 1
@@ -154,7 +157,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
       refreshGenerationRef.current += 1
       unsubscribe()
     }
-  }, [workflowListBlocked, workspaceOptions?.workspaceId])
+  }, [activeWorkspaceIsLocal, refresh, workspaceOptions])
   const workflowDraftBlocked = !activeWorkspaceIsLocal || runtimeConfigSource === 'machine'
   const workflowActionBlocked = !workspaceSupport.flags.canRunWorkflow
   const workflowActionReason = workflowActionBlocked ? workspaceSupport.flags.reasons.runWorkflow : null

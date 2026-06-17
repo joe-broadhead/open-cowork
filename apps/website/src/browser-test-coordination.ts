@@ -136,7 +136,7 @@ export function handleBrowserCoordinationRequest(options: {
   }
   const coordinationPlanMatch = request.pathname.match(/^\/api\/coordination\/projects\/([^/]+)\/plan-with-cleo$/)
   if (request.method === 'POST' && coordinationPlanMatch) {
-    const projectId = decodeURIComponent(coordinationPlanMatch[1])
+    const projectId = decodeURIComponent(coordinationPlanMatch[1] ?? '')
     const project = state.coordinationProjects.find((entry: any) => entry.id === projectId)
     if (!project) return jsonResponse({ error: 'Coordination project was not found.' }, 404)
     const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
@@ -175,21 +175,21 @@ export function handleBrowserCoordinationRequest(options: {
   }
   const coordinationMoveMatch = request.pathname.match(/^\/api\/coordination\/tasks\/([^/]+)\/move$/)
   if (request.method === 'POST' && coordinationMoveMatch) {
-    const taskId = decodeURIComponent(coordinationMoveMatch[1])
+    const taskId = decodeURIComponent(coordinationMoveMatch[1] ?? '')
     const column = (request.body as Record<string, unknown> | null)?.column
     state.coordinationTasks = state.coordinationTasks.map((task: any) => task.id === taskId ? { ...task, column, updatedAt: iso(60) } : task)
     return jsonResponse(state.coordinationTasks.find((task: any) => task.id === taskId) || null)
   }
   const coordinationAssignMatch = request.pathname.match(/^\/api\/coordination\/tasks\/([^/]+)\/assign$/)
   if (request.method === 'POST' && coordinationAssignMatch) {
-    const taskId = decodeURIComponent(coordinationAssignMatch[1])
+    const taskId = decodeURIComponent(coordinationAssignMatch[1] ?? '')
     const assigneeAgent = (request.body as Record<string, unknown> | null)?.assigneeAgent || null
     state.coordinationTasks = state.coordinationTasks.map((task: any) => task.id === taskId ? { ...task, assigneeAgent, updatedAt: iso(61) } : task)
     return jsonResponse(state.coordinationTasks.find((task: any) => task.id === taskId) || null)
   }
   const coordinationWorkTargetMatch = request.pathname.match(/^\/api\/coordination\/tasks\/([^/]+)\/work-target$/)
   if (request.method === 'GET' && coordinationWorkTargetMatch) {
-    const taskId = decodeURIComponent(coordinationWorkTargetMatch[1])
+    const taskId = decodeURIComponent(coordinationWorkTargetMatch[1] ?? '')
     const task = state.coordinationTasks.find((entry: any) => entry.id === taskId)
     if (!task?.assignedSessionId) return jsonResponse(null)
     const session = sessions.find((entry) => entry.sessionId === task.assignedSessionId)
@@ -224,19 +224,19 @@ export function handleBrowserCoordinationRequest(options: {
   }
   const watchPauseMatch = request.pathname.match(/^\/api\/coordination\/watches\/([^/]+)\/pause$/)
   if (request.method === 'POST' && watchPauseMatch) {
-    const watchId = decodeURIComponent(watchPauseMatch[1])
+    const watchId = decodeURIComponent(watchPauseMatch[1] ?? '')
     state.coordinationWatches = state.coordinationWatches.map((watch: any) => watch.id === watchId ? { ...watch, status: 'paused', updatedAt: iso(80) } : watch)
     return jsonResponse({ watch: state.coordinationWatches.find((watch: any) => watch.id === watchId) || null })
   }
   const watchResumeMatch = request.pathname.match(/^\/api\/coordination\/watches\/([^/]+)\/resume$/)
   if (request.method === 'POST' && watchResumeMatch) {
-    const watchId = decodeURIComponent(watchResumeMatch[1])
+    const watchId = decodeURIComponent(watchResumeMatch[1] ?? '')
     state.coordinationWatches = state.coordinationWatches.map((watch: any) => watch.id === watchId ? { ...watch, status: 'active', updatedAt: iso(81) } : watch)
     return jsonResponse({ watch: state.coordinationWatches.find((watch: any) => watch.id === watchId) || null })
   }
   const watchMatch = request.pathname.match(/^\/api\/coordination\/watches\/([^/]+)$/)
   if (request.method === 'POST' && watchMatch) {
-    const watchId = decodeURIComponent(watchMatch[1])
+    const watchId = decodeURIComponent(watchMatch[1] ?? '')
     const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
       ? request.body as Record<string, any>
       : {}
@@ -244,7 +244,7 @@ export function handleBrowserCoordinationRequest(options: {
     return jsonResponse({ watch: state.coordinationWatches.find((watch: any) => watch.id === watchId) || null })
   }
   if (request.method === 'DELETE' && watchMatch) {
-    const watchId = decodeURIComponent(watchMatch[1])
+    const watchId = decodeURIComponent(watchMatch[1] ?? '')
     state.coordinationWatches = state.coordinationWatches.filter((watch: any) => watch.id !== watchId)
     return jsonResponse({ ok: true })
   }

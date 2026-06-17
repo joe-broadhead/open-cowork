@@ -72,8 +72,11 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
         tools.writeError(res, 400, 'Member invite requires an email address.', options.corsOrigin)
         return true
       }
+      const invited = await options.service.inviteOrgMember(context.principal, { email, role })
       tools.writeJson(res, 201, {
-        member: await options.service.inviteOrgMember(context.principal, { email, role }),
+        member: invited.member,
+        inviteToken: invited.inviteToken,
+        inviteExpiresAt: invited.inviteExpiresAt,
       }, options.corsOrigin)
       return true
     }

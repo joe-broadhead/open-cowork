@@ -98,7 +98,7 @@ export function AgentBuilderPage({
   const [tab, setTab] = useState<WorkbenchTab>('capabilities')
   const [step, setStep] = useState<BuilderStep>('role')
   const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory)
-  const providers = appConfig?.providers.available || []
+  const providers = useMemo(() => appConfig?.providers.available || [], [appConfig?.providers.available])
   const defaultProviderId = appConfig?.providers.defaultProvider || null
   const [catalogOverrides, setCatalogOverrides] = useState<Record<string, ProviderModelDescriptor[]>>({})
   const selectedModel = useMemo(

@@ -72,7 +72,7 @@ export class PostgresBillingRepository {
         now,
       ],
     )
-    const subscription = billingSubscriptionFromRow(result.rows[0])
+    const subscription = billingSubscriptionFromRow(result.rows[0]!)
     await this.options.recordAuditEvent(this.options.pool, {
       orgId: subscription.orgId,
       actorType: 'system',

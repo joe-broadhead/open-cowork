@@ -400,7 +400,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                 {focusedApprovals[0] && onOpenApproval ? (
                   <button
                     type="button"
-                    onClick={() => onOpenApproval(focusedApprovals[0])}
+                    onClick={() => onOpenApproval(focusedApprovals[0]!)}
                     className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text"
                   >
                     Open approval ({focusedApprovals.length})
@@ -409,7 +409,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                 {focusedQuestions[0] && onOpenQuestion ? (
                   <button
                     type="button"
-                    onClick={() => onOpenQuestion(focusedQuestions[0])}
+                    onClick={() => onOpenQuestion(focusedQuestions[0]!)}
                     className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text"
                   >
                     Open question ({focusedQuestions.length})

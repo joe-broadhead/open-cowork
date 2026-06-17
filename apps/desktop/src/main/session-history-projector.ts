@@ -690,7 +690,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       enqueueUnmatchedChildren()
       continue
     }
-    const [taskId, child] = childTaskQueue[taskQueueIndex]
+    const [taskId, child] = childTaskQueue[taskQueueIndex]!
     taskQueueIndex += 1
     const { messages: childMessages, todos: childTodos } = await loadChildSnapshot(child.id)
     const normalizedChildTodos = normalizeTodoItems(childTodos)

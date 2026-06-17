@@ -170,7 +170,7 @@ export function CustomMcpForm({
       projectTargetDirectory,
       type,
     })
-  }, [draft.command, draft.name, draft.url, existingNames, isEditing, projectTargetDirectory, scope, type])
+  }, [draft, existingNames, isEditing, projectTargetDirectory, scope, type])
 
   const chooseProjectDirectory = async () => {
     const selected = await window.coworkApi.dialog.selectDirectory()

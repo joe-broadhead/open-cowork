@@ -466,7 +466,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
           prompt: 'consent',
           state: oauthState,
         })
-        shell.openExternal(authUrl)
+        void shell.openExternal(authUrl)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         log('auth', `Login server error: ${message}`)

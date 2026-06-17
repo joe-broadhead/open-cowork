@@ -11,6 +11,7 @@ import { log } from './logger.ts'
 import { getAgentToolBridgeEnvironment } from './agent-tool-bridge.ts'
 import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.ts'
 import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridge.ts'
+import { getKnowledgeToolBridgeEnvironment } from './knowledge/knowledge-tool-bridge.ts'
 import { getSemanticUiBridgeEnvironment } from './semantic-ui-bridge.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
@@ -226,6 +227,9 @@ function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): Res
     }
     if (builtin.name === 'workflows') {
       Object.assign(env, getWorkflowToolBridgeEnvironment())
+    }
+    if (builtin.name === 'knowledge') {
+      Object.assign(env, getKnowledgeToolBridgeEnvironment())
     }
     if (builtin.name === 'semantic-ui') {
       Object.assign(env, getSemanticUiBridgeEnvironment())

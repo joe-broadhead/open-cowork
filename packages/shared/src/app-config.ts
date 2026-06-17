@@ -87,6 +87,15 @@ export interface BrandingConfig {
   appId: string
   dataDirName: string
   helpUrl: string
+  // Base URL the in-app "read docs" links resolve `docs/*.md` paths against. Defaults
+  // to the upstream repo for the public app; downstream builders point it at their own
+  // docs so no upstream identity is hardcoded into a deployment.
+  docsBaseUrl?: string
+  // Branding-relative path (under the `branding/` asset dir, e.g. "app-icon.png") to the
+  // OS window/dock icon shown by the running desktop app. Falls back to the bundled default
+  // when unset. Installer/bundle icons are set at build time (see APP_ICON_* env in the dist
+  // script) since they must be baked into the binary.
+  appIcon?: string
   supportUrl?: string
   privacyUrl?: string
   securityUrl?: string
@@ -153,7 +162,13 @@ export interface ManagedOrgConnectionLabels {
 export interface PublicBrandingConfig {
   productName: string
   shortName?: string
+  /** Meta description + Open Graph/Twitter description for the public web shell. */
+  description?: string
   logoUrl?: string
+  /** Favicon URL (https). Falls back to the logo, then a generated accent mark. */
+  faviconUrl?: string
+  /** Open Graph / Twitter card image URL (https). Falls back to the logo. */
+  ogImageUrl?: string
   supportUrl?: string
   privacyUrl?: string
   securityUrl?: string
@@ -369,6 +384,25 @@ export interface AppMetadata {
 
 export type RuntimePermissionPolicy = 'allow' | 'ask' | 'deny'
 
+// Per-deployment desktop feature flags. A downstream builder disables a product area
+// (it disappears from the sidebar and its route is blocked) by setting its key false;
+// omitted keys default to enabled, so the standard build ships everything.
+export type DesktopFeatureKey =
+  | 'projects'
+  | 'knowledge'
+  | 'approvals'
+  | 'team'
+  | 'playbooks'
+  | 'channels'
+  | 'tools'
+  | 'artifacts'
+
+export type DesktopFeatureFlags = Partial<Record<DesktopFeatureKey, boolean>>
+
+export function isDesktopFeatureEnabled(features: DesktopFeatureFlags | undefined, key: DesktopFeatureKey): boolean {
+  return features?.[key] !== false
+}
+
 export interface PublicAppConfig {
   branding: BrandingConfig
   auth: {
@@ -390,6 +424,7 @@ export interface PublicAppConfig {
   agentStarterTemplates: AgentStarterTemplate[]
   toolTrace?: ToolTraceConfig
   i18n?: AppI18nConfig
+  features?: DesktopFeatureFlags
 }
 
 export interface AppSettings {

@@ -98,6 +98,10 @@ import {
   type GatewayWorkspaceCredentialStore,
 } from './gateway-workspace-credentials.ts'
 import { DEFAULT_CONFIG, type CloudDesktopConfig } from './config-types.ts'
+import { createCloudSessionGateway } from './workspace-gateway-cloud-sessions.ts'
+import { createCloudWorkflowGateway } from './workspace-gateway-cloud-workflows.ts'
+import { createCloudThreadGateway } from './workspace-gateway-cloud-threads.ts'
+import { createCloudArtifactGateway } from './workspace-gateway-cloud-artifacts.ts'
 
 export const LOCAL_WORKSPACE_ID = 'local'
 
@@ -349,6 +353,27 @@ export class WorkspaceGateway {
   private readonly cloudReconnectBaseMs: number
   private readonly cloudReconnectMaxMs: number
   private readonly cloudReconnectMaxAttempts: number
+  private readonly cloudSessions = createCloudSessionGateway({
+    resolveAdapter: (event, workspaceIdInput) => this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput)),
+    resolveWorkspaceAndAdapter: async (event, workspaceIdInput) => {
+      const workspace = this.resolveWorkspace(event, workspaceIdInput)
+      const adapter = await this.requireCloudAdapter(workspace)
+      return { workspaceId: workspace.id, adapter }
+    },
+    onSessionImported: (workspaceId, syncedAt) => {
+      this.syncedAtByWorkspace.set(workspaceId, syncedAt)
+      this.cloudRegistry?.touchSync(workspaceId, syncedAt)
+    },
+  })
+  private readonly cloudWorkflows = createCloudWorkflowGateway(
+    (event, workspaceIdInput) => this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput)),
+  )
+  private readonly cloudThreads = createCloudThreadGateway(
+    (event, workspaceIdInput) => this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput)),
+  )
+  private readonly cloudArtifacts = createCloudArtifactGateway(
+    (event, workspaceIdInput) => this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput)),
+  )
 
   constructor(options: WorkspaceGatewayOptions = {}) {
     this.cloudDesktopConfig = options.cloudDesktop || DEFAULT_CONFIG.cloudDesktop
@@ -918,7 +943,7 @@ export class WorkspaceGateway {
   }
 
   async listCloudSessions(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<SessionInfo[]> {
-    return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).listSessions()
+    return this.cloudSessions.listSessions(event, workspaceIdInput)
   }
 
   async createCloudSession(
@@ -926,7 +951,7 @@ export class WorkspaceGateway {
     workspaceIdInput?: string | null,
     input: { projectSource?: CloudProjectSourceInput | null } = {},
   ): Promise<SessionInfo> {
-    return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).createSession(input)
+    return this.cloudSessions.createSession(event, workspaceIdInput, input)
   }
 
   async validateCloudProjectSource(
@@ -934,11 +959,7 @@ export class WorkspaceGateway {
     workspaceIdInput: string | null | undefined,
     projectSource: CloudProjectSourceInput,
   ): Promise<CloudProjectSourcePolicyVerdict> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.validateProjectSource) {
-      return { allowed: false, reason: 'Cloud workspace does not support project source validation.' }
-    }
-    return adapter.validateProjectSource(projectSource)
+    return this.cloudSessions.validateProjectSource(event, workspaceIdInput, projectSource)
   }
 
   async uploadCloudProjectSnapshot(
@@ -946,11 +967,7 @@ export class WorkspaceGateway {
     workspaceIdInput: string | null | undefined,
     input: CloudProjectSnapshotUploadInput,
   ): Promise<CloudProjectSnapshotUploadResult> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.uploadProjectSnapshot) {
-      throw new Error('Cloud workspace does not support project snapshot uploads.')
-    }
-    return adapter.uploadProjectSnapshot(input)
+    return this.cloudSessions.uploadProjectSnapshot(event, workspaceIdInput, input)
   }
 
   async importLocalSessionToCloud(
@@ -958,28 +975,15 @@ export class WorkspaceGateway {
     input: SessionImportRequest,
     workspaceIdInput: string,
   ): Promise<SessionImportResult & { view: SessionView }> {
-    const workspace = this.resolveWorkspace(event, workspaceIdInput)
-    const adapter = await this.requireCloudAdapter(workspace)
-    const imported = await adapter.importSession(input)
-    const syncedAt = new Date().toISOString()
-    this.syncedAtByWorkspace.set(workspace.id, syncedAt)
-    this.cloudRegistry?.touchSync(workspace.id, syncedAt)
-    return {
-      workspaceId: workspace.id,
-      sessionId: imported.session.id,
-      title: imported.session.title || input.title,
-      importedAt: imported.session.createdAt,
-      itemCounts: input.itemCounts,
-      view: imported.view,
-    }
+    return this.cloudSessions.importSession(event, input, workspaceIdInput)
   }
 
   async getCloudSessionInfo(event: WorkspaceEventLike, sessionId: string, workspaceIdInput?: string | null): Promise<SessionInfo | null> {
-    return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).getSessionInfo(sessionId)
+    return this.cloudSessions.getSessionInfo(event, sessionId, workspaceIdInput)
   }
 
   async getCloudSessionView(event: WorkspaceEventLike, sessionId: string, workspaceIdInput?: string | null): Promise<SessionView> {
-    return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).getSessionView(sessionId)
+    return this.cloudSessions.getSessionView(event, sessionId, workspaceIdInput)
   }
 
   async promptCloudSession(
@@ -988,7 +992,7 @@ export class WorkspaceGateway {
     input: CloudPromptInput,
     workspaceIdInput?: string | null,
   ): Promise<void> {
-    await (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).promptSession(sessionId, input)
+    await this.cloudSessions.promptSession(event, sessionId, input, workspaceIdInput)
   }
 
   async abortCloudSession(
@@ -996,7 +1000,7 @@ export class WorkspaceGateway {
     sessionId: string,
     workspaceIdInput?: string | null,
   ): Promise<void> {
-    await (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).abortSession(sessionId)
+    await this.cloudSessions.abortSession(event, sessionId, workspaceIdInput)
   }
 
   async replyCloudQuestion(
@@ -1006,9 +1010,7 @@ export class WorkspaceGateway {
     answers: unknown[],
     workspaceIdInput?: string | null,
   ): Promise<void> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.replyToQuestion) throw new Error('Cloud question replies are not supported by this workspace.')
-    await adapter.replyToQuestion(sessionId, requestId, answers)
+    await this.cloudSessions.replyToQuestion(event, sessionId, requestId, answers, workspaceIdInput)
   }
 
   async rejectCloudQuestion(
@@ -1017,9 +1019,7 @@ export class WorkspaceGateway {
     requestId: string,
     workspaceIdInput?: string | null,
   ): Promise<void> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.rejectQuestion) throw new Error('Cloud question rejection is not supported by this workspace.')
-    await adapter.rejectQuestion(sessionId, requestId)
+    await this.cloudSessions.rejectQuestion(event, sessionId, requestId, workspaceIdInput)
   }
 
   async respondCloudPermission(
@@ -1029,15 +1029,11 @@ export class WorkspaceGateway {
     allowed: boolean,
     workspaceIdInput?: string | null,
   ): Promise<void> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.respondToPermission) throw new Error('Cloud permission responses are not supported by this workspace.')
-    await adapter.respondToPermission(sessionId, permissionId, allowed)
+    await this.cloudSessions.respondToPermission(event, sessionId, permissionId, allowed, workspaceIdInput)
   }
 
   async listCloudWorkflows(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkflowListPayload> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.listWorkflows) throw new Error('Cloud workflows are not supported by this workspace.')
-    return adapter.listWorkflows()
+    return this.cloudWorkflows.list(event, workspaceIdInput)
   }
 
   async getCloudWorkflow(
@@ -1045,9 +1041,7 @@ export class WorkspaceGateway {
     workflowId: string,
     workspaceIdInput?: string | null,
   ): Promise<WorkflowDetail | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.getWorkflow) throw new Error('Cloud workflows are not supported by this workspace.')
-    return adapter.getWorkflow(workflowId)
+    return this.cloudWorkflows.get(event, workflowId, workspaceIdInput)
   }
 
   async runCloudWorkflow(
@@ -1055,9 +1049,7 @@ export class WorkspaceGateway {
     workflowId: string,
     workspaceIdInput?: string | null,
   ): Promise<WorkflowRun | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.runWorkflow) throw new Error('Cloud workflow runs are not supported by this workspace.')
-    return adapter.runWorkflow(workflowId)
+    return this.cloudWorkflows.run(event, workflowId, workspaceIdInput)
   }
 
   async pauseCloudWorkflow(
@@ -1065,9 +1057,7 @@ export class WorkspaceGateway {
     workflowId: string,
     workspaceIdInput?: string | null,
   ): Promise<WorkflowDetail | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.pauseWorkflow) throw new Error('Cloud workflow pause is not supported by this workspace.')
-    return adapter.pauseWorkflow(workflowId)
+    return this.cloudWorkflows.pause(event, workflowId, workspaceIdInput)
   }
 
   async resumeCloudWorkflow(
@@ -1075,9 +1065,7 @@ export class WorkspaceGateway {
     workflowId: string,
     workspaceIdInput?: string | null,
   ): Promise<WorkflowDetail | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.resumeWorkflow) throw new Error('Cloud workflow resume is not supported by this workspace.')
-    return adapter.resumeWorkflow(workflowId)
+    return this.cloudWorkflows.resume(event, workflowId, workspaceIdInput)
   }
 
   async archiveCloudWorkflow(
@@ -1085,9 +1073,7 @@ export class WorkspaceGateway {
     workflowId: string,
     workspaceIdInput?: string | null,
   ): Promise<WorkflowDetail | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.archiveWorkflow) throw new Error('Cloud workflow archive is not supported by this workspace.')
-    return adapter.archiveWorkflow(workflowId)
+    return this.cloudWorkflows.archive(event, workflowId, workspaceIdInput)
   }
 
   async searchCloudThreads(
@@ -1095,9 +1081,7 @@ export class WorkspaceGateway {
     query?: ThreadSearchQuery,
     workspaceIdInput?: string | null,
   ): Promise<ThreadSearchResult> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.searchThreads) throw new Error('Cloud thread search is not supported by this workspace.')
-    return adapter.searchThreads(query)
+    return this.cloudThreads.search(event, query, workspaceIdInput)
   }
 
   async cloudThreadFacets(
@@ -1105,15 +1089,11 @@ export class WorkspaceGateway {
     query?: ThreadSearchQuery,
     workspaceIdInput?: string | null,
   ): Promise<ThreadFacetSummary> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.threadFacets) throw new Error('Cloud thread facets are not supported by this workspace.')
-    return adapter.threadFacets(query)
+    return this.cloudThreads.facets(event, query, workspaceIdInput)
   }
 
   async listCloudThreadTags(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<ThreadTag[]> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.listThreadTags) throw new Error('Cloud thread tags are not supported by this workspace.')
-    return adapter.listThreadTags()
+    return this.cloudThreads.listTags(event, workspaceIdInput)
   }
 
   async createCloudThreadTag(
@@ -1121,9 +1101,7 @@ export class WorkspaceGateway {
     input: ThreadTagInput,
     workspaceIdInput?: string | null,
   ): Promise<ThreadTag> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.createThreadTag) throw new Error('Cloud thread tags are not supported by this workspace.')
-    return adapter.createThreadTag(input)
+    return this.cloudThreads.createTag(event, input, workspaceIdInput)
   }
 
   async updateCloudThreadTag(
@@ -1132,9 +1110,7 @@ export class WorkspaceGateway {
     input: ThreadTagInput,
     workspaceIdInput?: string | null,
   ): Promise<ThreadTag | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.updateThreadTag) throw new Error('Cloud thread tags are not supported by this workspace.')
-    return adapter.updateThreadTag(tagId, input)
+    return this.cloudThreads.updateTag(event, tagId, input, workspaceIdInput)
   }
 
   async deleteCloudThreadTag(
@@ -1142,9 +1118,7 @@ export class WorkspaceGateway {
     tagId: string,
     workspaceIdInput?: string | null,
   ): Promise<boolean> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.deleteThreadTag) throw new Error('Cloud thread tags are not supported by this workspace.')
-    return adapter.deleteThreadTag(tagId)
+    return this.cloudThreads.deleteTag(event, tagId, workspaceIdInput)
   }
 
   async applyCloudThreadTags(
@@ -1153,9 +1127,7 @@ export class WorkspaceGateway {
     tagIds: string[],
     workspaceIdInput?: string | null,
   ): Promise<boolean> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.applyThreadTags) throw new Error('Cloud thread tags are not supported by this workspace.')
-    return adapter.applyThreadTags(sessionIds, tagIds)
+    return this.cloudThreads.applyTags(event, sessionIds, tagIds, workspaceIdInput)
   }
 
   async removeCloudThreadTags(
@@ -1164,15 +1136,11 @@ export class WorkspaceGateway {
     tagIds: string[],
     workspaceIdInput?: string | null,
   ): Promise<boolean> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.removeThreadTags) throw new Error('Cloud thread tags are not supported by this workspace.')
-    return adapter.removeThreadTags(sessionIds, tagIds)
+    return this.cloudThreads.removeTags(event, sessionIds, tagIds, workspaceIdInput)
   }
 
   async listCloudThreadSmartFilters(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<ThreadSmartFilter[]> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.listThreadSmartFilters) throw new Error('Cloud smart filters are not supported by this workspace.')
-    return adapter.listThreadSmartFilters()
+    return this.cloudThreads.listSmartFilters(event, workspaceIdInput)
   }
 
   async createCloudThreadSmartFilter(
@@ -1180,9 +1148,7 @@ export class WorkspaceGateway {
     input: ThreadSmartFilterInput,
     workspaceIdInput?: string | null,
   ): Promise<ThreadSmartFilter> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.createThreadSmartFilter) throw new Error('Cloud smart filters are not supported by this workspace.')
-    return adapter.createThreadSmartFilter(input)
+    return this.cloudThreads.createSmartFilter(event, input, workspaceIdInput)
   }
 
   async updateCloudThreadSmartFilter(
@@ -1191,9 +1157,7 @@ export class WorkspaceGateway {
     input: ThreadSmartFilterInput,
     workspaceIdInput?: string | null,
   ): Promise<ThreadSmartFilter | null> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.updateThreadSmartFilter) throw new Error('Cloud smart filters are not supported by this workspace.')
-    return adapter.updateThreadSmartFilter(filterId, input)
+    return this.cloudThreads.updateSmartFilter(event, filterId, input, workspaceIdInput)
   }
 
   async deleteCloudThreadSmartFilter(
@@ -1201,9 +1165,7 @@ export class WorkspaceGateway {
     filterId: string,
     workspaceIdInput?: string | null,
   ): Promise<boolean> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.deleteThreadSmartFilter) throw new Error('Cloud smart filters are not supported by this workspace.')
-    return adapter.deleteThreadSmartFilter(filterId)
+    return this.cloudThreads.deleteSmartFilter(event, filterId, workspaceIdInput)
   }
 
   async listCloudArtifacts(
@@ -1211,9 +1173,7 @@ export class WorkspaceGateway {
     sessionId: string,
     workspaceIdInput?: string | null,
   ): Promise<SessionArtifact[]> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.listArtifacts) throw new Error('Cloud artifacts are not supported by this workspace.')
-    return adapter.listArtifacts(sessionId)
+    return this.cloudArtifacts.list(event, sessionId, workspaceIdInput)
   }
 
   async indexCloudArtifacts(
@@ -1221,9 +1181,7 @@ export class WorkspaceGateway {
     request: ArtifactIndexRequest,
     workspaceIdInput?: string | null,
   ): Promise<ArtifactIndexPayload> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.indexArtifacts) throw new Error('Cloud artifact index is not supported by this workspace.')
-    return adapter.indexArtifacts(request)
+    return this.cloudArtifacts.index(event, request, workspaceIdInput)
   }
 
   async launchpadFeed(
@@ -1231,9 +1189,7 @@ export class WorkspaceGateway {
     request: LaunchpadFeedRequest,
     workspaceIdInput?: string | null,
   ): Promise<LaunchpadFeedPayload> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.launchpadFeed) throw new Error('Cloud launchpad feed is not supported by this workspace.')
-    return adapter.launchpadFeed(request)
+    return this.cloudArtifacts.launchpadFeed(event, request, workspaceIdInput)
   }
 
   async updateCloudArtifactStatus(
@@ -1241,9 +1197,7 @@ export class WorkspaceGateway {
     request: ArtifactStatusUpdateRequest,
     workspaceIdInput?: string | null,
   ): Promise<SessionArtifact> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.updateArtifactStatus) throw new Error('Cloud artifact status updates are not supported by this workspace.')
-    return adapter.updateArtifactStatus(request)
+    return this.cloudArtifacts.updateStatus(event, request, workspaceIdInput)
   }
 
   async uploadCloudArtifact(
@@ -1251,9 +1205,7 @@ export class WorkspaceGateway {
     input: SessionArtifactUploadRequest,
     workspaceIdInput?: string | null,
   ): Promise<SessionArtifact> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.uploadArtifact) throw new Error('Cloud artifact uploads are not supported by this workspace.')
-    return adapter.uploadArtifact(input)
+    return this.cloudArtifacts.upload(event, input, workspaceIdInput)
   }
 
   async readCloudArtifactAttachment(
@@ -1262,9 +1214,7 @@ export class WorkspaceGateway {
     filePathOrArtifactId: string,
     workspaceIdInput?: string | null,
   ): Promise<SessionArtifactAttachment> {
-    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
-    if (!adapter.readArtifactAttachment) throw new Error('Cloud artifact downloads are not supported by this workspace.')
-    return adapter.readArtifactAttachment(sessionId, filePathOrArtifactId)
+    return this.cloudArtifacts.readAttachment(event, sessionId, filePathOrArtifactId, workspaceIdInput)
   }
 
   async listCloudCapabilityTools(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<CapabilityTool[]> {

@@ -138,7 +138,7 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
       continue
     }
 
-    const nextTaskRun = nextTaskRuns[nextIndex]
+    const nextTaskRun = nextTaskRuns[nextIndex]!
     const transcript = nextTaskRun.transcript.slice()
     const reasoning = (nextTaskRun.reasoning || []).slice()
     for (const existingSegment of existingTaskRun.transcript) {
@@ -147,7 +147,7 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
         transcript.push({ ...existingSegment })
         continue
       }
-      const currentSegment = transcript[segmentIndex]
+      const currentSegment = transcript[segmentIndex]!
       const content = preferNewerStreamingText(currentSegment.content, existingSegment.content)
       if (content !== currentSegment.content) {
         transcript[segmentIndex] = {
@@ -162,7 +162,7 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
         reasoning.push({ ...existingSegment })
         continue
       }
-      const currentSegment = reasoning[segmentIndex]
+      const currentSegment = reasoning[segmentIndex]!
       const content = preferNewerStreamingText(currentSegment.content, existingSegment.content)
       if (content !== currentSegment.content) {
         reasoning[segmentIndex] = {

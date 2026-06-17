@@ -415,7 +415,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
         const translation = translateOpencodeRuntimeEventWithDiagnostics(raw)
         if (translation.dropped) options.onDroppedEvent?.(translation.dropped)
         for (const event of translation.events) {
-          listener(event)
+          void listener(event)
         }
       }
     } catch (error) {

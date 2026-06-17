@@ -16,6 +16,7 @@ import {
 import { log } from './logger.ts'
 import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.ts'
 import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/workflow-tool-bridge.ts'
+import { ensureKnowledgeToolBridge, stopKnowledgeToolBridge } from './knowledge/knowledge-tool-bridge.ts'
 import { ensureSemanticUiBridge, stopSemanticUiBridge } from './semantic-ui-bridge.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { buildModelInfoSnapshot } from './model-info-utils.ts'
@@ -444,6 +445,7 @@ async function buildRuntimeConfigForStartup(
   if (plan.useMachineOpenCodeConfig) return undefined
   await ensureAgentToolBridge()
   await ensureWorkflowToolBridge()
+  await ensureKnowledgeToolBridge()
   await ensureSemanticUiBridge()
   return buildRuntimeConfigForRuntime(projectDirectory)
 }
@@ -626,6 +628,7 @@ export async function stopRuntime() {
   runtimeState.stopTokenRefreshTimer()
   stopAgentToolBridge()
   stopWorkflowToolBridge()
+  stopKnowledgeToolBridge()
   stopSemanticUiBridge()
   const serverClose = runtimeState.takeServerClose()
   if (serverClose) serverClose()

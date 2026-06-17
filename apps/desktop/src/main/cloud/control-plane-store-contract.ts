@@ -302,10 +302,10 @@ export type ControlPlaneStore = {
     updatedAt?: Date
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
-  listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number): MaybePromise<SessionEventRecord[]>
+  listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
   getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
-  listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number): MaybePromise<WorkspaceEventRecord[]>
+  listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>
   writeSessionProjection(input: WriteProjectionInput): MaybePromise<SessionProjectionRecord>
   getSessionProjection(tenantId: string, sessionId: string): MaybePromise<SessionProjectionRecord | null>
   claimSessionLease(

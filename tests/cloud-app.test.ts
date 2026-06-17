@@ -9,6 +9,7 @@ import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import {
   assertCloudProductionDeploymentSafe,
   assertCloudAuthDeploymentSafe,
+  describeUnacknowledgedEphemeralStorage,
   createControlPlaneStoreForCloud,
   createHeaderCloudAuthResolver,
   createCloudAuthResolverForConfig,
@@ -245,6 +246,43 @@ test('cloud bootstrap parses env options and role helpers', () => {
   assert.throws(() => parseCloudDeploymentTier('ga'), /Invalid OPEN_COWORK_CLOUD_DEPLOYMENT_TIER/)
 })
 
+test('describeUnacknowledgedEphemeralStorage warns beta tiers on ephemeral storage unless acknowledged', () => {
+  const ephemeralStore = new InMemoryControlPlaneStore()
+  const durableStore = { __durable: true } as never // any non-InMemoryControlPlaneStore instance
+  const filesystemObjectStore = { kind: 'filesystem' } as never
+  const durableObjectStore = { kind: 's3' } as never
+
+  // Beta tier on in-memory control plane + filesystem object store → flagged (both ephemeral).
+  assert.deepEqual(
+    describeUnacknowledgedEphemeralStorage({ tier: 'self_host_beta', store: ephemeralStore, objectStore: filesystemObjectStore, env: {} }),
+    { controlPlane: 'in-memory', objectStore: 'filesystem' },
+  )
+  // private_beta with a durable control plane but filesystem object store → still flagged (object store is ephemeral).
+  assert.deepEqual(
+    describeUnacknowledgedEphemeralStorage({ tier: 'private_beta', store: durableStore, objectStore: filesystemObjectStore, env: {} }),
+    { controlPlane: 'durable', objectStore: 'filesystem' },
+  )
+  // Acknowledged via env opt-in → no warning.
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'self_host_beta', store: ephemeralStore, objectStore: filesystemObjectStore, env: { OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE: 'true' } }),
+    null,
+  )
+  // Fully durable storage → no warning.
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'self_host_beta', store: durableStore, objectStore: durableObjectStore, env: {} }),
+    null,
+  )
+  // `local` (dev) and `public_production` (hard-blocked elsewhere) are out of scope → never warns here.
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'local', store: ephemeralStore, objectStore: filesystemObjectStore, env: {} }),
+    null,
+  )
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'public_production', store: ephemeralStore, objectStore: filesystemObjectStore, env: {} }),
+    null,
+  )
+})
+
 test('cloud public branding resolves from config and env JSON', () => {
   const config = {
     ...DEFAULT_CONFIG,
@@ -318,12 +356,19 @@ test('cloud public branding ignores unsafe env URLs', () => {
   const branding = resolveCloudPublicBranding(config, {
     OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: JSON.stringify({
       logoUrl: 'http://assets.example.test/logo.png',
+      faviconUrl: 'http://assets.example.test/favicon.png',
+      ogImageUrl: 'https://cdn.example.test/social.png',
+      description: 'Custom deployment description.',
       supportUrl: 'javascript:alert(1)',
       privacyUrl: 'mailto:privacy@example.test',
     }),
   })
 
   assert.equal(branding.logoUrl, undefined)
+  // Favicon enforces https (non-https rejected); og image + description pass through.
+  assert.equal(branding.faviconUrl, undefined)
+  assert.equal(branding.ogImageUrl, 'https://cdn.example.test/social.png')
+  assert.equal(branding.description, 'Custom deployment description.')
   assert.equal(branding.supportUrl, 'https://support.config.example/cowork')
   assert.equal(branding.privacyUrl, DEFAULT_CONFIG.cloud.publicBranding.privacyUrl)
 })

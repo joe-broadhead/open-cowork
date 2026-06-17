@@ -119,7 +119,7 @@ export class SessionTaskStateStore {
         && (taskRun.status === 'queued' || taskRun.status === 'running')
     })
 
-    return candidates.length === 1 ? cloneTaskRunMeta(candidates[0]) : null
+    return candidates.length === 1 ? cloneTaskRunMeta(candidates[0]!) : null
   }
 
   bindTaskRunToChild(taskRunId: string, childSessionId: string) {

@@ -77,7 +77,7 @@ function adminSurfaceDocRow(entry: (typeof CLOUD_WEB_ADMIN_SURFACE_MATRIX)[numbe
   return `| ${markdownTableCell(entry.label)} | \`${entry.routeId}\` | ${markdownTableCell(entry.desktopSurface)} | ${markdownTableCell(entry.cloudAffordance)} | ${markdownTableCell(entry.sensitiveBoundary)} |`
 }
 
-test('cloud website renders Studio and admin shell surfaces', () => {
+void test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /Open Cowork Cloud/)
   assert.match(html, /Studio/)
   assert.match(html, /Projects/)
@@ -199,7 +199,7 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /Secrets are write-only in Admin and never rendered in user settings/)
 })
 
-test('cloud website app shell exposes typed route metadata', () => {
+void test('cloud website app shell exposes typed route metadata', () => {
   assert.equal(DEFAULT_CLOUD_WEB_ROUTE, 'chat')
   assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.id), ['studio', 'manage', 'admin'])
   assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.label), ['Studio', 'Manage', 'Admin'])
@@ -212,7 +212,7 @@ test('cloud website app shell exposes typed route metadata', () => {
   assert.equal(findCloudWebRoute('usage')?.requiresAdmin, false)
 })
 
-test('cloud website desktop parity matrix covers every Studio route and documented boundary', () => {
+void test('cloud website desktop parity matrix covers every Studio route and documented boundary', () => {
   const workbenchRoutes = CLOUD_WEB_ROUTES.filter((route) => route.surface === 'workbench')
   const routeApiIds = new Set(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId))
   const doc = readFileSync(fileURLToPath(new URL('../../../docs/cloud-web-workbench.md', import.meta.url)), 'utf8')
@@ -251,7 +251,7 @@ test('cloud website desktop parity matrix covers every Studio route and document
   }
 })
 
-test('cloud website admin surface matrix covers every admin route and documented boundary', () => {
+void test('cloud website admin surface matrix covers every admin route and documented boundary', () => {
   const adminRoutes = CLOUD_WEB_ROUTES.filter((route) => route.surface === 'admin')
   const routeApiIds = new Set(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId))
   const doc = readFileSync(fileURLToPath(new URL('../../../docs/cloud-web-workbench.md', import.meta.url)), 'utf8')
@@ -279,7 +279,7 @@ test('cloud website admin surface matrix covers every admin route and documented
   }
 })
 
-test('cloud website route/API matrix covers every route and real endpoint id', () => {
+void test('cloud website route/API matrix covers every route and real endpoint id', () => {
   const routes = new Map(CLOUD_WEB_ROUTES.map((route) => [route.id, route]))
   const endpoints = new Set(CLOUD_WEB_CLIENT_ENDPOINTS.map((endpoint) => endpoint.id))
   assert.deepEqual(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId).sort(), CLOUD_WEB_ROUTES.map((route) => route.id).sort())
@@ -333,7 +333,7 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
   }
 })
 
-test('cloud website bootstrap exposes typed client endpoint metadata', () => {
+void test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'config')?.path, '/api/config')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workspace')?.path, '/api/workspace')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'setting')?.path, '/api/settings/:settingKey')
@@ -465,10 +465,10 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'billingPortal')?.path, '/api/billing/portal')
 })
 
-test('cloud website exposes the Mercury/Day theme identity with tenant branding precedence', () => {
+void test('cloud website exposes the Mercury/Day theme identity with tenant branding precedence', () => {
   const match = html.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
   assert.ok(match)
-  const bootstrap = JSON.parse(match[1])
+  const bootstrap = JSON.parse(match[1]!)
   assert.equal(bootstrap.theme.defaultPreset, 'mercury')
   assert.equal(bootstrap.theme.defaultScheme, 'dark')
   assert.equal(bootstrap.theme.defaultAccent, 'azure')
@@ -498,12 +498,12 @@ test('cloud website exposes the Mercury/Day theme identity with tenant branding 
   })
   const brandedMatch = branded.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
   assert.ok(brandedMatch)
-  assert.equal(JSON.parse(brandedMatch[1]).theme.tenantBrandingLocked, true)
+  assert.equal(JSON.parse(brandedMatch[1]!).theme.tenantBrandingLocked, true)
   // Locked tenant branding disables the live theme controls (verified via Mode).
   assert.match(branded, /<select(?=[^>]*data-cloud-theme-control="scheme")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
 })
 
-test('cloud website keeps existing admin dashboard surfaces available', () => {
+void test('cloud website keeps existing admin dashboard surfaces available', () => {
   assert.match(html, /Slack team ID/)
   assert.match(html, /Inbound address/)
   assert.match(html, /Webhook delivery URL/)
@@ -518,7 +518,7 @@ test('cloud website keeps existing admin dashboard surfaces available', () => {
   assert.match(html, /Usage/)
 })
 
-test('cloud website renders deployer public branding', () => {
+void test('cloud website renders deployer public branding', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'data-analyst',
@@ -563,7 +563,72 @@ test('cloud website renders deployer public branding', () => {
   assert.match(branded, /https:\/\/legal\.acme\.example\/privacy/)
 })
 
-test('cloud website preserves legacy partial public branding themes', () => {
+void test('cloud website emits default head metadata (favicon, description, og/twitter)', () => {
+  const defaulted = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: { chat: true },
+  })
+
+  // Default description is present on the meta + OG + Twitter tags.
+  assert.match(defaulted, /<meta name="description" content="Collaborate with AI coworkers in the cloud\.">/)
+  assert.match(defaulted, /<meta property="og:description" content="Collaborate with AI coworkers in the cloud\.">/)
+  assert.match(defaulted, /<meta name="twitter:description" content="Collaborate with AI coworkers in the cloud\.">/)
+  // OG/Twitter title + type are emitted.
+  assert.match(defaulted, /<meta property="og:type" content="website">/)
+  assert.match(defaulted, /<meta property="og:title" content="Open Cowork Cloud">/)
+  assert.match(defaulted, /<meta name="twitter:title" content="Open Cowork Cloud">/)
+  // With no logo/og image configured, the card is `summary` and no image tag is emitted.
+  assert.match(defaulted, /<meta name="twitter:card" content="summary">/)
+  assert.ok(!/<meta property="og:image"/.test(defaulted))
+  // A generated accent-coloured SVG favicon is always present (CSP allows data: images).
+  assert.match(defaulted, /<link rel="icon" href="data:image\/svg\+xml,/)
+})
+
+void test('cloud website head metadata honours deployer branding overrides', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: { chat: true },
+  }, {
+    productName: 'Acme Cowork',
+    description: 'Acme automation for teams.',
+    faviconUrl: 'https://assets.acme.example/favicon.png',
+    ogImageUrl: 'https://assets.acme.example/social.png',
+  })
+
+  assert.match(branded, /<meta name="description" content="Acme automation for teams\.">/)
+  assert.match(branded, /<link rel="icon" href="https:\/\/assets\.acme\.example\/favicon\.png">/)
+  assert.match(branded, /<meta property="og:image" content="https:\/\/assets\.acme\.example\/social\.png">/)
+  assert.match(branded, /<meta name="twitter:image" content="https:\/\/assets\.acme\.example\/social\.png">/)
+  // An OG image upgrades the Twitter card to a large summary.
+  assert.match(branded, /<meta name="twitter:card" content="summary_large_image">/)
+  // Favicon override wins over the generated default.
+  assert.ok(!/<link rel="icon" href="data:image\/svg\+xml,/.test(branded))
+})
+
+void test('cloud website memoises per-branding CSS without leaking nonce or branding across calls', () => {
+  const policy = { role: 'owner', profileName: 'default', features: { chat: true } }
+  const brandingA = { productName: 'Acme Cowork', theme: { accent: '#0f6b4b' } }
+  const brandingB = { productName: 'Globex Cowork', theme: { accent: '#2563eb' } }
+
+  const a1 = cloudWebsiteHtml(policy, brandingA, 'nonce-alpha')
+  const a2 = cloudWebsiteHtml(policy, brandingA, 'nonce-bravo')
+  const b1 = cloudWebsiteHtml(policy, brandingB, 'nonce-alpha')
+
+  // Same branding object across requests → byte-identical output except the per-request nonce.
+  // (Proves the cached CSS is reused AND the nonce is still injected fresh per call.)
+  assert.equal(a1.replaceAll('nonce-alpha', 'N'), a2.replaceAll('nonce-bravo', 'N'))
+  assert.match(a1, /nonce="nonce-alpha"/)
+  assert.match(a2, /nonce="nonce-bravo"/)
+
+  // Different branding object → its own cache entry; accents do not bleed between them.
+  assert.match(a1, /--color-accent: #0f6b4b;/)
+  assert.match(b1, /--color-accent: #2563eb;/)
+  assert.ok(!b1.includes('#0f6b4b'))
+})
+
+void test('cloud website preserves legacy partial public branding themes', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'default',
@@ -600,7 +665,7 @@ test('cloud website preserves legacy partial public branding themes', () => {
   assert.doesNotMatch(branded, /--surface: #242021;/)
 })
 
-test('cloud website classifies shorthand and rgb light branding tokens', () => {
+void test('cloud website classifies shorthand and rgb light branding tokens', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'default',
@@ -653,7 +718,7 @@ test('cloud website classifies shorthand and rgb light branding tokens', () => {
   assert.match(named, /--focus: rgba\(45, 107, 86, 0\.28\);/)
 })
 
-test('cloud website emits complex public branding active-surface tokens', () => {
+void test('cloud website emits complex public branding active-surface tokens', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'default',
@@ -672,7 +737,7 @@ test('cloud website emits complex public branding active-surface tokens', () => 
   assert.match(branded, /--color-surface-active: color-mix\(in srgb, #fff 20%, #000\);/)
 })
 
-test('cloud website preserves dark defaults for partial dark branding overrides', () => {
+void test('cloud website preserves dark defaults for partial dark branding overrides', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'default',
@@ -697,7 +762,7 @@ test('cloud website preserves dark defaults for partial dark branding overrides'
   assert.doesNotMatch(branded, /--text: #18211c;/)
 })
 
-test('cloud website drops unsafe public branding URLs', () => {
+void test('cloud website drops unsafe public branding URLs', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'default',
@@ -717,7 +782,7 @@ test('cloud website drops unsafe public branding URLs', () => {
   assert.doesNotMatch(branded, /mailto:privacy/)
 })
 
-test('cloud website serializes bootstrap JSON for raw script parsing', () => {
+void test('cloud website serializes bootstrap JSON for raw script parsing', () => {
   const branded = cloudWebsiteHtml({
     role: 'owner',
     profileName: 'default',
@@ -732,16 +797,16 @@ test('cloud website serializes bootstrap JSON for raw script parsing', () => {
 
   const match = branded.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
   assert.ok(match)
-  assert.doesNotMatch(match[1], /<\/script>/i)
-  assert.equal(JSON.parse(match[1]).publicBranding.productName, '</script><img src=x onerror=alert(1)>')
+  assert.doesNotMatch(match[1]!, /<\/script>/i)
+  assert.equal(JSON.parse(match[1]!).publicBranding.productName, '</script><img src=x onerror=alert(1)>')
 })
 
-test('cloud website client avoids persistent browser secret storage', () => {
+void test('cloud website client avoids persistent browser secret storage', () => {
   assert.doesNotMatch(html, /sessionStorage|indexedDB/)
   assert.match(html, /id="open-cowork-cloud-bootstrap" type="application\/json"/)
 })
 
-test('cloud website binds actions through the React module client', () => {
+void test('cloud website binds actions through the React module client', () => {
   assert.equal(html.includes('onclick='), false)
   assert.match(html, /data-cloud-react-root="true"/)
   assert.match(html, /data-cloud-react-shell="ssr"/)
@@ -753,7 +818,7 @@ test('cloud website binds actions through the React module client', () => {
   assert.match(html, /id="prepare-diagnostics"/)
 })
 
-test('cloud website renders chat-first controls without local host path affordances', () => {
+void test('cloud website renders chat-first controls without local host path affordances', () => {
   assert.match(html, /id="thread-list"/)
   assert.match(html, /id="project-board-surface"/)
   assert.match(html, /Objectives, coworker tasks, linked OpenCode work/)
@@ -789,7 +854,7 @@ test('cloud website renders chat-first controls without local host path affordan
   assert.match(html, /Cloud Web cannot spawn local stdio MCP processes/)
 })
 
-test('cloud website surface helper derives agents, filters capabilities, and summarizes workflow triggers', () => {
+void test('cloud website surface helper derives agents, filters capabilities, and summarizes workflow triggers', () => {
   const agents = deriveCloudWebWorkbenchAgents({
     policyAllowedAgents: [
       { name: 'build', label: 'Build', mode: 'primary', modelLabel: 'Claude Sonnet', temperature: 0.2, steps: 40 },
@@ -900,7 +965,7 @@ test('cloud website surface helper derives agents, filters capabilities, and sum
   )
 })
 
-test('cloud website runtime helper covers all runtime entity classes', () => {
+void test('cloud website runtime helper covers all runtime entity classes', () => {
   assert.deepEqual(CLOUD_WEB_RUNTIME_ENTITY_CLASSES, [
     'message',
     'taskRun',
@@ -946,7 +1011,7 @@ test('cloud website runtime helper covers all runtime entity classes', () => {
   assert.equal(cloudWebRuntimeCounts({ contextState: 'idle' }).context, 0)
 })
 
-test('cloud website runtime helper preserves order and classifies errors', () => {
+void test('cloud website runtime helper preserves order and classifies errors', () => {
   assert.equal(cloudWebRuntimeOrder({ order: 42 }, 7), 42)
   assert.equal(cloudWebRuntimeOrder({}, 7), 7)
   assert.equal(cloudWebErrorCategory('Policy blocked by profile'), 'policy')
@@ -957,7 +1022,7 @@ test('cloud website runtime helper preserves order and classifies errors', () =>
   assert.equal(cloudWebErrorCategory('Runtime crashed'), 'runtime')
 })
 
-test('cloud website artifact metadata redacts transient artifact bodies and URLs', () => {
+void test('cloud website artifact metadata redacts transient artifact bodies and URLs', () => {
   assert.deepEqual(cloudWebSafeArtifactMetadata({
     artifactId: 'artifact-1',
     filename: 'result.txt',
@@ -973,7 +1038,7 @@ test('cloud website artifact metadata redacts transient artifact bodies and URLs
   })
 })
 
-test('cloud website thread helper handles status filters and thousands-sized lists', () => {
+void test('cloud website thread helper handles status filters and thousands-sized lists', () => {
   const sessions = Array.from({ length: CLOUD_WEB_THREAD_PAGE_SIZE + 25 }, (_, index) => ({
     sessionId: `session-${index}`,
     title: index === 50 ? 'Design review' : `Thread ${index}`,
@@ -1003,20 +1068,20 @@ test('cloud website thread helper handles status filters and thousands-sized lis
     },
   }
 
-  assert.equal(cloudWebThreadStatus(sessions[50], views['session-50'].projection.view), 'approval')
-  assert.equal(cloudWebThreadStatus(sessions[51], views['session-51'].projection.view), 'question')
+  assert.equal(cloudWebThreadStatus(sessions[50]!, views['session-50']!.projection.view), 'approval')
+  assert.equal(cloudWebThreadStatus(sessions[51]!, views['session-51']!.projection.view), 'question')
   assert.equal(filterCloudWebThreads(sessions, views).length, CLOUD_WEB_THREAD_PAGE_SIZE)
   assert.deepEqual(filterCloudWebThreads(sessions, views, { status: 'approval' }).map((session) => session.sessionId), ['session-50'])
   assert.deepEqual(filterCloudWebThreads(sessions, views, { project: 'snapshot' }).map((session) => session.sessionId), ['session-51'])
   assert.deepEqual(filterCloudWebThreads(sessions, views, { query: 'design customer-a app' }).map((session) => session.sessionId), ['session-50'])
 })
 
-test('cloud website disables dynamic admin actions for member roles', () => {
+void test('cloud website disables dynamic admin actions for member roles', () => {
   assert.match(html, /data-requires-admin="true"/)
   assert.match(html, /data-admin-control="true"/)
 })
 
-test('cloud website renders signed-out, member, admin, and policy-disabled states', () => {
+void test('cloud website renders signed-out, member, admin, and policy-disabled states', () => {
   const member = cloudWebsiteHtml({
     role: 'member',
     profileName: 'default',
@@ -1043,7 +1108,7 @@ test('cloud website renders signed-out, member, admin, and policy-disabled state
   assert.match(owner, /signed-out-only/)
 })
 
-test('cloud website role helper gates admin controls', () => {
+void test('cloud website role helper gates admin controls', () => {
   assert.equal(canManageOrg('owner'), true)
   assert.equal(canManageOrg('admin'), true)
   assert.equal(canManageOrg('member'), false)

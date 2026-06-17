@@ -66,7 +66,7 @@ export class PostgresChannelIdentitiesRepository {
         now,
       ],
     )
-    return channelIdentityFromRow(result.rows[0])
+    return channelIdentityFromRow(result.rows[0]!)
   }
 
   async getChannelIdentity(orgId: string, identityId: string) {

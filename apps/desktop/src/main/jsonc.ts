@@ -273,7 +273,7 @@ export function updateTopLevelObjectPropertyInJsonc(
     return `${raw.slice(0, rootEnd)}${newline}${serialized}${newline}${raw.slice(rootEnd)}`
   }
 
-  const last = properties[properties.length - 1]
+  const last = properties[properties.length - 1]!
   const separator = last.hasTrailingComma ? '' : ','
   return `${raw.slice(0, last.end)}${separator}${newline}${serialized}${raw.slice(last.end)}`
 }

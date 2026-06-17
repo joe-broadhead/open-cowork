@@ -25,6 +25,7 @@ function cssDeclarationSafe(value: string) {
 export const DEFAULT_WEBSITE_PUBLIC_BRANDING: PublicBrandingConfig = {
   productName: 'Open Cowork Cloud',
   shortName: 'OC',
+  description: 'Collaborate with AI coworkers in the cloud.',
   supportUrl: '',
   privacyUrl: '',
   securityUrl: '',
@@ -129,12 +130,17 @@ function cleanPublicBranding(input?: PublicBrandingConfig | null): Partial<Publi
   const cleaned: Partial<PublicBrandingConfig> = {}
   if (typeof input.productName === 'string' && input.productName.trim()) cleaned.productName = input.productName.trim()
   if (typeof input.shortName === 'string' && input.shortName.trim()) cleaned.shortName = input.shortName.trim()
+  if (typeof input.description === 'string' && input.description.trim()) cleaned.description = input.description.trim()
   const logoUrl = safeBrandingUrl(input.logoUrl)
+  const faviconUrl = safeBrandingUrl(input.faviconUrl)
+  const ogImageUrl = safeBrandingUrl(input.ogImageUrl)
   const supportUrl = safeBrandingUrl(input.supportUrl, true)
   const privacyUrl = safeBrandingUrl(input.privacyUrl)
   const securityUrl = safeBrandingUrl(input.securityUrl)
   const legalUrl = safeBrandingUrl(input.legalUrl)
   if (logoUrl) cleaned.logoUrl = logoUrl
+  if (faviconUrl) cleaned.faviconUrl = faviconUrl
+  if (ogImageUrl) cleaned.ogImageUrl = ogImageUrl
   if (supportUrl) cleaned.supportUrl = supportUrl
   if (privacyUrl) cleaned.privacyUrl = privacyUrl
   if (securityUrl) cleaned.securityUrl = securityUrl
@@ -159,6 +165,7 @@ export function resolvePublicBranding(input?: PublicBrandingConfig | null): Publ
     ...cleaned,
     productName: cleaned.productName || DEFAULT_WEBSITE_PUBLIC_BRANDING.productName,
     shortName: cleaned.shortName || DEFAULT_WEBSITE_PUBLIC_BRANDING.shortName,
+    description: cleaned.description || DEFAULT_WEBSITE_PUBLIC_BRANDING.description,
     logoUrl: cleaned.logoUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.logoUrl,
     supportUrl: cleaned.supportUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.supportUrl,
     privacyUrl: cleaned.privacyUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.privacyUrl,
@@ -282,6 +289,33 @@ export function brandLogoMarkup(branding: PublicBrandingConfig) {
     return `<img class="brand-logo" src="${escapeHtml(branding.logoUrl)}" alt="" aria-hidden="true">`
   }
   return `<div class="mark" aria-hidden="true">${escapeHtml(branding.shortName || 'OC')}</div>`
+}
+
+// `<head>` favicon + description + Open Graph/Twitter card tags. Emitted with
+// sensible defaults so the public app is polished out of the box, and fully
+// overridable via `cloud.publicBranding.*`. The favicon falls back logo →
+// generated accent mark (CSP allows `img-src data:`); social images fall back
+// to the logo. Expects a resolved branding (description/theme already defaulted).
+export function cloudHeadMetaMarkup(branding: PublicBrandingConfig): string {
+  const description = branding.description || branding.productName
+  const accentMark = branding.theme?.accent || '#6366f1'
+  const defaultFavicon = `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${accentMark}"/><circle cx="16" cy="16" r="6.5" fill="#ffffff"/></svg>`,
+  )}`
+  const faviconHref = branding.faviconUrl || branding.logoUrl || defaultFavicon
+  const ogImage = branding.ogImageUrl || branding.logoUrl || ''
+  const socialImageTags = ogImage
+    ? `\n  <meta property="og:image" content="${escapeHtml(ogImage)}">\n  <meta name="twitter:image" content="${escapeHtml(ogImage)}">`
+    : ''
+  return `<meta name="description" content="${escapeHtml(description)}">
+  <link rel="icon" href="${escapeHtml(faviconHref)}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="${escapeHtml(branding.productName)}">
+  <meta property="og:title" content="${escapeHtml(branding.productName)}">
+  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta name="twitter:card" content="${ogImage ? 'summary_large_image' : 'summary'}">
+  <meta name="twitter:title" content="${escapeHtml(branding.productName)}">
+  <meta name="twitter:description" content="${escapeHtml(description)}">${socialImageTags}`
 }
 
 export function brandLinksMarkup(branding: PublicBrandingConfig) {

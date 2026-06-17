@@ -82,6 +82,7 @@ export function ChatInputToolbar({
           type="file"
           multiple
           className="hidden"
+          aria-label={t('chat.attachFile', 'Attach files')}
           onChange={(event) => {
             if (event.target.files) {
               void onAddFiles(event.target.files)

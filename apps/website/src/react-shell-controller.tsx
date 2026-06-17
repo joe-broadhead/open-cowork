@@ -385,6 +385,7 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
 
   const navigate = useCallback((routeId: string | null | undefined, replace = false) => {
     const route = resolveRoute(routeId)
+    if (!route) return
     const nextHash = `#${route.id}`
     if (window.location.hash !== nextHash) {
       if (replace) window.history.replaceState(null, '', nextHash)

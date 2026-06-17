@@ -74,8 +74,11 @@ function cleanPublicBrandingEntry(entry: Partial<PublicBrandingConfig>) {
   const cleaned: Partial<PublicBrandingConfig> = {}
   if (typeof entry.productName === 'string' && entry.productName.trim()) cleaned.productName = entry.productName.trim()
   if (typeof entry.shortName === 'string' && entry.shortName.trim()) cleaned.shortName = entry.shortName.trim()
+  if (typeof entry.description === 'string' && entry.description.trim()) cleaned.description = entry.description.trim()
   const urls: Array<[keyof PublicBrandingConfig, boolean]> = [
     ['logoUrl', false],
+    ['faviconUrl', false],
+    ['ogImageUrl', false],
     ['supportUrl', true],
     ['privacyUrl', false],
     ['securityUrl', false],

@@ -22,7 +22,7 @@ function linearize(channel: number) {
 
 function relativeLuminance(color: HexColor) {
   const [red, green, blue] = rgbFromHex(color).map(linearize)
-  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+  return (0.2126 * red!) + (0.7152 * green!) + (0.0722 * blue!)
 }
 
 function contrastRatio(foreground: HexColor, background: HexColor) {

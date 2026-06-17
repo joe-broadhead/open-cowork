@@ -79,7 +79,7 @@ asarUnpack:
   - "node_modules/.pnpm/opencode-*/node_modules/opencode-*/**/*"
 
 mac:
-  icon: resources/icon.icns
+  icon: ${env.APP_ICON_MAC}
   category: public.app-category.productivity
   artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}-mac.${ext}
   hardenedRuntime: true
@@ -98,7 +98,7 @@ mac:
   darkModeSupport: true
 
 linux:
-  icon: resources/icon.png
+  icon: ${env.APP_ICON_LINUX}
   target:
     - target: AppImage
       arch:

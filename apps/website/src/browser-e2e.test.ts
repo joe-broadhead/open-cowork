@@ -25,7 +25,7 @@ function assertStreamAfterSequence(url: string, minimumSequence: number) {
   assert.ok(Number(after) >= minimumSequence, `expected stream cursor ${after} to be >= ${minimumSequence}`)
 }
 
-test('cloud web browser renders signed-out OIDC bootstrap state', async () => {
+void test('cloud web browser renders signed-out OIDC bootstrap state', async () => {
   const harness = await createCloudWebBrowserHarness({ signedOut: true }).start()
   try {
     assert.equal(harness.document.body.dataset.auth, 'signed-out')
@@ -38,7 +38,7 @@ test('cloud web browser renders signed-out OIDC bootstrap state', async () => {
   }
 })
 
-test('cloud web browser gates admin controls for member workspaces', async () => {
+void test('cloud web browser gates admin controls for member workspaces', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'member' }).start()
   try {
     assert.equal(harness.document.body.dataset.auth, 'signed-in')
@@ -87,7 +87,7 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
   }
 })
 
-test('cloud web browser expands the collapsed rail before focusing chat search', async () => {
+void test('cloud web browser expands the collapsed rail before focusing chat search', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', sessionCount: 2, hydratedViewCount: 2 }).start()
   try {
     const railToggle = harness.document.querySelector('[data-sidebar-rail-toggle]') as HTMLButtonElement
@@ -107,7 +107,7 @@ test('cloud web browser expands the collapsed rail before focusing chat search',
   }
 })
 
-test('cloud web browser disables member invite controls outside invite signup mode', async () => {
+void test('cloud web browser disables member invite controls outside invite signup mode', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', signupMode: 'disabled' }).start()
   try {
     await waitFor(() => assert.match(harness.document.querySelector('#member-invite-notice')?.textContent || '', /only when signup mode is invite/))
@@ -133,7 +133,7 @@ test('cloud web browser disables member invite controls outside invite signup mo
   }
 })
 
-test('cloud web browser creates a fresh active channel agent before provider setup', async () => {
+void test('cloud web browser creates a fresh active channel agent before provider setup', async () => {
   const harness = createCloudWebBrowserHarness({ role: 'admin' })
   harness.state.agents = [{
     agentId: 'agent-disabled',
@@ -167,7 +167,7 @@ test('cloud web browser creates a fresh active channel agent before provider set
   }
 })
 
-test('cloud web browser keeps disabled member role controls locked', async () => {
+void test('cloud web browser keeps disabled member role controls locked', async () => {
   const harness = createCloudWebBrowserHarness({ role: 'admin', memberCount: 6 })
   harness.state.members = harness.state.members.map((member: Record<string, unknown>) => {
     if (member.accountId === 'acct-2') return { ...member, role: 'member', status: 'disabled' }
@@ -198,7 +198,7 @@ test('cloud web browser keeps disabled member role controls locked', async () =>
   }
 })
 
-test('cloud web browser exercises every route declared in the route API matrix', async () => {
+void test('cloud web browser exercises every route declared in the route API matrix', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
@@ -229,7 +229,7 @@ test('cloud web browser exercises every route declared in the route API matrix',
   }
 })
 
-test('cloud web browser renders the standalone approvals queue across chats', async () => {
+void test('cloud web browser renders the standalone approvals queue across chats', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', sessionCount: 2, hydratedViewCount: 2, multiPromptQuestions: true }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
@@ -245,8 +245,8 @@ test('cloud web browser renders the standalone approvals queue across chats', as
     assert.match(queue.textContent || '', /Always allow/)
     assert.match(queue.textContent || '', /workspace policy/)
 
-    const firstSessionId = harness.sessions[0].sessionId
-    const secondSessionId = harness.sessions[1].sessionId
+    const firstSessionId = harness.sessions[0]!.sessionId
+    const secondSessionId = harness.sessions[1]!.sessionId
     harness.views[secondSessionId].projection.view.pendingApprovals.push({
       id: `${secondSessionId}-late-approval`,
       tool: 'shell',
@@ -314,9 +314,9 @@ test('cloud web browser renders the standalone approvals queue across chats', as
   }
 })
 
-test('cloud web browser exposes desktop parity boundaries and workbench state vocabulary', async () => {
+void test('cloud web browser exposes desktop parity boundaries and workbench state vocabulary', async () => {
   const harness = createCloudWebBrowserHarness({ role: 'admin' })
-  const firstView = harness.views[harness.sessions[0].sessionId]
+  const firstView = harness.views[harness.sessions[0]!.sessionId]
   firstView.projection.view.messages.push(
     { id: 'system-note', role: 'system', content: 'Cloud policy loaded.', order: 8 },
     { id: 'error-note', role: 'error', content: 'Provider warning projected from cloud.', order: 9 },
@@ -492,7 +492,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
   }
 })
 
-test('cloud web browser renders and mutates the Projects Kanban board through coordination APIs', async () => {
+void test('cloud web browser renders and mutates the Projects Kanban board through coordination APIs', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Studio parity launch/))
@@ -557,7 +557,7 @@ test('cloud web browser renders and mutates the Projects Kanban board through co
   }
 })
 
-test('cloud web browser clears signed-in UI when AppAPI reports auth required after hydration', async () => {
+void test('cloud web browser clears signed-in UI when AppAPI reports auth required after hydration', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     harness.window.dispatchEvent(new harness.window.CustomEvent(CLOUD_WEB_AUTH_REQUIRED_EVENT))
@@ -575,7 +575,7 @@ test('cloud web browser clears signed-in UI when AppAPI reports auth required af
   }
 })
 
-test('cloud web browser renders launchpad feed and routes launchpad actions', async () => {
+void test('cloud web browser renders launchpad feed and routes launchpad actions', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   const clickContaining = (selector: string, text: string) => {
     const target = [...harness.document.querySelectorAll(selector)]
@@ -622,7 +622,7 @@ test('cloud web browser renders launchpad feed and routes launchpad actions', as
   }
 })
 
-test('cloud launchpad suggestions stay inside the allowed coworker policy', async () => {
+void test('cloud launchpad suggestions stay inside the allowed coworker policy', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', allowedAgents: ['build'] }).start()
   const clickContaining = (selector: string, text: string) => {
     const target = [...harness.document.querySelectorAll(selector)]
@@ -650,7 +650,7 @@ test('cloud launchpad suggestions stay inside the allowed coworker policy', asyn
   }
 })
 
-test('cloud launchpad suggestions preserve requested agents for default cloud policies', async () => {
+void test('cloud launchpad suggestions preserve requested agents for default cloud policies', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', allowedAgents: null }).start()
   const clickContaining = (selector: string, text: string) => {
     const target = [...harness.document.querySelectorAll(selector)]
@@ -676,7 +676,7 @@ test('cloud launchpad suggestions preserve requested agents for default cloud po
   }
 })
 
-test('cloud web browser creates, prompts, streams, reloads, and continues a cloud thread', async () => {
+void test('cloud web browser creates, prompts, streams, reloads, and continues a cloud thread', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 1/))
@@ -712,7 +712,7 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
     assert.equal((promptRequest.body as Record<string, unknown>).agent, 'build')
     assert.equal((promptRequest.body as Record<string, unknown>).text, 'Continue the work.')
 
-    const sessionId = harness.sessions[0].sessionId
+    const sessionId = harness.sessions[0]!.sessionId
     const liveStreamAfterSequence = harness.views[sessionId].projection.sequence
     harness.views[sessionId].projection.view.messages.push({ id: 'live-update', role: 'assistant', content: 'SSE live update arrived.', order: 30 })
     harness.views[sessionId].projection.sequence += 1
@@ -746,7 +746,7 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
   }
 })
 
-test('cloud web browser starts project-backed chats from Projects route sources', async () => {
+void test('cloud web browser starts project-backed chats from Projects route sources', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     const repositoryUrl = harness.document.querySelector('#session-form input[name="repositoryUrl"]') as HTMLInputElement
@@ -778,7 +778,7 @@ test('cloud web browser starts project-backed chats from Projects route sources'
   }
 })
 
-test('cloud web browser keeps project-source policy denials in Projects route', async () => {
+void test('cloud web browser keeps project-source policy denials in Projects route', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', projectSourceDenied: true }).start()
   try {
     const repositoryUrl = harness.document.querySelector('#session-form input[name="repositoryUrl"]') as HTMLInputElement
@@ -794,7 +794,7 @@ test('cloud web browser keeps project-source policy denials in Projects route', 
   }
 })
 
-test('cloud web browser pages cloud threads through backend cursors without losing loaded pages on SSE', async () => {
+void test('cloud web browser pages cloud threads through backend cursors without losing loaded pages on SSE', async () => {
   const harness = await createCloudWebBrowserHarness({
     role: 'admin',
     sessionCount: 1001,
@@ -841,7 +841,7 @@ test('cloud web browser pages cloud threads through backend cursors without losi
   }
 })
 
-test('cloud web browser bounds large admin surfaces and redacts unsafe operational details', async () => {
+void test('cloud web browser bounds large admin surfaces and redacts unsafe operational details', async () => {
   const harness = await createCloudWebBrowserHarness({
     role: 'admin',
     memberCount: 150,
@@ -913,8 +913,8 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
     }, true)
     harness.clickText('#diagnostics-bundle button', 'Download bundle')
     await waitFor(() => assert.equal(downloads.length, 1))
-    assert.equal(downloads[0]?.download, 'open-cowork-diagnostics.json')
-    const downloadedBlob = blobs.get(downloads[0]?.href || '')
+    assert.equal(downloads[0]!?.download, 'open-cowork-diagnostics.json')
+    const downloadedBlob = blobs.get(downloads[0]!?.href || '')
     assert.ok(downloadedBlob)
     const downloaded = await new Promise<string>((resolve, reject) => {
       const reader = new harness.window.FileReader()
@@ -929,10 +929,10 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
   }
 })
 
-test('cloud web browser handles approvals, questions, artifacts, and workflow runs', async () => {
+void test('cloud web browser handles approvals, questions, artifacts, and workflow runs', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
-    const firstSessionId = harness.sessions[0].sessionId
+    const firstSessionId = harness.sessions[0]!.sessionId
     harness.views[firstSessionId].projection.view.lastError = 'Provider timeout while summarizing the run.'
     await selectFirstCloudThread(harness)
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Run read-only tests/))
@@ -992,7 +992,7 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
   }
 })
 
-test('cloud web browser renders an empty artifact library after the index loads', async () => {
+void test('cloud web browser renders an empty artifact library after the index loads', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', artifactCount: 0 }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
@@ -1011,7 +1011,7 @@ test('cloud web browser renders an empty artifact library after the index loads'
   }
 })
 
-test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota/policy blocked states', async () => {
+void test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota/policy blocked states', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
@@ -1073,8 +1073,8 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     harness.clickText('#export-audit', 'Export')
     harness.clickText('#export-usage', 'Export usage')
     await waitFor(() => assert.equal(downloads.length, 2))
-    const auditExportText = await readBrowserBlobText(harness, downloads[0])
-    const usageExportText = await readBrowserBlobText(harness, downloads[1])
+    const auditExportText = await readBrowserBlobText(harness, downloads[0]!)
+    const usageExportText = await readBrowserBlobText(harness, downloads[1]!)
     const auditExport = JSON.parse(auditExportText) as { events?: unknown[] }
     const usageExport = JSON.parse(usageExportText) as { summary?: unknown, events?: unknown[] }
     assert.equal(auditExport.events?.length, 1)
@@ -1136,7 +1136,7 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
   }
 })
 
-test('cloud web browser requires typed confirmation for destructive admin actions', async () => {
+void test('cloud web browser requires typed confirmation for destructive admin actions', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))

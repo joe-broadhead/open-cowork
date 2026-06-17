@@ -5,6 +5,7 @@ import type {
   CapabilityBundleManifest,
   CloudProjectSourceInput,
   CredentialField,
+  DesktopFeatureFlags,
   GatewayDeploymentConfig,
   ModelInfoSnapshot,
   ProviderModelDescriptor,
@@ -219,6 +220,9 @@ export type CloudFeatureKey =
   | 'customSkills'
   | 'customAgents'
   | 'customMcps'
+  | 'knowledge'
+  | 'channels'
+  | 'byok'
 
 export type CloudFeatureConfig = Record<CloudFeatureKey, boolean>
 
@@ -496,6 +500,8 @@ export type OpenCoworkConfig = {
     endpoint?: string
     headers?: Record<string, string>
   }
+  // Per-deployment desktop feature flags (omit a key to keep it enabled).
+  features?: DesktopFeatureFlags
 }
 
 // Re-export the shared type under the config-loader's historical name so
@@ -515,6 +521,9 @@ const DEFAULT_CLOUD_FEATURES: CloudFeatureConfig = {
   customSkills: true,
   customAgents: true,
   customMcps: true,
+  knowledge: true,
+  channels: true,
+  byok: true,
 }
 
 const DEFAULT_CLOUD_RUNTIME: CloudRuntimePolicyConfig = {

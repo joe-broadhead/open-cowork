@@ -19,7 +19,7 @@ function lineCount(path: string) {
   return readFileSync(path, 'utf8').split('\n').length
 }
 
-test('cloud web workbench production source stays split into bounded modules', () => {
+void test('cloud web workbench production source stays split into bounded modules', () => {
   const files = new Map(sourceFiles().map((path) => [relative(SRC_ROOT, path), lineCount(path)]))
   const requiredModules = [
     'admin-surface-matrix.ts',
@@ -86,7 +86,7 @@ test('cloud web workbench production source stays split into bounded modules', (
   }
 })
 
-test('cloud web workbench does not import runtime, database, or provider-specific internals', () => {
+void test('cloud web workbench does not import runtime, database, or provider-specific internals', () => {
   const forbidden = [
     /@opencode-ai\/sdk/,
     /postgres-control-plane-store/,

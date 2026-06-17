@@ -314,7 +314,7 @@ async function handleRequest(
   const webhookMatch = /^\/webhooks\/([^/]+)$/.exec(url.pathname)
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
-    const providerId = decodeURIComponent(webhookMatch[1])
+    const providerId = decodeURIComponent(webhookMatch[1] ?? '')
     const providerConfig = configuredProvider(config, providerId)
     if (providerConfig) ensureGatewayProviderMetrics(runtime.metrics, providerConfig).webhookRequests += 1
     const source = webhookSource(req, config.server.trustProxyHeaders, config.server.trustedProxyCidrs)

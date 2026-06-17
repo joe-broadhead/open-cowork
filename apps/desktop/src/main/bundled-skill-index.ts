@@ -118,7 +118,7 @@ function scanBundledSkillRoot(root: string): BundledSkillRootScan {
   const visited = new Set<string>()
 
   for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
-    const current = queue[queueIndex]
+    const current = queue[queueIndex]!
 
     let realCurrent: string
     try {

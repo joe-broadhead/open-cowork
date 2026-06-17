@@ -347,7 +347,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     const memberUpdateMatch = request.pathname.match(/^\/api\/admin\/members\/([^/]+)\/update$/)
     if (request.method === 'POST' && memberUpdateMatch) {
-      const accountId = decodeURIComponent(memberUpdateMatch[1])
+      const accountId = decodeURIComponent(memberUpdateMatch[1] ?? '')
       state.members = state.members.map((member: any) => member.accountId === accountId ? { ...member, ...(request.body as Record<string, unknown>), updatedAt: iso(14) } : member)
       return jsonResponse({ member: state.members.find((member: any) => member.accountId === accountId) })
     }
@@ -358,7 +358,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (request.method === 'GET' && request.pathname === '/api/admin/workers') return jsonResponse({ workers: state.workers.slice(0, limitFromRequest(request, 100)) })
     const workerHeartbeatsMatch = request.pathname.match(/^\/api\/admin\/workers\/([^/]+)\/heartbeats$/)
     if (request.method === 'GET' && workerHeartbeatsMatch) {
-      const workerId = decodeURIComponent(workerHeartbeatsMatch[1])
+      const workerId = decodeURIComponent(workerHeartbeatsMatch[1] ?? '')
       return jsonResponse({ heartbeats: state.workerHeartbeats.filter((heartbeat: any) => heartbeat.workerId === workerId) })
     }
     const channelResponse = handleBrowserChannelRequest({ request, state, jsonResponse, limitFromRequest })
@@ -419,7 +419,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     const workflowArchiveMatch = request.pathname.match(/^\/api\/workflows\/([^/]+)\/archive$/)
     if (request.method === 'POST' && workflowArchiveMatch) {
-      const workflowId = decodeURIComponent(workflowArchiveMatch[1])
+      const workflowId = decodeURIComponent(workflowArchiveMatch[1] ?? '')
       state.workflows = state.workflows.map((workflow: any) => workflow.id === workflowId ? { ...workflow, status: 'archived' } : workflow)
       return jsonResponse({ workflow: state.workflows.find((workflow: any) => workflow.id === workflowId) })
     }
@@ -456,7 +456,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     const sessionViewMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/view$/)
     if (request.method === 'GET' && sessionViewMatch) {
-      const sessionId = decodeURIComponent(sessionViewMatch[1])
+      const sessionId = decodeURIComponent(sessionViewMatch[1] ?? '')
       if (!views[sessionId]) {
         const session = sessions.find((entry) => entry.sessionId === sessionId)
         if (session) views[sessionId] = makeSessionView(session, 10, artifactCount)
@@ -470,7 +470,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       if (options.promptFailure) {
         return jsonResponse({ error: options.promptFailure.error, policyCode: options.promptFailure.policyCode, verdict: { reason: options.promptFailure.error } }, options.promptFailure.status)
       }
-      const sessionId = decodeURIComponent(promptMatch[1])
+      const sessionId = decodeURIComponent(promptMatch[1] ?? '')
       const view = views[sessionId]
       const projection = view.projection.view
       projection.messages = [
@@ -483,7 +483,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     const permissionMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/permission-respond$/)
     if (request.method === 'POST' && permissionMatch) {
-      const view = views[decodeURIComponent(permissionMatch[1])]
+      const view = views[decodeURIComponent(permissionMatch[1] ?? '')]
       const permissionId = (request.body as Record<string, unknown>)?.permissionId
       const response = (request.body as Record<string, { allowed?: boolean }>)?.response || {}
       const pending = view.projection.view.pendingApprovals.find((entry: { id: string }) => entry.id === permissionId)
@@ -494,7 +494,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     const questionReplyMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/question-reply$/)
     if (request.method === 'POST' && questionReplyMatch) {
-      const view = views[decodeURIComponent(questionReplyMatch[1])]
+      const view = views[decodeURIComponent(questionReplyMatch[1] ?? '')]
       const requestId = (request.body as Record<string, unknown>)?.requestId
       const pending = view.projection.view.pendingQuestions.find((entry: { id: string }) => entry.id === requestId)
       view.projection.view.pendingQuestions = view.projection.view.pendingQuestions.filter((entry: { id: string }) => entry.id !== requestId)
@@ -520,12 +520,12 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     const artifactListMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts$/)
     if (request.method === 'GET' && artifactListMatch) {
-      const view = views[decodeURIComponent(artifactListMatch[1])]
+      const view = views[decodeURIComponent(artifactListMatch[1] ?? '')]
       return jsonResponse({ artifacts: view.projection.view.artifacts.slice(0, limitFromRequest(request, 100)) })
     }
     const artifactMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts\/([^/]+)$/)
     if (request.method === 'GET' && artifactMatch) {
-      return jsonResponse({ artifact: { artifactId: decodeURIComponent(artifactMatch[2]), filename: 'summary.txt', contentType: 'text/plain', dataBase64: 'SGVsbG8=', size: 5 } })
+      return jsonResponse({ artifact: { artifactId: decodeURIComponent(artifactMatch[2] ?? ''), filename: 'summary.txt', contentType: 'text/plain', dataBase64: 'SGVsbG8=', size: 5 } })
     }
     return jsonResponse({ error: `Unhandled test route ${request.method} ${request.path}` }, 404)
   }

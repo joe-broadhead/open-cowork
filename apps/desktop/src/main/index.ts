@@ -39,7 +39,7 @@ import { primeShellEnvironment } from './shell-env.ts'
 import { restartRuntimeMcpStatusPolling } from './runtime-mcp-status-polling.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
-import { registerBrandingAssetProtocol } from './branding-assets.ts'
+import { registerBrandingAssetProtocol, resolveAppIconFile } from './branding-assets.ts'
 import { registerChartFrameAssetProtocol } from './chart-frame-assets.ts'
 import {
   attachPermissionGuards,
@@ -67,6 +67,9 @@ let appCleanupPromise: Promise<void> | null = null
 let runtimeProjectDirectory: string | null = null
 let appIsQuitting = false
 const branding = getBranding()
+// Resolved once at startup; reused for the window + dock icon. Null when unset/invalid,
+// so the window controller and dock fall back to the bundled default icon.
+const appIconPath = resolveAppIconFile(branding.appIcon)
 
 async function getAuthStateLazy() {
   const { getAuthState } = await import('./auth.ts')
@@ -101,6 +104,7 @@ const {
   app,
   appDirname: __dirname,
   brandName: branding.name,
+  appIconPath,
   canOpenMainWindowFromLoading: () => getRuntimeInitializationStatus().phase === 'error',
   getAppIsQuitting: () => appIsQuitting,
   log,
@@ -388,7 +392,7 @@ async function performCleanup() {
     } finally {
       stopWorkflowService()
       appCleanupFinished = true
-      closeLogger()
+      await closeLogger()
     }
   })()
 
@@ -403,7 +407,7 @@ function exitAfterCleanup(exitCode: number) {
   })
 }
 
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
   app.name = branding.name
   applySettingsSideEffects()
@@ -411,7 +415,7 @@ app.whenReady().then(async () => {
   // In development we set the dock icon explicitly so branding changes show up immediately.
   // In packaged builds the app bundle icon should be authoritative.
   if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
-    const iconPath = getPackagedResourcePath('icon-128.png')
+    const iconPath = appIconPath || getPackagedResourcePath('icon-128.png')
     try {
       const icon = nativeImage.createFromPath(iconPath)
       log('main', `[icon] Loading ${iconPath}, isEmpty: ${icon.isEmpty()}, size: ${icon.getSize().width}x${icon.getSize().height}`)

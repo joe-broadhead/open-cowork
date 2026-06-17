@@ -37,7 +37,7 @@ export function ModelsPanel({
   mode?: 'model' | 'advanced'
 }) {
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId) || null
-  const models = provider?.models || []
+  const models = useMemo(() => provider?.models || [], [provider])
   const providerCredentials = settings.effectiveProviderId
     ? (settings.providerCredentials[settings.effectiveProviderId] || {})
     : {}
@@ -304,7 +304,7 @@ export function ModelsPanel({
                     filteredModels.map((model, index) => {
                       const isActive = settings.effectiveModel === model.id
                       const showFeaturedBoundary =
-                        hasFeatured && index > 0 && filteredModels[index - 1].featured && !model.featured
+                        hasFeatured && index > 0 && filteredModels[index - 1]!.featured && !model.featured
                       return (
                         <div key={model.id}>
                           {showFeaturedBoundary && (

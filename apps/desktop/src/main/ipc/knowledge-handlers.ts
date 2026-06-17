@@ -2,8 +2,10 @@ import type {
   KnowledgeProposalInput,
   KnowledgeReviewInput,
   KnowledgeSnapshotOptions,
+  KnowledgeSpaceInput,
   WorkspaceOptions,
 } from '@open-cowork/shared'
+import { isKnowledgeSpaceVisibility } from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import {
@@ -16,6 +18,7 @@ import {
 import {
   acceptKnowledgeProposal,
   createKnowledgeProposal,
+  createKnowledgeSpace,
   declineKnowledgeProposal,
   listKnowledgePageHistory,
   listKnowledgeSnapshot,
@@ -64,6 +67,17 @@ function normalizeProposalInput(value: Record<string, unknown>): KnowledgePropos
   }
 }
 
+function normalizeSpaceInput(value: Record<string, unknown>): KnowledgeSpaceInput {
+  const workspaceId = readWorkspaceIdOption(value)
+  // Default visibility handling lives in the store; only pass through an explicit
+  // valid value. The store re-validates `name`, so pass it through as-is.
+  return {
+    ...(workspaceId ? { workspaceId } : {}),
+    name: value.name as KnowledgeSpaceInput['name'],
+    ...(isKnowledgeSpaceVisibility(value.visibility) ? { visibility: value.visibility } : {}),
+  }
+}
+
 function assertLocalWorkspace(context: IpcHandlerContext, event: IpcMainInvokeEvent, options?: unknown) {
   context.workspaceGateway.assertLocalWorkspace(event, readWorkspaceIdOption(options))
 }
@@ -76,6 +90,11 @@ export function registerKnowledgeHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'knowledge:snapshot', optionalObjectArg<KnowledgeSnapshotOptions>('knowledge options', normalizeSnapshotOptions), async (event, options) => {
     assertLocalWorkspace(context, event, options)
     return listKnowledgeSnapshot(withLocalWorkspace(options))
+  })
+
+  registerIpcInvoke(context, 'knowledge:space:create', objectArg<KnowledgeSpaceInput>('knowledge space', normalizeSpaceInput), async (event, input) => {
+    assertLocalWorkspace(context, event, input)
+    return createKnowledgeSpace(withLocalWorkspace(input))
   })
 
   registerIpcInvoke(context, 'knowledge:proposal:create', objectArg<KnowledgeProposalInput>('knowledge proposal', normalizeProposalInput), async (event, input) => {

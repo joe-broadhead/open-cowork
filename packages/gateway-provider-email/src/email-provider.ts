@@ -20,11 +20,16 @@ export interface EmailProviderConfig {
   providerId?: ChannelProviderId;
   from: string;
   inboundSecret: string;
+  // Outbound message subject. Configurable so a downstream builder can rebrand it;
+  // defaults to the Open Cowork public-app value when unset.
+  subject?: string;
   smtp?: SmtpEmailTransportConfig;
   transport?: EmailTransport;
   now?: () => Date;
   maxAttachmentBytes?: number;
 }
+
+const DEFAULT_EMAIL_SUBJECT = "Open Cowork update";
 
 export interface SmtpEmailTransportConfig {
   host: string;
@@ -156,7 +161,7 @@ export class EmailProvider implements ChannelProvider {
     const result = await this.transport.send({
       from: this.config.from,
       to: target.chatId,
-      subject: "Open Cowork update",
+      subject: this.config.subject?.trim() || DEFAULT_EMAIL_SUBJECT,
       text,
       messageId,
       inReplyTo: target.threadId || null,
@@ -336,7 +341,7 @@ function renderEmailMessage(message: EmailMessage): string {
     ...(message.inReplyTo ? [["In-Reply-To", message.inReplyTo]] : []),
     ...(references.length ? [["References", references.join(" ")]] : [])
   ];
-  return `${headers.map(([key, value]) => `${key}: ${sanitizeHeader(value)}`).join("\r\n")}\r\n\r\n${dotStuff(message.text)}\r\n.`;
+  return `${headers.map(([key, value]) => `${key}: ${sanitizeHeader(value ?? "")}`).join("\r\n")}\r\n\r\n${dotStuff(message.text)}\r\n.`;
 }
 
 function dotStuff(value: string): string {

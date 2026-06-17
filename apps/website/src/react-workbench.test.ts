@@ -15,7 +15,7 @@ import { CLOUD_DELIVERABLE_APPROVAL_COPY, CloudConversationMeta } from './react-
 import { canManageCloudKnowledge, cloudKnowledgeAuthorityRole, knowledgeCaptureSpace } from './react-workbench-knowledge-state.ts'
 import { makeSession, makeSessionView } from './browser-test-fixtures.ts'
 
-test('React workbench components render cloud-safe thread, timeline, runtime, and artifact markup', () => {
+void test('React workbench components render cloud-safe thread, timeline, runtime, and artifact markup', () => {
   const session = makeSession(1)
   const view = makeSessionView(session, 10, 1)
   const views = { [session.sessionId]: view }
@@ -59,7 +59,7 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
   assert.doesNotMatch(html, /leaked-secret/)
 })
 
-test('React Cloud sidebar groups chats by project source', () => {
+void test('React Cloud sidebar groups chats by project source', () => {
   const projectSession = makeSession(10)
   const projectFollowUp = makeSession(20)
   const chatOnlySession = makeSession(1)
@@ -80,7 +80,7 @@ test('React Cloud sidebar groups chats by project source', () => {
   assert.match(html, /data-selected="true"/)
 })
 
-test('React Cloud sidebar groups chats from session list project metadata without loaded views', () => {
+void test('React Cloud sidebar groups chats from session list project metadata without loaded views', () => {
   const projectSession = {
     ...makeSession(10),
     projectSource: { kind: 'git' as const, repositoryUrl: 'https://github.com/acme/api.git' },
@@ -104,7 +104,7 @@ test('React Cloud sidebar groups chats from session list project metadata withou
   assert.match(html, /data-selected="true"/)
 })
 
-test('React Cloud sidebar keeps distinct repos with the same basename in separate groups', () => {
+void test('React Cloud sidebar keeps distinct repos with the same basename in separate groups', () => {
   const acmeSession = makeSession(10)
   const contosoSession = makeSession(20)
   const sessions = [acmeSession, contosoSession]
@@ -122,7 +122,7 @@ test('React Cloud sidebar keeps distinct repos with the same basename in separat
   assert.doesNotMatch(html, />2<\/small>/)
 })
 
-test('React workbench renders delegated handoff badges, task context, and approval-gated deliverables', () => {
+void test('React workbench renders delegated handoff badges, task context, and approval-gated deliverables', () => {
   const session = makeSession(3)
   const view = makeSessionView(session, 10, 1)
   view.projection.view.taskRuns = [
@@ -183,7 +183,7 @@ test('React workbench renders delegated handoff badges, task context, and approv
   assert.doesNotMatch(html, /Capture to knowledge/)
 })
 
-test('React workbench marks only post-prompt assistant messages as streaming', () => {
+void test('React workbench marks only post-prompt assistant messages as streaming', () => {
   const session = makeSession(2)
   const view = makeSessionView(session, 10, 0)
   view.projection.view.isGenerating = true
@@ -202,7 +202,7 @@ test('React workbench marks only post-prompt assistant messages as streaming', (
   assert.match(streamingHtml, /Streaming answer/)
 })
 
-test('React Cloud Knowledge capture ignores read-only spaces', () => {
+void test('React Cloud Knowledge capture ignores read-only spaces', () => {
   assert.equal(knowledgeCaptureSpace([
     {
       id: 'space-reader',
@@ -228,7 +228,7 @@ test('React Cloud Knowledge capture ignores read-only spaces', () => {
   ])?.id, 'space-contributor')
 })
 
-test('React Cloud Knowledge management follows owner and admin authority only', () => {
+void test('React Cloud Knowledge management follows owner and admin authority only', () => {
   assert.equal(cloudKnowledgeAuthorityRole('viewer', {
     principal: { role: 'admin' },
     member: { role: 'member' },

@@ -142,11 +142,11 @@ export function CloudArtifactSurfacePortals({ artifactActions }: CloudArtifactSu
           onReload={loadArtifactIndex}
           onOpenArtifact={(artifact) => {
             const id = artifactActionId(artifact)
-            if (id) artifactActions.onViewArtifact?.(id, { sessionId: artifact.sessionId })
+            if (id) void artifactActions.onViewArtifact?.(id, { sessionId: artifact.sessionId })
           }}
           onExportArtifact={(artifact) => {
             const id = artifactActionId(artifact)
-            if (id) artifactActions.onDownloadArtifact?.(id, { sessionId: artifact.sessionId })
+            if (id) void artifactActions.onDownloadArtifact?.(id, { sessionId: artifact.sessionId })
           }}
           onInspectArtifact={(artifact) => {
             const id = artifactActionId(artifact)

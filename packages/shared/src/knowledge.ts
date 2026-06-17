@@ -203,6 +203,13 @@ export type KnowledgeReviewInput = WorkspaceOptions & {
   reviewedBy?: string | null
 }
 
+export type KnowledgeSpaceInput = WorkspaceOptions & {
+  name: string
+  visibility?: KnowledgeSpaceVisibility | null
+  icon?: string | null
+  hue?: string | null
+}
+
 export function isKnowledgeSpaceVisibility(value: unknown): value is KnowledgeSpaceVisibility {
   return typeof value === 'string' && (KNOWLEDGE_VISIBILITIES as readonly string[]).includes(value)
 }

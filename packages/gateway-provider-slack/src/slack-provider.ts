@@ -578,7 +578,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function stringField(value: Record<string, unknown>, key: string): string | null {
+function stringField(value: Record<string, unknown> | undefined, key: string): string | null {
+  if (!value) return null;
   const entry = value[key];
   return typeof entry === "string" && entry.trim() ? entry.trim() : null;
 }

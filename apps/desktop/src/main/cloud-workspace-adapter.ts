@@ -181,7 +181,7 @@ async function settleWithConcurrency<T>(
       const index = nextIndex
       nextIndex += 1
       try {
-        await task(items[index], index)
+        await task(items[index]!, index)
         results[index] = { status: 'fulfilled', value: undefined }
       } catch (reason) {
         results[index] = { status: 'rejected', reason }

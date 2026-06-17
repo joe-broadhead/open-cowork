@@ -23,7 +23,7 @@ function bootstrap(): CloudWebClientBootstrap {
   }
 }
 
-test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only requests', async () => {
+void test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only requests', async () => {
   const calls: Array<{ path: string; method: string; headers: Record<string, string>; body: unknown }> = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -60,22 +60,22 @@ test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only requests',
       '/api/coordination/watches?limit=10&targetKind=project&targetId=project-1&status=active',
       '/api/workflows/workflow-1/run',
     ])
-    assert.equal(calls[0].method, 'GET')
-    assert.equal(calls[1].method, 'POST')
-    assert.equal(calls[2].method, 'GET')
-    assert.equal(calls[3].method, 'GET')
-    assert.equal(calls[4].method, 'POST')
-    assert.equal(calls[1].headers['x-csrf-token'], 'csrf-1')
-    assert.deepEqual(calls[1].body, { text: 'Hello', agent: 'build' })
-    assert.deepEqual(calls[4].body, { objective: 'Ship the Studio board.' })
-    assert.equal(calls[6].headers['x-csrf-token'], 'csrf-2')
+    assert.equal(calls[0]!.method, 'GET')
+    assert.equal(calls[1]!.method, 'POST')
+    assert.equal(calls[2]!.method, 'GET')
+    assert.equal(calls[3]!.method, 'GET')
+    assert.equal(calls[4]!.method, 'POST')
+    assert.equal(calls[1]!.headers['x-csrf-token'], 'csrf-1')
+    assert.deepEqual(calls[1]!.body, { text: 'Hello', agent: 'build' })
+    assert.deepEqual(calls[4]!.body, { objective: 'Ship the Studio board.' })
+    assert.equal(calls[6]!.headers['x-csrf-token'], 'csrf-2')
     await assert.rejects(() => api.request('https://example.test/leak'), /blocked non-API request/)
   } finally {
     globalThis.fetch = originalFetch
   }
 })
 
-test('cloud AppAPI reports 401 responses through the unauthorized callback', async () => {
+void test('cloud AppAPI reports 401 responses through the unauthorized callback', async () => {
   const originalFetch = globalThis.fetch
   let unauthorizedCount = 0
   const calls: Array<{ headers: Record<string, string> }> = []
@@ -96,14 +96,14 @@ test('cloud AppAPI reports 401 responses through the unauthorized callback', asy
     await assert.rejects(() => api.sessions.prompt('session-1', { text: 'hello' }), /Authentication required/)
     await assert.rejects(() => api.sessions.prompt('session-1', { text: 'again' }), /Authentication required/)
     assert.equal(unauthorizedCount, 2)
-    assert.equal(calls[0].headers['x-csrf-token'], 'csrf-1')
-    assert.equal(calls[1].headers['x-csrf-token'], undefined)
+    assert.equal(calls[0]!.headers['x-csrf-token'], 'csrf-1')
+    assert.equal(calls[1]!.headers['x-csrf-token'], undefined)
   } finally {
     globalThis.fetch = originalFetch
   }
 })
 
-test('cloud AppAPI streams only API EventSource URLs and parses typed events', () => {
+void test('cloud AppAPI streams only API EventSource URLs and parses typed events', () => {
   const originalEventSource = (globalThis as { EventSource?: unknown }).EventSource
   const created: Array<{ url: string; init: EventSourceInit | undefined; listeners: Map<string, (event: MessageEvent) => void> }> = []
   class FakeEventSource {
@@ -131,10 +131,10 @@ test('cloud AppAPI streams only API EventSource URLs and parses typed events', (
     const events: unknown[] = []
     const api = createCloudWebAppApi(bootstrap())
     const stream = api.sessions.events('session-1', { message: (event) => events.push(event) }, { afterSequence: 2 })
-    assert.equal(created[0].url, '/api/sessions/session-1/events?after=2')
-    assert.equal(created[0].init?.withCredentials, true)
-    created[0].listeners.get('assistant.message')?.(new MessageEvent('assistant.message', { data: '{"sequence":2}' }))
-    created[0].listeners.get('session.updated')?.(new MessageEvent('session.updated', { data: 'plain text' }))
+    assert.equal(created[0]!.url, '/api/sessions/session-1/events?after=2')
+    assert.equal(created[0]!.init?.withCredentials, true)
+    created[0]!.listeners.get('assistant.message')?.(new MessageEvent('assistant.message', { data: '{"sequence":2}' }))
+    created[0]!.listeners.get('session.updated')?.(new MessageEvent('session.updated', { data: 'plain text' }))
     assert.equal((events[0] as { type: string }).type, 'assistant.message')
     assert.deepEqual((events[0] as { data: unknown }).data, { sequence: 2 })
     assert.equal((events[1] as { type: string }).type, 'session.updated')

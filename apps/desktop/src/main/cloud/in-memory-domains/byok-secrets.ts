@@ -175,7 +175,7 @@ export class InMemoryByokSecretsDomain {
         createdAt: input.disabledAt,
       })
     }
-    return clone(matching[0])
+    return clone(matching[0]!)
   }
 
   recordByokSecretValidation(input: RecordByokSecretValidationInput): ByokSecretRecord | null {

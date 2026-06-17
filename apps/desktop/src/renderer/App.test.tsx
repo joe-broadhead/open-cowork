@@ -41,6 +41,7 @@ vi.mock('./helpers/loadSessionMessages', () => ({
 
 vi.mock('./helpers/brand', () => ({
   setBrandName: mockSetBrandName,
+  setDocsBaseUrl: vi.fn(),
 }))
 
 vi.mock('./helpers/i18n', () => ({

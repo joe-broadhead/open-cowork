@@ -5,6 +5,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin'
 import securityPlugin from 'eslint-plugin-security'
 import noUnsanitizedPlugin from 'eslint-plugin-no-unsanitized'
 import jsxA11yPlugin from 'eslint-plugin-jsx-a11y'
+import reactHooks from 'eslint-plugin-react-hooks'
 
 const ignoredPaths = [
   '.git/**',
@@ -229,6 +230,57 @@ export default [
     rules: {
       'no-unsanitized/method': 'off',
       'no-unsanitized/property': 'off',
+    },
+  },
+  {
+    // Type-aware async-safety: flag unhandled promises so background work is
+    // explicitly awaited or `void`-marked. Scoped to app/package/mcp source +
+    // tests (everything already covered by a tsconfig project) so the type
+    // service can resolve each file.
+    files: [
+      'apps/desktop/src/**/*.ts', 'apps/desktop/src/**/*.tsx',
+      'apps/website/src/**/*.ts', 'apps/website/src/**/*.tsx',
+      'apps/gateway/src/**/*.ts', 'apps/standalone-gateway/src/**/*.ts',
+      'packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx',
+      'mcps/*/src/**/*.ts',
+    ],
+    // The gateway packages exclude their `*.test.ts` from their tsconfigs
+    // (they ship runtime-only dist), so the type service can't resolve those
+    // test files. Skip them here; their production source is still covered.
+    ignores: [
+      'apps/gateway/src/**/*.test.ts',
+      'apps/standalone-gateway/src/**/*.test.ts',
+      'packages/gateway-*/src/**/*.test.ts',
+    ],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+    },
+  },
+  {
+    // React hooks correctness for every renderer surface (desktop, website SSR
+    // portals, shared UI). rules-of-hooks catches hook-order bugs; exhaustive-deps
+    // keeps effect/memo dependency arrays honest.
+    files: [
+      'apps/desktop/src/renderer/**/*.tsx',
+      'apps/website/src/**/*.tsx',
+      'packages/ui/src/**/*.tsx',
+    ],
+    plugins: {
+      'react-hooks': reactHooks,
+    },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
     },
   },
 ]

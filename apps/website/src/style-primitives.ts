@@ -324,17 +324,5 @@ export function cloudWebsitePrimitiveStyles() {
     .ui-dialog__body {
       overflow: auto;
       padding: var(--space-4);
-    }
-    @keyframes ui-dialog-in {
-      from { opacity: 0; transform: translateX(-50%) translateY(var(--space-3)) scale(0.985); }
-      to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-    }
-    @keyframes ui-drawer-in {
-      from { opacity: 0.6; transform: translateX(var(--space-6)); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-    @keyframes ui-drawer-left-in {
-      from { opacity: 0.6; transform: translateX(calc(-1 * var(--space-6))); }
-      to { opacity: 1; transform: translateX(0); }
     }`
 }

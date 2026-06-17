@@ -548,6 +548,7 @@ function parseHexColor(value: string) {
   const match = value.match(/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)
   if (!match) return null
   const hex = match[1]
+  if (!hex) return null
   const isShort = hex.length === 3 || hex.length === 4
   const pairs = isShort
     ? hex.split('').map((part) => part + part)

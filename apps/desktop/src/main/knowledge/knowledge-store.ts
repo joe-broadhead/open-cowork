@@ -15,6 +15,8 @@ import type {
   KnowledgeSnapshotOptions,
   KnowledgeSnapshotPayload,
   KnowledgeSpace,
+  KnowledgeSpaceRole,
+  KnowledgeSpaceVisibility,
 } from '@open-cowork/shared'
 import {
   isKnowledgeLinkKind,
@@ -26,19 +28,35 @@ import {
   knowledgeRoleCanReview,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
+import type { KnowledgeCreateSpaceInput, KnowledgeStore } from './knowledge-store-contract.ts'
 
 const KNOWLEDGE_DB_SCHEMA_VERSION = 1
 const KNOWLEDGE_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
-const MAX_TITLE_BYTES = 240
-const MAX_TEXT_BYTES = 64 * 1024
-const MAX_LINKS = 100
-const MAX_BLOCKS = 300
-const MAX_LIST_ITEMS = 100
-const DEFAULT_SNAPSHOT_LIMIT = 100
-const MAX_SNAPSHOT_LIMIT = 100
+// Byte/size limits and the snapshot ceiling are storage-agnostic (validation is
+// identical for SQLite + Postgres), so they are exported for the Postgres impl
+// to reuse instead of re-deriving its own — divergence here would be a contract
+// hole, not a feature.
+export const KNOWLEDGE_MAX_TITLE_BYTES = 240
+export const KNOWLEDGE_MAX_TEXT_BYTES = 64 * 1024
+export const KNOWLEDGE_MAX_LINKS = 100
+export const KNOWLEDGE_MAX_BLOCKS = 300
+export const KNOWLEDGE_MAX_LIST_ITEMS = 100
+export const KNOWLEDGE_DEFAULT_SNAPSHOT_LIMIT = 100
+export const KNOWLEDGE_MAX_SNAPSHOT_LIMIT = 100
+const MAX_TITLE_BYTES = KNOWLEDGE_MAX_TITLE_BYTES
+const MAX_TEXT_BYTES = KNOWLEDGE_MAX_TEXT_BYTES
+const MAX_LINKS = KNOWLEDGE_MAX_LINKS
+const MAX_BLOCKS = KNOWLEDGE_MAX_BLOCKS
+const MAX_LIST_ITEMS = KNOWLEDGE_MAX_LIST_ITEMS
+const DEFAULT_SNAPSHOT_LIMIT = KNOWLEDGE_DEFAULT_SNAPSHOT_LIMIT
+const MAX_SNAPSHOT_LIMIT = KNOWLEDGE_MAX_SNAPSHOT_LIMIT
 
-type DbRow = Record<string, unknown>
+// A column→value bag from either backend. SQLite and the Postgres tables use
+// the SAME column names (the Postgres DDL mirrors the SQLite schema), so the
+// pure row→domain mappers below work unchanged against both.
+export type KnowledgeDbRow = Record<string, unknown>
+type DbRow = KnowledgeDbRow
 type KnowledgeWriteOptions = {
   id?: string
   now?: Date
@@ -226,16 +244,17 @@ function nowIso(options?: KnowledgeWriteOptions | InternalKnowledgeReviewInput) 
   return ((options as KnowledgeWriteOptions | undefined)?.now || new Date()).toISOString()
 }
 
-function workspaceIdFrom(value: string | null | undefined) {
+export function workspaceIdFrom(value: string | null | undefined) {
   const trimmed = value?.trim()
   return trimmed || LOCAL_WORKSPACE_ID
 }
 
-function snapshotLimit(value: number | null | undefined) {
+export function knowledgeSnapshotLimit(value: number | null | undefined) {
   const limit = Math.floor(Number(value))
   if (!Number.isFinite(limit) || limit <= 0) return DEFAULT_SNAPSHOT_LIMIT
   return Math.min(limit, MAX_SNAPSHOT_LIMIT)
 }
+const snapshotLimit = knowledgeSnapshotLimit
 
 function byteLength(value: string) {
   return new TextEncoder().encode(value).length
@@ -257,21 +276,26 @@ function stringValue(value: unknown, label: string, options: { required?: boolea
   return trimmed
 }
 
-function requiredString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
+export function requiredString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
   return stringValue(value, label, { required: true, maxBytes })!
 }
 
-function optionalString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
+export function optionalString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
   return stringValue(value, label, { maxBytes })
 }
 
-function jsonString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
+export function knowledgeJsonString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
   const json = JSON.stringify(value)
   if (byteLength(json) > maxBytes) throw new Error(`${label} is too large.`)
   return json
 }
+const jsonString = knowledgeJsonString
 
+// Postgres can return `jsonb` columns either as already-parsed objects (jsonb)
+// or as JSON strings (json/text), so the parser tolerates both shapes. SQLite
+// always stores text.
 function parseJson<T>(value: unknown, fallback: T): T {
+  if (value && typeof value === 'object') return value as T
   if (typeof value !== 'string' || !value.trim()) return fallback
   try {
     return JSON.parse(value) as T
@@ -280,7 +304,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
   }
 }
 
-function normalizeLinks(value: unknown): KnowledgePageLink[] {
+export function normalizeLinks(value: unknown): KnowledgePageLink[] {
   if (value === undefined || value === null) return []
   if (!Array.isArray(value)) throw new Error('Knowledge links must be an array.')
   return value.slice(0, MAX_LINKS).map((entry, index) => {
@@ -301,7 +325,7 @@ function blockId(index: number) {
   return `block-${index + 1}`
 }
 
-function normalizeBody(value: unknown): KnowledgePageBlock[] {
+export function normalizeBody(value: unknown): KnowledgePageBlock[] {
   if (!Array.isArray(value) || value.length === 0) throw new Error('Knowledge page body must be a non-empty array.')
   return value.slice(0, MAX_BLOCKS).map((entry, index) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -328,21 +352,24 @@ function normalizeBody(value: unknown): KnowledgePageBlock[] {
   })
 }
 
-function revisionFor(input: { pageId: string; version: number; body: KnowledgePageBlock[]; links: KnowledgePageLink[] }) {
+export function knowledgeRevisionFor(input: { pageId: string; version: number; body: KnowledgePageBlock[]; links: KnowledgePageLink[] }) {
   return createHash('sha256')
     .update(JSON.stringify(input))
     .digest('hex')
 }
+const revisionFor = knowledgeRevisionFor
 
-function defaultSpaceId(workspaceId: string) {
+export function knowledgeDefaultSpaceId(workspaceId: string) {
   return `space:${workspaceId}:company-os`
 }
+const defaultSpaceId = knowledgeDefaultSpaceId
 
-function defaultPageId(workspaceId: string) {
+export function knowledgeDefaultPageId(workspaceId: string) {
   return `page:${workspaceId}:operating-model`
 }
+const defaultPageId = knowledgeDefaultPageId
 
-function toSpace(row: DbRow): KnowledgeSpace {
+export function toSpace(row: DbRow): KnowledgeSpace {
   const role = row.role
   const visibility = row.visibility
   if (!isKnowledgeSpaceRole(role)) throw new Error('Stored knowledge space role is invalid.')
@@ -357,7 +384,7 @@ function toSpace(row: DbRow): KnowledgeSpace {
   }
 }
 
-function toPage(row: DbRow): KnowledgePage {
+export function toPage(row: DbRow): KnowledgePage {
   return {
     id: String(row.id),
     spaceId: String(row.space_id),
@@ -371,7 +398,7 @@ function toPage(row: DbRow): KnowledgePage {
   }
 }
 
-function toVersion(row: DbRow): KnowledgePageVersion {
+export function toVersion(row: DbRow): KnowledgePageVersion {
   const pageId = String(row.page_id || row.id)
   return {
     ...toPage(row),
@@ -382,7 +409,7 @@ function toVersion(row: DbRow): KnowledgePageVersion {
   }
 }
 
-function toProposal(row: DbRow): KnowledgeProposal {
+export function toProposal(row: DbRow): KnowledgeProposal {
   const status = row.status
   if (!isKnowledgeProposalStatus(status)) throw new Error('Stored knowledge proposal status is invalid.')
   return {
@@ -403,10 +430,13 @@ function toProposal(row: DbRow): KnowledgeProposal {
   }
 }
 
-function ensureWorkspaceSeed(db: DatabaseSync, workspaceId: string, now = new Date('2026-01-01T00:00:00.000Z')) {
-  const count = db.prepare('select count(*) as count from knowledge_spaces where workspace_id = ?').get(workspaceId) as { count?: number } | undefined
-  if (Number(count?.count || 0) > 0) return
-
+/**
+ * The canonical first-touch seed for a workspace: a "Company OS" Space and an
+ * "Operating model" page (version 1). Pure + deterministic so BOTH backends
+ * seed byte-identical content (same ids, blocks, revision hash) — the contract
+ * test relies on this equivalence.
+ */
+export function knowledgeWorkspaceSeed(workspaceId: string, now = new Date('2026-01-01T00:00:00.000Z')) {
   const at = now.toISOString()
   const spaceId = defaultSpaceId(workspaceId)
   const pageId = defaultPageId(workspaceId)
@@ -418,19 +448,38 @@ function ensureWorkspaceSeed(db: DatabaseSync, workspaceId: string, now = new Da
   ]
   const links: KnowledgePageLink[] = []
   const revision = revisionFor({ pageId, version: 1, body, links })
+  return {
+    at,
+    spaceId,
+    pageId,
+    versionId: `version:${pageId}:1`,
+    space: { name: 'Company OS', icon: 'book-open', hue: 'azure', visibility: 'company' as const, role: 'Maintainer' as const },
+    page: { title: 'Operating model', updatedBy: 'Open Cowork', version: 1, revision, body, links },
+  }
+}
+
+function ensureWorkspaceSeed(db: DatabaseSync, workspaceId: string, now = new Date('2026-01-01T00:00:00.000Z')) {
+  const count = db.prepare('select count(*) as count from knowledge_spaces where workspace_id = ?').get(workspaceId) as { count?: number } | undefined
+  if (Number(count?.count || 0) > 0) return
+
+  const seed = knowledgeWorkspaceSeed(workspaceId, now)
+  const { at, spaceId, pageId, versionId } = seed
+  const { space, page } = seed
+  const linksJson = jsonString(page.links, 'Knowledge links')
+  const bodyJson = jsonString(page.body, 'Knowledge body')
 
   db.prepare(`
     insert into knowledge_spaces (id, workspace_id, name, icon, hue, visibility, role, created_at, updated_at)
     values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(spaceId, workspaceId, 'Company OS', 'book-open', 'azure', 'company', 'Maintainer', at, at)
+  `).run(spaceId, workspaceId, space.name, space.icon, space.hue, space.visibility, space.role, at, at)
   db.prepare(`
     insert into knowledge_pages (id, workspace_id, space_id, title, updated_by, updated_at, version, revision, links_json, body_json, created_at)
     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(pageId, workspaceId, spaceId, 'Operating model', 'Open Cowork', at, 1, revision, jsonString(links, 'Knowledge links'), jsonString(body, 'Knowledge body'), at)
+  `).run(pageId, workspaceId, spaceId, page.title, page.updatedBy, at, page.version, page.revision, linksJson, bodyJson, at)
   db.prepare(`
     insert into knowledge_page_versions (id, page_id, workspace_id, space_id, title, updated_by, updated_at, version, revision, proposal_id, links_json, body_json)
     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(`version:${pageId}:1`, pageId, workspaceId, spaceId, 'Operating model', 'Open Cowork', at, 1, revision, null, jsonString(links, 'Knowledge links'), jsonString(body, 'Knowledge body'))
+  `).run(versionId, pageId, workspaceId, spaceId, page.title, page.updatedBy, at, page.version, page.revision, null, linksJson, bodyJson)
 }
 
 function getSpace(db: DatabaseSync, workspaceId: string, spaceId: string) {
@@ -448,27 +497,23 @@ function getPageByTitle(db: DatabaseSync, workspaceId: string, spaceId: string, 
   return row ? toPage(row) : null
 }
 
-function getProposal(db: DatabaseSync, proposalId: string, workspaceId?: string | null) {
-  const row = workspaceId
-    ? db.prepare('select * from knowledge_proposals where workspace_id = ? and id = ?').get(workspaceId, proposalId)
-    : db.prepare('select * from knowledge_proposals where id = ?').get(proposalId)
+// Proposal lookups are ALWAYS scoped to a concrete workspace — there is no
+// unscoped (id-only) branch, so a review on the wrong/absent workspace can never
+// reach another tenant's proposal (tenant-isolation invariant).
+function getProposal(db: DatabaseSync, proposalId: string, workspaceId: string) {
+  const row = db.prepare('select * from knowledge_proposals where workspace_id = ? and id = ?').get(workspaceId, proposalId)
   return row ? toProposal(row as DbRow) : null
 }
 
-function getProposalWorkspaceId(db: DatabaseSync, proposalId: string) {
-  const row = db.prepare('select workspace_id from knowledge_proposals where id = ?').get(proposalId) as DbRow | undefined
-  return typeof row?.workspace_id === 'string' ? row.workspace_id : null
-}
-
-function assertReadable(space: KnowledgeSpace) {
+export function assertReadable(space: KnowledgeSpace) {
   if (!knowledgeRoleCanRead(space.role)) throw new Error('Knowledge space is not readable for this role.')
 }
 
-function assertCanPropose(space: KnowledgeSpace) {
+export function assertCanPropose(space: KnowledgeSpace) {
   if (!knowledgeRoleCanPropose(space.role)) throw new Error('Knowledge space requires Contributor or Maintainer to propose changes.')
 }
 
-function assertCanReview(space: KnowledgeSpace) {
+export function assertCanReview(space: KnowledgeSpace) {
   if (!knowledgeRoleCanReview(space.role)) throw new Error('Knowledge space requires Maintainer to review proposals.')
 }
 
@@ -489,8 +534,8 @@ function commonLineCount(left: string[], right: string[]) {
   for (const leftLine of left) {
     for (let index = 0; index < right.length; index += 1) {
       current[index + 1] = leftLine === right[index]
-        ? previous[index] + 1
-        : Math.max(current[index], previous[index + 1] || 0)
+        ? (previous[index] ?? 0) + 1
+        : Math.max(current[index] ?? 0, previous[index + 1] || 0)
     }
     previous.splice(0, previous.length, ...current)
     current.fill(0)
@@ -498,7 +543,7 @@ function commonLineCount(left: string[], right: string[]) {
   return previous[right.length] || 0
 }
 
-function calculateDiffStats(current: KnowledgePage | null, body: KnowledgePageBlock[]) {
+export function calculateDiffStats(current: KnowledgePage | null, body: KnowledgePageBlock[]) {
   const currentLines = current ? blockDiffLines(current.body) : []
   const nextLines = blockDiffLines(body)
   const unchanged = commonLineCount(currentLines, nextLines)
@@ -508,7 +553,7 @@ function calculateDiffStats(current: KnowledgePage | null, body: KnowledgePageBl
   }
 }
 
-function graphFrom(spaces: KnowledgeSpace[], pages: KnowledgePage[]): KnowledgeGraph {
+export function graphFrom(spaces: KnowledgeSpace[], pages: KnowledgePage[]): KnowledgeGraph {
   const nodes = [
     { id: 'root', kind: 'root' as const, label: 'Company OS' },
     ...spaces.map((space) => ({ id: space.id, kind: 'space' as const, label: space.name, spaceId: space.id })),
@@ -621,6 +666,7 @@ export function createKnowledgeProposal(input: InternalKnowledgeProposalInput, o
 function updateProposalStatus(
   db: DatabaseSync,
   proposal: KnowledgeProposal,
+  workspaceId: string,
   status: KnowledgeProposalStatus,
   input: KnowledgeReviewInput | undefined,
   at: string,
@@ -628,30 +674,29 @@ function updateProposalStatus(
   db.prepare(`
     update knowledge_proposals
     set status = ?, reviewed_at = ?, reviewed_by = ?
-    where id = ?
+    where workspace_id = ? and id = ?
   `).run(
     status,
     at,
     optionalString(input?.reviewedBy, 'Knowledge reviewer', MAX_TITLE_BYTES) || 'you',
+    workspaceId,
     proposal.id,
   )
-  const updated = getProposal(db, proposal.id)
+  const updated = getProposal(db, proposal.id, workspaceId)
   if (!updated) throw new Error('Knowledge proposal was not found after review.')
   return updated
 }
 
 export function acceptKnowledgeProposal(proposalId: string, input: InternalKnowledgeReviewInput = {}): { proposal: KnowledgeProposal; page: KnowledgePageVersion } {
-  const workspaceId = input.workspaceId ? workspaceIdFrom(input.workspaceId) : null
+  const workspaceId = workspaceIdFrom(input.workspaceId)
   return withTransaction((db) => {
     const proposal = getProposal(db, requiredString(proposalId, 'Knowledge proposal id', 512), workspaceId)
     if (!proposal) throw new Error('Knowledge proposal was not found.')
     if (proposal.status !== 'pending') throw new Error('Knowledge proposal is not pending.')
-    const proposalWorkspaceId = getProposalWorkspaceId(db, proposal.id)
-    if (!proposalWorkspaceId) throw new Error('Knowledge proposal workspace was not found.')
-    const space = getSpace(db, proposalWorkspaceId, proposal.spaceId)
+    const space = getSpace(db, workspaceId, proposal.spaceId)
     if (!space) throw new Error('Knowledge space was not found.')
     assertCanReview(space)
-    const existing = proposal.pageId ? getPage(db, proposalWorkspaceId, proposal.pageId) : getPageByTitle(db, proposalWorkspaceId, proposal.spaceId, proposal.pageTitle)
+    const existing = proposal.pageId ? getPage(db, workspaceId, proposal.pageId) : getPageByTitle(db, workspaceId, proposal.spaceId, proposal.pageTitle)
     const at = nowIso(input)
     const pageId = existing?.id || `page:${randomUUID()}`
     const version = (existing?.version || 0) + 1
@@ -666,15 +711,15 @@ export function acceptKnowledgeProposal(proposalId: string, input: InternalKnowl
       db.prepare(`
         insert into knowledge_pages (id, workspace_id, space_id, title, updated_by, updated_at, version, revision, links_json, body_json, created_at)
         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(pageId, proposalWorkspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'), at)
+      `).run(pageId, workspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'), at)
     }
     const versionId = `version:${pageId}:${version}`
     db.prepare(`
       insert into knowledge_page_versions (id, page_id, workspace_id, space_id, title, updated_by, updated_at, version, revision, proposal_id, links_json, body_json)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(versionId, pageId, proposalWorkspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, proposal.id, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'))
+    `).run(versionId, pageId, workspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, proposal.id, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'))
 
-    const reviewed = updateProposalStatus(db, proposal, 'accepted', input, at)
+    const reviewed = updateProposalStatus(db, proposal, workspaceId, 'accepted', input, at)
     const page = db.prepare('select * from knowledge_page_versions where id = ?').get(versionId) as DbRow | undefined
     if (!page) throw new Error('Knowledge page version was not created.')
     return { proposal: reviewed, page: toVersion(page) }
@@ -682,16 +727,15 @@ export function acceptKnowledgeProposal(proposalId: string, input: InternalKnowl
 }
 
 export function declineKnowledgeProposal(proposalId: string, input: InternalKnowledgeReviewInput = {}): KnowledgeProposal {
-  const workspaceId = input.workspaceId ? workspaceIdFrom(input.workspaceId) : null
+  const workspaceId = workspaceIdFrom(input.workspaceId)
   return withTransaction((db) => {
     const proposal = getProposal(db, requiredString(proposalId, 'Knowledge proposal id', 512), workspaceId)
     if (!proposal) throw new Error('Knowledge proposal was not found.')
     if (proposal.status !== 'pending') throw new Error('Knowledge proposal is not pending.')
-    const proposalWorkspaceId = String((db.prepare('select workspace_id from knowledge_proposals where id = ?').get(proposal.id) as DbRow).workspace_id)
-    const space = getSpace(db, proposalWorkspaceId, proposal.spaceId)
+    const space = getSpace(db, workspaceId, proposal.spaceId)
     if (!space) throw new Error('Knowledge space was not found.')
     assertCanReview(space)
-    return updateProposalStatus(db, proposal, 'declined', input, nowIso(input))
+    return updateProposalStatus(db, proposal, workspaceId, 'declined', input, nowIso(input))
   }, input)
 }
 
@@ -765,4 +809,116 @@ export function getKnowledgeSpaceDetail(spaceId: string, workspaceId = LOCAL_WOR
     ensureWorkspaceSeed(db, workspaceIdFrom(workspaceId))
     return getSpace(db, workspaceIdFrom(workspaceId), spaceId)
   })
+}
+
+export type NormalizedKnowledgeSpace = {
+  id: string
+  name: string
+  icon: string | null
+  hue: string | null
+  visibility: KnowledgeSpaceVisibility
+  role: KnowledgeSpaceRole
+}
+
+/**
+ * Validate + normalize Space-creation input (storage-agnostic). Shared by both
+ * backends so a created Space is shaped/validated identically regardless of
+ * where it lands. Defaults: a derived slug id, `team` visibility, `Maintainer`
+ * role (the creator owns the Space).
+ */
+export function normalizeKnowledgeSpaceInput(
+  input: KnowledgeCreateSpaceInput,
+  options: KnowledgeWriteOptions = {},
+): NormalizedKnowledgeSpace {
+  const name = requiredString(input.name, 'Knowledge space name', MAX_TITLE_BYTES)
+  const icon = optionalString(input.icon, 'Knowledge space icon', MAX_TITLE_BYTES)
+  const hue = optionalString(input.hue, 'Knowledge space hue', MAX_TITLE_BYTES)
+  // An unrecognized visibility falls back to the default team scope (the original
+  // createKnowledgeSpace contract — consumers pre-validate, so this only guards
+  // direct/raw callers and keeps both store impls forgiving + identical).
+  const visibilityInput = input.visibility ?? undefined
+  const visibility = isKnowledgeSpaceVisibility(visibilityInput) ? visibilityInput : undefined
+  const role = input.role ?? undefined
+  if (role !== undefined && !isKnowledgeSpaceRole(role)) {
+    throw new Error('Knowledge space role is invalid.')
+  }
+  const id = options.id || `space:${randomUUID()}`
+  if (byteLength(id) > 512) throw new Error('Knowledge space id is too large.')
+  return {
+    id,
+    name,
+    icon,
+    hue,
+    visibility: visibility ?? 'team',
+    role: role ?? 'Maintainer',
+  }
+}
+
+export function createKnowledgeSpace(
+  workspaceIdInput: string,
+  input: KnowledgeCreateSpaceInput,
+  options: KnowledgeWriteOptions & KnowledgeStorageOptions = {},
+): KnowledgeSpace {
+  const workspaceId = workspaceIdFrom(workspaceIdInput)
+  return withTransaction((db) => {
+    ensureWorkspaceSeed(db, workspaceId)
+    const space = normalizeKnowledgeSpaceInput(input, options)
+    const existing = db.prepare('select id from knowledge_spaces where workspace_id = ? and id = ?').get(workspaceId, space.id) as DbRow | undefined
+    if (existing) throw new Error('Knowledge space already exists.')
+    const at = nowIso(options)
+    db.prepare(`
+      insert into knowledge_spaces (id, workspace_id, name, icon, hue, visibility, role, created_at, updated_at)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(space.id, workspaceId, space.name, space.icon, space.hue, space.visibility, space.role, at, at)
+    const created = getSpace(db, workspaceId, space.id)
+    if (!created) throw new Error('Knowledge space was not created.')
+    return created
+  }, options)
+}
+
+/**
+ * A {@link KnowledgeStore} backed by the desktop SQLite database. This is a thin
+ * synchronous adapter that delegates to the existing free functions — the same
+ * code the desktop IPC layer uses — so there is one source of truth for the
+ * SQLite behavior. `options.storageDataDir` targets a specific on-disk DB (for
+ * tests/isolation); omit it to use the app's default knowledge DB.
+ */
+export function createSqliteKnowledgeStore(storeOptions: KnowledgeStorageOptions = {}): KnowledgeStore {
+  const dataDir = storeOptions.storageDataDir ?? null
+  const storage: KnowledgeStorageOptions = dataDir ? { storageDataDir: dataDir } : {}
+  return {
+    listSnapshot(workspaceId, options = {}) {
+      return listKnowledgeSnapshot({
+        ...storage,
+        workspaceId,
+        spaceId: options.spaceId ?? null,
+        limit: options.limit ?? null,
+      })
+    },
+    listPageHistory(workspaceId, pageId, options = {}) {
+      return listKnowledgePageHistory(pageId, {
+        ...storage,
+        workspaceId,
+        limit: options.limit ?? null,
+      })
+    },
+    createSpace(workspaceId, input, options = {}) {
+      return createKnowledgeSpace(workspaceId, input, { ...storage, ...options })
+    },
+    getSpaceDetail(workspaceId, spaceId) {
+      return getKnowledgeSpaceDetail(spaceId, workspaceId)
+    },
+    createProposal(workspaceId, input, options = {}) {
+      return createKnowledgeProposal({ ...storage, ...input, workspaceId }, options)
+    },
+    acceptProposal(workspaceId, proposalId, input = {}, options = {}) {
+      return acceptKnowledgeProposal(proposalId, { ...storage, ...input, ...options, workspaceId })
+    },
+    declineProposal(workspaceId, proposalId, input = {}, options = {}) {
+      return declineKnowledgeProposal(proposalId, { ...storage, ...input, ...options, workspaceId })
+    },
+    restoreVersion(workspaceId, pageId, versionId, input = {}, options = {}) {
+      return restoreKnowledgePageVersion(pageId, versionId, { ...storage, ...input, ...options, workspaceId })
+    },
+  }
 }

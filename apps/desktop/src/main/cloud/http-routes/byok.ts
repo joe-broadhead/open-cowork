@@ -3,6 +3,11 @@ import type { CloudApiRouteInput } from './types.ts'
 export async function handleByokApiRoute(input: CloudApiRouteInput): Promise<boolean> {
   const { req, res, options, context, itemId: providerId, action, tools } = input
 
+  if (!options.policy.features.byok) {
+    tools.writePolicyError(res, 403, 'Bring-your-own-key is disabled for this cloud profile.', 'byok.disabled', options.corsOrigin)
+    return true
+  }
+
   if (!providerId && !action && req.method === 'GET') {
     tools.writeJson(res, 200, { secrets: await options.service.listByokSecrets(context.principal) }, options.corsOrigin)
     return true

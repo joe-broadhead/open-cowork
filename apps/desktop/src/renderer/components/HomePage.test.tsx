@@ -325,7 +325,7 @@ describe('HomePage', () => {
     await user.keyboard('{Enter}')
 
     await waitFor(() => {
-      const [, attachments, agent] = onStartThread.mock.calls[0]
+      const [, attachments, agent] = onStartThread.mock.calls[0]!
       const attachment = attachments?.[0]
       expect(attachments ?? []).toHaveLength(1)
       expect(attachment).toMatchObject({
@@ -582,7 +582,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => {
-      const [text, attachments, agent] = onStartThread.mock.calls[0]
+      const [text, attachments, agent] = onStartThread.mock.calls[0]!
       expect(text).toBe('Describe this image.')
       expect(attachments ?? []).toHaveLength(1)
       expect(agent).toBe('build')

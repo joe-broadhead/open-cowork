@@ -15,6 +15,10 @@ type SseReplayTopic = {
   lastSequence: number
   polling: boolean
   pollRequested: boolean
+  // When loadEvents is bounded (returns at most batchSize events), a full batch means
+  // more may be pending, so the topic re-polls immediately to drain the backlog instead
+  // of waiting a full pollMs per page. 0 = unbounded loadEvents (no immediate re-poll).
+  batchSize: number
   timer: ReturnType<typeof setInterval>
 }
 
@@ -82,6 +86,7 @@ export class CloudSseReplayHub {
       loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
       listener: (event: SequencedSseEvent) => void
       onError?: (error: unknown) => void
+      batchSize?: number
     },
   ) {
     if (this.closed) return () => {}
@@ -93,6 +98,7 @@ export class CloudSseReplayHub {
         lastSequence: input.afterSequence,
         polling: false,
         pollRequested: false,
+        batchSize: Number.isInteger(input.batchSize) && (input.batchSize as number) > 0 ? (input.batchSize as number) : 0,
         timer: setInterval(() => {
           this.requestPoll(input.key)
         }, input.pollMs),
@@ -158,6 +164,8 @@ export class CloudSseReplayHub {
       const afterSequence = this.replayAfterSequence(topic)
       const events = await topic.loadEvents(afterSequence)
       if (this.closed || this.topics.get(key) !== topic) return
+      // A full bounded batch means more events may be pending — drain immediately.
+      if (topic.batchSize > 0 && events.length >= topic.batchSize) topic.pollRequested = true
       for (const event of events) {
         if (event.sequence <= afterSequence) continue
         topic.lastSequence = Math.max(topic.lastSequence, event.sequence)

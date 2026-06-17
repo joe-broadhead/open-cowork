@@ -1021,7 +1021,10 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   }, [activeWorkspaceIsLocal, workspaceSupport.workspaceId])
 
   const agentPolicyReady = activeWorkspaceIsLocal || agentPolicyStatus === 'ready'
-  const effectiveAllowedPrimaryModes = agentPolicyReady ? allowedPrimaryModes : []
+  const effectiveAllowedPrimaryModes = useMemo(
+    () => (agentPolicyReady ? allowedPrimaryModes : []),
+    [agentPolicyReady, allowedPrimaryModes],
+  )
   const effectiveAllowedAgentNames = agentPolicyReady ? allowedAgentNames : []
   const effectiveFallbackPromptAgent = agentPolicyReady ? fallbackPromptAgent : null
   const canPromptFromHome = workspaceSupport.flags.canPrompt && agentPolicyReady

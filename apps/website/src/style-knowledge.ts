@@ -21,6 +21,13 @@ export function cloudWebsiteKnowledgeStyles() {
       max-height: calc(100vh - 180px);
       overflow: auto;
     }
+    .knowledge-rail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
     .knowledge-reader {
       min-height: 560px;
       padding: 0;

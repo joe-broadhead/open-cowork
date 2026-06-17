@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { CloudAbuseConfig, CloudBillingConfig } from '../../config-types.ts'
+import type { CloudAbuseConfig, CloudBillingConfig, CloudBillingEntitlements } from '../../config-types.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { ControlPlaneQuotaExceededError, type QuotaPolicyCode } from '../control-plane-errors.ts'
 import type {
@@ -87,17 +87,34 @@ export class CloudUsageGovernanceService {
     throw error
   }
 
+  // One subscription round-trip → resolved entitlements (or null when billing is off / the org
+  // has no subscription). Callers that need several entitlement limits for the same org should
+  // resolve once via this and read each key with `limitFromEntitlements`, instead of calling
+  // `effectiveQuotaLimit` per key (which would re-fetch the subscription each time).
+  private async resolveOrgEntitlements(orgId: string): Promise<CloudBillingEntitlements | null> {
+    if (!this.billingConfig || !isBillingConfigured(this.billingConfig)) return null
+    const subscription = await this.store.getBillingSubscription(orgId)
+    if (!subscription) return null
+    return resolvedBillingEntitlements(this.billingConfig, subscription)
+  }
+
+  private limitFromEntitlements(
+    entitlements: CloudBillingEntitlements | null,
+    fallback: number | null | undefined,
+    key?: EntitlementLimitKey,
+  ) {
+    if (!key || !entitlements) return fallback
+    const value = entitlements[key]
+    return value === undefined ? fallback : value
+  }
+
   async effectiveQuotaLimit(
     orgId: string,
     fallback: number | null | undefined,
     key?: EntitlementLimitKey,
   ) {
-    if (!key || !this.billingConfig || !isBillingConfigured(this.billingConfig)) return fallback
-    const subscription = await this.store.getBillingSubscription(orgId)
-    if (!subscription) return fallback
-    const entitlements = resolvedBillingEntitlements(this.billingConfig, subscription)
-    const value = entitlements[key]
-    return value === undefined ? fallback : value
+    if (!key) return fallback
+    return this.limitFromEntitlements(await this.resolveOrgEntitlements(orgId), fallback, key)
   }
 
   async consumeQuota(input: {
@@ -156,15 +173,17 @@ export class CloudUsageGovernanceService {
   }
 
   async commandQueueQuotaForOrg(orgId: string) {
+    // Single subscription fetch for both entitlement limits (was two, on the prompt hot path).
+    const entitlements = await this.resolveOrgEntitlements(orgId)
     return {
       orgId,
-      maxQueuedCommandsPerOrg: this.quotaLimit(await this.effectiveQuotaLimit(
-        orgId,
+      maxQueuedCommandsPerOrg: this.quotaLimit(this.limitFromEntitlements(
+        entitlements,
         this.abuse.maxQueuedCommandsPerOrg,
         'maxQueuedCommandsPerOrg',
       )),
-      maxQueueAgeMs: this.quotaLimit(await this.effectiveQuotaLimit(
-        orgId,
+      maxQueueAgeMs: this.quotaLimit(this.limitFromEntitlements(
+        entitlements,
         this.abuse.maxQueueAgeMs,
         'maxQueueAgeMs',
       )),
@@ -174,15 +193,17 @@ export class CloudUsageGovernanceService {
   }
 
   async workflowRunQuotaForOrg(orgId: string) {
+    // Single subscription fetch for both entitlement limits (was two).
+    const entitlements = await this.resolveOrgEntitlements(orgId)
     return {
       orgId,
-      maxConcurrentWorkflowRunsPerOrg: this.quotaLimit(await this.effectiveQuotaLimit(
-        orgId,
+      maxConcurrentWorkflowRunsPerOrg: this.quotaLimit(this.limitFromEntitlements(
+        entitlements,
         this.abuse.maxConcurrentWorkflowRunsPerOrg,
         'maxConcurrentWorkflowRunsPerOrg',
       )),
-      maxWorkflowRunsPerHour: this.quotaLimit(await this.effectiveQuotaLimit(
-        orgId,
+      maxWorkflowRunsPerHour: this.quotaLimit(this.limitFromEntitlements(
+        entitlements,
         this.abuse.maxWorkflowRunsPerHour,
         'maxWorkflowRunsPerHour',
       )),

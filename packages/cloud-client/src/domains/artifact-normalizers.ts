@@ -16,7 +16,7 @@ function cloudArtifactFilePath(artifactId: string, filename: string) {
 
 export function cloudArtifactIdFromFilePath(filePath: string) {
   const match = /^cloud-artifact:\/\/([^/]+)/.exec(filePath)
-  return match ? decodeURIComponent(match[1]) : null
+  return match?.[1] ? decodeURIComponent(match[1]) : null
 }
 
 export function normalizeCloudArtifact(value: unknown, fallbackOrder = 0): SessionArtifact {

@@ -44,7 +44,7 @@ function resolveSchemaPath() {
     resolve(process.cwd(), 'open-cowork.config.schema.json'),
   ].filter((value): value is string => Boolean(value))
 
-  return candidates.find((candidate) => existsSync(candidate)) || candidates[candidates.length - 1]
+  return candidates.find((candidate) => existsSync(candidate)) || candidates[candidates.length - 1]!
 }
 
 function createValidator(schema: JsonSchemaNode) {

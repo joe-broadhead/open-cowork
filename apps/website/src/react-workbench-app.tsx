@@ -181,7 +181,8 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     setViews((current) => {
       const next = { ...current }
       results.forEach((result, index) => {
-        if (result.status === 'fulfilled') next[targets[index].sessionId] = result.value
+        const target = targets[index]
+        if (target && result.status === 'fulfilled') next[target.sessionId] = result.value
       })
       viewsRef.current = next
       return next

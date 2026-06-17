@@ -105,9 +105,11 @@ export class InMemoryWorkflowsDomain {
 
   listWorkflows(tenantId: string, userId: string): CloudWorkflowRecord[] {
     this.host.requireTenantUser(tenantId, userId)
+    // Mirrors the Postgres store's defensive per-user workflow-list bound (500).
     return Array.from(this.workflows.values())
       .filter((workflow) => workflow.record.tenantId === tenantId && workflow.record.userId === userId)
       .sort((left, right) => right.record.updatedAt.localeCompare(left.record.updatedAt))
+      .slice(0, 500)
       .map((workflow) => clone(workflow.record))
   }
 

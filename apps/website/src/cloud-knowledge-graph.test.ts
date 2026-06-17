@@ -31,7 +31,7 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
-test('knowledge graph layout centres the root and tiers node radii by kind', () => {
+void test('knowledge graph layout centres the root and tiers node radii by kind', () => {
   const layout = computeKnowledgeGraphLayout(sampleGraph())
   const root = layout.nodes.find((node) => node.kind === 'root')
   assert.ok(root)
@@ -42,7 +42,7 @@ test('knowledge graph layout centres the root and tiers node radii by kind', () 
   assert.ok(layout.nodes.filter((node) => node.kind === 'page').every((node) => node.r === 8))
 })
 
-test('knowledge graph layout preserves every edge and exposes page ids only on pages', () => {
+void test('knowledge graph layout preserves every edge and exposes page ids only on pages', () => {
   const graph = sampleGraph()
   const layout = computeKnowledgeGraphLayout(graph)
   assert.equal(layout.edges.length, graph.edges.length)
@@ -54,7 +54,7 @@ test('knowledge graph layout preserves every edge and exposes page ids only on p
   assert.equal(layout.nodes.find((node) => node.kind === 'space')?.pageId, null)
 })
 
-test('knowledge graph layout clusters pages nearer their own space', () => {
+void test('knowledge graph layout clusters pages nearer their own space', () => {
   const layout = computeKnowledgeGraphLayout(sampleGraph())
   const byId = new Map(layout.nodes.map((node) => [node.id, node]))
   const p1 = byId.get('p1')

@@ -105,6 +105,13 @@ export type ByokSecretStoreOptions = {
   ids?: { randomUUID: () => string }
   kmsRefResolver?: ByokSecretRefResolver | null
   validators?: Record<string, ByokProviderValidator | undefined> | null
+  // Policy for a provider with no configured validator. Default false preserves the
+  // strict posture: the key stays `unsupported` and an explicit audited override
+  // (`activateWithoutValidation`) is required to activate it — the BYOK validation
+  // boundary is not weakened by default. A downstream deployment that cannot run
+  // validators but accepts trusting the user's own credential (the runtime surfaces a
+  // clear error if it is invalid) can set this true to activate unvalidated keys on save.
+  activateUnvalidatedProviders?: boolean
 }
 
 const PROVIDER_ID_MAX_LENGTH = 64
@@ -222,6 +229,7 @@ export function createByokSecretStore(
 ): ByokSecretStore {
   const ids = options.ids || { randomUUID }
   const validators = options.validators || {}
+  const activateUnvalidatedProviders = options.activateUnvalidatedProviders ?? false
 
   async function revealSecretRecord(secret: ByokSecretRecord, input: RevealByokSecretInput) {
     if (secret.ciphertext) {
@@ -372,12 +380,18 @@ export function createByokSecretStore(
 
       const validator = validators[providerId]
       if (!validator) {
+        // No validator for this provider. By default, trust the user's own credential
+        // and activate it (the runtime fails clearly if the key is actually invalid)
+        // rather than bricking it as `unsupported`. Strict deployments set
+        // activateUnvalidatedProviders: false to require a validator per provider.
         const record = await store.recordByokSecretValidation({
           orgId: input.orgId,
           providerId,
           secretId: secret.secretId,
-          status: 'unsupported',
-          validationError: `No BYOK validator is configured for provider "${providerId}".`,
+          status: activateUnvalidatedProviders ? 'active' : 'unsupported',
+          validationError: activateUnvalidatedProviders
+            ? null
+            : `No BYOK validator is configured for provider "${providerId}".`,
           actor: input.actor,
         })
         return record ? byokSecretMetadata(record) : null

@@ -175,6 +175,7 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
     },
     knowledge: {
       snapshot: (query) => request(withQuery(endpoint('knowledgeSnapshot', '/api/knowledge'), query || {})),
+      createSpace: (input) => request(endpoint('knowledgeSpaceCreate', '/api/knowledge/spaces'), { method: 'POST', body: input }),
       propose: (input) => request(endpoint('knowledgeProposalCreate', '/api/knowledge/proposals'), { method: 'POST', body: input }),
       acceptProposal: (proposalId, input) => request(endpointPath('knowledgeProposalAccept', '/api/knowledge/proposals/:proposalId/accept', { proposalId }), { method: 'POST', body: input || {} }),
       declineProposal: (proposalId, input) => request(endpointPath('knowledgeProposalDecline', '/api/knowledge/proposals/:proposalId/decline', { proposalId }), { method: 'POST', body: input || {} }),
@@ -251,6 +252,7 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
         list: () => request(endpoint('byok', '/api/byok')),
         save: (providerId, input) => request(endpointPath('byokSave', '/api/byok/:providerId', { providerId }), { method: 'POST', body: input }),
         validate: (providerId) => request(endpointPath('byokValidate', '/api/byok/:providerId/validate', { providerId }), { method: 'POST' }),
+        override: (providerId, reason) => request(endpointPath('byokOverride', '/api/byok/:providerId/override', { providerId }), { method: 'POST', body: { reason } }),
         disable: (providerId) => request(endpointPath('byokDisable', '/api/byok/:providerId', { providerId }), { method: 'DELETE' }),
       },
       apiTokens: {

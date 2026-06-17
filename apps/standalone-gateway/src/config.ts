@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+
 import { normalizeChannelProviderIdentity, type ChannelProviderKind } from "@open-cowork/gateway-channel";
-import { splitTrustedProxyCidrs } from "@open-cowork/shared";
+import { parseJsoncText, splitTrustedProxyCidrs } from "@open-cowork/shared";
 
 import { assertPrivateBindHost, assertPrivateOpenCodeEndpoint } from "./network-policy.js";
 import type { StandaloneGatewayConfig, StandaloneGatewayProviderConfig } from "./types.js";
@@ -9,8 +11,12 @@ export type StandaloneGatewayEnv = Record<string, string | undefined>;
 const defaultHost = "127.0.0.1";
 const defaultPort = 8795;
 
-export function loadStandaloneGatewayConfig(env: StandaloneGatewayEnv = process.env): StandaloneGatewayConfig {
-  const databaseUrl = readRequired(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL, "OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL");
+export function loadStandaloneGatewayConfig(rawEnv: StandaloneGatewayEnv = process.env): StandaloneGatewayConfig {
+  const env = mergeStandaloneGatewayFileConfig(rawEnv);
+  const store = readStoreKind(env.OPEN_COWORK_STANDALONE_GATEWAY_STORE);
+  const databaseUrl = store === "postgres"
+    ? readRequired(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL, "OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL")
+    : readString(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL);
   const adminToken = readRequired(env.OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN, "OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN");
   const opencodeBaseUrl = readRequired(env.OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL, "OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL");
   const allowPrivateDns = readBoolean(env.OPEN_COWORK_STANDALONE_GATEWAY_ALLOW_PRIVATE_DNS, false);
@@ -18,6 +24,7 @@ export function loadStandaloneGatewayConfig(env: StandaloneGatewayEnv = process.
   const publicBaseUrl = readNullable(env.OPEN_COWORK_STANDALONE_GATEWAY_PUBLIC_URL);
   const config: StandaloneGatewayConfig = {
     productMode: "standalone",
+    store,
     deploymentMode: readDeploymentMode(env.OPEN_COWORK_STANDALONE_GATEWAY_DEPLOYMENT_MODE),
     server: {
       host,
@@ -60,6 +67,7 @@ export function assertStandaloneGatewayProductionDatabaseSecurity(config: Standa
 }
 
 export function standaloneGatewayProductionDatabaseSecurityIssue(config: StandaloneGatewayConfig): string | null {
+  if (config.store === "memory") return null;
   if (config.deploymentMode === "solo") return null;
   if (!config.database.ssl) {
     return `Standalone Gateway ${config.deploymentMode} deployments require OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true.`;
@@ -167,6 +175,48 @@ function readPort(value: unknown, fallback: number): number {
 function readDeploymentMode(value: unknown): StandaloneGatewayConfig["deploymentMode"] {
   const text = readString(value);
   return text === "team" || text === "enterprise" ? text : "solo";
+}
+
+function readStoreKind(value: unknown): StandaloneGatewayConfig["store"] {
+  const text = readString(value).toLowerCase();
+  if (text === "memory" || text === "in-memory" || text === "inmemory") return "memory";
+  if (text === "" || text === "postgres" || text === "postgresql" || text === "pg") return "postgres";
+  throw new Error(`Unsupported OPEN_COWORK_STANDALONE_GATEWAY_STORE ${text}. Use postgres or memory.`);
+}
+
+// Optional file-config layer: environment variables override file values. The file (path via
+// OPEN_COWORK_STANDALONE_GATEWAY_CONFIG, or inline JSON via _CONFIG_JSON) is a flat JSON map of
+// the same OPEN_COWORK_STANDALONE_GATEWAY_* keys, so downstream builders can ship config as a
+// file instead of (or alongside) env vars — mirroring the Cloud Channel Gateway's file config.
+function mergeStandaloneGatewayFileConfig(env: StandaloneGatewayEnv): StandaloneGatewayEnv {
+  const layers: StandaloneGatewayEnv[] = [];
+  const path = readString(env.OPEN_COWORK_STANDALONE_GATEWAY_CONFIG);
+  if (path) layers.push(parseStandaloneGatewayConfigFile(readFileSync(path, "utf8"), path));
+  const inline = readString(env.OPEN_COWORK_STANDALONE_GATEWAY_CONFIG_JSON);
+  if (inline) layers.push(parseStandaloneGatewayConfigFile(inline, "OPEN_COWORK_STANDALONE_GATEWAY_CONFIG_JSON"));
+  if (layers.length === 0) return env;
+  return Object.assign({}, ...layers, env);
+}
+
+function parseStandaloneGatewayConfigFile(raw: string, source: string): StandaloneGatewayEnv {
+  // parseJsoncText accepts JSONC and already enforces a top-level object, so a malformed file
+  // or a non-object (array/primitive) surfaces as one clear, source-attributed error.
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseJsoncText(raw);
+  } catch (error) {
+    throw new Error(`Standalone Gateway config ${source} must be a JSON object of OPEN_COWORK_STANDALONE_GATEWAY_* keys: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+  const result: StandaloneGatewayEnv = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      result[key] = String(value);
+    } else {
+      throw new Error(`Standalone Gateway config ${source} key ${key} must be a string, number, or boolean.`);
+    }
+  }
+  return result;
 }
 
 function isPlaceholderSecret(value: string): boolean {

@@ -64,9 +64,9 @@ export function buildTaskTimeline(taskRun: TaskRun): TaskTimelineItem[] {
     if (toolGroup.length === 0) return
     result.push({
       kind: 'tools',
-      id: `tools:${toolGroup[0].id}`,
+      id: `tools:${toolGroup[0]!.id}`,
       tools: [...toolGroup],
-      order: toolGroup[0].order,
+      order: toolGroup[0]!.order,
     })
     toolGroup = []
   }

@@ -8,7 +8,8 @@ import type {
   KnowledgeSnapshotPayload,
   KnowledgeSpace,
 } from '@open-cowork/shared'
-import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
+import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
+import { KNOWLEDGE_VISIBILITIES, knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
@@ -16,11 +17,14 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
   EmptyState,
   Icon,
   type IconName,
+  Input,
   KnowledgeGraph,
   SegmentedControl,
+  Select,
   StudioPageHeader,
   WikiPage,
   WikiProposeEditDialog,
@@ -229,6 +233,73 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
   )
 }
 
+function NewSpaceDialog({ busy, error, onSubmit, onClose }: {
+  busy: boolean
+  error: string | null
+  onSubmit: (input: { name: string; visibility: KnowledgeSpaceVisibility }) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState('')
+  const [visibility, setVisibility] = useState<KnowledgeSpaceVisibility>('company')
+  const trimmedName = name.trim()
+  const canSubmit = Boolean(trimmedName) && !busy
+  const visibilityOptions = useMemo(
+    () => KNOWLEDGE_VISIBILITIES.map((value) => ({ value, label: knowledgeVisibilityLabel(value) })),
+    [],
+  )
+
+  return (
+    <Dialog
+      title={t('knowledge.newSpace.title', 'New Space')}
+      size="sm"
+      onClose={onClose}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            {t('knowledge.newSpace.cancel', 'Cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            leftIcon="plus"
+            disabled={!canSubmit}
+            disabledReason={!trimmedName ? t('knowledge.newSpace.needName', 'Add a name') : undefined}
+            onClick={() => onSubmit({ name: trimmedName, visibility })}
+          >
+            {busy ? t('knowledge.newSpace.creating', 'Creating') : t('knowledge.newSpace.create', 'Create')}
+          </Button>
+        </>
+      )}
+    >
+      <div className="studio-wiki-propose">
+        <p className="studio-wiki-propose__hint">
+          {t('knowledge.newSpace.hint', 'Spaces group related pages and set who can read, propose, and review them.')}
+        </p>
+        <label className="studio-wiki-propose__field">
+          <span>{t('knowledge.newSpace.nameLabel', 'Name')}</span>
+          <Input
+            value={name}
+            placeholder={t('knowledge.newSpace.namePlaceholder', 'e.g. Onboarding')}
+            disabled={busy}
+            autoFocus
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label className="studio-wiki-propose__field">
+          <span>{t('knowledge.newSpace.visibilityLabel', 'Visibility')}</span>
+          <Select
+            label={t('knowledge.newSpace.visibilityLabel', 'Visibility')}
+            value={visibility}
+            options={visibilityOptions}
+            disabled={busy}
+            onChange={(value) => setVisibility(value as KnowledgeSpaceVisibility)}
+          />
+        </label>
+        {error ? <p role="alert" className="studio-wiki-propose__error">{error}</p> : null}
+      </div>
+    </Dialog>
+  )
+}
+
 export function KnowledgePage() {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
@@ -242,6 +313,9 @@ export function KnowledgePage() {
   const [proposeOpen, setProposeOpen] = useState(false)
   const [proposeBusy, setProposeBusy] = useState(false)
   const [proposeError, setProposeError] = useState<string | null>(null)
+  const [newSpaceOpen, setNewSpaceOpen] = useState(false)
+  const [newSpaceBusy, setNewSpaceBusy] = useState(false)
+  const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
 
   const loadSnapshot = useCallback(async () => {
@@ -373,6 +447,29 @@ export function KnowledgePage() {
     }
   }, [activeWorkspaceId, loadSnapshot, selectedPage, selectedSpace])
 
+  const createSpace = useCallback(async ({ name, visibility }: { name: string; visibility: KnowledgeSpaceVisibility }) => {
+    setNewSpaceBusy(true)
+    setNewSpaceError(null)
+    try {
+      const space = await window.coworkApi.knowledge.createSpace({
+        workspaceId: activeWorkspaceId,
+        name,
+        visibility,
+      })
+      const next = await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId })
+      setSnapshot(next)
+      // Select the new Space by opening its first page when it has one. A brand-new
+      // Space starts empty, so selection falls back to the current readable page.
+      const firstPageOfSpace = next.pages.find((page) => page.spaceId === space.id)
+      if (firstPageOfSpace) setSelectedPageId(firstPageOfSpace.id)
+      setNewSpaceOpen(false)
+    } catch (createError) {
+      setNewSpaceError(createError instanceof Error ? createError.message : String(createError))
+    } finally {
+      setNewSpaceBusy(false)
+    }
+  }, [activeWorkspaceId])
+
   const canPropose = selectedSpace ? knowledgeRoleCanPropose(selectedSpace.role) : false
   const canReview = selectedSpace ? knowledgeRoleCanReview(selectedSpace.role) : false
 
@@ -420,7 +517,17 @@ export function KnowledgePage() {
         ) : null}
 
         <div className="grid min-h-[720px] grid-cols-[260px_minmax(0,1fr)_330px] gap-4">
-          <WikiSpaceRail
+          <div className="flex min-h-0 flex-col gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon="plus"
+              fullWidth
+              onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+            >
+              {t('knowledge.newSpace.action', 'New Space')}
+            </Button>
+            <WikiSpaceRail
             spaces={spacesForRail}
             activePageId={selectedPage?.id}
             viewToggle={(
@@ -444,7 +551,8 @@ export function KnowledgePage() {
               </button>
             )}
             onSelectPage={(_, page) => setSelectedPageId(page.id)}
-          />
+            />
+          </div>
 
           <div className="min-w-0 space-y-4">
             {view === 'graph' ? (
@@ -540,6 +648,14 @@ export function KnowledgePage() {
           error={proposeError}
           onSubmit={(input) => void submitProposal(input)}
           onClose={() => setProposeOpen(false)}
+        />
+      ) : null}
+      {newSpaceOpen ? (
+        <NewSpaceDialog
+          busy={newSpaceBusy}
+          error={newSpaceError}
+          onSubmit={(input) => void createSpace(input)}
+          onClose={() => setNewSpaceOpen(false)}
         />
       ) : null}
     </div>

@@ -237,11 +237,13 @@ function encode(value: string) {
   return encodeURIComponent(value)
 }
 
-function decode(value: string, field: string) {
+function decode(value: string | undefined, field: string | undefined) {
+  const label = field ?? 'value'
+  if (value === undefined) throw new Error(`${label} is missing`)
   try {
     return decodeURIComponent(value)
   } catch {
-    throw new Error(`${field} is not valid URI encoding`)
+    throw new Error(`${label} is not valid URI encoding`)
   }
 }
 

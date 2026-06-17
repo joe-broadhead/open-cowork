@@ -404,7 +404,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               <div className="px-1">
                 <input autoFocus type="text" value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleRename(session.id); if (e.key === 'Escape') setEditingId(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter') void handleRename(session.id); if (e.key === 'Escape') setEditingId(null) }}
                   onBlur={() => handleRename(session.id)}
                   className="w-full px-2 py-[6px] rounded-md text-[13px] bg-elevated border border-accent text-text outline-none" />
               </div>

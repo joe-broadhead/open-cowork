@@ -169,6 +169,13 @@ function runControlPlaneDomainContracts(
       })
       assert.equal((await store.getSessionProjection(tenantId, sessionId))?.sequence, event.sequence)
 
+      // Event reads are bounded by an optional limit (the SSE replay hot path uses it;
+      // omitting it returns the full stream). Append two more, then assert the bound.
+      await store.appendSessionEvent({ tenantId, sessionId, eventId: `${prefix}-event-2`, type: 'assistant.message', payload: { messageId: 'assistant-2', content: 'ok' } })
+      await store.appendSessionEvent({ tenantId, sessionId, eventId: `${prefix}-event-3`, type: 'assistant.message', payload: { messageId: 'assistant-3', content: 'ok' } })
+      assert.equal((await store.listSessionEvents(tenantId, sessionId, 0, 2)).length, 2)
+      assert.equal((await store.listSessionEvents(tenantId, sessionId, 0)).length, 3)
+
       const command = await store.enqueueSessionCommand({
         commandId: `${prefix}-command`,
         tenantId,
@@ -318,6 +325,9 @@ function runControlPlaneDomainContracts(
       assert.equal(issuedToken.token.last4, issuedToken.plaintext.slice(-4))
       const resolvedToken = await store.findApiTokenByPlaintext(issuedToken.plaintext)
       assert.equal(resolvedToken?.tokenId, issuedToken.token.tokenId)
+      // A correct token-id prefix with a tampered secret must still fail the hash check
+      // (guards the O(1) by-id fast path against forged ids).
+      assert.equal(await store.findApiTokenByPlaintext(`${issuedToken.plaintext}-tampered`), null)
       assert.equal((await store.listApiTokens(org.orgId)).some((apiToken) => apiToken.tokenId === issuedToken.token.tokenId), true)
       const grant = await store.grantApiTokenChannelBinding({
         orgId: org.orgId,

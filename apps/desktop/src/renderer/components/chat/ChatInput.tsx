@@ -399,7 +399,7 @@ export function ChatInput() {
       return
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); return }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSubmit(); return }
 
     const textarea = textareaRef.current
     if (!textarea) return
@@ -410,7 +410,7 @@ export function ChatInput() {
       const next = navigate('up', input, textarea)
       if (!next.handled) return
       e.preventDefault()
-      setInput(next.value)
+      setInput(next.value ?? input)
       requestAnimationFrame(() => resizeComposerTextarea())
     }
 
@@ -418,7 +418,7 @@ export function ChatInput() {
       const next = navigate('down', input, textarea)
       if (!next.handled) return
       e.preventDefault()
-      setInput(next.value)
+      setInput(next.value ?? input)
       requestAnimationFrame(() => resizeComposerTextarea())
     }
   }

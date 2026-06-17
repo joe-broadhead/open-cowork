@@ -27,6 +27,7 @@ import type {
 // pglite + real-Postgres control-plane contract suites.
 
 const WORKFLOW_RUN_LIST_LIMIT = 100
+const WORKFLOW_LIST_LIMIT = 500
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -108,10 +109,13 @@ export class PostgresWorkflowsRepository {
 
   async listWorkflows(tenantId: string, userId: string) {
     await this.options.requireTenantUser(tenantId, userId)
+    // Defensively bound the per-user workflow list so the query can't grow unbounded
+    // (keyset pagination is the future enhancement; the cap is far above realistic use).
     const result = await this.options.pool.query(
       `SELECT * FROM cloud_workflows
        WHERE tenant_id = $1 AND user_id = $2
-       ORDER BY updated_at DESC, workflow_id`,
+       ORDER BY updated_at DESC, workflow_id
+       LIMIT ${WORKFLOW_LIST_LIMIT}`,
       [tenantId, userId],
     )
     return result.rows.map(workflowFromRow)
@@ -228,7 +232,7 @@ export class PostgresWorkflowsRepository {
          WHERE tenant_id = $1 AND workflow_id = $2`,
         [input.tenantId, input.workflowId, input.runId, createdAt],
       )
-      return workflowRunFromRow(result.rows[0])
+      return workflowRunFromRow(result.rows[0]!)
     })
   }
 
@@ -297,8 +301,8 @@ export class PostgresWorkflowsRepository {
           [tenantId, workflowId, runId, retryStatus, retrySessionId, claimedAt],
         )
         return {
-          workflow: workflowFromRow(updatedWorkflow.rows[0]),
-          run: workflowRunFromRow(updatedRun.rows[0]),
+          workflow: workflowFromRow(updatedWorkflow.rows[0]!),
+          run: workflowRunFromRow(updatedRun.rows[0]!),
         }
       }
       const row = await this.maybeOne(
@@ -358,8 +362,8 @@ export class PostgresWorkflowsRepository {
         [workflow.tenantId, workflow.id, input.runId, claimedAt],
       )
       return {
-        workflow: workflowFromRow(updatedWorkflow.rows[0]),
-        run: workflowRunFromRow(result.rows[0]),
+        workflow: workflowFromRow(updatedWorkflow.rows[0]!),
+        run: workflowRunFromRow(result.rows[0]!),
       }
     })
   }
@@ -672,7 +676,7 @@ export class PostgresWorkflowsRepository {
           input.nextRunAt,
         ],
       )
-      return workflowRunFromRow(result.rows[0])
+      return workflowRunFromRow(result.rows[0]!)
     })
   }
 

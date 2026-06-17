@@ -8,6 +8,7 @@ import {
   type SetupIntentId,
 } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
+import { getDocsBaseUrl } from '../helpers/brand'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
 import { useSessionStore } from '../stores/session'
@@ -29,7 +30,7 @@ type ConnectionTestState =
   | { status: 'success'; signature: string; message: string }
   | { status: 'error'; signature: null; message: string }
 
-const localIntent = SETUP_INTENTS.find((intent) => intent.id === 'desktop-local') || SETUP_INTENTS[0]
+const localIntent = SETUP_INTENTS.find((intent) => intent.id === 'desktop-local') || SETUP_INTENTS[0]!
 const advancedIntents = SETUP_INTENTS.filter((intent) => intent.id !== 'desktop-local')
 
 const phaseProgress: Record<RuntimeLoadingPhase, number> = {
@@ -97,7 +98,7 @@ function docsLabel(path: string) {
 
 function docsHref(path: string) {
   if (/^https?:\/\//i.test(path)) return path
-  return `https://github.com/joe-broadhead/open-cowork/blob/master/${path.replace(/^\/+/, '')}`
+  return `${getDocsBaseUrl()}${path.replace(/^\/+/, '')}`
 }
 
 function runtimeProgressLabel(status: RuntimeLoadingStatus | null, fallback: string | null) {
@@ -218,7 +219,7 @@ export function SetupScreen({
     [providers, providerId],
   )
   const selectedIntent = useMemo(
-    () => SETUP_INTENTS.find((intent) => intent.id === selectedIntentId) || localIntent,
+    () => SETUP_INTENTS.find((intent) => intent.id === selectedIntentId) ?? localIntent,
     [selectedIntentId],
   )
 
@@ -252,7 +253,10 @@ export function SetupScreen({
     return () => { cancelled = true }
   }, [addGlobalError, loadedCredentialProviders, providerId])
 
-  const selectedCredentials = providerId ? (providerCredentials[providerId] || {}) : {}
+  const selectedCredentials = useMemo(
+    () => (providerId ? (providerCredentials[providerId] || {}) : {}),
+    [providerCredentials, providerId],
+  )
   const requiredCredentials = selectedProvider?.credentials.filter((credential) => credential.required !== false) || []
   const hasRequiredCredentials = requiredCredentials.every((credential) => (selectedCredentials[credential.key] || '').trim())
   const canContinue = Boolean(providerId && modelId.trim() && hasRequiredCredentials)
@@ -391,7 +395,7 @@ export function SetupScreen({
           </div>
           <h1 className="text-lg font-semibold text-text">
             {email
-              ? t('setup.welcomeUser', 'Welcome, {{name}}', { name: email.split('@')[0] })
+              ? t('setup.welcomeUser', 'Welcome, {{name}}', { name: email.split('@')[0]! })
               : t('setup.welcomeGeneric', 'Welcome to {{brandName}}', { brandName })}
           </h1>
           <p className="max-w-xl text-sm text-text-muted">

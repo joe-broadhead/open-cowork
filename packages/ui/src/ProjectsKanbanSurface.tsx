@@ -596,8 +596,8 @@ export function ProjectsKanbanSurface({
   className,
   ...props
 }: ProjectsKanbanSurfaceProps) {
-  const projects = board?.projects || []
-  const tasks = board?.tasks || []
+  const projects = useMemo(() => board?.projects || [], [board?.projects])
+  const tasks = useMemo(() => board?.tasks || [], [board?.tasks])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0]?.id || null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
@@ -614,7 +614,10 @@ export function ProjectsKanbanSurface({
   }, [projects])
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0] || null
-  const projectTasks = selectedProject ? tasks.filter((task) => task.projectId === selectedProject.id) : []
+  const projectTasks = useMemo(
+    () => (selectedProject ? tasks.filter((task) => task.projectId === selectedProject.id) : []),
+    [selectedProject, tasks],
+  )
 
   // The task detail is a slide-in overlay, so it stays closed until a card is
   // opened; only drop a stale selection when its task leaves the active project.

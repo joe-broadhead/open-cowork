@@ -7,7 +7,7 @@ import { initialCloudWebClientState } from './react-state.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
 
-test('React Cloud Web state initializes from bootstrap without feature data', () => {
+void test('React Cloud Web state initializes from bootstrap without feature data', () => {
   const bootstrap: CloudWebClientBootstrap = {
     role: 'admin',
     profileName: 'default',

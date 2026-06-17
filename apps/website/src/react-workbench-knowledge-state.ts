@@ -1,5 +1,5 @@
-import type { KnowledgeSpace } from '@open-cowork/shared'
-import { knowledgeRoleCanPropose } from '@open-cowork/shared'
+import type { KnowledgeSpace, KnowledgeSpaceVisibility } from '@open-cowork/shared'
+import { KNOWLEDGE_VISIBILITIES, knowledgeRoleCanPropose, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import { asRecord } from './react-workbench-controller.ts'
 
 function text(value: unknown, fallback = '') {
@@ -21,3 +21,12 @@ export function canManageCloudKnowledge(bootstrapRole: unknown, workspace: unkno
 export function knowledgeCaptureSpace(spaces: KnowledgeSpace[]) {
   return spaces.find((candidate) => knowledgeRoleCanPropose(candidate.role)) || null
 }
+
+/** The default visibility a new Space is created with (matches the Knowledge store server default). */
+export const KNOWLEDGE_DEFAULT_VISIBILITY: KnowledgeSpaceVisibility = 'team'
+
+/** Visibility choices for the "New Space" form, labelled via the single-sourced shared helper. */
+export const KNOWLEDGE_VISIBILITY_OPTIONS = KNOWLEDGE_VISIBILITIES.map((value) => ({
+  value,
+  label: knowledgeVisibilityLabel(value),
+}))

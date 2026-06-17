@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   BuiltInAgentDetail,
   CapabilitySkill,
@@ -83,7 +83,7 @@ export function CapabilitiesPage({
     [currentProjectDirectory],
   )
 
-  const loadAll = () => {
+  const loadAll = useCallback(() => {
     setLoading(true)
     const base = Promise.all([
       window.coworkApi.capabilities.tools(toolOptions),
@@ -113,14 +113,14 @@ export function CapabilitiesPage({
           setBuiltInAgents([])
           setWorkflowList(null)
         })
-    Promise.all([base, relationships]).finally(() => setLoading(false))
-  }
+    void Promise.all([base, relationships]).finally(() => setLoading(false))
+  }, [contextOptions, relationshipEnabled, toolOptions])
 
   useEffect(() => {
     loadAll()
     const unsubscribe = window.coworkApi.on.runtimeReady(() => loadAll())
     return unsubscribe
-  }, [currentSessionId, currentProjectDirectory, relationshipEnabled])
+  }, [loadAll])
 
   useEffect(() => {
     if (selection?.type !== 'tool') {

@@ -186,6 +186,9 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
   const [state, setState] = useState<AdminState>(EMPTY_STATE)
   const [memberFilter, setMemberFilter] = useState('')
   const [auditFilter, setAuditFilter] = useState('')
+  // The most recent issued invite — surfaced so the admin can copy + share the (single-use,
+  // expiring) invite token. The invitee accepts it via POST /api/invites/accept.
+  const [lastInvite, setLastInvite] = useState<{ email: string, token: string } | null>(null)
 
   const targets = {
     members: usePortalTarget('member-list'), memberCount: usePortalTarget('member-count'), inviteNotice: usePortalTarget('member-invite-notice'),
@@ -332,7 +335,13 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
       return () => form.removeEventListener('submit', listener, true)
     }
     const disposers = [
-      bindForm('member-invite-form', (data) => api.admin.members.invite({ email: text(data.get('email')).trim(), role: text(data.get('role'), 'member') }).then(() => undefined)),
+      bindForm('member-invite-form', (data) => {
+        const email = text(data.get('email')).trim()
+        return api.admin.members.invite({ email, role: text(data.get('role'), 'member') }).then((body) => {
+          const token = text(asRecord(body).inviteToken)
+          setLastInvite(token ? { email, token } : null)
+        })
+      }),
       bindForm('byok-form', (data) => {
         const providerId = text(data.get('providerId')).trim().toLowerCase()
         const apiKey = text(data.get('apiKey')).trim()
@@ -401,7 +410,12 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
 
   const portals = []
   if (targets.memberCount) portals.push(createPortal(<>{filteredMembers.length}</>, targets.memberCount))
-  if (targets.inviteNotice) portals.push(createPortal(<>{inviteDisabled ? inviteDisabledReason : 'Invite mode is enabled. Invited users activate on first verified sign-in.'}</>, targets.inviteNotice))
+  if (targets.inviteNotice) portals.push(createPortal(
+    lastInvite
+      ? <>Invite created for {lastInvite.email}. Share this single-use invite token (expires in 7 days): <code className="invite-token" data-cloud-invite-token>{lastInvite.token}</code></>
+      : <>{inviteDisabled ? inviteDisabledReason : 'Invite mode is enabled. Invited users activate on first verified sign-in.'}</>,
+    targets.inviteNotice,
+  ))
   if (targets.members) portals.push(createPortal(<>{filteredMembers.length ? filteredMembers.slice(0, 100).map((member, index) => {
     const id = rowKey(member, `member-${index}`)
     const roleMutationDisabled = memberMutationDisabled || member.status === 'disabled'
@@ -415,7 +429,7 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
   if (targets.workers) portals.push(createPortal(<><Row label="Org worker capacity" value={`${state.workerPools.length} pool(s), ${state.workers.filter((worker) => worker.status === 'active').length} active worker(s)`} />{state.workerPools.slice(0, 4).map((pool, index) => <Row key={rowKey(pool, `pool-${index}`)} label={pool.name || pool.poolId} value={`${pool.mode || 'pool'} - ${pool.status || 'unknown'}`} />)}{state.workers.slice(0, 6).map((worker, index) => <Row key={rowKey(worker, `worker-${index}`)} label={worker.displayName || worker.name || worker.workerId} value={`${worker.status || 'unknown'} - load ${worker.currentLoad ?? 0}`} />)}</>, targets.workers))
 
   if (targets.byokNote) portals.push(createPortal(<>{`Allowed providers: ${list(asRecord(state.policy?.byok).allowedProviderIds).join(', ') || 'profile defaults'} - ${asRecord(state.policy?.byok).kmsRefsEnabled ? 'KMS refs enabled' : 'KMS refs disabled'}`}</>, targets.byokNote))
-  if (targets.byok) portals.push(createPortal(<>{state.byok.length ? state.byok.map((secret, index) => { const id = rowKey(secret, `secret-${index}`); return <div className="row" key={id}><div><strong>{id}</strong> {secret.credentialKind === 'kms_ref' ? 'KMS ref' : 'key'} ending {text(secret.last4)}<br /><small>Updated {formatDate(secret.updatedAt)} - {secret.lastValidatedAt ? `validated ${formatDate(secret.lastValidatedAt)}` : 'not validated'}</small></div><div className="row-actions"><span className="pill" data-kind={pillKind(secret.status)}>{text(secret.status, 'unknown')}</span><ActionButton disabled={locked} title={lockTitle} onClick={() => void mutate('Provider validated', () => api.admin.byok.validate(id))}>Validate</ActionButton><ActionButton kind="danger" disabled={locked} title={lockTitle} onClick={() => { if (window.prompt(`Type the provider id to confirm BYOK credential disablement: ${id}`) === id) void mutate('Provider disabled', () => api.admin.byok.disable(id)); else status('Confirmation did not match the provider id.', 'warn') }}>Disable</ActionButton></div></div> }) : <p className="empty">No provider keys configured.</p>}</>, targets.byok))
+  if (targets.byok) portals.push(createPortal(<>{state.byok.length ? state.byok.map((secret, index) => { const id = rowKey(secret, `secret-${index}`); return <div className="row" key={id}><div><strong>{id}</strong> {secret.credentialKind === 'kms_ref' ? 'KMS ref' : 'key'} ending {text(secret.last4)}<br /><small>Updated {formatDate(secret.updatedAt)} - {secret.lastValidatedAt ? `validated ${formatDate(secret.lastValidatedAt)}` : 'not validated'}</small></div><div className="row-actions"><span className="pill" data-kind={pillKind(secret.status)}>{text(secret.status, 'unknown')}</span><ActionButton disabled={locked} title={lockTitle} onClick={() => void mutate('Provider validated', () => api.admin.byok.validate(id))}>Validate</ActionButton>{secret.status !== 'active' ? <ActionButton disabled={locked} title={lockTitle} onClick={() => { const reason = window.prompt(`Activate ${id} without validation? Enter an audit reason (recorded in the audit log):`); if (reason && reason.trim()) void mutate('Provider activated', () => api.admin.byok.override(id, reason.trim())); else if (reason !== null) status('An audit reason is required to override validation.', 'warn') }}>Activate</ActionButton> : null}<ActionButton kind="danger" disabled={locked} title={lockTitle} onClick={() => { if (window.prompt(`Type the provider id to confirm BYOK credential disablement: ${id}`) === id) void mutate('Provider disabled', () => api.admin.byok.disable(id)); else status('Confirmation did not match the provider id.', 'warn') }}>Disable</ActionButton></div></div> }) : <p className="empty">No provider keys configured.</p>}</>, targets.byok))
   if (targets.tokens) portals.push(createPortal(<>{state.revealToken ? <div className="secret-reveal"><label>New token<input readOnly value={state.revealToken} /></label><small>Shown once. It is not stored by this dashboard.</small><div className="row-actions"><button type="button" onClick={() => setState((current) => ({ ...current, revealToken: null }))}>Clear token</button></div></div> : null}{state.tokens.length ? state.tokens.slice(0, 100).map((token, index) => { const id = rowKey(token, `token-${index}`); return <div className="row" key={id}><div><strong>{text(token.name, 'API token')}</strong> ending {text(token.last4)}<br /><small>{list(token.scopes).join(', ') || 'scoped'} - last used {formatDate(token.lastUsedAt)}</small></div><div className="row-actions"><span className="pill" data-kind={token.revokedAt ? 'warn' : 'ok'}>{token.revokedAt ? 'revoked' : 'active'}</span>{!token.revokedAt ? <ActionButton kind="danger" disabled={locked} title={lockTitle} onClick={() => { if (window.prompt(`Type the token id to confirm token revocation: ${id}`) === id) void mutate('Token revoked', () => api.admin.apiTokens.revoke(id)); else status('Confirmation did not match the token id.', 'warn') }}>Revoke</ActionButton> : null}</div></div> }) : <p className="empty">No API tokens issued.</p>}</>, targets.tokens))
 
   if (targets.setup) portals.push(createPortal(<>{['Create or rotate a gateway-scoped service token in Connections.', 'Deploy the gateway with OPEN_COWORK_CLOUD_BASE_URL and OPEN_COWORK_GATEWAY_SERVICE_TOKEN.', 'Use the delivery backlog below to retry or dead-letter stuck outbound messages.'].map((step, index) => <div className="row compact" key={step}><span className="pill">{index + 1}</span><span>{step}</span></div>)}</>, targets.setup))

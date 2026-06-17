@@ -83,7 +83,7 @@ export function handleBrowserChannelRequest(input: BrowserChannelRequestInput) {
   }
   const channelBindingMatch = request.pathname.match(/^\/api\/channels\/bindings\/([^/]+)$/)
   if (request.method === 'PATCH' && channelBindingMatch) {
-    const bindingId = decodeURIComponent(channelBindingMatch[1])
+    const bindingId = decodeURIComponent(channelBindingMatch[1] ?? '')
     state.bindings = state.bindings.map((binding: Record<string, any>) => binding.bindingId === bindingId ? { ...binding, ...(request.body as Record<string, unknown>), updatedAt: iso(15) } : binding)
     return jsonResponse({ binding: state.bindings.find((binding: Record<string, any>) => binding.bindingId === bindingId) || null })
   }

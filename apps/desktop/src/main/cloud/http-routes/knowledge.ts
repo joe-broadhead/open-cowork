@@ -1,33 +1,21 @@
-import type {
-  KnowledgeProposalInput,
-  KnowledgeReviewInput,
-  KnowledgeSnapshotOptions,
-} from '@open-cowork/shared'
+import { isKnowledgeSpaceVisibility } from '@open-cowork/shared'
 import type { CloudApiRouteInput } from './types.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
-import {
-  acceptKnowledgeProposal,
-  createKnowledgeProposal,
-  declineKnowledgeProposal,
-  listKnowledgePageHistory,
-  listKnowledgeSnapshot,
-  restoreKnowledgePageVersion,
-} from '../../knowledge/knowledge-service.ts'
+import type {
+  KnowledgeStore,
+  KnowledgeStoreListOptions,
+} from '../../knowledge/knowledge-store-contract.ts'
 import { normalizeKnowledgeProposalContent } from '../../knowledge/knowledge-input.ts'
-
-type CloudKnowledgeSnapshotOptions = KnowledgeSnapshotOptions & {
-  storageDataDir?: string | null
-}
-type CloudKnowledgeProposalInput = KnowledgeProposalInput & {
-  storageDataDir?: string | null
-}
-type CloudKnowledgeReviewInput = KnowledgeReviewInput & {
-  storageDataDir?: string | null
-}
 
 function knowledgeWorkspaceId(context: CloudApiRouteInput['context']) {
   return `cloud:${context.principal.tenantId.trim() || context.principal.orgId || context.principal.userId || 'default'}`
+}
+
+// The cloud HTTP server always resolves a concrete store (Postgres in cloud,
+// SQLite otherwise) before dispatching here, so `knowledgeStore` is guaranteed.
+function knowledgeStore(input: CloudApiRouteInput): KnowledgeStore {
+  return input.options.knowledgeStore as KnowledgeStore
 }
 
 function knowledgeErrorStatus(error: unknown) {
@@ -56,12 +44,10 @@ function readSpaceId(input: CloudApiRouteInput) {
   return value && value.trim() ? value.trim() : null
 }
 
-function queryOptions(input: CloudApiRouteInput, workspaceId: string): CloudKnowledgeSnapshotOptions {
+function listOptions(input: CloudApiRouteInput): KnowledgeStoreListOptions {
   const spaceId = readSpaceId(input)
   const limit = input.tools.parseLimit(input.context.url)
   return {
-    workspaceId,
-    storageDataDir: input.options.knowledgeDataDir,
     ...(spaceId ? { spaceId } : {}),
     ...(limit ? { limit } : {}),
   }
@@ -96,18 +82,13 @@ function assertKnowledgeReviewAuthority(input: CloudApiRouteInput) {
   }
 }
 
-function assertKnowledgeProposalAuthority(input: CloudApiRouteInput) {
-  const { principal } = input.context
-  const allowed = principal.authSource === 'api_token'
-    ? principalHasPrivilegedTokenScope(principal, 'admin')
-    : principalHasOrgAdminRole(principal)
-  if (!allowed) {
-    throw new CloudServiceError(403, 'Knowledge proposal creation requires an org admin or admin-scoped API token.')
-  }
-}
-
 export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promise<void> {
   const { req, res, options, itemId: collection, action: itemId, artifactId: itemAction, tools } = input
+
+  if (!options.policy.features.knowledge) {
+    tools.writePolicyError(res, 403, 'Knowledge is disabled for this cloud profile.', 'knowledge.disabled', options.corsOrigin)
+    return
+  }
 
   try {
     await options.service.ensurePrincipal(input.context.principal)
@@ -116,11 +97,35 @@ export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promis
     return
   }
 
+  // The workspace id is the tenant-isolation boundary: it is recomputed from the
+  // authenticated principal on every request and passed as the first argument to
+  // every store call below, so a request can only ever read/mutate its own
+  // workspace.
   const workspaceId = knowledgeWorkspaceId(input.context)
+  const store = knowledgeStore(input)
 
   if (!collection && req.method === 'GET') {
     try {
-      tools.writeJson(res, 200, listKnowledgeSnapshot(queryOptions(input, workspaceId)), options.corsOrigin)
+      tools.writeJson(res, 200, await store.listSnapshot(workspaceId, listOptions(input)), options.corsOrigin)
+    } catch (error) {
+      writeKnowledgeError(input, error)
+    }
+    return
+  }
+
+  if (collection === 'spaces' && !itemId && req.method === 'POST') {
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024) as Record<string, unknown>
+    try {
+      // Creating a Space is a structural change, so it is org-admin gated (like review). The
+      // creator owns the new Space as Maintainer; the store validates name/visibility.
+      assertKnowledgeReviewAuthority(input)
+      const visibilityRaw = tools.readString(body.visibility)
+      tools.writeJson(res, 201, await store.createSpace(workspaceId, {
+        name: tools.readString(body.name) || '',
+        visibility: isKnowledgeSpaceVisibility(visibilityRaw) ? visibilityRaw : undefined,
+        icon: tools.readString(body.icon) || undefined,
+        hue: tools.readString(body.hue) || undefined,
+      }), options.corsOrigin)
     } catch (error) {
       writeKnowledgeError(input, error)
     }
@@ -131,13 +136,13 @@ export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promis
     if (!itemId && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       try {
-        assertKnowledgeProposalAuthority(input)
-        tools.writeJson(res, 201, createKnowledgeProposal({
+        // Proposing is governed by the space role (the store's assertCanPropose — Contributor or
+        // Maintainer), not org-admin: any active member with a contributor role may propose, and
+        // proposals stay pending until a Maintainer/admin reviews (assertKnowledgeReviewAuthority).
+        tools.writeJson(res, 201, await store.createProposal(workspaceId, {
           ...normalizeKnowledgeProposalContent(body as Record<string, unknown>),
-          workspaceId,
-          storageDataDir: input.options.knowledgeDataDir,
           by: knowledgeActor(input),
-        } as CloudKnowledgeProposalInput), options.corsOrigin)
+        }), options.corsOrigin)
       } catch (error) {
         writeKnowledgeError(input, error)
       }
@@ -145,15 +150,12 @@ export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promis
     }
 
     if (itemId && itemAction === 'accept' && req.method === 'POST') {
-      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       try {
         assertKnowledgeReviewAuthority(input)
-        tools.writeJson(res, 200, acceptKnowledgeProposal(id(itemId, 'Knowledge proposal id'), {
-          ...(body as KnowledgeReviewInput),
-          workspaceId,
-          storageDataDir: input.options.knowledgeDataDir,
+        tools.writeJson(res, 200, await store.acceptProposal(workspaceId, id(itemId, 'Knowledge proposal id'), {
           reviewedBy: knowledgeActor(input),
-        } as CloudKnowledgeReviewInput), options.corsOrigin)
+        }), options.corsOrigin)
       } catch (error) {
         writeKnowledgeError(input, error)
       }
@@ -161,15 +163,12 @@ export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promis
     }
 
     if (itemId && itemAction === 'decline' && req.method === 'POST') {
-      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       try {
         assertKnowledgeReviewAuthority(input)
-        tools.writeJson(res, 200, declineKnowledgeProposal(id(itemId, 'Knowledge proposal id'), {
-          ...(body as KnowledgeReviewInput),
-          workspaceId,
-          storageDataDir: input.options.knowledgeDataDir,
+        tools.writeJson(res, 200, await store.declineProposal(workspaceId, id(itemId, 'Knowledge proposal id'), {
           reviewedBy: knowledgeActor(input),
-        } as CloudKnowledgeReviewInput), options.corsOrigin)
+        }), options.corsOrigin)
       } catch (error) {
         writeKnowledgeError(input, error)
       }
@@ -179,7 +178,7 @@ export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promis
 
   if (collection === 'pages' && itemId && itemAction === 'history' && req.method === 'GET') {
     try {
-      tools.writeJson(res, 200, listKnowledgePageHistory(id(itemId, 'Knowledge page id'), queryOptions(input, workspaceId)), options.corsOrigin)
+      tools.writeJson(res, 200, await store.listPageHistory(workspaceId, id(itemId, 'Knowledge page id'), listOptions(input)), options.corsOrigin)
     } catch (error) {
       writeKnowledgeError(input, error)
     }
@@ -192,11 +191,9 @@ export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promis
       assertKnowledgeReviewAuthority(input)
       const rawVersionId = (body as Record<string, unknown> | null)?.versionId
       const versionId = id(typeof rawVersionId === 'string' ? rawVersionId : undefined, 'Knowledge version id')
-      tools.writeJson(res, 200, restoreKnowledgePageVersion(id(itemId, 'Knowledge page id'), versionId, {
-        workspaceId,
-        storageDataDir: input.options.knowledgeDataDir,
+      tools.writeJson(res, 200, await store.restoreVersion(workspaceId, id(itemId, 'Knowledge page id'), versionId, {
         reviewedBy: knowledgeActor(input),
-      } as CloudKnowledgeReviewInput), options.corsOrigin)
+      }), options.corsOrigin)
     } catch (error) {
       writeKnowledgeError(input, error)
     }

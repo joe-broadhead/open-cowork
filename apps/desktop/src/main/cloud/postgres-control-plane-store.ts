@@ -123,6 +123,7 @@ import type {
   WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
 import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
+import { cloudPostgresPoolPlan, type CloudPostgresPoolConfig } from './postgres-pool-options.ts'
 import { workspaceEventCursorFromRow } from './workspace-event-cursor.ts'
 import { normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import { usageEventFromRow } from './postgres-domains/billing.ts'
@@ -178,9 +179,20 @@ export type PostgresControlPlaneStoreOptions = {
 const require = createRequire(import.meta.url)
 
 const CHANNEL_TEXT_MAX_LENGTH = 256
-function loadPgPool(connectionString: string): PgPool {
-  const pg = require('pg') as { Pool: new (options: { connectionString: string }) => PgPool }
-  return new pg.Pool({ connectionString })
+export function loadPgPool(connectionString: string): PgPool {
+  type PgPoolClient = { query(text: string): Promise<unknown> }
+  type RealPgPool = PgPool & { on?(event: 'connect', handler: (client: PgPoolClient) => void): void }
+  const pg = require('pg') as { Pool: new (options: CloudPostgresPoolConfig) => RealPgPool }
+  const { config, lockTimeoutMs } = cloudPostgresPoolPlan(connectionString)
+  const pool = new pg.Pool(config)
+  if (lockTimeoutMs > 0 && typeof pool.on === 'function') {
+    // lock_timeout is not a native pool option; set it per connection so a blocked
+    // FOR UPDATE waits at most lockTimeoutMs instead of pinning a pooled connection.
+    pool.on('connect', (client) => {
+      void Promise.resolve(client.query(`SET lock_timeout = ${lockTimeoutMs}`)).catch(() => {})
+    })
+  }
+  return pool
 }
 
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
@@ -886,7 +898,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
             createdAt,
           ],
         )
-        command = commandFromRow(commandResult.rows[0])
+        command = commandFromRow(commandResult.rows[0]!)
       }
       const updated = await client.query(
         `UPDATE cloud_channel_interactions
@@ -895,7 +907,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [interaction.interactionId, usedAt],
       )
-      const resolvedInteraction = channelInteractionFromRow(updated.rows[0])
+      const resolvedInteraction = channelInteractionFromRow(updated.rows[0]!)
       await this.recordAuditEventWithExecutor(client, {
         orgId: resolvedInteraction.orgId,
         actorType: 'system',
@@ -999,7 +1011,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           createdAt,
         ],
       )
-      return sessionFromRow(result.rows[0])
+      return sessionFromRow(result.rows[0]!)
     })
   }
 
@@ -1100,8 +1112,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async listAllSessions() {
+    // Defensively bound this cross-tenant read so it can never become an unbounded
+    // full-table scan; it has no production caller (diagnostics/compat only).
     const result = await this.pool.query(
-      `SELECT * FROM cloud_sessions ORDER BY updated_at DESC, tenant_id, session_id`,
+      `SELECT * FROM cloud_sessions ORDER BY updated_at DESC, tenant_id, session_id LIMIT 1000`,
     )
     return result.rows.map(sessionFromRow)
   }
@@ -1147,11 +1161,27 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          FOR UPDATE OF sessions SKIP LOCKED`,
         [nowMs, now.toISOString(), limit],
       )
+      // Batch-fetch the current leases for all selected sessions in one query instead
+      // of a per-row locking SELECT (the N+1). The CTE already holds `FOR UPDATE OF
+      // sessions SKIP LOCKED` on each session, which serializes claims per session, so
+      // the per-row lease FOR UPDATE was redundant — an unclaimed session has no
+      // concurrent lease mutation (renew/release require a live lease token it lacks).
+      const leaseByKey = new Map<string, ReturnType<typeof leaseFromRow>>()
+      if (selected.rows.length > 0) {
+        const leaseRows = await client.query(
+          `SELECT * FROM cloud_worker_leases
+           WHERE (tenant_id, session_id) IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
+          [selected.rows.map((row) => String(row.tenant_id)), selected.rows.map((row) => String(row.session_id))],
+        )
+        for (const leaseRow of leaseRows.rows) {
+          leaseByKey.set(`${String(leaseRow.tenant_id)} ${String(leaseRow.session_id)}`, leaseFromRow(leaseRow))
+        }
+      }
       const leases = []
       for (const row of selected.rows) {
         const tenantId = String(row.tenant_id)
         const sessionId = String(row.session_id)
-        const currentLease = await this.getLease(tenantId, sessionId, client, true)
+        const currentLease = leaseByKey.get(`${tenantId} ${sessionId}`) || null
         if (currentLease && currentLease.leaseExpiresAt > nowMs) continue
         const attempt = numberValue(row.next_lease_attempt) + 1
         const leaseRecord = {
@@ -1188,7 +1218,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
             leaseRecord.checkpointVersion,
           ],
         )
-        leases.push(leaseFromRow(result.rows[0]))
+        leases.push(leaseFromRow(result.rows[0]!))
       }
       return {
         leases,
@@ -1295,17 +1325,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [input.tenantId, input.sessionId, eventId, sequence, input.type, JSON.stringify(payload), createdAt],
       )
-      return eventFromRow(inserted.rows[0])
+      return eventFromRow(inserted.rows[0]!)
     })
   }
 
-  async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0) {
+  async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
     await this.requireSession(tenantId, sessionId)
+    // `limit` bounds the read for the SSE replay hot path (it paginates by advancing its
+    // cursor across polls). Callers that need the full stream (projection rebuild) omit
+    // it and get every event.
+    const bounded = Number.isInteger(limit) && (limit as number) > 0
     const result = await this.pool.query(
       `SELECT * FROM cloud_session_events
        WHERE tenant_id = $1 AND session_id = $2 AND sequence > $3
-       ORDER BY sequence`,
-      [tenantId, sessionId, afterSequence],
+       ORDER BY sequence${bounded ? ' LIMIT $4' : ''}`,
+      bounded ? [tenantId, sessionId, afterSequence, limit] : [tenantId, sessionId, afterSequence],
     )
     return result.rows.map(eventFromRow)
   }
@@ -1390,17 +1424,18 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           createdAt,
         ],
       )
-      return workspaceEventFromRow(inserted.rows[0])
+      return workspaceEventFromRow(inserted.rows[0]!)
     })
   }
 
-  async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0) {
+  async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
     await this.requireTenantUser(tenantId, userId)
+    const bounded = Number.isInteger(limit) && (limit as number) > 0
     const result = await this.pool.query(
       `SELECT * FROM cloud_workspace_events
        WHERE tenant_id = $1 AND user_id = $2 AND sequence > $3
-       ORDER BY sequence`,
-      [tenantId, userId, afterSequence],
+       ORDER BY sequence${bounded ? ' LIMIT $4' : ''}`,
+      bounded ? [tenantId, userId, afterSequence, limit] : [tenantId, userId, afterSequence],
     )
     return result.rows.map(workspaceEventFromRow)
   }
@@ -1459,7 +1494,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         `UPDATE cloud_sessions SET updated_at = $3 WHERE tenant_id = $1 AND session_id = $2`,
         [input.tenantId, input.sessionId, updatedAt],
       )
-      return projectionFromRow(result.rows[0])
+      return projectionFromRow(result.rows[0]!)
     })
   }
 
@@ -1525,7 +1560,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           leaseRecord.checkpointVersion,
         ],
       )
-      return leaseFromRow(result.rows[0])
+      return leaseFromRow(result.rows[0]!)
     })
   }
 
@@ -1561,7 +1596,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [lease.tenantId, lease.sessionId, now.getTime() + ttlMs],
       )
-      return leaseFromRow(result.rows[0])
+      return leaseFromRow(result.rows[0]!)
     })
   }
 
@@ -1578,7 +1613,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [lease.tenantId, lease.sessionId],
       )
-      return leaseFromRow(result.rows[0])
+      return leaseFromRow(result.rows[0]!)
     })
   }
 
@@ -1764,7 +1799,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           createdAt,
         ],
       )
-      return commandFromRow(result.rows[0])
+      return commandFromRow(result.rows[0]!)
     })
   }
 
@@ -1801,7 +1836,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [String(selected.command_id), lease.leasedBy, lease.leaseToken],
       )
-      return commandFromRow(result.rows[0])
+      return commandFromRow(result.rows[0]!)
     })
   }
 
@@ -1824,7 +1859,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [commandId, now.toISOString()],
       )
-      return commandFromRow(result.rows[0])
+      return commandFromRow(result.rows[0]!)
     })
   }
 
@@ -1845,7 +1880,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          RETURNING *`,
         [commandId, error, redactOperationalText(error, 512, 'Command error')],
       )
-      return commandFromRow(result.rows[0])
+      return commandFromRow(result.rows[0]!)
     })
   }
 

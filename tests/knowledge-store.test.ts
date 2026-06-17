@@ -4,12 +4,14 @@ import { DatabaseSync } from 'node:sqlite'
 import {
   acceptKnowledgeProposal,
   createKnowledgeProposal,
+  createKnowledgeSpace,
   declineKnowledgeProposal,
   listKnowledgePageHistory,
   listKnowledgeSnapshot,
   restoreKnowledgePageVersion,
   setKnowledgeDatabaseForTests,
 } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
+import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
 
 function withMemoryKnowledgeStore(run: (db: DatabaseSync) => void) {
   const db = new DatabaseSync(':memory:')
@@ -214,6 +216,24 @@ test('knowledge store computes diff stats from content instead of client input',
   assert.equal(proposal.del, 6)
 }))
 
+test('knowledge store creates additional workspace-scoped Spaces', () => withMemoryKnowledgeStore(() => {
+  const workspaceId = 'workspace-spaces'
+  listKnowledgeSnapshot({ workspaceId }) // seed the default Space
+
+  const space = createKnowledgeSpace(workspaceId, { name: 'Engineering', visibility: 'team', icon: 'blocks', hue: 'violet' })
+  assert.equal(space.name, 'Engineering')
+  assert.equal(space.visibility, 'team')
+  assert.equal(space.role, 'Maintainer') // the creator owns the new Space
+
+  // It appears in the workspace snapshot alongside the seeded Space, and is scoped to the workspace.
+  assert.ok(listKnowledgeSnapshot({ workspaceId }).spaces.some((entry) => entry.name === 'Engineering'))
+  assert.ok(!listKnowledgeSnapshot({ workspaceId: 'workspace-other' }).spaces.some((entry) => entry.name === 'Engineering'))
+
+  // An invalid visibility falls back to team; a blank name is rejected.
+  assert.equal(createKnowledgeSpace(workspaceId, { name: 'Private notes', visibility: 'bogus' as KnowledgeSpaceVisibility }).visibility, 'team')
+  assert.throws(() => createKnowledgeSpace(workspaceId, { name: '' }), /name/i)
+}))
+
 test('knowledge store scopes proposal review to the requested workspace', () => withMemoryKnowledgeStore(() => {
   const cloudWorkspaceId = 'workspace-knowledge-cloud'
   const localWorkspaceId = 'local'
@@ -230,6 +250,11 @@ test('knowledge store scopes proposal review to the requested workspace', () => 
 
   listKnowledgeSnapshot({ workspaceId: localWorkspaceId })
   assert.throws(() => acceptKnowledgeProposal(proposal.id, { workspaceId: localWorkspaceId }), /not found/)
+  // Tenant-isolation regression: an accept/decline with NO workspace must NOT fall through to an
+  // unscoped lookup that reaches another workspace's proposal — it resolves to the local sentinel.
+  assert.throws(() => acceptKnowledgeProposal(proposal.id), /not found/)
+  assert.throws(() => declineKnowledgeProposal(proposal.id), /not found/)
+  // The cross-tenant attempts did not mutate it; the owning workspace can still accept.
   assert.equal(acceptKnowledgeProposal(proposal.id, { workspaceId: cloudWorkspaceId }).proposal.status, 'accepted')
 }))
 

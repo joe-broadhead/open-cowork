@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { axe } from 'vitest-axe'
 import {
   Badge,
   Button,
@@ -476,7 +477,7 @@ describe('Studio primitives', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Coworkers' }))
-    expect(onNavigate).toHaveBeenCalledWith(navSections[0].items[1])
+    expect(onNavigate).toHaveBeenCalledWith(navSections[0]!.items[1])
   })
 
   it('renders presence, conversation lanes, kanban cards, and run timeline states', () => {
@@ -699,5 +700,24 @@ describe('PrimitiveGallery', () => {
     expect(screen.getByRole('button', { name: 'Loading settings' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Toast' })).toBeInTheDocument()
     expect(screen.getByText('Mode selection is managed by policy.')).toBeInTheDocument()
+  })
+
+  it('has no axe accessibility violations across the shared primitive set', async () => {
+    const { container } = render(<PrimitiveGallery />)
+    // The gallery exercises every shared primitive (buttons, inputs, selects,
+    // cards, dialogs, badges, the Studio production surfaces) in one tree, so
+    // this locks their structural a11y (roles, names, contrast) for both apps,
+    // which single-source these components from @open-cowork/ui.
+    // `heading-order` is a page-structure rule about the synthetic demo gallery's
+    // own heading flow (a card title rendered as <h3> is context-appropriate for
+    // a real surface) — not a defect in the shared components, so it's scoped out
+    // here. Component-level a11y (roles, accessible names, color-contrast) is enforced.
+    const result = await axe(container, {
+      rules: {
+        'color-contrast': { enabled: true },
+        'heading-order': { enabled: false },
+      },
+    })
+    expect(result.violations).toEqual([])
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChartArtifactSource, SessionArtifact } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
@@ -77,6 +77,10 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
       muted: ensureReadableTextColor(textMuted, surface),
       secondary: ensureReadableTextColor(textSecondary, surface),
     }
+    // themeVersion is an intentional cache-buster: it is bumped by the
+    // theme MutationObserver above to force a recompute of the CSS-variable
+    // snapshot when the UI theme changes, even though it isn't read here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeVersion])
 
   const themedSpec = useMemo(() => {
@@ -103,7 +107,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
     return toolCallId || null
   }, [toolCallId])
 
-  const requestCapture = () => {
+  const requestCapture = useCallback(() => {
     if (!canCapture) return
     if (capturedForSpecRef.current === specSignature) return
     if (!iframeRef.current?.contentWindow) return
@@ -120,7 +124,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
       requestId,
       scale: 2,
     }, targetOrigin)
-  }
+  }, [canCapture, specSignature])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent<ChartFrameMessage>) => {
@@ -205,7 +209,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
         window.clearInterval(frameReadyPingIntervalRef.current)
       }
     }
-  }, [canCapture, chartSource, frameOrigin, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
+  }, [canCapture, chartSource, frameOrigin, registerChartArtifact, requestCapture, sessionId, specSignature, taskRunId, toolCallId, toolName])
 
   useEffect(() => {
     if (!frameLoaded || !frameReady || !iframeRef.current?.contentWindow) return

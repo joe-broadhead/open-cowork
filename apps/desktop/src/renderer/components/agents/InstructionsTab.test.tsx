@@ -23,7 +23,7 @@ describe('InstructionsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /Be concise/i }))
 
     expect(onChange).toHaveBeenCalledWith(expect.stringContaining('Existing guidance'))
-    expect(onChange.mock.calls[0][0]).toMatch(/^Answer in 3/)
+    expect(onChange.mock.calls[0]![0]).toMatch(/^Answer in 3/)
   })
 
   it('switches between edit and markdown preview states', () => {

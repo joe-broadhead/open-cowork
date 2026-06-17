@@ -168,7 +168,7 @@ export function ChatInputModelMenu({
               const isActive = currentModel === model.id
               const isHighlighted = highlightIndex === index
               const showFeaturedBoundary =
-                hasFeatured && index > 0 && filtered[index - 1].featured && !model.featured
+                hasFeatured && index > 0 && filtered[index - 1]!.featured && !model.featured
               return (
                 <div key={model.id}>
                   {showFeaturedBoundary && (

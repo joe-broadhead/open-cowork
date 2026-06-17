@@ -123,7 +123,9 @@ describe('buildChatTimeline', () => {
       actionsEnabled: false,
       data: { id: 'message-1', content: 'After tool.' },
     })
-    expect(timeline[0].kind === 'message' && timeline[2].kind === 'message' && timeline[0].key !== timeline[2].key).toBe(true)
+    const first = timeline[0]!
+    const third = timeline[2]!
+    expect(first.kind === 'message' && third.kind === 'message' && first.key !== third.key).toBe(true)
   })
 
   it('preserves whitespace-only segments around interleaved tools', () => {

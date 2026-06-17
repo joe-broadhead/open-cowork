@@ -44,7 +44,7 @@ export class PostgresWorkerHeartbeatsRepository {
         nowIso(input.now),
       ],
     )
-    return heartbeatFromRow(result.rows[0])
+    return heartbeatFromRow(result.rows[0]!)
   }
 
   async listWorkerHeartbeats() {

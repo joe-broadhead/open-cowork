@@ -34,12 +34,6 @@ import {
   summarizeCloudProjectSource,
   normalizeWorkflowSteps,
 } from '@open-cowork/shared'
-import {
-  getCapabilitySkillBundle,
-  getCapabilityTool,
-  listCapabilitySkills,
-  listCapabilityTools,
-} from '../capability-catalog.ts'
 import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
   ApiTokenScope,
@@ -66,7 +60,6 @@ import type {
   IssuedChannelInteractionRecord,
   ManagedWorkerPoolStatus,
   ManagedWorkerStatus,
-  OrgMemberRecord,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
@@ -100,13 +93,9 @@ import type {
 } from './runtime-adapter.ts'
 import {
   evaluateCloudProjectDirectoryPolicy,
-  evaluateCloudProjectSourcePolicy,
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
-import {
-  isCloudProjectSnapshotObjectKeyForTenant,
-  type CloudProjectSourceService,
-} from './project-source-service.ts'
+import type { CloudProjectSourceService as CloudProjectSourceStore } from './project-source-service.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
 import type {
   PublicChannelBindingRecord,
@@ -121,6 +110,21 @@ import {
   CloudByokService,
   type ByokManagementPolicy,
 } from './services/byok-service.ts'
+import {
+  CloudMemberService,
+  type CloudEmailSender,
+  type MembershipInviteResult,
+  type PublicOrgMemberRecord,
+} from './services/member-service.ts'
+import { CloudCoordinationService } from './services/coordination-service.ts'
+import { CloudCapabilityService } from './services/capability-service.ts'
+import { CloudSettingMetadataService } from './services/setting-metadata-service.ts'
+import {
+  CloudOverviewService,
+  type CloudAdminPolicyOverview,
+  type CloudWorkspaceOverview,
+} from './services/overview-service.ts'
+import { CloudProjectSourceService } from './services/project-source-service.ts'
 import {
   normalizePermissionPayload,
   normalizePromptPayload,
@@ -174,9 +178,6 @@ import {
   boundedOptionalText,
   boundedText,
   includesAllowed,
-  normalizeControlPlaneRole,
-  normalizeEmailAddress,
-  normalizeMembershipStatus,
   normalizedCloudListLimit,
   readNullableString,
   readString,
@@ -210,71 +211,9 @@ export type CloudPrincipal = {
   workerScopes?: string[]
 }
 
-export type CloudWorkspaceOverview = {
-  tenantId: string
-  tenantName: string | null
-  orgId: string
-  orgName: string
-  userId: string
-  accountId: string
-  email: string
-  role: 'owner' | 'admin' | 'member'
-  profileName: string
-  policy: {
-    features: Record<string, boolean>
-    allowedAgents: string[] | null
-    allowedTools: string[] | null
-    allowedMcps: string[] | null
-    localFiles: 'disabled'
-    localStdioMcps: 'disabled'
-    machineRuntimeConfig: 'disabled'
-  }
-}
-
-export type PublicOrgMemberRecord = OrgMemberRecord
-
-export type CloudAdminPolicyOverview = {
-  org: {
-    orgId: string
-    tenantId: string
-    name: string
-    planKey: string | null
-    status: string
-  }
-  signup: {
-    mode: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
-    allowSelfServiceSignup: boolean
-    allowedEmailDomains: string[]
-    invitesEnabled: boolean
-  }
-  profile: {
-    name: string
-    label: string | null
-    description: string | null
-  }
-  features: Record<string, boolean>
-  allowedAgents: string[] | null
-  allowedTools: string[] | null
-  allowedMcps: string[] | null
-  runtime: {
-    configSource: 'app'
-    machineRuntimeConfig: 'disabled' | 'allowlisted'
-    localStdioMcps: 'disabled' | 'allowlisted'
-    hostProjectDirectories: 'disabled' | 'allowlisted'
-    remoteApprovalResponses: 'disabled' | 'allowlisted'
-  }
-  projectSources: CloudRuntimePolicy['projectSources']
-  gateway: {
-    channelsEnabled: boolean
-    webhooksEnabled: boolean
-  }
-  byok: {
-    allowedProviderIds: string[] | null
-    kmsRefsEnabled: boolean
-    kmsRefPrefixesConfigured: boolean
-    envRefsEnabled: boolean
-  }
-}
+export type { CloudEmailMessage } from './services/member-service.ts'
+export type { CloudEmailSender, MembershipInviteResult, PublicOrgMemberRecord }
+export type { CloudAdminPolicyOverview, CloudWorkspaceOverview } from './services/overview-service.ts'
 
 export type CloudUsageTotalRecord = {
   eventType: string
@@ -499,10 +438,18 @@ export class CloudSessionService {
   private readonly billingConfig: CloudBillingConfig | null
   private readonly billingAdapter: BillingAdapter | null
   private readonly identityPolicy: CloudIdentityPolicy
-  private readonly projectSources: CloudProjectSourceService | null
+  private readonly projectSources: CloudProjectSourceStore | null
+  private readonly projectSourceService: CloudProjectSourceService
+  private readonly overviewService: CloudOverviewService
   private readonly managedWorkerService: CloudManagedWorkerService
   private readonly usageGovernance: CloudUsageGovernanceService
   private readonly channelDomain: CloudChannelDomainService
+  private readonly memberService: CloudMemberService
+  private readonly coordinationService: CloudCoordinationService
+  private readonly capabilityService: CloudCapabilityService
+  private readonly settingMetadataService: CloudSettingMetadataService
+  private readonly inviteSigningSecret: string | Buffer | null
+  private readonly emailSender: CloudEmailSender | null
 
   constructor(
     store: ControlPlaneStore,
@@ -517,7 +464,9 @@ export class CloudSessionService {
     billingConfig: CloudBillingConfig | null = null,
     billingAdapter: BillingAdapter | null = null,
     identityPolicy: CloudIdentityPolicy = { allowSelfServiceSignup: true },
-    projectSources: CloudProjectSourceService | null = null,
+    projectSources: CloudProjectSourceStore | null = null,
+    inviteSigningSecret: string | Buffer | null = null,
+    emailSender: CloudEmailSender | null = null,
   ) {
     this.store = store
     this.runtime = runtime
@@ -538,6 +487,23 @@ export class CloudSessionService {
     this.billingAdapter = billingAdapter
     this.identityPolicy = identityPolicy
     this.projectSources = projectSources
+    this.inviteSigningSecret = inviteSigningSecret
+    this.emailSender = emailSender
+    this.projectSourceService = new CloudProjectSourceService({
+      store,
+      policy,
+      projectSources,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+    })
+    this.overviewService = new CloudOverviewService({
+      store,
+      policy,
+      identityPolicy,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      byokPolicyOverview: () => this.byokService.getPolicyOverview(),
+    })
     this.managedWorkerService = new CloudManagedWorkerService(store, (principal) => this.ensurePrincipal(principal))
     this.usageGovernance = new CloudUsageGovernanceService({ store, abuse, billingConfig })
     this.channelDomain = new CloudChannelDomainService({
@@ -557,6 +523,30 @@ export class CloudSessionService {
       auditActor: (principal) => this.auditActor(principal),
       stableCloudId,
     })
+    this.memberService = new CloudMemberService({
+      store,
+      identityPolicy,
+      inviteSigningSecret,
+      emailSender,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+    })
+    this.coordinationService = new CloudCoordinationService({
+      store,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      deliverCloudCoordinationWatchEvent: (event) => this.deliverCloudCoordinationWatchEvent(event),
+    })
+    this.capabilityService = new CloudCapabilityService({
+      policy,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+    })
+    this.settingMetadataService = new CloudSettingMetadataService({
+      store,
+      policy,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+    })
   }
 
   get eventBus() {
@@ -568,41 +558,25 @@ export class CloudSessionService {
   }
 
   validateProjectSource(source: CloudProjectSourceInput | null | undefined): CloudProjectSourcePolicyVerdict {
-    return this.projectSources?.validateProjectSource(source) || evaluateCloudProjectSourcePolicy(source, this.policy)
+    return this.projectSourceService.validateProjectSource(source)
   }
 
   async uploadProjectSnapshot(
     principal: CloudPrincipal,
     input: CloudProjectSnapshotUploadInput,
   ): Promise<CloudProjectSnapshotUploadResult> {
-    await this.ensurePrincipal(principal)
-    if (!this.projectSources) throw new CloudServiceError(503, 'Cloud project snapshot storage is not configured.')
-    return this.projectSources.uploadSnapshot(principal, input)
+    return this.projectSourceService.uploadProjectSnapshot(principal, input)
   }
 
   async getSessionProjectSource(tenantId: string, sessionId: string): Promise<CloudProjectSource | null> {
-    const projection = await this.store.getSessionProjection(tenantId, sessionId)
-    return normalizeCloudProjectSource(projection?.view?.projectSource)
+    return this.projectSourceService.getSessionProjectSource(tenantId, sessionId)
   }
 
   private normalizeAndValidateProjectSource(
     source: CloudProjectSourceInput | null | undefined,
     tenantId: string,
   ) {
-    if (source === undefined || source === null) return null
-    const normalized = normalizeCloudProjectSource(source)
-    const verdict = this.validateProjectSource(normalized)
-    if (!normalized || !verdict.allowed) {
-      throw new CloudServiceError(400, verdict.reason || 'Cloud project source is not allowed.', {
-        policyCode: verdict.policyCode || 'project_source.denied',
-      })
-    }
-    if (normalized.kind === 'snapshot' && !isCloudProjectSnapshotObjectKeyForTenant(tenantId, normalized.objectKey)) {
-      throw new CloudServiceError(400, 'Project snapshot does not belong to this tenant.', {
-        policyCode: 'project_source.snapshot.tenant',
-      })
-    }
-    return normalized
+    return this.projectSourceService.normalizeAndValidateProjectSource(source, tenantId)
   }
 
   private async bindSessionProjectSource(
@@ -714,140 +688,38 @@ export class CloudSessionService {
   }
 
   async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {
-    await this.ensurePrincipal(principal)
-    const membership = await this.store.resolvePrincipalMembership({
-      tenantId: principal.tenantId,
-      accountId: principal.accountId || principal.userId,
-      email: principal.email,
-    })
-    if (!membership) throw new CloudServiceError(403, 'Cloud membership is not active.')
-    return {
-      tenantId: principal.tenantId,
-      tenantName: principal.tenantName || null,
-      orgId: membership.org.orgId,
-      orgName: membership.org.name,
-      userId: principal.userId,
-      accountId: membership.account.accountId,
-      email: membership.account.email,
-      role: membership.membership.role,
-      profileName: this.policy.profileName,
-      policy: {
-        features: this.policy.features,
-        allowedAgents: this.policy.allowedAgents,
-        allowedTools: this.policy.allowedTools,
-        allowedMcps: this.policy.allowedMcps,
-        localFiles: 'disabled',
-        localStdioMcps: 'disabled',
-        machineRuntimeConfig: 'disabled',
-      },
-    }
+    return this.overviewService.getWorkspaceOverview(principal)
   }
 
   async getAdminPolicyOverview(principal: CloudPrincipal): Promise<CloudAdminPolicyOverview> {
-    await this.ensurePrincipal(principal)
-    const membership = await this.store.resolvePrincipalMembership({
-      tenantId: principal.tenantId,
-      accountId: principal.accountId || principal.userId,
-      email: principal.email,
-    })
-    if (!membership) throw new CloudServiceError(403, 'Cloud membership is not active.')
-    const signupMode = resolvedSignupMode(this.identityPolicy)
-    return {
-      org: {
-        orgId: membership.org.orgId,
-        tenantId: membership.org.tenantId,
-        name: membership.org.name,
-        planKey: membership.org.planKey,
-        status: membership.org.status,
-      },
-      signup: {
-        mode: signupMode,
-        allowSelfServiceSignup: this.identityPolicy.allowSelfServiceSignup,
-        allowedEmailDomains: [...(this.identityPolicy.allowedEmailDomains || [])],
-        invitesEnabled: signupMode === 'invite',
-      },
-      profile: {
-        name: this.policy.profileName,
-        label: this.policy.profile.label || null,
-        description: this.policy.profile.description || null,
-      },
-      features: this.policy.features,
-      allowedAgents: this.policy.allowedAgents,
-      allowedTools: this.policy.allowedTools,
-      allowedMcps: this.policy.allowedMcps,
-      runtime: {
-        configSource: 'app',
-        machineRuntimeConfig: this.policy.allowMachineRuntimeConfig ? 'allowlisted' : 'disabled',
-        localStdioMcps: this.policy.allowLocalStdioMcps || this.policy.allowedLocalMcpNames.length ? 'allowlisted' : 'disabled',
-        hostProjectDirectories: this.policy.allowHostProjectDirectories || this.policy.allowedHostProjectDirectories.length ? 'allowlisted' : 'disabled',
-        remoteApprovalResponses: this.policy.allowRemoteApprovalResponses ? 'allowlisted' : 'disabled',
-      },
-      projectSources: this.policy.projectSources,
-      gateway: {
-        channelsEnabled: this.policy.features.agents !== false,
-        webhooksEnabled: this.policy.features.webhooks !== false,
-      },
-      byok: this.byokService.getPolicyOverview(),
-    }
+    return this.overviewService.getAdminPolicyOverview(principal)
   }
 
-  async listOrgMembers(
+  listOrgMembers(
     principal: CloudPrincipal,
     input: { query?: string | null, limit?: number | null } = {},
   ): Promise<PublicOrgMemberRecord[]> {
-    await this.ensurePrincipal(principal)
-    this.assertOrgAdmin(principal)
-    return this.store.listOrgMembers(this.principalOrgId(principal), {
-      query: input.query || null,
-      limit: input.limit || 100,
-    })
+    return this.memberService.listOrgMembers(principal, input)
   }
 
-  async inviteOrgMember(
+  inviteOrgMember(
     principal: CloudPrincipal,
     input: { email: string, role?: ControlPlaneRole | null },
-  ): Promise<PublicOrgMemberRecord> {
-    await this.ensurePrincipal(principal)
-    this.assertOrgAdmin(principal)
-    const signupMode = resolvedSignupMode(this.identityPolicy)
-    if (signupMode !== 'invite') {
-      throw new CloudServiceError(403, 'Member invites are available only when cloud signup mode is invite.')
-    }
-    const email = normalizeEmailAddress(input.email)
-    const role = normalizeControlPlaneRole(input.role || 'member')
-    if (role === 'owner' && principal.role !== 'owner' && principal.authSource !== 'local') {
-      throw new CloudServiceError(403, 'Only org owners can invite another owner.')
-    }
-    const orgId = this.principalOrgId(principal)
-    const account = await this.store.createAccount({
-      accountId: stableCloudId('account', orgId, email),
-      email,
-      idpSubject: null,
-    })
-    const membership = await this.store.upsertMembership({
-      orgId,
-      accountId: account.accountId,
-      role,
-      status: 'invited',
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: principal.accountId || principal.userId,
-      },
-    })
-    return {
-      orgId,
-      accountId: account.accountId,
-      email: account.email,
-      displayName: account.displayName,
-      role: membership.role,
-      status: membership.status,
-      createdAt: membership.createdAt,
-      updatedAt: membership.updatedAt,
-    }
+  ): Promise<MembershipInviteResult> {
+    return this.memberService.inviteOrgMember(principal, input)
   }
 
-  async updateOrgMember(
+  acceptMembershipInvite(token: string): Promise<{
+    orgId: string
+    accountId: string
+    email: string
+    role: ControlPlaneRole
+    status: ControlPlaneMembershipStatus
+  }> {
+    return this.memberService.acceptMembershipInvite(token)
+  }
+
+  updateOrgMember(
     principal: CloudPrincipal,
     accountId: string,
     input: {
@@ -856,64 +728,14 @@ export class CloudSessionService {
       confirm?: string | null
     },
   ): Promise<PublicOrgMemberRecord> {
-    await this.ensurePrincipal(principal)
-    this.assertOrgAdmin(principal)
-    const orgId = this.principalOrgId(principal)
-    const members = await this.store.listOrgMembers(orgId, { limit: 500 })
-    const existing = members.find((member) => member.accountId === accountId)
-    if (!existing) throw new CloudServiceError(404, 'Org member was not found.')
-    const nextRole = input.role ? normalizeControlPlaneRole(input.role, existing.role) : existing.role
-    const nextStatus = input.status ? normalizeMembershipStatus(input.status, existing.status) : existing.status
-    if (nextRole === 'owner' && principal.role !== 'owner' && principal.authSource !== 'local') {
-      throw new CloudServiceError(403, 'Only org owners can promote another owner.')
-    }
-    if (existing.role === 'owner' && principal.role !== 'owner' && principal.authSource !== 'local') {
-      throw new CloudServiceError(403, 'Only org owners can change another owner.')
-    }
-    const currentActorAccountId = principal.accountId || principal.userId
-    if (accountId === currentActorAccountId && nextRole !== existing.role) {
-      throw new CloudServiceError(400, 'You cannot change your own org role.')
-    }
-    if (accountId === currentActorAccountId && nextStatus !== 'active') {
-      throw new CloudServiceError(400, 'You cannot disable your own active membership.')
-    }
-    if (nextStatus === 'disabled' && input.confirm !== accountId) {
-      throw new CloudServiceError(400, 'Disabling a member requires confirmation.')
-    }
-    const activeOwnerCount = members.filter((member) => member.role === 'owner' && member.status === 'active').length
-    if (existing.role === 'owner' && existing.status === 'active' && (nextRole !== 'owner' || nextStatus !== 'active') && activeOwnerCount <= 1) {
-      throw new CloudServiceError(400, 'Cannot remove or demote the last active owner.')
-    }
-    const updated = await this.store.upsertMembership({
-      orgId,
-      accountId,
-      role: nextRole,
-      status: nextStatus,
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: currentActorAccountId,
-      },
-    })
-    return {
-      orgId,
-      accountId: existing.accountId,
-      email: existing.email,
-      displayName: existing.displayName,
-      role: updated.role,
-      status: updated.status,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
-    }
+    return this.memberService.updateOrgMember(principal, accountId, input)
   }
 
   async listAuditEvents(
     principal: CloudPrincipal,
     input: { limit?: number | null } = {},
   ) {
-    await this.ensurePrincipal(principal)
-    this.assertOrgAdmin(principal)
-    return this.store.listAuditEvents(this.principalOrgId(principal), input.limit || 100)
+    return this.overviewService.listAuditEvents(principal, input)
   }
 
   createManagedWorkerPool(principal: CloudPrincipal, input: CreateManagedWorkerPoolRequest) {
@@ -1216,9 +1038,9 @@ export class CloudSessionService {
     }
   }
 
-  async listEvents(principal: CloudPrincipal, sessionId: string, afterSequence = 0): Promise<SessionEventRecord[]> {
+  async listEvents(principal: CloudPrincipal, sessionId: string, afterSequence = 0, limit?: number): Promise<SessionEventRecord[]> {
     await this.getSessionView(principal, sessionId)
-    return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence)
+    return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence, limit)
   }
 
   async getSessionProjectionStatus(principal: CloudPrincipal, sessionId: string) {
@@ -1253,9 +1075,9 @@ export class CloudSessionService {
     })
   }
 
-  async listWorkspaceEvents(principal: CloudPrincipal, afterSequence = 0) {
+  async listWorkspaceEvents(principal: CloudPrincipal, afterSequence = 0, limit?: number) {
     await this.ensurePrincipal(principal)
-    return this.store.listWorkspaceEvents(principal.tenantId, principal.userId, afterSequence)
+    return this.store.listWorkspaceEvents(principal.tenantId, principal.userId, afterSequence, limit)
   }
 
   async getWorkspaceEventCursor(principal: CloudPrincipal) {
@@ -1511,9 +1333,7 @@ export class CloudSessionService {
     principal: CloudPrincipal,
     input: CoordinationWatchInput & { workspaceId: string },
   ): Promise<CoordinationWatch> {
-    await this.ensurePrincipal(principal)
-    this.assertCloudCoordinationWorkspace(principal, input.workspaceId)
-    return this.store.createCloudCoordinationWatch(input)
+    return this.coordinationService.createCloudCoordinationWatch(principal, input)
   }
 
   async updateCloudCoordinationWatch(
@@ -1522,9 +1342,7 @@ export class CloudSessionService {
     watchId: string,
     patch: CoordinationWatchUpdateInput,
   ): Promise<CoordinationWatch | null> {
-    await this.ensurePrincipal(principal)
-    this.assertCloudCoordinationWorkspace(principal, workspaceId)
-    return this.store.updateCloudCoordinationWatch({ workspaceId, watchId, patch })
+    return this.coordinationService.updateCloudCoordinationWatch(principal, workspaceId, watchId, patch)
   }
 
   async getCloudCoordinationWatch(
@@ -1532,9 +1350,7 @@ export class CloudSessionService {
     workspaceId: string,
     watchId: string,
   ): Promise<CoordinationWatch | null> {
-    await this.ensurePrincipal(principal)
-    this.assertCloudCoordinationWorkspace(principal, workspaceId)
-    return this.store.getCloudCoordinationWatch(workspaceId, watchId)
+    return this.coordinationService.getCloudCoordinationWatch(principal, workspaceId, watchId)
   }
 
   async listCloudCoordinationWatches(
@@ -1546,9 +1362,7 @@ export class CloudSessionService {
       limit?: number | null
     },
   ): Promise<CoordinationWatch[]> {
-    await this.ensurePrincipal(principal)
-    this.assertCloudCoordinationWorkspace(principal, input.workspaceId)
-    return this.store.listCloudCoordinationWatches(input)
+    return this.coordinationService.listCloudCoordinationWatches(principal, input)
   }
 
   async deleteCloudCoordinationWatch(
@@ -1556,23 +1370,14 @@ export class CloudSessionService {
     workspaceId: string,
     watchId: string,
   ): Promise<boolean> {
-    await this.ensurePrincipal(principal)
-    this.assertCloudCoordinationWorkspace(principal, workspaceId)
-    return this.store.deleteCloudCoordinationWatch(workspaceId, watchId)
+    return this.coordinationService.deleteCloudCoordinationWatch(principal, workspaceId, watchId)
   }
 
   async emitCloudCoordinationWatchEvent(
     principal: CloudPrincipal,
     event: CoordinationWatchEvent,
   ): Promise<void> {
-    await this.ensurePrincipal(principal)
-    const workspaceId = event.workspaceId?.trim() || `cloud:${principal.tenantId.trim() || this.principalOrgId(principal) || principal.userId || 'default'}`
-    this.assertCloudCoordinationWorkspace(principal, workspaceId)
-    await this.deliverCloudCoordinationWatchEvent({
-      ...event,
-      workspaceId,
-      occurredAt: event.occurredAt || new Date().toISOString(),
-    })
+    return this.coordinationService.emitCloudCoordinationWatchEvent(principal, event)
   }
 
   async resolveOrgIdForTenant(tenantId: string): Promise<string> {
@@ -1662,73 +1467,42 @@ export class CloudSessionService {
   }
 
   async listSettingMetadata(principal: CloudPrincipal) {
-    await this.ensurePrincipal(principal)
-    this.assertSettingsEnabled()
-    return this.store.listSettingMetadata(principal.tenantId, principal.userId)
+    return this.settingMetadataService.listSettingMetadata(principal)
   }
 
   async getSettingMetadata(principal: CloudPrincipal, key: string) {
-    await this.ensurePrincipal(principal)
-    this.assertSettingsEnabled()
-    return this.store.getSettingMetadata(principal.tenantId, key, principal.userId)
+    return this.settingMetadataService.getSettingMetadata(principal, key)
   }
 
   async setSettingMetadata(
     principal: CloudPrincipal,
     input: { key: string, value: Record<string, unknown> },
   ) {
-    await this.ensurePrincipal(principal)
-    this.assertSettingsEnabled()
-    return this.store.setSettingMetadata({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      key: input.key,
-      value: input.value,
-    })
+    return this.settingMetadataService.setSettingMetadata(principal, input)
   }
 
   async listCapabilityCatalog(principal: CloudPrincipal) {
-    await this.ensurePrincipal(principal)
-    this.assertCapabilitiesEnabled()
-    const [tools, skills] = await Promise.all([
-      this.listCapabilityTools(principal),
-      this.listCapabilitySkills(principal),
-    ])
-    return { tools, skills }
+    return this.capabilityService.listCapabilityCatalog(principal)
   }
 
   async listCapabilityTools(principal: CloudPrincipal): Promise<CapabilityTool[]> {
-    await this.ensurePrincipal(principal)
-    this.assertCapabilitiesEnabled()
-    return (await listCapabilityTools())
-      .map((tool) => this.filterCapabilityTool(tool))
-      .filter((tool): tool is CapabilityTool => Boolean(tool))
+    return this.capabilityService.listCapabilityTools(principal)
   }
 
   async getCapabilityTool(principal: CloudPrincipal, toolId: string): Promise<CapabilityTool | null> {
-    await this.ensurePrincipal(principal)
-    this.assertCapabilitiesEnabled()
-    const tool = await getCapabilityTool(toolId)
-    return tool ? this.filterCapabilityTool(tool) : null
+    return this.capabilityService.getCapabilityTool(principal, toolId)
   }
 
   async listCapabilitySkills(principal: CloudPrincipal): Promise<CapabilitySkill[]> {
-    await this.ensurePrincipal(principal)
-    this.assertCapabilitiesEnabled()
-    return (await listCapabilitySkills())
-      .map((skill) => this.filterCapabilitySkill(skill))
-      .filter((skill): skill is CapabilitySkill => Boolean(skill))
+    return this.capabilityService.listCapabilitySkills(principal)
   }
 
   async getCapabilitySkill(principal: CloudPrincipal, skillName: string): Promise<CapabilitySkill | null> {
-    const skills = await this.listCapabilitySkills(principal)
-    return skills.find((skill) => skill.name === skillName) || null
+    return this.capabilityService.getCapabilitySkill(principal, skillName)
   }
 
   async getCapabilitySkillBundle(principal: CloudPrincipal, skillName: string) {
-    const skill = await this.getCapabilitySkill(principal, skillName)
-    if (!skill) return null
-    return getCapabilitySkillBundle(skillName)
+    return this.capabilityService.getCapabilitySkillBundle(principal, skillName)
   }
 
   async listThreadTags(principal: CloudPrincipal): Promise<ThreadTagRecord[]> {
@@ -2546,6 +2320,18 @@ export class CloudSessionService {
     input: { text: string, agent?: string | null },
   ): Promise<SessionCommandRecord> {
     const view = await this.getSessionView(principal, sessionId)
+    // Enforce the deployer's agent allowlist on the prompt path, mirroring the
+    // workflow-draft check (`assertWorkflowDraftAllowed`). Without this, a caller
+    // could request an arbitrary agent name on a prompt and bypass a profile that
+    // restricts `agents`. `allowedAgents === null` (the default) imposes no limit.
+    const agentName = input.agent || 'build'
+    if (!includesAllowed(agentName, this.policy.allowedAgents)) {
+      throw new CloudServiceError(
+        403,
+        `Agent "${agentName}" is not enabled for cloud profile "${this.policy.profileName}".`,
+        { policyCode: 'policy.agent_not_enabled' },
+      )
+    }
     await this.assertBillingAllowed({
       orgId: this.principalOrgId(principal),
       action: 'prompt.enqueue',
@@ -3579,11 +3365,6 @@ export class CloudSessionService {
     return principal.orgId || principal.tenantId
   }
 
-  private assertCloudCoordinationWorkspace(principal: CloudPrincipal, workspaceId: string) {
-    const expected = `cloud:${principal.tenantId.trim() || this.principalOrgId(principal) || principal.userId || 'default'}`
-    if (workspaceId !== expected) throw new CloudServiceError(404, 'Coordination workspace was not found.')
-  }
-
   private async principalIsActiveWorkspaceMember(principal: CloudPrincipal) {
     const membership = await this.store.resolvePrincipalMembership({
       tenantId: principal.tenantId,
@@ -3768,50 +3549,6 @@ export class CloudSessionService {
     if (!this.policy.features.threadIndex) {
       throw new Error('Thread index is disabled for this cloud profile.')
     }
-  }
-
-  private assertSettingsEnabled() {
-    if (!this.policy.features.settings) {
-      throw new Error('Settings are disabled for this cloud profile.')
-    }
-  }
-
-  private assertCapabilitiesEnabled() {
-    if (!this.policy.features.agents && !this.policy.features.customSkills && !this.policy.features.customMcps) {
-      throw new Error('Capabilities are disabled for this cloud profile.')
-    }
-  }
-
-  private filterCapabilityTool(tool: CapabilityTool): CapabilityTool | null {
-    if (tool.source === 'custom' && !this.policy.features.customMcps) return null
-    if (!includesAllowed(tool.id, this.policy.allowedTools)) return null
-    if (tool.kind === 'mcp' && !includesAllowed(tool.namespace || tool.id, this.policy.allowedMcps)) return null
-    return {
-      ...tool,
-      agentNames: this.policy.features.agents
-        ? this.filterAgentNames(tool.agentNames)
-        : [],
-    }
-  }
-
-  private filterCapabilitySkill(skill: CapabilitySkill): CapabilitySkill | null {
-    if (skill.source === 'custom' && !this.policy.features.customSkills) return null
-    if (this.policy.allowedTools && skill.toolIds?.length) {
-      const hasAllowedTool = skill.toolIds.some((toolId) => this.policy.allowedTools?.includes(toolId))
-      if (!hasAllowedTool) return null
-    }
-    return {
-      ...skill,
-      agentNames: this.policy.features.agents
-        ? this.filterAgentNames(skill.agentNames)
-        : [],
-    }
-  }
-
-  private filterAgentNames(agentNames: string[]) {
-    return this.policy.allowedAgents
-      ? agentNames.filter((agentName) => this.policy.allowedAgents?.includes(agentName))
-      : agentNames
   }
 
   private async requireOwnedSessions(principal: CloudPrincipal, sessionIds: string[]) {

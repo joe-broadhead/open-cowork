@@ -300,7 +300,7 @@ function installThemeControlChangeListener(ownerDocument: Document, bootstrap: C
       persistCloudDensity(density)
       applyCloudDensity(density)
       syncThemeControls(ownerDocument, { ...resolveThemeSelection(ownerDocument), density })
-      persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
+      void persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
       return
     }
     if (select.disabled || select.dataset.tenantBrandingLocked === 'true') return
@@ -310,7 +310,7 @@ function installThemeControlChangeListener(ownerDocument: Document, bootstrap: C
     persistCloudThemeAccent(accentId)
     applyCloudThemePreset(presetId, scheme, accentId)
     syncThemeControls(ownerDocument, { presetId, scheme, accentId, density })
-    persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
+    void persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
   })
   ownerDocument.addEventListener('click', (event) => {
     const target = event.target as Element | null
@@ -332,7 +332,7 @@ function installThemeControlChangeListener(ownerDocument: Document, bootstrap: C
       persistCloudThemeAccent(accentId as UiAccentPresetId)
       applyCloudThemePreset(current.presetId, current.scheme, accentId)
       syncThemeControls(ownerDocument, { ...current, accentId: accentId as UiAccentPresetId })
-      persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
+      void persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
       return
     }
     const densityButton = target?.closest<HTMLButtonElement>('[data-cloud-density-button]')
@@ -342,7 +342,7 @@ function installThemeControlChangeListener(ownerDocument: Document, bootstrap: C
       persistCloudDensity(density)
       applyCloudDensity(density)
       syncThemeControls(ownerDocument, { ...resolveThemeSelection(ownerDocument), density })
-      persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
+      void persistCurrentCloudUserPreferences(ownerDocument, bootstrap, locked)
       return
     }
     const userSetting = target?.closest<HTMLButtonElement>('[data-cloud-user-setting]')

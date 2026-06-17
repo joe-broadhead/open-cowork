@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 import { LoginScreen } from './LoginScreen'
 import { ApprovalCard } from './chat/ApprovalCard'
+import { HomePage } from './HomePage'
+import { useSessionStore } from '../stores/session'
 import type { PendingApproval } from '../stores/session'
 import { SettingsPanel } from './sidebar/SettingsPanel'
 import { configureI18n } from '../helpers/i18n'
@@ -44,6 +46,23 @@ describe('focused accessibility smoke', () => {
     const { container } = render(<ApprovalCard approval={approval} />)
 
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    await expectNoA11yViolations(container)
+  })
+
+  it('keeps the home shell structurally accessible (landmarks, contrast)', async () => {
+    useSessionStore.getState().setActiveWorkspace('local')
+    useSessionStore.getState().setSessions([])
+    useSessionStore.getState().setCurrentSession(null)
+
+    const { container } = render(
+      <HomePage
+        brandName="Open Cowork"
+        onStartThread={vi.fn(async () => undefined)}
+        onOpenThread={vi.fn()}
+        onNavigate={vi.fn()}
+      />,
+    )
+
     await expectNoA11yViolations(container)
   })
 

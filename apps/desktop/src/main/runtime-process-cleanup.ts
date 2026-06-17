@@ -38,9 +38,9 @@ export function parsePsOutput(output: string): RuntimeProcessInfo[] {
       const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/)
       if (!match) return null
       const [, pidRaw, ppidRaw, command] = match
-      const pid = parseProcessId(pidRaw, false)
-      const ppid = parseProcessId(ppidRaw, true)
-      const normalizedCommand = command.trim()
+      const pid = parseProcessId(pidRaw!, false)
+      const ppid = parseProcessId(ppidRaw!, true)
+      const normalizedCommand = command!.trim()
       if (pid === null || ppid === null || !normalizedCommand || normalizedCommand === 'COMMAND' || normalizedCommand === 'ARGS') return null
       return {
         pid,

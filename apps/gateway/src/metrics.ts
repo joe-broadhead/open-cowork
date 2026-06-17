@@ -10,6 +10,7 @@ export type GatewayMetrics = {
   deliveryLatencyMsTotal: number
   webhookRequests: number
   streamReconnects: number
+  streamEvictions: number
   sessionRenderRetries: number
   sessionRenderDeadLetters: number
   cursorPersistenceFailures: number
@@ -50,6 +51,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     deliveryLatencyMsTotal: 0,
     webhookRequests: 0,
     streamReconnects: 0,
+    streamEvictions: 0,
     sessionRenderRetries: 0,
     sessionRenderDeadLetters: 0,
     cursorPersistenceFailures: 0,
@@ -138,6 +140,9 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# HELP open_cowork_gateway_stream_reconnects_total Session stream reconnects after SSE/render failures.',
     '# TYPE open_cowork_gateway_stream_reconnects_total counter',
     `open_cowork_gateway_stream_reconnects_total ${metrics.streamReconnects}`,
+    '# HELP open_cowork_gateway_stream_evictions_total Idle/over-capacity session streams evicted to bound memory and upstream connections.',
+    '# TYPE open_cowork_gateway_stream_evictions_total counter',
+    `open_cowork_gateway_stream_evictions_total ${metrics.streamEvictions}`,
     '# HELP open_cowork_gateway_session_render_retries_total Session events retried after transient channel rendering failures.',
     '# TYPE open_cowork_gateway_session_render_retries_total counter',
     `open_cowork_gateway_session_render_retries_total ${metrics.sessionRenderRetries}`,

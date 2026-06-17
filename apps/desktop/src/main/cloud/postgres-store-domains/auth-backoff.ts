@@ -79,7 +79,7 @@ export class PostgresAuthBackoffRepository {
        RETURNING *`,
       [input.scope, input.source, startedAtMs, limit, blockedUntilMs],
     )
-    return cloudAuthBackoffFromRow(result.rows[0], nowMs)
+    return cloudAuthBackoffFromRow(result.rows[0]!, nowMs)
   }
 
   private async maybeOne<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]) {

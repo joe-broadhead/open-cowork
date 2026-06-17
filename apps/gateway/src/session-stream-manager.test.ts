@@ -728,3 +728,49 @@ async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void>
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
 }
+
+function evictionCloud(closed: string[]) {
+  return {
+    subscribeSessionEvents(input: { sessionId: string }) {
+      return { close() { closed.push(input.sessionId) } }
+    },
+    async updateCursor(input: unknown) { return cursorOk(input) },
+  } as unknown as CloudGateway
+}
+
+function evictionBinding(n: number) {
+  return cursorBinding({}, { bindingId: `binding-${n}`, sessionId: `session-${n}`, externalThreadId: `thread-${n}`, externalChatId: `chat-${n}` })
+}
+
+test('session stream manager evicts the least-recently-active stream when over the capacity cap', () => {
+  const provider = new FakeChannelProvider()
+  const closed: string[] = []
+  const metrics = createGatewayMetrics()
+  let clock = 0
+  const manager = createGatewaySessionStreamManager(evictionCloud(closed), metrics, { maxStreams: 2, idleTtlMs: 0, now: () => clock })
+
+  manager.ensure({ provider, binding: evictionBinding(1) }); clock += 1
+  manager.ensure({ provider, binding: evictionBinding(2) }); clock += 1
+  manager.ensure({ provider, binding: evictionBinding(3) })
+
+  assert.equal(manager.activeCount(), 2)
+  assert.equal(metrics.streamEvictions, 1)
+  assert.deepEqual(closed, ['session-1'])
+  manager.closeAll()
+})
+
+test('session stream manager evicts streams idle beyond the TTL on the next ensure', () => {
+  const provider = new FakeChannelProvider()
+  const closed: string[] = []
+  let clock = 0
+  const manager = createGatewaySessionStreamManager(evictionCloud(closed), createGatewayMetrics(), { maxStreams: 1000, idleTtlMs: 1_000, now: () => clock })
+
+  manager.ensure({ provider, binding: evictionBinding(1) })
+  assert.equal(manager.activeCount(), 1)
+  clock = 2_000
+  manager.ensure({ provider, binding: evictionBinding(2) })
+
+  assert.equal(manager.activeCount(), 1)
+  assert.deepEqual(closed, ['session-1'])
+  manager.closeAll()
+})

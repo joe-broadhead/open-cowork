@@ -94,7 +94,7 @@ export class PostgresWebhooksRepository {
        RETURNING *`,
       [input.scope, input.source, input.nowMs, input.windowMs, input.limit, blockedUntil],
     )
-    return webhookAuthFailureFromRow(result.rows[0])
+    return webhookAuthFailureFromRow(result.rows[0]!)
   }
 
   async claimSignature(input: {

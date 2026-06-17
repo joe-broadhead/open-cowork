@@ -71,7 +71,7 @@ function useToolTraceRules(directory?: string | null) {
   useEffect(() => {
     let cancelled = false
     const refresh = (forceRefresh = false) => {
-      loadToolTraceRules(directory, forceRefresh).then((next) => {
+      void loadToolTraceRules(directory, forceRefresh).then((next) => {
         if (!cancelled) setRules(next)
       })
     }

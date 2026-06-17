@@ -89,7 +89,7 @@ export class PostgresByokSecretsRepository {
           now,
         ],
       )
-      const secret = byokSecretFromRow(result.rows[0])
+      const secret = byokSecretFromRow(result.rows[0]!)
       await this.options.recordAuditEvent(client, {
         orgId: secret.orgId,
         accountId: secret.createdByAccountId,
@@ -182,7 +182,7 @@ export class PostgresByokSecretsRepository {
           createdAt: input.disabledAt,
         })
       }
-      return secrets[0]
+      return secrets[0]!
     })
   }
 

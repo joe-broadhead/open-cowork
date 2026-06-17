@@ -83,8 +83,8 @@ describe('ChatInputToolbar', () => {
   it('routes stop actions while generating', () => {
     const { props } = renderToolbar({ isGenerating: true })
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Stop generating (Esc)' })[0])
-    fireEvent.click(screen.getAllByRole('button', { name: 'Stop generating (Esc)' })[1])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Stop generating (Esc)' })[0]!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Stop generating (Esc)' })[1]!)
 
     expect(props.onStop).toHaveBeenCalledTimes(2)
     expect(props.onSubmit).not.toHaveBeenCalled()

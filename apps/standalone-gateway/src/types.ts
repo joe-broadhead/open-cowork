@@ -37,6 +37,10 @@ export interface StandaloneGatewayProviderConfig {
 export interface StandaloneGatewayConfig {
   productMode: "standalone";
   deploymentMode: "solo" | "team" | "enterprise";
+  // Persistence backend. "postgres" (default) is durable + multi-replica; "memory" is an
+  // ephemeral in-process store for local dev / embedded single-process deployments (data is
+  // lost on restart and not shared across replicas).
+  store: "postgres" | "memory";
   server: {
     host: string;
     port: number;

@@ -115,7 +115,7 @@ async function waitFor(assertion: () => void, timeoutMs = 1000) {
   throw lastError
 }
 
-test('React workbench controller helpers normalize cloud thread state', () => {
+void test('React workbench controller helpers normalize cloud thread state', () => {
   const created = {
     session: { sessionId: 'session-1' },
     view: {
@@ -143,7 +143,7 @@ test('React workbench controller helpers normalize cloud thread state', () => {
   assert.equal(chatFeatureEnabled(bootstrap({ features: { chat: false } })), false)
 })
 
-test('React project-source helpers build git and upload snapshots with policy validation', async () => {
+void test('React project-source helpers build git and upload snapshots with policy validation', async () => {
   await withDom(`
     <form id="session-form">
       <input name="repositoryUrl" value="https://github.com/acme/app.git" />
@@ -209,7 +209,7 @@ test('React project-source helpers build git and upload snapshots with policy va
   })
 })
 
-test('React workbench form hook creates a chat and prompts the selected agent', async () => {
+void test('React workbench form hook creates a chat and prompts the selected agent', async () => {
   await withDom(`
     <div id="status"></div>
     <div id="sidebar-status"></div>
@@ -293,7 +293,7 @@ test('React workbench form hook creates a chat and prompts the selected agent', 
   })
 })
 
-test('React workbench form hook maps a direct coworker mention to the cloud prompt assignment', async () => {
+void test('React workbench form hook maps a direct coworker mention to the cloud prompt assignment', async () => {
   await withDom(`
     <div id="status"></div>
     <div id="sidebar-status"></div>
@@ -374,7 +374,7 @@ test('React workbench form hook maps a direct coworker mention to the cloud prom
   })
 })
 
-test('React workbench form hook preserves a selected capability coworker outside the policy shortlist', async () => {
+void test('React workbench form hook preserves a selected capability coworker outside the policy shortlist', async () => {
   await withDom(`
     <div id="status"></div>
     <div id="sidebar-status"></div>
@@ -455,7 +455,7 @@ test('React workbench form hook preserves a selected capability coworker outside
   })
 })
 
-test('React cloud composer hook creates a session before prompting when no thread is selected', async () => {
+void test('React cloud composer hook creates a session before prompting when no thread is selected', async () => {
   await withDom('<div id="react-root"></div>', async (window) => {
     const calls: Array<{ type: string, body?: unknown, sessionId?: string }> = []
     const api = {

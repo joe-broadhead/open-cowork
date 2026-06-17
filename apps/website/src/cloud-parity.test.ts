@@ -15,7 +15,7 @@ import { DEFAULT_WEBSITE_PUBLIC_BRANDING } from './branding.ts'
 
 const css = cloudWebsiteStyles(DEFAULT_WEBSITE_PUBLIC_BRANDING)
 
-test('cloud web embeds the shared design-token source verbatim (one token source for both surfaces)', () => {
+void test('cloud web embeds the shared design-token source verbatim (one token source for both surfaces)', () => {
   // The website must derive its root tokens from the exact generator the
   // desktop ships from. If this drifts, the two surfaces no longer share a
   // single source of truth for colour/spacing/typography.
@@ -25,7 +25,7 @@ test('cloud web embeds the shared design-token source verbatim (one token source
   )
 })
 
-test('cloud web shell uses the shared studio shell tokens (no per-surface sidebar drift)', () => {
+void test('cloud web shell uses the shared studio shell tokens (no per-surface sidebar drift)', () => {
   // The shared studio shell tokens are the single source for both surfaces.
   assert.match(css, /--studio-shell-sidebar-w:\s*268px/)
   assert.match(css, /--studio-shell-rail-w:\s*72px/)
@@ -37,7 +37,7 @@ test('cloud web shell uses the shared studio shell tokens (no per-surface sideba
   assert.doesNotMatch(css, /--cloud-shell-sidebar-rail-w:\s*64px/)
 })
 
-test('cloud web ships the flat Mercury base — no atmosphere glow or film-grain decoration', () => {
+void test('cloud web ships the flat Mercury base — no atmosphere glow or film-grain decoration', () => {
   // The "clean Mercury graphite" identity sits on a flat base. These are the
   // decorations the design brief requires deleted from both surfaces.
   assert.doesNotMatch(css, /ui-atmosphere-drift/)
@@ -45,7 +45,7 @@ test('cloud web ships the flat Mercury base — no atmosphere glow or film-grain
   assert.doesNotMatch(css, /--bg-image:\s*radial-gradient/)
 })
 
-test('cloud web uses the brand white action ink (matches desktop)', () => {
+void test('cloud web uses the brand white action ink (matches desktop)', () => {
   // White text on the blue action fill is locked brand identity; the desktop
   // generated token sheet asserts the same value.
   assert.match(css, /--accent-action-foreground:\s*#ffffff/)

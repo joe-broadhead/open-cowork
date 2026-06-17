@@ -3,10 +3,12 @@ import type {
   KnowledgeProposalInput,
   KnowledgeReviewInput,
   KnowledgeSnapshotOptions,
+  KnowledgeSpaceVisibility,
 } from '@open-cowork/shared'
 import {
   acceptKnowledgeProposal as acceptProposalState,
   createKnowledgeProposal as createProposalState,
+  createKnowledgeSpace as createSpaceState,
   declineKnowledgeProposal as declineProposalState,
   listKnowledgePageHistory as listPageHistoryState,
   listKnowledgeSnapshot as listSnapshotState,
@@ -19,6 +21,13 @@ type KnowledgeStorageOptions = {
 type InternalKnowledgeSnapshotOptions = KnowledgeSnapshotOptions & KnowledgeStorageOptions
 type InternalKnowledgeProposalInput = KnowledgeProposalInput & KnowledgeStorageOptions
 type InternalKnowledgeReviewInput = KnowledgeReviewInput & KnowledgeStorageOptions
+type InternalKnowledgeSpaceInput = {
+  name: string
+  visibility?: KnowledgeSpaceVisibility | null
+  icon?: string | null
+  hue?: string | null
+  workspaceId?: string | null
+} & KnowledgeStorageOptions
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 
@@ -39,6 +48,12 @@ export function listKnowledgeSnapshot(options: InternalKnowledgeSnapshotOptions 
 
 export function listKnowledgePageHistory(pageId: string, options: InternalKnowledgeSnapshotOptions = {}) {
   return listPageHistoryState(pageId, options)
+}
+
+export function createKnowledgeSpace(input: InternalKnowledgeSpaceInput) {
+  const space = createSpaceState(input.workspaceId ?? '', input, input)
+  publishKnowledgeUpdated()
+  return space
 }
 
 export function createKnowledgeProposal(input: InternalKnowledgeProposalInput) {

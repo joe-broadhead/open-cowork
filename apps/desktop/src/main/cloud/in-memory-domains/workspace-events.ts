@@ -75,12 +75,13 @@ export class InMemoryWorkspaceEventsDomain {
     return clone(event)
   }
 
-  listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0): WorkspaceEventRecord[] {
+  listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
     this.host.requireTenantUser(tenantId, userId)
     const workspaceKey = `${tenantId}:${userId}`
-    return (this.workspaceEvents.get(workspaceKey)?.events || [])
+    const matching = (this.workspaceEvents.get(workspaceKey)?.events || [])
       .filter((event) => event.sequence > afterSequence)
       .map((event) => clone(event))
+    return Number.isInteger(limit) && (limit as number) > 0 ? matching.slice(0, limit) : matching
   }
   getWorkspaceEventCursor(tenantId: string, userId: string): WorkspaceEventCursorRecord {
     this.host.requireTenantUser(tenantId, userId)

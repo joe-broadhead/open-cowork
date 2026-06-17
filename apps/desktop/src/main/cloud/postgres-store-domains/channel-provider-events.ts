@@ -100,7 +100,7 @@ export class PostgresChannelProviderEventsRepository {
            RETURNING *`,
           [current.eventId, nowIsoValue],
         )
-        return { event: channelProviderEventFromRow(touched.rows[0]), claimed: false, duplicate: true }
+        return { event: channelProviderEventFromRow(touched.rows[0]!), claimed: false, duplicate: true }
       }
 
       const reclaimed = await client.query(
@@ -128,7 +128,7 @@ export class PostgresChannelProviderEventsRepository {
           nowIsoValue,
         ],
       )
-      return { event: channelProviderEventFromRow(reclaimed.rows[0]), claimed: true, duplicate: false }
+      return { event: channelProviderEventFromRow(reclaimed.rows[0]!), claimed: true, duplicate: false }
     })
   }
 

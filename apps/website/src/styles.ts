@@ -1,5 +1,5 @@
 import { cssColorLuminance, emitRootTokensCss, type PublicBrandingConfig } from '@open-cowork/shared'
-import { approvalsSurfaceCss, channelsSurfaceCss, knowledgeGraphCss, projectsSurfaceCss, wikiSurfaceCss } from '@open-cowork/ui'
+import { approvalsSurfaceCss, channelsSurfaceCss, knowledgeGraphCss, primitivesSurfaceCss, projectsSurfaceCss, sharedKeyframesCss, wikiSurfaceCss } from '@open-cowork/ui'
 import { publicBrandingCss } from './branding.ts'
 import { cloudWebsiteAgentProfileStyles } from './style-agent-profile.ts'
 import { cloudWebsiteArtifactStyles } from './style-artifacts.ts'
@@ -109,51 +109,6 @@ ${publicBrandingCss(branding)}
     button, input, select, textarea {
       font: inherit;
     }
-    @keyframes ui-fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes ui-popover-in {
-      from { opacity: 0; transform: translateY(calc(-1 * var(--space-1))) scale(0.985); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    @keyframes ui-view-transition-in {
-      from { opacity: 0; transform: translateY(var(--space-2)); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes ui-view-transition-out {
-      from { opacity: 1; transform: translateY(0); }
-      to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); }
-    }
-    ::view-transition-old(root) {
-      animation: ui-view-transition-out var(--dur-2) var(--ease-out) both;
-    }
-    ::view-transition-new(root) {
-      animation: ui-view-transition-in var(--dur-3) var(--ease-spring) both;
-    }
-    @keyframes ui-primary-sheen {
-      from { transform: skewX(-18deg) translateX(0); }
-      to { transform: skewX(-18deg) translateX(430%); }
-    }
-    @keyframes ui-polish-row-in {
-      from { opacity: 0; transform: translateX(calc(-1 * var(--space-2))); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-    @keyframes ui-status-pulse {
-      0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 42%, transparent); }
-      70% { box-shadow: 0 0 0 var(--space-2) transparent; }
-      100% { box-shadow: 0 0 0 0 transparent; }
-    }
-    @keyframes ui-progress-shimmer {
-      from { background-position: 220% 0; }
-      to { background-position: -220% 0; }
-    }
-    @keyframes ui-stream-shimmer {
-      to { background-position: -220% 0; }
-    }
-    @keyframes ui-stream-caret {
-      50% { opacity: 0; }
-    }
     body:not([data-auth="signed-in"]) .signed-in-only {
       display: none;
     }
@@ -183,6 +138,7 @@ ${publicBrandingCss(branding)}
 export function cloudWebsiteStyles(branding: PublicBrandingConfig) {
   return String.raw`${cloudWebsiteFontFaces()}
 ${cloudWebsiteBaseStyles(branding)}
+${sharedKeyframesCss()}
 ${cloudWebsiteLayoutStyles()}
 ${cloudWebsiteSidebarStyles()}
 ${cloudWebsiteComponentStyles()}
@@ -198,6 +154,7 @@ ${cloudWebsiteChatStyles()}
 ${cloudWebsiteSharedUiStyles()}
 ${cloudWebsiteSettingsStyles()}
 ${cloudWebsiteStudioPrimitiveStyles()}
+${primitivesSurfaceCss()}
 ${channelsSurfaceCss()}
 ${projectsSurfaceCss()}
 ${cloudWebsiteStudioUiStyles()}

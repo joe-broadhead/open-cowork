@@ -7,6 +7,7 @@ import { build } from 'esbuild'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs')
+const migrateOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs')
 const supervisorOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/runtime-managed-server-supervisor.js')
 const cloudAssetsDir = resolve(repoRoot, 'apps/desktop/dist/cloud/assets')
 const cloudReactClientAsset = 'open-cowork-cloud-react.js'
@@ -68,6 +69,20 @@ await mkdir(cloudAssetsDir, { recursive: true })
 await build({
   entryPoints: [resolve(repoRoot, 'scripts/open-cowork-cloud.ts')],
   outfile,
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  sourcemap: true,
+  packages: 'external',
+  external: [...builtins],
+  plugins: [cloudElectronShimPlugin],
+  logLevel: 'info',
+})
+
+await build({
+  entryPoints: [resolve(repoRoot, 'scripts/open-cowork-cloud-migrate.ts')],
+  outfile: migrateOutfile,
   bundle: true,
   platform: 'node',
   format: 'esm',

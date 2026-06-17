@@ -75,10 +75,10 @@ vi.mock('./TaskDrillIn', () => ({
       Drill in: {rootTask.title}
       <span data-testid="task-navigation-count">{navigationTaskRuns.length}</span>
       {navigationTaskRuns[1] && (
-        <button type="button" onClick={() => onNavigateTask?.(navigationTaskRuns[1])}>Next filtered task</button>
+        <button type="button" onClick={() => onNavigateTask?.(navigationTaskRuns[1]!)}>Next filtered task</button>
       )}
       {pendingQuestions[1] && (
-        <button type="button" onClick={() => onOpenQuestion?.(pendingQuestions[1])}>Open second question</button>
+        <button type="button" onClick={() => onOpenQuestion?.(pendingQuestions[1]!)}>Open second question</button>
       )}
       <button type="button" onClick={onClose}>Close task</button>
     </aside>
@@ -111,7 +111,7 @@ vi.mock('./AgentRunPanel', () => ({
         </button>
       ))}
       {taskRuns.length > 2 && (
-        <button type="button" onClick={() => onFocusTask(taskRuns[1], taskRuns.slice(1))}>
+        <button type="button" onClick={() => onFocusTask(taskRuns[1]!, taskRuns.slice(1))}>
           Focus filtered run
         </button>
       )}

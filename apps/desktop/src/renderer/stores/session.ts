@@ -206,7 +206,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       sessionStateById,
       currentSessionId: id,
       currentView: deriveVisibleSessionPatch(
-        sessionStateById[sessionKey],
+        sessionStateById[sessionKey]!,
         sessionKey,
         state.busySessions,
         state.awaitingPermissionSessions,
@@ -372,7 +372,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
     }
     if (state.currentSessionId === sessionId) {
       patch.currentView = deriveVisibleSessionPatch(
-        sessionStateById[sessionKey],
+        sessionStateById[sessionKey]!,
         sessionKey,
         busySessions,
         awaitingPermissionSessions,
