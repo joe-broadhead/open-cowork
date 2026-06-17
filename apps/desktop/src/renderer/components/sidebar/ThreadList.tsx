@@ -9,6 +9,7 @@ import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
+import { cloudGitRepositoryLabel } from '@open-cowork/shared'
 import type { CloudProjectSourceSummary, SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
 
@@ -46,8 +47,7 @@ function compactPathLabel(directory: string) {
 
 function projectSourceGroupForSession(session: Session, source: CloudProjectSourceSummary): Omit<ThreadGroup, 'sessions'> {
   if (source.kind === 'git') {
-    const repo = source.repositoryUrl || t('sidebar.gitRepository', 'Git repository')
-    const label = repo.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || repo
+    const label = cloudGitRepositoryLabel(source.repositoryUrl || t('sidebar.gitRepository', 'Git repository'))
     return {
       id: `project:git:${source.repositoryUrl || session.id}:${source.ref || ''}:${source.subdirectory || ''}`,
       label,

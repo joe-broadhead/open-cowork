@@ -150,3 +150,15 @@ export function summarizeCloudProjectSource(source: CloudProjectSource | null | 
     title: source.title,
   }
 }
+
+/**
+ * The short, human-facing label for a git repository URL: its final path
+ * segment with a trailing `.git` removed (e.g. `…/acme/web.git` → `web`),
+ * falling back to the input itself when it has no path segments. Single-sourced
+ * so the desktop thread sidebar and the Cloud Web thread list derive the
+ * identical git project label; each caller supplies its own (localized) fallback
+ * string for a missing URL before calling this.
+ */
+export function cloudGitRepositoryLabel(repositoryUrl: string): string {
+  return repositoryUrl.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || repositoryUrl
+}

@@ -1,4 +1,4 @@
-import type { CloudProjectSourceSummary } from '@open-cowork/shared'
+import { cloudGitRepositoryLabel, type CloudProjectSourceSummary } from '@open-cowork/shared'
 
 export const CLOUD_WEB_THREAD_PAGE_SIZE = 200
 
@@ -58,8 +58,7 @@ export function cloudWebThreadProjectLabel(session: CloudWebThreadSession | null
   const source = cloudWebThreadProjectSource(session, projection)
   if (!source) return 'chat-only'
   if (source.kind === 'git') {
-    const repo = source.repositoryUrl || 'git repository'
-    return repo.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || repo
+    return cloudGitRepositoryLabel(source.repositoryUrl || 'git repository')
   }
   if (source.kind === 'snapshot') return source.title || 'uploaded snapshot'
   return 'project'
