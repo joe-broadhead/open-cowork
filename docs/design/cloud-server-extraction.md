@@ -46,17 +46,48 @@ cloud only "works" today because `build-cloud`'s Electron shim + config-loader
 fallbacks paper over it. Real decoupling = a config-loader CORE in shared that is
 Electron-free, OR the cloud server gets its own log destination.)
 
+## ⚠️ Discovered architectural constraint (2026-06-17) — the easy moves are done
+
+The first four increments moved genuinely **browser-safe, SDK-free** modules into
+`@open-cowork/shared`. The remaining boundary deps cannot follow them, for two hard reasons:
+
+1. **`@opencode-ai/sdk` is restricted to "runtime authority" packages.**
+   `tests/opencode-sdk-boundary.test.ts` enforces (via strict `deepEqual`) that **only**
+   `apps/desktop` and `apps/standalone-gateway` may *declare* the opencode SDK, and keeps a
+   per-file allowlist of SDK importers cross-checked against `docs/opencode-sdk-v2-boundary.md`.
+   So `opencode-adapter`, `runtime-managed-server-core`, `runtime-node-managed-server`, and
+   `runtime-config-builder` (all SDK importers) **cannot** move into `@open-cowork/shared` —
+   that's a deliberate, test-enforced boundary, not an oversight.
+2. **Node-only modules can't live in the browser-bundled shared barrel.**
+   `knowledge-store.ts` (`node:sqlite`), the runtime managed-server cluster
+   (`node:child_process`), and `workflow-webhook-server` (`node:http`) would break the
+   website bundle if re-exported from `@open-cowork/shared`'s main entry.
+
+**Implication:** the remaining ~12 boundary modules are SDK-coupled runtime code, node-only
+code, or `config-loader`/`settings`/`electron`-coupled code. Resolving them requires a
+**new shared runtime package** (declares the SDK, node-only; imported by both `apps/desktop`
+and the future `packages/cloud-server`) plus **deep decoupling** of the config-coupled
+modules — and two of those pieces (the runtime package + the cloud-server package) must ship
+in the cloud **Docker image**, a change the local `pnpm test` gate cannot fully verify.
+
 ## Sequenced increments (each its own green commit + push)
 
 1. ✅ config-types → shared.
 2. ~~workflow-schedule~~ — dropped (false positive; not a cloud dep).
 3. ✅ log-sanitizer → shared.
 4. ✅ knowledge interfaces (contract + input) → shared.
-5. ✅ pure normalizers (normalizer-utils + runtime-event-normalizers) → shared. (opencode-adapter still pending — needs `@opencode-ai/sdk` type dep in shared.)
-6. knowledge cluster: ⚠️ blocked — `knowledge-store.ts` (SQLite) is used by both desktop and cloud http-server but `import`s `node:sqlite`, which can't go in the browser-bundled shared package. Needs a node-only home (the eventual cloud-server pkg, or a node-only shared entrypoint). `postgres-knowledge-store` is cloud-only → move into cloud. ← **next: postgres-knowledge-store → cloud**
-7. runtime cluster (environment + managed-server-core + node-managed-server + siblings) → shared.
-8. **Decoupling tier** (the hard part): config-loader core → shared (Electron-free), then logger → shared, then workflow-webhook-server, runtime-config-builder, capability-catalog, coordination + launchpad.
-9. Final: `main/cloud/**` → `packages/cloud-server/src/**` + package.json/tsconfig/exports + Docker packaging + build-cloud + update the ~2-3 non-cloud importers.
+5. ✅ pure normalizers (normalizer-utils + runtime-event-normalizers) → shared.
+   — **End of the cleanly-shareable, locally-verifiable moves.** —
+6. **Decoupling tier (no new packages, locally verifiable):** decouple `logger`,
+   `runtime-config-builder`, `capability-catalog`, `coordination-service`, `launchpad-service`
+   from `config-loader`/`settings`/`electron` (inject the app-data dir + config + a renderer
+   event sink instead of importing them). Each is behavior-sensitive but gate-verifiable.
+7. **Runtime package (needs Docker packaging):** `packages/runtime-core` — node + SDK runtime
+   shared by desktop & cloud (opencode-adapter, managed-server cluster, knowledge SQLite store).
+   Add it to the SDK-boundary test's allowed manifests + the boundary doc + the Dockerfile build.
+8. **Cloud-server package (needs Docker packaging):** `main/cloud/**` → `packages/cloud-server/**`
+   once the boundary is empty; wire package.json/tsconfig/exports + Dockerfile + build-cloud.
+9. `postgres-knowledge-store` (cloud-only) lands in `packages/cloud-server` with step 8.
 
 Gate every step: main/renderer/website tsc 0, node suite 0-fail, website 101/101,
 renderer 475/475, lint clean. Commit + push each green step.
