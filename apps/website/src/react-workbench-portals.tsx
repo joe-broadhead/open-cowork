@@ -14,6 +14,7 @@ import {
 import { CloudConversationMeta } from './react-workbench-context.ts'
 import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
+import { CloudSettingsAccessPortals } from './react-workbench-settings-access.tsx'
 import { CloudComposerPortal } from './react-workbench-composer.tsx'
 import { CloudLaunchpadPortal } from './react-workbench-launchpad.tsx'
 import { canManageCloudKnowledge } from './react-workbench-knowledge-state.ts'
@@ -238,6 +239,7 @@ export function CloudWorkbenchPortals({
     />,
   )
   portals.push(<CloudAdminSurfacePortals key="admin-surfaces" bootstrap={bootstrap} workspace={workspace} />)
+  portals.push(<CloudSettingsAccessPortals key="settings-access" />)
 
   return <>{portals}</>
 }

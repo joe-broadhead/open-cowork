@@ -247,7 +247,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse({ ok: true })
     }
     if (request.method === 'GET' && request.pathname === '/api/config') {
-      return jsonResponse({ ...bootstrap, features })
+      return jsonResponse({ ...bootstrap, features, providers: { available: [{ id: 'anthropic', label: 'Anthropic', models: [{ id: 'claude' }, { id: 'haiku' }] }], defaultProvider: 'anthropic', defaultModel: 'claude-opus' }, permissions: { bash: 'ask', fileWrite: 'allow', task: 'allow', web: 'deny', webSearch: false } })
     }
     if (request.method === 'GET' && request.pathname === '/api/workspace') {
       return jsonResponse({

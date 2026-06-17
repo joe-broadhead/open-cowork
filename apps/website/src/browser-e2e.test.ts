@@ -314,6 +314,21 @@ void test('cloud web browser renders the standalone approvals queue across chats
   }
 })
 
+void test('cloud web settings surfaces read-only models and per-tool permissions from config', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    // The cloud /api/config carries providers + per-tool permissions; the
+    // settings Models & permissions view renders them read-only (was discarded).
+    await waitFor(() => assert.match(harness.document.querySelector('#cloud-settings-access')?.textContent || '', /claude-opus/))
+    const access = harness.document.querySelector('#cloud-settings-access')?.textContent || ''
+    assert.match(access, /Anthropic/) // available provider surfaced
+    assert.match(access, /Ask first/) // bash permission = ask
+    assert.match(access, /Denied/) // web permission = deny
+  } finally {
+    harness.close()
+  }
+})
+
 void test('cloud web browser exposes desktop parity boundaries and workbench state vocabulary', async () => {
   const harness = createCloudWebBrowserHarness({ role: 'admin' })
   const firstView = harness.views[harness.sessions[0]!.sessionId]

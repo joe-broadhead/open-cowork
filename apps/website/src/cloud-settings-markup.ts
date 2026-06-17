@@ -68,6 +68,11 @@ export function cloudSettingsSurfaceMarkup(input: CloudSettingsSurfaceInput) {
                 <span class="pill">Read-only</span>
               </div>
             </div>
+            <div>
+              <h3>Models &amp; permissions</h3>
+              <p class="meta">The effective models and coworker tool permissions for this workspace, as set by the org policy. Editing machine runtime config stays in Desktop.</p>
+            </div>
+            <div class="settings-group" id="cloud-settings-access"><p class="empty">Loading models &amp; permissions…</p></div>
           </section>
 
           <section class="settings-section" id="cloud-settings-appearance">
