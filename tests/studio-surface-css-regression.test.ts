@@ -77,10 +77,17 @@ test('shared controlsSurfaceCss defines the primitive controls that were web-mis
   // The control fill/border/text declarations the website was missing must be present.
   assert.ok(rules.get('.ui-input')?.includes('--color-text'), '.ui-input must set its text color')
   assert.ok(rules.get('.ui-select-trigger')?.includes('--control-h-md'), '.ui-select-trigger must set its control height')
-  // `.ui-button--primary` is intentionally NOT single-sourced (desktop⇄web drift); guard that.
+  // `.ui-button--primary` is now single-sourced too: the website previously rendered a flat
+  // accent fill that drifted from the desktop's canonical Studio accent-action gradient. Both
+  // apps now share this rule (the gradient uses the shared `--accent-action-*` tokens emitted
+  // on both apps), so the primary button renders identically. Pin the base + hover.
   assert.ok(
-    !controlsSurfaceCss().includes('.ui-button--primary {'),
-    'controlsSurfaceCss() must NOT define `.ui-button--primary` — it stays app-local because the desktop and website render it differently',
+    rules.get('.ui-button--primary')?.includes('--accent-action-fill'),
+    'controlsSurfaceCss() must define `.ui-button--primary` with the shared accent-action gradient fill',
+  )
+  assert.ok(
+    rules.get('.ui-button--primary:hover:not(:disabled)')?.includes('--specular-strong'),
+    'controlsSurfaceCss() must define the `.ui-button--primary` hover state so desktop⇄web stay identical',
   )
 })
 

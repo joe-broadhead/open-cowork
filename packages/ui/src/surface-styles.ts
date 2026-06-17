@@ -1416,6 +1416,15 @@ export function controlsSurfaceCss(): string {
   width: 100%;
 }
 
+.ui-button--primary {
+  position: relative;
+  overflow: hidden;
+  background: var(--accent-action-fill);
+  color: var(--accent-action-foreground);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-1), var(--specular);
+}
+
 .ui-button--primary::after {
   content: "";
   position: absolute;
@@ -1432,6 +1441,12 @@ export function controlsSurfaceCss(): string {
 .ui-icon-button > * {
   position: relative;
   z-index: 1;
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: var(--accent-action-fill);
+  box-shadow: var(--shadow-2), var(--specular-strong);
+  transform: translateY(calc(-1 * var(--border-width-1)));
 }
 
 .ui-button--primary:hover:not(:disabled)::after {

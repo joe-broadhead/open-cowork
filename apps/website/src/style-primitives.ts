@@ -35,25 +35,12 @@ export function cloudWebsitePrimitiveStyles() {
       pointer-events: none;
       animation: ui-popover-in var(--dur-2) var(--ease-spring) both;
     }
-    /* The base interaction group (border/transition/display), focus/active/disabled,
-       button sizes, the icon button, the secondary/ghost/danger variants, and the
-       primary-button sheen ::after are single-sourced in @open-cowork/ui
-       controlsSurfaceCss() (embedded above in styles.ts). Only ui-button--primary
-       (base + :hover) stays here: the website renders the primary button with the flat
-       accent fill, which differs from the desktop accent-action gradient. */
-    .ui-button--primary {
-      position: relative;
-      overflow: hidden;
-      border-color: color-mix(in srgb, var(--color-accent) 82%, var(--color-text) 18%);
-      background: var(--color-accent);
-      color: var(--color-accent-foreground);
-      box-shadow: var(--shadow-1), var(--specular);
-    }
-    .ui-button--primary:hover:not(:disabled) {
-      background: var(--color-accent-hover);
-      box-shadow: var(--shadow-2), var(--specular-strong);
-      transform: translateY(calc(-1 * var(--border-width-1)));
-    }
+    /* All primitive-control rules — the base interaction group, focus/active/disabled,
+       button sizes, the icon button, the secondary/ghost/danger variants, and
+       ui-button--primary (base + :hover + sheen ::after, the canonical Studio
+       accent-action gradient fill) — are single-sourced in @open-cowork/ui
+       controlsSurfaceCss() (embedded above in styles.ts), so the website renders them
+       identically to the desktop. */
     .ui-card {
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-lg);

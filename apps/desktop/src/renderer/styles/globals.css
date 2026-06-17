@@ -403,23 +403,8 @@ body {
    icon button, secondary/ghost/danger, input/textarea/select/menu/popover/segmented, and
    the primary sheen ::after) are single-sourced in @open-cowork/ui controlsSurfaceCss(),
    injected via studioSurfaceStyles() at renderer startup, so desktop and web render them
-   identically. Only `.ui-button--primary` (base + :hover) stays here because the desktop's
-   accent-action gradient fill differs from the website's flat accent fill. */
-
-.ui-button--primary {
-  position: relative;
-  overflow: hidden;
-  background: var(--accent-action-fill);
-  color: var(--accent-action-foreground);
-  border-color: var(--accent-line);
-  box-shadow: var(--shadow-1), var(--specular);
-}
-
-.ui-button--primary:hover:not(:disabled) {
-  background: var(--accent-action-fill);
-  box-shadow: var(--shadow-2), var(--specular-strong);
-  transform: translateY(calc(-1 * var(--border-width-1)));
-}
+   identically — including `.ui-button--primary` (the canonical Studio accent-action
+   gradient fill via the shared `--accent-action-*` tokens), now adopted by Cloud Web too. */
 
 .ui-dialog-backdrop {
   position: fixed;
