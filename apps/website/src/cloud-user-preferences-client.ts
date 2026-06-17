@@ -1,5 +1,5 @@
 import type { UiAccentPresetId } from '@open-cowork/shared'
-import type { CloudWebClientBootstrap } from './client-contract.ts'
+import type { CloudWebClientBootstrap, CloudWebEndpointId } from './client-contract.ts'
 import {
   isCloudDensity,
   isCloudThemeAccentPreset,
@@ -82,10 +82,13 @@ function sanitizeCloudUserPreferences(value: unknown): CloudUserPreferences {
   }
 }
 
-function endpointPath(bootstrap: CloudWebClientBootstrap, id: string, fallback: string, params: Record<string, string> = {}) {
-  const configured = bootstrap.api.find((endpoint) => endpoint.id === id)?.path
-  if (!configured) return null
-  let path = configured || fallback
+// Capability probe: resolves an endpoint's path from the server-sent registry
+// (`bootstrap.api`, single-sourced from CLOUD_WEB_CLIENT_ENDPOINTS) and returns
+// null when the server doesn't advertise it — which gates the durable-preferences
+// feature. No hardcoded path: the registry is the only source.
+function endpointPath(bootstrap: CloudWebClientBootstrap, id: CloudWebEndpointId, params: Record<string, string> = {}) {
+  let path = bootstrap.api.find((endpoint) => endpoint.id === id)?.path
+  if (!path) return null
   for (const [key, value] of Object.entries(params)) {
     path = path.replace(`:${key}`, encodeURIComponent(value))
   }
@@ -102,7 +105,7 @@ function readCookie(name: string) {
 }
 
 function cloudUserPreferencesPath(bootstrap: CloudWebClientBootstrap) {
-  return endpointPath(bootstrap, 'setting', '/api/settings/:settingKey', {
+  return endpointPath(bootstrap, 'setting', {
     settingKey: CLOUD_USER_PREFERENCES_SETTING_KEY,
   })
 }

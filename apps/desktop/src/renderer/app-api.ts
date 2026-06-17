@@ -32,9 +32,6 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
   const channels = createChannelAppApi(coworkApi)
   return {
     platform: 'desktop',
-    endpoint: (_id, fallback) => fallback,
-    endpointPath: (_id, fallback, params = {}) => Object.entries(params)
-      .reduce((path, [key, value]) => path.replace(`:${key}`, encodeURIComponent(String(value))), fallback),
     request: unsupported('Raw HTTP requests'),
     stream: () => ({ close: () => {} }),
     auth: {

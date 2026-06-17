@@ -41,7 +41,6 @@ void test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only reque
   }) as typeof fetch
   try {
     const api = createCloudWebAppApi(bootstrap(), { csrfToken: 'csrf-1' })
-    assert.equal(api.endpointPath('sessionPrompt', '/fallback/:sessionId', { sessionId: 's/1' }), '/api/sessions/s%2F1/prompt')
     await api.sessions.list({ limit: 200, cursor: 'offset:200', empty: '' })
     await api.sessions.prompt('s/1', { text: 'Hello', agent: 'build' })
     await api.artifacts.index({ projectId: 'project-1', taskIds: ['task-1', 'task-2'], status: 'draft', limit: 25 })

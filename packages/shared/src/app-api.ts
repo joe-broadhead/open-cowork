@@ -30,12 +30,7 @@ export type AppApiSessionEventsOptions = {
 
 export type AppApiQueryValue = string | number | boolean | readonly string[] | null | undefined
 
-export type AppApiEndpointResolver = {
-  endpoint: (id: string, fallback: string) => string
-  endpointPath: (id: string, fallback: string, params?: Record<string, string | number>) => string
-}
-
-export type AppAPI = AppApiEndpointResolver & {
+export type AppAPI = {
   platform: AppApiPlatform
   request: <T = unknown>(path: string, options?: AppApiRequestOptions) => Promise<T>
   stream: (path: string, handlers?: AppApiEventHandlers) => AppApiEventStream
