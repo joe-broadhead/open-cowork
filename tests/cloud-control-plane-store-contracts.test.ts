@@ -514,6 +514,27 @@ test('cloud_workflow_runs concurrency gauge trigger stays consistent with the CO
     await pool.query(`DELETE FROM cloud_workflow_runs WHERE run_id = 'r2'`)
     assert.equal(await gauge(), 0)
     assert.equal(await gauge(), await counted())
+
+    // concurrent-sessions gauge (active = status <> 'closed')
+    const insertSession = (sessionId: string, status: string) => pool.query(
+      `INSERT INTO cloud_sessions (tenant_id, session_id, user_id, opencode_session_id, profile_name, status, created_at, updated_at)
+       VALUES ('t1', $1, 'u1', $1, 'default', $2, now(), now())`,
+      [sessionId, status],
+    )
+    const sessionGauge = async () => Number((await pool.query(
+      `SELECT value FROM cloud_concurrency_counters WHERE scope_id = 'org-1' AND counter_key = 'concurrent_sessions'`,
+    )).rows[0]?.value ?? 0)
+    const sessionCounted = async () => Number((await pool.query(
+      `SELECT count(*) AS c FROM cloud_sessions WHERE status <> 'closed'`,
+    )).rows[0]?.c ?? 0)
+
+    await insertSession('s1', 'running')
+    await insertSession('s2', 'idle')
+    assert.equal(await sessionGauge(), 2)
+    assert.equal(await sessionGauge(), await sessionCounted())
+    await pool.query(`UPDATE cloud_sessions SET status = 'closed' WHERE session_id = 's1'`)
+    assert.equal(await sessionGauge(), 1)
+    assert.equal(await sessionGauge(), await sessionCounted())
   } finally {
     await store.close?.()
   }

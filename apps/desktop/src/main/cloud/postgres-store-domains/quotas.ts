@@ -76,12 +76,11 @@ export async function assertPostgresConcurrentSessionQuota(
   const orgId = await resolveOrgId(executor, input.tenantId, input.quota?.orgId)
   const now = input.now || new Date()
   await deps.lockQuota(executor, orgId, 'concurrent_sessions', now)
+  // O(1) read of the maintained gauge (kept by the cloud_sessions trigger).
   const countRow = await executor.query(
-    `SELECT count(*)::int AS count
-     FROM cloud_sessions sessions
-     LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = sessions.tenant_id
-     WHERE coalesce(orgs.org_id, sessions.tenant_id) = $1
-       AND sessions.status <> 'closed'`,
+    `SELECT value::int AS count
+     FROM cloud_concurrency_counters
+     WHERE scope_id = $1 AND counter_key = 'concurrent_sessions'`,
     [orgId],
   )
   const activeSessions = numberValue(countRow.rows[0]?.count)

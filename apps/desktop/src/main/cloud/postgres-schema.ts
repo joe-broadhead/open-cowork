@@ -949,6 +949,42 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS = [
     ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
+// Concurrent-sessions gauge (active = status <> 'closed'), same drift-free
+// trigger pattern as workflow runs.
+export const CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_MIGRATION_ID = '018_concurrency_counter_sessions'
+const CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS = [
+  `CREATE OR REPLACE FUNCTION cloud_session_concurrency_counter() RETURNS trigger AS $func$
+    DECLARE
+      old_active int := 0;
+      new_active int := 0;
+      tid text;
+      scope text;
+    BEGIN
+      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status <> 'closed' THEN old_active := 1; END IF;
+      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status <> 'closed' THEN new_active := 1; END IF;
+      IF old_active = new_active THEN RETURN NULL; END IF;
+      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
+      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+        VALUES (scope, 'concurrent_sessions', GREATEST(0, new_active - old_active), now())
+        ON CONFLICT (scope_id, counter_key) DO UPDATE
+          SET value = GREATEST(0, cloud_concurrency_counters.value + (new_active - old_active)), updated_at = now();
+      RETURN NULL;
+    END;
+    $func$ LANGUAGE plpgsql`,
+  `DROP TRIGGER IF EXISTS cloud_sessions_concurrency_counter ON cloud_sessions`,
+  `CREATE TRIGGER cloud_sessions_concurrency_counter
+    AFTER INSERT OR UPDATE OR DELETE ON cloud_sessions
+    FOR EACH ROW EXECUTE FUNCTION cloud_session_concurrency_counter()`,
+  `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value)
+    SELECT COALESCE(orgs.org_id, sessions.tenant_id), 'concurrent_sessions', count(*)
+    FROM cloud_sessions sessions
+    LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = sessions.tenant_id
+    WHERE sessions.status <> 'closed'
+    GROUP BY COALESCE(orgs.org_id, sessions.tenant_id)
+    ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1019,5 +1055,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS,
   },
 ] as const
