@@ -3700,6 +3700,46 @@ test('cloud HTTP server rejects user-bound admin API token privileges after role
   }
 })
 
+test('principal bootstrap fast-path skips redundant writes but still enforces the membership gate', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const bootstrapOrg = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const bootstrapAccount = store.createAccount({ accountId: 'account-1', idpSubject: 'subject-1', email: 'member@example.test' })
+  store.ensureUser({ tenantId: 'tenant-1', userId: bootstrapAccount.accountId, email: bootstrapAccount.email })
+  store.upsertMembership({ orgId: bootstrapOrg.orgId, accountId: bootstrapAccount.accountId, role: 'admin', status: 'active' })
+  const service = new CloudSessionService(store, new FakeRuntimeAdapter(), resolveCloudRuntimePolicy(DEFAULT_CONFIG))
+
+  // Count the bootstrap WRITES so we can prove the fast path skips them.
+  let bootstrapWrites = 0
+  const realCreateAccount = store.createAccount.bind(store)
+  store.createAccount = ((input: Parameters<typeof realCreateAccount>[0]) => {
+    bootstrapWrites += 1
+    return realCreateAccount(input)
+  }) as typeof store.createAccount
+
+  const principal = (): CloudPrincipal => ({
+    tenantId: 'tenant-1',
+    orgId: bootstrapOrg.orgId,
+    tenantName: 'Tenant 1',
+    userId: bootstrapAccount.accountId,
+    accountId: bootstrapAccount.accountId,
+    email: bootstrapAccount.email,
+    role: 'admin',
+    authSource: 'api_token',
+    tokenId: 'token-1',
+  })
+
+  await service.ensurePrincipal(principal()) // first call bootstraps (writes)
+  await service.ensurePrincipal(principal()) // second call takes the fast path (no writes)
+  assert.equal(bootstrapWrites, 1, 'the second request reused the bootstrap and skipped the idempotent writes')
+
+  // Suspend the membership AFTER bootstrap. The gate must still fire on the next
+  // request even though the principal is cached as bootstrapped — the fast path
+  // re-reads membership status every request, so there is no revocation window.
+  store.upsertMembership({ orgId: bootstrapOrg.orgId, accountId: bootstrapAccount.accountId, role: 'admin', status: 'suspended' })
+  await assert.rejects(() => service.ensurePrincipal(principal()), /membership is not active/i)
+})
+
 test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })

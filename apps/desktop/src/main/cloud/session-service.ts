@@ -450,6 +450,15 @@ export class CloudSessionService {
   private readonly settingMetadataService: CloudSettingMetadataService
   private readonly inviteSigningSecret: string | Buffer | null
   private readonly emailSender: CloudEmailSender | null
+  // Per-(tenant,account) "already bootstrapped" markers. The org-active and
+  // membership-active gates still run on EVERY request via
+  // resolvePrincipalMembership (a read); this only lets a request SKIP the
+  // idempotent bootstrap WRITES (createTenant / ensureOrgForTenant /
+  // createAccount / ensureUser / upsertMembership) once a principal has been
+  // bootstrapped within the short TTL. No principal/role is cached, so a revoked
+  // token, deactivated org, or inactive membership is still rejected on the very
+  // next request — there is no revocation window.
+  private readonly bootstrappedPrincipals = new Map<string, number>()
 
   constructor(
     store: ControlPlaneStore,
@@ -622,6 +631,29 @@ export class CloudSessionService {
         throw new CloudServiceError(403, 'Cloud membership is not active.')
       }
     }
+    // Fast path: once a (tenant, account) has been bootstrapped within the TTL,
+    // skip the idempotent bootstrap WRITES below. Every security gate is still
+    // enforced on THIS request from the fresh `existingMembership` read above —
+    // org must be active, membership must be active — so a deactivated org or
+    // revoked/expired membership is rejected on the very next request. Nothing
+    // is mutated server-side; only the redundant upserts are avoided.
+    const bootstrapKey = `${principal.tenantId} ${principal.accountId || principal.userId}`
+    const bootstrappedUntil = this.bootstrappedPrincipals.get(bootstrapKey)
+    if (
+      bootstrappedUntil !== undefined
+      && bootstrappedUntil > Date.now()
+      && existingMembership
+      && existingMembership.membership.status === 'active'
+      && (principal.authSource === 'local' || existingMembership.org.status === 'active')
+    ) {
+      principal.tenantId = existingMembership.org.tenantId
+      principal.orgId = existingMembership.org.orgId
+      principal.tenantName = existingMembership.org.name
+      principal.accountId = existingMembership.account.accountId
+      principal.email = existingMembership.account.email
+      principal.role = existingMembership.membership.role
+      return
+    }
     await this.store.createTenant({
       tenantId: principal.tenantId,
       name: principal.tenantName || principal.tenantId,
@@ -685,6 +717,9 @@ export class CloudSessionService {
     principal.accountId = account.accountId
     principal.email = account.email
     principal.role = effectiveRole
+    // Mark bootstrapped so subsequent requests within the TTL take the fast path
+    // above and skip these idempotent writes (the gates still re-run each time).
+    this.bootstrappedPrincipals.set(bootstrapKey, Date.now() + 60_000)
   }
 
   async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {
