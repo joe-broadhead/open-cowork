@@ -55,6 +55,15 @@ function readBuiltReactClientAsset() {
   return pathExists(BUILT_REACT_CLIENT_PATH) ? readFileSync(BUILT_REACT_CLIENT_PATH, 'utf8') : null
 }
 
+// Read any built client chunk (entry / vendor / runtime) by its request path, so
+// the vendor-split ESM graph fully resolves in the real-browser e2e.
+function readBuiltReactClientChunk(pathname: string): string | null {
+  const file = pathname.split('/').pop() || ''
+  if (!/^open-cowork-cloud-react[\w.-]*\.js$/.test(file)) return null
+  const chunkPath = fileURLToPath(new URL(`../dist/client/${file}`, import.meta.url))
+  return pathExists(chunkPath) ? readFileSync(chunkPath, 'utf8') : null
+}
+
 async function loadChromium() {
   try {
     const module = await import('playwright-core') as { chromium: ChromiumLauncher }
@@ -393,12 +402,18 @@ void test('cloud web workbench passes a real Chromium desktop and mobile smoke',
         ? { status: 200, contentType: 'font/woff2', body }
         : { status: 404, contentType: 'text/plain; charset=utf-8', body: 'Not found' })
     })
-    await page.route('https://cloud.example.test/assets/open-cowork-cloud-react.js', (route: any) => {
-      reactClientRequests.push(new URL(route.request().url()).pathname)
+    // The client is vendor-split: the entry imports a vendor + runtime chunk by
+    // fixed names. Serve every built chunk so the ESM graph fully resolves.
+    await page.route(/\/assets\/open-cowork-cloud-react[\w.-]*\.js$/, (route: any) => {
+      const pathname = new URL(route.request().url()).pathname
+      reactClientRequests.push(pathname)
+      const chunk = readBuiltReactClientChunk(pathname)
       return route.fulfill({
         status: 200,
         contentType: 'application/javascript; charset=utf-8',
-        body: builtReactClient || 'document.getElementById("open-cowork-cloud-react-root")?.setAttribute("data-react-status", "test-hydrated");',
+        body: chunk ?? (pathname.endsWith('/open-cowork-cloud-react.js')
+          ? 'document.getElementById("open-cowork-cloud-react-root")?.setAttribute("data-react-status", "test-hydrated");'
+          : ''),
       })
     })
     await page.addInitScript(browserMocksScript(state))
@@ -412,7 +427,10 @@ void test('cloud web workbench passes a real Chromium desktop and mobile smoke',
     await waitForFontsReady(page)
     assert.ok(fontRequests.some((path) => path.endsWith('/mona-sans-latin-wght-normal.woff2')), 'Mona Sans font route was requested')
     assert.ok(fontRequests.some((path) => path.endsWith('/schibsted-grotesk-latin-wght-normal.woff2')), 'Schibsted Grotesk font route was requested')
-    assert.deepEqual(reactClientRequests, ['/assets/open-cowork-cloud-react.js'])
+    assert.ok(reactClientRequests.includes('/assets/open-cowork-cloud-react.js'), 'the entry client chunk was requested')
+    if (builtReactClient) {
+      assert.ok(reactClientRequests.includes('/assets/open-cowork-cloud-react-vendor.js'), 'the vendor chunk was requested (the entry imports it)')
+    }
     if (builtReactClient) {
       try {
         await page.waitForFunction(() => document.getElementById('open-cowork-cloud-react-root')?.dataset.reactStatus === 'hydrated', undefined, { timeout: 10_000 })

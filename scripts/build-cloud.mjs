@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, readdir } from 'node:fs/promises'
 import { builtinModules } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
@@ -103,10 +103,18 @@ await build({
   logLevel: 'info',
 })
 
-await copyFile(
-  resolve(repoRoot, 'apps/website/dist/client', cloudReactClientAsset),
-  resolve(cloudAssetsDir, cloudReactClientAsset),
-)
+// Copy EVERY built client chunk (the vendor-split entry + its sibling vendor /
+// runtime chunks) so the split client fully loads from the cloud image. The SSR
+// shell references only the entry `<script>`; the entry imports the sibling
+// chunks by their fixed names, so all of them must ship alongside it.
+const clientDir = resolve(repoRoot, 'apps/website/dist/client')
+const clientChunks = (await readdir(clientDir)).filter((file) => file.endsWith('.js'))
+if (!clientChunks.includes(cloudReactClientAsset)) {
+  throw new Error(`Cloud React client entry ${cloudReactClientAsset} is missing from the website build output.`)
+}
+for (const chunk of clientChunks) {
+  await copyFile(resolve(clientDir, chunk), resolve(cloudAssetsDir, chunk))
+}
 
 await build({
   entryPoints: [resolve(repoRoot, 'apps/desktop/src/main/runtime-managed-server-supervisor.ts')],
