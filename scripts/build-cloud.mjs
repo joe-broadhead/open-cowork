@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { CLOUD_ELECTRON_SHIM_EXPORTS } from './cloud-electron-shim-exports.mjs'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs')
@@ -28,23 +29,12 @@ const cloudElectronShimPlugin = {
       namespace: 'cloud-electron-shim',
     }))
     buildContext.onLoad({ filter: /.*/, namespace: 'cloud-electron-shim' }, () => ({
+      // Stub every name in the single-sourced shim list (kept in lockstep with the
+      // server→Electron boundary test). Each is an undefined-valued named export,
+      // plus a default object so `import electron from 'electron'` keeps working.
       contents: [
-        'export const app = undefined;',
-        'export const safeStorage = undefined;',
-        'export const net = undefined;',
-        'export const protocol = undefined;',
-        'export const shell = undefined;',
-        'export const session = undefined;',
-        'export const BrowserWindow = undefined;',
-        'export const ipcMain = undefined;',
-        'export const Menu = undefined;',
-        'export const nativeImage = undefined;',
-        'export const dialog = undefined;',
-        'export const Notification = undefined;',
-        'export const Tray = undefined;',
-        'export const powerMonitor = undefined;',
-        'export const utilityProcess = undefined;',
-        'export default { app, safeStorage, net, protocol, shell, session, BrowserWindow, ipcMain, Menu, nativeImage, dialog, Notification, Tray, powerMonitor, utilityProcess };',
+        ...CLOUD_ELECTRON_SHIM_EXPORTS.map((name) => `export const ${name} = undefined;`),
+        `export default { ${CLOUD_ELECTRON_SHIM_EXPORTS.join(', ')} };`,
       ].join('\n'),
       loader: 'js',
     }))
