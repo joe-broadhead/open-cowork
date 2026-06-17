@@ -1,8 +1,7 @@
+import { sanitizeLogMessage } from '@open-cowork/shared'
 import { createWriteStream, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir, getLogFilePrefix } from './config-loader.ts'
-import { sanitizeLogMessage } from './log-sanitizer.ts'
-
 let logPath: string | null = null
 let logStream: ReturnType<typeof createWriteStream> | null = null
 const LOG_RETENTION_DAYS = 14

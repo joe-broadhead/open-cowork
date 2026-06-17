@@ -1,3 +1,4 @@
+import { shortSessionId } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
 import { getEffectiveSettings } from '../settings.ts'
@@ -18,7 +19,6 @@ import { trackParentSession } from '../event-task-state.ts'
 import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { log } from '../logger.ts'
-import { shortSessionId } from '../log-sanitizer.ts'
 import type { IpcHandlerContext } from '../ipc/context.ts'
 import type { DesktopPairingCommandExecutor } from './service.ts'
 import {

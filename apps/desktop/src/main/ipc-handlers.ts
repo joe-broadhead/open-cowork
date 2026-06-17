@@ -4,7 +4,7 @@ import type {
   DestructiveConfirmationRequest,
   ToolListOptions,
 } from '@open-cowork/shared'
-import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
+import { isMcpAuthRequiredStatus, shortSessionId } from '@open-cowork/shared'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import {
@@ -15,7 +15,6 @@ import { getEffectiveSettings } from './settings.ts'
 import { getAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
-import { shortSessionId } from './log-sanitizer.ts'
 import {
   addRuntimeSessionEventObserver,
   dispatchRuntimeSessionEvent,

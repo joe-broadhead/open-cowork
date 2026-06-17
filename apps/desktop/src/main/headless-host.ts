@@ -1,8 +1,7 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import type { RuntimeDoctorCheck, RuntimeStatus } from '@open-cowork/shared'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { sanitizeForExport } from './log-sanitizer.ts'
-
 export const HEADLESS_HOST_STATUS_VERSION = 1
 export const HEADLESS_HOST_STATE_VERSION = 1
 

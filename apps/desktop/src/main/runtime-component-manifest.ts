@@ -1,3 +1,4 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import type {
   RuntimeComponentManifest,
   RuntimeComponentManifestEntry,
@@ -8,7 +9,6 @@ import electron from 'electron'
 import { createHash } from 'node:crypto'
 import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
-import { sanitizeForExport } from './log-sanitizer.ts'
 import {
   getBundledOpencodeSdkVersion,
   getBundledOpencodeVersion,

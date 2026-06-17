@@ -170,6 +170,7 @@ import type {
 
 export * from './app-config.js'
 export * from './config-types.js'
+export * from './log-sanitizer.js'
 export * from './app-api.js'
 export * from './agent-capability-profile.js'
 export * from './agent-validation.js'

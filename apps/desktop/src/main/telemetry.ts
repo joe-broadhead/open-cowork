@@ -1,8 +1,7 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir, getTelemetryConfig } from './config-loader.ts'
-import { sanitizeForExport } from './log-sanitizer.ts'
-
 let telemetryPath: string | null = null
 const TELEMETRY_RETENTION_DAYS = 14
 

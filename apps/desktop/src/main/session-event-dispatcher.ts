@@ -1,7 +1,7 @@
+import { shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import type { MessageAttachment, RuntimeNotification, SessionPatch, TodoItem } from '@open-cowork/shared'
 import { log } from './logger.ts'
-import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
 import { sessionEngine } from './session-engine.ts'
 import { getThreadIndexService } from './thread-index/thread-index-service.ts'

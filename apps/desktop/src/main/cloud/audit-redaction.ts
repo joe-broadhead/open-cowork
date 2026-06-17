@@ -1,5 +1,4 @@
-import { sanitizeLogMessage } from '../log-sanitizer.ts'
-
+import { sanitizeLogMessage } from '@open-cowork/shared'
 const SENSITIVE_AUDIT_FIELD = /token|secret|key|password|credential|ref|ciphertext|envelope/i
 
 export function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {

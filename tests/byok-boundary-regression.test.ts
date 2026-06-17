@@ -1,9 +1,8 @@
+import { sanitizeForExport, sanitizeLogMessage } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-
-import { sanitizeForExport, sanitizeLogMessage } from '../apps/desktop/src/main/log-sanitizer.ts'
 
 const RAW_BYOK_KEY = ['sk', 'byokboundarysecretvalue1234567890abcdef123456'].join('-')
 

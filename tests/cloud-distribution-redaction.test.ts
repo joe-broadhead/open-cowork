@@ -1,7 +1,7 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { sanitizeForExport } from '../apps/desktop/src/main/log-sanitizer.ts'
 import { sanitizeCloudObservabilityAttributes } from '../apps/desktop/src/main/cloud/observability.ts'
 import { redactGatewayConfig, resolveGatewayConfig } from '../apps/gateway/dist/config.js'
 

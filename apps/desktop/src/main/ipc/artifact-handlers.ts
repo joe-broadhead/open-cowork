@@ -2,7 +2,7 @@ import electron from 'electron'
 import { resolve } from 'path'
 import { basename, join } from 'path'
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs'
-import { isSafeArtifactOpenTarget } from '@open-cowork/shared'
+import { isSafeArtifactOpenTarget, shortSessionId } from '@open-cowork/shared'
 import type {
   ArtifactIndexPayload,
   ArtifactIndexRequest,
@@ -28,7 +28,6 @@ import { buildArtifactAttachmentPayload, inferArtifactMime } from '../artifact-a
 import { listLocalArtifactIndex, listLocalSessionArtifacts, updateLocalArtifactStatus } from '../artifact-index.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
-import { shortSessionId } from '../log-sanitizer.ts'
 import { log } from '../logger.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { isReadableSessionArtifact } from '../session-artifact-access.ts'

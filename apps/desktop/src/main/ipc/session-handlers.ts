@@ -1,10 +1,5 @@
 import type { IpcHandlerContext } from './context.ts'
-import {
-  normalizeCloudProjectSource,
-  type CloudProjectSourceInput,
-  type SessionChangeSummary,
-  type SessionImportSelection,
-} from '@open-cowork/shared'
+import { normalizeCloudProjectSource, type CloudProjectSourceInput, type SessionChangeSummary, type SessionImportSelection, shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
@@ -29,7 +24,6 @@ import { toIsoTimestamp } from '../task-run-utils.ts'
 import { isSessionPartiallyHydrated, syncSessionView } from '../session-history-loader.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { normalizeSessionInfo } from '../opencode-adapter.ts'
-import { shortSessionId } from '../log-sanitizer.ts'
 import { log } from '../logger.ts'
 import {
   buildSessionImportInventory,

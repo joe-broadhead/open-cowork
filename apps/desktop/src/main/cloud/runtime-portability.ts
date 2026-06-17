@@ -1,8 +1,7 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import { execFile } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
-
-import { sanitizeForExport } from '../log-sanitizer.ts'
 
 export type PortableRuntimeEntryKind =
   | 'opencode-config'

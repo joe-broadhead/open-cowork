@@ -36,7 +36,7 @@ const consoleLogAllowlist = new Set([
   'scripts/lint.mjs',
 ])
 const secretScanAllowlist = new Set([
-  'apps/desktop/src/main/log-sanitizer.ts',
+  'packages/shared/src/log-sanitizer.ts',
   'scripts/lint.mjs',
   'tests/log-sanitizer.test.ts',
 ])

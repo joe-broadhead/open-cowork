@@ -69,11 +69,19 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// Read process.env defensively so this module stays platform-agnostic in the
+// shared package. It runs in the Electron main process and the cloud server
+// (both Node, where this is exactly `process.env`); anywhere `process` is
+// absent it simply skips env-value redaction rather than throwing.
+function secretEnvValue(key: string): string | undefined {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[key]
+}
+
 export function sanitizeLogMessage(message: string) {
   let sanitized = message
 
   for (const key of SECRET_ENV_KEYS) {
-    const value = process.env[key]
+    const value = secretEnvValue(key)
     if (value) {
       sanitized = sanitized.replace(new RegExp(escapeRegExp(value), 'g'), '[REDACTED_SECRET]')
     }

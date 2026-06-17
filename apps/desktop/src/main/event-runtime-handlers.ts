@@ -1,3 +1,4 @@
+import { shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { trackPermission } from './permission-tracker.ts'
 import { log } from './logger.ts'
@@ -18,7 +19,6 @@ import {
 } from './runtime-event-normalizers.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { dropSessionFromDispatcherQueues, publishNotification } from './session-event-dispatcher.ts'
-import { shortSessionId } from './log-sanitizer.ts'
 import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { sessionEngine } from './session-engine.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'

@@ -1,3 +1,4 @@
+import { shortSessionId } from '@open-cowork/shared'
 import type { OpencodeClient, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
@@ -18,7 +19,6 @@ import {
 } from './normalizer-utils.ts'
 import { projectSessionHistory } from './session-history-projector.ts'
 import { log } from './logger.ts'
-import { shortSessionId } from './log-sanitizer.ts'
 import { measureAsyncPerf } from './perf-metrics.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { sessionEngine } from './session-engine.ts'

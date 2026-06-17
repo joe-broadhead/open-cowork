@@ -1,7 +1,6 @@
+import { sanitizeForExport, sanitizeLogMessage, shortSessionId } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { sanitizeForExport, sanitizeLogMessage, shortSessionId } from '../apps/desktop/src/main/log-sanitizer.ts'
-
 test('sanitizeLogMessage redacts env-backed secrets, emails, and token-like values', () => {
   process.env.DATABRICKS_TOKEN = 'super-secret-token'
 

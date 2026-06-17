@@ -1,7 +1,7 @@
+import { shortSessionId } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { normalizeCommandName, normalizeSessionId } from './session-handler-validation.ts'
 import { trackParentSession } from '../event-task-state.ts'
-import { shortSessionId } from '../log-sanitizer.ts'
 import { normalizeRuntimeCommands } from '../opencode-adapter.ts'
 import { getClient } from '../runtime.ts'
 import { touchSessionRecord } from '../session-registry.ts'

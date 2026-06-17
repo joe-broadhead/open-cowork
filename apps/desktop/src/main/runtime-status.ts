@@ -1,3 +1,4 @@
+import { sanitizeLogMessage } from '@open-cowork/shared'
 import type {
   RuntimeDoctorCheck,
   RuntimeDoctorSeverity,
@@ -8,8 +9,6 @@ import type {
   RuntimeReadinessTimelineEntry,
   RuntimeStatus,
 } from '@open-cowork/shared'
-import { sanitizeLogMessage } from './log-sanitizer.ts'
-
 const MAX_TIMELINE_ENTRIES = 80
 
 export type RuntimeDoctorCheckInput = {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { sanitizeForExport } from '@open-cowork/shared'
 import { randomBytes } from 'node:crypto'
 import {
   mkdirSync,
@@ -10,7 +11,6 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { sanitizeForExport } from '../apps/desktop/src/main/log-sanitizer.ts'
 import {
   checkSandboxRuntimeEngine,
   runSandboxRuntimeOneShot,

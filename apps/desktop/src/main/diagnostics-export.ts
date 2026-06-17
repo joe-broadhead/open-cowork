@@ -1,3 +1,4 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import { closeSync, fstatSync, openSync, readSync } from 'fs'
 import { getPublicAppConfig } from './config-loader.ts'
 import { getLogFilePath } from './logger.ts'
@@ -5,7 +6,6 @@ import { getPerfSnapshot } from './perf-metrics.ts'
 import { getRuntimeInputDiagnostics } from './runtime-input-diagnostics.ts'
 import { getRuntimeStatus } from './runtime-status.ts'
 import { getBundledOpencodeVersion } from './runtime-opencode-cli.ts'
-import { sanitizeForExport } from './log-sanitizer.ts'
 import { maskEffectiveSettingsCredentials } from './settings.ts'
 import { getEffectiveSettings } from './settings.ts'
 
