@@ -381,7 +381,6 @@ export function KnowledgePage() {
     try {
       const result = await window.coworkApi.knowledge.acceptProposal(proposal.id, {
         workspaceId: activeWorkspaceId,
-        reviewedBy: 'you',
       })
       setSelectedPageId(result.page.id)
       await loadSnapshot()
@@ -398,7 +397,6 @@ export function KnowledgePage() {
     try {
       await window.coworkApi.knowledge.declineProposal(proposal.id, {
         workspaceId: activeWorkspaceId,
-        reviewedBy: 'you',
       })
       await loadSnapshot()
     } catch (actionError) {
@@ -414,7 +412,6 @@ export function KnowledgePage() {
     try {
       await window.coworkApi.knowledge.restoreVersion(version.pageId, version.versionId, {
         workspaceId: activeWorkspaceId,
-        reviewedBy: 'you',
       })
       await Promise.all([loadSnapshot(), loadHistory()])
     } catch (actionError) {
