@@ -1,5 +1,5 @@
 import { cssColorLuminance, emitRootTokensCss, type PublicBrandingConfig } from '@open-cowork/shared'
-import { approvalsSurfaceCss, channelsSurfaceCss, knowledgeGraphCss, primitivesSurfaceCss, projectsSurfaceCss, sharedKeyframesCss, wikiSurfaceCss } from '@open-cowork/ui'
+import { approvalsSurfaceCss, channelsSurfaceCss, controlsSurfaceCss, knowledgeGraphCss, primitivesSurfaceCss, projectsSurfaceCss, sharedKeyframesCss, wikiSurfaceCss } from '@open-cowork/ui'
 import { publicBrandingCss } from './branding.ts'
 import { cloudWebsiteAgentProfileStyles } from './style-agent-profile.ts'
 import { cloudWebsiteArtifactStyles } from './style-artifacts.ts'
@@ -154,6 +154,7 @@ ${cloudWebsiteChatStyles()}
 ${cloudWebsiteSharedUiStyles()}
 ${cloudWebsiteSettingsStyles()}
 ${cloudWebsiteStudioPrimitiveStyles()}
+${controlsSurfaceCss()}
 ${primitivesSurfaceCss()}
 ${channelsSurfaceCss()}
 ${projectsSurfaceCss()}

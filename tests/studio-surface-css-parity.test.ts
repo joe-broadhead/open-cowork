@@ -30,6 +30,18 @@ const SINGLE_SOURCED_PREFIXES = [
   '.studio-wiki-propose',
   '.ui-empty-state',
   '.ui-skeleton',
+  // Primitive controls — the input/textarea/select-trigger/menu-trigger/field/popover
+  // rules previously lived ONLY in desktop globals.css (so the controls rendered with
+  // raw browser defaults on web). Now single-sourced in controlsSurfaceCss(). NOTE the
+  // byte-identical button base/sizes/secondary/ghost/danger move there too, but
+  // `.ui-button--primary` deliberately stays app-local (the desktop gradient fill differs
+  // from the website flat fill), so the broad `.ui-button` prefix is intentionally absent.
+  '.ui-input',
+  '.ui-field',
+  '.ui-select-trigger',
+  '.ui-menu-trigger',
+  '.ui-popover-root',
+  '.ui-popover-item',
   // Cross-app animation keyframes (defined once in sharedKeyframesCss). Desktop-only
   // `ui-spin`/`ui-disclosure-in` are intentionally NOT listed — they stay in globals.css.
   '@keyframes ui-fade-in',

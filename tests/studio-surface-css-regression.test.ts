@@ -4,6 +4,7 @@ import {
   approvalsSurfaceCss,
   artifactsSurfaceCss,
   channelsSurfaceCss,
+  controlsSurfaceCss,
   knowledgeGraphCss,
   projectsSurfaceCss,
   studioSurfaceStyles,
@@ -20,6 +21,7 @@ import { extractCssRules } from './helpers/css-rules.ts'
 // by diffing the extracted rule maps before and after.
 
 const SURFACES = [
+  { name: 'controls', css: controlsSurfaceCss() },
   { name: 'artifacts', css: artifactsSurfaceCss() },
   { name: 'approvals', css: approvalsSurfaceCss() },
   { name: 'wiki', css: wikiSurfaceCss() },
@@ -54,6 +56,32 @@ test('studioSurfaceStyles embeds every shared surface verbatim — desktop⇄web
       `studioSurfaceStyles() must contain the ${surface.name} surface CSS that Cloud Web embeds`,
     )
   }
+})
+
+test('shared controlsSurfaceCss defines the primitive controls that were web-missing', () => {
+  // The Input / Textarea / Select / MenuButton / SegmentedControl components render
+  // `.ui-input` / `.ui-textarea` / `.ui-select-trigger` / `.ui-menu-trigger` /
+  // `.ui-segmented-option`. These rules previously lived ONLY in desktop globals.css, so
+  // the website rendered the controls with raw browser defaults (no `.ui-input` rule
+  // existed anywhere the website consumed). Pinning them into the shared CSS — embedded
+  // by the website via styles.ts — keeps web from regressing back to unstyled controls.
+  const rules = extractCssRules(controlsSurfaceCss())
+  const required = ['.ui-input', '.ui-textarea', '.ui-select-trigger', '.ui-menu-trigger', '.ui-segmented-option'] as const
+  for (const selector of required) {
+    const declarations = rules.get(selector)
+    assert.ok(
+      declarations !== undefined && declarations.length > 0,
+      `controlsSurfaceCss() must define "${selector}" so web renders it styled (not browser-default)`,
+    )
+  }
+  // The control fill/border/text declarations the website was missing must be present.
+  assert.ok(rules.get('.ui-input')?.includes('--color-text'), '.ui-input must set its text color')
+  assert.ok(rules.get('.ui-select-trigger')?.includes('--control-h-md'), '.ui-select-trigger must set its control height')
+  // `.ui-button--primary` is intentionally NOT single-sourced (desktop⇄web drift); guard that.
+  assert.ok(
+    !controlsSurfaceCss().includes('.ui-button--primary {'),
+    'controlsSurfaceCss() must NOT define `.ui-button--primary` — it stays app-local because the desktop and website render it differently',
+  )
 })
 
 test('every keyboard-focusable surface control carries a :focus-visible ring (WCAG 2.4.7)', () => {

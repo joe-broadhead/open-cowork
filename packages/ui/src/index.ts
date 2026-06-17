@@ -10,7 +10,7 @@ export {
   type ApprovalsQueueSurfaceProps,
 } from './ApprovalsQueueSurface.js'
 export { ArtifactsLibrarySurface, type ArtifactsLibrarySurfaceProps } from './ArtifactsLibrarySurface.js'
-export { approvalsSurfaceCss, artifactsSurfaceCss, channelsSurfaceCss, knowledgeGraphCss, primitivesSurfaceCss, projectsSurfaceCss, sharedKeyframesCss, studioSurfaceStyles, wikiSurfaceCss } from './surface-styles.js'
+export { approvalsSurfaceCss, artifactsSurfaceCss, channelsSurfaceCss, controlsSurfaceCss, knowledgeGraphCss, primitivesSurfaceCss, projectsSurfaceCss, sharedKeyframesCss, studioSurfaceStyles, wikiSurfaceCss } from './surface-styles.js'
 export { KnowledgeGraph, type KnowledgeGraphProps } from './KnowledgeGraph.js'
 export { KNOWLEDGE_SPACE_HUES, knowledgeSpaceHue } from './knowledge-hues.js'
 export { WikiProposeEditDialog, type WikiProposeEditDialogProps, type WikiProposeEditSubmit } from './WikiProposeEditDialog.js'
