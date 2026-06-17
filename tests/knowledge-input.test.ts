@@ -1,7 +1,6 @@
+import { normalizeKnowledgeProposalContent } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeKnowledgeProposalContent } from '../apps/desktop/src/main/knowledge/knowledge-input.ts'
-
 // The knowledge proposal normalizer is the shared coercion used by BOTH the
 // desktop IPC handlers and the Cloud HTTP route, so the two trust boundaries
 // stay consistent. These tests pin that coercion contract.

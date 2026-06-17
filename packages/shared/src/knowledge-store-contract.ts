@@ -7,7 +7,7 @@ import type {
   KnowledgeSpace,
   KnowledgeSpaceRole,
   KnowledgeSpaceVisibility,
-} from '@open-cowork/shared'
+} from './knowledge.js'
 
 /**
  * A value that may be produced synchronously or asynchronously. The desktop

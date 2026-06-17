@@ -7,15 +7,7 @@ import type {
   KnowledgeSnapshotPayload,
   KnowledgeSpace,
 } from '@open-cowork/shared'
-import { knowledgeRoleCanRead } from '@open-cowork/shared'
-import type {
-  KnowledgeCreateProposalInput,
-  KnowledgeCreateSpaceInput,
-  KnowledgeReviewActionInput,
-  KnowledgeStore,
-  KnowledgeStoreListOptions,
-  KnowledgeStoreWriteOptions,
-} from './knowledge-store-contract.ts'
+import { knowledgeRoleCanRead, type KnowledgeCreateProposalInput, type KnowledgeCreateSpaceInput, type KnowledgeReviewActionInput, type KnowledgeStore, type KnowledgeStoreListOptions, type KnowledgeStoreWriteOptions } from '@open-cowork/shared'
 import {
   KNOWLEDGE_MAX_TEXT_BYTES,
   KNOWLEDGE_MAX_TITLE_BYTES,

@@ -1,13 +1,7 @@
-import { isKnowledgeSpaceVisibility } from '@open-cowork/shared'
+import { isKnowledgeSpaceVisibility, type KnowledgeStore, type KnowledgeStoreListOptions, normalizeKnowledgeProposalContent } from '@open-cowork/shared'
 import type { CloudApiRouteInput } from './types.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
-import type {
-  KnowledgeStore,
-  KnowledgeStoreListOptions,
-} from '../../knowledge/knowledge-store-contract.ts'
-import { normalizeKnowledgeProposalContent } from '../../knowledge/knowledge-input.ts'
-
 function knowledgeWorkspaceId(context: CloudApiRouteInput['context']) {
   return `cloud:${context.principal.tenantId.trim() || context.principal.orgId || context.principal.userId || 'default'}`
 }

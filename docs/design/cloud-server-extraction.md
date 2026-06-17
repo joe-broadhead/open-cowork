@@ -26,8 +26,8 @@ Counts = number of cloud files importing the module.
 | 4 | `normalizer-utils.ts` | (via below) | SHARED-PURE (zero deps) | → `@open-cowork/shared` |
 | 5 | `runtime-event-normalizers.ts` | 1 | SHARED-PURE (only normalizer-utils) | → `@open-cowork/shared` |
 | 6 | `opencode-adapter.ts` | 2 | SHARED-PURE (SDK *types* + shared types + normalizer-utils) | → `@open-cowork/shared` (needs `@opencode-ai/sdk` as shared type dep) |
-| 7 | `knowledge/knowledge-store-contract.ts` | 4 | SHARED-PURE (type-only shared) | → `@open-cowork/shared` |
-| 8 | `knowledge/knowledge-input.ts` | 2 | SHARED-PURE (type-only shared) | → `@open-cowork/shared` |
+| 7 | `knowledge/knowledge-store-contract.ts` | 4 | SHARED-PURE (type-only shared) | ✅ **DONE** → `@open-cowork/shared` |
+| 8 | `knowledge/knowledge-input.ts` | 2 | SHARED-PURE (type-only shared) | ✅ **DONE** → `@open-cowork/shared` |
 | 9 | `knowledge/knowledge-store.ts` | 1 | NODE-PURE (sqlite, no electron) — desktop SQLite store | extract shared constants/helpers → shared; store stays desktop |
 | 10 | `knowledge/postgres-knowledge-store.ts` | 1 | CLOUD-ONLY (Postgres store) | move *into* `main/cloud/` |
 | 11 | `runtime-environment.ts` | 1 | NODE-PURE-ish (path + runtime constants/types) | → shared (with runtime siblings) |
@@ -51,8 +51,8 @@ Electron-free, OR the cloud server gets its own log destination.)
 1. ✅ config-types → shared.
 2. ~~workflow-schedule~~ — dropped (false positive; not a cloud dep).
 3. ✅ log-sanitizer → shared.
-4. knowledge interfaces (contract + input) → shared. ← **next**
-5. pure normalizers (normalizer-utils + runtime-event-normalizers [+ opencode-adapter]) → shared.
+4. ✅ knowledge interfaces (contract + input) → shared.
+5. pure normalizers (normalizer-utils + runtime-event-normalizers [+ opencode-adapter]) → shared. ← **next**
 6. knowledge constants → shared; postgres-knowledge-store → cloud.
 7. runtime cluster (environment + managed-server-core + node-managed-server + siblings) → shared.
 8. **Decoupling tier** (the hard part): config-loader core → shared (Electron-free), then logger → shared, then workflow-webhook-server, runtime-config-builder, capability-catalog, coordination + launchpad.

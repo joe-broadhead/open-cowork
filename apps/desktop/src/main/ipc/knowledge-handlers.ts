@@ -5,7 +5,7 @@ import type {
   KnowledgeSpaceInput,
   WorkspaceOptions,
 } from '@open-cowork/shared'
-import { isKnowledgeSpaceVisibility } from '@open-cowork/shared'
+import { isKnowledgeSpaceVisibility, normalizeKnowledgeProposalContent } from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import {
@@ -24,7 +24,6 @@ import {
   listKnowledgeSnapshot,
   restoreKnowledgePageVersion,
 } from '../knowledge/knowledge-service.ts'
-import { normalizeKnowledgeProposalContent } from '../knowledge/knowledge-input.ts'
 import { LOCAL_WORKSPACE_ID, readWorkspaceIdOption } from '../workspace-gateway.ts'
 import { userInfo } from 'node:os'
 

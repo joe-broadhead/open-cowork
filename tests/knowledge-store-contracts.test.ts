@@ -1,8 +1,8 @@
+import type { KnowledgeStore } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 
-import type { KnowledgeStore } from '../apps/desktop/src/main/knowledge/knowledge-store-contract.ts'
 import {
   createSqliteKnowledgeStore,
   setKnowledgeDatabaseForTests,

@@ -1,4 +1,4 @@
-import type { KnowledgeProposalInput } from '@open-cowork/shared'
+import type { KnowledgeProposalInput } from './knowledge.js'
 
 // Shared coercion of the request body for knowledge proposal content, used by
 // BOTH the desktop IPC handlers and the Cloud HTTP route so the two trust

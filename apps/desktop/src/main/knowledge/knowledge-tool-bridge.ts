@@ -1,8 +1,8 @@
+import { normalizeKnowledgeProposalContent } from '@open-cowork/shared'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { KnowledgeProposalInput } from '@open-cowork/shared'
 import { createKnowledgeProposal } from './knowledge-service.ts'
-import { normalizeKnowledgeProposalContent } from './knowledge-input.ts'
 import { LOCAL_WORKSPACE_ID } from '../workspace-gateway.ts'
 import { log } from '../logger.ts'
 

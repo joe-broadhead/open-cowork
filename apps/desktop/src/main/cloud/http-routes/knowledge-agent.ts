@@ -1,6 +1,6 @@
+import { normalizeKnowledgeProposalContent } from '@open-cowork/shared'
+import type { KnowledgeStore } from '@open-cowork/shared'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { KnowledgeStore } from '../../knowledge/knowledge-store-contract.ts'
-import { normalizeKnowledgeProposalContent } from '../../knowledge/knowledge-input.ts'
 import { verifyKnowledgeAgentToken } from '../knowledge-agent-token.ts'
 
 // Cloud agent-propose route. A coworker (agent) running in a CLOUD session

@@ -1,20 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import {
-  emptySessionImportItemCounts,
-  createCloudProjectionFenceToken,
-  isCloudSessionEventType,
-  normalizeCloudProjectSource,
-  type CloudProjectionFenceToken,
-  type CloudSessionEventType,
-  type CloudProjectSourceInput,
-  type PublicBrandingConfig,
-  type SessionImportRequest,
-  type WorkflowDraft,
-  type WorkflowStatus,
-  type WorkflowTriggerType,
-} from '@open-cowork/shared'
+import { emptySessionImportItemCounts, createCloudProjectionFenceToken, isCloudSessionEventType, normalizeCloudProjectSource, type CloudProjectionFenceToken, type CloudSessionEventType, type CloudProjectSourceInput, type PublicBrandingConfig, type SessionImportRequest, type WorkflowDraft, type WorkflowStatus, type WorkflowTriggerType, type KnowledgeStore } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
 import {
@@ -66,7 +53,6 @@ import {
   writeSecurityHeaders,
 } from './http-response-writers.ts'
 import { internalTokenIsValid } from './http-auth-helpers.ts'
-import type { KnowledgeStore } from '../knowledge/knowledge-store-contract.ts'
 import { createSqliteKnowledgeStore } from '../knowledge/knowledge-store.ts'
 import {
   publicChannelInteraction,

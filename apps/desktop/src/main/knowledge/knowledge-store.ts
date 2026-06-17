@@ -18,18 +18,8 @@ import type {
   KnowledgeSpaceRole,
   KnowledgeSpaceVisibility,
 } from '@open-cowork/shared'
-import {
-  isKnowledgeLinkKind,
-  isKnowledgeProposalStatus,
-  isKnowledgeSpaceRole,
-  isKnowledgeSpaceVisibility,
-  knowledgeRoleCanPropose,
-  knowledgeRoleCanRead,
-  knowledgeRoleCanReview,
-} from '@open-cowork/shared'
+import { isKnowledgeLinkKind, isKnowledgeProposalStatus, isKnowledgeSpaceRole, isKnowledgeSpaceVisibility, knowledgeRoleCanPropose, knowledgeRoleCanRead, knowledgeRoleCanReview, type KnowledgeCreateSpaceInput, type KnowledgeStore } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
-import type { KnowledgeCreateSpaceInput, KnowledgeStore } from './knowledge-store-contract.ts'
-
 const KNOWLEDGE_DB_SCHEMA_VERSION = 1
 const KNOWLEDGE_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
