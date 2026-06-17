@@ -58,6 +58,7 @@ export type AppAPI = {
     artifacts: (sessionId: string) => Promise<unknown>
     artifact: (sessionId: string, artifactId: string) => Promise<unknown>
     updateArtifactStatus: (sessionId: string, artifactId: string, input: unknown) => Promise<unknown>
+    uploadArtifact: (sessionId: string, input: unknown) => Promise<unknown>
   }
   artifacts: {
     index: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>

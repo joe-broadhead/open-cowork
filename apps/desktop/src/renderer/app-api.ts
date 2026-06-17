@@ -73,6 +73,10 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
         sessionId,
         artifactId,
       } as Parameters<CoworkAPI['artifact']['updateStatus']>[0]),
+      uploadArtifact: (sessionId, input) => coworkApi.artifact.upload({
+        ...(input as Record<string, unknown>),
+        sessionId,
+      } as Parameters<CoworkAPI['artifact']['upload']>[0]),
     },
     artifacts: {
       index: (query) => coworkApi.artifact.index(query as Parameters<CoworkAPI['artifact']['index']>[0]),

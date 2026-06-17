@@ -334,6 +334,22 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
     }
   }, [activeWorkspaceId, activeWorkspaceIsLocal, loadArtifacts])
 
+  const uploadArtifact = useCallback(async (input: { filename: string, contentType: string, dataBase64: string }) => {
+    if (!currentSessionId) return
+    try {
+      await window.coworkApi.artifact.upload({
+        sessionId: currentSessionId,
+        filename: input.filename,
+        contentType: input.contentType,
+        dataBase64: input.dataBase64,
+        workspaceId: activeWorkspaceIsLocal ? undefined : activeWorkspaceId,
+      })
+      await loadArtifacts()
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
+    }
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, currentSessionId, loadArtifacts])
+
   const rendererChartArtifacts = useMemo<ArtifactIndexEntry[]>(() => {
     return sessions.flatMap((session) => {
       const sessionArtifacts = chartArtifactsBySession[sessionWorkspaceKey(activeWorkspaceId, session.id)] || []
@@ -410,6 +426,9 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
         onExportArtifact={exportArtifact}
         onExportAll={exportVisibleArtifacts}
         onAdvanceStatus={advanceArtifactStatus}
+        onUploadArtifact={uploadArtifact}
+        canUploadArtifact={Boolean(currentSessionId)}
+        uploadDisabledReason={t('studio.artifacts.uploadNeedsChat', 'Open or start a chat to upload an artifact to it.')}
       />
 
       <Card padding="md">

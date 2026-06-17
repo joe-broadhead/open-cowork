@@ -50,6 +50,7 @@ void test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only reque
     api.setCsrfToken?.('csrf-2')
     await api.workflows.run('workflow-1')
     await api.sessions.updateArtifactStatus('s/1', 'artifact-9', { status: 'in-review' })
+    await api.sessions.uploadArtifact('s/1', { filename: 'note.txt', contentType: 'text/plain', dataBase64: 'aGk=' })
 
     assert.deepEqual(calls.map((call) => call.path), [
       '/api/sessions?limit=200&cursor=offset%3A200',
@@ -60,10 +61,14 @@ void test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only reque
       '/api/coordination/watches?limit=10&targetKind=project&targetId=project-1&status=active',
       '/api/workflows/workflow-1/run',
       '/api/sessions/s%2F1/artifacts/artifact-9/status',
+      '/api/sessions/s%2F1/artifacts',
     ])
     assert.equal(calls[7]!.method, 'POST')
     assert.deepEqual(calls[7]!.body, { status: 'in-review' })
     assert.equal(calls[7]!.headers['x-csrf-token'], 'csrf-2')
+    assert.equal(calls[8]!.method, 'POST')
+    assert.deepEqual(calls[8]!.body, { filename: 'note.txt', contentType: 'text/plain', dataBase64: 'aGk=' })
+    assert.equal(calls[8]!.headers['x-csrf-token'], 'csrf-2')
     assert.equal(calls[0]!.method, 'GET')
     assert.equal(calls[1]!.method, 'POST')
     assert.equal(calls[2]!.method, 'GET')

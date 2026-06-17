@@ -93,7 +93,7 @@ function ArtifactLibraryStatus({
   )
 }
 
-export function CloudArtifactSurfacePortals({ artifactActions }: CloudArtifactSurfacePortalsProps) {
+export function CloudArtifactSurfacePortals({ selectedView, artifactActions }: CloudArtifactSurfacePortalsProps) {
   const api = useAppApi()
   const activeRoute = useActiveBodyRoute()
   const artifactListTarget = usePortalTarget('artifact-list')
@@ -102,6 +102,9 @@ export function CloudArtifactSurfacePortals({ artifactActions }: CloudArtifactSu
   const [artifactIndexError, setArtifactIndexError] = useState<string | null>(null)
   const [artifactIndexLoading, setArtifactIndexLoading] = useState(false)
   const shouldLoadArtifactIndex = Boolean(artifactListTarget && activeRoute === 'artifacts')
+  // Uploaded artifacts attach to the open chat's session (the upload route is
+  // session-scoped); the control disables when no chat is selected.
+  const selectedSessionId = selectedView?.session?.sessionId || null
 
   const loadArtifactIndex = useCallback(async () => {
     setArtifactIndexLoading(true)
@@ -166,6 +169,17 @@ export function CloudArtifactSurfacePortals({ artifactActions }: CloudArtifactSu
               await loadArtifactIndex()
             } catch (advanceError) {
               setArtifactIndexError(advanceError instanceof Error ? advanceError.message : String(advanceError))
+            }
+          }}
+          canUploadArtifact={Boolean(selectedSessionId)}
+          uploadDisabledReason="Open a chat to upload an artifact to it."
+          onUploadArtifact={async (input) => {
+            if (!selectedSessionId) return
+            try {
+              await api.sessions.uploadArtifact(selectedSessionId, input)
+              await loadArtifactIndex()
+            } catch (uploadError) {
+              setArtifactIndexError(uploadError instanceof Error ? uploadError.message : String(uploadError))
             }
           }}
         />,

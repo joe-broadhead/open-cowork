@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentPropsWithoutRef } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type ComponentPropsWithoutRef } from 'react'
 import {
   type ArtifactIndexEntry,
   type ArtifactKind,
@@ -31,6 +31,23 @@ export type ArtifactsLibrarySurfaceProps = Omit<ComponentPropsWithoutRef<'sectio
   onExportAll?: (artifacts: ArtifactIndexEntry[]) => Promise<unknown> | unknown
   /** Advance an artifact through the draft → in-review → final review lifecycle. When provided, each non-final card shows an advance control. */
   onAdvanceStatus?: (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => Promise<unknown> | unknown
+  /** Upload a file as a new artifact. When provided, the toolbar shows an Upload control; the picked file is read to base64 here so callers only POST it. */
+  onUploadArtifact?: (input: { filename: string, contentType: string, dataBase64: string }) => Promise<unknown> | unknown
+  canUploadArtifact?: boolean
+  uploadDisabledReason?: string
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error || new Error('Could not read the selected file.'))
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 const KIND_FILTERS: Array<{ id: ArtifactFilter; label: string }> = [
@@ -275,11 +292,25 @@ export function ArtifactsLibrarySurface({
   onExportArtifact,
   onExportAll,
   onAdvanceStatus,
+  onUploadArtifact,
+  canUploadArtifact = true,
+  uploadDisabledReason,
   className,
   ...props
 }: ArtifactsLibrarySurfaceProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ArtifactFilter>('all')
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const handleUploadChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = '' // allow re-selecting the same file
+    if (!file || !onUploadArtifact) return
+    await onUploadArtifact({
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      dataBase64: await fileToBase64(file),
+    })
+  }
   const filteredArtifacts = useMemo(() => filterArtifacts(artifacts, query, filter), [artifacts, filter, query])
   const exportableArtifacts = useMemo(
     () => filteredArtifacts.filter((artifact) => canExportArtifact !== false && actionAvailable(canExportArtifact, artifact)),
@@ -328,6 +359,28 @@ export function ArtifactsLibrarySurface({
             >
               {truncated ? 'Export visible' : 'Export all'}
             </Button>
+          ) : null}
+          {onUploadArtifact ? (
+            <>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                hidden
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={handleUploadChange}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon="arrow-up"
+                disabled={canUploadArtifact === false}
+                disabledReason={canUploadArtifact === false ? (uploadDisabledReason || 'Open a chat to upload an artifact to it.') : undefined}
+                onClick={() => uploadInputRef.current?.click()}
+              >
+                Upload
+              </Button>
+            </>
           ) : null}
         </div>
       </div>

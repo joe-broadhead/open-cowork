@@ -267,12 +267,14 @@ describe('StudioArtifactsPage', () => {
     const openArtifact = vi.fn(async () => '/tmp/board-review.md')
     const exportArtifact = vi.fn(async () => '/tmp/board-review.md')
     const updateStatus = vi.fn(async () => ({ id: 'artifact-deck', status: 'in-review' }))
+    const upload = vi.fn(async () => ({ id: 'artifact-uploaded' }))
     installRendererTestCoworkApi({
       artifact: {
         index: indexArtifacts,
         open: openArtifact,
         export: exportArtifact,
         updateStatus,
+        upload,
       },
     })
 
@@ -325,6 +327,23 @@ describe('StudioArtifactsPage', () => {
       sessionId: 'session-1',
       artifactId: 'artifact-deck',
       status: 'in-review',
+      workspaceId: undefined,
+    }))
+
+    // Upload a file as a new artifact attached to the active session (session-1),
+    // through the existing artifact:upload IPC. The hidden file input is read to
+    // base64 by the shared surface so the handler only forwards the payload.
+    const uploadInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    Object.defineProperty(uploadInput, 'files', {
+      value: [new File(['hi'], 'note.txt', { type: 'text/plain' })],
+      configurable: true,
+    })
+    fireEvent.change(uploadInput)
+    await waitFor(() => expect(upload).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      filename: 'note.txt',
+      contentType: 'text/plain',
+      dataBase64: 'aGk=',
       workspaceId: undefined,
     }))
   })
