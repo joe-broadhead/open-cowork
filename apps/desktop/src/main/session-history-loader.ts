@@ -1,4 +1,4 @@
-import { shortSessionId } from '@open-cowork/shared'
+import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString } from '@open-cowork/shared'
 import type { OpencodeClient, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
@@ -11,12 +11,6 @@ import {
   normalizeSessionStatuses,
   type NormalizedSessionMessage,
 } from './opencode-adapter.ts'
-import {
-  asRecord,
-  readRecordArray,
-  readRecordValue,
-  readString,
-} from './normalizer-utils.ts'
 import { projectSessionHistory } from './session-history-projector.ts'
 import { log } from './logger.ts'
 import { measureAsyncPerf } from './perf-metrics.ts'

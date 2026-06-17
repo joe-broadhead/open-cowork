@@ -1,3 +1,4 @@
+import { normalizePermissionEvent } from '@open-cowork/shared'
 import {
   createOpencodeClient,
   type OpencodeClientConfig,
@@ -10,7 +11,6 @@ import {
   normalizeRuntimeEventEnvelope,
   normalizeSessionInfo,
 } from '../opencode-adapter.ts'
-import { normalizePermissionEvent } from '../runtime-event-normalizers.ts'
 import { buildManagedRuntimeEnvironment } from '../runtime-environment.ts'
 import {
   createManagedOpencodeServerAuth,

@@ -23,9 +23,9 @@ Counts = number of cloud files importing the module.
 | 1 | `config-types.ts` | — | SHARED-PURE | ✅ **DONE** → `@open-cowork/shared` (commit 7cf8162c) |
 | 2 | ~~`workflow/workflow-schedule.ts`~~ | 0 | **FALSE POSITIVE** — no cloud file imports it (the analyzer mis-counted the string `workflow-scheduled`) | none |
 | 3 | `log-sanitizer.ts` | 2 | SHARED-PURE (zero deps) | ✅ **DONE** → `@open-cowork/shared` (process.env read via `globalThis` to stay node-types-free) |
-| 4 | `normalizer-utils.ts` | (via below) | SHARED-PURE (zero deps) | → `@open-cowork/shared` |
-| 5 | `runtime-event-normalizers.ts` | 1 | SHARED-PURE (only normalizer-utils) | → `@open-cowork/shared` |
-| 6 | `opencode-adapter.ts` | 2 | SHARED-PURE (SDK *types* + shared types + normalizer-utils) | → `@open-cowork/shared` (needs `@opencode-ai/sdk` as shared type dep) |
+| 4 | `normalizer-utils.ts` | (via below) | SHARED-PURE (zero deps) | ✅ **DONE** → `@open-cowork/shared` |
+| 5 | `runtime-event-normalizers.ts` | 1 | SHARED-PURE (only normalizer-utils) | ✅ **DONE** → `@open-cowork/shared` |
+| 6 | `opencode-adapter.ts` | 2 | SHARED-PURE (SDK *types* + shared types + normalizer-utils) | → `@open-cowork/shared` (needs `@opencode-ai/sdk` as shared type dep) — normalizer-utils dep now in shared |
 | 7 | `knowledge/knowledge-store-contract.ts` | 4 | SHARED-PURE (type-only shared) | ✅ **DONE** → `@open-cowork/shared` |
 | 8 | `knowledge/knowledge-input.ts` | 2 | SHARED-PURE (type-only shared) | ✅ **DONE** → `@open-cowork/shared` |
 | 9 | `knowledge/knowledge-store.ts` | 1 | NODE-PURE (sqlite, no electron) — desktop SQLite store | extract shared constants/helpers → shared; store stays desktop |
@@ -52,8 +52,8 @@ Electron-free, OR the cloud server gets its own log destination.)
 2. ~~workflow-schedule~~ — dropped (false positive; not a cloud dep).
 3. ✅ log-sanitizer → shared.
 4. ✅ knowledge interfaces (contract + input) → shared.
-5. pure normalizers (normalizer-utils + runtime-event-normalizers [+ opencode-adapter]) → shared. ← **next**
-6. knowledge constants → shared; postgres-knowledge-store → cloud.
+5. ✅ pure normalizers (normalizer-utils + runtime-event-normalizers) → shared. (opencode-adapter still pending — needs `@opencode-ai/sdk` type dep in shared.)
+6. knowledge cluster: ⚠️ blocked — `knowledge-store.ts` (SQLite) is used by both desktop and cloud http-server but `import`s `node:sqlite`, which can't go in the browser-bundled shared package. Needs a node-only home (the eventual cloud-server pkg, or a node-only shared entrypoint). `postgres-knowledge-store` is cloud-only → move into cloud. ← **next: postgres-knowledge-store → cloud**
 7. runtime cluster (environment + managed-server-core + node-managed-server + siblings) → shared.
 8. **Decoupling tier** (the hard part): config-loader core → shared (Electron-free), then logger → shared, then workflow-webhook-server, runtime-config-builder, capability-catalog, coordination + launchpad.
 9. Final: `main/cloud/**` → `packages/cloud-server/src/**` + package.json/tsconfig/exports + Docker packaging + build-cloud + update the ~2-3 non-cloud importers.

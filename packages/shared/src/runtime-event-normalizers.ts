@@ -2,7 +2,7 @@ import {
   asRecord,
   readRecordValue,
   readString,
-} from './normalizer-utils.ts'
+} from './normalizer-utils.js'
 
 function readFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {

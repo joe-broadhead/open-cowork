@@ -1,3 +1,4 @@
+import { asArray, asRecord, readBoolean, readRecordNumber, readRecordString, readString, type JsonRecord } from '@open-cowork/shared'
 import type {
   Event as SdkEvent,
   GlobalEvent as SdkGlobalEvent,
@@ -11,16 +12,6 @@ import type {
 import type {
   TodoItem,
 } from '@open-cowork/shared'
-import {
-  asArray,
-  asRecord,
-  readBoolean,
-  readRecordNumber,
-  readRecordString,
-  readString,
-  type JsonRecord,
-} from './normalizer-utils.ts'
-
 type SdkSessionMessage = SdkSessionMessagesResponse extends Array<infer T> ? T : never
 type SdkRuntimeEventEnvelope = SdkEvent | SdkGlobalEvent | { payload: SdkEvent | SdkGlobalEvent }
 

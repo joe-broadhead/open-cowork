@@ -1,10 +1,10 @@
+import { asRecord, readRecordValue, readString } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import {
   normalizeMessagePart,
   normalizeSessionInfo,
 } from './opencode-adapter.ts'
-import { asRecord, readRecordValue, readString } from './normalizer-utils.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
   aliasTaskRunId,

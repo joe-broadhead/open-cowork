@@ -1,3 +1,4 @@
+import { asRecord, readString } from '@open-cowork/shared'
 import {
   createOpencodeClient,
   type Auth as OpencodeAuth,
@@ -59,8 +60,6 @@ import {
 } from './runtime-process-cleanup.ts'
 import { MAX_DIRECTORY_CLIENTS, runtimeState } from './runtime-state.ts'
 import { sdkErrorMessage } from './sdk-error.ts'
-import { asRecord, readString } from './normalizer-utils.ts'
-
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 export { buildManagedRuntimeEnvironment } from './runtime-environment.ts'
 export {

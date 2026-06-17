@@ -1,6 +1,5 @@
+import { asRecord } from '@open-cowork/shared'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
-import { asRecord } from './normalizer-utils.ts'
-
 // Merge normalized provider/model data from `client.provider.list()` with
 // the configured fallbacks (pricing + context limits pulled from the local
 // `open-cowork.config.json`). Kept as a pure function separate from

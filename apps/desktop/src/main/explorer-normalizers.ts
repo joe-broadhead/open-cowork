@@ -1,3 +1,4 @@
+import { asArray, asRecord, readNumber, readRecordNumber, readRecordString } from '@open-cowork/shared'
 import type {
   ExplorerSymbol,
   FileContent,
@@ -5,14 +6,6 @@ import type {
   FileStatus,
   TextMatch,
 } from '@open-cowork/shared'
-import {
-  asArray,
-  asRecord,
-  readNumber,
-  readRecordNumber,
-  readRecordString,
-} from './normalizer-utils.ts'
-
 // Explorer normalizers (SDK find.* + file.*)
 //
 // Keep renderer callers off snake_case (`line_number`), URI tuples, and

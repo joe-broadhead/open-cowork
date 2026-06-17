@@ -1,5 +1,4 @@
-import { asRecord, readString } from './normalizer-utils.ts'
-
+import { asRecord, readString } from '@open-cowork/shared'
 function stringifyBody(value: unknown): string | null {
   if (typeof value === 'string' && value.trim().length > 0) return value.trim()
   if (!value || typeof value !== 'object') return null

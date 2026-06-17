@@ -1,4 +1,4 @@
-import { shortSessionId } from '@open-cowork/shared'
+import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString, extractRuntimeErrorMessage, normalizePermissionEvent, readRuntimeSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { trackPermission } from './permission-tracker.ts'
 import { log } from './logger.ts'
@@ -6,17 +6,6 @@ import {
   normalizeSessionInfo,
   normalizeTodoItems,
 } from './opencode-adapter.ts'
-import {
-  asRecord,
-  readRecordArray,
-  readRecordValue,
-  readString,
-} from './normalizer-utils.ts'
-import {
-  extractRuntimeErrorMessage,
-  normalizePermissionEvent,
-  readRuntimeSessionId,
-} from './runtime-event-normalizers.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { dropSessionFromDispatcherQueues, publishNotification } from './session-event-dispatcher.ts'
 import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
