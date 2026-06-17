@@ -45,10 +45,11 @@ type WorkflowTriggerInput =
     type: 'schedule'
     enabled: true
     schedule: {
-      type: 'daily'
+      type: 'daily' | 'weekly'
       timezone: string
       runAtHour: number
       runAtMinute: number
+      dayOfWeek?: number
     }
   }
   | { id: string, type: 'webhook', enabled: true }
@@ -75,19 +76,43 @@ function splitCsv(value: FormDataEntryValue | null) {
   return String(value || '').split(',').map((entry) => entry.trim()).filter(Boolean)
 }
 
+function browserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
+function parseScheduleTime(value: FormDataEntryValue | null): { runAtHour: number, runAtMinute: number } {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim())
+  const hour = match ? Number(match[1]) : 9
+  const minute = match ? Number(match[2]) : 0
+  return {
+    runAtHour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 9,
+    runAtMinute: Number.isInteger(minute) && minute >= 0 && minute <= 59 ? minute : 0,
+  }
+}
+
 function workflowTriggersFromForm(data: FormData): WorkflowTriggerInput[] {
   const type = String(data.get('triggerType') || 'manual').trim()
   const id = `${type}-web`
   if (type === 'schedule') {
+    // Configurable (was hard-coded daily/09:00/UTC): read the frequency + time
+    // from the form and resolve the viewer's own timezone so "09:00" means their
+    // local 09:00. The backend re-validates the schedule shape.
+    const frequency = String(data.get('scheduleFrequency') || 'daily').trim() === 'weekly' ? 'weekly' : 'daily'
+    const dayRaw = Number(data.get('scheduleDayOfWeek'))
+    const dayOfWeek = Number.isInteger(dayRaw) && dayRaw >= 0 && dayRaw <= 6 ? dayRaw : 1
     return [{
       id,
       type: 'schedule',
       enabled: true,
       schedule: {
-        type: 'daily',
-        timezone: 'UTC',
-        runAtHour: 9,
-        runAtMinute: 0,
+        type: frequency,
+        timezone: browserTimezone(),
+        ...parseScheduleTime(data.get('scheduleTime')),
+        ...(frequency === 'weekly' ? { dayOfWeek } : {}),
       },
     }]
   }

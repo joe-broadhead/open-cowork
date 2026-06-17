@@ -16,7 +16,7 @@ import { cloudSettingsRouteMarkup } from './cloud-settings-markup.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { cloudKnowledgeRouteMarkup } from './cloud-knowledge-markup.ts'
-import { cloudLaunchpadStaticMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { cloudLaunchpadStaticMarkup, cloudWorkflowScheduleFieldsMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
 import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
@@ -359,9 +359,10 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
                   <label><span>Lead coworker</span><input name="agentName" autocomplete="off" placeholder="build" data-workflow-control="true"></label>
                   <label><span>Trigger</span><select name="triggerType" data-workflow-control="true">
                     <option value="manual">Manual</option>
-                    <option value="schedule">Daily schedule</option>
+                    <option value="schedule">Schedule</option>
                     <option value="webhook">Webhook</option>
                   </select></label>
+                  ${cloudWorkflowScheduleFieldsMarkup()}
                   <label><span>Tools</span><input name="toolIds" autocomplete="off" placeholder="comma-separated" data-workflow-control="true"></label>
                   <label><span>Skills</span><input name="skillNames" autocomplete="off" placeholder="comma-separated" data-workflow-control="true"></label>
                   <label class="span"><span>Instructions</span><textarea name="instructions" placeholder="What this playbook should do" data-workflow-control="true"></textarea></label>

@@ -36,7 +36,7 @@ export type Workflow = {
   skillNames?: string[]
   toolIds?: string[]
   steps?: WorkflowStep[]
-  triggers?: Array<{ type?: string, enabled?: boolean }>
+  triggers?: Array<{ type?: string, enabled?: boolean, webhookSecret?: string | null }>
   latestRunId?: string
   latestRunStatus?: string
   latestRunSummary?: string
@@ -246,6 +246,41 @@ export function WorkflowTable({ workflows, selectedWorkflowId, onSelect }: { wor
   )
 }
 
+function activeWebhookSecret(workflow: Workflow): string | null {
+  return workflow.triggers?.find((trigger) => (
+    trigger.enabled !== false
+    && trigger.type === 'webhook'
+    && typeof trigger.webhookSecret === 'string'
+    && trigger.webhookSecret.length > 0
+  ))?.webhookSecret || null
+}
+
+function shellSingleQuote(value: string) {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+// The runnable webhook invocation. Mirrors the desktop WorkflowsPage helper: the
+// secret lives ONLY in the copied curl (never shown on screen), and falls back
+// to the bare URL when no secret is present.
+function webhookCurlCommand(workflow: Workflow): string | null {
+  if (!workflow.webhookUrl) return null
+  const secret = activeWebhookSecret(workflow)
+  if (!secret) return workflow.webhookUrl
+  return [
+    `curl -X POST ${shellSingleQuote(workflow.webhookUrl)}`,
+    `  -H ${shellSingleQuote('content-type: application/json')}`,
+    `  -H ${shellSingleQuote(`Authorization: Bearer ${secret}`)}`,
+    `  --data ${shellSingleQuote('{"source":"manual"}')}`,
+  ].join(' \\\n')
+}
+
+function copyWebhookCurl(workflow: Workflow) {
+  const command = webhookCurlCommand(workflow)
+  if (command && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(command)
+  }
+}
+
 export function WorkflowDetail({ workflow, runs, disabled, onRun, onPause, onResume, onArchive, onOpenThread }: {
   workflow: Workflow | null
   runs: WorkflowRun[]
@@ -268,6 +303,17 @@ export function WorkflowDetail({ workflow, runs, disabled, onRun, onPause, onRes
         <div className="row compact">
           <div><strong>Latest run</strong><br /><small>{[workflow.latestRunStatus || 'unknown', workflow.latestRunSummary, workflow.latestRunSessionId ? `chat ${workflow.latestRunSessionId}` : null].filter(Boolean).join(' · ')}</small></div>
           {workflow.latestRunSessionId ? <div className="row-actions"><button type="button" onClick={() => onOpenThread(workflow.latestRunSessionId as string)}>Open run chat</button></div> : null}
+        </div>
+      ) : null}
+      {workflow.webhookUrl ? (
+        <div className="row compact">
+          <div>
+            <strong>Webhook</strong><br />
+            <code className="webhook-url">{workflow.webhookUrl}</code>
+          </div>
+          <div className="row-actions">
+            <button type="button" onClick={() => copyWebhookCurl(workflow)}>Copy curl</button>
+          </div>
         </div>
       ) : null}
       <p className="empty">{workflow.instructions || 'No instructions.'}</p>

@@ -402,6 +402,9 @@ void test('cloud web browser exposes desktop parity boundaries and workbench sta
     ;(workflowForm.elements.namedItem('title') as HTMLInputElement).value = 'Daily triage'
     ;(workflowForm.elements.namedItem('agentName') as HTMLInputElement).value = 'data-analyst'
     ;(workflowForm.elements.namedItem('triggerType') as HTMLSelectElement).value = 'schedule'
+    ;(workflowForm.elements.namedItem('scheduleFrequency') as HTMLSelectElement).value = 'weekly'
+    ;(workflowForm.elements.namedItem('scheduleTime') as HTMLInputElement).value = '14:30'
+    ;(workflowForm.elements.namedItem('scheduleDayOfWeek') as HTMLSelectElement).value = '3'
     ;(workflowForm.elements.namedItem('toolIds') as HTMLInputElement).value = 'shell'
     ;(workflowForm.elements.namedItem('skillNames') as HTMLInputElement).value = 'analysis'
     ;(workflowForm.elements.namedItem('instructions') as HTMLTextAreaElement).value = 'Summarize the day.'
@@ -418,10 +421,13 @@ void test('cloud web browser exposes desktop parity boundaries and workbench sta
       type: 'schedule',
       enabled: true,
       schedule: {
-        type: 'daily',
-        timezone: 'UTC',
-        runAtHour: 9,
-        runAtMinute: 0,
+        // Configurable now (was hard-coded daily/09:00/UTC): the form drives the
+        // frequency, time, and weekday, and the timezone is the viewer's own.
+        type: 'weekly',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        runAtHour: 14,
+        runAtMinute: 30,
+        dayOfWeek: 3,
       },
     }])
     await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Playbook created/))

@@ -134,3 +134,24 @@ export function cloudLaunchpadStaticMarkup() {
                 <button class="cloud-launchpad-team-strip" type="button" disabled><span>Your team</span><span class="cloud-launchpad-team-strip__avatars" aria-hidden="true"><span>B</span><span>P</span><span>CS</span></span><span>3 coworkers · manage</span></button>
               </div>`
 }
+
+const WORKFLOW_SCHEDULE_WEEKDAYS: ReadonlyArray<{ value: number, label: string }> = [
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+  { value: 0, label: 'Sunday' },
+]
+
+// The configurable schedule controls for the playbook-create form (frequency,
+// time, and the weekly day). Extracted from render.ts to keep its SSR template
+// within the module budget; `workflowTriggersFromForm` reads these on submit and
+// resolves the viewer's own timezone (replacing the former hard-coded daily/09:00/UTC).
+export function cloudWorkflowScheduleFieldsMarkup() {
+  const days = WORKFLOW_SCHEDULE_WEEKDAYS.map((day) => `<option value="${day.value}">${day.label}</option>`).join('')
+  return `<label><span>Schedule frequency</span><select name="scheduleFrequency" data-workflow-control="true"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>`
+    + `<label><span>Schedule time</span><input type="time" name="scheduleTime" value="09:00" data-workflow-control="true"></label>`
+    + `<label><span>Schedule day (weekly)</span><select name="scheduleDayOfWeek" data-workflow-control="true">${days}</select></label>`
+}
