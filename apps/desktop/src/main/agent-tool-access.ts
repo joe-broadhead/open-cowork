@@ -1,4 +1,4 @@
-import type { ConfiguredAgent, ConfiguredTool } from './config-types.ts'
+import type { ConfiguredAgent, ConfiguredTool } from '@open-cowork/shared'
 import {
   expandMcpToolPermissionPatterns,
   getConfiguredToolAllowPatterns,

@@ -97,7 +97,7 @@ import {
   createFileGatewayWorkspaceCredentialStore,
   type GatewayWorkspaceCredentialStore,
 } from './gateway-workspace-credentials.ts'
-import { DEFAULT_CONFIG, type CloudDesktopConfig } from './config-types.ts'
+import { DEFAULT_CONFIG, type CloudDesktopConfig } from '@open-cowork/shared'
 import { createCloudSessionGateway } from './workspace-gateway-cloud-sessions.ts'
 import { createCloudWorkflowGateway } from './workspace-gateway-cloud-workflows.ts'
 import { createCloudThreadGateway } from './workspace-gateway-cloud-threads.ts'

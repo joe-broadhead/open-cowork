@@ -17,7 +17,7 @@ import type {
   SessionView,
 } from '../packages/shared/src/session.ts'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'

@@ -13,7 +13,7 @@ import {
 } from './config-public.ts'
 import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
-import { DEFAULT_CONFIG } from './config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { normalizeAppConfig, normalizeConfigLayers } from './config-normalizer.ts'
 import {
   deepMerge,
@@ -25,7 +25,7 @@ import type {
   ConfiguredTool,
   ModelFallbackInfo,
   OpenCoworkConfig,
-} from './config-types.ts'
+} from '@open-cowork/shared'
 import { applyE2EArgEnvironment } from './e2e-remote-debugging.ts'
 
 applyE2EArgEnvironment()
@@ -48,7 +48,7 @@ export type {
   CustomProviderRuntimeConfig,
   ModelFallbackInfo,
   OpenCoworkConfig,
-} from './config-types.ts'
+} from '@open-cowork/shared'
 
 export { normalizeProviderModelId } from './config-public.ts'
 export { resolveConfigEnvPlaceholders } from './config-layer-utils.ts'

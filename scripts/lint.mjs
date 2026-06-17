@@ -59,7 +59,7 @@ const legacyNamingAllowlist = new Set([
   'apps/desktop/src/main/config-layer-utils.ts',
   'apps/desktop/src/main/config-loader.ts',
   'apps/desktop/src/main/config-public.ts',
-  'apps/desktop/src/main/config-types.ts',
+  'packages/shared/src/config-types.ts',
   'apps/desktop/src/main/custom-agent-store.ts',
   'apps/desktop/src/main/runtime-config-builder.ts',
   'apps/desktop/src/renderer/helpers/i18n.ts',

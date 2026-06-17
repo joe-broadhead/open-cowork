@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { CloudAuthConfig, CloudBillingConfig } from '../config-types.ts'
+import type { CloudAuthConfig, CloudBillingConfig } from '@open-cowork/shared'
 import type { BillingAdapter } from './billing-adapter.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { ControlPlaneStore } from './control-plane-store.ts'

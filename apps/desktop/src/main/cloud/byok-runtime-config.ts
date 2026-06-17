@@ -1,6 +1,6 @@
 import type { Config, ProviderConfig } from '@opencode-ai/sdk/v2'
 import type { CredentialField } from '@open-cowork/shared'
-import type { OpenCoworkConfig } from '../config-types.ts'
+import type { OpenCoworkConfig } from '@open-cowork/shared'
 import { log } from '../logger.ts'
 import { buildConfiguredDescriptorProviderRuntimeConfig } from '../runtime-config-builder.ts'
 import type { ByokSecretStore } from './byok-secret-store.ts'

@@ -1,6 +1,6 @@
 import { createHash, createHmac, createPublicKey, randomBytes, timingSafeEqual, type JsonWebKey, verify } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
-import type { CloudAuthConfig } from '../config-types.ts'
+import type { CloudAuthConfig } from '@open-cowork/shared'
 import { CloudHttpError, type CloudAuthResolver, type CloudBrowserAuthProvider } from './http-server.ts'
 
 type OidcFetchResponse = {

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 
-import { DEFAULT_CONFIG, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type CloudBillingConfig } from '@open-cowork/shared'
 import { evaluateBillingEntitlement } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
 import { createStripeBillingAdapter } from '../apps/desktop/src/main/cloud/stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'

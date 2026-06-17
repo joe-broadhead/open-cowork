@@ -1,5 +1,5 @@
 import { derivePublicBrandingThemeTokens, PUBLIC_BRANDING_THEME_TOKEN_KEYS, type PublicBrandingConfig } from '@open-cowork/shared'
-import { DEFAULT_CONFIG, type OpenCoworkConfig } from '../config-types.ts'
+import { DEFAULT_CONFIG, type OpenCoworkConfig } from '@open-cowork/shared'
 import { type Env, envValue } from './cloud-config-parse.ts'
 
 // Public-branding config resolution, extracted from cloud/app.ts. Cleans and

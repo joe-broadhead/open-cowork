@@ -1,4 +1,4 @@
-import type { OpenCoworkConfig } from '../config-types.ts'
+import type { OpenCoworkConfig } from '@open-cowork/shared'
 import type { ByokSecretStore } from './byok-secret-store.ts'
 import {
   buildCloudByokRuntimeConfig,

@@ -1,4 +1,4 @@
-import type { CloudSubscriptionStatus } from '../config-types.ts'
+import type { CloudSubscriptionStatus } from '@open-cowork/shared'
 
 // The control-plane's string-literal enum vocabulary, extracted from the
 // 4k-line in-memory store so the foundational status/role/kind unions live in

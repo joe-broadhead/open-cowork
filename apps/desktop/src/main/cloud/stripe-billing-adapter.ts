@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import type { CloudBillingConfig, CloudSubscriptionStatus } from '../config-types.ts'
+import type { CloudBillingConfig, CloudSubscriptionStatus } from '@open-cowork/shared'
 import type {
   BillingAdapter,
   BillingCheckoutInput,

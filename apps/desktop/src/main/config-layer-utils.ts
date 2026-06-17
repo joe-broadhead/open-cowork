@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
-import type { OpenCoworkConfig } from './config-types.ts'
+import type { OpenCoworkConfig } from '@open-cowork/shared'
 
 export function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {
   const next: Record<string, unknown> = { ...base }

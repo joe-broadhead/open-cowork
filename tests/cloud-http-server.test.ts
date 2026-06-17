@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
 import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'

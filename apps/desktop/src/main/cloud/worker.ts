@@ -3,7 +3,7 @@ import type { CloudObservabilityAdapter } from './observability.ts'
 import { recordCloudWorkerMetric } from './observability.ts'
 import type { CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudSessionService } from './session-service.ts'
-import type { CloudAbuseConfig } from '../config-types.ts'
+import type { CloudAbuseConfig } from '@open-cowork/shared'
 
 export type CloudWorkerCheckpointHooks = {
   restoreBeforeCommands?: (lease: WorkerLeaseRecord) => Promise<void>

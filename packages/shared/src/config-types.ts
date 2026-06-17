@@ -1,18 +1,10 @@
-import { DEFAULT_DARK_PUBLIC_BRANDING_THEME, DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from '@open-cowork/shared'
-import type {
-  AgentStarterTemplate,
-  BrandingConfig,
-  CapabilityBundleManifest,
-  CloudProjectSourceInput,
-  CredentialField,
-  DesktopFeatureFlags,
-  GatewayDeploymentConfig,
-  ModelInfoSnapshot,
-  ProviderModelDescriptor,
-  PublicBrandingConfig,
-  UpdateReleaseSourceAuthKind,
-  UpdateReleaseSourceKind,
-} from '@open-cowork/shared'
+import { DEFAULT_DARK_PUBLIC_BRANDING_THEME } from './design-tokens.js'
+import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from './tool-trace.js'
+import type { AgentStarterTemplate, BrandingConfig, DesktopFeatureFlags, GatewayDeploymentConfig, PublicBrandingConfig } from './app-config.js'
+import type { CredentialField, ModelInfoSnapshot, ProviderModelDescriptor } from './providers.js'
+import type { CapabilityBundleManifest } from './capabilities.js'
+import type { CloudProjectSourceInput } from './project-source.js'
+import type { UpdateReleaseSourceAuthKind, UpdateReleaseSourceKind } from './updates.js'
 
 export type ConfiguredSkill = {
   name: string

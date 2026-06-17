@@ -1,7 +1,7 @@
 import type { PublicBrandingConfig } from '@open-cowork/shared'
 import { derivePublicBrandingThemeTokens, normalizeCloudProjectSource } from '@open-cowork/shared'
 import { deepMerge } from './config-layer-utils.ts'
-import { DEFAULT_CONFIG } from './config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import type {
   CloudConfig,
   CloudDesktopConfig,
@@ -9,7 +9,7 @@ import type {
   CloudProfileConfig,
   CloudRole,
   OpenCoworkConfig,
-} from './config-types.ts'
+} from '@open-cowork/shared'
 
 const CLOUD_ROLES = new Set<CloudRole>(['all-in-one', 'web', 'worker', 'scheduler'])
 const CLOUD_AUTH_MODES = new Set(['none', 'header', 'oidc'])

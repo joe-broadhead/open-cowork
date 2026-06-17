@@ -6,7 +6,7 @@ import {
   type CloudProjectSourcePolicyVerdict,
   type CustomMcpConfig,
 } from '@open-cowork/shared'
-import { DEFAULT_CONFIG } from '../config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import type {
   BundleMcp,
   CloudAbuseConfig,
@@ -17,7 +17,7 @@ import type {
   CloudProjectSourcePolicyConfig,
   CloudRole,
   OpenCoworkConfig,
-} from '../config-types.ts'
+} from '@open-cowork/shared'
 import { parseBoolean, parseCsv, parseCsvArray, parseOptionalPositiveInt, parsePositiveInt, parseSignupMode, resolveEnvRef } from './cloud-config-parse.ts'
 import { isSupportedCloudSecretRef } from './secret-ref-policy.ts'
 

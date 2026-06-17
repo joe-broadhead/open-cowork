@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import {
   coerceCloudRuntimeSettings,
   evaluateCloudMcpPolicy,

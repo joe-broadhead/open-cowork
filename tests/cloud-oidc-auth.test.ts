@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { generateKeyPairSync, sign as signBuffer, type JsonWebKey } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 
-import { DEFAULT_CONFIG, type OpenCoworkConfig } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type OpenCoworkConfig } from '@open-cowork/shared'
 import { createCloudAuthResolverForConfig } from '../apps/desktop/src/main/cloud/app.ts'
 import { CloudHttpError } from '../apps/desktop/src/main/cloud/http-server.ts'
 import {

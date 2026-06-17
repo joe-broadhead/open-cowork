@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-server.ts'

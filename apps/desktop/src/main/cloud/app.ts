@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
 import { splitTrustedProxyCidrs } from '@open-cowork/shared'
-import { DEFAULT_CONFIG, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
+import { DEFAULT_CONFIG, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '@open-cowork/shared'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
 import {

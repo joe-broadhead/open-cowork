@@ -5,7 +5,7 @@ import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import {
   assertCloudProductionDeploymentSafe,
   assertCloudAuthDeploymentSafe,

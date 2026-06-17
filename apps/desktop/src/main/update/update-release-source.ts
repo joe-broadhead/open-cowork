@@ -4,7 +4,7 @@ import type {
   UpdateInstallUnsupportedReason,
   UpdateReleaseSourceDescriptor,
 } from '@open-cowork/shared'
-import type { OpenCoworkConfig, UpdateReleaseSourceConfig } from '../config-types.ts'
+import type { OpenCoworkConfig, UpdateReleaseSourceConfig } from '@open-cowork/shared'
 import { getAppConfig, getBranding } from '../config-loader.ts'
 import { compareVersions, normalizeVersion } from './update-version.ts'
 import {

@@ -20,7 +20,7 @@ import {
   type WorkspaceOptions,
 } from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
-import { DEFAULT_CONFIG } from '../config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { getAppConfig } from '../config-loader.ts'
 import { createUnavailableRuntimeAdapter } from '../cloud/unavailable-runtime-adapter.ts'
 import { resolveCloudRuntimePolicy } from '../cloud/cloud-config.ts'

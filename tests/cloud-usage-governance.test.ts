@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { CloudUsageGovernanceService } from '../apps/desktop/src/main/cloud/services/usage-governance-service.ts'
-import { DEFAULT_CONFIG, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type CloudBillingConfig } from '@open-cowork/shared'
 
 function billingConfig(): CloudBillingConfig {
   return {

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'

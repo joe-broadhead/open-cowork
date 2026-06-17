@@ -11,7 +11,7 @@ import {
   type S3ClientConfig,
 } from '@aws-sdk/client-s3'
 import { GoogleAuth } from 'google-auth-library'
-import type { OpenCoworkConfig } from '../config-types.ts'
+import type { OpenCoworkConfig } from '@open-cowork/shared'
 import type { PathProvider } from './path-provider.ts'
 
 type Env = Record<string, string | undefined>

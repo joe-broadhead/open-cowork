@@ -3,7 +3,7 @@ import type {
   CloudBillingEntitlements,
   CloudFeatureKey,
   CloudSubscriptionStatus,
-} from '../config-types.ts'
+} from '@open-cowork/shared'
 import type {
   BillingSubscriptionRecord,
   UpsertBillingSubscriptionInput,

@@ -2,7 +2,7 @@ import type {
   CloudProjectSource,
   RemoteApprovalPolicyDecision,
 } from '@open-cowork/shared'
-import type { CloudAbuseConfig } from '../../config-types.ts'
+import type { CloudAbuseConfig } from '@open-cowork/shared'
 import type { BillingAction } from '../billing-adapter.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import type { CloudRuntimePolicy } from '../cloud-config.ts'

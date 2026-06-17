@@ -10,7 +10,7 @@ import type {
   ConfiguredProviderDescriptor,
   ModelFallbackInfo,
   OpenCoworkConfig,
-} from './config-types.ts'
+} from '@open-cowork/shared'
 import { modelInfoKeys } from './model-info-utils.ts'
 import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-catalog.ts'
 

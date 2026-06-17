@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { CloudAbuseConfig, CloudBillingConfig, CloudBillingEntitlements } from '../../config-types.ts'
+import type { CloudAbuseConfig, CloudBillingConfig, CloudBillingEntitlements } from '@open-cowork/shared'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { ControlPlaneQuotaExceededError, type QuotaPolicyCode } from '../control-plane-errors.ts'
 import type {

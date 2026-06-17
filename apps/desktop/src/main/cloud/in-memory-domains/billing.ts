@@ -7,7 +7,7 @@ import {
   nowIso,
   stableJson,
 } from './store-helpers.ts'
-import type { CloudBillingEntitlements } from '../../config-types.ts'
+import type { CloudBillingEntitlements } from '@open-cowork/shared'
 import { redactAuditMetadata } from '../audit-redaction.ts'
 import type {
   AuditEventRecord,

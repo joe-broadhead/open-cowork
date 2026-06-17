@@ -1,4 +1,4 @@
-import type { CloudBillingEntitlements } from '../config-types.ts'
+import type { CloudBillingEntitlements } from '@open-cowork/shared'
 import type { QuotaPolicyCode } from './control-plane-errors.ts'
 import type { BillingSubscriptionStatus, UsageEventType, UsageUnit } from './control-plane-enums.ts'
 

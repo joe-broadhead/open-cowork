@@ -16,7 +16,7 @@ import type {
   UpdateInfo,
 } from 'electron-updater'
 import { getBranding } from '../config-loader.ts'
-import type { OpenCoworkConfig } from '../config-types.ts'
+import type { OpenCoworkConfig } from '@open-cowork/shared'
 import { log } from '../logger.ts'
 import { sanitizeLogMessage } from '../log-sanitizer.ts'
 import { getCurrentVersion, parseGithubRepo } from './update-check.ts'

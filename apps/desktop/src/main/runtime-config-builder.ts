@@ -10,7 +10,7 @@ import {
   getConfiguredToolsFromConfig,
   expandMcpToolPermissionPatterns,
 } from './config-loader.ts'
-import type { ConfiguredProviderDescriptor } from './config-types.ts'
+import type { ConfiguredProviderDescriptor } from '@open-cowork/shared'
 import { getEffectiveSettings, getProviderCredentialValue, type CoworkSettings } from './settings.ts'
 import { log } from './logger.ts'
 import { buildOpenCoworkAgentConfig } from './agent-config.ts'

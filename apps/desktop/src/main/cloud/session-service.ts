@@ -192,7 +192,7 @@ import {
   type WorkflowWebhookAuth,
   type WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
-import type { CloudAbuseConfig, CloudBillingConfig } from '../config-types.ts'
+import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
 
 export type CloudPrincipal = {
   tenantId: string
