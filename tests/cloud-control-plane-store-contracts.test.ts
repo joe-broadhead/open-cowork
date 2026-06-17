@@ -473,3 +473,48 @@ function runControlPlaneDomainContracts(
     }
   })
 }
+
+test('cloud_workflow_runs concurrency gauge trigger stays consistent with the COUNT', async () => {
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
+  try {
+    await store.createTenant({ tenantId: 't1', name: 'T1', orgId: 'org-1' })
+    await store.ensureOrgForTenant({ tenantId: 't1', name: 'T1', orgId: 'org-1' })
+    await store.ensureUser({ tenantId: 't1', userId: 'u1', email: 'u1@example.test', role: 'member' })
+    await pool.query(
+      `INSERT INTO cloud_workflows (tenant_id, workflow_id, user_id, title, instructions, agent_name, skill_names, tool_ids, status, triggers, created_at, updated_at)
+       VALUES ('t1', 'wf', 'u1', 'WF', 'do', 'build', '[]'::jsonb, '[]'::jsonb, 'active', '[]'::jsonb, now(), now())`,
+    )
+
+    const insertRun = (runId: string, status: string) => pool.query(
+      `INSERT INTO cloud_workflow_runs (tenant_id, run_id, workflow_id, user_id, trigger_type, status, title, created_at)
+       VALUES ('t1', $1, 'wf', 'u1', 'manual', $2, 'Run', now())`,
+      [runId, status],
+    )
+    const gauge = async () => Number((await pool.query(
+      `SELECT value FROM cloud_concurrency_counters WHERE scope_id = 'org-1' AND counter_key = 'concurrent_workflow_runs'`,
+    )).rows[0]?.value ?? 0)
+    const counted = async () => Number((await pool.query(
+      `SELECT count(*) AS c FROM cloud_workflow_runs WHERE status IN ('queued', 'running')`,
+    )).rows[0]?.c ?? 0)
+
+    await insertRun('r1', 'queued')
+    await insertRun('r2', 'running')
+    assert.equal(await gauge(), 2)
+    assert.equal(await gauge(), await counted())
+
+    // queued -> running stays active (no delta); running -> completed exits the gauge
+    await pool.query(`UPDATE cloud_workflow_runs SET status = 'running' WHERE run_id = 'r1'`)
+    assert.equal(await gauge(), 2)
+    await pool.query(`UPDATE cloud_workflow_runs SET status = 'completed' WHERE run_id = 'r1'`)
+    assert.equal(await gauge(), 1)
+    assert.equal(await gauge(), await counted())
+
+    // a DELETE of an active row also decrements
+    await pool.query(`DELETE FROM cloud_workflow_runs WHERE run_id = 'r2'`)
+    assert.equal(await gauge(), 0)
+    assert.equal(await gauge(), await counted())
+  } finally {
+    await store.close?.()
+  }
+})

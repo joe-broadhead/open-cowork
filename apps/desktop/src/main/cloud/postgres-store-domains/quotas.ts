@@ -223,13 +223,13 @@ export async function assertPostgresWorkflowRunQuota(
   const maxConcurrentRuns = input.quota.maxConcurrentWorkflowRunsPerOrg
   if (maxConcurrentRuns && maxConcurrentRuns > 0) {
     await deps.lockQuota(executor, orgId, 'concurrent_workflow_runs', now)
+    // O(1) read of the maintained gauge (cloud_concurrency_counters, kept by the
+    // cloud_workflow_runs trigger) instead of a COUNT(*)+JOIN on every create.
+    // `orgId` is resolveOrgId(tenant) — the same scope the trigger writes.
     const result = await executor.query(
-      `SELECT count(*)::int AS count
-       FROM cloud_workflow_runs runs
-       LEFT JOIN cloud_orgs orgs
-         ON orgs.tenant_id = runs.tenant_id
-       WHERE coalesce(orgs.org_id, runs.tenant_id) = $1
-         AND runs.status IN ('queued', 'running')`,
+      `SELECT value::int AS count
+       FROM cloud_concurrency_counters
+       WHERE scope_id = $1 AND counter_key = 'concurrent_workflow_runs'`,
       [orgId],
     )
     const activeRuns = numberValue(result.rows[0]?.count)

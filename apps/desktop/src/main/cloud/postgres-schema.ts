@@ -901,6 +901,54 @@ export const CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS = [
     ON cloud_knowledge_proposals (workspace_id, status, created_at)`,
 ] as const
 
+// Maintained concurrency gauges. The per-org count of *active* rows for each
+// concurrency quota (workflow runs, sessions, queued commands, worker leases) is
+// kept in cloud_concurrency_counters by AFTER-row triggers, so the quota hot path
+// reads an O(1) primary-key row instead of running a COUNT(*) on every
+// enqueue/claim/create. The trigger fires for EVERY row change regardless of code
+// path, so the gauge can't drift; a migration-time backfill seeds it from the
+// current COUNT. (Built one gauge per migration — this one covers workflow runs.)
+export const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID = '017_cloud_concurrency_counters'
+const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_concurrency_counters (
+    scope_id text NOT NULL,
+    counter_key text NOT NULL,
+    value bigint NOT NULL DEFAULT 0,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (scope_id, counter_key)
+  )`,
+  `CREATE OR REPLACE FUNCTION cloud_workflow_run_concurrency_counter() RETURNS trigger AS $func$
+    DECLARE
+      old_active int := 0;
+      new_active int := 0;
+      tid text;
+      scope text;
+    BEGIN
+      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status IN ('queued', 'running') THEN old_active := 1; END IF;
+      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status IN ('queued', 'running') THEN new_active := 1; END IF;
+      IF old_active = new_active THEN RETURN NULL; END IF;
+      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
+      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+        VALUES (scope, 'concurrent_workflow_runs', GREATEST(0, new_active - old_active), now())
+        ON CONFLICT (scope_id, counter_key) DO UPDATE
+          SET value = GREATEST(0, cloud_concurrency_counters.value + (new_active - old_active)), updated_at = now();
+      RETURN NULL;
+    END;
+    $func$ LANGUAGE plpgsql`,
+  `DROP TRIGGER IF EXISTS cloud_workflow_runs_concurrency_counter ON cloud_workflow_runs`,
+  `CREATE TRIGGER cloud_workflow_runs_concurrency_counter
+    AFTER INSERT OR UPDATE OR DELETE ON cloud_workflow_runs
+    FOR EACH ROW EXECUTE FUNCTION cloud_workflow_run_concurrency_counter()`,
+  `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value)
+    SELECT COALESCE(orgs.org_id, runs.tenant_id), 'concurrent_workflow_runs', count(*)
+    FROM cloud_workflow_runs runs
+    LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = runs.tenant_id
+    WHERE runs.status IN ('queued', 'running')
+    GROUP BY COALESCE(orgs.org_id, runs.tenant_id)
+    ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -967,5 +1015,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_KNOWLEDGE_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS,
   },
 ] as const
