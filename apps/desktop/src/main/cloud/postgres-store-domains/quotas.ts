@@ -137,21 +137,28 @@ export async function assertPostgresCommandQueueQuota(
   ) {
     await deps.lockQuota(executor, orgId, 'queued_commands', now)
   }
-  const result = await executor.query(
-    `SELECT count(*)::int AS queued_commands,
-            min(commands.created_at) AS oldest_created_at
-     FROM cloud_session_commands commands
-     JOIN cloud_sessions sessions
-       ON sessions.tenant_id = commands.tenant_id
-      AND sessions.session_id = commands.session_id
-     LEFT JOIN cloud_orgs orgs
-       ON orgs.tenant_id = commands.tenant_id
-     WHERE coalesce(orgs.org_id, commands.tenant_id) = $1
-       AND commands.status IN ('pending', 'running')`,
+  // Count via the O(1) maintained gauge (kept by the cloud_session_commands
+  // trigger). The queue-AGE limit needs min(created_at), which a gauge can't
+  // carry, so only run that bounded scan when an age limit is actually set.
+  const counterRow = await executor.query(
+    `SELECT value::int AS queued_commands
+     FROM cloud_concurrency_counters
+     WHERE scope_id = $1 AND counter_key = 'queued_commands'`,
     [orgId],
   )
-  const statsRow = result.rows[0] || {}
-  const queuedCommands = numberValue(statsRow.queued_commands)
+  let oldestCreatedAtRaw: unknown = null
+  if (quota.maxQueueAgeMs && quota.maxQueueAgeMs > 0) {
+    const ageRow = await executor.query(
+      `SELECT min(commands.created_at) AS oldest_created_at
+       FROM cloud_session_commands commands
+       LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = commands.tenant_id
+       WHERE coalesce(orgs.org_id, commands.tenant_id) = $1
+         AND commands.status IN ('pending', 'running')`,
+      [orgId],
+    )
+    oldestCreatedAtRaw = ageRow.rows[0]?.oldest_created_at ?? null
+  }
+  const queuedCommands = numberValue(counterRow.rows[0]?.queued_commands)
   const maxQueuedCommands = quota.maxQueuedCommandsPerOrg
   if (maxQueuedCommands && maxQueuedCommands > 0 && queuedCommands >= maxQueuedCommands) {
     throw new ControlPlaneQuotaExceededError({
@@ -164,7 +171,7 @@ export async function assertPostgresCommandQueueQuota(
     })
   }
   const maxQueueAgeMs = quota.maxQueueAgeMs
-  const oldestCreatedAt = statsRow.oldest_created_at ? new Date(String(statsRow.oldest_created_at)) : null
+  const oldestCreatedAt = oldestCreatedAtRaw ? new Date(String(oldestCreatedAtRaw)) : null
   if (maxQueueAgeMs && maxQueueAgeMs > 0 && oldestCreatedAt) {
     const oldestAgeMs = Math.max(0, now.getTime() - oldestCreatedAt.getTime())
     if (oldestAgeMs >= maxQueueAgeMs) {

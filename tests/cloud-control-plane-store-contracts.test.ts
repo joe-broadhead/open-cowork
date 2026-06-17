@@ -535,6 +535,27 @@ test('cloud_workflow_runs concurrency gauge trigger stays consistent with the CO
     await pool.query(`UPDATE cloud_sessions SET status = 'closed' WHERE session_id = 's1'`)
     assert.equal(await sessionGauge(), 1)
     assert.equal(await sessionGauge(), await sessionCounted())
+
+    // queued-commands gauge (active = status IN ('pending','running')); s2 is active
+    const insertCommand = (commandId: string, sequence: number, status: string) => pool.query(
+      `INSERT INTO cloud_session_commands (command_id, tenant_id, user_id, session_id, kind, payload, created_sequence, created_at, status)
+       VALUES ($1, 't1', 'u1', 's2', 'prompt', '{}'::jsonb, $2, now(), $3)`,
+      [commandId, sequence, status],
+    )
+    const commandGauge = async () => Number((await pool.query(
+      `SELECT value FROM cloud_concurrency_counters WHERE scope_id = 'org-1' AND counter_key = 'queued_commands'`,
+    )).rows[0]?.value ?? 0)
+    const commandCounted = async () => Number((await pool.query(
+      `SELECT count(*) AS c FROM cloud_session_commands WHERE status IN ('pending', 'running')`,
+    )).rows[0]?.c ?? 0)
+
+    await insertCommand('c1', 1, 'pending')
+    await insertCommand('c2', 2, 'running')
+    assert.equal(await commandGauge(), 2)
+    assert.equal(await commandGauge(), await commandCounted())
+    await pool.query(`UPDATE cloud_session_commands SET status = 'completed' WHERE command_id = 'c1'`)
+    assert.equal(await commandGauge(), 1)
+    assert.equal(await commandGauge(), await commandCounted())
   } finally {
     await store.close?.()
   }

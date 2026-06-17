@@ -985,6 +985,43 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS = [
     ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
+// Queued-commands gauge (active = status IN ('pending','running')), same
+// drift-free trigger pattern. The queue-AGE limit still needs min(created_at),
+// so the quota keeps a bounded age scan only when that limit is configured.
+export const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_MIGRATION_ID = '019_concurrency_counter_commands'
+const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
+  `CREATE OR REPLACE FUNCTION cloud_command_concurrency_counter() RETURNS trigger AS $func$
+    DECLARE
+      old_active int := 0;
+      new_active int := 0;
+      tid text;
+      scope text;
+    BEGIN
+      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status IN ('pending', 'running') THEN old_active := 1; END IF;
+      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status IN ('pending', 'running') THEN new_active := 1; END IF;
+      IF old_active = new_active THEN RETURN NULL; END IF;
+      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
+      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+        VALUES (scope, 'queued_commands', GREATEST(0, new_active - old_active), now())
+        ON CONFLICT (scope_id, counter_key) DO UPDATE
+          SET value = GREATEST(0, cloud_concurrency_counters.value + (new_active - old_active)), updated_at = now();
+      RETURN NULL;
+    END;
+    $func$ LANGUAGE plpgsql`,
+  `DROP TRIGGER IF EXISTS cloud_session_commands_concurrency_counter ON cloud_session_commands`,
+  `CREATE TRIGGER cloud_session_commands_concurrency_counter
+    AFTER INSERT OR UPDATE OR DELETE ON cloud_session_commands
+    FOR EACH ROW EXECUTE FUNCTION cloud_command_concurrency_counter()`,
+  `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value)
+    SELECT COALESCE(orgs.org_id, commands.tenant_id), 'queued_commands', count(*)
+    FROM cloud_session_commands commands
+    LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = commands.tenant_id
+    WHERE commands.status IN ('pending', 'running')
+    GROUP BY COALESCE(orgs.org_id, commands.tenant_id)
+    ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1059,5 +1096,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS,
   },
 ] as const
