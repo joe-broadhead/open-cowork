@@ -266,11 +266,13 @@ describe('StudioArtifactsPage', () => {
     }))
     const openArtifact = vi.fn(async () => '/tmp/board-review.md')
     const exportArtifact = vi.fn(async () => '/tmp/board-review.md')
+    const updateStatus = vi.fn(async () => ({ id: 'artifact-deck', status: 'in-review' }))
     installRendererTestCoworkApi({
       artifact: {
         index: indexArtifacts,
         open: openArtifact,
         export: exportArtifact,
+        updateStatus,
       },
     })
 
@@ -312,6 +314,17 @@ describe('StudioArtifactsPage', () => {
       sessionId: 'session-1',
       filePath: '/Users/joe/private/objectKey/report.md',
       suggestedName: 'board-review.md',
+      workspaceId: undefined,
+    }))
+
+    // The final artifact is terminal (no advance control); the draft deck advances
+    // to in-review through the shared lifecycle backed by the existing IPC.
+    expect(within(revenueCard).queryByRole('button', { name: /Advance to/ })).toBeNull()
+    fireEvent.click(within(deckCard).getByRole('button', { name: 'Advance to In review' }))
+    await waitFor(() => expect(updateStatus).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      artifactId: 'artifact-deck',
+      status: 'in-review',
       workspaceId: undefined,
     }))
   })

@@ -172,6 +172,7 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
       rejectQuestion: (sessionId, input) => request(endpointPath('sessionQuestionReject', { sessionId }), { method: 'POST', body: input }),
       artifacts: (sessionId) => request(withQuery(endpointPath('sessionArtifacts', { sessionId }), { limit: 100 })),
       artifact: (sessionId, artifactId) => request(endpointPath('sessionArtifact', { sessionId, artifactId })),
+      updateArtifactStatus: (sessionId, artifactId, input) => request(endpointPath('sessionArtifactStatus', { sessionId, artifactId }), { method: 'POST', body: input }),
     },
     artifacts: {
       index: (query) => request(`${endpoint('artifactsIndex')}${queryString(query)}`),

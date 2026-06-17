@@ -49,6 +49,7 @@ void test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only reque
     await api.coordination.watches({ targetKind: 'project', targetId: 'project-1', status: 'active', limit: 10 })
     api.setCsrfToken?.('csrf-2')
     await api.workflows.run('workflow-1')
+    await api.sessions.updateArtifactStatus('s/1', 'artifact-9', { status: 'in-review' })
 
     assert.deepEqual(calls.map((call) => call.path), [
       '/api/sessions?limit=200&cursor=offset%3A200',
@@ -58,7 +59,11 @@ void test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only reque
       '/api/coordination/projects/project-1/plan-with-cleo',
       '/api/coordination/watches?limit=10&targetKind=project&targetId=project-1&status=active',
       '/api/workflows/workflow-1/run',
+      '/api/sessions/s%2F1/artifacts/artifact-9/status',
     ])
+    assert.equal(calls[7]!.method, 'POST')
+    assert.deepEqual(calls[7]!.body, { status: 'in-review' })
+    assert.equal(calls[7]!.headers['x-csrf-token'], 'csrf-2')
     assert.equal(calls[0]!.method, 'GET')
     assert.equal(calls[1]!.method, 'POST')
     assert.equal(calls[2]!.method, 'GET')

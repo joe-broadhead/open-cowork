@@ -158,6 +158,16 @@ export function CloudArtifactSurfacePortals({ artifactActions }: CloudArtifactSu
               if (id) await artifactActions.onDownloadArtifact?.(id, { sessionId: artifact.sessionId })
             }
           }}
+          onAdvanceStatus={async (artifact, nextStatus) => {
+            const id = artifactActionId(artifact)
+            if (!id) return
+            try {
+              await api.sessions.updateArtifactStatus(artifact.sessionId, id, { status: nextStatus })
+              await loadArtifactIndex()
+            } catch (advanceError) {
+              setArtifactIndexError(advanceError instanceof Error ? advanceError.message : String(advanceError))
+            }
+          }}
         />,
         artifactListTarget,
       ) : null}

@@ -29,6 +29,8 @@ export type ArtifactsLibrarySurfaceProps = Omit<ComponentPropsWithoutRef<'sectio
   onOpenArtifact?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onExportArtifact?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onExportAll?: (artifacts: ArtifactIndexEntry[]) => Promise<unknown> | unknown
+  /** Advance an artifact through the draft → in-review → final review lifecycle. When provided, each non-final card shows an advance control. */
+  onAdvanceStatus?: (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => Promise<unknown> | unknown
 }
 
 const KIND_FILTERS: Array<{ id: ArtifactFilter; label: string }> = [
@@ -49,6 +51,15 @@ const STATUS_LABELS: Record<ArtifactStatus, string> = {
   draft: 'Draft',
   'in-review': 'In review',
   final: 'Final',
+}
+
+// The artifact review lifecycle, in order. `nextArtifactStatus` returns the
+// status an artifact advances to, or null when it is already final (terminal).
+const STATUS_ORDER: readonly ArtifactStatus[] = ['draft', 'in-review', 'final']
+
+function nextArtifactStatus(status: ArtifactStatus): ArtifactStatus | null {
+  const index = STATUS_ORDER.indexOf(status)
+  return index >= 0 && index < STATUS_ORDER.length - 1 ? STATUS_ORDER[index + 1]! : null
 }
 
 const KIND_LABELS: Record<ArtifactKind, string> = {
@@ -170,6 +181,7 @@ function ArtifactLibraryCard({
   onOpen,
   onExport,
   onInspect,
+  onAdvanceStatus,
 }: {
   artifact: ArtifactIndexEntry
   canOpen: boolean
@@ -178,9 +190,11 @@ function ArtifactLibraryCard({
   onOpen?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onExport?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onInspect?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
+  onAdvanceStatus?: (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => Promise<unknown> | unknown
 }) {
   const kind = artifact.kind || 'draft'
   const status = artifact.status || 'draft'
+  const advanceTo = nextArtifactStatus(status)
   const updated = dateLabel(artifact.updatedAt || artifact.createdAt)
 
   return (
@@ -205,6 +219,15 @@ function ArtifactLibraryCard({
         <div><dt>Updated</dt><dd>{updated || 'Unknown'}</dd></div>
       </dl>
       <div className="studio-artifact-card__actions">
+        {onAdvanceStatus && advanceTo ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onAdvanceStatus(artifact, advanceTo)}
+          >
+            {`Advance to ${STATUS_LABELS[advanceTo]}`}
+          </Button>
+        ) : null}
         {onInspect ? (
           <Button
             size="sm"
@@ -251,6 +274,7 @@ export function ArtifactsLibrarySurface({
   onOpenArtifact,
   onExportArtifact,
   onExportAll,
+  onAdvanceStatus,
   className,
   ...props
 }: ArtifactsLibrarySurfaceProps) {
@@ -321,6 +345,7 @@ export function ArtifactsLibrarySurface({
               onInspect={onInspectArtifact}
               onOpen={onOpenArtifact}
               onExport={onExportArtifact}
+              onAdvanceStatus={onAdvanceStatus}
             />
           ))}
         </div>

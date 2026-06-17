@@ -39,6 +39,7 @@ const CLOUD_WEB_ENDPOINT_DEFINITIONS = [
   { id: 'sessionQuestionReject', method: 'POST', path: '/api/sessions/:sessionId/question-reject', csrf: true },
   { id: 'sessionArtifacts', method: 'GET', path: '/api/sessions/:sessionId/artifacts', csrf: false },
   { id: 'sessionArtifact', method: 'GET', path: '/api/sessions/:sessionId/artifacts/:artifactId', csrf: false },
+  { id: 'sessionArtifactStatus', method: 'POST', path: '/api/sessions/:sessionId/artifacts/:artifactId/status', csrf: true },
   { id: 'artifactsIndex', method: 'GET', path: '/api/artifacts', csrf: false },
   { id: 'launchpadFeed', method: 'GET', path: '/api/launchpad/feed', csrf: false },
   { id: 'knowledgeSnapshot', method: 'GET', path: '/api/knowledge', csrf: false },

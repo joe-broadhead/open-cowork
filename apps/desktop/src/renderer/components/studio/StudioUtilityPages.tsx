@@ -12,6 +12,7 @@ import {
   isSafeArtifactOpenTarget,
   type ArtifactIndexEntry,
   type ArtifactIndexPayload,
+  type ArtifactStatus,
   channelProviderLabel,
   type ChannelAgentRecord,
   type ChannelBindingPublicRecord,
@@ -319,6 +320,20 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
     }
   }, [exportArtifact])
 
+  const advanceArtifactStatus = useCallback(async (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => {
+    try {
+      await window.coworkApi.artifact.updateStatus({
+        sessionId: artifact.sessionId,
+        artifactId: artifact.id,
+        status: nextStatus,
+        workspaceId: activeWorkspaceIsLocal ? undefined : activeWorkspaceId,
+      })
+      await loadArtifacts()
+    } catch (advanceError) {
+      setError(advanceError instanceof Error ? advanceError.message : String(advanceError))
+    }
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, loadArtifacts])
+
   const rendererChartArtifacts = useMemo<ArtifactIndexEntry[]>(() => {
     return sessions.flatMap((session) => {
       const sessionArtifacts = chartArtifactsBySession[sessionWorkspaceKey(activeWorkspaceId, session.id)] || []
@@ -394,6 +409,7 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
         onOpenArtifact={openArtifact}
         onExportArtifact={exportArtifact}
         onExportAll={exportVisibleArtifacts}
+        onAdvanceStatus={advanceArtifactStatus}
       />
 
       <Card padding="md">

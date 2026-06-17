@@ -68,6 +68,11 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
       },
       artifacts: (sessionId) => coworkApi.artifact.list({ sessionId }),
       artifact: (sessionId, artifactId) => coworkApi.artifact.readAttachment({ sessionId, filePath: cloudArtifactFilePath(artifactId) }),
+      updateArtifactStatus: (sessionId, artifactId, input) => coworkApi.artifact.updateStatus({
+        ...(input as Record<string, unknown>),
+        sessionId,
+        artifactId,
+      } as Parameters<CoworkAPI['artifact']['updateStatus']>[0]),
     },
     artifacts: {
       index: (query) => coworkApi.artifact.index(query as Parameters<CoworkAPI['artifact']['index']>[0]),

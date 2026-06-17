@@ -215,7 +215,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     routeId: 'artifacts',
     surface: 'workbench',
     requiredRole: 'member',
-    endpointIds: ['artifactsIndex', 'sessionArtifacts', 'sessionArtifact'],
+    endpointIds: ['artifactsIndex', 'sessionArtifacts', 'sessionArtifact', 'sessionArtifactStatus'],
     states: {
       loading: 'Artifact inspector starts idle until a selected session artifact is inspected.',
       empty: 'No artifacts loaded.',
