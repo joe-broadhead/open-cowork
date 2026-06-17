@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
@@ -68,6 +69,10 @@ import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
+import {
+  applyKnowledgeAgentRuntimeAugmentation,
+  buildKnowledgeAgentRuntimeAugmentation,
+} from './knowledge-agent-runtime.ts'
 import { createUnavailableRuntimeAdapter } from './unavailable-runtime-adapter.ts'
 import {
   createObjectWorkspaceCheckpointStore,
@@ -271,6 +276,21 @@ async function resolveCloudOidcClientSecretForRuntime(config: Pick<OpenCoworkCon
   return resolveConfiguredSecretRef(clientSecretRef, env)
 }
 
+// Filesystem path to the bundled cloud knowledge MCP. build-cloud.mjs bundles
+// mcps/knowledge/src/index.ts → apps/desktop/dist/cloud/mcp-knowledge.mjs, which
+// sits next to the bundled cloud entrypoint (this module). An env override lets
+// non-default deployments relocate it; null/missing means the agent path is not
+// wired (fail closed). Resolved lazily so a bad URL never throws at import time.
+export function resolveCloudKnowledgeMcpScriptPath(env: Env = process.env): string | null {
+  const override = envValue(env, 'OPEN_COWORK_CLOUD_KNOWLEDGE_MCP_PATH')
+  if (override) return override
+  try {
+    return fileURLToPath(new URL('./mcp-knowledge.mjs', import.meta.url))
+  } catch {
+    return null
+  }
+}
+
 export function resolveCloudInternalToken(env: Env = process.env) {
   return envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN')
     || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF') || undefined, env)
@@ -329,14 +349,46 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
   }
 }
 
-function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {
-  return createNodeOpencodeCloudRuntimeAdapter({
-    paths: input.paths,
-    env: input.env as NodeJS.ProcessEnv,
-    config: input.runtimeConfig,
-    configDelivery: 'ephemeral-file',
-    cwd: input.paths.resolveWorkspacePath(input.execution.tenantId, input.execution.sessionId),
-  })
+// Per-session knowledge-agent spawn options. When all three are present the
+// default runtime factory mints a per-session token and injects the knowledge
+// MCP + its env so a cloud coworker can propose a knowledge edit. Any missing
+// field ⇒ nothing is injected (fail closed).
+export type KnowledgeAgentSpawnOptions = {
+  knowledgeEnabled: boolean
+  secret: string | null
+  publicUrl: string | null
+  mcpScriptPath: string | null
+}
+
+export function createDefaultCloudRuntimeFactory(
+  knowledgeAgent: KnowledgeAgentSpawnOptions,
+): CloudRuntimeFactory {
+  return (input: CloudRoleRuntimeFactoryInput) => {
+    // Mint the per-session token + inject the knowledge MCP/env only for THIS
+    // session's tenant. Returns null (no augmentation) when fail-closed.
+    const augmentation = buildKnowledgeAgentRuntimeAugmentation({
+      knowledgeEnabled: knowledgeAgent.knowledgeEnabled,
+      secret: knowledgeAgent.secret,
+      publicUrl: knowledgeAgent.publicUrl,
+      mcpScriptPath: knowledgeAgent.mcpScriptPath,
+      execution: input.execution,
+    })
+    const { env, runtimeConfig } = applyKnowledgeAgentRuntimeAugmentation({
+      env: input.env,
+      runtimeConfig: input.runtimeConfig,
+      augmentation,
+    })
+    return createNodeOpencodeCloudRuntimeAdapter({
+      paths: input.paths,
+      env: env as NodeJS.ProcessEnv,
+      // The augmentation only ever adds a valid local-MCP entry to `mcp`; this
+      // module owns the OpenCode `Config` typing (the helper stays SDK-free so it
+      // sits outside the OpenCode SDK boundary), so re-narrow back to it here.
+      config: runtimeConfig as CloudRoleRuntimeFactoryInput['runtimeConfig'],
+      configDelivery: 'ephemeral-file',
+      cwd: input.paths.resolveWorkspacePath(input.execution.tenantId, input.execution.sessionId),
+    })
+  }
 }
 
 export function listConfiguredByokProviderIds(config: OpenCoworkConfig) {
@@ -1090,6 +1142,24 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           })
         : null
     : null
+  // Knowledge-agent write-path inputs, resolved for BOTH the worker (which spawns
+  // the runtime + mints the per-session token) and the web role (which verifies
+  // the token on the agent-propose route). Reuses the cloud cookie/invite signing
+  // secret + the stable public URL. Any missing piece ⇒ no token minted, no env
+  // injected, and the route fails closed.
+  const knowledgeAgentSecret = await resolveCloudCookieSecretForRuntime(resolvedAuthConfig, env)
+  // The knowledge MCP requires a loopback http endpoint. In all-in-one the worker
+  // (which mints the per-session token + spawns the MCP) is co-located with the web
+  // role (which verifies the token on the propose route), so the MCP reaches it over
+  // loopback at the bind port — regardless of the (possibly https) public URL. Split
+  // roles can't reach the web over loopback and the MCP rejects a remote https URL,
+  // so they fall through to the public URL which fails closed at the MCP — i.e. the
+  // cloud agent write-path is effectively all-in-one-only today (broadening to split
+  // would need the MCP to accept a same-origin https endpoint).
+  const knowledgeAgentPublicUrl = policy.role === 'all-in-one'
+    ? `http://127.0.0.1:${options.port ?? envOptions.port}`
+    : (envOptions.publicUrl?.trim() || null)
+  const knowledgeAgentMcpScriptPath = resolveCloudKnowledgeMcpScriptPath(env)
   const runtime = options.runtime || (
     shouldRunCloudWorker(policy.role)
       ? createWorkerScopedRuntimeAdapter({
@@ -1103,7 +1173,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
             checkEntitlement: byokPolicy.checkRuntimeEntitlement,
           },
           observability,
-          runtimeFactory: options.runtimeFactory || defaultCloudRuntimeFactory,
+          runtimeFactory: options.runtimeFactory || createDefaultCloudRuntimeFactory({
+            knowledgeEnabled: policy.features.knowledge,
+            secret: knowledgeAgentSecret,
+            publicUrl: knowledgeAgentPublicUrl,
+            mcpScriptPath: knowledgeAgentMcpScriptPath,
+          }),
           maxRuntimeEntries: options.runtimeCacheMaxEntries ?? envOptions.runtimeCacheMaxEntries,
           runtimeIdleTtlMs: options.runtimeCacheIdleTtlMs ?? envOptions.runtimeCacheIdleTtlMs,
         })
@@ -1295,6 +1370,10 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         trustedProxyCidrs: envOptions.trustedProxyCidrs,
         knowledgeDataDir: paths.getAppDataDir(),
         knowledgeStore: knowledgeStore ?? undefined,
+        // Verifies the per-session agent token on /api/knowledge/agent/propose.
+        // Same signing secret the worker uses to mint the token. Null ⇒ the route
+        // fails closed (401).
+        knowledgeAgentTokenSecret: knowledgeAgentSecret,
         readiness: createCloudReadinessCheck({
           policy,
           store,

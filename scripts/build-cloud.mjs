@@ -8,6 +8,7 @@ import { build } from 'esbuild'
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs')
 const migrateOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs')
+const knowledgeMcpOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/mcp-knowledge.mjs')
 const supervisorOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/runtime-managed-server-supervisor.js')
 const cloudAssetsDir = resolve(repoRoot, 'apps/desktop/dist/cloud/assets')
 const cloudReactClientAsset = 'open-cowork-cloud-react.js'
@@ -91,6 +92,24 @@ await build({
   packages: 'external',
   external: [...builtins],
   plugins: [cloudElectronShimPlugin],
+  logLevel: 'info',
+})
+
+// Bundle the knowledge MCP into the cloud image so a cloud coworker can propose
+// a knowledge-wiki edit. The cloud runtime registers this built file as a local
+// MCP (command `['node', '<…>/mcp-knowledge.mjs']`) per session. Unlike the other
+// cloud entries (which keep node_modules external), the MCP ships as a single
+// self-contained file with its deps (@modelcontextprotocol/sdk, zod) bundled, so
+// the spawned process needs nothing installed alongside it.
+await build({
+  entryPoints: [resolve(repoRoot, 'mcps/knowledge/src/index.ts')],
+  outfile: knowledgeMcpOutfile,
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  sourcemap: true,
+  external: [...builtins],
   logLevel: 'info',
 })
 

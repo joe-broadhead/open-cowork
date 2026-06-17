@@ -31,6 +31,10 @@ import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-bi
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
 import { setKnowledgeDatabaseForTests } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
+import {
+  KNOWLEDGE_AGENT_TOKEN_TTL_MS,
+  signKnowledgeAgentToken,
+} from '../apps/desktop/src/main/cloud/knowledge-agent-token.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
@@ -121,6 +125,7 @@ function createFixture(options: {
   trustedProxyCidrs?: readonly string[] | null
   inviteSigningSecret?: string | null
   emailSender?: CloudEmailSender | null
+  knowledgeAgentTokenSecret?: string | null
 } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -155,6 +160,7 @@ function createFixture(options: {
     webhookSecurity: options.webhookSecurity,
     trustProxyHeaders: options.trustProxyHeaders,
     trustedProxyCidrs: options.trustedProxyCidrs,
+    knowledgeAgentTokenSecret: options.knowledgeAgentTokenSecret,
     auth: options.auth || (async (req) => {
       const authorization = String(req.headers.authorization || '')
       if (authorization.startsWith('Bearer ocw_')) return workerAuth(req)
@@ -651,6 +657,147 @@ test('cloud HTTP knowledge routes expose snapshot, proposal review, and version 
     assert.match(String((await readJson(staleOwnerHeader)).error), /membership is not active/i)
   } finally {
     await fixture.server.close()
+    setKnowledgeDatabaseForTests(null)
+    knowledgeDb.close()
+  }
+})
+
+test('cloud HTTP knowledge agent-propose route is token-authed, tenant-scoped from the token, and propose-only', async () => {
+  const knowledgeDb = new DatabaseSync(':memory:')
+  setKnowledgeDatabaseForTests(knowledgeDb)
+  const AGENT_SECRET = 'cloud-knowledge-agent-secret-for-tests'
+  const now = Date.now()
+  // A principal is still supplied by the fixture, but this route is pre-user-auth:
+  // it authenticates ONLY via the signed agent token, not the principal.
+  const fixture = createFixture({ knowledgeAgentTokenSecret: AGENT_SECRET })
+  const baseUrl = await fixture.server.listen()
+  const proposeUrl = `${baseUrl}/api/knowledge/agent/propose`
+  // The seeded default Space for the token's tenant (cloud:tenant-1). The agent
+  // never learns this from the body — it proposes against its own workspace.
+  const tokenSpaceId = 'space:cloud:tenant-1:company-os'
+  const proposalBody = (extra: Record<string, unknown> = {}) => JSON.stringify({
+    spaceId: tokenSpaceId,
+    pageTitle: 'Operating Model',
+    summary: 'A cloud coworker proposes a knowledge change.',
+    body: [{ type: 'p', text: 'Proposed by an agent; pending human review.' }],
+    ...extra,
+  })
+  const signToken = (payload: { tenantId: string; sessionId: string; exp?: number }) =>
+    signKnowledgeAgentToken(AGENT_SECRET, {
+      tenantId: payload.tenantId,
+      sessionId: payload.sessionId,
+      exp: payload.exp ?? now + KNOWLEDGE_AGENT_TOKEN_TTL_MS,
+    })
+
+  try {
+    // Missing token → 401.
+    assert.equal((await fetch(proposeUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: proposalBody() })).status, 401)
+
+    // Malformed / wrong-secret / expired tokens → 401.
+    assert.equal((await fetch(proposeUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: proposalBody() })).status, 401)
+    assert.equal((await fetch(proposeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${signKnowledgeAgentToken('a-different-secret', { tenantId: 'tenant-1', sessionId: 's-1', exp: now + 1000 })}` },
+      body: proposalBody(),
+    })).status, 401)
+    assert.equal((await fetch(proposeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${signToken({ tenantId: 'tenant-1', sessionId: 's-1', exp: now - 1 })}` },
+      body: proposalBody(),
+    })).status, 401)
+
+    // Non-POST is rejected (propose-only, single verb).
+    assert.equal((await fetch(proposeUrl, { method: 'GET', headers: { authorization: `Bearer ${signToken({ tenantId: 'tenant-1', sessionId: 's-1' })}` } })).status, 405)
+
+    // Valid token → 201, a PENDING proposal scoped to the TOKEN's tenant.
+    const validToken = signToken({ tenantId: 'tenant-1', sessionId: 'session-abc' })
+    const created = await fetch(proposeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
+      // The agent supplies a hostile `by` + a body-level workspace/tenant override.
+      body: proposalBody({ by: 'totally-the-admin', workspaceId: 'cloud:tenant-victim', tenantId: 'tenant-victim' }),
+    })
+    assert.equal(created.status, 201)
+    const createdBody = asRecord(await readJson(created))
+    assert.equal(createdBody.ok, true)
+    const proposal = asRecord(createdBody.proposal)
+    assert.ok(proposal.id)
+    // `by` is server-forced to 'Coworker' (the hostile body `by` is ignored).
+    assert.equal(proposal.by, 'Coworker')
+    // Created PENDING — it stays for a human Maintainer.
+    assert.equal(proposal.status, 'pending')
+    assert.equal(proposal.spaceId, tokenSpaceId)
+
+    // The proposal landed in the TOKEN's tenant (cloud:tenant-1), NOT the body's
+    // claimed tenant. It is visible in tenant-1's snapshot…
+    const tenant1Snapshot = asRecord(await readJson(await fetch(`${baseUrl}/api/knowledge`, { headers: { 'x-test-role': 'owner' } })))
+    assert.ok(asArray(tenant1Snapshot.proposals).map(asRecord).some((entry) => entry.id === proposal.id))
+
+    // The agent route is propose-ONLY: there is no agent accept/decline/list/read
+    // surface. The only other path under the agent base 404s (it is not routed as
+    // a human knowledge API — it sits pre-user-auth and only matches the exact
+    // propose path), so the agent token cannot reach review/read endpoints.
+    const acceptViaAgent = await fetch(`${baseUrl}/api/knowledge/agent/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
+      body: JSON.stringify({}),
+    })
+    // Not the propose path ⇒ falls through to the desktop-API user-principal gate,
+    // which the agent token is not. It never reaches an accept handler.
+    assert.notEqual(acceptViaAgent.status, 200)
+    assert.equal(asArray(tenant1Snapshot.proposals).map(asRecord).find((entry) => entry.id === proposal.id)?.status, 'pending')
+  } finally {
+    await fixture.server.close()
+    setKnowledgeDatabaseForTests(null)
+    knowledgeDb.close()
+  }
+})
+
+test('cloud HTTP knowledge agent-propose route fails closed without a secret and when knowledge is disabled', async () => {
+  const knowledgeDb = new DatabaseSync(':memory:')
+  setKnowledgeDatabaseForTests(knowledgeDb)
+  const now = Date.now()
+  const proposalBody = JSON.stringify({
+    spaceId: 'space:cloud:tenant-1:company-os',
+    pageTitle: 'Operating Model',
+    summary: 'A cloud coworker proposes a knowledge change.',
+    body: [{ type: 'p', text: 'Proposed by an agent.' }],
+  })
+
+  // No configured secret ⇒ the route rejects even a structurally valid-looking
+  // token (it must NOT verify against an empty secret). Fail closed → 401.
+  const noSecretFixture = createFixture({ knowledgeAgentTokenSecret: null })
+  const noSecretUrl = await noSecretFixture.server.listen()
+  try {
+    const forged = signKnowledgeAgentToken('', { tenantId: 'tenant-1', sessionId: 's-1', exp: now + 1000 })
+    const rejected = await fetch(`${noSecretUrl}/api/knowledge/agent/propose`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${forged}` },
+      body: proposalBody,
+    })
+    assert.equal(rejected.status, 401)
+  } finally {
+    await noSecretFixture.server.close()
+  }
+
+  // Knowledge disabled by policy ⇒ 403 (feature gate), even with a valid token.
+  const disabledPolicy: CloudRuntimePolicy = {
+    ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    features: { ...resolveCloudRuntimePolicy(DEFAULT_CONFIG).features, knowledge: false },
+  }
+  const AGENT_SECRET = 'cloud-knowledge-agent-secret-for-tests'
+  const disabledFixture = createFixture({ policy: disabledPolicy, knowledgeAgentTokenSecret: AGENT_SECRET })
+  const disabledUrl = await disabledFixture.server.listen()
+  try {
+    const validToken = signKnowledgeAgentToken(AGENT_SECRET, { tenantId: 'tenant-1', sessionId: 's-1', exp: now + KNOWLEDGE_AGENT_TOKEN_TTL_MS })
+    const gated = await fetch(`${disabledUrl}/api/knowledge/agent/propose`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
+      body: proposalBody,
+    })
+    assert.equal(gated.status, 403)
+  } finally {
+    await disabledFixture.server.close()
     setKnowledgeDatabaseForTests(null)
     knowledgeDb.close()
   }

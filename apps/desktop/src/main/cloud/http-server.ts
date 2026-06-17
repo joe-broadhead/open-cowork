@@ -32,6 +32,7 @@ import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
 import { handleCoordinationApiRoute } from './http-routes/coordination.ts'
 import { handleKnowledgeApiRoute } from './http-routes/knowledge.ts'
+import { handleKnowledgeAgentProposeRoute } from './http-routes/knowledge-agent.ts'
 import { handleLaunchpadApiRoute } from './http-routes/launchpad.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
@@ -158,6 +159,13 @@ export type CloudHttpServerOptions = {
    * rather than a node-local SQLite file.
    */
   knowledgeStore?: KnowledgeStore
+  /**
+   * Cloud signing secret used to verify the per-session, tenant-scoped knowledge
+   * agent token presented by the knowledge MCP on the agent-propose route. When
+   * omitted, the route fails closed (401) — no agent proposals are accepted.
+   * Same secret the cloud app uses for session cookies / team-invite tokens.
+   */
+  knowledgeAgentTokenSecret?: string | null
 }
 
 export class CloudHttpError extends Error {
@@ -1659,6 +1667,29 @@ export class CloudHttpServer {
         }
         const membership = await this.options.service.acceptMembershipInvite(token)
         writeJson(res, 200, { membership }, requestOptions.corsOrigin)
+        return
+      }
+
+      // Public, pre-user-auth: the cloud agent-propose route. A coworker (agent)
+      // in a cloud session proposes a knowledge edit via the knowledge MCP,
+      // which carries a per-session, tenant-scoped signed token as its bearer
+      // credential (NOT the user cookie/principal). The route verifies the token,
+      // derives the workspace from the TOKEN (never the body), forces `by`, and
+      // creates a PENDING proposal. Propose-only; placed like /api/invites/accept
+      // so it bypasses the desktop-API user-principal gate. IP-rate-limited above.
+      if (url.pathname === '/api/knowledge/agent/propose') {
+        const knowledgeStore = this.options.knowledgeStore
+          ?? createSqliteKnowledgeStore({ storageDataDir: this.options.knowledgeDataDir })
+        await handleKnowledgeAgentProposeRoute({
+          req,
+          res,
+          secret: this.options.knowledgeAgentTokenSecret || '',
+          store: knowledgeStore,
+          knowledgeEnabled: this.options.policy.features.knowledge,
+          maxBodyBytes: this.options.maxBodyBytes || 1024 * 1024,
+          corsOrigin: requestOptions.corsOrigin,
+          tools: { readJsonBody, writeJson, writeError, writePolicyError },
+        })
         return
       }
 
