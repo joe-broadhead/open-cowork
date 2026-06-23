@@ -150,8 +150,19 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
     protocol/output (self-contained, verified by `pnpm cloud:build` **and** the full desktop
     `vite build`). Remaining: `runtime-node-managed-server` + the supervisor (move together, later),
     `runtime-environment` (config-coupled via `runtime-paths`), the knowledge SQLite store (config).
-11. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
-    cores, runtime-config-builder, capability-catalog, coordination, launchpad). The long tail.
+11. 🟡 **Decouple the desktop config/runtime/session core from Electron** (the long tail; the real
+    gate on the final lift). **First increment ✅ — `config-loader` Electron-decoupled via core+shim**
+    (the logger pattern): `config-loader.ts` → `config-loader-core.ts` which no longer imports
+    `electron`; its only Electron use was the `app` object for path resolution
+    (`isPackaged`/`getAppPath`/`getPath`), now an **injected** `ConfigAppPathHost`
+    (`setConfigAppPathHost`). The new tiny `config-loader.ts` shim imports `electron` and wires the
+    host at module load (before any of the 109 importers call a config fn — no bootstrap risk, host
+    read lazily), so desktop behavior is byte-identical and the cloud (Electron shimmed → host null)
+    falls back exactly as before. Preparatory like the logger move: the cloud still reaches the shim,
+    so the edge isn't cut until the cloud imports the core + injects its own host and the core moves
+    to a package. **Remaining:** `settings` (harder — `safeStorage` **credential encryption**, deferred
+    as security-critical), `runtime-config-builder`, `capability-catalog`, `coordination` (electron
+    BrowserWindow), `launchpad`, `runtime-paths`, the knowledge SQLite store.
 12. **`main/cloud/** → packages/cloud-server`** once the boundary is empty; wire package +
     Dockerfile + build-cloud. `postgres-knowledge-store` (cloud-only) lands here.
 
