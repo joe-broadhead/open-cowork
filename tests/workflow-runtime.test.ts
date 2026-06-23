@@ -1,3 +1,4 @@
+import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, isWorkflowWebhookLoopbackBindAddress, InMemoryWorkflowWebhookSecurityStore, resetWorkflowWebhookSecurityStateForTests, signWorkflowWebhookPayload, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth } from '@open-cowork/shared/node'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'
@@ -18,18 +19,6 @@ import {
   startWorkflowService,
   stopWorkflowService,
 } from '../apps/desktop/src/main/workflow/workflow-service.ts'
-import {
-  configureWorkflowWebhookServer,
-  ensureWorkflowWebhookServer,
-  getWorkflowWebhookBaseUrl,
-  isWorkflowWebhookLoopbackBindAddress,
-  InMemoryWorkflowWebhookSecurityStore,
-  resetWorkflowWebhookSecurityStateForTests,
-  signWorkflowWebhookPayload,
-  stopWorkflowWebhookServer,
-  claimWorkflowWebhookSignatureOnce,
-  verifyWorkflowWebhookAuth,
-} from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
 import {
   ensureWorkflowToolBridge,
   getWorkflowToolBridgeEnvironment,

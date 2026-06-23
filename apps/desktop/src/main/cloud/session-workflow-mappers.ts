@@ -1,8 +1,7 @@
+import type { WorkflowWebhookAuth } from '@open-cowork/shared/node'
 import { createHash } from 'node:crypto'
 import type { WorkflowRun } from '@open-cowork/shared'
 import type { CloudWorkflowRecord, CloudWorkflowRunRecord } from './control-plane-store.ts'
-import type { WorkflowWebhookAuth } from '../workflow/workflow-webhook-server.ts'
-
 // Pure mappers from the control-plane's stored workflow records to the public
 // API shapes (stripping tenant/claim/internal fields), plus the run-terminal
 // predicate and the signature-webhook replay key. Extracted from

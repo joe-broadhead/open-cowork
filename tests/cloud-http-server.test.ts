@@ -1,3 +1,4 @@
+import { signWorkflowWebhookPayload, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -39,10 +40,6 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import {
-  signWorkflowWebhookPayload,
-  type WorkflowWebhookSecurityStore,
-} from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
 import { invalidateRuntimeCatalogSnapshotCache } from '../apps/desktop/src/main/runtime-catalog-snapshot.ts'
 
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'

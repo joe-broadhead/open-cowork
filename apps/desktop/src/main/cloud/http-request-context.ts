@@ -1,9 +1,8 @@
+import { WebhookHttpError, type WorkflowWebhookAuth } from '@open-cowork/shared/node'
 import { createHash } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 import { firstHeader } from './http-request-parsers.ts'
-import { WebhookHttpError, type WorkflowWebhookAuth } from '../workflow/workflow-webhook-server.ts'
-
 // Pure request-context helpers for the cloud HTTP server, extracted from
 // http-server.ts: resolve the client source (honouring the trusted-proxy
 // policy), the validated CORS origin, a flattened header record, the

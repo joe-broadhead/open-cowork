@@ -1,7 +1,6 @@
+import type { WorkflowWebhookAuth, WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import type { WorkflowDetail, WorkflowDraft, WorkflowListPayload, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudPrincipal, CloudWorkflowStartResult } from '../session-service.ts'
-import type { WorkflowWebhookAuth, WorkflowWebhookSecurityStore } from '../../workflow/workflow-webhook-server.ts'
-
 export type CloudWorkflowWebhookInput = {
   workflowId: string
   auth: WorkflowWebhookAuth

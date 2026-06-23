@@ -1,3 +1,4 @@
+import type { WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHmac, timingSafeEqual } from 'node:crypto'
@@ -78,7 +79,6 @@ import {
   defaultCloudSessionCheckpointRoots,
   type WorkspaceCheckpointStore,
 } from './workspace-checkpoint-store.ts'
-import type { WorkflowWebhookSecurityStore } from '../workflow/workflow-webhook-server.ts'
 import { type Env, envValue, parseBoolean, parsePort, parsePositiveInt, resolveEnvRef } from './cloud-config-parse.ts'
 import { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 export { resolveCloudPublicBranding } from './cloud-branding-config.ts'

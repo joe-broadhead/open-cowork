@@ -1,3 +1,4 @@
+import type { WorkflowWebhookReplayClaim, WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 import {
@@ -118,10 +119,6 @@ import type {
   ApiTokenChannelBindingGrantRecord,
   ListChannelIdentitiesInput,
 } from './control-plane-store.ts'
-import type {
-  WorkflowWebhookReplayClaim,
-  WorkflowWebhookSecurityStore,
-} from '../workflow/workflow-webhook-server.ts'
 import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
 import { cloudPostgresPoolPlan, type CloudPostgresPoolConfig } from './postgres-pool-options.ts'
 import { workspaceEventCursorFromRow } from './workspace-event-cursor.ts'

@@ -1,3 +1,4 @@
+import { InMemoryWorkflowWebhookSecurityStore, WebhookHttpError, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -81,12 +82,6 @@ import type {
 } from './control-plane-store.ts'
 import { recordCloudHttpRequest, recordCloudLog, recordCloudMetric } from './observability.ts'
 import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
-import {
-  InMemoryWorkflowWebhookSecurityStore,
-  WebhookHttpError,
-  type WorkflowWebhookSecurityStore,
-} from '../workflow/workflow-webhook-server.ts'
-
 export type CloudAuthResolver = (req: IncomingMessage) => Promise<CloudPrincipal> | CloudPrincipal
 
 export type CloudBrowserAuthRedirect = {

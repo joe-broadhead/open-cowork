@@ -121,13 +121,20 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
    `logger.test.ts` green through the shim. **Caveat (honest):** because the cloud reaches the
    same shim via `../logger`, the cloud → config-loader edge **persists** — it can't be cut
    until the config core is Electron-decoupled (the file prefix needs `getDataDirName()` from
-   branding config). So this is infra-positioning, not a closure reduction yet. Next:
-   `workflow-webhook-server` (depends on the logger) can follow once it has a node home.
-9. **`packages/runtime-host`** (Docker): opencode-adapter, runtime-managed-server cluster,
-   runtime-environment, knowledge SQLite store. + SDK-boundary allowlist + boundary doc + Docker.
-10. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
+   branding config). So this is infra-positioning, not a closure reduction yet.
+9. ✅ **`workflow-webhook-server` → shared/node.** The HMAC-authenticated workflow webhook
+   HTTP server (the cloud's **highest** direct edge — 9 cloud importers) had only one non-builtin
+   dependency: the logger. With the logger core now in shared/node, moved the webhook server
+   verbatim (`node:http` + `node:crypto` + the config-free `./logger.js` core), repointing all
+   13 importers to `@open-cowork/shared/node`. This **cuts** the `cloud → webhook-server →
+   logger → config-loader` path (the server now reaches only the config-free logger core);
+   config-loader stays in the closure via other chains, but one more path to it is gone and the
+   webhook server is fully shared. No signature-auth / replay-window logic changed.
+10. **`packages/runtime-host`** (Docker): opencode-adapter, runtime-managed-server cluster,
+    runtime-environment, knowledge SQLite store. + SDK-boundary allowlist + boundary doc + Docker.
+11. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
     cores, runtime-config-builder, capability-catalog, coordination, launchpad). The long tail.
-11. **`main/cloud/** → packages/cloud-server`** once the boundary is empty; wire package +
+12. **`main/cloud/** → packages/cloud-server`** once the boundary is empty; wire package +
     Dockerfile + build-cloud. `postgres-knowledge-store` (cloud-only) lands here.
 
 Gate every step: main/renderer/website tsc 0, node suite 0-fail, website 101/101,

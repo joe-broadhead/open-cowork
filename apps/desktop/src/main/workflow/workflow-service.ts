@@ -1,3 +1,4 @@
+import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth, WebhookHttpError } from '@open-cowork/shared/node'
 import type { BrowserWindow } from 'electron'
 import type {
   SessionInfo,
@@ -20,15 +21,6 @@ import {
   updateWorkflowStatus,
 } from './workflow-store.ts'
 import { configureWorkflowToolActions } from './workflow-tool-actions.ts'
-import {
-  configureWorkflowWebhookServer,
-  ensureWorkflowWebhookServer,
-  getWorkflowWebhookBaseUrl,
-  stopWorkflowWebhookServer,
-  claimWorkflowWebhookSignatureOnce,
-  verifyWorkflowWebhookAuth,
-  WebhookHttpError,
-} from './workflow-webhook-server.ts'
 import { getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { getConfiguredAgentsFromConfig } from '../config-loader.ts'

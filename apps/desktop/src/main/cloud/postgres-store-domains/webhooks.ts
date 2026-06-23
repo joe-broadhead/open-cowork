@@ -1,7 +1,6 @@
+import type { WorkflowWebhookReplayClaim } from '@open-cowork/shared/node'
 import { numberValue, type QueryResult, type QueryRow } from '../postgres-domains/shared.ts'
 import { webhookAuthFailureFromRow } from '../postgres-domains/webhooks.ts'
-import type { WorkflowWebhookReplayClaim } from '../../workflow/workflow-webhook-server.ts'
-
 // Webhook-security SQL domain extracted from postgres-control-plane-store.ts. Implements
 // the WorkflowWebhookSecurityStore surface for inbound webhooks: fixed-window request
 // rate limiting, fail-closed auth backoff, and single-use signature/replay claims (with

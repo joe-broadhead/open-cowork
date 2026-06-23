@@ -1,3 +1,4 @@
+import { getWorkflowWebhookBaseUrl } from '@open-cowork/shared/node'
 import { randomBytes } from 'node:crypto'
 import type {
   WorkflowDraft,
@@ -10,7 +11,6 @@ import {
   previewWorkflowDraft,
   type WorkflowCapabilityValidationContext,
 } from './workflow-store.ts'
-import { getWorkflowWebhookBaseUrl } from './workflow-webhook-server.ts'
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,

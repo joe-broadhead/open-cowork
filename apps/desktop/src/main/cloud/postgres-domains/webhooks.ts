@@ -1,4 +1,4 @@
-import type { WebhookAuthFailureRecord } from '../../workflow/workflow-webhook-server.ts'
+import type { WebhookAuthFailureRecord } from '@open-cowork/shared/node'
 import { numberValue, type QueryRow } from './shared.ts'
 
 export function webhookAuthFailureFromRow(row: QueryRow): WebhookAuthFailureRecord {
