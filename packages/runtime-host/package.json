@@ -1,0 +1,39 @@
+{
+  "name": "@open-cowork/runtime-host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Node + OpenCode-SDK runtime substrate shared by the desktop main process and the cloud server",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "packages/runtime-host"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@open-cowork/shared": "workspace:*",
+    "@opencode-ai/sdk": "1.15.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^6.0.3"
+  }
+}

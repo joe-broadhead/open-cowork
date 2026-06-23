@@ -1,9 +1,6 @@
+import type { NormalizedMessagePart, NormalizedSessionMessage } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type {
-  NormalizedMessagePart,
-  NormalizedSessionMessage,
-} from '../apps/desktop/src/main/opencode-adapter.ts'
 import {
   collectHistoryTextParts,
   createHistoryCostPayload,

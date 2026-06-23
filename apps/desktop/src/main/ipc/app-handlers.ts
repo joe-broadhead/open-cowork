@@ -1,3 +1,4 @@
+import { normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { writeFileAtomic, readFileCheckedSync, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import electron from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
@@ -37,7 +38,6 @@ import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionReco
 import { syncSessionView } from '../session-history-loader.ts'
 import { publishSessionMetadata, publishSessionView } from '../session-event-dispatcher.ts'
 import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
-import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { trackParentSession } from '../event-task-state.ts'
 import { toIsoTimestamp } from '../task-run-utils.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'

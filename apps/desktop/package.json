@@ -67,6 +67,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@open-cowork/runtime-host": "workspace:*",
     "@open-cowork/shared": "workspace:*",
     "@open-cowork/website": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",

@@ -1,3 +1,4 @@
+import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from '@open-cowork/runtime-host'
 import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth, WebhookHttpError } from '@open-cowork/shared/node'
 import type { BrowserWindow } from 'electron'
 import type {
@@ -26,7 +27,6 @@ import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { getConfiguredAgentsFromConfig } from '../config-loader.ts'
 import { getEffectiveSettings } from '../settings.ts'
 import { trackParentSession } from '../event-task-state.ts'
-import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from '../opencode-adapter.ts'
 import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '../session-registry.ts'
 import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { toIsoTimestamp } from '../task-run-utils.ts'

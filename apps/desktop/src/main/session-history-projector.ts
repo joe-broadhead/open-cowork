@@ -1,10 +1,5 @@
+import { normalizeTodoItems, normalizeSessionMessages, normalizeSessionStatuses, type NormalizedMessagePart } from '@open-cowork/runtime-host'
 import { isInternalCoworkMessage } from './internal-message-utils.ts'
-import {
-  normalizeTodoItems,
-  normalizeSessionMessages,
-  normalizeSessionStatuses,
-  type NormalizedMessagePart,
-} from './opencode-adapter.ts'
 import type { TodoItem } from '@open-cowork/shared'
 import {
   chooseTaskTitle,

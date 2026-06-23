@@ -85,6 +85,14 @@
         "src/**/*.ts"
       ]
     },
+    "packages/runtime-host": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "packages/ui": {
       "entry": [
         "src/index.ts"

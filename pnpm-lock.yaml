@@ -23,6 +23,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.4.1(jiti@2.7.0))
+      '@open-cowork/runtime-host':
+        specifier: workspace:*
+        version: link:packages/runtime-host
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:packages/shared
@@ -144,6 +147,9 @@ importers:
         specifier: ^5.0.0
         version: 5.0.12(@types/react@19.2.14)(react@19.2.5)
     devDependencies:
+      '@open-cowork/runtime-host':
+        specifier: workspace:*
+        version: link:../../packages/runtime-host
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -604,6 +610,22 @@ importers:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../gateway-channel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/runtime-host:
+    dependencies:
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@opencode-ai/sdk':
+        specifier: 1.15.5
+        version: 1.15.5
     devDependencies:
       '@types/node':
         specifier: ^22.12.0

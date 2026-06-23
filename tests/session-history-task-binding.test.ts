@@ -1,7 +1,7 @@
+import type { NormalizedMessagePart } from '@open-cowork/runtime-host'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import type { NormalizedMessagePart } from '../apps/desktop/src/main/opencode-adapter.ts'
 import {
   bindingHintsForSubtask,
   timingFromChild,

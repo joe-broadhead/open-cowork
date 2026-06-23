@@ -14,6 +14,7 @@ COPY tsconfig.base.json ./
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @open-cowork/shared build
+RUN pnpm --filter @open-cowork/runtime-host build
 RUN pnpm cloud:build
 
 FROM node:26-bookworm-slim@sha256:79723b41edbedf595f62e943a9f8b0ba9af5b1e61045c5f8f59c2c02c1212a16

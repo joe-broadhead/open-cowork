@@ -130,8 +130,18 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
    logger → config-loader` path (the server now reaches only the config-free logger core);
    config-loader stays in the closure via other chains, but one more path to it is gone and the
    webhook server is fully shared. No signature-auth / replay-window logic changed.
-10. **`packages/runtime-host`** (Docker): opencode-adapter, runtime-managed-server cluster,
-    runtime-environment, knowledge SQLite store. + SDK-boundary allowlist + boundary doc + Docker.
+10. 🟡 **`packages/runtime-host`** (Docker-shipped node + SDK substrate) — **created**, first
+    resident landed. The package declares `@opencode-ai/sdk` + `@types/node`, is wired into
+    `tsconfig.base` paths + the Dockerfile build + the `apps/desktop`/root devDeps + knip, and is
+    added to **both** SDK-boundary test assertions (the per-file allowlist and the
+    declaring-manifest `deepEqual`) + the boundary doc. First resident: **`opencode-adapter`**
+    (SDK-type-only event/session normalizer; built dist has **zero** runtime SDK refs — types
+    erased — so it needs no runtime `@opencode-ai/sdk`), 18 importers repointed to
+    `@open-cowork/runtime-host`. In the cloud bundle it inlines like `shared/node` (no runtime
+    resolution gap); the Docker build line is belt-and-suspenders for future externalized
+    residents. Remaining residents (follow-ups): `runtime-managed-server-core/-protocol/-output`,
+    `runtime-node-managed-server`, `runtime-environment` (these use SDK **values** → exercise the
+    runtime SDK dep), then the knowledge SQLite store (needs config-loader decoupling first).
 11. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
     cores, runtime-config-builder, capability-catalog, coordination, launchpad). The long tail.
 12. **`main/cloud/** → packages/cloud-server`** once the boundary is empty; wire package +

@@ -1,3 +1,4 @@
+import { normalizeMcpStatusEntries, normalizeRuntimeCommands, normalizeRuntimeEventEnvelope, normalizeSessionInfo, normalizeSessionMessages, normalizeSessionStatuses, normalizeShareUrl } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type {
@@ -9,16 +10,6 @@ import type {
   SessionMessagesResponse as SdkSessionMessagesResponse,
   SessionStatus as SdkSessionStatus,
 } from '@opencode-ai/sdk/v2'
-import {
-  normalizeMcpStatusEntries,
-  normalizeRuntimeCommands,
-  normalizeRuntimeEventEnvelope,
-  normalizeSessionInfo,
-  normalizeSessionMessages,
-  normalizeSessionStatuses,
-  normalizeShareUrl,
-} from '../apps/desktop/src/main/opencode-adapter.ts'
-
 test('normalizeSessionMessages projects info and parts into typed records', () => {
   const messages = normalizeSessionMessages([
     {

@@ -1,6 +1,5 @@
+import { normalizeSessionInfo } from '@open-cowork/runtime-host'
 import type { CloudProjectedSessionEventType } from '@open-cowork/shared'
-import { normalizeSessionInfo } from '../opencode-adapter.ts'
-
 export type CloudRuntimeSession = {
   id: string
   title: string

@@ -60,7 +60,7 @@ Open Cowork product state.
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
-- `apps/desktop/src/main/opencode-adapter.ts`
+- `packages/runtime-host/src/opencode-adapter.ts`
 - `apps/desktop/src/main/permission-config.ts`
 - `apps/desktop/src/main/question-normalization.ts`
 - `apps/desktop/src/main/runtime-config-builder.ts`
@@ -113,7 +113,9 @@ records.
 Use this checklist for every OpenCode SDK or `opencode-ai` runtime bump:
 
 - Confirm `apps/desktop/package.json` pins both `@opencode-ai/sdk` and
-  `opencode-ai`, then update `pnpm-lock.yaml`.
+  `opencode-ai`, then update `pnpm-lock.yaml`. `packages/runtime-host/package.json`
+  also pins `@opencode-ai/sdk` (it is the node + SDK runtime substrate shared by
+  the desktop main process and the cloud server); keep its pin in lockstep.
 - Run `pnpm proof:opencode:compatibility` and resolve any registry drift before
   accepting the bump.
 - Run `pnpm typecheck` first. SDK type drift in runtime config, client calls, or

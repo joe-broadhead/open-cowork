@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "paths": {
+      "@open-cowork/shared": ["../shared/dist/index.d.ts"],
+      "@open-cowork/shared/*": ["../shared/dist/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

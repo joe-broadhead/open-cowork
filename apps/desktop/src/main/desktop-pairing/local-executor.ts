@@ -1,3 +1,4 @@
+import { normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
@@ -13,7 +14,6 @@ import {
   updateSessionRecord,
   upsertSessionRecord,
 } from '../session-registry.ts'
-import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { toIsoTimestamp } from '../task-run-utils.ts'
 import { trackParentSession } from '../event-task-state.ts'
 import { getThreadIndexService } from '../thread-index/thread-index-service.ts'

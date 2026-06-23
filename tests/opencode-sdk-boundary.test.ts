@@ -38,7 +38,6 @@ const allowedSdkImportPaths = new Set([
   'apps/desktop/src/main/event-subscriptions.ts',
   'apps/desktop/src/main/events.ts',
   'apps/desktop/src/main/ipc/context.ts',
-  'apps/desktop/src/main/opencode-adapter.ts',
   'apps/desktop/src/main/permission-config.ts',
   'apps/desktop/src/main/question-normalization.ts',
   'apps/desktop/src/main/runtime-config-builder.ts',
@@ -51,6 +50,7 @@ const allowedSdkImportPaths = new Set([
   'apps/desktop/src/main/runtime.ts',
   'apps/desktop/src/main/session-history-loader.ts',
   'apps/standalone-gateway/src/opencode.ts',
+  'packages/runtime-host/src/opencode-adapter.ts',
 ])
 
 test('OpenCode SDK imports stay inside documented runtime boundary modules', () => {
@@ -105,6 +105,7 @@ test('only runtime authority packages declare OpenCode runtime dependencies', ()
   assert.deepEqual(opencodeManifests.sort(), [
     'apps/desktop/package.json',
     'apps/standalone-gateway/package.json',
+    'packages/runtime-host/package.json',
   ])
 })
 

@@ -1,3 +1,4 @@
+import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { normalizePermissionEvent } from '@open-cowork/shared'
 import {
   createOpencodeClient,
@@ -6,11 +7,6 @@ import {
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import {
-  normalizeMessagePart,
-  normalizeRuntimeEventEnvelope,
-  normalizeSessionInfo,
-} from '../opencode-adapter.ts'
 import { buildManagedRuntimeEnvironment } from '../runtime-environment.ts'
 import {
   createManagedOpencodeServerAuth,
