@@ -8,3 +8,4 @@
 // see the Node globals, keeping the rest of the package browser-safe.
 export * from './fs-atomic.js'
 export * from './fs-read.js'
+export * from './knowledge-store-helpers.js'

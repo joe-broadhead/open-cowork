@@ -105,10 +105,13 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
    (pure `node:fs` utils, in the cloud's broader closure). Proves the node lane end-to-end:
    tsc 0, node 2,099/0, website 101/101, renderer 475/475, lint 1,684, `pnpm cloud:build` green;
    the shared export-surface boundary test now documents `./node`.
-7. **Knowledge helpers → shared/node:** extract the storage-agnostic helpers (incl.
-   `knowledgeRevisionFor`'s `createHash`) from `knowledge-store.ts`; both stores consume them
-   from `@open-cowork/shared/node`. Cuts the `postgres-store → knowledge-store` edge.
-   (Safety net: the pglite contract test exercises both stores.)
+7. ✅ **Knowledge helpers → shared/node.** Extracted the storage-agnostic core (~28 pure
+   functions incl. `knowledgeRevisionFor`'s `createHash`, validation, row→domain mappers, the
+   deterministic seed, diff/graph derivation) from `knowledge-store.ts` (914→594 lines) into
+   `shared/src/node/knowledge-store-helpers.ts`. Confirmed a clean split — every private helper
+   (`parseJson`/`byteLength`/`stringValue`/…) is used only by moved functions. Both stores now
+   consume them from `@open-cowork/shared/node`; the `postgres-store → knowledge-store` edge is
+   cut. Safety net: the pglite contract test (both stores, same contract) stayed green.
 8. **Decouple `logger` from `config-loader`** (inject log dir + file prefix; config-loader stays
    a desktop-side fallback) → move `logger` to shared/node → then `workflow-webhook-server`.
 9. **`packages/runtime-host`** (Docker): opencode-adapter, runtime-managed-server cluster,

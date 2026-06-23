@@ -31,7 +31,7 @@ import {
   toSpace,
   toVersion,
   workspaceIdFrom,
-} from './knowledge-store.ts'
+} from '@open-cowork/shared/node'
 
 // Narrow pg-compatible pool shape (node-postgres / pglite). Mirrors the shape
 // the Postgres control-plane store accepts so the same injected `pool` works.
