@@ -1,3 +1,4 @@
+import { readTextFileCheckedSync } from '@open-cowork/shared/node'
 import type {
   SessionChangeSummary,
   SessionFileDiff,
@@ -5,8 +6,6 @@ import type {
   ToolCall,
 } from '@open-cowork/shared'
 import { relative, resolve } from 'path'
-import { readTextFileCheckedSync } from './fs-read.ts'
-
 const WRITE_LIKE_TOOLS = new Set(['write', 'edit', 'multi_edit', 'str_replace', 'apply_patch'])
 const MAX_SYNTHETIC_DIFF_BYTES = 256 * 1024
 

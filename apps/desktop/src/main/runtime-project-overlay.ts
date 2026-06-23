@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
@@ -10,8 +11,6 @@ import {
   getRuntimeHomeDir,
 } from './runtime-paths.ts'
 import { getProjectNamespace, getSidecarJsonSuffix } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-
 function agentOverlayFileSuffixes() {
   return ['.md', '.disabled.md', getSidecarJsonSuffix()]
 }

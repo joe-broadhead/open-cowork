@@ -1,11 +1,10 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { log } from './logger.ts'
 import { getRuntimeEnvPaths } from './runtime-paths.ts'
 import { delay } from './delay.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-
 export interface RuntimeProcessInfo {
   pid: number
   ppid: number

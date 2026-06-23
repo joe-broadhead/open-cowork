@@ -1,3 +1,4 @@
+import { writeFileAtomic, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import {
   existsSync,
   mkdtempSync,
@@ -15,8 +16,6 @@ import type {
   ScopedArtifactRef,
 } from '@open-cowork/shared'
 import { log } from './logger.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-import { readTextFileCheckedSync } from './fs-read.ts'
 import { resolveProjectDirectory } from './runtime-paths.ts'
 import {
   assertValidOpenCodeSkillName,

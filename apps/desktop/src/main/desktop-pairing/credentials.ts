@@ -1,9 +1,9 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DesktopPairingCredentialMetadata } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
-import { writeFileAtomic } from '../fs-atomic.ts'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,

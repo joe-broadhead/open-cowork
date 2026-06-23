@@ -1,7 +1,6 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { tmpdir } from 'node:os'
 import { isAbsolute, relative, resolve } from 'node:path'
-import { writeFileAtomic } from './fs-atomic.ts'
-
 type ElectronAppWithCommandLine = {
   commandLine: {
     appendSwitch(name: string, value?: string): void

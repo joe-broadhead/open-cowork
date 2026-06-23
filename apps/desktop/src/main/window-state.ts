@@ -1,9 +1,9 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
 import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle } from 'electron'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 
 const electronScreen = (electron as { screen?: typeof import('electron').screen }).screen

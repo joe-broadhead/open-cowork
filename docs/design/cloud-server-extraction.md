@@ -63,12 +63,36 @@ The first four increments moved genuinely **browser-safe, SDK-free** modules int
    (`node:child_process`), and `workflow-webhook-server` (`node:http`) would break the
    website bundle if re-exported from `@open-cowork/shared`'s main entry.
 
-**Implication:** the remaining ~12 boundary modules are SDK-coupled runtime code, node-only
-code, or `config-loader`/`settings`/`electron`-coupled code. Resolving them requires a
-**new shared runtime package** (declares the SDK, node-only; imported by both `apps/desktop`
-and the future `packages/cloud-server`) plus **deep decoupling** of the config-coupled
-modules — and two of those pieces (the runtime package + the cloud-server package) must ship
-in the cloud **Docker image**, a change the local `pnpm test` gate cannot fully verify.
+## 🔭 True scope (2026-06-23) — the cloud transitively reaches the desktop core
+
+A direct-import count understates the boundary. The **transitive value-closure** from
+`main/cloud/**` reaches **128** `main/` modules — including `config-loader.ts` and
+`settings.ts` (both value-import `electron`), `workspace-gateway.ts`, `session-engine.ts`,
+and the whole runtime/config/session substrate. Verified shortest paths:
+- `cloud/byok-runtime-config.ts` → `logger` → `config-loader` (electron+config core)
+- `cloud/byok-runtime-config.ts` → `runtime-config-builder` → `settings` (electron); and
+  → `runtime-mcp` → `knowledge-tool-bridge` → `workspace-gateway`
+- `cloud/http-routes/launchpad.ts` → `launchpad-service` → `session-engine`
+
+So the final `main/cloud → packages/cloud-server` lift is gated on decoupling the desktop
+config/settings/runtime/session core from Electron — a large, behavior-sensitive sub-project,
+not a few module moves. The cloud "works" today only because `build-cloud`'s Electron shim
+binds those electron exports to `undefined` at runtime.
+
+**Decision (user, 2026-06-23): full extraction, accepting the costs** — new Docker-shipped
+packages the local gate can't fully verify, and extending the SDK-boundary test allowlist.
+Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped packages last.
+
+## Two homes for the extracted substrate
+
+- **`@open-cowork/shared/node`** (NO Docker change — ships inside the already-shipped shared
+  package): node-only, **non-SDK** modules. Built via a single `tsc` with `"types": []` in
+  `packages/shared/tsconfig.json` (browser-safety preserved) + a per-file
+  `/// <reference types="node" />` opt-in. Export `"./node"` → `dist/node/index.js`. Fully
+  locally verifiable (tsc + node suite + `pnpm cloud:build`).
+- **`@open-cowork/runtime-host`** (NEW Docker-shipped package): node + **SDK** runtime substrate
+  (declares `@opencode-ai/sdk` + `@types/node`). Needs the Dockerfile build step + lockfile +
+  the SDK-boundary test allowlist + boundary doc. Docker image itself not locally verifiable.
 
 ## Sequenced increments (each its own green commit + push)
 
@@ -77,17 +101,22 @@ in the cloud **Docker image**, a change the local `pnpm test` gate cannot fully 
 3. ✅ log-sanitizer → shared.
 4. ✅ knowledge interfaces (contract + input) → shared.
 5. ✅ pure normalizers (normalizer-utils + runtime-event-normalizers) → shared.
-   — **End of the cleanly-shareable, locally-verifiable moves.** —
-6. **Decoupling tier (no new packages, locally verifiable):** decouple `logger`,
-   `runtime-config-builder`, `capability-catalog`, `coordination-service`, `launchpad-service`
-   from `config-loader`/`settings`/`electron` (inject the app-data dir + config + a renderer
-   event sink instead of importing them). Each is behavior-sensitive but gate-verifiable.
-7. **Runtime package (needs Docker packaging):** `packages/runtime-core` — node + SDK runtime
-   shared by desktop & cloud (opencode-adapter, managed-server cluster, knowledge SQLite store).
-   Add it to the SDK-boundary test's allowed manifests + the boundary doc + the Dockerfile build.
-8. **Cloud-server package (needs Docker packaging):** `main/cloud/**` → `packages/cloud-server/**`
-   once the boundary is empty; wire package.json/tsconfig/exports + Dockerfile + build-cloud.
-9. `postgres-knowledge-store` (cloud-only) lands in `packages/cloud-server` with step 8.
+6. ✅ **`@open-cowork/shared/node` subpath infra** + first residents `fs-atomic` + `fs-read`
+   (pure `node:fs` utils, in the cloud's broader closure). Proves the node lane end-to-end:
+   tsc 0, node 2,099/0, website 101/101, renderer 475/475, lint 1,684, `pnpm cloud:build` green;
+   the shared export-surface boundary test now documents `./node`.
+7. **Knowledge helpers → shared/node:** extract the storage-agnostic helpers (incl.
+   `knowledgeRevisionFor`'s `createHash`) from `knowledge-store.ts`; both stores consume them
+   from `@open-cowork/shared/node`. Cuts the `postgres-store → knowledge-store` edge.
+   (Safety net: the pglite contract test exercises both stores.)
+8. **Decouple `logger` from `config-loader`** (inject log dir + file prefix; config-loader stays
+   a desktop-side fallback) → move `logger` to shared/node → then `workflow-webhook-server`.
+9. **`packages/runtime-host`** (Docker): opencode-adapter, runtime-managed-server cluster,
+   runtime-environment, knowledge SQLite store. + SDK-boundary allowlist + boundary doc + Docker.
+10. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
+    cores, runtime-config-builder, capability-catalog, coordination, launchpad). The long tail.
+11. **`main/cloud/** → packages/cloud-server`** once the boundary is empty; wire package +
+    Dockerfile + build-cloud. `postgres-knowledge-store` (cloud-only) lands here.
 
 Gate every step: main/renderer/website tsc 0, node suite 0-fail, website 101/101,
-renderer 475/475, lint clean. Commit + push each green step.
+renderer 475/475, lint clean, `pnpm cloud:build` green. Commit + push each green step.

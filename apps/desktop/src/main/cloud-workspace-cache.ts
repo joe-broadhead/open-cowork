@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -11,7 +12,6 @@ import type {
 import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
 import type { CloudTransportSettingMetadata } from './cloud/transport-adapter.ts'
 import { getAppDataDir } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,

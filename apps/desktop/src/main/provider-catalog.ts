@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -5,8 +6,6 @@ import type { ProviderModelDescriptor } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import { dedupByKey } from './inflight-dedup.ts'
 import { log } from './logger.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-
 // Config-driven dynamic model catalog. A provider descriptor opts in by
 // adding a `dynamicCatalog` block — we fetch the URL, pull models out of
 // the response using the configured field paths, and merge them underneath

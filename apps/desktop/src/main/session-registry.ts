@@ -1,5 +1,5 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs'
-import { writeFileAtomic } from './fs-atomic.ts'
 import { join, resolve } from 'path'
 import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
 import { getAppDataDir, getBrandName } from './config-loader.ts'

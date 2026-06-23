@@ -1,3 +1,4 @@
+import { writeFileAtomic, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 import {
@@ -7,9 +8,6 @@ import {
   stripTrailingCommas,
   type JsonObject,
 } from '@open-cowork/shared'
-import { writeFileAtomic } from './fs-atomic.ts'
-import { readTextFileCheckedSync } from './fs-read.ts'
-
 export {
   jsonConfigCandidates,
   parseJsoncText,

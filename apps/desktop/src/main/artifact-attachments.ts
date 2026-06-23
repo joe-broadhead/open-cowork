@@ -1,8 +1,7 @@
+import { readFileCheckedSync } from '@open-cowork/shared/node'
 import { basename, extname } from 'path'
 import type { SessionArtifactAttachment } from '@open-cowork/shared'
 import { readChartArtifactSource } from './chart-artifacts.ts'
-import { readFileCheckedSync } from './fs-read.ts'
-
 export const MAX_COMPOSER_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 const MIME_BY_EXTENSION: Record<string, string> = {

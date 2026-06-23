@@ -1,5 +1,6 @@
-import { closeSync, fchmodSync, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'fs'
-import { dirname } from 'path'
+/// <reference types="node" />
+import { closeSync, fchmodSync, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'node:fs'
+import { dirname } from 'node:path'
 
 // Atomic-write helper used for every on-disk file that holds
 // load-bearing state (settings.enc, sessions.json, etc.).

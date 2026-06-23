@@ -54,7 +54,10 @@ test('cloud client package boundary and desktop transport compatibility re-expor
   assert.equal(sharedPackageJson.name, '@open-cowork/shared')
   assert.equal(sharedPackageJson.private, true)
   assert.equal(sharedPackageJson.publishConfig, undefined)
-  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './package.json'])
+  // '.' is the browser-safe barrel; './node' is the Node-only runtime substrate
+  // (node:fs/node:crypto helpers) shared by the Electron main process and the cloud
+  // server — it must never be imported from a browser bundle.
+  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './node', './package.json'])
   assert.deepEqual(sharedPackageJson.files, ['dist'])
   assert.equal(sharedPackageJson.sideEffects, false)
   for (const dependencyName of Object.keys(packageJson.dependencies || {})) {

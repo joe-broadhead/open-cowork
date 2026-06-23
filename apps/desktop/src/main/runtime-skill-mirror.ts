@@ -1,8 +1,7 @@
+import { writeFileAtomic, readFileCheckedSync } from '@open-cowork/shared/node'
 import { createHash } from 'crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'fs'
 import { join, relative } from 'path'
-import { readFileCheckedSync } from './fs-read.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 
 const MANAGED_SKILL_MIRROR_REGISTRY = '.open-cowork-managed-skills.json'

@@ -1,4 +1,5 @@
-import { closeSync, fstatSync, openSync, readFileSync } from 'fs'
+/// <reference types="node" />
+import { closeSync, fstatSync, openSync, readFileSync } from 'node:fs'
 
 export function readFileCheckedSync(
   path: string,

@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
 import { existsSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -18,7 +19,6 @@ import {
   normalizeProviderModelId,
 } from './config-loader.ts'
 import { log } from './logger.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,

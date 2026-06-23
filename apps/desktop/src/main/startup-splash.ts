@@ -1,6 +1,6 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { writeFileAtomic } from './fs-atomic.ts'
 import { escapeHtml } from './html-escape.ts'
 
 export function resolveStartupSplashTemplatePath(dirname: string) {

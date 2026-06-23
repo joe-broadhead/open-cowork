@@ -1,9 +1,8 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-
 export type CloudWorkspaceConnectionRecord = {
   id: string
   baseUrl: string

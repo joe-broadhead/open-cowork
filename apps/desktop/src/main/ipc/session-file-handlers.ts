@@ -1,7 +1,7 @@
+import { readFileCheckedSync } from '@open-cowork/shared/node'
 import type { IpcHandlerContext } from './context.ts'
 import { MAX_FILE_SNIPPET_BYTES } from './session-handler-validation.ts'
 import { getBrandName } from '../config-loader.ts'
-import { readFileCheckedSync } from '../fs-read.ts'
 import { getRuntimeHomeDir } from '../runtime.ts'
 import { getSessionRecord } from '../session-registry.ts'
 

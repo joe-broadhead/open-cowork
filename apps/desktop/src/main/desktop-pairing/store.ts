@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import {
   DEFAULT_DESKTOP_PAIRING_POLICY,
   type DesktopPairingAuditEvent,
@@ -9,7 +10,6 @@ import {
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppDataDir } from '../config-loader.ts'
-import { writeFileAtomic } from '../fs-atomic.ts'
 import { evaluateDesktopPairingBrokerUrl } from './broker-url-policy.ts'
 
 const MAX_TEXT_BYTES = 512

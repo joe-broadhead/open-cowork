@@ -614,6 +614,9 @@ importers:
 
   packages/shared:
     devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

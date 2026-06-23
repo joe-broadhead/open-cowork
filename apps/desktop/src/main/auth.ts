@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
@@ -9,7 +10,6 @@ import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,

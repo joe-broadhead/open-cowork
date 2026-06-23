@@ -1,3 +1,4 @@
+import { writeFileAtomic, readFileCheckedSync, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import electron from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import type { IpcHandlerContext } from './context.ts'
@@ -53,8 +54,6 @@ import {
   subscribeUpdateInstallEvents,
 } from '../update/update-service.ts'
 import { resetAppData } from '../app-reset.ts'
-import { readFileCheckedSync, readTextFileCheckedSync } from '../fs-read.ts'
-import { writeFileAtomic } from '../fs-atomic.ts'
 import type {
   ChartSaveArtifactRequest,
   DestructiveConfirmationRequest,

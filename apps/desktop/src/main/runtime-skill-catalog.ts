@@ -1,3 +1,4 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { mkdirSync, rmSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import type { RuntimeContextOptions } from '@open-cowork/shared'
@@ -7,8 +8,6 @@ import { warmBundledSkillIndex } from './bundled-skill-index.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 import { getBundledSkillRoots } from './runtime-content.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-
 export type RuntimeSkillBundle = {
   name: string
   content: string

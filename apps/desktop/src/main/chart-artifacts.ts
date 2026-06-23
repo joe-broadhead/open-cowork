@@ -1,8 +1,8 @@
+import { writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import type { ChartArtifactSource, ChartSaveArtifactRequest, SessionArtifact } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 
 // Charts are captured client-side (vega-embed's `view.toImageURL`) and

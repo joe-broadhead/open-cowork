@@ -1,3 +1,4 @@
+import { writeFileAtomic, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import {
   basename,
   join,
@@ -21,8 +22,6 @@ import {
   writeJsonFile,
 } from './jsonc.ts'
 import { log } from './logger.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-import { readTextFileCheckedSync } from './fs-read.ts'
 import {
   resolveProjectDirectory,
   type NativeConfigScope,
