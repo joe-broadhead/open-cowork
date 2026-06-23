@@ -139,9 +139,17 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
     erased — so it needs no runtime `@opencode-ai/sdk`), 18 importers repointed to
     `@open-cowork/runtime-host`. In the cloud bundle it inlines like `shared/node` (no runtime
     resolution gap); the Docker build line is belt-and-suspenders for future externalized
-    residents. Remaining residents (follow-ups): `runtime-managed-server-core/-protocol/-output`,
-    `runtime-node-managed-server`, `runtime-environment` (these use SDK **values** → exercise the
-    runtime SDK dep), then the knowledge SQLite store (needs config-loader decoupling first).
+    residents. **Second resident batch ✅:** `runtime-managed-server-protocol` + `-output` (pure
+    support modules) + `runtime-managed-server-core` (the SDK-value managed-server lifecycle) moved
+    in, exercising the runtime SDK-value path. `core`'s allowlist+doc entries repointed to
+    `packages/runtime-host/`. **`runtime-node-managed-server` deliberately stayed in desktop:** it
+    resolves the forked **supervisor** file path relative to its own module dir, and the supervisor
+    is build-wired in three places (`vite.config.ts` desktop entry, `build-cloud` entry, two
+    `resolveSupervisorPath` fns) — keeping node-managed-server co-located with the supervisor in
+    `dist/main` (desktop) / `dist/cloud` (cloud) preserves that resolution. Both bundles inline
+    protocol/output (self-contained, verified by `pnpm cloud:build` **and** the full desktop
+    `vite build`). Remaining: `runtime-node-managed-server` + the supervisor (move together, later),
+    `runtime-environment` (config-coupled via `runtime-paths`), the knowledge SQLite store (config).
 11. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
     cores, runtime-config-builder, capability-catalog, coordination, launchpad). The long tail.
 12. **`main/cloud/** → packages/cloud-server`** once the boundary is empty; wire package +

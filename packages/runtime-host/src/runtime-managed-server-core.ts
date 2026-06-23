@@ -3,8 +3,8 @@ import { randomBytes } from 'node:crypto'
 import {
   type ManagedOpencodeServerParentMessage,
   type ManagedOpencodeServerSupervisorMessage,
-} from './runtime-managed-server-protocol.ts'
-import { appendManagedOpencodeOutputTail } from './runtime-managed-server-output.ts'
+} from './runtime-managed-server-protocol.js'
+import { appendManagedOpencodeOutputTail } from './runtime-managed-server-output.js'
 
 export const MANAGED_OPENCODE_SERVER_USERNAME = 'opencode'
 

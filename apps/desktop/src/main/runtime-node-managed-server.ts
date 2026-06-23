@@ -1,15 +1,9 @@
+import { createManagedOpencodeServerWithSupervisor, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit, type ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { fork, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  createManagedOpencodeServerWithSupervisor,
-  type ManagedOpencodeServerLogLevel,
-  type ManagedOpencodeServerUnexpectedExit,
-  type ManagedOpencodeSupervisorProcess,
-} from './runtime-managed-server-core.ts'
-
 const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
   ? __filename
   : fileURLToPath(import.meta.url)

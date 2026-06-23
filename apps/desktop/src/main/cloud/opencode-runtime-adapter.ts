@@ -1,4 +1,4 @@
-import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionInfo } from '@open-cowork/runtime-host'
+import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionInfo, createManagedOpencodeServerAuth, type ManagedOpencodeServerAuth, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit } from '@open-cowork/runtime-host'
 import { normalizePermissionEvent } from '@open-cowork/shared'
 import {
   createOpencodeClient,
@@ -8,12 +8,6 @@ import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { buildManagedRuntimeEnvironment } from '../runtime-environment.ts'
-import {
-  createManagedOpencodeServerAuth,
-  type ManagedOpencodeServerAuth,
-  type ManagedOpencodeServerLogLevel,
-  type ManagedOpencodeServerUnexpectedExit,
-} from '../runtime-managed-server-core.ts'
 import { createNodeManagedOpencodeServer } from '../runtime-node-managed-server.ts'
 import type { PathProvider } from './path-provider.ts'
 import {

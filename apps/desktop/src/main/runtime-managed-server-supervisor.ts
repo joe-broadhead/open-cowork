@@ -1,15 +1,7 @@
+import { appendManagedOpencodeOutputTail, drainManagedOpencodeProcessOutput, parseManagedOpencodeServerStdoutChunk } from '@open-cowork/runtime-host'
+import type { ManagedOpencodeServerParentMessage, ManagedOpencodeServerSupervisorMessage } from '@open-cowork/runtime-host'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
-import type {
-  ManagedOpencodeServerParentMessage,
-  ManagedOpencodeServerSupervisorMessage,
-} from './runtime-managed-server-protocol.ts'
-import {
-  appendManagedOpencodeOutputTail,
-  drainManagedOpencodeProcessOutput,
-  parseManagedOpencodeServerStdoutChunk,
-} from './runtime-managed-server-output.ts'
-
 const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
   ? __filename
   : import.meta.url

@@ -1,14 +1,8 @@
+import { createManagedOpencodeServerWithSupervisor, type ManagedOpencodeServerUnexpectedExit, type ManagedOpencodeServerLogLevel, type ManagedOpencodeSupervisorFork, type ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
 import electron from 'electron'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  createManagedOpencodeServerWithSupervisor,
-  type ManagedOpencodeServerUnexpectedExit,
-  type ManagedOpencodeServerLogLevel,
-  type ManagedOpencodeSupervisorFork,
-  type ManagedOpencodeSupervisorProcess,
-} from './runtime-managed-server-core.ts'
 export {
   MANAGED_OPENCODE_SERVER_USERNAME,
   buildManagedOpencodeAuthorizationHeader,
@@ -21,13 +15,13 @@ export {
   type ManagedOpencodeServerUnexpectedExit,
   type ManagedOpencodeSupervisorFork,
   type ManagedOpencodeSupervisorProcess,
-} from './runtime-managed-server-core.ts'
+} from '@open-cowork/runtime-host'
 export {
   drainManagedOpencodeProcessOutput,
   parseManagedOpencodeServerStdoutChunk,
   type ManagedOpencodeServerStdoutParseResult,
   type ManagedProcessOutputStreams,
-} from './runtime-managed-server-output.ts'
+} from '@open-cowork/runtime-host'
 
 const electronUtilityProcess = (electron as { utilityProcess?: typeof import('electron').utilityProcess }).utilityProcess
 const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
