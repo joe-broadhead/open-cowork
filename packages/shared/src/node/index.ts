@@ -9,3 +9,4 @@
 export * from './fs-atomic.js'
 export * from './fs-read.js'
 export * from './knowledge-store-helpers.js'
+export * from './logger.js'

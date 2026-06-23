@@ -32,7 +32,7 @@ const ignoredDirs = new Set([
   'site',
 ])
 const consoleLogAllowlist = new Set([
-  'apps/desktop/src/main/logger.ts',
+  'packages/shared/src/node/logger.ts',
   'scripts/lint.mjs',
 ])
 const secretScanAllowlist = new Set([

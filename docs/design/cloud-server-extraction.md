@@ -112,8 +112,17 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
    (`parseJson`/`byteLength`/`stringValue`/…) is used only by moved functions. Both stores now
    consume them from `@open-cowork/shared/node`; the `postgres-store → knowledge-store` edge is
    cut. Safety net: the pglite contract test (both stores, same contract) stayed green.
-8. **Decouple `logger` from `config-loader`** (inject log dir + file prefix; config-loader stays
-   a desktop-side fallback) → move `logger` to shared/node → then `workflow-webhook-server`.
+8. ✅ **Logger core → shared/node (destination injected).** Moved the dual-channel
+   rotating-file logger into `shared/src/node/logger.ts`; the log destination (data dir +
+   brand prefix) is now **injected** via `setLogStorage` instead of imported, so the core
+   carries no config-loader/Electron dependency. `apps/desktop/src/main/logger.ts` is a thin
+   shim that wires the resolver from config-loader at module load (before any `log()` call —
+   zero behavior change, the resolver fires lazily on first write). All 30 importers unchanged;
+   `logger.test.ts` green through the shim. **Caveat (honest):** because the cloud reaches the
+   same shim via `../logger`, the cloud → config-loader edge **persists** — it can't be cut
+   until the config core is Electron-decoupled (the file prefix needs `getDataDirName()` from
+   branding config). So this is infra-positioning, not a closure reduction yet. Next:
+   `workflow-webhook-server` (depends on the logger) can follow once it has a node home.
 9. **`packages/runtime-host`** (Docker): opencode-adapter, runtime-managed-server cluster,
    runtime-environment, knowledge SQLite store. + SDK-boundary allowlist + boundary doc + Docker.
 10. **Decouple the desktop config/runtime/session core from Electron** (config-loader/settings
