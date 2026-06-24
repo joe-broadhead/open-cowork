@@ -59,12 +59,14 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
   --radius-full: 9999px;
-  --shadow-1: 0 1px 1px rgba(0,0,0,.30), 0 2px 4px rgba(0,0,0,.16);
+  --shadow-1: 0 1px 2px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.28);
   --shadow-2: var(--shadow-card);
   --shadow-3: var(--shadow-elevated);
-  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26);
-  --shadow-elevated: 0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 12px 30px rgba(0, 0, 0, 0.46);
+  --shadow-elevated: 0 2px 8px rgba(0, 0, 0, 0.5), 0 24px 60px rgba(0, 0, 0, 0.58);
   --bg-image: none;
   --accent: #2f6bf0;
   --accent-2: #5a8cf5;

@@ -225,8 +225,8 @@ export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
   red: '#d6587e',
   info: '#6f8cc4',
   accentForeground: '#ffffff',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
-  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
+  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.42), 0 12px 30px rgba(0, 0, 0, 0.46)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.5), 0 24px 60px rgba(0, 0, 0, 0.58)',
   bgImage: 'none',
 }
 
@@ -763,10 +763,12 @@ export const DESIGN_TOKENS = {
     md: '10px',
     lg: '14px',
     xl: '18px',
+    '2xl': '20px',
+    '3xl': '28px',
     full: '9999px',
   },
   shadow: {
-    1: '0 1px 1px rgba(0,0,0,.30), 0 2px 4px rgba(0,0,0,.16)',
+    1: '0 1px 2px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.28)',
     card: DEFAULT_DARK_BRAND_THEME.shadowCard,
     elevated: DEFAULT_DARK_BRAND_THEME.shadowElevated,
   },

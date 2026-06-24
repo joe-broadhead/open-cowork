@@ -496,9 +496,10 @@ body {
 
 .ui-card {
   border: var(--border-width-1) solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
-  box-shadow: var(--shadow-2);
+  /* Elevation = shadow-card + 1px hairline + the top-inset specular highlight. */
+  box-shadow: var(--shadow-2), var(--specular);
   color: var(--color-text);
 }
 
@@ -793,6 +794,15 @@ body {
   background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
   box-shadow: var(--shadow-2), var(--specular);
   padding: var(--space-4);
+}
+/* Content cards use the larger 20px card radius (prototype --r4); the composer is
+   the most-rounded surface at 28px (--r5). Lanes/panels keep the 14px radius. */
+.studio-coworker-card,
+.studio-decision-card {
+  border-radius: var(--radius-2xl);
+}
+.studio-composer {
+  border-radius: var(--radius-3xl);
 }
 
 .studio-coworker-card {

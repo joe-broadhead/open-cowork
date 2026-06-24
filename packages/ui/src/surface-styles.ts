@@ -97,7 +97,7 @@ export function artifactsSurfaceCss(): string {
       flex-direction: column;
       gap: var(--space-3);
       border: var(--border-width-1) solid var(--color-border);
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-2xl);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       box-shadow: var(--shadow-2), var(--specular);
       padding: var(--space-4);

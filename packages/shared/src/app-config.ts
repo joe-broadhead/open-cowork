@@ -206,8 +206,8 @@ const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
   amber: '#e0913a',
   red: '#d6587e',
   info: '#6f8cc4',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
-  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
+  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.42), 0 12px 30px rgba(0, 0, 0, 0.46)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.5), 0 24px 60px rgba(0, 0, 0, 0.58)',
   // Flat Mercury base (Phase 0 Fix #1) — must mirror the canonical dark theme
   // (DEFAULT_DARK_PUBLIC_BRANDING_THEME); the design-tokens-sync test asserts equality.
   bgImage: 'none',
