@@ -691,10 +691,15 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   ): CloudTransportSubscription {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const afterSequence = input.afterSequence ?? this.cache?.getEventCursor(cacheKey, 'workspace') ?? undefined
+    // Sequence per subscription (audit P1-X2): each event's async handling (notably the
+    // snapshot.required sync()) must complete before the next event is delivered, otherwise event N's
+    // await wouldn't gate N+1 and input.onEvent could fire out of order — letting a stale snapshot
+    // overwrite a newer one downstream. A tail-promise chain serializes handling without dropping events.
+    let tail: Promise<void> = Promise.resolve()
     return this.transport.subscribeWorkspaceEvents({
       afterSequence,
       onEvent: (event) => {
-        void (async () => {
+        tail = tail.then(async () => {
           try {
             if (event.type === 'snapshot.required') {
               await this.sync()
@@ -707,7 +712,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
           } catch (error) {
             input.onError?.(error)
           }
-        })()
+        })
       },
       onError: input.onError,
     })

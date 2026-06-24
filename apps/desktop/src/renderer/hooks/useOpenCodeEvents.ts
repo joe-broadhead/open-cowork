@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { normalizeWorkspaceId, sessionWorkspaceKey } from '../stores/session-workspace-keys'
@@ -34,6 +34,9 @@ function combineSubscriptions(...subscriptions: Array<(() => void) | undefined>)
 
 export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
+  // Highest workspace-event sequence whose session snapshot we've already applied, per workspace
+  // (audit P1-X2). Out-of-order delivery would otherwise let a stale snapshot overwrite a newer one.
+  const lastAppliedWorkspaceSequence = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
     activeHookMounts += 1
@@ -208,7 +211,18 @@ export function useOpenCodeEvents() {
 
     const unsubWorkspaceSessions = window.coworkApi.on.workspaceSessionsUpdated((data) => {
       const store = useSessionStore.getState()
-      if (normalizeWorkspaceId(data.workspaceId) !== normalizeWorkspaceId(store.activeWorkspaceId)) return
+      const workspaceId = normalizeWorkspaceId(data.workspaceId)
+      if (workspaceId !== normalizeWorkspaceId(store.activeWorkspaceId)) return
+      // Drop a snapshot that isn't newer than the last we applied (audit P1-X2) — out-of-order
+      // delivery must not regress the session list. Payloads without a sequence (e.g. resyncs) apply.
+      const sequence = typeof data.lastEventSequence === 'number' && Number.isFinite(data.lastEventSequence)
+        ? data.lastEventSequence
+        : null
+      if (sequence !== null) {
+        const applied = lastAppliedWorkspaceSequence.current.get(workspaceId)
+        if (applied !== undefined && sequence <= applied) return
+        lastAppliedWorkspaceSequence.current.set(workspaceId, sequence)
+      }
       store.setSessions(data.sessions)
     })
 

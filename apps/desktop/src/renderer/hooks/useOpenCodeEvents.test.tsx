@@ -281,6 +281,30 @@ describe('useOpenCodeEvents', () => {
     expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['active-session'])
   })
 
+  it('drops out-of-order workspace session snapshots by lastEventSequence', () => {
+    render(<Harness />)
+    useSessionStore.getState().setActiveWorkspace('cloud:active')
+    useSessionStore.getState().setSessions([])
+
+    const snapshot = (id: string, sequence: number) => ({
+      workspaceId: 'cloud:active',
+      sessions: [{ id, title: id, createdAt: '2026-05-27T10:00:00.000Z', updatedAt: '2026-05-27T10:00:00.000Z' }],
+      lastEventSequence: sequence,
+      syncedAt: '2026-05-27T10:00:00.000Z',
+    })
+
+    act(() => { workspaceSessionsUpdated?.(snapshot('seq-5', 5)) })
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['seq-5'])
+
+    // A stale snapshot (older sequence) arriving late must NOT overwrite the newer one.
+    act(() => { workspaceSessionsUpdated?.(snapshot('seq-3', 3)) })
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['seq-5'])
+
+    // A genuinely newer snapshot still applies.
+    act(() => { workspaceSessionsUpdated?.(snapshot('seq-6', 6)) })
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['seq-6'])
+  })
+
   it('routes session metadata and delete events by workspace identity', () => {
     render(<Harness />)
     useSessionStore.getState().setSessions([{
