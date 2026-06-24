@@ -13,7 +13,7 @@ import {
   recordCloudWorkerMetric,
   sanitizeCloudObservabilityAttributes,
   type CloudObservabilityAdapter,
-} from '../apps/desktop/src/main/cloud/observability.ts'
+} from '@open-cowork/cloud-server/observability'
 
 test('cloud observability sanitizes secret-bearing attributes', () => {
   assert.deepEqual(sanitizeCloudObservabilityAttributes({

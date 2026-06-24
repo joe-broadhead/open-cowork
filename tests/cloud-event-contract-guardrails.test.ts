@@ -11,7 +11,7 @@ import {
 } from '../packages/shared/dist/cloud-session-projection.js'
 
 const root = process.cwd()
-const cloudRoot = join(root, 'apps/desktop/src/main/cloud')
+const cloudRoot = join(root, 'packages/cloud-server/src')
 const httpServerSource = readFileSync(join(cloudRoot, 'http-server.ts'), 'utf8')
 
 const projectionReducingEventTypes = [

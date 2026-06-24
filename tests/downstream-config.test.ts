@@ -4,7 +4,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
-import { resolveCloudPublicBranding } from '../apps/desktop/src/main/cloud/app.ts'
+import { resolveCloudPublicBranding } from '@open-cowork/cloud-server/app'
 import { cloudWebsiteHtml } from '../apps/website/src/render.ts'
 
 const root = process.cwd()

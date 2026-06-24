@@ -30,8 +30,8 @@ import type {
   WorkflowRun,
   WorkspacePolicy,
 } from '@open-cowork/shared'
-import type { SessionRecord } from './cloud/control-plane-store.ts'
-import { cloudSessionViewToSessionView } from './cloud/session-view-contract.ts'
+import type { SessionRecord } from '@open-cowork/cloud-server/control-plane-store'
+import { cloudSessionViewToSessionView } from '@open-cowork/cloud-server/session-view-contract'
 import {
   createHttpSseCloudTransportAdapter,
   type CloudTransportAdapter,
@@ -40,7 +40,7 @@ import {
   type CloudTransportSessionEvent,
   type CloudTransportSubscription,
   type CloudTransportWorkspaceEvent,
-} from './cloud/transport-adapter.ts'
+} from '@open-cowork/cloud-server/transport-adapter'
 import type { CloudWorkspaceConnectionRecord } from './cloud-workspace-registry.ts'
 import {
   createFileCloudWorkspaceCache,

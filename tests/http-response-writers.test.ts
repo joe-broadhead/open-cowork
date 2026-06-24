@@ -9,7 +9,7 @@ import {
   writePolicyError,
   writeRedirect,
   writeSecurityHeaders,
-} from '../apps/desktop/src/main/cloud/http-response-writers.ts'
+} from '@open-cowork/cloud-server/http-response-writers'
 
 // Focused coverage for the pure HTTP response writers extracted from
 // http-server.ts. A minimal fake ServerResponse records headers/status/body so

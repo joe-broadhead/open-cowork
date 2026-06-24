@@ -1,6 +1,6 @@
 import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
-import { resolveCloudControlPlaneUrl } from '../apps/desktop/src/main/cloud/app.ts'
-import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
+import { resolveCloudControlPlaneUrl } from '../packages/cloud-server/src/app.ts'
+import { createPostgresControlPlaneStore } from '../packages/cloud-server/src/postgres-control-plane-store.ts'
 
 // Standalone control-plane migration step for change-managed / blue-green rollouts:
 // run the schema migrations once up front (with the web/worker instances booted via

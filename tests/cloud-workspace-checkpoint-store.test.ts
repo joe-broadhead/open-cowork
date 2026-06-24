@@ -8,10 +8,10 @@ import {
   createObjectWorkspaceCheckpointStore,
   defaultCloudSessionCheckpointRoots,
   sessionCheckpointLatestKey,
-} from '../apps/desktop/src/main/cloud/workspace-checkpoint-store.ts'
-import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createPlaintextSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+} from '@open-cowork/cloud-server/workspace-checkpoint-store'
+import { createInMemoryObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createPlaintextSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
 
 async function writeFixture(path: string, value: string) {
   await mkdir(dirname(path), { recursive: true })

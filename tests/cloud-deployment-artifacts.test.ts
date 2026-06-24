@@ -720,7 +720,7 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
   const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')
   const buildScript = readRepoFile('scripts/build-cloud.mjs')
-  const browserApp = readRepoFile('apps/desktop/src/main/cloud/browser-app.ts')
+  const browserApp = readRepoFile('packages/cloud-server/src/browser-app.ts')
   const websitePackage = readRepoFile('apps/website/package.json')
 
   assert.match(buildScript, /cloudElectronShimPlugin/)

@@ -5,10 +5,10 @@ import type {
   ChannelControlPlaneStore,
   ProjectionControlPlaneStore,
   SessionControlPlaneStore,
-} from '../apps/desktop/src/main/cloud/control-plane-store-domains.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { CloudSessionEventBus, CloudWorkspaceEventBus } from '../apps/desktop/src/main/cloud/session-event-bus.ts'
-import { CloudSessionProjectionService } from '../apps/desktop/src/main/cloud/session-projection-service.ts'
+} from '@open-cowork/cloud-server/control-plane-store-domains'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { CloudSessionEventBus, CloudWorkspaceEventBus } from '@open-cowork/cloud-server/session-event-bus'
+import { CloudSessionProjectionService } from '@open-cowork/cloud-server/session-projection-service'
 import { createCloudProjectionFenceToken } from '../packages/shared/dist/cloud-session-projection.js'
 
 test('control plane domain contracts expose narrow stores for cloud subservices', async () => {

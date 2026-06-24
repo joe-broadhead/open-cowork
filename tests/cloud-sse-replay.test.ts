@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { CloudSseReplayHub } from '../apps/desktop/src/main/cloud/sse-replay.ts'
+import { CloudSseReplayHub } from '@open-cowork/cloud-server/sse-replay'
 
 function waitFor(predicate: () => boolean, label: string) {
   const started = Date.now()

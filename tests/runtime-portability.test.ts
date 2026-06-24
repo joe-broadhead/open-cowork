@@ -15,7 +15,7 @@ import {
   runSandboxRuntimeSmoke,
   startSandboxRuntime,
   stopSandboxRuntime,
-} from '../apps/desktop/src/main/cloud/runtime-portability.ts'
+} from '@open-cowork/cloud-server/runtime-portability'
 
 type RuntimePortabilityInput = Parameters<typeof createSandboxRuntimeLaunchPlan>[0]
 

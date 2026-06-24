@@ -29,18 +29,18 @@ import {
   shouldRunCloudWeb,
   shouldRunCloudWorker,
   startCloudApp,
-} from '../apps/desktop/src/main/cloud/app.ts'
+} from '@open-cowork/cloud-server/app'
 import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createInMemoryObjectStore, createUnavailableObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
-import { createUnavailableSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createInMemoryObjectStore, createUnavailableObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+import { createUnavailableSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEventListener,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { sessionCheckpointLatestKey } from '../apps/desktop/src/main/cloud/workspace-checkpoint-store.ts'
+} from '@open-cowork/cloud-server/runtime-adapter'
+import { sessionCheckpointLatestKey } from '@open-cowork/cloud-server/workspace-checkpoint-store'
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 const STRONG_CLOUD_SECRET = 'Pp4J9_kV2rTq8YzLmN6bHwC3sDxF7uAaG1eOiR5v'
 const STRONG_CLOUD_COOKIE_SECRET = 'Vs7Qm2_ZxHa93LpNuR4TwE8cYbK6jFoDiG1rS5el'

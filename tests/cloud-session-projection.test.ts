@@ -2,13 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
-import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
+} from '@open-cowork/cloud-server/runtime-adapter'
+import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 import { cloudSessionViewToSessionView } from '../packages/shared/dist/cloud-session-projection.js'
 
 class FakeRuntime implements CloudRuntimeAdapter {

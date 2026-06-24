@@ -34,7 +34,7 @@ import {
   buildCloudProjectSnapshotInventory,
   buildCloudProjectSnapshotUpload,
 } from '../project-source-snapshot.ts'
-import type { CloudTransportSessionEvent } from '../cloud/transport-adapter.ts'
+import type { CloudTransportSessionEvent } from '@open-cowork/cloud-server/transport-adapter'
 import {
   normalizeComposerPreferences,
   normalizePromptAgent,

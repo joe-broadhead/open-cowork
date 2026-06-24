@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   signMembershipInviteToken,
   verifyMembershipInviteToken,
-} from '../apps/desktop/src/main/cloud/membership-invite-token.ts'
+} from '@open-cowork/cloud-server/membership-invite-token'
 
 const SIGNING_KEY = 'membership-invite-signing-secret-key'
 const EXP = 2_000_000_000_000

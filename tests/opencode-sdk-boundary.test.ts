@@ -29,10 +29,10 @@ const sourceRoots = [
 const sdkImportPattern = /\bfrom\s+['"]@opencode-ai\/sdk(?:\/v2(?:\/server)?)?['"]|import\s*\(\s*['"]@opencode-ai\/sdk(?:\/v2(?:\/server)?)?['"]\s*\)/
 
 const allowedSdkImportPaths = new Set([
-  'apps/desktop/src/main/cloud/app.ts',
-  'apps/desktop/src/main/cloud/byok-runtime-config.ts',
-  'apps/desktop/src/main/cloud/opencode-runtime-adapter.ts',
-  'apps/desktop/src/main/cloud/worker-scoped-runtime-adapter.ts',
+  'packages/cloud-server/src/app.ts',
+  'packages/cloud-server/src/byok-runtime-config.ts',
+  'packages/cloud-server/src/opencode-runtime-adapter.ts',
+  'packages/cloud-server/src/worker-scoped-runtime-adapter.ts',
   'apps/desktop/src/main/event-subscriptions.ts',
   'apps/desktop/src/main/events.ts',
   'apps/desktop/src/main/ipc/context.ts',
@@ -105,6 +105,7 @@ test('only runtime authority packages declare OpenCode runtime dependencies', ()
   assert.deepEqual(opencodeManifests.sort(), [
     'apps/desktop/package.json',
     'apps/standalone-gateway/package.json',
+    'packages/cloud-server/package.json',
     'packages/runtime-host/package.json',
   ])
 })

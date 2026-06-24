@@ -8,7 +8,7 @@ import {
   cloudWorkspaceCacheKey,
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
-import type { CloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+import type { CloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
 import type { SessionView, WorkflowRun, WorkflowStatus } from '@open-cowork/shared'
 
 function workflowSummary(status: WorkflowStatus = 'active') {

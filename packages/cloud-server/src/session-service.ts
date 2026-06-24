@@ -186,7 +186,7 @@ import {
   stableCloudId,
 } from './session-input-validation.ts'
 import { normalizeChannelProviderId } from './channel-provider-utils.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
 
 export type CloudPrincipal = {

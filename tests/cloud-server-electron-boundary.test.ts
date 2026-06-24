@@ -13,9 +13,9 @@ import { CLOUD_ELECTRON_SHIM_EXPORTS } from '../scripts/cloud-electron-shim-expo
 //   1. every Electron VALUE name the reachable graph imports is one the shim
 //      stubs — importing an unstubbed name (e.g. `clipboard`) would ship
 //      `undefined` to the cloud server;
-//   2. the cloud-specific layer (main/cloud/**) never reaches for Electron
-//      directly — the build would silently shim such an import, so only a test
-//      can keep that layer host-process-free.
+//   2. the cloud-server package (packages/cloud-server/**) never reaches for
+//      Electron directly — the build would silently shim such an import, so only
+//      a test can keep that package host-process-free.
 
 const root = process.cwd()
 const CLOUD_ENTRYPOINTS = ['scripts/open-cowork-cloud.ts', 'scripts/open-cowork-cloud-migrate.ts']
@@ -101,10 +101,10 @@ test('the cloud server bundle stubs every Electron value import its source graph
   )
 })
 
-test('the cloud-specific layer (main/cloud/**) never imports Electron directly', () => {
+test('the cloud-server package (packages/cloud-server/**) never imports Electron directly', () => {
   // The build would silently shim an Electron import here, so the cloud server
-  // would still bundle — only this test keeps the cloud-specific code host-free.
-  const cloudRoot = resolve(root, 'apps/desktop/src/main/cloud')
+  // would still bundle — only this test keeps the cloud-server code host-free.
+  const cloudRoot = resolve(root, 'packages/cloud-server/src')
   const offenders: string[] = []
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -116,7 +116,7 @@ test('the cloud-specific layer (main/cloud/**) never imports Electron directly',
     }
   }
   walk(cloudRoot)
-  assert.deepEqual(offenders, [], `main/cloud modules must not import 'electron' (use a shared, guarded desktop module instead):\n${offenders.join('\n')}`)
+  assert.deepEqual(offenders, [], `cloud-server modules must not import 'electron' (use a shared, guarded runtime-host module instead):\n${offenders.join('\n')}`)
 })
 
 test('the single-sourced Electron shim list and the build plugin stay in agreement', () => {

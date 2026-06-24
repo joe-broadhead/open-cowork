@@ -8,7 +8,7 @@ import {
   requestHeaderRecord,
   webhookAuthScope,
   workflowScopeKey,
-} from '../apps/desktop/src/main/cloud/http-request-context.ts'
+} from '@open-cowork/cloud-server/http-request-context'
 
 // Focused coverage for the security-relevant request-context helpers extracted
 // from http-server.ts: CORS-origin allow-listing, auth-failure scope derivation,

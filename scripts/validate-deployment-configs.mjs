@@ -1362,7 +1362,7 @@ function validateHybridSecurityGates() {
     throw new Error('apps/standalone-gateway/src/network-policy.ts must reject public OpenCode endpoint')
   }
 
-  const cloudHttpServer = read('apps/desktop/src/main/cloud/http-server.ts')
+  const cloudHttpServer = read('@open-cowork/cloud-server/http-server')
   for (const phrase of ['Retry-After', 'quota_rejections']) {
     if (!cloudHttpServer.includes(phrase)) {
       throw new Error(`apps/desktop/src/main/cloud/http-server.ts must include ${phrase}`)

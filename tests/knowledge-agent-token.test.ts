@@ -5,12 +5,12 @@ import {
   KNOWLEDGE_AGENT_TOKEN_TTL_MS,
   signKnowledgeAgentToken,
   verifyKnowledgeAgentToken,
-} from '../apps/desktop/src/main/cloud/knowledge-agent-token.ts'
+} from '@open-cowork/cloud-server/knowledge-agent-token'
 import {
   KNOWLEDGE_AGENT_ROUTE_BASE_PATH,
   applyKnowledgeAgentRuntimeAugmentation,
   buildKnowledgeAgentRuntimeAugmentation,
-} from '../apps/desktop/src/main/cloud/knowledge-agent-runtime.ts'
+} from '@open-cowork/cloud-server/knowledge-agent-runtime'
 
 const SIGNING_KEY = 'knowledge-agent-signing-secret-key'
 const EXP = 2_000_000_000_000

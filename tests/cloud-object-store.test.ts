@@ -13,8 +13,8 @@ import {
   createS3CompatibleObjectStore,
   type ObjectStoreHttpResponse,
   resolveCloudObjectStoreConfig,
-} from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+} from '@open-cowork/cloud-server/object-store'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
 
 function httpResponse(input: {
   status?: number

@@ -7,7 +7,7 @@ import {
   isCloudTransportError,
   type CloudTransportEventSource,
   type CloudTransportFetch,
-} from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+} from '@open-cowork/cloud-server/transport-adapter'
 import { CLOUD_SESSION_EVENT_TYPES } from '../packages/shared/dist/cloud-session-projection.js'
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {

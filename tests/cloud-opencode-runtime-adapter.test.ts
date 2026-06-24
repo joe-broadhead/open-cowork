@@ -5,15 +5,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
-import { createSdkCloudRuntimeAdapter } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+import { createSdkCloudRuntimeAdapter } from '@open-cowork/cloud-server/runtime-adapter'
 import {
   buildNodeOpencodeCloudRuntimeClientConfig,
   createNodeOpencodeCloudRuntimeAdapter,
   subscribeToOpencodeCloudRuntimeEvents,
   translateOpencodeRuntimeEvent,
   translateOpencodeRuntimeEventWithDiagnostics,
-} from '../apps/desktop/src/main/cloud/opencode-runtime-adapter.ts'
+} from '@open-cowork/cloud-server/opencode-runtime-adapter'
 
 const MANAGED_RUNTIME_START_TIMEOUT_MS = 15_000
 

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { cloudPostgresPoolPlan } from '../apps/desktop/src/main/cloud/postgres-pool-options.ts'
+import { cloudPostgresPoolPlan } from '@open-cowork/cloud-server/postgres-pool-options'
 
 test('cloud postgres pool plan defaults preserve behaviour with a safe idle-in-transaction guard', () => {
   const { config, lockTimeoutMs } = cloudPostgresPoolPlan('postgres://db/main', {})

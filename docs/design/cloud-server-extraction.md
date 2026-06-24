@@ -273,16 +273,29 @@ runtime.ts, session-engine, agent-config, the 32 config modules) into a shared p
 subsystem: config · runtime · session · agents · workflow · coordination · launchpad · knowledge-store
 (~8 batches).
 
-### Milestone C — The final lift (~5–8 commits)
-- **C1** `runtime-node-managed-server` + supervisor → runtime-host (the deferred vite-entry consolidation). `[1–2]`
-- **C2** create `packages/cloud-server`; move `main/cloud/**` (+ `postgres-knowledge-store`) in; wire
-  package.json/tsconfig/exports. `[2–3]`
-- **C3** Dockerfile + build-cloud rewire; update the ~2–3 non-cloud importers
-  (`cloud-workspace-adapter`, `ipc/channel-handlers`). `[1–2]`
-- **C4** flip the electron-boundary test to **structural** (cloud graph has zero `electron`); drop the
-  build-cloud shim's now-dead names. `[1]`
+### Milestone C — ✅ COMPLETE (2026-06-24)
+- **C1** ✅ `runtime-node-managed-server` + supervisor consolidated into runtime-host (done as part of B).
+- **C2** ✅ created `packages/cloud-server`; moved all ~201 `main/cloud/**` modules in. The cloud layer was
+  remarkably clean — zero Electron (even type-only), and the only escapes were `logger` (→
+  `@open-cowork/shared/node`) and the deep `cloud-client` path (→ `@open-cowork/cloud-client`).
+  `postgres-knowledge-store` already lived in runtime-host (moved in B). The package is **esbuild-bundled**
+  (it SSRs React via `@open-cowork/website`, which is jsx-coupled and never tsc-built standalone), so its
+  `exports`/entry resolve to source: the desktop's local control plane imports modules through the
+  `@open-cowork/cloud-server/*` subpath, and the cloud `build-cloud` entry scripts bundle it from a relative
+  source path. Type-checked transitively via the desktop main tsc + `cloud:build` esbuild.
+- **C3** ✅ no Dockerfile build line needed (cloud-server is esbuild-bundled, not tsc-built; the image copies
+  `packages/`, full-installs, then `cloud:build` bundles it). `build-cloud` entry scripts repointed; the 6
+  desktop importers + the smoke/proof scripts repointed to the package.
+- **C4** ✅ the electron-boundary test is structural and now walks the `packages/cloud-server/**` graph (zero
+  Electron). The build-cloud Electron shim is still consumed (the esbuild-bundled runtime-host substrate
+  reaches guarded `app`/`safeStorage`), so no shim names were dead.
 
-**Total remaining: ~25–40 commits — a multi-week structural project.** The original audit finding (cloud
-graph silently value-imports Electron) is already **test-enforced** (guard b, `cloud-server-electron-boundary.test.ts`),
-so this is risk-retirement of a *deferred enhancement*, not an open vulnerability. Reasonable to pursue
-incrementally (each commit releasable) or to bank the 12 commits and schedule A/B/C as a separate effort.
+**Bonus:** extracting the cloud removed the desktop-main → `@open-cowork/website` → `@open-cowork/ui` jsx
+import chain (the desktop imports only cloud *control-plane* modules, not the SSR app), so `build:electron`'s
+raw main-tsc dropped from a long-standing **54 pre-existing jsx errors to 0**.
+
+**Gate green:** node 2099/0 · desktop typecheck 0 · `build:electron` 0 (was 54) · renderer 475/475 · lint clean ·
+knip improved vs baseline (unused files 13→5, unused exports 288→156, unused deps 1→0, unlisted binaries 6→4) ·
+`cloud:build` green · desktop `vite build` green. The original audit finding (cloud graph silently
+value-imports Electron) remains test-enforced by `cloud-server-electron-boundary.test.ts`, now scoped to the
+extracted package.

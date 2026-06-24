@@ -10,7 +10,7 @@ import type {
   WorkflowListPayload,
 } from '@open-cowork/shared'
 import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
-import type { CloudTransportSettingMetadata } from './cloud/transport-adapter.ts'
+import type { CloudTransportSettingMetadata } from '@open-cowork/cloud-server/transport-adapter'
 import { getAppDataDir } from './config-loader.ts'
 type SecretStorageAdapter = {
   mode: SecretStorageMode

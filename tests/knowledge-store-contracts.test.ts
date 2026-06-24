@@ -5,7 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 
-import { CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS } from '../apps/desktop/src/main/cloud/postgres-schema.ts'
+import { CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS } from '@open-cowork/cloud-server/postgres-schema'
 import { createPglitePool } from './helpers/pglite-pool.ts'
 
 // A real external Postgres is exercised only when a URL is provided (CI service

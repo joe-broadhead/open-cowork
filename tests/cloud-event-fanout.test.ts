@@ -7,8 +7,8 @@ import {
   InMemoryCloudEventFanoutAdapter,
   type CloudSessionEventFilter,
   type CloudWorkspaceEventFilter,
-} from '../apps/desktop/src/main/cloud/session-event-bus.ts'
-import type { SessionEventRecord, WorkspaceEventRecord } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+} from '@open-cowork/cloud-server/session-event-bus'
+import type { SessionEventRecord, WorkspaceEventRecord } from '@open-cowork/cloud-server/control-plane-store'
 
 test('cloud event buses use injectable fanout adapters with sequence filtering', () => {
   const sessionFanout = new InMemoryCloudEventFanoutAdapter<SessionEventRecord, CloudSessionEventFilter>((filter, event) => (

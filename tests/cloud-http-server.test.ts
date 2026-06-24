@@ -11,36 +11,36 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
-import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
-import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
-import { createByokSecretStore, type ByokSecretStoreOptions } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
-import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
+import { CloudArtifactService } from '@open-cowork/cloud-server/artifact-service'
+import type { BillingAdapter } from '@open-cowork/cloud-server/billing-adapter'
+import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '@open-cowork/cloud-server/app'
+import { createByokSecretStore, type ByokSecretStoreOptions } from '@open-cowork/cloud-server/byok-secret-store'
+import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import {
   CloudHttpError,
   createCloudHttpServer,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
   type CloudDesktopAuthConfig,
-} from '../apps/desktop/src/main/cloud/http-server.ts'
-import { createHttpSseCloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+} from '@open-cowork/cloud-server/http-server'
+import { createHttpSseCloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
 import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
-import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
-import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
-import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudIdentityPolicy, type CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
-import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
+import { createInMemoryObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { createCloudSessionCookieManager } from '@open-cowork/cloud-server/session-cookie-auth'
+import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudIdentityPolicy, type CloudPrincipal } from '@open-cowork/cloud-server/session-service'
+import { createStubBillingAdapter } from '@open-cowork/cloud-server/stub-billing-adapter'
+import { CloudWorker } from '@open-cowork/cloud-server/worker'
 import {
   KNOWLEDGE_AGENT_TOKEN_TTL_MS,
   signKnowledgeAgentToken,
-} from '../apps/desktop/src/main/cloud/knowledge-agent-token.ts'
+} from '@open-cowork/cloud-server/knowledge-agent-token'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
+} from '@open-cowork/cloud-server/runtime-adapter'
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {

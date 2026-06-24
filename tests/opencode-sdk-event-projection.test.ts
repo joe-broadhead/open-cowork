@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import {
   translateOpencodeRuntimeEvent,
   translateOpencodeRuntimeEventWithDiagnostics,
-} from '../apps/desktop/src/main/cloud/opencode-runtime-adapter.ts'
+} from '@open-cowork/cloud-server/opencode-runtime-adapter'
 import {
   CLOUD_SESSION_EVENT_TYPES,
   cloudSessionViewToSessionView,

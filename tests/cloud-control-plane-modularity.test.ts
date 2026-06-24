@@ -16,10 +16,10 @@ const ignoredDirectories = new Set([
 
 test('cloud control-plane facade files stay within documented compatibility budgets', () => {
   const budgets = [
-    { path: 'apps/desktop/src/main/cloud/http-server.ts', maxLines: 2_000 },
-    { path: 'apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', maxLines: 4_200 },
-    { path: 'apps/desktop/src/main/cloud/postgres-control-plane-store.ts', maxLines: 4_400 },
-    { path: 'apps/desktop/src/main/cloud/session-service.ts', maxLines: 4_200 },
+    { path: 'packages/cloud-server/src/http-server.ts', maxLines: 2_000 },
+    { path: 'packages/cloud-server/src/in-memory-control-plane-store.ts', maxLines: 4_200 },
+    { path: 'packages/cloud-server/src/postgres-control-plane-store.ts', maxLines: 4_400 },
+    { path: 'packages/cloud-server/src/session-service.ts', maxLines: 4_200 },
   ]
 
   for (const budget of budgets) {
@@ -34,8 +34,8 @@ test('cloud control-plane facade files stay within documented compatibility budg
 
 test('cloud route, service, client-domain, and gateway source modules stay bounded', () => {
   const budgets = [
-    { directory: 'apps/desktop/src/main/cloud/http-routes', maxLines: 500 },
-    { directory: 'apps/desktop/src/main/cloud/services', maxLines: 450 },
+    { directory: 'packages/cloud-server/src/http-routes', maxLines: 500 },
+    { directory: 'packages/cloud-server/src/services', maxLines: 450 },
     { directory: 'packages/cloud-client/src/domains', maxLines: 120 },
     { directory: 'apps/gateway/src', maxLines: 900 },
   ]
@@ -98,13 +98,13 @@ test('cloud route and service modules do not reach below their domain seams', ()
     /opencode-runtime-adapter/,
   ]
 
-  for (const filePath of sourceFiles(join(root, 'apps/desktop/src/main/cloud/http-routes'))) {
+  for (const filePath of sourceFiles(join(root, 'packages/cloud-server/src/http-routes'))) {
     const source = readFileSync(filePath, 'utf8')
     for (const pattern of routeForbidden) {
       assert.doesNotMatch(source, pattern, `${relative(root, filePath)} bypasses service/store seams`)
     }
   }
-  for (const filePath of sourceFiles(join(root, 'apps/desktop/src/main/cloud/services'))) {
+  for (const filePath of sourceFiles(join(root, 'packages/cloud-server/src/services'))) {
     const source = readFileSync(filePath, 'utf8')
     for (const pattern of serviceForbidden) {
       assert.doesNotMatch(source, pattern, `${relative(root, filePath)} bypasses store/runtime seams`)
@@ -113,8 +113,8 @@ test('cloud route and service modules do not reach below their domain seams', ()
 })
 
 test('BYOK orchestration stays outside the CloudSessionService facade', () => {
-  const sessionServiceSource = readFileSync(join(root, 'apps/desktop/src/main/cloud/session-service.ts'), 'utf8')
-  const byokServiceSource = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/byok-service.ts'), 'utf8')
+  const sessionServiceSource = readFileSync(join(root, 'packages/cloud-server/src/session-service.ts'), 'utf8')
+  const byokServiceSource = readFileSync(join(root, 'packages/cloud-server/src/services/byok-service.ts'), 'utf8')
 
   const extractedByokHelpers = [
     'private async assertByokProviderAllowed',

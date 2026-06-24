@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
+import { createByokSecretStore } from '@open-cowork/cloud-server/byok-secret-store'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 
 const FIRST_KEY = 'credential-sample-first-1234567890'
 const SECOND_KEY = 'credential-sample-second-abcdefghi'

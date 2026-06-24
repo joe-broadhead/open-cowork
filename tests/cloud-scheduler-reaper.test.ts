@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import type { CloudMetricRecord, CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
-import { CloudScheduler } from '../apps/desktop/src/main/cloud/scheduler.ts'
-import type { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import type { CloudMetricRecord, CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
+import { CloudScheduler } from '@open-cowork/cloud-server/scheduler'
+import type { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 
 class RecordingObservability implements CloudObservabilityAdapter {
   readonly metrics: CloudMetricRecord[] = []

@@ -12,7 +12,7 @@ import {
   readNullableString,
   readString,
   stableCloudId,
-} from '../apps/desktop/src/main/cloud/session-input-validation.ts'
+} from '@open-cowork/cloud-server/session-input-validation'
 
 // Focused coverage for the pure session-service input validators/normalizers
 // extracted from session-service.ts — including the security-adjacent role/status

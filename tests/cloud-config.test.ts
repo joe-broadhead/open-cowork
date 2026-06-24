@@ -9,7 +9,7 @@ import {
   evaluateCloudProjectSourcePolicy,
   resolveCloudRuntimePolicy,
   resolveCloudRole,
-} from '../apps/desktop/src/main/cloud/cloud-config.ts'
+} from '@open-cowork/cloud-server/cloud-config'
 
 test('cloud role and profile resolve from deployment environment', () => {
   const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG, {

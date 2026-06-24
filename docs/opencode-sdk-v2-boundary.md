@@ -57,10 +57,10 @@ session loading, agent/permission/skill composition) now lives in
 share it. The remaining `apps/desktop/src/main` entries are product seams that
 still touch SDK event/types at the desktop edge.
 
-- `apps/desktop/src/main/cloud/app.ts`
-- `apps/desktop/src/main/cloud/byok-runtime-config.ts`
-- `apps/desktop/src/main/cloud/opencode-runtime-adapter.ts`
-- `apps/desktop/src/main/cloud/worker-scoped-runtime-adapter.ts`
+- `packages/cloud-server/src/app.ts`
+- `packages/cloud-server/src/byok-runtime-config.ts`
+- `packages/cloud-server/src/opencode-runtime-adapter.ts`
+- `packages/cloud-server/src/worker-scoped-runtime-adapter.ts`
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
@@ -130,7 +130,7 @@ Use this checklist for every OpenCode SDK or `opencode-ai` runtime bump:
 - Verify `packages/runtime-host/src/runtime-config-builder.ts` still emits
   SDK-native config for providers, agents, skills, MCPs, permissions, and model
   defaults.
-- Verify `apps/desktop/src/main/cloud/byok-runtime-config.ts` still injects BYOK
+- Verify `packages/cloud-server/src/byok-runtime-config.ts` still injects BYOK
   provider credentials through `provider.<id>.options` only.
 - Update SDK event fixtures for assistant message parts, tool calls,
   permission requests/resolutions, question requests/resolutions, todos, status,

@@ -5,9 +5,9 @@ import { randomUUID } from 'node:crypto'
 import {
   ControlPlaneQuotaExceededError,
   type ControlPlaneStore,
-} from '../apps/desktop/src/main/cloud/control-plane-store.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
+} from '@open-cowork/cloud-server/control-plane-store'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
 import { createPglitePool } from './helpers/pglite-pool.ts'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL

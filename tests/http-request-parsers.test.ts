@@ -13,7 +13,7 @@ import {
   readRecord,
   readString,
   readStringArray,
-} from '../apps/desktop/src/main/cloud/http-request-parsers.ts'
+} from '@open-cowork/cloud-server/http-request-parsers'
 
 // Focused edge-case coverage for the pure HTTP request parsers extracted from
 // http-server.ts. The 100-test cloud-http-server suite exercises these through

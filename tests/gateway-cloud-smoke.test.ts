@@ -7,13 +7,13 @@ import {
   createApiTokenCloudAuthResolver,
   createCompositeCloudAuthResolver,
   createLocalCloudAuthResolver,
-} from '../apps/desktop/src/main/cloud/app.ts'
-import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-server.ts'
-import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
+} from '@open-cowork/cloud-server/app'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createCloudHttpServer } from '@open-cowork/cloud-server/http-server'
+import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '@open-cowork/cloud-server/runtime-adapter'
+import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
+import { CloudWorker } from '@open-cowork/cloud-server/worker'
 import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
 
 function gatewayPolicy() {

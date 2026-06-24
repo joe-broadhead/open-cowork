@@ -18,7 +18,7 @@ import {
   type SandboxEngine,
   type SandboxRuntimeEngineCheckResult,
   type SandboxRuntimeOneShotResult,
-} from '../apps/desktop/src/main/cloud/runtime-portability.ts'
+} from '@open-cowork/cloud-server/runtime-portability'
 
 type ProofOptions = {
   developmentOverride: boolean

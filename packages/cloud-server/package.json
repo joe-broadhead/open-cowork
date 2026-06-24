@@ -1,0 +1,38 @@
+{
+  "name": "@open-cowork/cloud-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open Cowork cloud control-plane + runtime server (HTTP routes, control-plane stores, transport adapter) shared by the cloud deployment and the desktop's local control plane",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "packages/cloud-server"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1054.0",
+    "@fontsource-variable/mona-sans": "^5.2.8",
+    "@fontsource-variable/schibsted-grotesk": "^5.2.8",
+    "@open-cowork/cloud-client": "workspace:*",
+    "@open-cowork/runtime-host": "workspace:*",
+    "@open-cowork/shared": "workspace:*",
+    "@open-cowork/website": "workspace:*",
+    "@opencode-ai/sdk": "1.15.5",
+    "google-auth-library": "^10.6.2",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^6.0.3"
+  }
+}

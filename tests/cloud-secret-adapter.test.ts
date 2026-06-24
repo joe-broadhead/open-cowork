@@ -12,7 +12,7 @@ import {
   resolveCloudSecretRef,
   validateCloudSecretKeyMaterial,
   type CloudSecretStoreHttpClient,
-} from '../apps/desktop/src/main/cloud/secret-adapter.ts'
+} from '@open-cowork/cloud-server/secret-adapter'
 
 test('cloud envelope secret adapter encrypts and decrypts with context binding', () => {
   const adapter = createEnvelopeSecretAdapter('test-key-material')

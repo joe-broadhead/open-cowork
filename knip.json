@@ -45,7 +45,9 @@
         "electron"
       ],
       "ignoreDependencies": [
-        "opencode-ai"
+        "opencode-ai",
+        "@fontsource-variable/mona-sans",
+        "@fontsource-variable/schibsted-grotesk"
       ]
     },
     "apps/website": {
@@ -119,6 +121,15 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.mjs"
+      ]
+    },
+    "packages/cloud-server": {
+      "entry": [
+        "src/index.ts",
+        "src/app.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
       ]
     },
     "packages/gateway-channel": {

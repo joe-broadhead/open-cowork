@@ -1,13 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
+import type { CloudPrincipal } from '@open-cowork/cloud-server/session-service'
 import {
   principalCanManageBilling,
   principalCanManageOrg,
   principalCanViewDiagnostics,
   principalCanViewOperations,
   principalEmailDomain,
-} from '../apps/desktop/src/main/cloud/session-principal-access.ts'
+} from '@open-cowork/cloud-server/session-principal-access'
 
 // Security-focused coverage for the principal-authorization predicates extracted
 // from session-service.ts: local principals are fully trusted, org-role gates

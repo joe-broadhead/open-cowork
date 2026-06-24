@@ -5,20 +5,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { DEFAULT_CONFIG, type OpenCoworkConfig } from '@open-cowork/shared'
-import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
-import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+import { createByokSecretStore } from '@open-cowork/cloud-server/byok-secret-store'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import type { CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeExecutionContext,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
-import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
-import { createWorkerScopedRuntimeAdapter, type WorkerScopedRuntimeFactoryInput } from '../apps/desktop/src/main/cloud/worker-scoped-runtime-adapter.ts'
+} from '@open-cowork/cloud-server/runtime-adapter'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
+import { CloudWorker } from '@open-cowork/cloud-server/worker'
+import { createWorkerScopedRuntimeAdapter, type WorkerScopedRuntimeFactoryInput } from '@open-cowork/cloud-server/worker-scoped-runtime-adapter'
 
 const KEY_A = ['credential', 'tenant-a', 'runtime', '1234567890abcdef'].join('-')
 const KEY_B = ['credential', 'tenant-b', 'runtime', 'abcdef1234567890'].join('-')

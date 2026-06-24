@@ -4,13 +4,13 @@ import { generateKeyPairSync, sign as signBuffer, type JsonWebKey } from 'node:c
 import type { IncomingMessage } from 'node:http'
 
 import { DEFAULT_CONFIG, type OpenCoworkConfig } from '@open-cowork/shared'
-import { createCloudAuthResolverForConfig } from '../apps/desktop/src/main/cloud/app.ts'
-import { CloudHttpError } from '../apps/desktop/src/main/cloud/http-server.ts'
+import { createCloudAuthResolverForConfig } from '@open-cowork/cloud-server/app'
+import { CloudHttpError } from '@open-cowork/cloud-server/http-server'
 import {
   createOidcBrowserAuthProvider,
   createOidcCloudAuthResolver,
   type OidcCloudAuthResolverOptions,
-} from '../apps/desktop/src/main/cloud/oidc-auth.ts'
+} from '@open-cowork/cloud-server/oidc-auth'
 
 const issuerUrl = 'https://auth.example.test'
 const clientId = 'open-cowork-cloud'

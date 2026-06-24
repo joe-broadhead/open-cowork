@@ -65,7 +65,7 @@ import type {
   CloudTransportSessionEvent,
   CloudTransportSubscription,
   CloudTransportWorkspaceEvent,
-} from './cloud/transport-adapter.ts'
+} from '@open-cowork/cloud-server/transport-adapter'
 import {
   cloudWorkspaceIdForBaseUrl,
   createFileCloudWorkspaceRegistry,

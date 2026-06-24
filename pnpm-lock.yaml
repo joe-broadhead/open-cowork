@@ -23,6 +23,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.4.1(jiti@2.7.0))
+      '@open-cowork/cloud-server':
+        specifier: workspace:*
+        version: link:packages/cloud-server
       '@open-cowork/runtime-host':
         specifier: workspace:*
         version: link:packages/runtime-host
@@ -65,9 +68,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1054.0
-        version: 3.1054.0
       '@fontsource-variable/mona-sans':
         specifier: ^5.2.8
         version: 5.2.8
@@ -86,18 +86,12 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.13.24
         version: 3.13.24(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
       dompurify:
         specifier: ^3.4.6
         version: 3.4.6
       electron-updater:
         specifier: ^6.8.3
         version: 6.8.3
-      google-auth-library:
-        specifier: ^10.6.2
-        version: 10.6.2
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.5)
@@ -113,9 +107,6 @@ importers:
       opencode-ai:
         specifier: 1.15.5
         version: 1.15.5
-      pg:
-        specifier: ^8.21.0
-        version: 8.21.0
       react:
         specifier: ^19.1.0
         version: 19.2.5
@@ -153,9 +144,6 @@ importers:
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@open-cowork/website':
-        specifier: workspace:*
-        version: link:../website
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.4(vite@8.0.10(@types/node@22.19.19)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
@@ -476,6 +464,52 @@ importers:
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/cloud-server:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1054.0
+        version: 3.1054.0
+      '@fontsource-variable/mona-sans':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/schibsted-grotesk':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@open-cowork/cloud-client':
+        specifier: workspace:*
+        version: link:../cloud-client
+      '@open-cowork/runtime-host':
+        specifier: workspace:*
+        version: link:../runtime-host
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@open-cowork/website':
+        specifier: workspace:*
+        version: link:../../apps/website
+      '@opencode-ai/sdk':
+        specifier: 1.15.5
+        version: 1.15.5
+      google-auth-library:
+        specifier: ^10.6.2
+        version: 10.6.2
+      pg:
+        specifier: ^8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.1.0
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

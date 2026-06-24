@@ -7,7 +7,7 @@ import {
   hashCloudApiToken,
   plaintextMatchesCloudApiTokenId,
   verifyCloudApiTokenHash,
-} from '../apps/desktop/src/main/cloud/control-plane-tokens.ts'
+} from '@open-cowork/cloud-server/control-plane-tokens'
 
 test('cloud API token hashes use per-token salts while preserving legacy verification', () => {
   const generated = generateCloudApiToken({ tokenId: 'tok_test', secret: 'secret-value' })

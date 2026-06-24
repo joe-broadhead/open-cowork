@@ -28,7 +28,7 @@ import {
   runtimePathsForPortability,
   type SandboxEngine,
   type PortableRuntimeEntry,
-} from '../apps/desktop/src/main/cloud/runtime-portability.ts'
+} from '@open-cowork/cloud-server/runtime-portability'
 type RuntimePathSet = ReturnType<typeof runtimePathsForPortability>
 
 type ProofCliOptions = {

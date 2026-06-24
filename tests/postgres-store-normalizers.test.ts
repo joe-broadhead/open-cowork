@@ -9,7 +9,7 @@ import {
   redactOperationalText,
   retryAfterMs,
   windowStart,
-} from '../apps/desktop/src/main/cloud/postgres-store-normalizers.ts'
+} from '@open-cowork/cloud-server/postgres-store-normalizers'
 
 // Focused coverage for the pure normalizers extracted from
 // postgres-control-plane-store.ts — including the security-relevant operational

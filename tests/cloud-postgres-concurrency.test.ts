@@ -3,15 +3,15 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 
-import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
-import { ControlPlaneQuotaExceededError } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
+import { ControlPlaneQuotaExceededError } from '@open-cowork/cloud-server/control-plane-store'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
 const POSTGRES_SKIP = POSTGRES_URL
   ? false
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres cloud concurrency tests.'
-const require = createRequire(new URL('../apps/desktop/src/main/cloud/postgres-control-plane-store.ts', import.meta.url))
+const require = createRequire(new URL('../packages/cloud-server/src/postgres-control-plane-store.ts', import.meta.url))
 
 type PgPool = {
   query(text: string, values?: unknown[]): Promise<unknown>

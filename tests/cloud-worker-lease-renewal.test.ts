@@ -2,15 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
-import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import type { CloudMetricRecord, CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
-import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { CloudWorker, CloudWorkerLeaseLostError } from '../apps/desktop/src/main/cloud/worker.ts'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import type { CloudMetricRecord, CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
+import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
+import { CloudWorker, CloudWorkerLeaseLostError } from '@open-cowork/cloud-server/worker'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
+} from '@open-cowork/cloud-server/runtime-adapter'
 
 class AbortAwareRuntime implements CloudRuntimeAdapter {
   readonly promptSignals: AbortSignal[] = []

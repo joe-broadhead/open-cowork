@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 
 import { DEFAULT_CONFIG, type CloudBillingConfig } from '@open-cowork/shared'
-import { evaluateBillingEntitlement } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
-import { createStripeBillingAdapter } from '../apps/desktop/src/main/cloud/stripe-billing-adapter.ts'
-import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
+import { evaluateBillingEntitlement } from '@open-cowork/cloud-server/billing-adapter'
+import { createStripeBillingAdapter } from '@open-cowork/cloud-server/stripe-billing-adapter'
+import { createStubBillingAdapter } from '@open-cowork/cloud-server/stub-billing-adapter'
 
 function billingConfig(): CloudBillingConfig {
   return {

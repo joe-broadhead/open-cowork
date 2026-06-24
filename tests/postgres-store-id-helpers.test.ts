@@ -6,7 +6,7 @@ import {
   stableId,
   stableJson,
   workspaceOperationFromType,
-} from '../apps/desktop/src/main/cloud/postgres-store-id-helpers.ts'
+} from '@open-cowork/cloud-server/postgres-store-id-helpers'
 
 // Focused coverage for the pure id / stable-JSON / hash / classification helpers
 // extracted from postgres-control-plane-store.ts.

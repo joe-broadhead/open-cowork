@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = process.cwd()
-const cloudRoot = join(root, 'apps/desktop/src/main/cloud')
+const cloudRoot = join(root, 'packages/cloud-server/src')
 const cloudClientRoot = join(root, 'packages/cloud-client/src')
 const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
 const downstreamDoc = readFileSync(join(root, 'docs/downstream.md'), 'utf8')
@@ -22,10 +22,10 @@ const lineThreshold = 2_000
 // silently re-grow (previously they sat 600-2,000+ lines above actuals). Lower these
 // (never raise) whenever a file shrinks further.
 const documentedLargeFileBudgets = new Map([
-  ['apps/desktop/src/main/cloud/http-server.ts', 1_800],
-  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 1_750],
-  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 2_550],
-  ['apps/desktop/src/main/cloud/session-service.ts', 3_950],
+  ['packages/cloud-server/src/http-server.ts', 1_800],
+  ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_550],
+  ['packages/cloud-server/src/session-service.ts', 3_950],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
