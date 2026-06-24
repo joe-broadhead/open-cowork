@@ -30,6 +30,7 @@ export type GatewaySessionStreamManagerOptions = {
   retryDelayMs?: number
   maxRetryDelayMs?: number
   maxRenderAttempts?: number
+  maxQueueDepth?: number
   // Live stream subscriptions are a bounded cache: each holds an upstream SSE
   // connection (a file descriptor) + render state. `ensure()` is called on every
   // inbound message, so an evicted idle stream re-subscribes from its persisted
@@ -51,6 +52,12 @@ type StreamState = {
   renderState: GatewaySessionRenderState
   renderFailures: Map<number, number>
   queue: Promise<void>
+  // Depth of the in-flight serial event queue. handleEvent awaits a render +
+  // a cursor DB round-trip, so a fast upstream can chain faster than we drain.
+  queueDepth: number
+  // When the queue hits maxQueueDepth we stop enqueuing (detach from the
+  // producer) until it fully drains, then resubscribe from the advanced cursor.
+  overflowing: boolean
   closed: boolean
   generation: number
   lastActivityMs: number
@@ -69,6 +76,9 @@ export function createGatewaySessionStreamManager(
   // hammer reconnect at the base delay (thundering herd).
   const maxRetryDelayMs = options.maxRetryDelayMs ?? 30_000
   const maxRenderAttempts = options.maxRenderAttempts ?? 5
+  // Bound the in-flight event queue. A burst (or a slow channel render) must not
+  // grow the serial promise chain — and its retained event payloads — without limit.
+  const maxQueueDepth = Math.max(1, options.maxQueueDepth ?? 512)
   const maxStreams = Math.max(1, options.maxStreams ?? 2_000)
   const idleTtlMs = options.idleTtlMs ?? 30 * 60_000
   const sweepIntervalMs = Math.max(1_000, options.sweepIntervalMs ?? 60_000)
@@ -140,6 +150,8 @@ export function createGatewaySessionStreamManager(
         renderState: createGatewaySessionRenderState(),
         renderFailures: new Map(),
         queue: Promise.resolve(),
+        queueDepth: 0,
+        overflowing: false,
         closed: false,
         generation: 0,
         lastActivityMs: now(),
@@ -168,13 +180,37 @@ export function createGatewaySessionStreamManager(
   function subscribe(state: StreamState) {
     if (state.closed) return
     state.subscription?.close()
+    state.overflowing = false
     state.generation += 1
     const generation = state.generation
     state.subscription = cloud.subscribeSessionEvents({
       sessionId: state.binding.sessionId,
       afterSequence: state.lastEventSequence,
       onEvent: (event) => {
-        state.queue = state.queue.then(() => handleEvent(state, event, generation))
+        // Already detached for backpressure: drop further events (no enqueue).
+        // They'll be re-delivered when we resubscribe from the advanced cursor.
+        if (state.overflowing) return
+        if (state.queueDepth >= maxQueueDepth) {
+          // Consumer is behind. Stop reading from the producer; the in-flight
+          // queue keeps advancing the persisted cursor. When it drains we
+          // resubscribe from that cursor, so no event is lost — guaranteeing
+          // forward progress under a sustained burst rather than livelocking.
+          state.overflowing = true
+          metrics.streamBackpressureDisconnects += 1
+          return
+        }
+        state.queueDepth += 1
+        state.queue = state.queue
+          .then(() => handleEvent(state, event, generation))
+          .finally(() => {
+            state.queueDepth -= 1
+            // Drained after a backpressure detach: resubscribe from the advanced
+            // cursor. Skip if a retry is already pending (an SSE error raced the
+            // drain) — that timer's subscribe() will recover and reset the flag.
+            if (state.overflowing && state.queueDepth === 0 && !state.closed && !state.retryTimer) {
+              subscribe(state)
+            }
+          })
       },
       onError: () => {
         metrics.errors += 1

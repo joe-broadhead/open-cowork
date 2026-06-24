@@ -16,6 +16,7 @@ export type GatewayMetrics = {
   cursorPersistenceFailures: number
   cloudSubscriptionErrors: number
   droppedSessionEvents: number
+  streamBackpressureDisconnects: number
   errors: number
   providerMetrics: Record<string, GatewayProviderMetrics>
 }
@@ -57,6 +58,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     cursorPersistenceFailures: 0,
     cloudSubscriptionErrors: 0,
     droppedSessionEvents: 0,
+    streamBackpressureDisconnects: 0,
     errors: 0,
     providerMetrics: {},
   }
@@ -161,6 +163,9 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# HELP open_cowork_gateway_dropped_session_events_total Session events skipped after non-retryable channel rendering failures.',
     '# TYPE open_cowork_gateway_dropped_session_events_total counter',
     `open_cowork_gateway_dropped_session_events_total ${metrics.droppedSessionEvents}`,
+    '# HELP open_cowork_gateway_stream_backpressure_disconnects_total Session streams detached from the upstream after the in-flight event queue hit its depth cap; recovered by resubscribing from the persisted cursor.',
+    '# TYPE open_cowork_gateway_stream_backpressure_disconnects_total counter',
+    `open_cowork_gateway_stream_backpressure_disconnects_total ${metrics.streamBackpressureDisconnects}`,
     ...renderProviderMetrics(metrics),
     '',
   ].join('\n')

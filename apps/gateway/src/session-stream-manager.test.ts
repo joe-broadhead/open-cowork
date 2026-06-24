@@ -774,3 +774,49 @@ test('session stream manager evicts streams idle beyond the TTL on the next ensu
   assert.deepEqual(closed, ['session-1'])
   manager.closeAll()
 })
+
+test('session stream manager applies backpressure and resubscribes from the advanced cursor on queue overflow', async () => {
+  const provider = new FakeChannelProvider()
+  const metrics = createGatewayMetrics()
+  const subscriptions: Array<{
+    sessionId: string
+    afterSequence?: number
+    onEvent: (event: unknown) => void
+    closed: boolean
+  }> = []
+  const cloud = {
+    subscribeSessionEvents(input: { sessionId: string, afterSequence?: number, onEvent: (event: unknown) => void }) {
+      const record = { ...input, closed: false }
+      subscriptions.push(record)
+      return { close() { record.closed = true } }
+    },
+    async updateCursor(input: unknown) { return cursorOk(input) },
+    async createChannelInteraction() {
+      return { interaction: { interactionId: 'interaction-1' }, plaintextToken: 'token-1' }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, metrics, { maxQueueDepth: 2 })
+
+  manager.ensure({ provider, binding: cursorBinding({ lastEventSequence: 0 }) })
+  assert.equal(subscriptions.length, 1)
+
+  // Emit four events synchronously: the serial queue fills to the depth cap (2)
+  // before any handleEvent microtask runs, so the 3rd and 4th overflow (one
+  // backpressure disconnect — the 4th is dropped while already detached).
+  for (let sequence = 1; sequence <= 4; sequence += 1) {
+    subscriptions[0].onEvent({
+      eventId: `event-${sequence}`,
+      sequence,
+      type: 'assistant.message',
+      payload: { content: `message ${sequence}` },
+    })
+  }
+  assert.equal(metrics.streamBackpressureDisconnects, 1)
+
+  // The two enqueued events drain (advancing the cursor to 2), then the manager
+  // resubscribes from that cursor to recover the dropped events — no loss.
+  await waitFor(() => subscriptions.length === 2)
+  assert.equal(subscriptions[0].closed, true)
+  assert.equal(subscriptions[1].afterSequence, 2)
+  manager.closeAll()
+})
