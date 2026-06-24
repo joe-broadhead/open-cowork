@@ -287,7 +287,9 @@ export function createGatewaySessionStreamManager(
       metrics.errors += 1
       const attempts = (state.renderFailures.get(event.sequence) ?? 0) + 1
       state.renderFailures.set(event.sequence, attempts)
-      const failure = classifyProviderFailure(error)
+      // Re-rendering is idempotent (cursor-gated), so retry unknown/transient failures rather than
+      // dropping the event — unlike the outbound delivery path's no-idempotency-key conservatism.
+      const failure = classifyProviderFailure(error, { defaultTransient: true })
       if (failure.transient && attempts < maxRenderAttempts) {
         metrics.sessionRenderRetries += 1
         metrics.streamReconnects += 1
