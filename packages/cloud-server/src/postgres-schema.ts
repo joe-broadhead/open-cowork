@@ -1036,6 +1036,27 @@ const CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS = [
     ON cloud_sessions (opencode_session_id)`,
 ] as const
 
+// Scheduled / hot-path queries that were full-scanning or top-N-sorting unindexed
+// columns: the scheduler's due-workflow probe (claim_token IS NULL — the opposite of the
+// existing partial reaper index), the channel retention sweeps (status/expires_at), the
+// per-webhook replay-cache trim (seen_at_ms), and account→orgs principal resolution
+// (account_id, not the PK lead). Built CONCURRENTLY so they never lock a populated table.
+export const CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID = '021_performance_indexes'
+const CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflow_runs_due_idx
+    ON cloud_workflow_runs (created_at, run_id)
+    WHERE claim_token IS NULL AND status IN ('queued', 'running')`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_channel_deliveries_retention_idx
+    ON cloud_channel_deliveries (updated_at)
+    WHERE status IN ('sent', 'dead')`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_channel_interactions_expiry_idx
+    ON cloud_channel_interactions (expires_at)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_webhook_replay_claims_seen_idx
+    ON cloud_webhook_replay_claims (seen_at_ms)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_memberships_account_idx
+    ON cloud_memberships (account_id, updated_at DESC)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1119,6 +1140,18 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     id: CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS,
     concurrentIndexes: ['cloud_sessions_session_id_idx', 'cloud_sessions_opencode_session_idx'],
+    transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS,
+    concurrentIndexes: [
+      'cloud_workflow_runs_due_idx',
+      'cloud_channel_deliveries_retention_idx',
+      'cloud_channel_interactions_expiry_idx',
+      'cloud_webhook_replay_claims_seen_idx',
+      'cloud_memberships_account_idx',
+    ],
     transactional: false,
   },
 ] as const
