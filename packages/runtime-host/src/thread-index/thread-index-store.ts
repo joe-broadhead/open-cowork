@@ -114,6 +114,7 @@ export class ThreadIndexStore {
   private transactionCounter = 0
   private readonly dbPath: string
   private queryCacheGeneration = 0
+  private fileModesEnsured = false
   private readonly searchCache = new Map<string, ThreadSearchResult>()
   private readonly facetCache = new Map<string, ThreadFacetSummary>()
 
@@ -135,13 +136,23 @@ export class ThreadIndexStore {
     this.db.close()
   }
 
+  // The sqlite db and its -wal/-shm sidecars only need their 0o600 mode set once after they
+  // first materialize on disk; in WAL mode they persist for the connection's lifetime. Re-running
+  // existsSync + chmod on every write was pure syscall overhead on the hot indexing path (a write
+  // per streamed-event debounce window), so chmod once per connection and skip thereafter.
+  private ensureFileModesOnce() {
+    if (this.fileModesEnsured) return
+    ensureThreadIndexDbFileModes(this.dbPath)
+    this.fileModesEnsured = true
+  }
+
   private withTransaction<T>(callback: () => T): T {
     const savepoint = `thread_index_tx_${this.transactionCounter += 1}`
     this.db.exec(`savepoint ${savepoint}`)
     try {
       const result = callback()
       this.db.exec(`release savepoint ${savepoint}`)
-      ensureThreadIndexDbFileModes(this.dbPath)
+      this.ensureFileModesOnce()
       this.invalidateQueryCache()
       return result
     } catch (error) {
@@ -149,7 +160,7 @@ export class ThreadIndexStore {
         this.db.exec(`rollback to savepoint ${savepoint}`)
       } finally {
         this.db.exec(`release savepoint ${savepoint}`)
-        ensureThreadIndexDbFileModes(this.dbPath)
+        this.ensureFileModesOnce()
       }
       throw error
     }
@@ -180,6 +191,20 @@ export class ThreadIndexStore {
   }
 
   upsertThread(input: ThreadIndexUpsertInput) {
+    this.withTransaction(() => this.upsertThreadRow(input))
+  }
+
+  // Upsert the thread row and its derived agent/tool metadata, then replace the deterministic
+  // suggestions, in a SINGLE transaction — one cache invalidation and one chmod instead of the two
+  // each path would incur separately. The streamed-event refresh path uses this exclusively.
+  upsertThreadWithSuggestions(input: ThreadIndexUpsertInput, suggestions: ThreadSuggestionInput[]) {
+    this.withTransaction(() => {
+      this.upsertThreadRow(input)
+      this.replaceSuggestedRows(input.sessionId, suggestions)
+    })
+  }
+
+  private upsertThreadRow(input: ThreadIndexUpsertInput) {
     const title = normalizeText(input.title || 'New session', 512, 'Thread title')
     const sessionId = normalizeText(input.sessionId, 256, 'Session id')
     const directory = input.directory || null
@@ -190,7 +215,7 @@ export class ThreadIndexStore {
         : input.revertedMessageId ? 'reverted' : 'idle'
     )
     const indexedAt = input.indexedAt || nowIso()
-    this.withTransaction(() => {
+    {
       this.db.prepare(`
         insert into thread_index (
           session_id, title, kind, directory, project_label, provider_id, model_id, status,
@@ -261,7 +286,7 @@ export class ThreadIndexStore {
       )
       if (input.actualAgents) this.replaceAgents(sessionId, input.actualAgents)
       if (input.actualTools) this.replaceTools(sessionId, input.actualTools)
-    })
+    }
   }
 
   deleteThread(sessionId: string) {
@@ -599,7 +624,7 @@ export class ThreadIndexStore {
       insert into thread_tags (id, name, color, created_at, updated_at)
       values (?, ?, ?, ?, ?)
     `).run(id, tag.name, tag.color, timestamp, timestamp)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return this.getTag(id)!
   }
@@ -609,7 +634,7 @@ export class ThreadIndexStore {
     const tag = normalizeTagInput(input)
     this.db.prepare('update thread_tags set name = ?, color = ?, updated_at = ? where id = ?')
       .run(tag.name, tag.color, nowIso(), id)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return this.getTag(id)
   }
@@ -664,7 +689,7 @@ export class ThreadIndexStore {
       where session_id in (${makePlaceholders(sessions)})
         and tag_id in (${makePlaceholders(tags)})
     `).run(...sessions, ...tags)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return true
   }
@@ -699,7 +724,7 @@ export class ThreadIndexStore {
       insert into thread_smart_filters (id, name, query_json, created_at, updated_at)
       values (?, ?, ?, ?, ?)
     `).run(id, filter.name, filter.serialized, timestamp, timestamp)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return this.getSmartFilter(id)!
   }
@@ -709,7 +734,7 @@ export class ThreadIndexStore {
     const filter = normalizeSmartFilterInput(input)
     this.db.prepare('update thread_smart_filters set name = ?, query_json = ?, updated_at = ? where id = ?')
       .run(filter.name, filter.serialized, nowIso(), id)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return this.getSmartFilter(id)
   }
@@ -717,7 +742,7 @@ export class ThreadIndexStore {
   deleteSmartFilter(filterId: string) {
     const id = normalizeText(filterId, 256, 'Smart filter id')
     this.db.prepare('delete from thread_smart_filters where id = ?').run(id)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return true
   }
@@ -730,33 +755,35 @@ export class ThreadIndexStore {
       insert into thread_category_suggestions (id, session_id, label, reason, evidence_json, status, created_at, updated_at)
       values (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, normalizeText(sessionId, 256, 'Session id'), normalized.label, normalized.reason, json(normalized.evidence), status, timestamp, timestamp)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return this.rowToSuggestion(this.db.prepare('select * from thread_category_suggestions where id = ?').get(id) as Row)
   }
 
   replaceSuggestedSuggestions(sessionId: string, suggestions: ThreadSuggestionInput[]) {
+    this.withTransaction(() => this.replaceSuggestedRows(sessionId, suggestions))
+  }
+
+  private replaceSuggestedRows(sessionId: string, suggestions: ThreadSuggestionInput[]) {
     const id = normalizeText(sessionId, 256, 'Session id')
-    this.withTransaction(() => {
-      const protectedLabels = new Set((this.db.prepare(`
-        select lower(label) as label
-        from thread_category_suggestions
-        where session_id = ? and status in ('accepted', 'dismissed')
-      `).all(id) as Row[]).map((row) => asString(row.label)).filter(Boolean))
-      this.db.prepare("delete from thread_category_suggestions where session_id = ? and status = 'suggested'").run(id)
-      const insertedLabels = new Set<string>()
-      for (const suggestion of suggestions.slice(0, THREAD_FILTER_MAX_VALUES)) {
-        const normalized = normalizeSuggestionInput(suggestion)
-        const labelKey = normalized.label.toLowerCase()
-        if (protectedLabels.has(labelKey) || insertedLabels.has(labelKey)) continue
-        insertedLabels.add(labelKey)
-        const timestamp = nowIso()
-        this.db.prepare(`
-          insert into thread_category_suggestions (id, session_id, label, reason, evidence_json, status, created_at, updated_at)
-          values (?, ?, ?, ?, ?, 'suggested', ?, ?)
-        `).run(crypto.randomUUID(), id, normalized.label, normalized.reason, json(normalized.evidence), timestamp, timestamp)
-      }
-    })
+    const protectedLabels = new Set((this.db.prepare(`
+      select lower(label) as label
+      from thread_category_suggestions
+      where session_id = ? and status in ('accepted', 'dismissed')
+    `).all(id) as Row[]).map((row) => asString(row.label)).filter(Boolean))
+    this.db.prepare("delete from thread_category_suggestions where session_id = ? and status = 'suggested'").run(id)
+    const insertedLabels = new Set<string>()
+    for (const suggestion of suggestions.slice(0, THREAD_FILTER_MAX_VALUES)) {
+      const normalized = normalizeSuggestionInput(suggestion)
+      const labelKey = normalized.label.toLowerCase()
+      if (protectedLabels.has(labelKey) || insertedLabels.has(labelKey)) continue
+      insertedLabels.add(labelKey)
+      const timestamp = nowIso()
+      this.db.prepare(`
+        insert into thread_category_suggestions (id, session_id, label, reason, evidence_json, status, created_at, updated_at)
+        values (?, ?, ?, ?, ?, 'suggested', ?, ?)
+      `).run(crypto.randomUUID(), id, normalized.label, normalized.reason, json(normalized.evidence), timestamp, timestamp)
+    }
   }
 
   acceptSuggestion(suggestionId: string) {
@@ -772,7 +799,7 @@ export class ThreadIndexStore {
     const nextLabel = normalizeText(label, THREAD_SUGGESTION_LABEL_MAX_LENGTH, 'Suggestion label')
     this.db.prepare("update thread_category_suggestions set label = ?, status = 'accepted', updated_at = ? where id = ?")
       .run(nextLabel, nowIso(), id)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return true
   }
@@ -781,7 +808,7 @@ export class ThreadIndexStore {
     const id = normalizeText(suggestionId, 256, 'Suggestion id')
     this.db.prepare('update thread_category_suggestions set status = ?, updated_at = ? where id = ?')
       .run(status, nowIso(), id)
-    ensureThreadIndexDbFileModes(this.dbPath)
+    this.ensureFileModesOnce()
     this.invalidateQueryCache()
     return true
   }

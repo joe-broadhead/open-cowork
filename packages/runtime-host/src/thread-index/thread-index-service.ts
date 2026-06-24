@@ -23,6 +23,17 @@ import {
 
 const REFRESH_DEBOUNCE_MS = 750
 const MAX_DETERMINISTIC_SUGGESTIONS = 5
+// Bounds the per-session "last indexed projection" signature map. Sessions far above this are rare;
+// evicting the oldest just costs one redundant (idempotent) reindex the next time it streams.
+const THREAD_INDEX_SIGNATURE_CACHE_MAX = 4_096
+
+// A stable fingerprint of everything the thread-index projection persists for a session. When a
+// debounced refresh produces the same fingerprint as the last applied one, the write (and its cache
+// invalidation + chmod) is skipped entirely. The input carries no wall-clock fields (indexedAt is
+// assigned by the store), so identical session state yields an identical signature.
+function threadIndexSignature(input: ThreadIndexUpsertInput, suggestions: ThreadSuggestionInput[]) {
+  return JSON.stringify([input, suggestions])
+}
 
 function emptyTokens(): SessionTokens {
   return {
@@ -254,6 +265,7 @@ function deterministicSuggestions(record: SessionRecord, agents: ThreadMetadataC
 
 export class ThreadIndexService {
   private readonly refreshTimers = new Map<string, NodeJS.Timeout>()
+  private readonly lastIndexSignatures = new Map<string, string>()
   private readonly store: ThreadIndexStore
 
   constructor(store: ThreadIndexStore = getThreadIndexStore()) {
@@ -278,21 +290,35 @@ export class ThreadIndexService {
       const existing = input.actualAgents === undefined || input.actualTools === undefined
         ? this.store.getThread(record.id)
         : null
-      this.store.upsertThread(input)
       const actualAgents = input.actualAgents ?? existing?.actualAgents ?? []
       const actualTools = input.actualTools ?? existing?.actualTools ?? []
-      this.store.replaceSuggestedSuggestions(
-        record.id,
-        deterministicSuggestions(record, actualAgents, actualTools),
-      )
+      const suggestions = deterministicSuggestions(record, actualAgents, actualTools)
+      // Streamed-event refreshes are debounced but still fire for events that change nothing in the
+      // projection (permission prompts, question/answer turns, partial text within one message).
+      // Skip the upsert when the derived projection is byte-identical to the last applied one.
+      const signature = threadIndexSignature(input, suggestions)
+      if (this.lastIndexSignatures.get(record.id) === signature) return
+      this.store.upsertThreadWithSuggestions(input, suggestions)
+      this.rememberIndexSignature(record.id, signature)
     } catch (err) {
       log('thread-index', `Upsert failed session=${shortSessionId(record.id)}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  private rememberIndexSignature(sessionId: string, signature: string) {
+    this.lastIndexSignatures.delete(sessionId)
+    this.lastIndexSignatures.set(sessionId, signature)
+    while (this.lastIndexSignatures.size > THREAD_INDEX_SIGNATURE_CACHE_MAX) {
+      const oldest = this.lastIndexSignatures.keys().next().value
+      if (typeof oldest !== 'string') break
+      this.lastIndexSignatures.delete(oldest)
     }
   }
 
   removeThread(sessionId: string) {
     try {
       this.store.deleteThread(sessionId)
+      this.lastIndexSignatures.delete(sessionId)
     } catch (err) {
       log('thread-index', `Remove failed session=${shortSessionId(sessionId)}: ${err instanceof Error ? err.message : String(err)}`)
     }
