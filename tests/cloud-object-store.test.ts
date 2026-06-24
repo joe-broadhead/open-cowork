@@ -9,12 +9,57 @@ import {
   createAzureBlobObjectStore,
   createFilesystemObjectStore,
   createGcsObjectStore,
+  createInMemoryObjectStore,
   createObjectStoreForCloud,
   createS3CompatibleObjectStore,
+  instrumentObjectStore,
+  type ObjectStoreAdapter,
   type ObjectStoreHttpResponse,
   resolveCloudObjectStoreConfig,
 } from '@open-cowork/cloud-server/object-store'
+import type { CloudMetricRecord } from '@open-cowork/cloud-server/observability'
 import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+
+test('instrumentObjectStore emits ok and error operation metrics (audit P1-O4)', async () => {
+  const metrics: CloudMetricRecord[] = []
+  const observability = { log() {}, metric(record: CloudMetricRecord) { metrics.push(record) }, span() {} }
+
+  const store = instrumentObjectStore(createInMemoryObjectStore(), observability)
+  await store.putObject({ key: 'a/b.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+  await store.getObject('a/b.txt')
+
+  const ops = metrics.filter((metric) => metric.name === 'open_cowork_cloud_object_store_operations_total')
+  assert.equal(ops.some((metric) => metric.attributes?.operation === 'put' && metric.attributes?.status === 'ok'), true)
+  assert.equal(ops.some((metric) => metric.attributes?.operation === 'get' && metric.attributes?.status === 'ok'), true)
+  assert.equal(metrics.some((metric) => metric.name === 'open_cowork_cloud_object_store_operation_duration_ms'), true)
+
+  // The error path (the previously-dark alert signal) emits a status=error operation metric + re-throws.
+  const failing: ObjectStoreAdapter = {
+    kind: 'filesystem',
+    async putObject() { throw new Error('disk full') },
+    async getObject() { return null },
+    async headObject() { return null },
+    async deleteObject() {},
+  }
+  const instrumentedFailing = instrumentObjectStore(failing, observability)
+  await assert.rejects(
+    () => instrumentedFailing.putObject({ key: 'x', body: Buffer.from(''), contentType: 'text/plain' }),
+    /disk full/,
+  )
+  assert.equal(
+    metrics.some((metric) => (
+      metric.name === 'open_cowork_cloud_object_store_operations_total'
+      && metric.attributes?.status === 'error'
+      && metric.attributes?.operation === 'put'
+    )),
+    true,
+  )
+})
+
+test('instrumentObjectStore is transparent without an observability adapter', () => {
+  const base = createInMemoryObjectStore()
+  assert.equal(instrumentObjectStore(base, null), base)
+})
 
 function httpResponse(input: {
   status?: number

@@ -13,6 +13,7 @@ import {
 import { GoogleAuth } from 'google-auth-library'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
 import type { PathProvider } from './path-provider.ts'
+import { recordCloudMetric, type CloudObservabilityAdapter } from './observability.ts'
 
 type Env = Record<string, string | undefined>
 
@@ -53,6 +54,48 @@ export type ObjectStoreAdapter = {
   headObject(key: string): Promise<ObjectStoreHeadResult | null>
   deleteObject(key: string): Promise<void>
   close?: () => Promise<void> | void
+}
+
+// Wrap any object-store adapter so the durable-state layer actually emits telemetry (audit P1-O4).
+// The get/put/head/delete path was completely dark — the catalogued object-store error alert (the one
+// alert covering session-state loss) had ZERO emission sites and could never fire. Each operation now
+// records an operations_total counter (status=ok|error, so errors are a status filter) and a duration
+// histogram, tagged with the store kind + operation. Best-effort: telemetry failures never break I/O,
+// and the wrapper is transparent when no observability adapter is configured.
+export function instrumentObjectStore(
+  adapter: ObjectStoreAdapter,
+  observability: CloudObservabilityAdapter | null | undefined,
+): ObjectStoreAdapter {
+  if (!observability) return adapter
+  const emit = async (operation: string, status: 'ok' | 'error', startedAtMs: number, error?: unknown) => {
+    const attributes = {
+      cloud_object_store_kind: adapter.kind,
+      operation,
+      status,
+      ...(status === 'error' ? { error: error instanceof Error ? error.name : 'unknown' } : {}),
+    }
+    await recordCloudMetric(observability, { name: 'open_cowork_cloud_object_store_operations_total', value: 1, unit: '1', attributes })
+    await recordCloudMetric(observability, { name: 'open_cowork_cloud_object_store_operation_duration_ms', value: Math.max(0, Date.now() - startedAtMs), unit: 'ms', attributes })
+  }
+  const instrument = async <T>(operation: string, run: () => Promise<T>): Promise<T> => {
+    const startedAtMs = Date.now()
+    try {
+      const result = await run()
+      await emit(operation, 'ok', startedAtMs)
+      return result
+    } catch (error) {
+      await emit(operation, 'error', startedAtMs, error)
+      throw error
+    }
+  }
+  return {
+    kind: adapter.kind,
+    putObject: (input) => instrument('put', () => adapter.putObject(input)),
+    getObject: (key) => instrument('get', () => adapter.getObject(key)),
+    headObject: (key) => instrument('head', () => adapter.headObject(key)),
+    deleteObject: (key) => instrument('delete', () => adapter.deleteObject(key)),
+    ...(adapter.close ? { close: () => adapter.close!() } : {}),
+  }
 }
 
 export type ObjectStoreCredentials = {

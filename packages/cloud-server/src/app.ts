@@ -38,7 +38,7 @@ import {
   recordCloudWorkerMetric,
   type CloudObservabilityAdapter,
 } from './observability.ts'
-import { createObjectStoreForCloud, resolveCloudObjectStoreConfig, type ObjectStoreAdapter } from './object-store.ts'
+import { createObjectStoreForCloud, instrumentObjectStore, resolveCloudObjectStoreConfig, type ObjectStoreAdapter } from './object-store.ts'
 import {
   createByokSecretStore,
   type ByokSecretStore,
@@ -1118,7 +1118,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     ? createPostgresKnowledgeStore(loadPgPool(knowledgeControlPlaneUrl), { ownsPool: true })
     : null
   const knowledgeStore: KnowledgeStore | null = options.knowledgeStore ?? ownedKnowledgeStore
-  const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
+  // Instrument the durable object store so get/put/head/delete (and, transitively, checkpoint
+  // save/restore) emit success/error + latency metrics (audit P1-O4).
+  const objectStore = instrumentObjectStore(
+    options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths }),
+    observability,
+  )
   const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env, {
     requireStrongKeyMaterial: envOptions.deploymentTier === 'public_production',
   })

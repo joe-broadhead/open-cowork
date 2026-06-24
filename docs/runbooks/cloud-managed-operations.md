@@ -282,6 +282,10 @@ or timeout errors.
 
 Use this when artifacts, uploads, exports, or checkpoint restore/save fails.
 
+0. Watch `open_cowork_cloud_object_store_operations_total{status="error"}` (by `operation`
+   = get/put/head/delete and `cloud_object_store_kind`) and the
+   `open_cowork_cloud_object_store_operation_duration_ms` latency — these cover every durable
+   read/write, including the object-store I/O behind checkpoint save/restore.
 1. Check object-store service health and credentials/workload identity.
 2. Verify bucket/container/prefix exists and has versioning enabled.
 3. Check checkpoint restore logs before allowing workers to resume failed
