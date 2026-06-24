@@ -415,10 +415,9 @@ async function sessionView(record: SessionRecord): Promise<SessionView | null> {
   }
 }
 
-async function artifactsForRecord(record: SessionRecord, workspace: string) {
+async function artifactsForRecord(record: SessionRecord, workspace: string, tasks: CoordinationTaskCandidate[]) {
   const view = await sessionView(record)
   if (!view) return []
-  const tasks = listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
   return artifactsFromView(view).map((artifact) => {
     const lifecycle = findLifecycleForArtifact(workspace, record.id, artifact)
     return normalizeArtifactLifecycleEntry({
@@ -439,8 +438,11 @@ export async function listLocalArtifactIndex(request: ArtifactIndexRequest = {})
     ? listSessionRecords().filter((record) => record.id === request.sessionId)
     : listSessionRecords()
   const artifacts: ArtifactIndexEntry[] = []
+  // The coordination-task list is workspace-scoped, not per-record — fetch it once and reuse it for
+  // every record instead of re-reading up to 1000 tasks once per session in the loop.
+  const tasks = listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
   for (const record of records) {
-    const entries = await artifactsForRecord(record, workspace)
+    const entries = await artifactsForRecord(record, workspace, tasks)
     for (const entry of entries) {
       if (!matchesIndexRequest(entry, request)) continue
       artifacts.push(entry)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Message, PendingApproval, SessionError, TaskRun, ToolCall } from '../../stores/session'
-import { buildChatTimeline } from './chat-view-timeline'
+import { buildChatTimeline, messageSignature } from './chat-view-timeline'
 
 const sessionTokens = {
   input: 0,
@@ -189,7 +189,7 @@ describe('buildChatTimeline', () => {
   it('stabilizeMessage reuses the derived message reference until its content changes', () => {
     const cache = new Map<string, { signature: string; message: Message }>()
     const stabilizeMessage = (key: string, message: Message): Message => {
-      const signature = JSON.stringify(message)
+      const signature = messageSignature(message)
       const cached = cache.get(key)
       if (cached && cached.signature === signature) return cached.message
       cache.set(key, { signature, message })
@@ -212,5 +212,39 @@ describe('buildChatTimeline', () => {
     const thirdMessage = messageData(third.find((item) => item.kind === 'message'))
     expect(thirdMessage).not.toBe(firstMessage)
     expect(thirdMessage).toMatchObject({ content: 'hello world' })
+  })
+
+  it('messageSignature is stable for identical messages and changes for every rendered field', () => {
+    const base: Message = {
+      id: 'm1',
+      role: 'assistant',
+      content: 'hello',
+      order: 1,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      providerId: 'openrouter',
+      modelId: 'openrouter/sonnet',
+      reasoning: [{ id: 'r1', content: 'thinking', order: 1 }],
+      attachments: [{ mime: 'image/png', url: 'cowork://a.png', filename: 'a.png' }],
+    }
+    const clone = (overrides: Partial<Message>): Message => ({
+      ...base,
+      reasoning: base.reasoning?.map((segment) => ({ ...segment })),
+      attachments: base.attachments?.map((attachment) => ({ ...attachment })),
+      ...overrides,
+    })
+
+    // A structurally identical (but distinct-reference) message yields the same signature.
+    expect(messageSignature(clone({}))).toBe(messageSignature(base))
+
+    // Every field the bubble renders must move the signature.
+    expect(messageSignature(clone({ content: 'hello!' }))).not.toBe(messageSignature(base))
+    expect(messageSignature(clone({ reasoning: [{ id: 'r1', content: 'thinking harder', order: 1 }] }))).not.toBe(messageSignature(base))
+    expect(messageSignature(clone({ attachments: [{ mime: 'image/png', url: 'cowork://b.png', filename: 'a.png' }] }))).not.toBe(messageSignature(base))
+    expect(messageSignature(clone({ providerId: 'codex' }))).not.toBe(messageSignature(base))
+    expect(messageSignature(clone({ timestamp: '2026-01-02T00:00:00.000Z' }))).not.toBe(messageSignature(base))
+
+    // Length-prefixing prevents adjacent free-text fields from colliding when their boundary shifts.
+    expect(messageSignature(clone({ content: 'ab', reasoning: [{ id: 'r1', content: 'c', order: 1 }] })))
+      .not.toBe(messageSignature(clone({ content: 'a', reasoning: [{ id: 'r1', content: 'bc', order: 1 }] })))
   })
 })

@@ -269,17 +269,21 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const openDecisionCount = currentView.pendingApprovals.length + currentView.pendingQuestions.length
   const activeTaskRuns = currentView.taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
   const todoCount = currentView.todos.length + currentView.executionPlan.length + currentView.taskRuns.reduce((count, task) => count + task.todos.length, 0)
-  const toolPayloads = [
+  // serializeToolPayload JSON-stringifies every tool input AND output; computeBreakdown then scans
+  // every message and payload. The view slices are referentially stable between streamed patches,
+  // so memoizing keeps these off the critical path for the far more frequent re-renders that don't
+  // touch the transcript (tab switches, hover, parent re-renders).
+  const toolPayloads = useMemo(() => [
     ...currentView.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ...currentView.taskRuns.flatMap((taskRun) =>
       taskRun.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ),
-  ]
-  const breakdown = computeBreakdown({
+  ], [currentView.toolCalls, currentView.taskRuns])
+  const breakdown = useMemo(() => computeBreakdown({
     messages: currentView.messages,
     toolPayloads,
     totalContextTokens: contextTokens,
-  })
+  }), [currentView.messages, toolPayloads, contextTokens])
 
   if (!currentSessionId) return null
 

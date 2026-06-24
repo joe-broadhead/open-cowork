@@ -8,6 +8,41 @@ import type {
   CompactionNotice,
 } from '../../stores/session'
 
+// A NUL byte is used to join signature fields: it never appears in the structured fields
+// (ids, role, urls, mimes), so combined with the length-prefixed free-text fields no two
+// distinct messages can collide into one signature (which would render stale).
+const SIGNATURE_DELIMITER = '\u0000'
+
+// Compact structural signature of a rebuilt message, used by ChatView to keep a stable object
+// reference (and skip MessageBubble's markdown/mermaid re-render) while the rendered output is
+// unchanged. This replaces JSON.stringify(message), which re-walked and escaped the full segment
+// text a SECOND time on top of the already-rendered `content` — O(transcript) per streamed patch.
+// `content` already encapsulates all segment text; reasoning and attachments render separately, so
+// they are included explicitly. Free-text fields are length-prefixed so no concatenation of
+// distinct messages can collide into an identical signature (which would show a stale render).
+export function messageSignature(message: Message): string {
+  const parts: string[] = [
+    message.id,
+    message.role,
+    String(message.order),
+    message.timestamp ?? '',
+    message.providerId ?? '',
+    message.modelId ?? '',
+    String(message.content.length),
+    message.content,
+    String(message.segments?.length ?? 0),
+    String(message.reasoning?.length ?? 0),
+  ]
+  for (const segment of message.reasoning ?? []) {
+    parts.push(segment.id, String(segment.content.length), segment.content)
+  }
+  parts.push(String(message.attachments?.length ?? 0))
+  for (const attachment of message.attachments ?? []) {
+    parts.push(attachment.mime, attachment.url, attachment.filename ?? '')
+  }
+  return parts.join(SIGNATURE_DELIMITER)
+}
+
 export type TimelineItem =
   | { kind: 'message'; data: Message; key: string; actionsEnabled: boolean }
   | { kind: 'tools'; data: ToolCall[] }

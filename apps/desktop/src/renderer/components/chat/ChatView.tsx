@@ -16,7 +16,7 @@ import { ChatInput } from './ChatInput'
 import { TaskDrillIn } from './TaskDrillIn'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
-import { buildChatTimeline, type TimelineItem } from './chat-view-timeline'
+import { buildChatTimeline, messageSignature, type TimelineItem } from './chat-view-timeline'
 import { useChatAgentVisuals } from './useChatAgentVisuals'
 import {
   isAgentRunFiltersEnabled,
@@ -192,7 +192,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
     }, {
       stabilizeMessage: (key, message) => {
         seenKeys.add(key)
-        const signature = JSON.stringify(message)
+        const signature = messageSignature(message)
         const cached = cache.get(key)
         if (cached && cached.signature === signature) return cached.message
         cache.set(key, { signature, message })
