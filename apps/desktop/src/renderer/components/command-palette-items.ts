@@ -63,6 +63,10 @@ type BuildPaletteItemsInput = {
   customAgents: CustomAgentSummary[]
   currentProjectDirectory?: string | null
   platform?: string
+  // DEV-only surfaces (e.g. the UI-primitives gallery) are gated on this; the renderer
+  // passes import.meta.env.DEV. Kept as an input (not read here) so this module stays
+  // node-testable without a vite import.meta.env.
+  devMode?: boolean
   onNavigate: (view: View) => void
   onCreateThread: (directory?: string) => Promise<SessionInfo | null>
   onEnsureSession: () => Promise<boolean>
@@ -83,6 +87,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     customAgents,
     currentProjectDirectory = null,
     platform = '',
+    devMode = false,
     onNavigate,
     onCreateThread,
     onEnsureSession,
@@ -268,7 +273,10 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       keywords: 'health setup onboarding readiness doctor smoke workspace authority',
       run: () => onNavigate('health'),
     },
-    {
+    // The UI-primitives gallery view is DEV-only (UI_PRIMITIVES_ENABLED in App.tsx);
+    // gate the palette entry on the same flag so production builds don't offer a route
+    // that renders nothing.
+    ...(devMode ? [{
       id: 'nav:ui-primitives',
       title: 'UI Primitives',
       subtitle: 'Open the internal design-system gallery for visual QA.',
@@ -279,7 +287,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
         window.location.hash = '#/ui-primitives'
         onNavigate('ui-primitives')
       },
-    },
+    }] as PaletteItem[] : []),
     {
       id: 'nav:settings',
       title: 'Settings',

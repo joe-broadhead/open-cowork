@@ -78,6 +78,7 @@ export function CommandPalette({
       customAgents,
       currentProjectDirectory,
       platform: getShortcutPlatform(),
+      devMode: import.meta.env.DEV,
       onNavigate,
       onCreateThread,
       onEnsureSession,
