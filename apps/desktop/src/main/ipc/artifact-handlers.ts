@@ -1,3 +1,5 @@
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { listLocalArtifactIndex, listLocalSessionArtifacts, updateLocalArtifactStatus } from '@open-cowork/runtime-host/artifact-index'
 import electron from 'electron'
 import { resolve } from 'path'
 import { basename, join } from 'path'
@@ -25,11 +27,9 @@ import {
   validateSessionArtifactUploadRequest,
 } from './object-validators.ts'
 import { buildArtifactAttachmentPayload, inferArtifactMime } from '../artifact-attachments.ts'
-import { listLocalArtifactIndex, listLocalSessionArtifacts, updateLocalArtifactStatus } from '../artifact-index.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
 import { log } from '../logger.ts'
-import { sessionEngine } from '../session-engine.ts'
 import { isReadableSessionArtifact } from '../session-artifact-access.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 

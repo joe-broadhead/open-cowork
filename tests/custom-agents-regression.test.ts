@@ -1,14 +1,13 @@
+import { getMachineAgentsDir, getMachineSkillsDir } from '@open-cowork/runtime-host/runtime-paths'
+import { removeCustomAgent, saveCustomAgent } from '@open-cowork/runtime-host/native-customizations'
+import { getCustomAgentCatalog, getCustomAgentSummaries } from '@open-cowork/runtime-host/custom-agents'
+import { buildCustomAgentPermissionFromCatalog } from '@open-cowork/runtime-host/custom-agents-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { getCustomAgentCatalog, getCustomAgentSummaries } from '../apps/desktop/src/main/custom-agents.ts'
-import { buildCustomAgentPermissionFromCatalog } from '../apps/desktop/src/main/custom-agents-utils.ts'
-import { getMachineAgentsDir, getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
-import { removeCustomAgent, saveCustomAgent } from '../apps/desktop/src/main/native-customizations.ts'
-
 test('custom agent summaries keep agents visible when app-owned skills need frontmatter healing', async () => {
   const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-agent-regression-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR

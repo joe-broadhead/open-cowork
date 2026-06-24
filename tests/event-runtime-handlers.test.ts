@@ -1,3 +1,4 @@
+import { resetSessionScopedFallbackIdsForTests } from '@open-cowork/runtime-host/runtime-fallback-ids'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BrowserWindow } from 'electron'
@@ -18,8 +19,6 @@ import {
   resolveRootSession,
   trackParentSession,
 } from '../apps/desktop/src/main/event-task-state.ts'
-import { resetSessionScopedFallbackIdsForTests } from '../apps/desktop/src/main/runtime-fallback-ids.ts'
-
 function createDispatchCollector() {
   const events: unknown[] = []
   return {

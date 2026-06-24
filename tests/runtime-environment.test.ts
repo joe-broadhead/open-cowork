@@ -1,18 +1,9 @@
+import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '@open-cowork/runtime-host/runtime-process-cleanup'
+import { buildManagedOpencodeAuthorizationHeader, buildManagedOpencodeServerEnvironment, createManagedOpencodeServerAuth, drainManagedOpencodeProcessOutput, parseManagedOpencodeServerStdoutChunk, resolveManagedOpencodeCommand, resolveManagedOpencodeSpawn } from '@open-cowork/runtime-host/runtime-managed-server'
+import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtime-environment'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
-import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime-environment.ts'
-import {
-  buildManagedOpencodeAuthorizationHeader,
-  buildManagedOpencodeServerEnvironment,
-  createManagedOpencodeServerAuth,
-  drainManagedOpencodeProcessOutput,
-  parseManagedOpencodeServerStdoutChunk,
-  resolveManagedOpencodeCommand,
-  resolveManagedOpencodeSpawn,
-} from '../apps/desktop/src/main/runtime-managed-server.ts'
-import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
-
 const runtimePaths = {
   home: '/tmp/open-cowork/runtime-home',
   configHome: '/tmp/open-cowork/runtime-home/.config',

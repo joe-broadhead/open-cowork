@@ -1,3 +1,4 @@
+import { createPostgresKnowledgeStore } from '@open-cowork/runtime-host/knowledge/postgres-knowledge-store'
 import type { WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -50,7 +51,6 @@ import {
 } from './oidc-auth.ts'
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
 import { createPostgresControlPlaneStore, loadPgPool } from './postgres-control-plane-store.ts'
-import { createPostgresKnowledgeStore } from '../knowledge/postgres-knowledge-store.ts'
 import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createCloudReadinessCheck } from './readiness.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'

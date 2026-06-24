@@ -1,16 +1,7 @@
+import { acceptKnowledgeProposal, createKnowledgeProposal, createKnowledgeSpace, declineKnowledgeProposal, listKnowledgePageHistory, listKnowledgeSnapshot, restoreKnowledgePageVersion, setKnowledgeDatabaseForTests } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
-import {
-  acceptKnowledgeProposal,
-  createKnowledgeProposal,
-  createKnowledgeSpace,
-  declineKnowledgeProposal,
-  listKnowledgePageHistory,
-  listKnowledgeSnapshot,
-  restoreKnowledgePageVersion,
-  setKnowledgeDatabaseForTests,
-} from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
 import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
 
 function withMemoryKnowledgeStore(run: (db: DatabaseSync) => void) {

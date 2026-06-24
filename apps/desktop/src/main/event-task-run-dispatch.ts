@@ -1,7 +1,6 @@
+import { dispatchRuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import type { BrowserWindow } from 'electron'
 import { getImmediateParentSession, type TaskRunMeta } from './event-task-state.ts'
-import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
-
 export function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   // Thread the immediate parent session so the renderer can reconstruct
   // nested delegation without guessing from task titles.

@@ -1,7 +1,7 @@
+import { loadSettings } from '@open-cowork/runtime-host/settings'
+import { listReadyGoogleAuthLocalMcpNames } from '@open-cowork/runtime-host/runtime-mcp'
+import { listCustomMcps } from '@open-cowork/runtime-host/native-customizations'
 import { getConfiguredMcpsFromConfig } from './config-loader.ts'
-import { listReadyGoogleAuthLocalMcpNames } from './runtime-mcp.ts'
-import { listCustomMcps } from './native-customizations.ts'
-import { loadSettings } from './settings.ts'
 import { log } from './logger.ts'
 
 type RuntimeMcpClient = {
@@ -37,7 +37,7 @@ function defaultGoogleAuthLocalMcpNames(runtimeProjectDirectory: string | null) 
 
 async function defaultRefreshGoogleAuth() {
   try {
-    const { refreshAccessToken, getAdcPathIfAvailable } = await import('./auth.ts')
+    const { refreshAccessToken, getAdcPathIfAvailable } = await import('@open-cowork/runtime-host/auth')
     const token = await refreshAccessToken()
     return Boolean(token || getAdcPathIfAvailable())
   } catch (err) {

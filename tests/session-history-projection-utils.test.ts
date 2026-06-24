@@ -1,13 +1,7 @@
+import { collectHistoryTextParts, createHistoryCostPayload, getHistoryModelMeta, toHistorySortTime } from '@open-cowork/runtime-host/session-history-projection-utils'
 import type { NormalizedMessagePart, NormalizedSessionMessage } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  collectHistoryTextParts,
-  createHistoryCostPayload,
-  getHistoryModelMeta,
-  toHistorySortTime,
-} from '../apps/desktop/src/main/session-history-projection-utils.ts'
-
 const part = (overrides: Partial<NormalizedMessagePart>): NormalizedMessagePart => ({
   type: 'text',
   id: null,

@@ -1,22 +1,14 @@
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
+import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
+import { getSessionRecord, listSessionRecords, toRendererSession, toSessionRecord, touchSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { getClientForDirectory } from '@open-cowork/runtime-host/runtime'
+import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
 import { normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
-import { getEffectiveSettings } from '../settings.ts'
-import { getClientForDirectory } from '../runtime.ts'
-import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
-import {
-  getSessionRecord,
-  listSessionRecords,
-  toRendererSession,
-  toSessionRecord,
-  touchSessionRecord,
-  updateSessionRecord,
-  upsertSessionRecord,
-} from '../session-registry.ts'
-import { toIsoTimestamp } from '../task-run-utils.ts'
 import { trackParentSession } from '../event-task-state.ts'
-import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { log } from '../logger.ts'
 import type { IpcHandlerContext } from '../ipc/context.ts'

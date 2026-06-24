@@ -1,14 +1,9 @@
+import { buildReadableSkillMirrorRelativePath, buildRuntimeSkillContent, writeRuntimeSkillBundle } from '@open-cowork/runtime-host/runtime-skill-catalog'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  buildReadableSkillMirrorRelativePath,
-  buildRuntimeSkillContent,
-  writeRuntimeSkillBundle,
-} from '../apps/desktop/src/main/runtime-skill-catalog.ts'
-
 test('buildReadableSkillMirrorRelativePath points into the project overlay skill mirror', () => {
   assert.equal(
     buildReadableSkillMirrorRelativePath('analyst', 'references/workflow.md'),

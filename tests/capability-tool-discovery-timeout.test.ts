@@ -1,3 +1,4 @@
+import type { ResolvedRuntimeMcpEntry } from '@open-cowork/runtime-host/runtime-mcp'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,8 +10,6 @@ import {
   CAPABILITY_TOOL_DISCOVERY_TIMEOUT_MS,
   listToolsFromMcpEntry,
 } from '../apps/desktop/src/main/capability-tool-discovery.ts'
-import type { ResolvedRuntimeMcpEntry } from '../apps/desktop/src/main/runtime-mcp.ts'
-
 async function waitForPid(path: string) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (existsSync(path)) return Number(readFileSync(path, 'utf8'))

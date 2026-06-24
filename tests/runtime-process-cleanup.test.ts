@@ -1,22 +1,10 @@
+import { buildPsSnapshotArgs, collectOrphanedManagedProcessTree, collectProcessTreeFromRootPids, isManagedOpencodeServeCommand, OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE, parsePsOutput, readTrackedManagedRuntimePids, registerTrackedManagedRuntimePid, unregisterTrackedManagedRuntimePid } from '@open-cowork/runtime-host/runtime-process-cleanup'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  buildPsSnapshotArgs,
-  collectOrphanedManagedProcessTree,
-  collectProcessTreeFromRootPids,
-  isManagedOpencodeServeCommand,
-  OPEN_COWORK_MANAGED_RUNTIME_ENV,
-  OPEN_COWORK_MANAGED_RUNTIME_VALUE,
-  parsePsOutput,
-  readTrackedManagedRuntimePids,
-  registerTrackedManagedRuntimePid,
-  unregisterTrackedManagedRuntimePid,
-} from '../apps/desktop/src/main/runtime-process-cleanup.ts'
-
 function testTempDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), prefix))
 }

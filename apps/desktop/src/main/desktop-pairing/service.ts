@@ -1,3 +1,4 @@
+import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { randomBytes, randomUUID } from 'node:crypto'
 import type {
   DesktopPairingAuditAction,
@@ -18,7 +19,6 @@ import {
   DESKTOP_PAIRING_COMMAND_KINDS,
   DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED,
 } from '@open-cowork/shared'
-import type { RuntimeSessionEvent } from '../session-event-dispatcher.ts'
 import {
   redactDesktopPairingSessionInfo,
   runtimeEventToDesktopPairingRemoteEvent,

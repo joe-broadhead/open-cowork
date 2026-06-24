@@ -22,6 +22,10 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
     },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -35,7 +39,9 @@
   "dependencies": {
     "@open-cowork/shared": "workspace:*",
     "@opencode-ai/sdk": "1.15.5",
-    "ajv": "^8.20.0"
+    "ajv": "^8.20.0",
+    "google-auth-library": "^10.6.2",
+    "opencode-ai": "1.15.5"
   },
   "devDependencies": {
     "@types/node": "^22.12.0",

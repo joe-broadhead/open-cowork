@@ -1,3 +1,5 @@
+import { clearProjectOverlayCopies, projectHasOverlayContent, syncProjectOverlayToRuntime } from '@open-cowork/runtime-host/runtime-project-overlay'
+import { getMachineAgentsDir, getMachineSkillsDir, getProjectCoworkAgentsDir, getProjectCoworkSkillsDir, getRuntimeEnvPaths } from '@open-cowork/runtime-host/runtime-paths'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
@@ -5,19 +7,6 @@ import { mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { clearConfigCaches, getProjectNamespace, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  clearProjectOverlayCopies,
-  projectHasOverlayContent,
-  syncProjectOverlayToRuntime,
-} from '../apps/desktop/src/main/runtime-project-overlay.ts'
-import {
-  getMachineAgentsDir,
-  getMachineSkillsDir,
-  getProjectCoworkAgentsDir,
-  getProjectCoworkSkillsDir,
-  getRuntimeEnvPaths,
-} from '../apps/desktop/src/main/runtime-paths.ts'
-
 function skillContent(label: string) {
   return `---\ndescription: ${JSON.stringify(label)}\n---\n\nUse this skill for ${label}.\n`
 }

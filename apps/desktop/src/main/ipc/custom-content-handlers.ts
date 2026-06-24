@@ -1,3 +1,9 @@
+import { VALID_OPENCODE_SKILL_NAME } from '@open-cowork/runtime-host/skill-bundle-validation'
+import { resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
+import { listCustomMcps, listCustomSkills, readSkillBundleDirectory, removeCustomMcp, removeCustomSkill, saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
+import { validateCustomMcpStdioCommand } from '@open-cowork/runtime-host/mcp-stdio-policy'
+import { assertCustomMcpContentLimits, assertCustomSkillContent } from '@open-cowork/runtime-host/custom-content-limits'
+import { invalidateCustomAgentCatalogCache } from '@open-cowork/runtime-host/custom-agents'
 import { randomUUID } from 'crypto'
 import { resolve } from 'path'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig, RuntimeContextOptions, ScopedArtifactRef } from '@open-cowork/shared'
@@ -10,15 +16,9 @@ import {
   stringAndObjectArgs,
 } from './schema.ts'
 import { validateCustomMcpConfig, validateCustomSkillConfig, validateRuntimeContextOptions, validateScopedArtifactRef } from './object-validators.ts'
-import { listCustomMcps, listCustomSkills, readSkillBundleDirectory, removeCustomMcp, removeCustomSkill, saveCustomMcp, saveCustomSkill } from '../native-customizations.ts'
-import { validateCustomMcpStdioCommand } from '../mcp-stdio-policy.ts'
-import { resolveCustomMcpRuntimeEntryForRuntime } from '../runtime-mcp.ts'
 import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
-import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
-import { assertCustomMcpContentLimits, assertCustomSkillContent } from '../custom-content-limits.ts'
 import { computeCustomSkillBundleDigest } from '../custom-skill-integrity.ts'
-import { invalidateCustomAgentCatalogCache } from '../custom-agents.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
@@ -128,7 +128,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
         validateCustomMcpStdioCommand(mcp)
       }
       if (mcp.type === 'http' && mcp.url) {
-        const { evaluateHttpMcpUrlResolved } = await import('../mcp-url-policy.ts')
+        const { evaluateHttpMcpUrlResolved } = await import('@open-cowork/runtime-host/mcp-url-policy')
         const verdict = await evaluateHttpMcpUrlResolved(mcp.url, { allowPrivateNetwork: mcp.allowPrivateNetwork })
         if (!verdict.ok) {
           return { ok: false, methods: [], error: verdict.reason }
@@ -181,7 +181,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       validateCustomMcpStdioCommand(resolved)
     }
     if (resolved.type === 'http' && resolved.url) {
-      const { evaluateHttpMcpUrlResolved } = await import('../mcp-url-policy.ts')
+      const { evaluateHttpMcpUrlResolved } = await import('@open-cowork/runtime-host/mcp-url-policy')
       const verdict = await evaluateHttpMcpUrlResolved(resolved.url, { allowPrivateNetwork: resolved.allowPrivateNetwork })
       if (!verdict.ok) {
         throw new Error(`Cannot save MCP: ${verdict.reason}`)

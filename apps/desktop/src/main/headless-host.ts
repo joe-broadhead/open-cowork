@@ -233,27 +233,27 @@ export async function clearHeadlessHostState(stateDir?: string | null) {
 }
 
 async function defaultRuntimeStatus() {
-  const { getRuntimeStatus } = await import('./runtime-status.ts')
+  const { getRuntimeStatus } = await import('@open-cowork/runtime-host/runtime-status')
   return getRuntimeStatus()
 }
 
 async function defaultSetRuntimeReady(ready: boolean, error?: string | null) {
-  const { setRuntimeReady } = await import('./runtime-status.ts')
+  const { setRuntimeReady } = await import('@open-cowork/runtime-host/runtime-status')
   setRuntimeReady(ready, error)
 }
 
 async function defaultSetRuntimeError(error: string | null) {
-  const { setRuntimeError } = await import('./runtime-status.ts')
+  const { setRuntimeError } = await import('@open-cowork/runtime-host/runtime-status')
   setRuntimeError(error)
 }
 
 async function defaultStartRuntime(workspaceRoot?: string | null) {
-  const { startRuntime } = await import('./runtime.ts')
+  const { startRuntime } = await import('@open-cowork/runtime-host/runtime')
   return startRuntime(workspaceRoot)
 }
 
 async function defaultStopRuntime() {
-  const { stopRuntime } = await import('./runtime.ts')
+  const { stopRuntime } = await import('@open-cowork/runtime-host/runtime')
   return stopRuntime()
 }
 

@@ -1,12 +1,11 @@
+import { getMachineAgentsDir } from '@open-cowork/runtime-host/runtime-paths'
+import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '@open-cowork/runtime-host/native-customizations'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineAgentsDir } from '../apps/desktop/src/main/runtime-paths.ts'
-
 function withTempUserData<T>(fn: () => T): T {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-custom-agent-store-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR

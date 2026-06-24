@@ -1,3 +1,4 @@
+import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { createHash } from 'node:crypto'
 import type {
   MessageAttachment,
@@ -15,8 +16,6 @@ import {
   emptySessionImportItemCounts,
   redactSessionImportText,
 } from '@open-cowork/shared'
-import type { SessionRecord } from './session-registry.ts'
-
 export type SessionImportArtifactLoader = (artifact: SessionArtifact) => Promise<{
   dataBase64: string
   contentType?: string | null

@@ -1,22 +1,12 @@
+import { getMachineSkillsDir } from '@open-cowork/runtime-host/runtime-paths'
+import { findBundledSkillDir } from '@open-cowork/runtime-host/runtime-content'
+import { getEffectiveSkillBundleSync, listEffectiveBuiltInSkillBundlesSync, readEffectiveSkillBundleFile } from '@open-cowork/runtime-host/effective-skills'
+import { buildBundledSkillIndex, clearBundledSkillIndexCache, getBundledSkillIndex, warmBundledSkillIndex } from '@open-cowork/runtime-host/bundled-skill-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  buildBundledSkillIndex,
-  clearBundledSkillIndexCache,
-  getBundledSkillIndex,
-  warmBundledSkillIndex,
-} from '../apps/desktop/src/main/bundled-skill-index.ts'
-import {
-  getEffectiveSkillBundleSync,
-  listEffectiveBuiltInSkillBundlesSync,
-  readEffectiveSkillBundleFile,
-} from '../apps/desktop/src/main/effective-skills.ts'
-import { findBundledSkillDir } from '../apps/desktop/src/main/runtime-content.ts'
-import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

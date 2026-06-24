@@ -1,3 +1,7 @@
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { runtimeState } from '@open-cowork/runtime-host/runtime-state'
+import { createCoordinationProject, getCoordinationWatch, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
@@ -26,18 +30,9 @@ import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support
 import { validateCustomSkillConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
-import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
-import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 import { LOCAL_WORKSPACE_ID, createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
-import { runtimeState } from '../apps/desktop/src/main/runtime-state.ts'
 import type { CloudWorkspaceSessionAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
-import {
-  createCoordinationProject,
-  getCoordinationWatch,
-  setCoordinationDatabaseForTests,
-} from '../apps/desktop/src/main/coordination/coordination-store.ts'
-
 function createBaseContext() {
   const handlers = new Map<string, (...args: any[]) => any>()
   const errors: string[] = []
@@ -2221,7 +2216,7 @@ test('local credential editor IPC masks secret fields and preserves them on save
       clearSettingsCache,
       loadSettings,
       saveSettings,
-    } = await import('../apps/desktop/src/main/settings.ts')
+    } = await import('@open-cowork/runtime-host/settings')
     clearSettingsCache()
     saveSettings({
       providerCredentials: {
@@ -2265,7 +2260,7 @@ test('local credential editor IPC masks secret fields and preserves them on save
     assert.equal(persisted.integrationCredentials.github.token, 'integration-secret')
     assert.equal(persisted.integrationCredentials.github.host, 'github-updated.example.test')
   } finally {
-    const { clearSettingsCache } = await import('../apps/desktop/src/main/settings.ts')
+    const { clearSettingsCache } = await import('@open-cowork/runtime-host/settings')
     clearSettingsCache()
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -2316,7 +2311,7 @@ test('provider connection test IPC syncs saved API auth and validates live model
     const {
       clearSettingsCache,
       saveSettings,
-    } = await import('../apps/desktop/src/main/settings.ts')
+    } = await import('@open-cowork/runtime-host/settings')
     clearSettingsCache()
     saveSettings({
       selectedProviderId: 'acme',
@@ -2353,7 +2348,7 @@ test('provider connection test IPC syncs saved API auth and validates live model
       /missing-model is not available from Acme/,
     )
   } finally {
-    const { clearSettingsCache } = await import('../apps/desktop/src/main/settings.ts')
+    const { clearSettingsCache } = await import('@open-cowork/runtime-host/settings')
     clearSettingsCache()
     runtimeState.resetAfterStop()
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR

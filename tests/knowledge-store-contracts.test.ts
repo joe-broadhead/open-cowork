@@ -1,13 +1,10 @@
+import { createPostgresKnowledgeStore } from '@open-cowork/runtime-host/knowledge/postgres-knowledge-store'
+import { createSqliteKnowledgeStore, setKnowledgeDatabaseForTests } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import type { KnowledgeStore } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 
-import {
-  createSqliteKnowledgeStore,
-  setKnowledgeDatabaseForTests,
-} from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
-import { createPostgresKnowledgeStore } from '../apps/desktop/src/main/knowledge/postgres-knowledge-store.ts'
 import { CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS } from '../apps/desktop/src/main/cloud/postgres-schema.ts'
 import { createPglitePool } from './helpers/pglite-pool.ts'
 

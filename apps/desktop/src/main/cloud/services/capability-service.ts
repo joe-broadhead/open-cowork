@@ -1,13 +1,8 @@
+import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '@open-cowork/runtime-host/capability-catalog'
 import type {
   CapabilitySkill,
   CapabilityTool,
 } from '@open-cowork/shared'
-import {
-  getCapabilitySkillBundle,
-  getCapabilityTool,
-  listCapabilitySkills,
-  listCapabilityTools,
-} from '../../capability-catalog.ts'
 import type { CloudRuntimePolicy } from '../cloud-config.ts'
 import { includesAllowed } from '../session-input-validation.ts'
 import type { CloudPrincipal } from '../session-service.ts'

@@ -1,19 +1,14 @@
+import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/runtime-host/settings'
+import { getMachineSkillsDir, getProjectCoworkAgentsDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
+import { copySkillsAndAgents } from '@open-cowork/runtime-host/runtime-content'
+import { buildProviderRuntimeConfig, buildRuntimeConfig, buildRuntimeConfigForRuntime } from '@open-cowork/runtime-host/runtime-config-builder'
+import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '@open-cowork/runtime-host/native-customizations'
+import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog } from '@open-cowork/runtime-host/custom-agents-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import {
-  buildProviderRuntimeConfig,
-  buildRuntimeConfig,
-  buildRuntimeConfigForRuntime,
-} from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { clearConfigCaches, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
-import { clearSettingsCache, loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
-import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineSkillsDir, getProjectCoworkAgentsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
-import { copySkillsAndAgents } from '../apps/desktop/src/main/runtime-content.ts'
-import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog } from '../apps/desktop/src/main/custom-agents-utils.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

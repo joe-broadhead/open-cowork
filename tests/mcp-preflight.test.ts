@@ -1,3 +1,5 @@
+import { clearSettingsCache, saveSettings } from '@open-cowork/runtime-host/settings'
+import type { ResolvedRuntimeMcpEntry } from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -6,9 +8,6 @@ import { join } from 'node:path'
 import type { AppSettings, CapabilityToolEntry } from '@open-cowork/shared'
 import { preflightConfiguredApiTokenMcp } from '../apps/desktop/src/main/mcp-preflight.ts'
 import { clearConfigCaches, type BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
-import { clearSettingsCache, saveSettings } from '../apps/desktop/src/main/settings.ts'
-import type { ResolvedRuntimeMcpEntry } from '../apps/desktop/src/main/runtime-mcp.ts'
-
 const resolvePublicTestHost = async () => [{ address: '140.82.112.22', family: 4 }]
 
 function baseSettings(): AppSettings {

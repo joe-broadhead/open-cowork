@@ -1,8 +1,7 @@
+import { escapeHtml } from '@open-cowork/runtime-host/html-escape'
 import { writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { escapeHtml } from './html-escape.ts'
-
 export function resolveStartupSplashTemplatePath(dirname: string) {
   const builtSplash = join(dirname, '../startup-splash.html')
   if (existsSync(builtSplash)) return builtSplash

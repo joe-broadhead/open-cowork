@@ -1,3 +1,4 @@
+import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -5,7 +6,6 @@ import {
   buildSessionImportInventory,
   buildSessionImportRequest,
 } from '../apps/desktop/src/main/session-import.ts'
-import type { SessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 import type { SessionView } from '../packages/shared/src/session.ts'
 
 function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {

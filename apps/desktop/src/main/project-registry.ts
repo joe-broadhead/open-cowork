@@ -1,6 +1,5 @@
+import { listSessionRecords } from '@open-cowork/runtime-host/session-registry'
 import type { RecentProject } from '@open-cowork/shared'
-import { listSessionRecords } from './session-registry.ts'
-
 export function listRecentProjects(limit = 9): RecentProject[] {
   const byDirectory = new Map<string, RecentProject>()
   for (const record of listSessionRecords()) {

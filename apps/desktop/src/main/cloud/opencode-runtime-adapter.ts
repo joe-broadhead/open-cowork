@@ -1,3 +1,5 @@
+import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
+import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtime-environment'
 import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionInfo, createManagedOpencodeServerAuth, type ManagedOpencodeServerAuth, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit } from '@open-cowork/runtime-host'
 import { normalizePermissionEvent } from '@open-cowork/shared'
 import {
@@ -7,8 +9,6 @@ import {
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { buildManagedRuntimeEnvironment } from '../runtime-environment.ts'
-import { createNodeManagedOpencodeServer } from '../runtime-node-managed-server.ts'
 import type { PathProvider } from './path-provider.ts'
 import {
   createSdkCloudRuntimeAdapter,

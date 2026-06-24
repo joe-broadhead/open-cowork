@@ -1,13 +1,8 @@
+import { buildCoworkRuntimePermissionConfig } from '@open-cowork/runtime-host/runtime-permissions'
+import { getMachineSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
+import { buildPermissionConfig } from '@open-cowork/runtime-host/permission-config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCoworkRuntimePermissionConfig } from '../apps/desktop/src/main/runtime-permissions.ts'
-import { buildPermissionConfig } from '../apps/desktop/src/main/permission-config.ts'
-import {
-  getMachineSkillsDir,
-  getRuntimeHomeDir,
-  getRuntimeSkillCatalogDir,
-} from '../apps/desktop/src/main/runtime-paths.ts'
-
 test('runtime permission config allowlists only Cowork-managed skills and configured MCP patterns', () => {
   const permission = buildCoworkRuntimePermissionConfig({
     managedSkillNames: ['chart-creator', 'skill-creator', 'nova-analyst'],

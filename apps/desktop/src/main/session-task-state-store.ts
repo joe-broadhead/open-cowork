@@ -1,7 +1,4 @@
-import {
-  chooseTaskTitle,
-  isPlaceholderTaskTitle,
-} from './task-run-utils.ts'
+import { chooseTaskTitle, isPlaceholderTaskTitle } from '@open-cowork/runtime-host/task-run-utils'
 import {
   applyTaskTimingTransition,
   isTerminalTaskStatus,

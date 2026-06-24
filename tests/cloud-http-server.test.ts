@@ -1,3 +1,6 @@
+import { invalidateRuntimeCatalogSnapshotCache } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
+import { setKnowledgeDatabaseForTests } from '@open-cowork/runtime-host/knowledge/knowledge-store'
+import { clearCoordinationStoreCache } from '@open-cowork/runtime-host/coordination/coordination-store'
 import { signWorkflowWebhookPayload, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -30,8 +33,6 @@ import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/
 import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudIdentityPolicy, type CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
-import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
-import { setKnowledgeDatabaseForTests } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
 import {
   KNOWLEDGE_AGENT_TOKEN_TTL_MS,
   signKnowledgeAgentToken,
@@ -40,8 +41,6 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { invalidateRuntimeCatalogSnapshotCache } from '../apps/desktop/src/main/runtime-catalog-snapshot.ts'
-
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {

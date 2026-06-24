@@ -3,29 +3,30 @@
 // is the desktop's single Electron-host wiring point; the cloud server never loads
 // it and uses the Electron-free fallbacks. (Hosts are read lazily, so placement
 // here at the entry is in time for every consumer.)
+import { telemetry } from '@open-cowork/runtime-host/telemetry'
+import { primeShellEnvironment } from '@open-cowork/runtime-host/shell-env'
+import { applySettingsSideEffects, isSetupComplete } from '@open-cowork/runtime-host/settings'
+import { flushSessionRegistryWrites } from '@open-cowork/runtime-host/session-registry'
+import { publishNotification } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { getActiveProjectOverlayDirectory, getRuntimeHomeDir, setDirectoryClientLifecycleHandlers, startRuntime, stopRuntime } from '@open-cowork/runtime-host/runtime'
+import { setRuntimeError, setRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
+import { syncReadableSkillMirror } from '@open-cowork/runtime-host/runtime-skill-catalog'
+import { projectHasOverlayContent } from '@open-cowork/runtime-host/runtime-project-overlay'
+import { isSandboxWorkspaceDir } from '@open-cowork/runtime-host/runtime-paths'
+import { setManagedOpencodeSupervisorForker } from '@open-cowork/runtime-host/runtime-managed-server'
+import { configureAgentToolBridge } from '@open-cowork/runtime-host/agent-tool-bridge'
+import { registerRuntimeDirectoryEnsurer } from '@open-cowork/runtime-host/runtime-context'
+import { configureCoordinationService } from '@open-cowork/runtime-host/coordination/coordination-service'
 import { resolveAppIconFile, appendE2ERemoteDebuggingSwitches, e2eWindowReadyProbeEnabled } from '@open-cowork/runtime-host'
 import './desktop-electron-hosts.ts'
 import { app, ipcMain, Menu, nativeImage, session as electronSession, utilityProcess } from 'electron'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { createApplicationMenuTemplate } from './app-menu.ts'
-import {
-  getActiveProjectOverlayDirectory,
-  getRuntimeHomeDir,
-  setDirectoryClientLifecycleHandlers,
-  startRuntime,
-  stopRuntime,
-} from './runtime.ts'
-import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents } from './events.ts'
-import { flushSessionRegistryWrites } from './session-registry.ts'
 import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts'
-import { applySettingsSideEffects, isSetupComplete } from './settings.ts'
-import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain, createSingleFlight } from './promise-chain.ts'
-import { configureCoordinationService } from './coordination/coordination-service.ts'
 import { configureWorkflowService, startWorkflowService, stopWorkflowService } from './workflow/workflow-service.ts'
-import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import {
   configureRuntimeInitialization,
   getRuntimeInitializationStatus,
@@ -33,21 +34,16 @@ import {
   resolveRuntimeInitializationReady,
   setRuntimeInitializationPhase,
 } from './runtime-initialization.ts'
-import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
-import { projectHasOverlayContent } from './runtime-project-overlay.ts'
-import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
 import { effectiveRendererDevServerUrl } from './main-window-lifecycle.ts'
 import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
-import { primeShellEnvironment } from './shell-env.ts'
 import { restartRuntimeMcpStatusPolling } from './runtime-mcp-status-polling.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
 import { registerBrandingAssetProtocol } from './branding-protocol.ts'
-import { setManagedOpencodeSupervisorForker } from './runtime-managed-server.ts'
 import type { ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
 
 // Inject Electron's utilityProcess as the managed OpenCode server's supervisor
@@ -59,6 +55,10 @@ setManagedOpencodeSupervisorForker((modulePath) =>
     stdio: 'pipe',
   }) as ManagedOpencodeSupervisorProcess,
 )
+
+// Inject the desktop's runtime reboot into the agent tool bridge (substrate-side);
+// the cloud leaves it unset and a refresh request there is a no-op.
+configureAgentToolBridge({ scheduleRuntimeRefresh: () => { void rebootRuntime() } })
 import { registerChartFrameAssetProtocol } from './chart-frame-assets.ts'
 import {
   attachPermissionGuards,
@@ -68,7 +68,6 @@ import {
 import { createMainWindowController } from './main-window-controller.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
-import { telemetry } from './telemetry.ts'
 registerAppProtocolSchemes()
 appendE2ERemoteDebuggingSwitches(app)
 
@@ -86,7 +85,7 @@ const branding = getBranding()
 const appIconPath = resolveAppIconFile(branding.appIcon)
 
 async function getAuthStateLazy() {
-  const { getAuthState } = await import('./auth.ts')
+  const { getAuthState } = await import('@open-cowork/runtime-host/auth')
   return getAuthState()
 }
 
@@ -194,8 +193,8 @@ export async function rebootRuntime(): Promise<void> {
     // Clear cached runtime tool lists — on reboot the MCP set, provider,
     // or model may have changed, and serving stale tool metadata from
     // the Capabilities UI would mislead the user.
-    const { invalidateRuntimeToolCache } = await import('./runtime-tool-cache.ts')
-    const { invalidateCustomAgentCatalogCache } = await import('./custom-agents.ts')
+    const { invalidateRuntimeToolCache } = await import('@open-cowork/runtime-host/runtime-tool-cache')
+    const { invalidateCustomAgentCatalogCache } = await import('@open-cowork/runtime-host/custom-agents')
     invalidateRuntimeToolCache()
     invalidateCustomAgentCatalogCache()
     await stopRuntime()
@@ -296,7 +295,7 @@ async function runBootRuntime(projectDirectory?: string | null) {
     // missing token gracefully.
     if (getAppConfig().auth.mode === 'google-oauth') {
       try {
-        const { refreshAccessToken } = await import('./auth.ts')
+        const { refreshAccessToken } = await import('@open-cowork/runtime-host/auth')
         await refreshAccessToken()
       } catch (err) {
         log('auth', `Pre-boot Google token refresh failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -323,7 +322,7 @@ async function runBootRuntime(projectDirectory?: string | null) {
     }
 
     eventSubscriptions.ensure(getRuntimeHomeDir(), client)
-    void import('./runtime-catalog-snapshot.ts').then(({ getRuntimeCatalogSnapshot }) =>
+    void import('@open-cowork/runtime-host/runtime-catalog-snapshot').then(({ getRuntimeCatalogSnapshot }) =>
       getRuntimeCatalogSnapshot(runtimeProjectDirectory ? { directory: runtimeProjectDirectory } : undefined)
     ).catch((err) => {
       log('main', `Runtime catalog warmup skipped: ${err instanceof Error ? err.message : String(err)}`)

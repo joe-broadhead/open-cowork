@@ -1,3 +1,6 @@
+import { buildManagedOpencodeClientConfig, getNativeOpencodeAuthPath, getRuntimeOpencodeAuthPath, getActiveProjectOverlayDirectory, getClient, getModelInfo, getModelInfoAsync, getServerUrl, reconcileProviderAuthBridge, shouldEnableNativeWebSearch, stopRuntime } from '@open-cowork/runtime-host/runtime'
+import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
+import { buildManagedOpencodeAuthorizationHeader, createManagedOpencodeServer, type ManagedOpencodeSupervisorFork } from '@open-cowork/runtime-host/runtime-managed-server'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { fork, type ChildProcess } from 'node:child_process'
@@ -8,26 +11,6 @@ import { fileURLToPath } from 'url'
 import { setTimeout as delay } from 'timers/promises'
 
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  buildManagedOpencodeAuthorizationHeader,
-  createManagedOpencodeServer,
-  type ManagedOpencodeSupervisorFork,
-} from '../apps/desktop/src/main/runtime-managed-server.ts'
-import { createNodeManagedOpencodeServer } from '../apps/desktop/src/main/runtime-node-managed-server.ts'
-import {
-  buildManagedOpencodeClientConfig,
-  getNativeOpencodeAuthPath,
-  getRuntimeOpencodeAuthPath,
-  getActiveProjectOverlayDirectory,
-  getClient,
-  getModelInfo,
-  getModelInfoAsync,
-  getServerUrl,
-  reconcileProviderAuthBridge,
-  shouldEnableNativeWebSearch,
-  stopRuntime,
-} from '../apps/desktop/src/main/runtime.ts'
-
 function writeExecutable(root: string, name: string, source: string) {
   const path = join(root, name)
   writeFileSync(path, `#!/bin/sh\n${source}`)
@@ -35,7 +18,7 @@ function writeExecutable(root: string, name: string, source: string) {
   return path
 }
 
-const testSupervisorPath = fileURLToPath(new URL('../apps/desktop/src/main/runtime-managed-server-supervisor.ts', import.meta.url))
+const testSupervisorPath = fileURLToPath(new URL('../packages/runtime-host/src/runtime-managed-server-supervisor.ts', import.meta.url))
 const MANAGED_RUNTIME_TEST_TIMEOUT_MS = 15_000
 
 const forkTestSupervisor: ManagedOpencodeSupervisorFork = () => {

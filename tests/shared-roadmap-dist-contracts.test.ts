@@ -1,3 +1,4 @@
+import { applyCapabilityBundleInstall, applyCapabilityBundleUninstall, applyCapabilityBundleUpdate, createEmptyCapabilityBundleLifecycleState, normalizeCapabilityBundleManifest, planCapabilityBundleInstall, planCapabilityBundleUninstall, planCapabilityBundleUpdate, validateCapabilityBundleRuntimeSupport } from '@open-cowork/runtime-host/capability-bundle-engine'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -16,17 +17,6 @@ import {
   CAPABILITY_BUNDLE_FORMAT,
   type CapabilityBundleManifest,
 } from '../packages/shared/dist/capabilities.js'
-import {
-  applyCapabilityBundleInstall,
-  applyCapabilityBundleUninstall,
-  applyCapabilityBundleUpdate,
-  createEmptyCapabilityBundleLifecycleState,
-  normalizeCapabilityBundleManifest,
-  planCapabilityBundleInstall,
-  planCapabilityBundleUninstall,
-  planCapabilityBundleUpdate,
-  validateCapabilityBundleRuntimeSupport,
-} from '../apps/desktop/src/main/capability-bundle-engine.ts'
 import {
   cloudGatewayRegistrationAllowsEdgeWork,
   cloudGatewayRegistrationContract,

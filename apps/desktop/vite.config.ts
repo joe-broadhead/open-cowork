@@ -103,7 +103,10 @@ export default defineConfig({
         },
       },
       {
-        entry: 'src/main/runtime-managed-server-supervisor.ts',
+        // Supervisor source now lives in @open-cowork/runtime-host; the desktop still
+        // emits it as a sibling of the built main bundle so the Electron utilityProcess
+        // forker (resolveManagedOpencodeSupervisorPath) finds it next to main.
+        entry: '../../packages/runtime-host/src/runtime-managed-server-supervisor.ts',
         vite: {
           build: {
             outDir: 'dist/main',

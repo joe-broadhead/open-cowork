@@ -1,3 +1,13 @@
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
+import { getEffectiveSettings, getIntegrationCredentials, getProviderCredentials, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '@open-cowork/runtime-host/settings'
+import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
+import { publishSessionMetadata, publishSessionView } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { getClient, getClientForDirectory, getModelInfoAsync } from '@open-cowork/runtime-host/runtime'
+import { getRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
+import { getPerfSnapshot } from '@open-cowork/runtime-host/perf-metrics'
 import { normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { writeFileAtomic, readFileCheckedSync, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import electron from 'electron'
@@ -16,35 +26,17 @@ import {
   sniffImageMime,
 } from './app-handler-support.ts'
 import { getPublicAppConfigWithRuntimeModels, registerProviderHandlers } from './provider-handlers.ts'
-import {
-  getEffectiveSettings,
-  getIntegrationCredentials,
-  getProviderCredentials,
-  maskEffectiveSettingsCredentials,
-  saveSettings,
-  isSetupComplete,
-  type CoworkSettings,
-} from '../settings.ts'
-import { getClient, getClientForDirectory, getModelInfoAsync } from '../runtime.ts'
 import { getConfigError } from '../config-loader.ts'
 import { buildDiagnosticsBundle } from '../diagnostics-export.ts'
 import { awaitRuntimeInitialization } from '../runtime-initialization.ts'
-import { getRuntimeStatus } from '../runtime-status.ts'
-import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { getRecentProjectByIndex, listRecentProjects } from '../project-registry.ts'
-import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '../session-registry.ts'
-import { syncSessionView } from '../session-history-loader.ts'
-import { publishSessionMetadata, publishSessionView } from '../session-event-dispatcher.ts'
-import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { trackParentSession } from '../event-task-state.ts'
-import { toIsoTimestamp } from '../task-run-utils.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { isKnownChartArtifactToolCall } from '../chart-artifact-access.ts'
 import { validateInlineChartSpec } from '../../lib/chart-spec-safety.ts'
-import { sessionEngine } from '../session-engine.ts'
 import { checkForUpdates } from '../update/update-check.ts'
 import {
   checkInstallableUpdate,
@@ -69,7 +61,7 @@ export {
 } from './app-handler-support.ts'
 
 async function loadAuthModule() {
-  return import('../auth.ts')
+  return import('@open-cowork/runtime-host/auth')
 }
 
 const CLOUD_PORTABLE_SETTINGS_KEY = 'portable-settings'
@@ -377,7 +369,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       return buildCloudEffectiveSettings(base, nextValue)
     }
     const result = saveSettings(updates)
-    const { invalidateRuntimeCatalogSnapshotCache } = await import('../runtime-catalog-snapshot.ts')
+    const { invalidateRuntimeCatalogSnapshotCache } = await import('@open-cowork/runtime-host/runtime-catalog-snapshot')
     invalidateRuntimeCatalogSnapshotCache()
     const runtimeSensitiveUpdate = hasRuntimeSensitiveSettingsUpdate(updates)
 

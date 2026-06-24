@@ -1,3 +1,4 @@
+import { buildLaunchpadFeedFromSources, listLaunchpadCoordinationBoard, listLocalLaunchpadFeed, setLaunchpadRuntimeDepsForTests } from '@open-cowork/runtime-host/launchpad/launchpad-service'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type {
@@ -6,13 +7,6 @@ import type {
   CoordinationBoardPayload,
   SessionView,
 } from '@open-cowork/shared'
-import {
-  buildLaunchpadFeedFromSources,
-  listLaunchpadCoordinationBoard,
-  listLocalLaunchpadFeed,
-  setLaunchpadRuntimeDepsForTests,
-} from '../apps/desktop/src/main/launchpad/launchpad-service.ts'
-
 function emptyView(partial: Partial<SessionView>): SessionView {
   return {
     messages: [],

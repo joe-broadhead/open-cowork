@@ -1,43 +1,34 @@
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
+import { getEffectiveSettings, getProviderCredentialValue } from '@open-cowork/runtime-host/settings'
+import { getSessionRecord, listSessionRecords, toDisplayDirectory, toRendererSession, toSessionRecord, touchSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { isSessionPartiallyHydrated, syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
+import { dispatchRuntimeSessionEvent, publishSessionMetadata, publishSessionView } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
+import { getClient, getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
+import { normalizeProviderListResponse, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
 import { normalizeSessionInfo } from '@open-cowork/runtime-host'
 import type { IpcHandlerContext } from './context.ts'
 import { normalizeCloudProjectSource, type CloudProjectSourceInput, type SessionChangeSummary, type SessionImportSelection, shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
-import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
 import { getProviderDescriptor } from '../config-loader.ts'
-import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
-import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
-import { dispatchRuntimeSessionEvent, publishSessionMetadata, publishSessionView } from '../session-event-dispatcher.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
-import {
-  getSessionRecord,
-  listSessionRecords,
-  toDisplayDirectory,
-  toRendererSession,
-  toSessionRecord,
-  touchSessionRecord,
-  updateSessionRecord,
-  upsertSessionRecord,
-} from '../session-registry.ts'
-import { toIsoTimestamp } from '../task-run-utils.ts'
-import { isSessionPartiallyHydrated, syncSessionView } from '../session-history-loader.ts'
-import { sessionEngine } from '../session-engine.ts'
 import { log } from '../logger.ts'
 import {
   buildSessionImportInventory,
   buildSessionImportRequest,
   type SessionImportArtifactLoader,
 } from '../session-import.ts'
-import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
-import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { registerSessionActionHandlers } from './session-action-handlers.ts'
 import { registerSessionCommandHandlers } from './session-command-handlers.ts'
 import { registerSessionFileHandlers } from './session-file-handlers.ts'
 import { registerSessionInteractionHandlers } from './session-interaction-handlers.ts'
 import { registerIpcInvoke, sessionPromptArgs, stringAndObjectArgs } from './schema.ts'
-import { sdkErrorMessage } from '../sdk-error.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 import {
   buildCloudProjectSnapshotInventory,

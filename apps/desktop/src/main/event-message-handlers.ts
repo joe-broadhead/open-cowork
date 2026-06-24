@@ -1,7 +1,9 @@
+import { chooseTaskTitle, extractAgentName, isPlaceholderTaskTitle, normalizeAgentName } from '@open-cowork/runtime-host/task-run-utils'
+import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { nextSessionScopedFallbackId } from '@open-cowork/runtime-host/runtime-fallback-ids'
 import { normalizeMessagePart, normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { asRecord, readRecordValue, readString } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
-import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
   aliasTaskRunId,
@@ -18,15 +20,7 @@ import {
   consumePendingPromptEcho,
 } from './event-task-state.ts'
 import { emitTaskRun } from './event-task-run-dispatch.ts'
-import {
-  chooseTaskTitle,
-  extractAgentName,
-  isPlaceholderTaskTitle,
-  normalizeAgentName,
-} from './task-run-utils.ts'
 import { log } from './logger.ts'
-import { nextSessionScopedFallbackId } from './runtime-fallback-ids.ts'
-
 const MAX_PENDING_TEXT_EVENTS_PER_SESSION = 500
 const MAX_TOTAL_PENDING_TEXT_EVENTS = 10_000
 const MAX_MESSAGE_ROLES_PER_SESSION = 2_000

@@ -1,4 +1,4 @@
-import { projectSessionHistory } from '../../apps/desktop/src/main/session-history-projector.ts'
+import { projectSessionHistory } from '@open-cowork/runtime-host/session-history-projector'
 import type { HistoryFixture } from './types.ts'
 
 function createTextMessage(id: string, role: 'user' | 'assistant', text: string, created: number, extraParts: any[] = []) {

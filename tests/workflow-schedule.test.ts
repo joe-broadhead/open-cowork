@@ -90,7 +90,7 @@ test('workflow schedule validation catches incomplete scheduled triggers', () =>
 })
 
 test('desktop workflow schedule module re-exports the shared validator', async () => {
-  const desktop = await import('../apps/desktop/src/main/workflow/workflow-schedule.ts')
+  const desktop = await import('@open-cowork/runtime-host/workflow/workflow-schedule')
 
   const schedule = {
     type: 'one_time' as const,

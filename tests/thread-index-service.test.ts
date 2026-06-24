@@ -1,3 +1,6 @@
+import { ThreadIndexStore } from '@open-cowork/runtime-host/thread-index/thread-index-store'
+import { ThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { clearSessionRegistryCache, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -5,10 +8,6 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { SessionView } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { clearSessionRegistryCache, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
-import { ThreadIndexService } from '../apps/desktop/src/main/thread-index/thread-index-service.ts'
-import { ThreadIndexStore } from '../apps/desktop/src/main/thread-index/thread-index-store.ts'
-
 function emptySessionView(overrides: Partial<SessionView> = {}): SessionView {
   return {
     messages: [],

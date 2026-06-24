@@ -1,3 +1,4 @@
+import { getClient, getClientForDirectory } from '@open-cowork/runtime-host/runtime'
 import type {
   ExplorerSymbol,
   FileContent,
@@ -9,7 +10,6 @@ import type {
 import { existsSync, realpathSync } from 'fs'
 import { isAbsolute, relative, resolve } from 'path'
 import type { IpcHandlerContext } from './context.ts'
-import { getClient, getClientForDirectory } from '../runtime.ts'
 import {
   normalizeExplorerSymbols,
   normalizeFileContent,

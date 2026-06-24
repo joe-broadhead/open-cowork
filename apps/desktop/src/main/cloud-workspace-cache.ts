@@ -1,3 +1,4 @@
+import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
 import { getAppPathHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -11,12 +12,6 @@ import type {
 import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
 import type { CloudTransportSettingMetadata } from './cloud/transport-adapter.ts'
 import { getAppDataDir } from './config-loader.ts'
-import {
-  readSafeStorageBackendForPolicy,
-  resolveSecretStorageMode,
-  type SecretStorageMode,
-} from './secure-storage-policy.ts'
-
 type SecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString: (plaintext: string) => Buffer

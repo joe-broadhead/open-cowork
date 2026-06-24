@@ -1,7 +1,6 @@
+import { getModelInfo } from '@open-cowork/runtime-host/runtime'
+import { resolveDisplayCostForModel } from '@open-cowork/runtime-host/pricing-core'
 import type { ModelPricing } from '@open-cowork/shared'
-import { getModelInfo } from './runtime.ts'
-import { resolveDisplayCostForModel } from './pricing-core.ts'
-
 export function resolveDisplayCost(
   modelId: string,
   reportedCost: number | undefined,

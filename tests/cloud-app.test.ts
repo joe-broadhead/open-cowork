@@ -1,3 +1,4 @@
+import { clearKnowledgeStoreCache } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { IncomingMessage } from 'node:http'
@@ -40,8 +41,6 @@ import type {
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import { sessionCheckpointLatestKey } from '../apps/desktop/src/main/cloud/workspace-checkpoint-store.ts'
-import { clearKnowledgeStoreCache } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
-
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 const STRONG_CLOUD_SECRET = 'Pp4J9_kV2rTq8YzLmN6bHwC3sDxF7uAaG1eOiR5v'
 const STRONG_CLOUD_COOKIE_SECRET = 'Vs7Qm2_ZxHa93LpNuR4TwE8cYbK6jFoDiG1rS5el'

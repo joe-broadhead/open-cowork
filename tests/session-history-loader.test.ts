@@ -1,12 +1,11 @@
+import type { ProjectedHistoryItem } from '@open-cowork/runtime-host/session-history-projector'
+import { createBoundedChildSnapshotLoader, createSessionHistoryService } from '@open-cowork/runtime-host/session-history-loader'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import type { SessionView } from '@open-cowork/shared'
-import type { ProjectedHistoryItem } from '../apps/desktop/src/main/session-history-projector.ts'
-import { createBoundedChildSnapshotLoader, createSessionHistoryService } from '../apps/desktop/src/main/session-history-loader.ts'
-
 function createEmptySessionView(): SessionView {
   return {
     messages: [],

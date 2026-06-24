@@ -1,12 +1,13 @@
+import { chooseTaskTitle, extractAgentName, isPlaceholderTaskTitle, normalizeAgentName, toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
+import { touchSessionRecord, updateSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { normalizeSessionInfo, normalizeTodoItems } from '@open-cowork/runtime-host'
 import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString, extractRuntimeErrorMessage, normalizePermissionEvent, readRuntimeSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { trackPermission } from './permission-tracker.ts'
 import { log } from './logger.ts'
-import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dropSessionFromDispatcherQueues, publishNotification } from './session-event-dispatcher.ts'
-import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
-import { sessionEngine } from './session-engine.ts'
+import { dropSessionFromDispatcherQueues, publishNotification } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {
   handleWorkflowSessionError,
@@ -27,13 +28,6 @@ import {
   updateTaskRun,
 } from './event-task-state.ts'
 import { emitTaskRun } from './event-task-run-dispatch.ts'
-import {
-  chooseTaskTitle,
-  extractAgentName,
-  isPlaceholderTaskTitle,
-  normalizeAgentName,
-  toIsoTimestamp,
-} from './task-run-utils.ts'
 import type { PermissionRequest } from '@open-cowork/shared'
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void

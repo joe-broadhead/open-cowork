@@ -1,10 +1,6 @@
+import { MAX_SEEN_COST_EVENT_IDS_PER_SESSION, SessionCostEventTracker } from '@open-cowork/runtime-host/session-cost-event-tracker'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  MAX_SEEN_COST_EVENT_IDS_PER_SESSION,
-  SessionCostEventTracker,
-} from '../apps/desktop/src/main/session-cost-event-tracker.ts'
-
 test('session cost event tracker treats missing ids as non-deduped events', () => {
   const tracker = new SessionCostEventTracker()
 

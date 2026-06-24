@@ -1,11 +1,11 @@
+import { recordRuntimeComponentVerification, resetRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
+import { verifyRuntimeComponentManifest } from '@open-cowork/runtime-host/runtime-component-manifest'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { buildDiagnosticsBundle, tailLogFile } from '../apps/desktop/src/main/diagnostics-export.ts'
-import { verifyRuntimeComponentManifest } from '../apps/desktop/src/main/runtime-component-manifest.ts'
-import { recordRuntimeComponentVerification, resetRuntimeStatus } from '../apps/desktop/src/main/runtime-status.ts'
 import { RUNTIME_COMPONENT_MANIFEST_FORMAT } from '../packages/shared/src/runtime.ts'
 
 function testTempDir(prefix: string) {

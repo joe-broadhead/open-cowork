@@ -1,16 +1,8 @@
+import { ensureKnowledgeToolBridge, getKnowledgeToolBridgeEnvironment, stopKnowledgeToolBridge } from '@open-cowork/runtime-host/knowledge/knowledge-tool-bridge'
+import { listKnowledgeSnapshot, setKnowledgeDatabaseForTests } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
-
-import {
-  ensureKnowledgeToolBridge,
-  getKnowledgeToolBridgeEnvironment,
-  stopKnowledgeToolBridge,
-} from '../apps/desktop/src/main/knowledge/knowledge-tool-bridge.ts'
-import {
-  listKnowledgeSnapshot,
-  setKnowledgeDatabaseForTests,
-} from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
 
 const LOCAL_SPACE_ID = 'space:local:company-os'
 

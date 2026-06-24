@@ -1,12 +1,11 @@
+import { getMachineOpencodeConfigPath, getMachineOpencodeDir } from '@open-cowork/runtime-host/runtime-paths'
+import { listCustomMcps, removeCustomMcp, saveCustomMcp } from '@open-cowork/runtime-host/native-customizations'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { listCustomMcps, removeCustomMcp, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineOpencodeConfigPath, getMachineOpencodeDir } from '../apps/desktop/src/main/runtime-paths.ts'
-
 function withTempUserData<T>(fn: () => T): T {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-custom-mcp-store-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR

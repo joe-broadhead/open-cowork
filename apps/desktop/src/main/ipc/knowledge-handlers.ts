@@ -1,3 +1,4 @@
+import { acceptKnowledgeProposal, createKnowledgeProposal, createKnowledgeSpace, declineKnowledgeProposal, listKnowledgePageHistory, listKnowledgeSnapshot, restoreKnowledgePageVersion } from '@open-cowork/runtime-host/knowledge/knowledge-service'
 import type {
   KnowledgeProposalInput,
   KnowledgeReviewInput,
@@ -15,15 +16,6 @@ import {
   stringAndOptionalObjectArgs,
   twoStringsAndOptionalObjectArgs,
 } from './schema.ts'
-import {
-  acceptKnowledgeProposal,
-  createKnowledgeProposal,
-  createKnowledgeSpace,
-  declineKnowledgeProposal,
-  listKnowledgePageHistory,
-  listKnowledgeSnapshot,
-  restoreKnowledgePageVersion,
-} from '../knowledge/knowledge-service.ts'
 import { LOCAL_WORKSPACE_ID, readWorkspaceIdOption } from '../workspace-gateway.ts'
 import { userInfo } from 'node:os'
 

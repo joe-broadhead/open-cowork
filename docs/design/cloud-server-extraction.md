@@ -223,7 +223,28 @@ module so the substrate stops importing `electron`:
   *(several may prove cloud-unreached on inspection → prunable, lowering the count)*
 - **A5** `runtime-paths` config-decouple → unblocks `runtime-environment` + `runtime-process-cleanup`. `[1–2]`
 
-### Milestone B — STATUS (2026-06-24): de-risked, ~3 mechanical moves remain
+### Milestone B — ✅ COMPLETE (2026-06-24)
+**Final move landed:** the full **~100-module substrate** (config cluster, `runtime.ts`,
+`session-engine`, `agent-config`/`agent-prompts`, `runtime-config-builder`, `permission-config`,
+the managed/node managed servers + supervisor, knowledge store, coordination, workflow store,
+session loaders, etc.) now lives in `@open-cowork/runtime-host` and is consumed by both the
+desktop main process and the cloud server via the **wildcard `./*` subpath export** (plus the
+`.` barrel and `/config` subpath). The remaining `apps/desktop/src/main` modules import the
+substrate through `@open-cowork/runtime-host/*` package specifiers; relative `.ts`/dynamic-import
+edges were repointed, and two substrate→desktop dynamic edges were inverted to dependency
+injection (`semantic-ui-bridge` ← `diagnosticsBundleBuilder`; `agent-tool-bridge` ←
+`scheduleRuntimeRefresh = rebootRuntime`). The **managed-server supervisor** was consolidated into
+runtime-host (built by tsc → `dist`, forked next to the desktop main bundle via a repointed vite
+entry, and resolved from `node_modules/@open-cowork/runtime-host/dist` in the cloud — the separate
+build-cloud esbuild of it is gone). runtime-host now also pins `opencode-ai` (it resolves the
+bundled OpenCode CLI). The SDK-boundary allowlist + `docs/opencode-sdk-v2-boundary.md`, the
+brand-naming allowlist, and the `knip` runtime-host config were updated for the new locations.
+**Gate green:** runtime-host build 0 · node 2099/0 · renderer 475/475 · lint clean · knip ≤ baseline
+(unlisted binaries improved 6→4) · `cloud:build` green · desktop `vite build` green (supervisor
+emitted next to main). (`build:electron`'s raw main-tsc keeps a pre-existing 54 jsx errors from the
+cloud-SSR → `@open-cowork/website` → `@open-cowork/ui` source chain — byte-identical to HEAD, 0
+delta, out of scope here.)
+
 **Done:** all Electron decoupling (A) + injection infra + substrate Electron-free (value+type);
 logger entry-injection; config cluster (11) relocated into `@open-cowork/runtime-host` (proven
 pattern: `/config` subpath + main barrel + export-collision curation + ajv/resourcesPath);

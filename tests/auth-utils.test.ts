@@ -1,7 +1,6 @@
+import { getUsableAccessToken } from '@open-cowork/runtime-host/auth-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getUsableAccessToken } from '../apps/desktop/src/main/auth-utils.ts'
-
 test('getUsableAccessToken returns token when expiry is comfortably in the future', () => {
   const now = Date.UTC(2026, 0, 1, 0, 0, 0)
   const token = getUsableAccessToken({

@@ -10,7 +10,6 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs')
 const migrateOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs')
 const knowledgeMcpOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/mcp-knowledge.mjs')
-const supervisorOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/runtime-managed-server-supervisor.js')
 const cloudAssetsDir = resolve(repoRoot, 'apps/desktop/dist/cloud/assets')
 const cloudReactClientAsset = 'open-cowork-cloud-react.js'
 const builtins = new Set([
@@ -116,14 +115,7 @@ for (const chunk of clientChunks) {
   await copyFile(resolve(clientDir, chunk), resolve(cloudAssetsDir, chunk))
 }
 
-await build({
-  entryPoints: [resolve(repoRoot, 'apps/desktop/src/main/runtime-managed-server-supervisor.ts')],
-  outfile: supervisorOutfile,
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  target: 'node22',
-  packages: 'external',
-  external: [...builtins],
-  logLevel: 'info',
-})
+// The managed-server supervisor now ships inside @open-cowork/runtime-host (built by
+// tsc, present in node_modules/@open-cowork/runtime-host/dist). The cloud's
+// runtime-node-managed-server resolves it as a sibling there, so no separate cloud
+// bundle of the supervisor is needed.

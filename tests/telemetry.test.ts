@@ -1,7 +1,6 @@
+import { sanitizeTelemetryPayload } from '@open-cowork/runtime-host/telemetry'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { sanitizeTelemetryPayload } from '../apps/desktop/src/main/telemetry.ts'
-
 test('telemetry payload sanitization strips tokens and local user paths recursively', () => {
   const openAiStyleToken = `sk-${'1'.repeat(32)}`
   const githubStyleToken = `ghp_${'a'.repeat(24)}`

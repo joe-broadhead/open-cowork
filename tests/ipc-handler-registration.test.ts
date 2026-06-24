@@ -1,3 +1,5 @@
+import { clearKnowledgeStoreCache } from '@open-cowork/runtime-host/knowledge/knowledge-store'
+import { createCoordinationProject, createCoordinationTask, createCoordinationWatch, getCoordinationProject, getCoordinationTask, getCoordinationWatch, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
@@ -20,18 +22,7 @@ import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coord
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
-import {
-  createCoordinationProject,
-  createCoordinationTask,
-  createCoordinationWatch,
-  getCoordinationProject,
-  getCoordinationTask,
-  getCoordinationWatch,
-  setCoordinationDatabaseForTests,
-} from '../apps/desktop/src/main/coordination/coordination-store.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { clearKnowledgeStoreCache } from '../apps/desktop/src/main/knowledge/knowledge-store.ts'
-
 function createTestContext() {
   const handlers = new Map<string, unknown>()
   const listeners = new Map<string, unknown>()

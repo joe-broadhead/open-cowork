@@ -1,9 +1,8 @@
+import { listSessionRecords, type SessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { DEFAULT_SANDBOX_RETENTION_DAYS, getSandboxRootDir, isSandboxWorkspaceDir } from '@open-cowork/runtime-host/runtime-paths'
 import { existsSync, lstatSync, readdirSync, realpathSync, rmSync, statSync } from 'fs'
 import { isAbsolute, join, relative, resolve } from 'path'
 import type { SandboxCleanupResult, SandboxStorageStats } from '@open-cowork/shared'
-import { listSessionRecords, type SessionRecord } from './session-registry.ts'
-import { DEFAULT_SANDBOX_RETENTION_DAYS, getSandboxRootDir, isSandboxWorkspaceDir } from './runtime-paths.ts'
-
 function directorySize(path: string): number {
   let stats
   try {

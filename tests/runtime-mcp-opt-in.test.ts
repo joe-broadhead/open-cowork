@@ -1,13 +1,9 @@
+import { evaluateBuiltInMcp, resolveBundledMcpNodeCommand, resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import {
-  evaluateBuiltInMcp,
-  resolveBundledMcpNodeCommand,
-  resolveCustomMcpRuntimeEntryForRuntime,
-} from '../apps/desktop/src/main/runtime-mcp.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import type { AppSettings } from '../packages/shared/src/index.ts'
 import type { BundleMcp } from '../apps/desktop/src/main/config-loader.ts'

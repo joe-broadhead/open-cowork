@@ -1,3 +1,5 @@
+import { dispatchRuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import {
   createSemanticUiActionList,
   createSemanticUiActionResult,
@@ -8,8 +10,6 @@ import {
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermission, getPermissionSession } from './permission-tracker.ts'
 import { normalizeQuestionAnswers, normalizeQuestionRequestId } from './question-normalization.ts'
-import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { sessionEngine } from './session-engine.ts'
 import { startSessionStatusReconciliation } from './session-status-reconciler.ts'
 import { log } from './logger.ts'
 

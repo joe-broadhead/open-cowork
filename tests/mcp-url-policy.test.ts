@@ -1,7 +1,6 @@
+import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved } from '@open-cowork/runtime-host/mcp-url-policy'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved } from '../apps/desktop/src/main/mcp-url-policy.ts'
-
 test('evaluateHttpMcpUrl accepts public internet URLs by default', () => {
   const result = evaluateHttpMcpUrl('https://api.example.com/mcp')
   assert.equal(result.ok, true)

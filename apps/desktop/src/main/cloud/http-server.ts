@@ -1,3 +1,4 @@
+import { createSqliteKnowledgeStore } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import { InMemoryWorkflowWebhookSecurityStore, WebhookHttpError, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
@@ -54,7 +55,6 @@ import {
   writeSecurityHeaders,
 } from './http-response-writers.ts'
 import { internalTokenIsValid } from './http-auth-helpers.ts'
-import { createSqliteKnowledgeStore } from '../knowledge/knowledge-store.ts'
 import {
   publicChannelInteraction,
   writeSnapshotRequiredEvent,

@@ -51,8 +51,12 @@ remove the import and remove it from this list. If a new file needs the SDK,
 first decide whether the concept belongs in OpenCode runtime composition or in
 Open Cowork product state.
 
-- `apps/desktop/src/main/agent-config.ts`
-- `apps/desktop/src/main/agent-prompts.ts`
+The OpenCode runtime substrate (config composition, the managed/runtime server,
+session loading, agent/permission/skill composition) now lives in
+`@open-cowork/runtime-host` so the desktop main process and the cloud server can
+share it. The remaining `apps/desktop/src/main` entries are product seams that
+still touch SDK event/types at the desktop edge.
+
 - `apps/desktop/src/main/cloud/app.ts`
 - `apps/desktop/src/main/cloud/byok-runtime-config.ts`
 - `apps/desktop/src/main/cloud/opencode-runtime-adapter.ts`
@@ -60,19 +64,21 @@ Open Cowork product state.
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
-- `packages/runtime-host/src/opencode-adapter.ts`
-- `apps/desktop/src/main/permission-config.ts`
 - `apps/desktop/src/main/question-normalization.ts`
-- `apps/desktop/src/main/runtime-config-builder.ts`
-- `packages/runtime-host/src/runtime-managed-server-core.ts`
-- `apps/desktop/src/main/runtime-managed-server.ts`
 - `apps/desktop/src/main/runtime-mcp-status-polling.ts`
-- `apps/desktop/src/main/runtime-node-managed-server.ts`
-- `apps/desktop/src/main/runtime-skill-verifier.ts`
-- `apps/desktop/src/main/runtime-state.ts`
-- `apps/desktop/src/main/runtime.ts`
-- `apps/desktop/src/main/session-history-loader.ts`
 - `apps/standalone-gateway/src/opencode.ts`
+- `packages/runtime-host/src/agent-config.ts`
+- `packages/runtime-host/src/agent-prompts.ts`
+- `packages/runtime-host/src/opencode-adapter.ts`
+- `packages/runtime-host/src/permission-config.ts`
+- `packages/runtime-host/src/runtime-config-builder.ts`
+- `packages/runtime-host/src/runtime-managed-server-core.ts`
+- `packages/runtime-host/src/runtime-managed-server.ts`
+- `packages/runtime-host/src/runtime-node-managed-server.ts`
+- `packages/runtime-host/src/runtime-skill-verifier.ts`
+- `packages/runtime-host/src/runtime-state.ts`
+- `packages/runtime-host/src/runtime.ts`
+- `packages/runtime-host/src/session-history-loader.ts`
 
 ## Shared Event Contract
 
@@ -114,13 +120,14 @@ Use this checklist for every OpenCode SDK or `opencode-ai` runtime bump:
 
 - Confirm `apps/desktop/package.json` pins both `@opencode-ai/sdk` and
   `opencode-ai`, then update `pnpm-lock.yaml`. `packages/runtime-host/package.json`
-  also pins `@opencode-ai/sdk` (it is the node + SDK runtime substrate shared by
-  the desktop main process and the cloud server); keep its pin in lockstep.
+  pins both `@opencode-ai/sdk` and `opencode-ai` (it is the node + SDK runtime
+  substrate shared by the desktop main process and the cloud server, and it
+  resolves the bundled OpenCode CLI); keep its pins in lockstep.
 - Run `pnpm proof:opencode:compatibility` and resolve any registry drift before
   accepting the bump.
 - Run `pnpm typecheck` first. SDK type drift in runtime config, client calls, or
   server options is treated as real drift.
-- Verify `apps/desktop/src/main/runtime-config-builder.ts` still emits
+- Verify `packages/runtime-host/src/runtime-config-builder.ts` still emits
   SDK-native config for providers, agents, skills, MCPs, permissions, and model
   defaults.
 - Verify `apps/desktop/src/main/cloud/byok-runtime-config.ts` still injects BYOK

@@ -1,3 +1,4 @@
+import { assignCoordinationTask, createCoordinationProject, createCoordinationTask, createCoordinationWatch, deleteCoordinationWatch, getCoordinationProjectDetail, getCoordinationTaskDetail, getCoordinationTaskWorkTarget, getCoordinationWatchDetail, linkCoordinationTaskToSession, listCoordinationBoard, listCoordinationProjects, listCoordinationTasks, listCoordinationWatches, moveCoordinationTask, pauseCoordinationWatch, planCoordinationProjectWithCleo, resumeCoordinationWatch, updateCoordinationProject, updateCoordinationTask, updateCoordinationWatch } from '@open-cowork/runtime-host/coordination/coordination-service'
 import type {
   CoordinationChiefOfStaffPlanInput,
   CoordinationProjectInput,
@@ -26,29 +27,6 @@ import {
   stringAndObjectArgs,
   stringAndOptionalObjectArgs,
 } from './schema.ts'
-import {
-  assignCoordinationTask,
-  createCoordinationProject,
-  createCoordinationTask,
-  createCoordinationWatch,
-  deleteCoordinationWatch,
-  getCoordinationProjectDetail,
-  getCoordinationTaskDetail,
-  getCoordinationTaskWorkTarget,
-  getCoordinationWatchDetail,
-  linkCoordinationTaskToSession,
-  listCoordinationBoard,
-  listCoordinationProjects,
-  listCoordinationTasks,
-  listCoordinationWatches,
-  moveCoordinationTask,
-  pauseCoordinationWatch,
-  planCoordinationProjectWithCleo,
-  resumeCoordinationWatch,
-  updateCoordinationProject,
-  updateCoordinationTask,
-  updateCoordinationWatch,
-} from '../coordination/coordination-service.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 const LOCAL_COORDINATION_WORKSPACE_ID = 'local'

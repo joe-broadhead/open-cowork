@@ -1,3 +1,4 @@
+import { listReadyGoogleAuthLocalMcpNames, resolveCustomMcpRuntimeEntry } from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
@@ -5,7 +6,6 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import type { CustomMcpConfig } from '../packages/shared/src/index.ts'
 import type { AppSettings } from '../packages/shared/src/index.ts'
-import { listReadyGoogleAuthLocalMcpNames, resolveCustomMcpRuntimeEntry } from '../apps/desktop/src/main/runtime-mcp.ts'
 import { clearConfigCaches, type BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
 
 const BASE_SETTINGS: AppSettings = {

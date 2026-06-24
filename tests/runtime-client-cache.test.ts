@@ -1,7 +1,6 @@
+import { getOrCreateDirectoryClient } from '@open-cowork/runtime-host/runtime-client-cache'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getOrCreateDirectoryClient } from '../apps/desktop/src/main/runtime-client-cache.ts'
-
 test('directory client cache returns the base client for the runtime home', () => {
   const cache = new Map<string, object>()
   const baseClient = { id: 'base' }

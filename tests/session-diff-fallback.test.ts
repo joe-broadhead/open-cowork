@@ -1,15 +1,9 @@
+import { buildSyntheticSessionDiffs, mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs, summarizeSessionDiffs } from '@open-cowork/runtime-host/session-diff-fallback'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
-import {
-  buildSyntheticSessionDiffs,
-  mergeSessionDiffsWithSynthetic,
-  normalizeSessionFileDiffs,
-  summarizeSessionDiffs,
-} from '../apps/desktop/src/main/session-diff-fallback.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

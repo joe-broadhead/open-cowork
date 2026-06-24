@@ -1,3 +1,4 @@
+import { assignCoordinationTask, createCoordinationProject, createCoordinationTask, getCoordinationProjectDetail, getCoordinationTaskDetail, linkCoordinationTaskToValidatedWork, listCoordinationBoard, listCoordinationProjects, listCoordinationTasks, moveCoordinationTask, planCoordinationProjectWithCleo, updateCoordinationProject, updateCoordinationTask } from '@open-cowork/runtime-host/coordination/coordination-service'
 import type {
   CoordinationChiefOfStaffPlanInput,
   CoordinationProjectInput,
@@ -26,22 +27,6 @@ import {
   watchUpdateInputFromBody,
 } from './coordination-watch-route-utils.ts'
 import type { CloudApiRouteInput } from './types.ts'
-import {
-  assignCoordinationTask,
-  createCoordinationProject,
-  createCoordinationTask,
-  getCoordinationProjectDetail,
-  getCoordinationTaskDetail,
-  linkCoordinationTaskToValidatedWork,
-  listCoordinationBoard,
-  listCoordinationProjects,
-  listCoordinationTasks,
-  moveCoordinationTask,
-  planCoordinationProjectWithCleo,
-  updateCoordinationProject,
-  updateCoordinationTask,
-} from '../../coordination/coordination-service.ts'
-
 function coordinationWorkspaceId(context: CloudApiRouteInput['context']) {
   return `cloud:${context.principal.tenantId.trim() || context.principal.orgId || context.principal.userId || 'default'}`
 }

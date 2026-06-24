@@ -1,15 +1,14 @@
+import { writeManagedSkillMirrorNames } from '@open-cowork/runtime-host/runtime-skill-mirror'
+import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
+import { copySkillsAndAgents, writeRuntimeAgentsFile } from '@open-cowork/runtime-host/runtime-content'
+import { listCustomSkills } from '@open-cowork/runtime-host/native-customizations'
+import { listEffectiveSkillsSync } from '@open-cowork/runtime-host/effective-skills'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { listEffectiveSkillsSync } from '../apps/desktop/src/main/effective-skills.ts'
-import { listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
-import { copySkillsAndAgents, writeRuntimeAgentsFile } from '../apps/desktop/src/main/runtime-content.ts'
-import { writeManagedSkillMirrorNames } from '../apps/desktop/src/main/runtime-skill-mirror.ts'
-
 test('writeRuntimeAgentsFile writes the runtime AGENTS mirror privately', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-agents-'))
 

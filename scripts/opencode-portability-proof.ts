@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
 import { createManagedOpencodeServerAuth } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -28,8 +29,6 @@ import {
   type SandboxEngine,
   type PortableRuntimeEntry,
 } from '../apps/desktop/src/main/cloud/runtime-portability.ts'
-import { createNodeManagedOpencodeServer } from '../apps/desktop/src/main/runtime-node-managed-server.ts'
-
 type RuntimePathSet = ReturnType<typeof runtimePathsForPortability>
 
 type ProofCliOptions = {

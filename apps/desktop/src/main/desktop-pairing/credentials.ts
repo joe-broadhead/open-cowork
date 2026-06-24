@@ -1,15 +1,10 @@
+import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
 import { writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DesktopPairingCredentialMetadata } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
-import {
-  readSafeStorageBackendForPolicy,
-  resolveSecretStorageMode,
-  type SecretStorageMode,
-} from '../secure-storage-policy.ts'
-
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
 const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
   getSelectedStorageBackend?: () => string

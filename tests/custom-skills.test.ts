@@ -1,14 +1,13 @@
+import { writeManagedSkillMirrorNames } from '@open-cowork/runtime-host/runtime-skill-mirror'
+import { getMachineSkillsDir } from '@open-cowork/runtime-host/runtime-paths'
+import { listCustomSkills, readSkillBundleDirectory, removeCustomSkill, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
+import { CUSTOM_SKILL_LIMITS } from '@open-cowork/runtime-host/custom-content-limits'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { listCustomSkills, readSkillBundleDirectory, removeCustomSkill, saveCustomSkill } from '../apps/desktop/src/main/native-customizations.ts'
-import { CUSTOM_SKILL_LIMITS } from '../apps/desktop/src/main/custom-content-limits.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
-import { writeManagedSkillMirrorNames } from '../apps/desktop/src/main/runtime-skill-mirror.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

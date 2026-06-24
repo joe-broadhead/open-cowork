@@ -1,10 +1,7 @@
+import { buildSessionUsageSummary } from '@open-cowork/runtime-host/session-usage-summary'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { SessionView } from '@open-cowork/shared'
-import {
-  buildSessionUsageSummary,
-} from '../apps/desktop/src/main/session-usage-summary.ts'
-
 function makeView(): SessionView {
   return {
     messages: [

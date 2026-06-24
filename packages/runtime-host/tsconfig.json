@@ -8,7 +8,10 @@
     "types": ["node"],
     "paths": {
       "@open-cowork/shared": ["../shared/dist/index.d.ts"],
-      "@open-cowork/shared/*": ["../shared/dist/*"]
+      "@open-cowork/shared/*": ["../shared/dist/*"],
+      "@open-cowork/runtime-host": ["./src/index.ts"],
+      "@open-cowork/runtime-host/config": ["./src/config.ts"],
+      "@open-cowork/runtime-host/*": ["./src/*"]
     }
   },
   "include": ["src/**/*"]

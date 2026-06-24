@@ -1,21 +1,20 @@
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '@open-cowork/runtime-host/session-diff-fallback'
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
+import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { isInternalCoworkMessage } from '@open-cowork/runtime-host/internal-message-utils'
 import { normalizeSessionInfo, normalizeSessionMessages, normalizeShareUrl } from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { normalizeSessionId, normalizeSessionTitle } from './session-handler-validation.ts'
 import { getBrandName } from '../config-loader.ts'
 import { removeParentSession } from '../events.ts'
-import { isInternalCoworkMessage } from '../internal-message-utils.ts'
 import { log } from '../logger.ts'
 import { clearPermissionsForSession } from '../permission-tracker.ts'
-import { getRuntimeHomeDir } from '../runtime.ts'
 import { cleanupSandboxWorkspaceForSession } from '../sandbox-storage.ts'
-import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '../session-diff-fallback.ts'
-import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
-import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '../session-registry.ts'
-import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
-import { sdkErrorMessage } from '../sdk-error.ts'
-
 export function registerSessionActionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:export', async (_event, sessionIdInput: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)

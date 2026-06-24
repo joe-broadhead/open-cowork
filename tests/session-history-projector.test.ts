@@ -1,7 +1,6 @@
+import { projectSessionHistory } from '@open-cowork/runtime-host/session-history-projector'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { projectSessionHistory } from '../apps/desktop/src/main/session-history-projector.ts'
-
 function textMessage(id: string, role: 'user' | 'assistant', text: string, created = 1) {
   return {
     info: {

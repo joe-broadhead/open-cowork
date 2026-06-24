@@ -1,3 +1,4 @@
+import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '@open-cowork/runtime-host/workflow/workflow-schedule'
 import { verifyWorkflowWebhookAuth, WebhookHttpError, type WorkflowWebhookAuth, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { createHash, randomUUID } from 'crypto'
 import type {
@@ -186,7 +187,6 @@ import {
 } from './session-input-validation.ts'
 import { normalizeChannelProviderId } from './channel-provider-utils.ts'
 import { log } from '../logger.ts'
-import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
 import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
 
 export type CloudPrincipal = {

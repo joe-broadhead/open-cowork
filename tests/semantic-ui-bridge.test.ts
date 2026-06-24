@@ -1,20 +1,14 @@
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { configureSemanticUiBridge, ensureSemanticUiBridge, getSemanticUiBridgeEnvironment, stopSemanticUiBridge, updateSemanticUiBridgeState } from '@open-cowork/runtime-host/semantic-ui-bridge'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { createSemanticUiStatus } from '../packages/shared/src/semantic-ui.ts'
 import { createResourceIdentity } from '../packages/shared/src/resource-identity.ts'
 import {
-  configureSemanticUiBridge,
-  ensureSemanticUiBridge,
-  getSemanticUiBridgeEnvironment,
-  stopSemanticUiBridge,
-  updateSemanticUiBridgeState,
-} from '../apps/desktop/src/main/semantic-ui-bridge.ts'
-import {
   createSemanticUiLocalActionList,
   executeSemanticUiLocalAction,
 } from '../apps/desktop/src/main/semantic-ui-local-actions.ts'
-import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 
@@ -55,6 +49,9 @@ test('semantic UI bridge exposes tokenized read-only status and snapshot routes'
           questions: 1,
         },
       }),
+      // diagnostics-export lives desktop-side and is injected into the bridge;
+      // mirror that wiring so the default diagnostics.export action has a builder.
+      diagnosticsBundleBuilder: () => 'diagnostics bundle for semantic UI bridge test',
     })
     await ensureSemanticUiBridge()
     const env = getSemanticUiBridgeEnvironment()

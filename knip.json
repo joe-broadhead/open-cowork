@@ -88,10 +88,19 @@
     "packages/runtime-host": {
       "entry": [
         "src/index.ts",
-        "src/config.ts"
+        "src/config.ts",
+        "src/runtime-managed-server-supervisor.ts"
       ],
       "project": [
         "src/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "ps",
+        "lsof",
+        "taskkill"
+      ],
+      "ignoreDependencies": [
+        "electron"
       ]
     },
     "packages/ui": {

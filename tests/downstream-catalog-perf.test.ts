@@ -1,7 +1,7 @@
+import { buildCoworkRuntimePermissionConfig } from '@open-cowork/runtime-host/runtime-permissions'
+import { buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-config'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildOpenCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
-import { buildCoworkRuntimePermissionConfig } from '../apps/desktop/src/main/runtime-permissions.ts'
 import { buildCapabilityMapGroups } from '../apps/desktop/src/renderer/components/capabilities/capabilities-page-support.ts'
 import {
   createDownstreamCatalogFixture,

@@ -1,8 +1,7 @@
+import { getMeaningfulSdkPricing, normalizeModelId, resolveMeaningfulCost } from '@open-cowork/runtime-host/pricing-utils'
+import { resolveDisplayCostForModel } from '@open-cowork/runtime-host/pricing-core'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveDisplayCostForModel } from '../apps/desktop/src/main/pricing-core.ts'
-import { getMeaningfulSdkPricing, normalizeModelId, resolveMeaningfulCost } from '../apps/desktop/src/main/pricing-utils.ts'
-
 test('normalizeModelId removes provider prefixes', () => {
   assert.equal(normalizeModelId('databricks/databricks-claude-sonnet-4'), 'databricks-claude-sonnet-4')
   assert.equal(normalizeModelId('databricks-claude-sonnet-4'), 'databricks-claude-sonnet-4')

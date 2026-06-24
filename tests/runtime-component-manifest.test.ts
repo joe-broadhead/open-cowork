@@ -1,3 +1,4 @@
+import { buildRuntimeComponentManifest, buildRuntimeComponentVerificationReport, formatRuntimeComponentVerificationFailure, runtimeComponentDevelopmentOverrideFromEnv, runtimeComponentVerificationIsEnforced, verifyRuntimeComponentManifest } from '@open-cowork/runtime-host/runtime-component-manifest'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -5,15 +6,6 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { RUNTIME_COMPONENT_MANIFEST_FORMAT, type RuntimeComponentManifest } from '../packages/shared/src/runtime.ts'
-import {
-  buildRuntimeComponentManifest,
-  buildRuntimeComponentVerificationReport,
-  formatRuntimeComponentVerificationFailure,
-  runtimeComponentDevelopmentOverrideFromEnv,
-  runtimeComponentVerificationIsEnforced,
-  verifyRuntimeComponentManifest,
-} from '../apps/desktop/src/main/runtime-component-manifest.ts'
-
 function manifest(overrides: Partial<RuntimeComponentManifest> = {}): RuntimeComponentManifest {
   return {
     format: RUNTIME_COMPONENT_MANIFEST_FORMAT,

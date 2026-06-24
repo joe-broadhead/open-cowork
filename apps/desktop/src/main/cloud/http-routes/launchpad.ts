@@ -1,11 +1,6 @@
+import { buildLaunchpadFeedFromSources, cloudLaunchpadSessionSnapshots, listLaunchpadCoordinationBoard } from '@open-cowork/runtime-host/launchpad/launchpad-service'
 import type { ArtifactIndexPayload, LaunchpadFeedRequest } from '@open-cowork/shared'
 import type { CloudApiRouteInput } from './types.ts'
-import {
-  buildLaunchpadFeedFromSources,
-  cloudLaunchpadSessionSnapshots,
-  listLaunchpadCoordinationBoard,
-} from '../../launchpad/launchpad-service.ts'
-
 const MAX_LAUNCHPAD_SECTION_LIMIT = 50
 const LAUNCHPAD_SESSION_SCAN_LIMIT = 100
 

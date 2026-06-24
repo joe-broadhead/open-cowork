@@ -1,7 +1,6 @@
+import { createRootToolCall, getLatestHistoryEventAt } from '@open-cowork/runtime-host/session-engine-helpers'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-
-import { createRootToolCall, getLatestHistoryEventAt } from '../apps/desktop/src/main/session-engine-helpers.ts'
 
 test('getLatestHistoryEventAt returns the newest finite history timestamp', () => {
   const latest = getLatestHistoryEventAt([
