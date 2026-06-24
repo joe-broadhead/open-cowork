@@ -282,12 +282,14 @@ function runControlPlaneDomainContracts(
         providerEventId: `${prefix}-provider-event`,
         eventType: 'message',
         claimedBy: 'gateway-a',
+        metadata: { source: 'first' },
         ttlMs: 30_000,
         now: new Date('2026-01-01T00:00:00.000Z'),
       })
       assert.equal(providerEventClaim.claimed, true)
       assert.equal(providerEventClaim.duplicate, false)
       assert.equal(providerEventClaim.event.status, 'processing')
+      assert.equal(providerEventClaim.event.metadata.source, 'first')
       const providerEventDuplicate = await store.claimChannelProviderEvent({
         orgId: org.orgId,
         provider: 'telegram',
@@ -301,6 +303,21 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(providerEventDuplicate.claimed, false)
       assert.equal(providerEventDuplicate.duplicate, true)
+      // Store-parity divergence fix: a reclaim past the TTL with NO metadata overwrites with {} in
+      // BOTH stores (in-memory previously preserved the prior metadata; postgres always overwrote).
+      const providerEventReclaim = await store.claimChannelProviderEvent({
+        orgId: org.orgId,
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: `${prefix}-provider-event`,
+        eventType: 'message',
+        claimedBy: 'gateway-c',
+        ttlMs: 30_000,
+        now: new Date('2026-01-01T00:00:31.000Z'),
+      })
+      assert.equal(providerEventReclaim.claimed, true)
+      assert.deepEqual(providerEventReclaim.event.metadata, {})
 
       const workerPool = await store.createManagedWorkerPool({
         poolId: `${prefix}-pool`,

@@ -1085,7 +1085,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         const runnable = session.commands
           .filter((command) => command.targetLeaseToken === null)
           .filter((command) => command.status === 'pending' || command.status === 'running')
-          .filter((command) => !command.availableAt || Date.parse(command.availableAt) <= nowMs)
+          // The delay gate applies only to 'pending' commands, matching postgres
+          // (status <> 'pending' OR available_at IS NULL OR available_at <= now); a 'running' command
+          // is already in flight and must stay runnable regardless of a stale availableAt.
+          .filter((command) => command.status !== 'pending' || !command.availableAt || Date.parse(command.availableAt) <= nowMs)
           .sort((a, b) => a.createdSequence - b.createdSequence)[0]
         return runnable ? { session, firstSequence: runnable.createdSequence } : null
       })
@@ -1465,6 +1468,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     command.claimedBy = lease.leasedBy
     command.claimedLeaseToken = lease.leaseToken
     command.attemptCount += 1
+    // Clear the delay gate on claim to match postgres (sets available_at = NULL). A future-dated
+    // availableAt that survived the claim would wrongly re-gate the command on a later requeue.
+    command.availableAt = null
     command.lastErrorCode = null
     command.lastErrorSummary = null
     return clone(command)

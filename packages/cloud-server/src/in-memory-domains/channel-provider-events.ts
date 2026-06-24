@@ -87,7 +87,10 @@ export class InMemoryChannelProviderEventsDomain {
       existing.attemptCount += 1
       existing.retryable = true
       existing.lastError = null
-      existing.metadata = normalizeRecord(input.metadata || existing.metadata, 'Channel provider event metadata')
+      // Match postgres on reclaim: a falsy input overwrites with {} (does NOT preserve the prior
+      // metadata), so both stores behave identically. Unreachable via the service today (callers
+      // always pass non-empty metadata) but aligned so the parity contract is authoritative.
+      existing.metadata = normalizeRecord(input.metadata || {}, 'Channel provider event metadata')
       existing.processedAt = null
       return { event: clone(existing), claimed: true, duplicate: false }
     }
