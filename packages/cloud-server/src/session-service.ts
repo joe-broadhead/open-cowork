@@ -1073,6 +1073,18 @@ export class CloudSessionService {
     return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence, limit)
   }
 
+  // Read paths for the SSE replay poll, which runs every pollMs for the life of a
+  // connection. The connection authorized the principal+session ONCE at connect; re-running
+  // the full membership/session/projection authorization on every poll was the dominant
+  // idle-connection cost (~6 queries/poll). These read directly, tenant-scoped by the query.
+  listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
+    return this.store.listSessionEvents(tenantId, sessionId, afterSequence, limit)
+  }
+
+  listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
+    return this.store.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
+  }
+
   async getSessionProjectionStatus(principal: CloudPrincipal, sessionId: string) {
     await this.getSessionView(principal, sessionId)
     if (!principalCanViewOperations(principal)) {

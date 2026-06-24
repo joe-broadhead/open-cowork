@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { principalHasGatewayAccess } from './access-policy.ts'
-import type { CloudHttpServerOptions } from '../http-server.ts'
+import { SSE_MAX_BUFFERED_BYTES, type CloudHttpServerOptions } from '../http-server.ts'
 import { CloudServiceError, type CloudPrincipal } from '../session-service.ts'
 
 type RouteContext = {
@@ -16,6 +16,7 @@ export type ChannelDeliverySseTools = {
     res: ServerResponse,
     options: CloudHttpServerOptions,
     cleanup: () => void,
+    orgKey?: string | null,
   ): boolean
   ssePollMs(options: CloudHttpServerOptions): number
 }
@@ -68,7 +69,7 @@ export async function handleChannelDeliveriesSse(
     closed = true
     if (pollTimer) clearInterval(pollTimer)
   }
-  if (!tools.trackSseStream(req, res, options, cleanup)) return
+  if (!tools.trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
   const poll = async () => {
     if (pollActive || closed || res.destroyed) return
     pollActive = true
@@ -77,6 +78,13 @@ export async function handleChannelDeliveriesSse(
       let claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy: requestedClaimedBy, ttlMs, channelBindingIds: requestedChannelBindingIds })
       while (claimed && !closed && !res.destroyed) {
         writeChannelDeliverySseEvent(res, claimed)
+        // Backpressure: a consumer draining slower than deliveries are produced would
+        // otherwise accumulate unbounded bytes in the writable queue (OOM). Match the
+        // session/workspace SSE handlers and drop the connection past the buffer cap.
+        if (res.writableLength > SSE_MAX_BUFFERED_BYTES) {
+          res.destroy()
+          break
+        }
         claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy: requestedClaimedBy, ttlMs, channelBindingIds: requestedChannelBindingIds })
       }
       if (!closed && !res.destroyed) res.write(': keep-alive\n\n')

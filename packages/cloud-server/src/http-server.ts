@@ -270,7 +270,7 @@ const SSE_REPLAY_BATCH = 1_000
 // Hard cap on per-connection outbound SSE bytes buffered in Node's writable queue. A
 // client that drains slower than events arrive would otherwise grow this without bound
 // (heap pressure); past the cap the connection is dropped (cleanup unsubscribes on close).
-const SSE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024
+export const SSE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024
 
 async function processCommandIfConfigured(
   options: CloudHttpServerOptions,
@@ -507,13 +507,21 @@ async function handleBillingWebhook(
   }
 }
 
+function sseMaxConnectionsPerOrg(): number {
+  const raw = Number(process.env.OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG)
+  return Number.isInteger(raw) && raw > 0 ? raw : 200
+}
+
 function trackSseStream(
   req: IncomingMessage,
   res: ServerResponse,
   options: CloudHttpServerOptions,
   cleanup: () => void,
+  orgKey?: string | null,
 ) {
-  if (options.sseStreamRegistry) return options.sseStreamRegistry.track(req, res, cleanup)
+  if (options.sseStreamRegistry) {
+    return options.sseStreamRegistry.track(req, res, cleanup, { orgKey: orgKey || undefined, maxPerOrg: sseMaxConnectionsPerOrg() })
+  }
 
   let closed = false
   const close = () => {
@@ -559,7 +567,7 @@ async function handleSse(
     replayUnsubscribe?.()
     unsubscribe?.()
   }
-  if (!trackSseStream(req, res, options, cleanup)) return
+  if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
   const writeIfNew = (event: {
     sequence: number
     type: string
@@ -598,7 +606,7 @@ async function handleSse(
     key: `session:${context.principal.tenantId}:${context.principal.userId}:${sessionId}`,
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
-    loadEvents: (sequence) => options.service.listEvents(context.principal, sessionId, sequence, SSE_REPLAY_BATCH),
+    loadEvents: (sequence) => options.service.listSessionEventsForStream(context.principal.tenantId, sessionId, sequence, SSE_REPLAY_BATCH),
     listener: (event) => writeIfNew(event as SessionEventRecord),
     batchSize: SSE_REPLAY_BATCH,
   }) ?? null
@@ -635,7 +643,7 @@ async function handleWorkspaceSse(
     replayUnsubscribe?.()
     unsubscribe?.()
   }
-  if (!trackSseStream(req, res, options, cleanup)) return
+  if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
   const writeIfNew = (event: {
     tenantId?: string
     userId?: string
@@ -701,7 +709,7 @@ async function handleWorkspaceSse(
     key: `workspace:${context.principal.tenantId}:${context.principal.userId}`,
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
-    loadEvents: (sequence) => options.service.listWorkspaceEvents(context.principal, sequence, SSE_REPLAY_BATCH),
+    loadEvents: (sequence) => options.service.listWorkspaceEventsForStream(context.principal.tenantId, context.principal.userId, sequence, SSE_REPLAY_BATCH),
     listener: (event) => writeIfNew(event as WorkspaceEventRecord),
     batchSize: SSE_REPLAY_BATCH,
   }) ?? null

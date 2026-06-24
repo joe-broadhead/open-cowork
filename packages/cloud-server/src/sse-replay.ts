@@ -25,14 +25,24 @@ type SseReplayTopic = {
 type ActiveSseStream = {
   res: ServerResponse
   socket: Socket | null
+  orgKey: string | null
   close: () => void
+}
+
+type SseStreamScope = {
+  // Per-org concurrent-connection cap. A single org could otherwise open thousands of
+  // long-lived SSE connections within its request-rate budget (each holding a socket,
+  // timers, a bus subscription, and a DB poll). 0/undefined ⇒ no cap.
+  orgKey?: string
+  maxPerOrg?: number
 }
 
 export class CloudSseStreamRegistry {
   private readonly streams = new Set<ActiveSseStream>()
+  private readonly perOrgCounts = new Map<string, number>()
   private closing = false
 
-  track(req: IncomingMessage, res: ServerResponse, cleanup: () => void) {
+  track(req: IncomingMessage, res: ServerResponse, cleanup: () => void, scope: SseStreamScope = {}) {
     if (this.closing) {
       const socket = res.socket || req.socket || null
       cleanup()
@@ -42,14 +52,35 @@ export class CloudSseStreamRegistry {
       return false
     }
 
+    const orgKey = scope.orgKey || null
+    if (orgKey && scope.maxPerOrg && scope.maxPerOrg > 0 && (this.perOrgCounts.get(orgKey) || 0) >= scope.maxPerOrg) {
+      // Over the per-org cap. Headers are already sent (SSE 200) by the time we get here,
+      // so signal via an SSE error event then drop the connection.
+      const socket = res.socket || req.socket || null
+      cleanup()
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Too many concurrent streams for this organization.' })}\n\n`)
+        res.end()
+      }
+      if (!res.destroyed) res.destroy()
+      if (socket && !socket.destroyed) socket.destroy()
+      return false
+    }
+
     let closed = false
     const stream: ActiveSseStream = {
       res,
       socket: res.socket || req.socket || null,
+      orgKey,
       close: () => {
         if (closed) return
         closed = true
         this.streams.delete(stream)
+        if (orgKey) {
+          const next = (this.perOrgCounts.get(orgKey) || 1) - 1
+          if (next <= 0) this.perOrgCounts.delete(orgKey)
+          else this.perOrgCounts.set(orgKey, next)
+        }
         req.off('close', stream.close)
         res.off('close', stream.close)
         res.off('finish', stream.close)
@@ -57,6 +88,7 @@ export class CloudSseStreamRegistry {
       },
     }
     this.streams.add(stream)
+    if (orgKey) this.perOrgCounts.set(orgKey, (this.perOrgCounts.get(orgKey) || 0) + 1)
     req.once('close', stream.close)
     res.once('close', stream.close)
     res.once('finish', stream.close)
