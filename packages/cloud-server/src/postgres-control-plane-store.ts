@@ -1369,6 +1369,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return result.rows.map(eventFromRow)
   }
 
+  async getSessionEventStats(tenantId: string, sessionId: string) {
+    await this.requireSession(tenantId, sessionId)
+    const row = await this.one<{ count: string | number; latest: string | number }>(
+      `SELECT count(*)::int AS count, COALESCE(max(sequence), 0)::int AS latest
+       FROM cloud_session_events WHERE tenant_id = $1 AND session_id = $2`,
+      [tenantId, sessionId],
+    )
+    return { count: Number(row.count), latestSequence: Number(row.latest) }
+  }
+
   async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
     return this.withTransaction(async (client) => {
       await this.requireTenantUser(input.tenantId, input.userId, client)

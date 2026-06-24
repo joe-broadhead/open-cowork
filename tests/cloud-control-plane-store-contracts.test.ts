@@ -175,6 +175,8 @@ function runControlPlaneDomainContracts(
       await store.appendSessionEvent({ tenantId, sessionId, eventId: `${prefix}-event-3`, type: 'assistant.message', payload: { messageId: 'assistant-3', content: 'ok' } })
       assert.equal((await store.listSessionEvents(tenantId, sessionId, 0, 2)).length, 2)
       assert.equal((await store.listSessionEvents(tenantId, sessionId, 0)).length, 3)
+      // Aggregate stats (used by projection-status) match the event log without loading it.
+      assert.deepEqual(await store.getSessionEventStats(tenantId, sessionId), { count: 3, latestSequence: 3 })
 
       const command = await store.enqueueSessionCommand({
         commandId: `${prefix}-command`,

@@ -12,6 +12,10 @@ import type { SessionEventRecord } from './control-plane-store.ts'
 import type { ProjectionControlPlaneStore } from './control-plane-store-domains.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
 
+// Keyset batch size for the projection rebuild fold — bounds the per-query result set
+// and memory regardless of total session-event-log size.
+const PROJECTION_REBUILD_BATCH = 1000
+
 export type AppendProjectedEventInput = {
   tenantId: string
   sessionId: string
@@ -144,12 +148,33 @@ export class CloudSessionProjectionService {
     const session = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
     if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
 
-    const events = await this.store.listSessionEvents(input.tenantId, input.sessionId, 0)
     const priorProjection = await this.store.getSessionProjection(input.tenantId, input.sessionId)
-    const latestEventSequence = events.at(-1)?.sequence || 0
     const priorProjectionSequence = priorProjection?.sequence || 0
 
-    if (events.length === 0) {
+    // Fold the event log into the projection in bounded keyset batches rather than one
+    // unbounded SELECT — a long-lived session can have an enormous log, and the prior
+    // single read materialized all of it into memory and could pin a pooled connection.
+    // The reducer is a sequential fold, so batching by sequence is identical.
+    let view = normalizeCloudSessionProjectionView(null, session)
+    let afterSequence = 0
+    let latestEventSequence = 0
+    let latestCreatedAt: SessionEventRecord['createdAt'] | null = null
+    let eventCount = 0
+    for (;;) {
+      const batch = await this.store.listSessionEvents(input.tenantId, input.sessionId, afterSequence, PROJECTION_REBUILD_BATCH)
+      if (batch.length === 0) break
+      for (const event of batch) {
+        eventCount += 1
+        latestEventSequence = event.sequence
+        latestCreatedAt = event.createdAt
+        if (!isCloudProjectedSessionEventType(event.type)) continue
+        view = reduceCloudSessionProjectionEvent(session, view, event)
+      }
+      afterSequence = batch[batch.length - 1]!.sequence
+      if (batch.length < PROJECTION_REBUILD_BATCH) break
+    }
+
+    if (eventCount === 0) {
       return {
         repaired: false,
         eventCount: 0,
@@ -160,24 +185,18 @@ export class CloudSessionProjectionService {
       }
     }
 
-    let view = normalizeCloudSessionProjectionView(null, session)
-    for (const event of events) {
-      if (!isCloudProjectedSessionEventType(event.type)) continue
-      view = reduceCloudSessionProjectionEvent(session, view, event)
-    }
-
     const projection = await this.store.writeSessionProjection({
       tenantId: input.tenantId,
       sessionId: input.sessionId,
       sequence: latestEventSequence,
       view,
       leaseToken: input.leaseToken,
-      updatedAt: new Date(events.at(-1)?.createdAt || session.updatedAt),
+      updatedAt: new Date(latestCreatedAt || session.updatedAt),
     })
 
     return {
       repaired: projection.sequence > priorProjectionSequence,
-      eventCount: events.length,
+      eventCount,
       latestEventSequence,
       priorProjectionSequence,
       projectionSequence: projection.sequence,

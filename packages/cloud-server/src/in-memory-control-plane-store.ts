@@ -1122,6 +1122,15 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return Number.isInteger(limit) && (limit as number) > 0 ? matching.slice(0, limit) : matching
   }
 
+  getSessionEventStats(tenantId: string, sessionId: string): { count: number; latestSequence: number } {
+    const session = this.requireSession(tenantId, sessionId)
+    let latestSequence = 0
+    for (const event of session.events) {
+      if (event.sequence > latestSequence) latestSequence = event.sequence
+    }
+    return { count: session.events.length, latestSequence }
+  }
+
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {
     return this.workspaceEventsDomain.appendWorkspaceEvent(input)
   }

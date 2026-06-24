@@ -577,8 +577,14 @@ async function handleSse(
     lastSequence = event.sequence
     if (res.writableLength > SSE_MAX_BUFFERED_BYTES) res.destroy()
   }
-  for (const event of await options.service.listEvents(context.principal, sessionId, afterSequence)) {
-    writeIfNew(event)
+  // Drain the catch-up backlog in bounded keyset pages — the initial connect previously
+  // loaded the session's entire event history (no retention) into memory in one read.
+  let drainAfter = afterSequence
+  for (;;) {
+    const batch = await options.service.listEvents(context.principal, sessionId, drainAfter, SSE_REPLAY_BATCH)
+    for (const event of batch) writeIfNew(event)
+    if (cleaned || batch.length < SSE_REPLAY_BATCH) break
+    drainAfter = batch[batch.length - 1]!.sequence
   }
   if (cleaned) return
   unsubscribe = options.service.eventBus.subscribe({
@@ -673,8 +679,14 @@ async function handleWorkspaceSse(
     })
     lastSequence = Math.max(lastSequence, latestSequence)
   } else {
-    const retainedEvents = await options.service.listWorkspaceEvents(context.principal, afterSequence)
-    for (const event of retainedEvents) writeIfNew(event)
+    // Bounded keyset drain of the workspace backlog (see the session handler).
+    let drainAfter = afterSequence
+    for (;;) {
+      const batch = await options.service.listWorkspaceEvents(context.principal, drainAfter, SSE_REPLAY_BATCH)
+      for (const event of batch) writeIfNew(event)
+      if (cleaned || batch.length < SSE_REPLAY_BATCH) break
+      drainAfter = batch[batch.length - 1]!.sequence
+    }
   }
 
   if (cleaned) return

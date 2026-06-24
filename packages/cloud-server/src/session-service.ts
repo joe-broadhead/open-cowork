@@ -1078,15 +1078,15 @@ export class CloudSessionService {
     if (!principalCanViewOperations(principal)) {
       throw new CloudServiceError(403, 'Projection status requires operator privileges.')
     }
-    const [events, projection] = await Promise.all([
-      this.store.listSessionEvents(principal.tenantId, sessionId, 0),
+    const [stats, projection] = await Promise.all([
+      this.store.getSessionEventStats(principal.tenantId, sessionId),
       this.store.getSessionProjection(principal.tenantId, sessionId),
     ])
-    const latestEventSequence = events.at(-1)?.sequence || 0
+    const latestEventSequence = stats.latestSequence
     const projectionSequence = projection?.sequence || 0
     return {
       sessionId,
-      eventCount: events.length,
+      eventCount: stats.count,
       latestEventSequence,
       projectionSequence,
       lag: Math.max(0, latestEventSequence - projectionSequence),

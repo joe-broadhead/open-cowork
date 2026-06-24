@@ -308,6 +308,9 @@ export type ControlPlaneStore = {
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
   listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
+  // Aggregate count + max sequence for projection-status, so it never loads the whole
+  // event log just to compute lag (index-served on the postgres backend).
+  getSessionEventStats(tenantId: string, sessionId: string): MaybePromise<{ count: number; latestSequence: number }>
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
   getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>
