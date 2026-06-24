@@ -193,7 +193,23 @@ So that substrate must become **package-resolvable**, not injected-away. The *on
 wholesale move is the **15 Electron value-imports** inside it. Critical path: decouple those 15 →
 batch-move the (now Electron-free) substrate into a package → lift `main/cloud`.
 
-### Milestone A — Electron-decouple the substrate (critical path, ~12–18 commits)
+### Milestone A — Electron-decouple the substrate ✅ COMPLETE (2026-06-24)
+All 15 Electron-value substrate modules are Electron-free via four injected hosts in
+`@open-cowork/shared/node` (`AppPathHost`, `SafeStorageHost`, `DesktopShellHost`) + a
+per-module forker (`runtime-managed-server`), all wired by `desktop-electron-hosts.ts`
+(+ the desktop entry for `utilityProcess`). The closure analysis now reports **0 Electron
+value-importers** directly reached; the only residual Electron reach is the `config-loader`
+**shim**'s side-effect import of `desktop-electron-hosts` — cut in B when the cloud stops
+importing the shim. Commits: A1 (AppPathHost, 5 modules), A2 (SafeStorageHost, 6 credential
+modules), A3a (DesktopShellHost: settings + cloud-workspace-auth), A3b (branding-assets split,
+auth, runtime-managed-server forker). **Refined B insight:** the substrate splits by SDK —
+non-SDK modules (config core, settings, workspace stores, capability-catalog) go to
+**`@open-cowork/shared/node`** (no Docker change); only SDK modules (runtime-config-builder,
+agent-config, runtime.ts, permission-config, session-history-loader, runtime-state) go to
+**`@open-cowork/runtime-host`**. Cut the config-loader shim's electron side-effect by moving
+host wiring to the desktop entries once the substrate imports the relocated cores.
+
+### Milestone A (original plan) — Electron-decouple the substrate
 Apply the proven core+shim / inject-host pattern (per `config-loader`, `logger`) to each Electron-value
 module so the substrate stops importing `electron`:
 - **A1** `config-loader` step 2: cloud imports `config-loader-core` + injects a cloud host (cuts the
