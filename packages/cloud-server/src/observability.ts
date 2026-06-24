@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { sanitizeLogMessage } from '@open-cowork/shared'
 
 type Env = Record<string, string | undefined>
 
@@ -124,7 +125,10 @@ function redactAttribute(key: string, value: CloudObservabilityAttributeValue) {
 }
 
 function redactCloudAttributeString(value: string) {
-  let redacted = value.replace(SIGNED_URL_QUERY_PATTERN, '$1?[redacted]')
+  // First pass through the single-source shared sanitizer so cloud telemetry gets the full
+  // provider-key/JWT/envelope/secret-ref/email pattern set (not just the cloud-specific extras
+  // below). This also covers the 500-error path that logs raw error.message via recordCloudLog.
+  let redacted = sanitizeLogMessage(value).replace(SIGNED_URL_QUERY_PATTERN, '$1?[redacted]')
   redacted = redacted
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(/\b(?:token|secret|password|credential|api[_-]?key|kms[_-]?ref|ciphertext)=([^\s"'&]+)/gi, (match) => {

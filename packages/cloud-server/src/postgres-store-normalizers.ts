@@ -1,5 +1,8 @@
 import { jsonRecord } from './postgres-domains/shared.ts'
 import { stableJson } from './postgres-store-id-helpers.ts'
+// redactOperationalText now lives in its own single-source module; re-exported here so the
+// store's existing import surface (postgres-store-normalizers) is unchanged.
+export { redactOperationalText } from './operational-text-redaction.ts'
 
 // Pure input normalizers/validators for the Postgres control-plane store,
 // extracted from postgres-control-plane-store.ts: trimming/length-bounding text,
@@ -24,16 +27,6 @@ export function normalizeText(value: unknown, maxLength: number, label: string) 
   return normalized
 }
 
-export function redactOperationalText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const redacted = value.trim()
-    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
-    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
-    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
-    .replace(/\b(?:sk-[A-Za-z0-9._-]{6,}|oc[wc]_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
-    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
-  return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength <= 3 ? maxLength : maxLength - 3)}${maxLength <= 3 ? '' : '...'}`
-}
 
 export function normalizeOptionalText(value: unknown, maxLength: number, label: string) {
   if (value === undefined) return undefined

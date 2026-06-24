@@ -39,7 +39,7 @@ test('cloud observability sanitizes secret-bearing attributes', () => {
     kmsRef: '[redacted]',
     ciphertext: '[redacted]',
     local_path: '/Users/[redacted]',
-    byok_error: 'provider failed for Bearer [redacted] and user [redacted-email] at /home/[redacted] with [redacted-secret-ref]',
+    byok_error: 'provider failed for Bearer [redacted] and user [REDACTED_EMAIL] at /home/[redacted] with [REDACTED_SECRET_REF]',
     count: 2,
     ok: true,
   })

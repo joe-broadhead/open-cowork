@@ -1,3 +1,4 @@
+import { redactOperationalText } from '../operational-text-redaction.ts'
 import {
   ControlPlaneQuotaExceededError,
   type AckChannelDeliveryInput,
@@ -244,16 +245,6 @@ function normalizeText(value: unknown, maxLength: number, label: string) {
   return normalized
 }
 
-function redactOperationalText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const redacted = value.trim()
-    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
-    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
-    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
-    .replace(/\b(?:sk-[A-Za-z0-9._-]{6,}|oc[wc]_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
-    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
-  return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength <= 3 ? maxLength : maxLength - 3)}${maxLength <= 3 ? '' : '...'}`
-}
 
 function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
   const record = jsonRecord(value)

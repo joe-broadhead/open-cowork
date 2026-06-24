@@ -1,3 +1,4 @@
+import { redactOperationalText } from '../operational-text-redaction.ts'
 import { randomBytes } from 'node:crypto'
 import {
   generateManagedWorkerCredential,
@@ -663,13 +664,3 @@ function normalizeIdList(values: readonly unknown[], label: string, maxLength: n
   return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
 }
 
-function redactOperationalText(value: unknown, maxLength: number, label: string) {
-  return normalizeText(value, maxLength, label)
-    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
-    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
-    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
-    .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
-    .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
-    .replace(/\b(ocw_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
-    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
-}

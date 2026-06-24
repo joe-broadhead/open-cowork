@@ -1,3 +1,4 @@
+import { redactOperationalText } from './operational-text-redaction.ts'
 import { normalizeCloudProjectSource, summarizeCloudProjectSource, type CoordinationWatch } from '@open-cowork/shared'
 import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
@@ -240,16 +241,6 @@ const THREAD_FILTER_MAX_VALUES = 50
 const THREAD_BULK_MAX_SESSION_IDS = 500
 const CHANNEL_TEXT_MAX_LENGTH = 256
 
-function redactOperationalText(value: unknown, maxLength: number, label: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
-  const redacted = value.trim()
-    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
-    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
-    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
-    .replace(/\b(?:sk-[A-Za-z0-9._-]{6,}|oc[wc]_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
-    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
-  return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength <= 3 ? maxLength : maxLength - 3)}${maxLength <= 3 ? '' : '...'}`
-}
 
 function normalizeIdList(values: readonly unknown[], label: string, maxLength: number) {
   if (!Array.isArray(values)) throw new Error(`${label} must be an array.`)

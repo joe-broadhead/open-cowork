@@ -8,6 +8,10 @@ const SECRET_ENV_KEYS = [
 const TOKEN_PATTERNS = [
   // Google OAuth access tokens.
   /\bya29\.[0-9A-Za-z._-]+\b/g,
+  // Google API keys (Gemini / Maps / etc. BYOK).
+  /\bAIza[0-9A-Za-z_-]{35}\b/g,
+  // Slack bot/user/app/refresh tokens (xoxb-/xoxp-/xoxa-/xoxr-/xoxs-).
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
   // Generic JWT (any issuer — Google refresh, Azure, Auth0, etc.).
   /\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g,
   // Generic Authorization headers users may paste from curl examples,
