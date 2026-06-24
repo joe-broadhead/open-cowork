@@ -200,7 +200,7 @@ export function createCloudSessionCookieManager(options: CloudSessionCookieOptio
         ? req.headers['x-csrf-token'][0] || ''
         : req.headers['x-csrf-token'] || ''
       const csrfCookie = cookieMap(req).get(csrfCookieName) || ''
-      if (!header || !csrfCookie || header !== csrfCookie || header !== session.csrfToken) {
+      if (!header || !csrfCookie || !constantTimeEquals(header, csrfCookie) || !constantTimeEquals(header, session.csrfToken)) {
         throw new Error('Cloud CSRF token is missing or invalid.')
       }
     },

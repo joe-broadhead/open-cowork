@@ -1,4 +1,4 @@
-import { isKnowledgeSpaceVisibility, type KnowledgeStore, type KnowledgeStoreListOptions, normalizeKnowledgeProposalContent } from '@open-cowork/shared'
+import { isKnowledgeSpaceVisibility, type KnowledgeStore, type KnowledgeStoreListOptions, normalizeKnowledgeProposalContent, sanitizeLogMessage } from '@open-cowork/shared'
 import type { CloudApiRouteInput } from './types.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
@@ -29,7 +29,7 @@ function knowledgeErrorStatus(error: unknown) {
 
 function writeKnowledgeError(input: CloudApiRouteInput, error: unknown) {
   const status = knowledgeErrorStatus(error)
-  const message = error instanceof Error && status < 500 ? error.message : 'Knowledge request failed.'
+  const message = error instanceof Error && status < 500 ? sanitizeLogMessage(error.message) : 'Knowledge request failed.'
   input.tools.writeError(input.res, status, message, input.options.corsOrigin)
 }
 

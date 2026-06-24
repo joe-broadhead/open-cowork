@@ -1,4 +1,4 @@
-import { normalizeKnowledgeProposalContent } from '@open-cowork/shared'
+import { normalizeKnowledgeProposalContent, sanitizeLogMessage } from '@open-cowork/shared'
 import type { KnowledgeStore } from '@open-cowork/shared'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { verifyKnowledgeAgentToken } from '../knowledge-agent-token.ts'
@@ -117,7 +117,7 @@ export async function handleKnowledgeAgentProposeRoute(input: KnowledgeAgentProp
     tools.writeJson(res, 201, { ok: true, proposal }, corsOrigin)
   } catch (error) {
     const status = proposeErrorStatus(error)
-    const message = error instanceof Error && status < 500 ? error.message : 'Knowledge proposal failed.'
+    const message = error instanceof Error && status < 500 ? sanitizeLogMessage(error.message) : 'Knowledge proposal failed.'
     tools.writeError(res, status, message, corsOrigin)
   }
 }

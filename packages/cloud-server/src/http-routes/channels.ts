@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { sanitizeLogMessage } from '@open-cowork/shared'
 import { handleChannelDirectoryRoute } from './channel-directory.ts'
 import { handleChannelDeliveriesSse, type ChannelDeliverySseTools } from './channel-delivery-sse.ts'
 import type { ChannelProviderId, SessionCommandRecord } from '../control-plane-store.ts'
@@ -323,7 +324,7 @@ export async function handleChannelsApiRoute(input: {
       try {
         processed = await tools.processSessionCommandIfConfigured(options, context.principal.tenantId, result.interaction.sessionId)
       } catch (error) {
-        processingError = error instanceof Error ? error.message : String(error)
+        processingError = sanitizeLogMessage(error instanceof Error ? error.message : String(error))
       }
       await tools.writeSessionCommandMutationResponse(
         res,

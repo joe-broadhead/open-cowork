@@ -11,6 +11,7 @@ import type {
   CoordinationTarget,
   SessionInfo,
 } from '@open-cowork/shared'
+import { sanitizeLogMessage } from '@open-cowork/shared'
 import {
   assertImplementedWatchTarget,
   emitCloudTaskWatchEvents,
@@ -44,7 +45,7 @@ function coordinationErrorStatus(error: unknown) {
 
 function writeCoordinationError(input: CloudApiRouteInput, error: unknown) {
   const status = coordinationErrorStatus(error)
-  const message = error instanceof Error && status < 500 ? error.message : 'Coordination request failed.'
+  const message = error instanceof Error && status < 500 ? sanitizeLogMessage(error.message) : 'Coordination request failed.'
   input.tools.writeError(input.res, status, message, input.options.corsOrigin)
 }
 

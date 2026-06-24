@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { CloudAuthConfig, CloudBillingConfig } from '@open-cowork/shared'
+import { sanitizeForExport, type CloudAuthConfig, type CloudBillingConfig } from '@open-cowork/shared'
 import type { BillingAdapter } from './billing-adapter.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { ControlPlaneStore } from './control-plane-store.ts'
@@ -60,7 +60,11 @@ async function check(name: string, fn: () => Promise<void> | void): Promise<Clou
     await fn()
     return { name, status: 'ok' }
   } catch (error) {
-    return { name, status: 'error', detail: errorDetail(error).slice(0, 512) }
+    // /readyz is unauthenticated (orchestrator probes it), and these checks throw raw
+    // object-store / pg / secret-adapter errors that can echo access-key ids, secret
+    // refs, vault URLs, or connection strings. Strip secrets + home paths before the
+    // detail enters the public report.
+    return { name, status: 'error', detail: sanitizeForExport(errorDetail(error)).slice(0, 512) }
   }
 }
 
