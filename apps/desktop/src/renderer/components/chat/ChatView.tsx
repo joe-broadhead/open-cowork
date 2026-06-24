@@ -7,7 +7,7 @@ import {
   type PendingQuestion,
 } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../../app-types'
-import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
+import { useSessionStore, type Message, type PendingApproval, type TaskRun } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
@@ -173,15 +173,36 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
     }
   }, [])
 
+  // Content-keyed identity cache so a derived message keeps the same object
+  // reference across rebuilds when its rendered content is unchanged — letting
+  // MessageBubble's memo skip its markdown/mermaid render for every message that
+  // didn't change on a streamed patch. Pruned to the live key set each pass so it
+  // can't outgrow the transcript.
+  const messageIdentityCache = useRef<Map<string, { signature: string; message: Message }>>(new Map())
   const timeline = useMemo(() => {
-    return buildChatTimeline({
+    const cache = messageIdentityCache.current
+    const seenKeys = new Set<string>()
+    const result = buildChatTimeline({
       messages,
       toolCalls,
       taskRuns,
       compactions,
       approvals: visibleApprovals,
       errors: visibleErrors,
+    }, {
+      stabilizeMessage: (key, message) => {
+        seenKeys.add(key)
+        const signature = JSON.stringify(message)
+        const cached = cache.get(key)
+        if (cached && cached.signature === signature) return cached.message
+        cache.set(key, { signature, message })
+        return message
+      },
     })
+    for (const key of cache.keys()) {
+      if (!seenKeys.has(key)) cache.delete(key)
+    }
+    return result
   }, [messages, toolCalls, taskRuns, compactions, visibleApprovals, visibleErrors])
 
   // Track whether the user is pinned to the bottom of the transcript. When

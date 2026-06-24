@@ -185,4 +185,32 @@ describe('buildChatTimeline', () => {
       data: { id: 'message-1', content: 'Part one.Part two.' },
     })
   })
+
+  it('stabilizeMessage reuses the derived message reference until its content changes', () => {
+    const cache = new Map<string, { signature: string; message: Message }>()
+    const stabilizeMessage = (key: string, message: Message): Message => {
+      const signature = JSON.stringify(message)
+      const cached = cache.get(key)
+      if (cached && cached.signature === signature) return cached.message
+      cache.set(key, { signature, message })
+      return message
+    }
+    const base = { toolCalls: [], taskRuns: [], compactions: [], approvals: [], errors: [] } as const
+    const messageData = (item: { kind: string } | undefined) => (item as { data: Message } | undefined)?.data
+
+    // buildChatTimeline mints a fresh grouped message object each call; with the cache
+    // an unchanged message keeps the same reference so MessageBubble's memo can skip.
+    const first = buildChatTimeline({ ...base, messages: [{ id: 'm1', role: 'assistant', content: 'hello', order: 1 }] }, { stabilizeMessage })
+    const second = buildChatTimeline({ ...base, messages: [{ id: 'm1', role: 'assistant', content: 'hello', order: 1 }] }, { stabilizeMessage })
+    const firstMessage = messageData(first.find((item) => item.kind === 'message'))
+    const secondMessage = messageData(second.find((item) => item.kind === 'message'))
+    expect(firstMessage).toBeDefined()
+    expect(secondMessage).toBe(firstMessage)
+
+    // A content change yields a new reference (no stale render).
+    const third = buildChatTimeline({ ...base, messages: [{ id: 'm1', role: 'assistant', content: 'hello world', order: 1 }] }, { stabilizeMessage })
+    const thirdMessage = messageData(third.find((item) => item.kind === 'message'))
+    expect(thirdMessage).not.toBe(firstMessage)
+    expect(thirdMessage).toMatchObject({ content: 'hello world' })
+  })
 })

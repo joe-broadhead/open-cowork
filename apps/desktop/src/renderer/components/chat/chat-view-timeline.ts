@@ -87,6 +87,16 @@ function buildGroupedMessage(
   }
 }
 
+type BuildChatTimelineOptions = {
+  // Returns a stable object reference for a derived message when its rendered
+  // content is unchanged. buildChatTimeline mints a fresh grouped Message object
+  // on every call, which defeats MessageBubble's memo (its expensive markdown /
+  // mermaid render re-runs for every message on every streamed patch). The caller
+  // supplies a content-keyed identity cache so unchanged messages keep the same
+  // reference and the memo can skip. Defaults to identity (no stabilization).
+  stabilizeMessage?: (key: string, message: Message) => Message
+}
+
 export function buildChatTimeline({
   messages,
   toolCalls,
@@ -101,7 +111,8 @@ export function buildChatTimeline({
   compactions: readonly CompactionNotice[]
   approvals: readonly PendingApproval[]
   errors: readonly SessionError[]
-}): TimelineItem[] {
+}, options: BuildChatTimelineOptions = {}): TimelineItem[] {
+  const stabilizeMessage = options.stabilizeMessage ?? ((_key, message) => message)
   const rawItems: OrderedTimelineItem[] = [
     ...messages.flatMap(messageTimelineItems),
     ...toolCalls.map((tc) => ({ kind: 'tool' as const, data: tc, order: tc.order })),
@@ -127,7 +138,7 @@ export function buildChatTimeline({
     if (grouped) {
       result.push({
         kind: 'message',
-        data: grouped.message,
+        data: stabilizeMessage(grouped.key, grouped.message),
         key: grouped.key,
         actionsEnabled: grouped.actionsEnabled,
       })
@@ -175,7 +186,8 @@ export function buildChatTimeline({
     flushToolGroup()
     flushTaskGroup()
     if (item.kind === 'message') {
-      result.push({ kind: 'message', data: item.data, key: `msg:${item.data.id}`, actionsEnabled: true })
+      const key = `msg:${item.data.id}`
+      result.push({ kind: 'message', data: stabilizeMessage(key, item.data), key, actionsEnabled: true })
     } else if (item.kind === 'compaction') {
       result.push({ kind: 'compaction', data: item.data })
     } else if (item.kind === 'approval') {
