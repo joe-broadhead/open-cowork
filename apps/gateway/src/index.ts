@@ -24,7 +24,9 @@ export {
 } from './daemon.js'
 export {
   createGatewayRuntime,
+  createDeliverySubscriber,
   type GatewayRuntime,
+  type DeliverySubscriber,
 } from './gateway-runtime.js'
 export {
   createGatewayMetrics,

@@ -107,6 +107,7 @@ export type CloudGateway = {
     channelBindingIds?: readonly string[]
     onDelivery: (delivery: ChannelDeliveryRecord) => void
     onError?: (error: unknown) => void
+    onClose?: () => void
   }): CloudTransportSubscription
   updateCursor(input: {
     bindingId: string

@@ -23,6 +23,106 @@ import { createGatewaySessionStreamManager, type GatewaySessionStreamManager } f
 const MAX_DELIVERY_ATTEMPTS = 5
 const PROVIDER_EVENT_CLAIM_TTL_MS = 5 * 60_000
 
+export type DeliverySubscriber = { start(): void; close(): void }
+
+// Self-healing wrapper around the cloud→channel delivery subscription (audit P1-G1). The raw
+// subscription opens once and never recovers: a clean server close (idle timeout / deploy / scale
+// event) ends it silently and an error left it permanently down until an orchestrator restart, so a
+// broken delivery pipe could persist undetected. This resubscribes with capped, jittered backoff on
+// error OR clean close, flips a health flag so /ready reflects the real state, and rotates a quiet
+// connection on a watchdog so a half-open/zombie socket can't blackhole deliveries forever.
+export function createDeliverySubscriber(input: {
+  subscribe: (handlers: {
+    onDelivery: (delivery: ChannelDeliveryRecord) => void
+    onError: () => void
+    onClose: () => void
+  }) => { close(): void }
+  onDelivery: (delivery: ChannelDeliveryRecord) => void
+  onHealthy: (healthy: boolean) => void
+  onError?: () => void
+  retryDelayMs?: number
+  maxRetryDelayMs?: number
+  watchdogMs?: number
+  now?: () => number
+  random?: () => number
+}): DeliverySubscriber {
+  const retryDelayMs = input.retryDelayMs ?? 250
+  const maxRetryDelayMs = input.maxRetryDelayMs ?? 30_000
+  const watchdogMs = input.watchdogMs ?? 5 * 60_000
+  const now = input.now ?? (() => Date.now())
+  const random = input.random ?? Math.random
+  let subscription: { close(): void } | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let watchdogTimer: ReturnType<typeof setInterval> | null = null
+  let retryAttempts = 0
+  let lastDeliveryMs = now()
+  let closed = false
+
+  const open = () => {
+    if (closed) return
+    subscription = input.subscribe({
+      onDelivery: (delivery) => {
+        retryAttempts = 0 // a live delivery proves the (re)subscription is healthy — reset backoff
+        lastDeliveryMs = now()
+        input.onHealthy(true)
+        input.onDelivery(delivery)
+      },
+      onError: () => { input.onError?.(); reconnect() },
+      // A clean server close is expected churn, not an error — recover without inflating error metrics.
+      onClose: () => reconnect(),
+    })
+    input.onHealthy(true) // optimistic: an open subscription is healthy until it errors
+  }
+
+  const reconnect = () => {
+    if (closed) return
+    input.onHealthy(false)
+    subscription?.close()
+    subscription = null
+    scheduleRetry()
+  }
+
+  const scheduleRetry = () => {
+    if (closed || retryTimer) return
+    // Exponential backoff with full jitter, capped — reset to the base delay once a delivery arrives.
+    const ceiling = Math.min(retryDelayMs * 2 ** retryAttempts, maxRetryDelayMs)
+    const delay = retryDelayMs + random() * (ceiling - retryDelayMs)
+    retryAttempts += 1
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      open()
+    }, delay)
+    retryTimer.unref?.()
+  }
+
+  return {
+    start() {
+      if (closed) return
+      lastDeliveryMs = now()
+      open()
+      watchdogTimer = setInterval(() => {
+        // Rotate a connection that has been quiet past the watchdog window so a half-open/zombie
+        // socket (no FIN, no read error) can't blackhole deliveries. Skip while a retry is pending.
+        if (closed || retryTimer || subscription === null) return
+        if (now() - lastDeliveryMs >= watchdogMs) {
+          lastDeliveryMs = now()
+          subscription.close()
+          subscription = null
+          open()
+        }
+      }, watchdogMs)
+      watchdogTimer.unref?.()
+    },
+    close() {
+      closed = true
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+      if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null }
+      subscription?.close()
+      subscription = null
+    },
+  }
+}
+
 export type GatewayRuntime = {
   readonly metrics: GatewayMetrics
   readonly providers: GatewayProviderRegistry
@@ -53,12 +153,11 @@ export function createGatewayRuntime(
   const deliverySubscriptions: Array<{ close(): void }> = []
   const inFlightDeliveries = new Set<Promise<void>>()
   let started = false
-  // Tracks whether the cloud delivery subscription is live. The gateway's job is to
-  // relay between channels and the cloud, so a broken delivery pipe means it is not
-  // ready even when its channel providers are healthy. The subscription is not
-  // auto-reconnected here, so onError is effectively terminal until restart — this
-  // flag therefore reflects cloud reachability without flapping. /ready returning 503
-  // lets the orchestrator restart the gateway to re-establish a clean subscription.
+  // Tracks whether the cloud delivery subscription is live. The gateway's job is to relay between
+  // channels and the cloud, so a broken delivery pipe means it is not ready even when its channel
+  // providers are healthy. createDeliverySubscriber now auto-recovers (resubscribe with backoff on
+  // error/clean-close + a quiet-connection watchdog) and drives this flag, so /ready reflects the
+  // real delivery state and self-heals instead of requiring an orchestrator restart.
   let cloudDeliveriesHealthy = true
 
   const runtime: GatewayRuntime = {
@@ -77,23 +176,29 @@ export function createGatewayRuntime(
       started = true
       if (options.subscribeDeliveries !== false) {
         cloudDeliveriesHealthy = true
-        deliverySubscriptions.push(cloud.subscribeDeliveries({
-          claimedBy,
-          channelBindingIds,
+        const subscriber = createDeliverySubscriber({
+          subscribe: (handlers) => cloud.subscribeDeliveries({
+            claimedBy,
+            channelBindingIds,
+            onDelivery: handlers.onDelivery,
+            onError: handlers.onError,
+            onClose: handlers.onClose,
+          }),
           onDelivery: (delivery) => {
-            cloudDeliveriesHealthy = true
             const task = handleDelivery(delivery, providers, cloud, metrics)
               .finally(() => {
                 inFlightDeliveries.delete(task)
               })
             inFlightDeliveries.add(task)
           },
+          onHealthy: (healthy) => { cloudDeliveriesHealthy = healthy },
           onError: () => {
-            cloudDeliveriesHealthy = false
             metrics.cloudSubscriptionErrors += 1
             metrics.errors += 1
           },
-        }))
+        })
+        subscriber.start()
+        deliverySubscriptions.push(subscriber)
       }
     },
     async stop() {

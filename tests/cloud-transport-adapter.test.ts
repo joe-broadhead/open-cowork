@@ -655,6 +655,45 @@ test('cloud transport adapter authenticates SSE subscriptions with bearer header
   assert.equal(requests[0]?.init?.credentials, 'include')
 })
 
+test('cloud transport delivery stream signals onClose (not onError) when the server ends it cleanly', async () => {
+  const fetcher = async () => ({
+    ok: true,
+    status: 200,
+    async text() { return '' },
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"delivery":{"deliveryId":"d1"}}\n\n'))
+        controller.close() // graceful server-initiated close; the consumer never calls close()
+      },
+    }),
+  })
+  const EventSourceImpl: CloudTransportEventSource = class {
+    constructor() { throw new Error('bearer headers must use the fetch SSE path') }
+    close() {}
+    addEventListener() {}
+    onmessage = null
+    onerror = null
+  }
+  const transport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    fetch: fetcher,
+    eventSource: EventSourceImpl,
+    headers: { authorization: 'Bearer cloud-token' },
+  })
+  const deliveries: string[] = []
+  let errors = 0
+  const closed = await new Promise<boolean>((resolve) => {
+    transport.subscribeChannelDeliveries?.({
+      onDelivery: (delivery) => deliveries.push((delivery as { deliveryId: string }).deliveryId),
+      onError: () => { errors += 1 },
+      onClose: () => resolve(true),
+    })
+  })
+  assert.equal(closed, true)
+  assert.deepEqual(deliveries, ['d1'])
+  assert.equal(errors, 0)
+})
+
 test('cloud transport adapter exposes typed HTTP error taxonomy', async () => {
   const cases: Array<{ status: number, kind: CloudTransportError['kind'] }> = [
     { status: 401, kind: 'unauthorized' },
