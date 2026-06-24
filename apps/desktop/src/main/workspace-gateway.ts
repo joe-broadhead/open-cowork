@@ -5,6 +5,7 @@ import {
   workspaceApiSupportContextForAuthority,
 } from '@open-cowork/shared'
 import { log } from './logger.ts'
+import { createKeyedSerializer } from './keyed-serializer.ts'
 import type {
   AddCloudWorkspaceInput,
   AddGatewayWorkspaceInput,
@@ -345,6 +346,10 @@ export class WorkspaceGateway {
   private readonly gatewayRegistry: GatewayWorkspaceRegistry | null
   private readonly gatewayCredentialStore: GatewayWorkspaceCredentialStore | null
   private cloudCache: CloudWorkspaceCache | null | undefined
+  // Serializes the cloud item-setting read-modify-write per (workspace, settings-key) (audit P1-X1).
+  // The RMW spans awaits, so without this two concurrent saves would last-write-win and silently
+  // drop a saved agent/MCP/skill.
+  private readonly itemSettingSerializer = createKeyedSerializer()
   private readonly cloudAdapterFactory: (connection: CloudWorkspaceConnectionRecord, accessToken?: string | null) => CloudWorkspaceSessionAdapter
   private readonly gatewayAdapterFactory: (connection: GatewayWorkspaceConnectionRecord, token?: string | null) => GatewayWorkspaceStatusAdapter
   private desktopPairingProvider: (() => DesktopPairingPublicRecord[]) | null
@@ -1732,18 +1737,31 @@ export class WorkspaceGateway {
     return Array.isArray(setting?.value.items) ? setting.value.items as T[] : []
   }
 
+  // Serialize a read-modify-write on one cloud item-setting per (workspace, key) (audit P1-X1).
+  private serializeCloudItemSetting<T>(
+    event: WorkspaceEventLike,
+    keyName: string,
+    workspaceIdInput: string | null | undefined,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    const lockKey = `${this.resolveWorkspace(event, workspaceIdInput).id}\u0000${keyName}`
+    return this.itemSettingSerializer.run(lockKey, task)
+  }
+
   private async upsertCloudItemSetting<T extends { name: string; scope?: string; directory?: string | null }>(
     event: WorkspaceEventLike,
     keyName: string,
     item: T,
     workspaceIdInput?: string | null,
   ) {
-    const items = await this.readCloudItemsSetting<T>(event, keyName, workspaceIdInput)
-    const next = [
-      ...items.filter((entry) => !this.sameScopedName(entry, item)),
-      item,
-    ].sort((left, right) => left.name.localeCompare(right.name))
-    await this.setCloudSetting(event, keyName, { items: next }, workspaceIdInput)
+    return this.serializeCloudItemSetting(event, keyName, workspaceIdInput, async () => {
+      const items = await this.readCloudItemsSetting<T>(event, keyName, workspaceIdInput)
+      const next = [
+        ...items.filter((entry) => !this.sameScopedName(entry, item)),
+        item,
+      ].sort((left, right) => left.name.localeCompare(right.name))
+      await this.setCloudSetting(event, keyName, { items: next }, workspaceIdInput)
+    })
   }
 
   private async removeCloudItemSetting(
@@ -1752,11 +1770,13 @@ export class WorkspaceGateway {
     target: ScopedArtifactRef,
     workspaceIdInput?: string | null,
   ) {
-    const items = await this.readCloudItemsSetting<ScopedArtifactRef>(event, keyName, workspaceIdInput)
-    const next = items.filter((entry) => !this.sameScopedName(entry, target))
-    if (next.length === items.length) return false
-    await this.setCloudSetting(event, keyName, { items: next }, workspaceIdInput)
-    return true
+    return this.serializeCloudItemSetting(event, keyName, workspaceIdInput, async () => {
+      const items = await this.readCloudItemsSetting<ScopedArtifactRef>(event, keyName, workspaceIdInput)
+      const next = items.filter((entry) => !this.sameScopedName(entry, target))
+      if (next.length === items.length) return false
+      await this.setCloudSetting(event, keyName, { items: next }, workspaceIdInput)
+      return true
+    })
   }
 
   private sameScopedName(
