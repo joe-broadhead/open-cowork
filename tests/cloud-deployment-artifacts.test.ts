@@ -739,7 +739,10 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(dockerfile, /pnpm --filter @open-cowork\/shared build/)
   assert.match(dockerfile, /pnpm cloud:build/)
   assert.match(dockerfile, /USER node/)
-  assert.match(dockerfile, /HEALTHCHECK/)
+  // The container healthcheck must probe readiness (/readyz), not bare liveness, so a
+  // degraded backing service marks the container unhealthy instead of accepting traffic.
+  assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/readyz/)
+  assert.doesNotMatch(dockerfile, /HEALTHCHECK[\s\S]*\/healthz/)
   assert.match(dockerfile, /CMD \["node", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
 
   assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/gateway build/)

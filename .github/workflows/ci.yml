@@ -99,6 +99,9 @@ jobs:
       - name: Build all (packages, MCPs, gateway, website, desktop)
         run: pnpm build
 
+      - name: Cloud bundle build
+        run: pnpm cloud:build
+
   cloud-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 45
