@@ -1,5 +1,8 @@
 import { shortSessionId } from '@open-cowork/shared'
-import type { BrowserWindow } from 'electron'
+type RendererWindow = {
+  isDestroyed(): boolean
+  webContents: { id: number; send(channel: string, ...args: unknown[]): void; isDestroyed(): boolean }
+}
 import type { MessageAttachment, RuntimeNotification, SessionPatch, TodoItem } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
@@ -57,14 +60,14 @@ export type RuntimeSessionEvent = {
 }
 
 type PendingViewFlush = {
-  win: BrowserWindow
+  win: RendererWindow
   sessions: Map<string, SessionFlushIdentity>
   queuedAt: number
   timer: ReturnType<typeof setTimeout> | null
 }
 
 type PendingPatchFlush = {
-  win: BrowserWindow
+  win: RendererWindow
   patches: SessionPatch[]
   overflowSessionIds: Map<string, SessionFlushIdentity>
   droppedPatches: number
@@ -87,7 +90,7 @@ const patchViewRecoverySessionIdsByWindowId = new Map<number, Map<string, Sessio
 let sessionHistoryRefreshHandler: ((sessionId: string) => Promise<void>) | null = null
 const runtimeSessionEventObservers = new Set<(event: RuntimeSessionEvent) => void>()
 const historyRefreshQueue = new Map<string, {
-  win: BrowserWindow
+  win: RendererWindow
   queued: boolean
   promise: Promise<void>
 }>()
@@ -210,7 +213,7 @@ export function addRuntimeSessionEventObserver(observer: (event: RuntimeSessionE
 }
 
 export function publishNotification(
-  win: BrowserWindow | null | undefined,
+  win: RendererWindow | null | undefined,
   notification: RuntimeNotification | null | undefined,
 ) {
   if (!win || win.isDestroyed() || !notification) return
@@ -219,7 +222,7 @@ export function publishNotification(
 }
 
 export function publishSessionView(
-  win: BrowserWindow | null | undefined,
+  win: RendererWindow | null | undefined,
   sessionId: string | null | undefined,
   workspaceId?: string | null,
 ) {
@@ -233,7 +236,7 @@ export function publishSessionView(
   })
 }
 
-export function publishSessionMetadata(win: BrowserWindow | null | undefined, sessionId: string | null | undefined) {
+export function publishSessionMetadata(win: RendererWindow | null | undefined, sessionId: string | null | undefined) {
   if (!win || win.isDestroyed() || !sessionId) return
   const record = getSessionRecord(sessionId)
   if (!record) return
@@ -251,7 +254,7 @@ export function publishSessionMetadata(win: BrowserWindow | null | undefined, se
 }
 
 export function publishSessionPatch(
-  win: BrowserWindow | null | undefined,
+  win: RendererWindow | null | undefined,
   patch: SessionPatch | null | undefined,
 ) {
   if (!win || win.isDestroyed() || !patch) return
@@ -301,8 +304,8 @@ function sessionHasQueuedView(windowId: number, sessionId: string, workspaceId?:
   return pendingViewFlushByWindowId.get(windowId)?.sessions.has(sessionFlushKey(sessionFlushIdentity(sessionId, workspaceId))) === true
 }
 
-function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string, workspaceId?: string | null) {
-  const webContents = win.webContents as BrowserWindow['webContents'] & { isDestroyed?: () => boolean }
+function flushQueuedSessionPatchesBeforeView(win: RendererWindow, sessionId: string, workspaceId?: string | null) {
+  const webContents = win.webContents as RendererWindow['webContents'] & { isDestroyed?: () => boolean }
   if (win.isDestroyed() || webContents.isDestroyed?.()) return
   const windowId = webContents.id
   const pending = pendingPatchFlushByWindowId.get(windowId)
@@ -364,7 +367,7 @@ function flushPendingSessionPatches(windowId: number) {
   }
 }
 
-function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null | undefined) {
+function queueSessionPatchPublish(win: RendererWindow, patch: SessionPatch | null | undefined) {
   if (!patch) return
   const windowId = win.webContents.id
   if (sessionNeedsPatchViewRecovery(windowId, patch.sessionId, patch.workspaceId)) {
@@ -449,7 +452,7 @@ function flushPendingSessionViews(windowId: number) {
   })
 }
 
-function queueSessionViewPublish(win: BrowserWindow, sessionId: string, workspaceId?: string | null) {
+function queueSessionViewPublish(win: RendererWindow, sessionId: string, workspaceId?: string | null) {
   if (workspaceId && workspaceId !== 'local') return
   const windowId = win.webContents.id
   if (!sessionNeedsPatchViewRecovery(windowId, sessionId, workspaceId)) {
@@ -475,7 +478,7 @@ function queueSessionViewPublish(win: BrowserWindow, sessionId: string, workspac
   pendingViewFlushByWindowId.set(windowId, pending)
 }
 
-function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
+function queueSessionHistoryRefresh(win: RendererWindow, sessionId: string) {
   const existing = historyRefreshQueue.get(sessionId)
   if (existing) {
     existing.win = win
@@ -559,7 +562,7 @@ export function dropSessionFromDispatcherQueues(sessionId: string) {
 }
 
 export function dispatchRuntimeSessionEvent(
-  win: BrowserWindow | null | undefined,
+  win: RendererWindow | null | undefined,
   event: RuntimeSessionEvent,
 ) {
   const eventType = getEventType(event)

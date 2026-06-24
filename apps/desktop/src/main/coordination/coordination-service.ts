@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
-import type { BrowserWindow } from 'electron'
+type RendererWindow = {
+  isDestroyed(): boolean
+  webContents: { send(channel: string, ...args: unknown[]): void }
+}
 import type {
   CoordinationChiefOfStaffPlanInput,
   CoordinationChiefOfStaffPlanResult,
@@ -53,7 +56,7 @@ import { getSessionRecord, toRendererSession } from '../session-registry.ts'
 import { addRuntimeSessionEventObserver, type RuntimeSessionEvent } from '../session-event-dispatcher.ts'
 import { log } from '../logger.ts'
 
-let getMainWindow: (() => BrowserWindow | null) | null = null
+let getMainWindow: (() => RendererWindow | null) | null = null
 let removeRuntimeEventObserver: (() => boolean) | null = null
 
 const CHIEF_OF_STAFF_AGENT_ID = 'chief-of-staff'
@@ -98,7 +101,7 @@ function publishCoordinationUpdated() {
 }
 
 export function configureCoordinationService(options: {
-  getMainWindow: () => BrowserWindow | null
+  getMainWindow: () => RendererWindow | null
   watchDeliveryAdapter?: CoordinationWatchDeliveryAdapter | null
 }) {
   getMainWindow = options.getMainWindow
