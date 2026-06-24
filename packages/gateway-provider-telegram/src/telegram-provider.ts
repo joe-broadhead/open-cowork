@@ -83,6 +83,12 @@ export class TelegramProvider implements ChannelProvider {
   private readonly seenWebhookUpdateOrder: string[] = [];
 
   constructor(private readonly config: TelegramProviderConfig) {
+    if (!config.botToken.trim()) throw new Error("Telegram bot token is required.");
+    // Match the other providers: reject an empty webhook secret at construction rather
+    // than only failing closed at request time (a blank secret would be sent to setWebhook).
+    if (config.mode === "webhook" && !config.webhook?.secretToken?.trim()) {
+      throw new Error("Telegram webhook secret token is required.");
+    }
     this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
     this.capabilities = normalizeChannelCapabilities(this.baseCapabilities);
     this.bot = new Bot(config.botToken);

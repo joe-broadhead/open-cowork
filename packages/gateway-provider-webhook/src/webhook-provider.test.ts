@@ -1,12 +1,36 @@
 import { describe, it } from "node:test";
 import { expect } from "../../../tests/gateway-test-expect.ts";
 import {
+  isCloudMetadataHost,
   mapWebhookPayload,
   signWebhookDeliveryPayload,
   signWebhookIngressPayload,
   validateWebhookButtons,
+  validateWebhookDeliveryUrl,
   WebhookProvider
 } from "@open-cowork/gateway-provider-webhook";
+
+describe("webhook delivery URL policy", () => {
+  it("blocks cloud metadata endpoints even when private delivery is allowed", () => {
+    const policy = { allowPrivateDelivery: true };
+    for (const url of [
+      "http://169.254.169.254/latest/meta-data/",
+      "http://metadata.google.internal/computeMetadata/v1/",
+      "https://[64:ff9b::169.254.169.254]/",
+    ]) {
+      expect(() => validateWebhookDeliveryUrl(url, policy)).toThrow();
+    }
+    expect(isCloudMetadataHost("169.254.169.254")).toBe(true);
+    expect(isCloudMetadataHost("metadata.google.internal")).toBe(true);
+    expect(isCloudMetadataHost("64:ff9b::a9fe:a9fe")).toBe(true); // NAT64-embedded 169.254.169.254
+    expect(isCloudMetadataHost("8.8.8.8")).toBe(false);
+  });
+
+  it("blocks NAT64-embedded private targets by default and allows public ones", () => {
+    expect(() => validateWebhookDeliveryUrl("https://[64:ff9b::127.0.0.1]/")).toThrow();
+    expect(() => validateWebhookDeliveryUrl("https://[64:ff9b::8.8.8.8]/")).not.toThrow();
+  });
+});
 
 describe("WebhookProvider", () => {
   function signedAuth(payload: unknown, sharedSecret = "secret", timestamp = "1772280000") {
