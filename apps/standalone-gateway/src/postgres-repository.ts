@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { standaloneRetentionCutoffs } from "./retention.js";
 import { standaloneGatewayMigrations } from "./schema.js";
 import {
-  canIdentityPrompt,
   normalizeIdentityRole,
   normalizeIdentityStatus,
   normalizeWorkspaceId,
@@ -384,17 +383,23 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
 
   async identityAuthorizationSummary(input: { providers?: readonly string[] } = {}): Promise<StandaloneGatewayIdentityAuthorizationSummary> {
     const providers = input.providers?.length ? [...new Set(input.providers)] : null;
-    const result = await this.pool.query<IdentityRow>(
-      providers
-        ? "SELECT * FROM standalone_gateway_channel_identities WHERE provider = ANY($1::text[])"
-        : "SELECT * FROM standalone_gateway_channel_identities",
+    // Aggregate in SQL (audit P1-G3): the /ready doctor calls this on every probe, so a
+    // SELECT * + materialize-all-rows was an unbounded full-table scan an anonymous caller could
+    // hammer. count(*) FILTER mirrors canIdentityPrompt (status='active' AND role IN owner/admin/member).
+    const result = await this.pool.query<{ total: string; active: string; prompt_capable: string }>(
+      `SELECT
+         count(*)::bigint AS total,
+         count(*) FILTER (WHERE status = 'active')::bigint AS active,
+         count(*) FILTER (WHERE status = 'active' AND role IN ('owner', 'admin', 'member'))::bigint AS prompt_capable
+       FROM standalone_gateway_channel_identities
+       ${providers ? "WHERE provider = ANY($1::text[])" : ""}`,
       providers ? [providers] : undefined,
     );
-    const identities = result.rows.map(identityFromRow);
+    const row = result.rows[0];
     return {
-      total: identities.length,
-      active: identities.filter((identity) => identity.status === "active").length,
-      promptCapable: identities.filter(canIdentityPrompt).length,
+      total: Number(row?.total ?? 0),
+      active: Number(row?.active ?? 0),
+      promptCapable: Number(row?.prompt_capable ?? 0),
     };
   }
 
