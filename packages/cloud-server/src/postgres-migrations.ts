@@ -15,6 +15,14 @@ export type PostgresTransactionRunner = <T>(fn: (client: PgClient) => Promise<T>
 
 const NON_TRANSACTIONAL_MIGRATION_LOCK_RETRY_MS = 50
 
+// Minimal ledger DDL so the applied-set check below is safe on a fresh database
+// (the full definition also lives in migration 001's statements; IF NOT EXISTS
+// makes running it twice a no-op).
+const SCHEMA_MIGRATIONS_LEDGER_DDL = `CREATE TABLE IF NOT EXISTS cloud_schema_migrations (
+  id text PRIMARY KEY,
+  applied_at timestamptz NOT NULL
+)`
+
 function nowIso() {
   return new Date().toISOString()
 }
@@ -28,7 +36,15 @@ export async function runPostgresControlPlaneMigrations(
       'SELECT pg_advisory_xact_lock($1, $2)',
       [...CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS],
     )
+    // Skip migrations already recorded — their statements (incl. one-shot
+    // backfills) must not re-execute on every boot. Bootstrap the ledger first
+    // so the SELECT can't fail (a failed query would poison the transaction).
+    await client.query(SCHEMA_MIGRATIONS_LEDGER_DDL)
+    const applied = new Set(
+      (await client.query<{ id: string }>('SELECT id FROM cloud_schema_migrations')).rows.map((row) => String(row.id)),
+    )
     for (const migration of CLOUD_CONTROL_PLANE_MIGRATIONS.filter((entry) => entry.transactional !== false)) {
+      if (applied.has(migration.id)) continue
       for (const statement of migration.statements) await client.query(statement)
       await recordMigration(client, migration.id)
     }
