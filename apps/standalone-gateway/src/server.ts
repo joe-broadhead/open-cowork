@@ -65,10 +65,29 @@ class WebhookRateLimiter {
     const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 };
     this.records.set(key, record);
     if (this.records.size > maxWebhookRateRecords) this.prune(nowMs);
+    // Evict by relevance, not insertion order (audit P3-11): prefer dropping a record that is NOT
+    // currently blocking, and among equals the one expiring soonest. FIFO-by-insertion could evict
+    // an early-inserted hot key that is still BLOCKING — resetting an attacker's block — while idle
+    // keys persisted.
     while (this.records.size > maxWebhookRateRecords) {
-      const oldest = this.records.keys().next().value;
-      if (!oldest) break;
-      this.records.delete(oldest);
+      let evictKey: string | null = null;
+      let evictBlocking = true;
+      let evictExpiry = Infinity;
+      for (const [candidateKey, candidate] of this.records) {
+        const blocking = candidate.blockedUntil > nowMs;
+        const expiry = Math.max(candidate.resetAt, candidate.blockedUntil);
+        if (
+          evictKey === null
+          || (!blocking && evictBlocking)
+          || (blocking === evictBlocking && expiry < evictExpiry)
+        ) {
+          evictKey = candidateKey;
+          evictBlocking = blocking;
+          evictExpiry = expiry;
+        }
+      }
+      if (!evictKey) break;
+      this.records.delete(evictKey);
     }
     return record;
   }

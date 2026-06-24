@@ -12,8 +12,26 @@ import {
   createGatewayHttpServer,
   createGatewayProviderRegistry,
   createGatewayRuntime,
+  GatewayWebhookRateLimiter,
   resolveGatewayConfig as resolveGatewayConfigBase,
 } from '../dist/index.js'
+
+test('webhook rate limiter evicts non-blocking records under cap pressure, preserving active blocks', () => {
+  const limiter = new GatewayWebhookRateLimiter(2)
+  const windowMs = 1_000
+
+  // 'attacker' inserted first, then trips its limit → blocked until resetAt.
+  assert.equal(limiter.claim({ key: 'attacker', nowMs: 0, windowMs, maxRequests: 1 }).ok, true)
+  assert.equal(limiter.claim({ key: 'attacker', nowMs: 0, windowMs, maxRequests: 1 }).ok, false)
+  // 'idle' inserted second, not blocked.
+  assert.equal(limiter.claim({ key: 'idle', nowMs: 0, windowMs, maxRequests: 5 }).ok, true)
+  // A third key exceeds the cap of 2. FIFO-by-insertion would evict 'attacker' (oldest) and reset
+  // its block; evict-by-relevance must drop the non-blocking record instead.
+  assert.equal(limiter.claim({ key: 'fresh', nowMs: 0, windowMs, maxRequests: 5 }).ok, true)
+
+  // 'attacker' is still blocked — its block survived the eviction.
+  assert.equal(limiter.claim({ key: 'attacker', nowMs: 500, windowMs, maxRequests: 1 }).ok, false)
+})
 
 const cloudEnv = {
   OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',

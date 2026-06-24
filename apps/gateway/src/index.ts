@@ -19,6 +19,7 @@ export {
 export {
   createGatewayDaemon,
   createGatewayHttpServer,
+  GatewayWebhookRateLimiter,
   type GatewayDaemon,
   type GatewayHttpServer,
 } from './daemon.js'
