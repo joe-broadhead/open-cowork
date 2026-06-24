@@ -11,11 +11,23 @@
 // which transitively imports the MCP SDK client packages and isn't
 // test-environment friendly.
 export const RUNTIME_TOOL_CACHE_TTL_MS = 30_000
+// Cap the cache: it has a TTL, but a stale entry is only swept on a read of that exact
+// (directory, provider, model) key, so entries for directories the user navigated away from
+// linger until an MCP toggle clears everything. Bound the total and evict the oldest.
+const RUNTIME_TOOL_CACHE_MAX_ENTRIES = 64
 type RuntimeToolCacheEntry = { expiresAt: number; tools: unknown[] }
 type RuntimeToolInflightEntry = { promise: Promise<unknown[]> }
 export const runtimeToolCache = new Map<string, RuntimeToolCacheEntry>()
 export const runtimeToolInflight = new Map<string, RuntimeToolInflightEntry>()
 let runtimeToolCacheGeneration = 0
+
+export function setRuntimeToolCacheEntry(key: string, entry: RuntimeToolCacheEntry) {
+  if (!runtimeToolCache.has(key) && runtimeToolCache.size >= RUNTIME_TOOL_CACHE_MAX_ENTRIES) {
+    const oldest = runtimeToolCache.keys().next().value
+    if (oldest !== undefined) runtimeToolCache.delete(oldest)
+  }
+  runtimeToolCache.set(key, entry)
+}
 
 export function currentRuntimeToolCacheGeneration() {
   return runtimeToolCacheGeneration

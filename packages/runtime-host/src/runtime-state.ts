@@ -2,7 +2,11 @@ import type { OpencodeClient as V2OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
 import type { ManagedOpencodeServerAuth } from './runtime-managed-server.js'
 
-export const MAX_DIRECTORY_CLIENTS = 10_000
+// LRU cap on live directory runtime clients (each holds a long-lived SSE subscription +
+// retry timers). Sized to a realistic working set — the LRU evicts least-recently-used
+// (idle) directories first, so active ones stay; the prior 10_000 let connections accrue
+// far past any real concurrent-directory count before any eviction.
+export const MAX_DIRECTORY_CLIENTS = 64
 
 type DirectoryClientHandler = (directory: string, client: V2OpencodeClient) => void
 

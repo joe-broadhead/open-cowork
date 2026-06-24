@@ -9,6 +9,7 @@ import {
   currentRuntimeToolCacheGeneration,
   runtimeToolCache,
   runtimeToolInflight,
+  setRuntimeToolCacheEntry,
 } from './runtime-tool-cache.js'
 import { sdkErrorMessage } from './sdk-error.js'
 
@@ -105,7 +106,7 @@ export async function listRuntimeToolsForResolvedContext(context: ResolvedRuntim
       })
       const tools = (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
       if (currentRuntimeToolCacheGeneration() === generation) {
-        runtimeToolCache.set(cacheKey, { expiresAt: Date.now() + RUNTIME_TOOL_CACHE_TTL_MS, tools })
+        setRuntimeToolCacheEntry(cacheKey, { expiresAt: Date.now() + RUNTIME_TOOL_CACHE_TTL_MS, tools })
       }
       return tools
     } catch (error) {

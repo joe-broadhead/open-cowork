@@ -28,6 +28,7 @@ export type GatewaySessionStreamManager = {
 
 export type GatewaySessionStreamManagerOptions = {
   retryDelayMs?: number
+  maxRetryDelayMs?: number
   maxRenderAttempts?: number
   // Live stream subscriptions are a bounded cache: each holds an upstream SSE
   // connection (a file descriptor) + render state. `ensure()` is called on every
@@ -54,6 +55,7 @@ type StreamState = {
   generation: number
   lastActivityMs: number
   retryTimer?: ReturnType<typeof setTimeout>
+  retryAttempts: number
 }
 
 export function createGatewaySessionStreamManager(
@@ -63,6 +65,9 @@ export function createGatewaySessionStreamManager(
 ): GatewaySessionStreamManager {
   const streams = new Map<string, StreamState>()
   const retryDelayMs = options.retryDelayMs ?? 250
+  // Cap for exponential backoff so a sustained cloud-SSE outage doesn't have every stream
+  // hammer reconnect at the base delay (thundering herd).
+  const maxRetryDelayMs = options.maxRetryDelayMs ?? 30_000
   const maxRenderAttempts = options.maxRenderAttempts ?? 5
   const maxStreams = Math.max(1, options.maxStreams ?? 2_000)
   const idleTtlMs = options.idleTtlMs ?? 30 * 60_000
@@ -138,6 +143,7 @@ export function createGatewaySessionStreamManager(
         closed: false,
         generation: 0,
         lastActivityMs: now(),
+        retryAttempts: 0,
       }
       streams.set(input.binding.bindingId, state)
       ensureSweepTimer()
@@ -187,10 +193,15 @@ export function createGatewaySessionStreamManager(
 
   function scheduleRetry(state: StreamState) {
     if (state.closed || state.retryTimer) return
+    // Exponential backoff with full jitter, capped — reset to the base delay once a
+    // (re)subscribe starts delivering events again (see handleEvent).
+    const backoff = Math.min(retryDelayMs * 2 ** state.retryAttempts, maxRetryDelayMs)
+    const delay = retryDelayMs + Math.random() * (backoff - retryDelayMs)
+    state.retryAttempts += 1
     state.retryTimer = setTimeout(() => {
       state.retryTimer = undefined
       subscribe(state)
-    }, retryDelayMs)
+    }, delay)
     state.retryTimer.unref?.()
   }
 
@@ -198,6 +209,7 @@ export function createGatewaySessionStreamManager(
     if (state.closed) return
     if (generation !== state.generation) return
     state.lastActivityMs = now()
+    state.retryAttempts = 0 // a live event means the (re)subscription is healthy — reset backoff
     if (event.type === 'snapshot.required') {
       try {
         await hydrateSnapshot(state, event)

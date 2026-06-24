@@ -136,6 +136,11 @@ export class SessionEngine {
       + (this.currentSessionId ? 1 : 0)
     if (Object.keys(this.sessionStateById).length <= keepBudget) return
     this.sessionStateById = pruneSessionDetailCache(this.sessionStateById, this.currentSessionId, this.busySessions)
+    // Drop materialized view-cache entries for sessions no longer hydrated — the warm-state
+    // prune previously left these (full SessionViews) to accumulate one-per-browsed-session.
+    for (const key of this.viewCacheById.keys()) {
+      if (!(key in this.sessionStateById)) this.viewCacheById.delete(key)
+    }
   }
 
   activateSession(sessionId: string) {
