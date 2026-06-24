@@ -2264,6 +2264,14 @@ body {
   line-height: var(--lh-xs);
 }
 
+/* "Waiting on you" count uses the filled accent treatment (prototype .mcount.alert),
+   not the soft accent tint. */
+.home-motion-alert-badge.ui-badge {
+  background: var(--accent-action-fill);
+  border-color: transparent;
+  color: var(--accent-action-foreground);
+}
+
 .home-motion-list {
   display: grid;
   gap: var(--space-2);

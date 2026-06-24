@@ -73,7 +73,7 @@ export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'chi
   icon: IconName
   label: string
   size?: Exclude<ButtonSize, 'lg'>
-  variant?: Exclude<ButtonVariant, 'primary'>
+  variant?: ButtonVariant
   badge?: ReactNode
   loading?: boolean
   disabledReason?: string | null

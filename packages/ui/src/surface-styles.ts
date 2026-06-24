@@ -1503,6 +1503,18 @@ export function controlsSurfaceCss(): string {
   transform: translateY(calc(-1 * var(--border-width-1)));
 }
 
+.ui-icon-button--primary {
+  background: var(--accent-action-fill);
+  color: var(--accent-action-foreground);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-1), var(--specular);
+}
+
+.ui-icon-button--primary:hover:not(:disabled) {
+  box-shadow: var(--shadow-2), var(--specular-strong);
+  transform: translateY(calc(-1 * var(--border-width-1)));
+}
+
 .ui-icon-button {
   flex: none;
   padding: 0;

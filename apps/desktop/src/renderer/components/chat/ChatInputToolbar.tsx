@@ -178,8 +178,8 @@ export function ChatInputToolbar({
           onClick={() => void (isGenerating ? onStop() : onSubmit())}
           disabled={!canSend && !isGenerating}
           disabledReason={!canSend && !isGenerating ? sendDisabledReason || null : null}
-          size="sm"
-          variant={isGenerating ? 'danger' : canSend ? 'secondary' : 'ghost'}
+          size="md"
+          variant={isGenerating ? 'danger' : canSend ? 'primary' : 'ghost'}
         />
       </div>
     </div>

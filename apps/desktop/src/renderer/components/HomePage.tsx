@@ -55,6 +55,19 @@ interface Props {
 const GREETING_KEY = 'studioHome.greeting'
 const GREETING_FALLBACK = 'What should your team tackle today?'
 
+// Prototype greeting: "Good evening." at 44px with the time-of-day word in accent.
+// (The reference shows a personal name there; the desktop has no user-name source,
+// so the time-of-day word carries the accent emphasis.)
+function timeOfDayGreeting(): { lead: string; accent: string } {
+  const hour = new Date().getHours()
+  const accent = hour < 12
+    ? t('studioHome.greeting.morning', 'morning')
+    : hour < 18
+      ? t('studioHome.greeting.afternoon', 'afternoon')
+      : t('studioHome.greeting.evening', 'evening')
+  return { lead: t('studioHome.greeting.lead', 'Good'), accent }
+}
+
 // Cap on how many coworker cards and how many recent project chats we
 // show. Kept small deliberately — the page is "get started", not
 // "everything at once".
@@ -457,7 +470,7 @@ function HomeComposer({
       />
       <div
         ref={inputChromeRef}
-        className="w-full rounded-t-[18px] px-4 py-3 grid gap-3 transition-colors"
+        className="w-full rounded-t-[28px] px-4 py-3 grid gap-3 transition-colors"
         style={{
           background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 86%, var(--color-base) 14%), color-mix(in srgb, var(--color-elevated) 70%, var(--color-base) 30%))',
           border: dragOver ? dropBorder : restBorder,
@@ -608,7 +621,7 @@ function HomeComposer({
         </div>
       )}
       <div
-        className="rounded-b-[18px] border-x border-b"
+        className="rounded-b-[28px] border-x border-b"
         style={{
           background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 72%, var(--color-base) 28%), color-mix(in srgb, var(--color-elevated) 62%, var(--color-base) 38%))',
           borderColor: dragOver ? 'var(--color-accent)' : 'rgba(148, 148, 172, 0.18)',
@@ -1090,7 +1103,11 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   }, [activeWorkspaceIsLocal, onNavigate, onOpenThread, workspaceSupport.workspaceId])
 
   const homeCopyVars = { brand: brandName }
-  const greeting = configuredCopy(homeBranding?.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
+  // A configured/branded greeting wins; otherwise the time-of-day greeting.
+  const brandedGreeting = homeBranding?.greeting?.trim()
+    ? configuredCopy(homeBranding.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
+    : null
+  const timeGreeting = timeOfDayGreeting()
   const subtitle = configuredCopy(
     homeBranding?.subtitle,
     'studioHome.subtitle',
@@ -1109,8 +1126,10 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
     // Flat surface on --color-base — no hero gradient / grid glow / atmosphere (brief §1).
     <div className="flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <div className="measure-column px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
-        <h1 className="font-display text-role-hero font-bold text-text text-center">
-          {greeting}
+        <h1 className="font-display text-[44px] leading-[1.04] font-semibold tracking-[-0.03em] text-text text-center">
+          {brandedGreeting ?? (
+            <>{timeGreeting.lead} <span className="text-accent">{timeGreeting.accent}</span>.</>
+          )}
         </h1>
         <p className="mt-3 text-[13px] text-text-muted text-center">
           {subtitle}

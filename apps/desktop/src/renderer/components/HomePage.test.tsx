@@ -142,7 +142,9 @@ describe('HomePage', () => {
       />,
     )
 
-    expect(screen.getByText('What should your team tackle today?')).toBeTruthy()
+    // Time-of-day greeting ("Good morning/afternoon/evening.") rendered at 44px with
+    // the time word in accent; assert on the stable "Good" lead, not the hour-dependent word.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Good /)
     expect(screen.getByText('Open Cowork · Choose a lead coworker, @mention specialists, and review the work in one place')).toBeTruthy()
     expect(screen.getByPlaceholderText('Ask anything, or @mention a coworker')).toBeTruthy()
     await waitFor(() => expect(window.coworkApi.app.builtinAgents).toHaveBeenCalledTimes(1))

@@ -52,7 +52,10 @@ function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingIt
           <Icon name={config.icon} size={16} />
           <span className="truncate">{config.title}</span>
         </span>
-        <Badge tone={config.key === 'waiting' && config.total > 0 ? 'accent' : 'neutral'}>
+        <Badge
+          tone={config.key === 'waiting' && config.total > 0 ? 'accent' : 'neutral'}
+          className={config.key === 'waiting' && config.total > 0 ? 'home-motion-alert-badge' : undefined}
+        >
           {config.truncated ? `${config.total}+` : config.total}
         </Badge>
       </div>
