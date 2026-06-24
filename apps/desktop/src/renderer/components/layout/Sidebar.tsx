@@ -597,7 +597,7 @@ function SidebarNavButton({
       aria-label={collapsed ? label : undefined}
       aria-current={active ? 'page' : undefined}
       title={collapsed ? label : undefined}
-      className={`sidebar-nav-item sidebar-nav-primary ${collapsed ? 'justify-center px-0' : ''} ${active ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
+      className={`sidebar-nav-item sidebar-nav-primary ${collapsed ? 'justify-center px-0' : ''} ${active ? 'text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
     >
       <Icon name={item.icon} size={16} />
       {!collapsed ? <span className="truncate">{label}</span> : null}
@@ -709,7 +709,7 @@ export function Sidebar({
   return (
     <>
       <aside
-        className={`flex min-h-0 shrink-0 flex-col border-e border-border-subtle transition-[width] duration-200 ${collapsed ? 'w-16 overflow-visible' : 'w-[252px] overflow-hidden'}`}
+        className={`flex min-h-0 shrink-0 flex-col border-e border-border-subtle transition-[width] duration-200 ${collapsed ? 'w-[74px] overflow-visible' : 'w-[264px] overflow-hidden'}`}
         style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
         aria-label={t('sidebar.navigation', 'Sidebar navigation')}
         data-sidebar-collapsed={collapsed ? 'true' : 'false'}

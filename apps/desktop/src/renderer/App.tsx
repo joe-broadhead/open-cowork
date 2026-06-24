@@ -643,7 +643,7 @@ export function App() {
   }
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
-      <TitleBar />
+      <TitleBar view={view} />
       {showPreviewNotice && metadata ? (
         <div className="flex items-center gap-3 border-b px-4 py-2 text-[12px]" style={previewNoticeStyle}>
           <span className="font-semibold">Public preview {metadata.version}</span>

@@ -2320,6 +2320,14 @@ body {
   padding-bottom: var(--space-4);
 }
 
+/* Window title bar carries the screen breadcrumb on a translucent, blurred surface
+   (prototype .topbar). */
+.title-bar {
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 .home-motion-list {
   display: grid;
   gap: var(--space-2);
@@ -2505,13 +2513,21 @@ body {
     color var(--dur-1) var(--ease-out);
 }
 
+/* Active nav: accent-soft fill + accent icon + a 3px accent left bar with a squared
+   outer edge (prototype .nav-item.on / .nav-item.on::before). */
+.sidebar-nav-item[aria-current="page"] {
+  background: var(--accent-soft);
+}
+.sidebar-nav-item[aria-current="page"] svg {
+  color: var(--color-accent);
+}
 .sidebar-nav-item[aria-current="page"]::before {
   content: "";
   position: absolute;
   inset-block: var(--space-2);
-  inset-inline-start: var(--space-1);
-  width: 2px;
-  border-radius: var(--radius-full);
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   background: var(--color-accent);
 }
 
