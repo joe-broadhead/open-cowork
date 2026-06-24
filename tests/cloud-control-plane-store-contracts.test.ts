@@ -256,6 +256,52 @@ function runControlPlaneDomainContracts(
       assert.equal(runnableClaim.pendingSessionCountEstimate >= 1, true)
       assert.equal(runnableClaim.leases.some((lease) => lease.sessionId === sessionId), true)
 
+      // Claim/fencing parity (audit P1-O6): these are exactly the lease-fenced/atomic-claim methods
+      // where a subtle SQL difference causes prod double-claims, yet they were exercised by neither the
+      // always-on contract nor (un-skipped) the postgres concurrency proofs. Run them on both stores.
+      const commandLease = runnableClaim.leases.find((lease) => lease.sessionId === sessionId)
+      assert.ok(commandLease)
+      // The lease-fenced command claim hands the pending command to exactly one holder, once.
+      const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z'))
+      assert.equal(claimedCommand?.commandId, `${prefix}-command`)
+      assert.equal(claimedCommand?.claimedLeaseToken, commandLease!.leaseToken)
+      assert.equal(await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z')), null)
+
+      // listRunnableSessions (previously untested anywhere) returns the same well-formed shape on both.
+      const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2026-01-01T00:00:05.000Z') })
+      assert.equal(Array.isArray(runnableList.sessions), true)
+      assert.equal(Number.isFinite(runnableList.pendingSessionCountEstimate), true)
+
+      // The provider-event claim is atomic: the first claim wins, a re-claim of the same event id is a
+      // no-op duplicate (the prod cross-gateway dedup guarantee).
+      const providerEventClaim = await store.claimChannelProviderEvent({
+        orgId: org.orgId,
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: `${prefix}-provider-event`,
+        eventType: 'message',
+        claimedBy: 'gateway-a',
+        ttlMs: 30_000,
+        now: new Date('2026-01-01T00:00:00.000Z'),
+      })
+      assert.equal(providerEventClaim.claimed, true)
+      assert.equal(providerEventClaim.duplicate, false)
+      assert.equal(providerEventClaim.event.status, 'processing')
+      const providerEventDuplicate = await store.claimChannelProviderEvent({
+        orgId: org.orgId,
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: `${prefix}-provider-event`,
+        eventType: 'message',
+        claimedBy: 'gateway-b',
+        ttlMs: 30_000,
+        now: new Date('2026-01-01T00:00:01.000Z'),
+      })
+      assert.equal(providerEventDuplicate.claimed, false)
+      assert.equal(providerEventDuplicate.duplicate, true)
+
       const workerPool = await store.createManagedWorkerPool({
         poolId: `${prefix}-pool`,
         orgId: org.orgId,
@@ -373,6 +419,26 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(binding.sessionId, sessionId)
       assert.equal((await store.getChannelIdentity(org.orgId, identity.identityId))?.role, 'approver')
+
+      // Channel-delivery claim parity (audit P1-O6): a delivery is claimable only at its nextAttemptAt,
+      // then exactly one claimer wins (the prod cross-gateway delivery guarantee) — identically on both.
+      await store.createChannelDelivery({
+        deliveryId: `${prefix}-delivery`,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId,
+        sessionBindingId: binding.bindingId,
+        provider: 'webhook',
+        target: { externalChatId: 'chat-1' },
+        eventType: 'workflow.completed',
+        payload: { runId: 'run-1' },
+        nextAttemptAt: new Date('2026-01-01T00:00:10.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+      assert.equal(await store.claimNextChannelDelivery({ orgId: org.orgId, claimedBy: 'gw-early', now: new Date('2026-01-01T00:00:01.000Z'), ttlMs: 30_000 }), null)
+      const claimedDelivery = await store.claimNextChannelDelivery({ orgId: org.orgId, claimedBy: 'gw-1', now: new Date('2026-01-01T00:00:10.000Z'), ttlMs: 30_000 })
+      assert.equal(claimedDelivery?.deliveryId, `${prefix}-delivery`)
+      assert.equal(await store.claimNextChannelDelivery({ orgId: org.orgId, claimedBy: 'gw-2', now: new Date('2026-01-01T00:00:11.000Z'), ttlMs: 30_000 }), null)
 
       // API tokens — issue (hashed, not stored plaintext, deduped scopes), resolve by
       // plaintext, list, grant a channel binding, then revoke (resolution fails closed).
