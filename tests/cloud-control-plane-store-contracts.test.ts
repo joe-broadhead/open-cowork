@@ -389,6 +389,11 @@ function runControlPlaneDomainContracts(
       assert.equal(authBlocked.allowed, false)
       assert.ok(authBlocked.retryAfterMs > 0)
 
+      // Retention: a future cutoff prunes both the rate-limit window and the auth-backoff
+      // rows just created (their timestamps are < the cutoff).
+      const prunedThrottle = await store.pruneStaleThrottleState({ olderThan: new Date(Date.now() + 3_600_000), limit: 100 })
+      assert.ok(prunedThrottle >= 2, `expected stale throttle rows pruned, got ${prunedThrottle}`)
+
       // Worker heartbeats — upsert by worker id (active session ids deduped), then list.
       await store.recordWorkerHeartbeat({ workerId: `${prefix}-hb-worker`, role: 'worker', activeSessionIds: [sessionId, sessionId] })
       const workerHeartbeat = (await store.listWorkerHeartbeats()).find((entry) => entry.workerId === `${prefix}-hb-worker`)

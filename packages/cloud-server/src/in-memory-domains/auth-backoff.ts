@@ -53,6 +53,20 @@ export class InMemoryAuthBackoffDomain {
     this.authFailureWindows.set(input.scope, currentWindowStartedAtMs)
     return clone(record)
   }
+
+  // Retention: delete entries whose block expired before the cutoff (no longer throttling).
+  pruneStale(olderThanMs: number, limit: number): number {
+    let removed = 0
+    for (const [scope, record] of this.authFailures) {
+      if (removed >= limit) break
+      if (record.blockedUntilMs < olderThanMs) {
+        this.authFailures.delete(scope)
+        this.authFailureWindows.delete(scope)
+        removed += 1
+      }
+    }
+    return removed
+  }
 }
 
 function windowStart(nowMs: number, windowMs: number) {

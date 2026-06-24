@@ -31,6 +31,19 @@ export class InMemoryRateLimitsDomain {
       policyCode: input.policyCode,
     }
   }
+
+  // Retention: delete sliding-window rows whose window started before the cutoff.
+  pruneStale(olderThanMs: number, limit: number): number {
+    let removed = 0
+    for (const [rateKey, entry] of this.rateLimits) {
+      if (removed >= limit) break
+      if (entry.windowStartedAtMs < olderThanMs) {
+        this.rateLimits.delete(rateKey)
+        removed += 1
+      }
+    }
+    return removed
+  }
 }
 
 function windowStart(nowMs: number, windowMs: number) {

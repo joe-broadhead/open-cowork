@@ -101,6 +101,7 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
   const scheduler = new CloudScheduler(store, service, 'scheduler-1', observability, {
     channelDeliveryMs: 1_000,
     channelInteractionMs: 1_000,
+    staleThrottleMs: null,
     intervalMs: 10_000,
     batchSize: 2,
     maxBatches: 5,

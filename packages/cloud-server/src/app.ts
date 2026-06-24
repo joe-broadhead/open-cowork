@@ -1355,6 +1355,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     // Default null (disabled) — retention is opt-in per the operator's compliance policy.
     channelDeliveryMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS'), 0) || null,
     channelInteractionMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_CHANNEL_INTERACTION_MS'), 0) || null,
+    // Stale throttle state is pure bookkeeping that grows one row per client IP forever, so
+    // unlike the compliance tables this prune defaults ON (1h). 0 disables it.
+    staleThrottleMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_STALE_THROTTLE_MS'), 60 * 60 * 1000) || null,
     intervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS'), 60 * 60 * 1000),
     batchSize: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE'), 500),
     maxBatches: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES'), 20),

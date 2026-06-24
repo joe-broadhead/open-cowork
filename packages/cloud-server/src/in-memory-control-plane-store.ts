@@ -838,6 +838,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.channelDeliveriesDomain.pruneTerminal(input)
   }
 
+  pruneStaleThrottleState(input: { olderThan: Date; limit: number }): number {
+    const cutoff = input.olderThan.getTime()
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    return this.rateLimitsDomain.pruneStale(cutoff, limit) + this.authBackoffDomain.pruneStale(cutoff, limit)
+  }
+
   pruneExpiredChannelInteractions(input: { olderThan: Date; limit: number }): number {
     const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
     const cutoff = input.olderThan.toISOString()

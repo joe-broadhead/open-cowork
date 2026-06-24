@@ -11,6 +11,10 @@ import type { CloudSessionService } from './session-service.ts'
 export type CloudRetentionOptions = {
   channelDeliveryMs: number | null
   channelInteractionMs: number | null
+  // Stale per-source throttle state (cloud_rate_limits + cloud_auth_failures). Pure
+  // throttle bookkeeping, not compliance data, and it grows one row per client IP
+  // forever — so this prune defaults ON (window via app.ts) unlike the others.
+  staleThrottleMs: number | null
   intervalMs: number
   batchSize: number
   maxBatches: number
@@ -19,6 +23,7 @@ export type CloudRetentionOptions = {
 const DISABLED_CLOUD_RETENTION: CloudRetentionOptions = {
   channelDeliveryMs: null,
   channelInteractionMs: null,
+  staleThrottleMs: null,
   intervalMs: 60 * 60 * 1000,
   batchSize: 500,
   maxBatches: 20,
@@ -113,8 +118,8 @@ export class CloudScheduler {
   // retention.intervalMs. No-op unless at least one window is configured. Each
   // table drains in bounded batches so a sweep can't monopolize the loop.
   private async maybeProcessRetention(now: Date) {
-    const { channelDeliveryMs, channelInteractionMs, intervalMs } = this.retention
-    if (channelDeliveryMs === null && channelInteractionMs === null) return
+    const { channelDeliveryMs, channelInteractionMs, staleThrottleMs, intervalMs } = this.retention
+    if (channelDeliveryMs === null && channelInteractionMs === null && staleThrottleMs === null) return
     const nowMs = now.getTime()
     if (this.lastRetentionRunMs !== 0 && nowMs - this.lastRetentionRunMs < intervalMs) return
     this.lastRetentionRunMs = nowMs
@@ -127,6 +132,10 @@ export class CloudScheduler {
     if (channelInteractionMs !== null) {
       const olderThan = new Date(nowMs - channelInteractionMs)
       pruned += await this.pruneInBatches((limit) => this.store.pruneExpiredChannelInteractions({ olderThan, limit }))
+    }
+    if (staleThrottleMs !== null) {
+      const olderThan = new Date(nowMs - staleThrottleMs)
+      pruned += await this.pruneInBatches((limit) => this.store.pruneStaleThrottleState({ olderThan, limit }))
     }
     if (pruned > 0) {
       await recordCloudSchedulerMetric(this.observability, {

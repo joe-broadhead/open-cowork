@@ -273,6 +273,9 @@ export type ControlPlaneStore = {
   // until drained. Disabled (never called) unless a retention window is configured.
   pruneTerminalChannelDeliveries(input: { olderThan: Date; limit: number }): MaybePromise<number>
   pruneExpiredChannelInteractions(input: { olderThan: Date; limit: number }): MaybePromise<number>
+  // Delete stale per-source throttle rows (rate-limit windows + expired auth-backoff blocks)
+  // older than the cutoff; returns the count removed so the scheduler can batch until drained.
+  pruneStaleThrottleState(input: { olderThan: Date; limit: number }): MaybePromise<number>
   createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch>
   updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch | null>
   getCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<CoordinationWatch | null>

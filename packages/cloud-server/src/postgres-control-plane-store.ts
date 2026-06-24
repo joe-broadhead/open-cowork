@@ -939,6 +939,24 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.channelDeliveries.pruneTerminal(input)
   }
 
+  async pruneStaleThrottleState(input: { olderThan: Date; limit: number }) {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const cutoff = input.olderThan.getTime()
+    const rateLimits = await this.pool.query(
+      `DELETE FROM cloud_rate_limits
+       WHERE ctid IN (SELECT ctid FROM cloud_rate_limits WHERE window_started_at_ms < $1 ORDER BY window_started_at_ms LIMIT $2)
+       RETURNING scope`,
+      [cutoff, limit],
+    )
+    const authFailures = await this.pool.query(
+      `DELETE FROM cloud_auth_failures
+       WHERE ctid IN (SELECT ctid FROM cloud_auth_failures WHERE blocked_until_ms < $1 ORDER BY blocked_until_ms LIMIT $2)
+       RETURNING scope`,
+      [cutoff, limit],
+    )
+    return rateLimits.rows.length + authFailures.rows.length
+  }
+
   async pruneExpiredChannelInteractions(input: { olderThan: Date; limit: number }) {
     // Interaction tokens are one-shot and time-bounded; once expired they can never
     // authenticate again, so deleting expired rows past the cutoff is safe. Bounded
