@@ -935,6 +935,29 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.channelDeliveries.ack(input)
   }
 
+  async pruneTerminalChannelDeliveries(input: { olderThan: Date; limit: number }) {
+    return this.channelDeliveries.pruneTerminal(input)
+  }
+
+  async pruneExpiredChannelInteractions(input: { olderThan: Date; limit: number }) {
+    // Interaction tokens are one-shot and time-bounded; once expired they can never
+    // authenticate again, so deleting expired rows past the cutoff is safe. Bounded
+    // by a ctid-keyed subselect so a single batch never locks the whole table.
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const result = await this.pool.query(
+      `DELETE FROM cloud_channel_interactions
+       WHERE ctid IN (
+         SELECT ctid FROM cloud_channel_interactions
+         WHERE expires_at < $1
+         ORDER BY expires_at
+         LIMIT $2
+       )
+       RETURNING interaction_id`,
+      [input.olderThan.toISOString(), limit],
+    )
+    return result.rows.length
+  }
+
   async createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): Promise<CoordinationWatch> {
     return this.coordinationWatches.create(input)
   }

@@ -160,6 +160,19 @@ export class InMemoryChannelDeliveriesDomain {
     delivery.updatedAt = updatedAt
     return clone(delivery)
   }
+
+  // Retention parity with the postgres store: delete up to `limit` terminal
+  // (delivered / dead-lettered) deliveries older than the cutoff, oldest-first.
+  pruneTerminal(input: { olderThan: Date; limit: number }): number {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const cutoff = input.olderThan.toISOString()
+    const stale = Array.from(this.deliveries.values())
+      .filter((delivery) => (delivery.status === 'sent' || delivery.status === 'dead') && delivery.updatedAt < cutoff)
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+      .slice(0, limit)
+    for (const delivery of stale) this.deliveries.delete(delivery.deliveryId)
+    return stale.length
+  }
 }
 
 function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {

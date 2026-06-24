@@ -834,6 +834,21 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.channelDeliveriesDomain.ack(input)
   }
 
+  pruneTerminalChannelDeliveries(input: { olderThan: Date; limit: number }): number {
+    return this.channelDeliveriesDomain.pruneTerminal(input)
+  }
+
+  pruneExpiredChannelInteractions(input: { olderThan: Date; limit: number }): number {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const cutoff = input.olderThan.toISOString()
+    const stale = Array.from(this.channelInteractions.values())
+      .filter((interaction) => interaction.expiresAt < cutoff)
+      .sort((left, right) => left.expiresAt.localeCompare(right.expiresAt))
+      .slice(0, limit)
+    for (const interaction of stale) this.channelInteractions.delete(interaction.interactionId)
+    return stale.length
+  }
+
   createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): CoordinationWatch { return this.coordinationWatchesDomain.create(input) }
   updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): CoordinationWatch | null { return this.coordinationWatchesDomain.update(input) }
   getCloudCoordinationWatch(workspaceId: string, watchId: string): CoordinationWatch | null { return this.coordinationWatchesDomain.get(workspaceId, watchId) }

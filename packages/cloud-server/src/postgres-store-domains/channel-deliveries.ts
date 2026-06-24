@@ -221,6 +221,26 @@ export class PostgresChannelDeliveriesRepository {
     )
     return result.rows[0] ? channelDeliveryFromRow(result.rows[0]) : null
   }
+
+  // Retention: delete up to `limit` terminal (delivered / dead-lettered) deliveries
+  // older than the cutoff, oldest-first, and return how many were removed. Bounded
+  // by ctid-keyed subselect so a single sweep batch never locks the whole table.
+  async pruneTerminal(input: { olderThan: Date; limit: number }): Promise<number> {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const result = await this.options.pool.query(
+      `DELETE FROM cloud_channel_deliveries
+       WHERE ctid IN (
+         SELECT ctid FROM cloud_channel_deliveries
+         WHERE status IN ('sent', 'dead')
+           AND updated_at < $1
+         ORDER BY updated_at
+         LIMIT $2
+       )
+       RETURNING delivery_id`,
+      [input.olderThan.toISOString(), limit],
+    )
+    return result.rows.length
+  }
 }
 
 async function one<Row extends QueryRow = QueryRow>(executor: PgExecutor, text: string, values?: unknown[]) {

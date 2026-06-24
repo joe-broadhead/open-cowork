@@ -268,6 +268,11 @@ export type ControlPlaneStore = {
   listChannelDeliveries(input: ListChannelDeliveriesInput): MaybePromise<ChannelDeliveryRecord[]>
   claimNextChannelDelivery(input: ClaimChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
   ackChannelDelivery(input: AckChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
+  // Retention sweeps for the transient channel tables. Each deletes up to `limit`
+  // rows past the cutoff and returns the count deleted, so the scheduler can batch
+  // until drained. Disabled (never called) unless a retention window is configured.
+  pruneTerminalChannelDeliveries(input: { olderThan: Date; limit: number }): MaybePromise<number>
+  pruneExpiredChannelInteractions(input: { olderThan: Date; limit: number }): MaybePromise<number>
   createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch>
   updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch | null>
   getCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<CoordinationWatch | null>

@@ -64,7 +64,7 @@ import {
 import { isManagedCloudSecretRef } from './secret-ref-policy.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudPrincipal } from './session-service.ts'
-import { CloudScheduler } from './scheduler.ts'
+import { CloudScheduler, type CloudRetentionOptions } from './scheduler.ts'
 import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { CloudWorker } from './worker.ts'
@@ -1303,8 +1303,16 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         observability,
       )
     : null
+  const retention: CloudRetentionOptions = {
+    // Default null (disabled) — retention is opt-in per the operator's compliance policy.
+    channelDeliveryMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS'), 0) || null,
+    channelInteractionMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_CHANNEL_INTERACTION_MS'), 0) || null,
+    intervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS'), 60 * 60 * 1000),
+    batchSize: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE'), 500),
+    maxBatches: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES'), 20),
+  }
   const scheduler = shouldRunCloudScheduler(policy.role)
-    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability)
+    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability, retention)
     : null
 
   const runtimeUnsubscribe = worker && runtime.subscribeEvents

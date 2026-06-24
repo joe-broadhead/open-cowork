@@ -76,3 +76,67 @@ test('cloud scheduler reaps expired workflow claims in bounded batches and repor
   assert.equal(capHitMetric?.value, 1)
   assert.equal(capHitMetric?.attributes?.status, 'cap_hit')
 })
+
+test('cloud scheduler runs retention in bounded batches, throttled by interval', async () => {
+  const deliveryReturns = [2, 2, 1] // drains in three batches (last < batchSize)
+  let deliveryCalls = 0
+  let interactionCalls = 0
+  const store = {
+    async recordWorkerHeartbeat() {},
+    async reapExpiredWorkflowClaims() { return [] },
+    async pruneTerminalChannelDeliveries() {
+      const value = deliveryReturns[deliveryCalls] ?? 0
+      deliveryCalls += 1
+      return value
+    },
+    async pruneExpiredChannelInteractions() {
+      interactionCalls += 1
+      return 0
+    },
+  } as unknown as InMemoryControlPlaneStore
+  const service = {
+    async claimAndStartDueWorkflow() { return null },
+  } as unknown as CloudSessionService
+  const observability = new RecordingObservability()
+  const scheduler = new CloudScheduler(store, service, 'scheduler-1', observability, {
+    channelDeliveryMs: 1_000,
+    channelInteractionMs: 1_000,
+    intervalMs: 10_000,
+    batchSize: 2,
+    maxBatches: 5,
+  })
+
+  // First loop runs retention: deliveries drain across three batches, then interactions.
+  await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
+  assert.equal(deliveryCalls, 3)
+  assert.equal(interactionCalls, 1)
+  const prunedMetric = observability.metrics.find((metric) => metric.name === 'open_cowork_cloud_scheduler_retention_pruned_total')
+  assert.equal(prunedMetric?.value, 5)
+
+  // Within the interval the sweep is skipped entirely.
+  await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:05.000Z'))
+  assert.equal(deliveryCalls, 3)
+  assert.equal(interactionCalls, 1)
+
+  // Past the interval it runs again.
+  await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:15.000Z'))
+  assert.equal(deliveryCalls, 4)
+  assert.equal(interactionCalls, 2)
+})
+
+test('cloud scheduler skips retention entirely when no window is configured', async () => {
+  let pruneCalls = 0
+  const store = {
+    async recordWorkerHeartbeat() {},
+    async reapExpiredWorkflowClaims() { return [] },
+    async pruneTerminalChannelDeliveries() { pruneCalls += 1; return 0 },
+    async pruneExpiredChannelInteractions() { pruneCalls += 1; return 0 },
+  } as unknown as InMemoryControlPlaneStore
+  const service = {
+    async claimAndStartDueWorkflow() { return null },
+  } as unknown as CloudSessionService
+  const scheduler = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability())
+
+  await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
+  assert.equal(pruneCalls, 0)
+})

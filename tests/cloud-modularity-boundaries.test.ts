@@ -276,6 +276,8 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
 
   assert.match(postgresStore, /async listSessionsPage[\s\S]*LIMIT \$\$\{params\.length\}/)
   assert.match(postgresStore, /async listSessions\b[\s\S]*WHERE s\.tenant_id = \$1 AND s\.user_id = \$2[\s\S]*LIMIT 1000/)
+  assert.match(postgresStore, /async pruneExpiredChannelInteractions[\s\S]*DELETE FROM cloud_channel_interactions[\s\S]*WHERE ctid IN \([\s\S]*WHERE expires_at < \$1[\s\S]*LIMIT \$2/)
+  assert.match(postgresChannelDeliveriesDomain, /async pruneTerminal[\s\S]*DELETE FROM cloud_channel_deliveries[\s\S]*WHERE ctid IN \([\s\S]*status IN \('sent', 'dead'\)[\s\S]*LIMIT \$2/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)
