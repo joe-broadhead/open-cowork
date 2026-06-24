@@ -260,6 +260,14 @@ spec:
             httpGet:
               path: /readyz
               port: http
+          # Delay SIGTERM so the endpoint controller removes this pod from the Service
+          # before the server stops accepting connections (close() drops new conns at
+          # once). Without this, in-flight/newly-routed requests get reset every rollout.
+          # Uses node (always present) so it works on shell-less base images.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["node", "-e", "setTimeout(() => {}, {{ mul (int ($role.preStopDrainSeconds | default 10)) 1000 }})"]
           {{- end }}
           {{- with $role.resources }}
           resources:

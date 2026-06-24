@@ -140,6 +140,9 @@ roles:
     replicas: 1
     port: 8787
     autoProcessCommands: false
+    # preStop sleep (seconds) so the Service endpoint is removed before SIGTERM —
+    # avoids dropped requests during rollouts. Must be < terminationGracePeriodSeconds.
+    preStopDrainSeconds: 10
     startupProbe:
       enabled: true
       periodSeconds: 10

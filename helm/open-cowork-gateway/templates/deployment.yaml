@@ -142,6 +142,13 @@ spec:
             httpGet:
               path: /ready
               port: http
+          # Delay SIGTERM so the Service endpoint is removed before the daemon stops
+          # accepting connections — avoids dropped requests during rollouts. Uses node
+          # (always present) so it works on shell-less base images.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["node", "-e", "setTimeout(() => {}, {{ mul (int (.Values.preStopDrainSeconds | default 10)) 1000 }})"]
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

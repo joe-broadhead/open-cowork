@@ -1404,6 +1404,9 @@ export class CloudHttpServer {
   private readonly options: CloudHttpServerOptions
   private readonly sseReplayHub: CloudSseReplayHub
   private readonly sseStreamRegistry: CloudSseStreamRegistry
+  // Set the instant close() begins so /readyz reports 503 during drain — the LB/ingress
+  // stops routing to this pod immediately while in-flight work finishes.
+  private draining = false
 
   constructor(options: CloudHttpServerOptions) {
     this.sseReplayHub = options.sseReplayHub || new CloudSseReplayHub()
@@ -1444,16 +1447,26 @@ export class CloudHttpServer {
     return `http://${address.address}:${address.port}`
   }
 
-  async close() {
+  async close(forceCloseAfterMs = 10_000) {
+    this.draining = true
     this.sseReplayHub.close()
     this.sseStreamRegistry.closeAll()
     this.server.closeIdleConnections?.()
-    await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => {
-        if (error) reject(error)
-        else resolve()
+    let forceTimer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await new Promise<void>((resolve, reject) => {
+        // A single hung/long request would otherwise block close() until the K8s
+        // SIGKILL; force-terminate stragglers after a bounded grace so drain is clean.
+        forceTimer = setTimeout(() => this.server.closeAllConnections?.(), forceCloseAfterMs)
+        forceTimer.unref?.()
+        this.server.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
       })
-    })
+    } finally {
+      if (forceTimer) clearTimeout(forceTimer)
+    }
   }
 
   private async enforceIpRateLimit(req: IncomingMessage) {
@@ -1617,6 +1630,15 @@ export class CloudHttpServer {
       }
 
       if (url.pathname === '/readyz') {
+        if (this.draining) {
+          writeJson(res, 503, {
+            ok: false,
+            role: this.options.policy.role,
+            profileName: this.options.policy.profileName,
+            checks: [{ name: 'draining', status: 'error', detail: 'Server is shutting down.' }],
+          }, requestOptions.corsOrigin)
+          return
+        }
         const readiness = this.options.readiness
           ? await this.options.readiness()
           : {

@@ -266,6 +266,8 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(deployment, /path: \/livez/)
   assert.match(deployment, /readinessProbe:/)
   assert.match(deployment, /path: \/readyz/)
+  // preStop drain so the Service endpoint is removed before SIGTERM (no dropped requests on rollout).
+  assert.match(deployment, /lifecycle:\s*\n\s*preStop:/)
   assert.match(deployment, /checksum\/config:/)
   assert.match(deployment, /checksum\/secret:/)
   assert.match(deployment, /public_production rejects cloud\.allowInsecureAuth=true/)
