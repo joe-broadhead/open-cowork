@@ -168,3 +168,62 @@ Executed **risk-sequenced**: fully-verifiable shared moves first, Docker-shipped
 
 Gate every step: main/renderer/website tsc 0, node suite 0-fail, website 101/101,
 renderer 475/475, lint clean, `pnpm cloud:build` green. Commit + push each green step.
+
+---
+
+## Remaining-work milestone plan (measured 2026-06-24)
+
+**Current state (measured, not estimated):**
+- Cloud→`main/` **value-closure: 126 modules** (was 128 — the 12 leaf-extraction commits cut the
+  *easy* edges; the closure barely shrank because the config/runtime core is the bulk).
+- **Direct frontier: 10 modules** the cloud imports first-hop: `logger`(shim), `runtime-config-builder`,
+  `capability-catalog`, `launchpad-service`, `coordination-service`, `knowledge-store`(SQLite),
+  `runtime-environment`, `runtime-node-managed-server`(deferred), `postgres-knowledge-store`(cloud-only),
+  `workflow-schedule`(trivial shared re-export).
+- The blocker is a **~47-module config/runtime/session substrate**: **15 Electron-value importers**
+  (`config-loader`shim, `settings`, `config-schema`, `auth`, `branding-assets`, `cloud-workspace-auth`
+  /`-cache`/`-credentials`, `gateway-workspace-credentials`, `runtime-component-manifest`,
+  `runtime-content`, `runtime-managed-server`, `runtime-mcp`, `runtime-opencode-cli`, `workflow-store`)
+  + **32 config-loader/settings importers** (agent-config, runtime-config-builder, capability-catalog,
+  runtime.ts, session-registry, permission-config, …).
+
+**Gating insight — no inversion shortcut.** The cloud is a *standalone* server (runs in Docker without
+the desktop) that runs opencode sessions through the **same** config/runtime/session engine as desktop.
+So that substrate must become **package-resolvable**, not injected-away. The *only* thing blocking a
+wholesale move is the **15 Electron value-imports** inside it. Critical path: decouple those 15 →
+batch-move the (now Electron-free) substrate into a package → lift `main/cloud`.
+
+### Milestone A — Electron-decouple the substrate (critical path, ~12–18 commits)
+Apply the proven core+shim / inject-host pattern (per `config-loader`, `logger`) to each Electron-value
+module so the substrate stops importing `electron`:
+- **A1** `config-loader` step 2: cloud imports `config-loader-core` + injects a cloud host (cuts the
+  cloud's config-loader edge). `[1]`
+- **A2** `settings` — `safeStorage` **BYOK credential encryption**. *Security-critical; dedicated careful
+  pass; no secret-handling behavior change.* `[2–3]`
+- **A3** runtime electron modules: `runtime-content`, `runtime-mcp`, `runtime-opencode-cli`,
+  `runtime-component-manifest`, `runtime-managed-server`. `[3–5]`
+- **A4** workspace/auth electron modules: `auth`, `branding-assets`, `cloud-workspace-auth`/`-cache`/
+  `-credentials`, `gateway-workspace-credentials`, `config-schema`, `workflow-store`. `[4–6]`
+  *(several may prove cloud-unreached on inspection → prunable, lowering the count)*
+- **A5** `runtime-paths` config-decouple → unblocks `runtime-environment` + `runtime-process-cleanup`. `[1–2]`
+
+### Milestone B — Relocate the Electron-free substrate into a package (~10–18 commits)
+Batch-move the substrate (config-loader-core, settings-core, runtime-config-builder, capability-catalog,
+runtime.ts, session-engine, agent-config, the 32 config modules) into a shared package (expand
+`@open-cowork/runtime-host`, or new `@open-cowork/app-core`). Desktop + cloud both import it. Batched by
+subsystem: config · runtime · session · agents · workflow · coordination · launchpad · knowledge-store
+(~8 batches).
+
+### Milestone C — The final lift (~5–8 commits)
+- **C1** `runtime-node-managed-server` + supervisor → runtime-host (the deferred vite-entry consolidation). `[1–2]`
+- **C2** create `packages/cloud-server`; move `main/cloud/**` (+ `postgres-knowledge-store`) in; wire
+  package.json/tsconfig/exports. `[2–3]`
+- **C3** Dockerfile + build-cloud rewire; update the ~2–3 non-cloud importers
+  (`cloud-workspace-adapter`, `ipc/channel-handlers`). `[1–2]`
+- **C4** flip the electron-boundary test to **structural** (cloud graph has zero `electron`); drop the
+  build-cloud shim's now-dead names. `[1]`
+
+**Total remaining: ~25–40 commits — a multi-week structural project.** The original audit finding (cloud
+graph silently value-imports Electron) is already **test-enforced** (guard b, `cloud-server-electron-boundary.test.ts`),
+so this is risk-retirement of a *deferred enhancement*, not an open vulnerability. Reasonable to pursue
+incrementally (each commit releasable) or to bank the 12 commits and schedule A/B/C as a separate effort.
