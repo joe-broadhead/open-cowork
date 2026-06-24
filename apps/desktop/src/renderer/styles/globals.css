@@ -1718,6 +1718,12 @@ body {
   color: var(--accent-text);
 }
 
+.ui-badge--info {
+  background: color-mix(in srgb, var(--color-info) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 34%, transparent);
+  color: var(--color-info);
+}
+
 .ui-badge--success {
   background: color-mix(in srgb, var(--color-green) 14%, transparent);
   border-color: color-mix(in srgb, var(--color-green) 34%, transparent);

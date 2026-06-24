@@ -306,29 +306,20 @@ export function approvalsSurfaceCss(): string {
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
     }
-    .studio-approval-details {
-      border: var(--border-width-1) solid var(--color-border-subtle);
-      border-radius: var(--radius-sm);
-      background: color-mix(in srgb, var(--color-base) 74%, transparent);
-      color: var(--color-text-secondary);
-      overflow: hidden;
-    }
-    .studio-approval-details summary {
-      cursor: pointer;
-      padding: var(--space-2) var(--space-3);
-      color: var(--color-text-muted);
-      font-size: var(--text-xs);
-      font-weight: 650;
-    }
-    .studio-approval-details pre {
+    .studio-approval-command {
       margin: 0;
       max-height: 240px;
       overflow: auto;
-      border-block-start: var(--border-width-1) solid var(--color-border-subtle);
+      border: var(--border-width-1) solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
       padding: var(--space-3);
-      color: var(--color-text-secondary);
-      font-size: var(--text-xs);
-      line-height: var(--lh-xs);
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      line-height: var(--lh-sm);
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     .studio-question-block {
       gap: var(--space-2);

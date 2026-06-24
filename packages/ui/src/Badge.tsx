@@ -1,7 +1,7 @@
 import { type ComponentPropsWithoutRef } from 'react'
 import { cn } from './utils.js'
 
-export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+export type BadgeTone = 'neutral' | 'accent' | 'info' | 'success' | 'warning' | 'danger'
 
 export type BadgeProps = ComponentPropsWithoutRef<'span'> & {
   tone?: BadgeTone

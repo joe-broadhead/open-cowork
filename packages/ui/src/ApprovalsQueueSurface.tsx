@@ -91,7 +91,7 @@ function requesterLine(item: ApprovalsQueueItem) {
 function metaChips(item: ApprovalsQueueItem) {
   return (
     <div className="studio-approval-item__chips">
-      <Badge tone={item.kind === 'permission' ? 'warning' : 'accent'}>
+      <Badge tone={item.kind === 'permission' ? 'accent' : 'info'}>
         {item.kind === 'permission' ? 'Permission' : 'Question'}
       </Badge>
       <Badge tone="neutral">via {item.viaLabel}</Badge>
@@ -107,12 +107,8 @@ function isStudioAction(action: StudioAction | null): action is StudioAction {
 function permissionDetails(item: ApprovalsQueuePermissionItem) {
   const input = item.input && Object.keys(item.input).length ? item.input : null
   if (!input) return null
-  return (
-    <details className="studio-approval-details">
-      <summary>Permission input</summary>
-      <pre>{JSON.stringify(input, null, 2)}</pre>
-    </details>
-  )
+  // Always-visible monospace command block (prototype .cmd) — not a collapsed disclosure.
+  return <pre className="studio-approval-command">{JSON.stringify(input, null, 2)}</pre>
 }
 
 function QuestionControls({
