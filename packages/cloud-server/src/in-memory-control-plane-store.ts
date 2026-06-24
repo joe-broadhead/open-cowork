@@ -1320,14 +1320,28 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     this.quotaDomain.assertCommandQueueQuota(input)
   }
 
+  private findSessionCommandById(commandId: string): SessionCommandRecord | undefined {
+    for (const session of this.sessions.values()) {
+      const command = session.commands.find((entry) => entry.commandId === commandId)
+      if (command) return command
+    }
+    return undefined
+  }
+
   enqueueSessionCommand(input: EnqueueCommandInput): SessionCommandRecord {
     this.requireTenantUser(input.tenantId, input.userId)
     const session = this.requireSession(input.tenantId, input.sessionId)
     const payload = input.payload || {}
-    const existing = session.commands.find((command) => command.commandId === input.commandId)
+    // command_id is globally unique (PRIMARY KEY in postgres), so resolve it across
+    // ALL sessions — not just this one — and compare tenant/session on reuse, exactly
+    // like the postgres store. Scoping the lookup to the session let the same
+    // command_id be re-created in a different session, which postgres rejects.
+    const existing = this.findSessionCommandById(input.commandId)
     if (existing) {
       if (
-        existing.userId !== input.userId
+        existing.tenantId !== input.tenantId
+        || existing.userId !== input.userId
+        || existing.sessionId !== input.sessionId
         || existing.kind !== input.kind
         || existing.targetLeaseToken !== (input.targetLeaseToken ?? null)
         || stableJson(existing.payload) !== stableJson(payload)

@@ -185,6 +185,22 @@ function runControlPlaneDomainContracts(
         payload: { text: 'contract prompt' },
       })
       assert.equal(command.status, 'pending')
+      // command_id is globally unique (PK): reusing it in a DIFFERENT session must be
+      // rejected identically by both stores. Regression guard for the prior in-memory
+      // bug where the lookup was scoped to the session and silently created a new command.
+      // async wrapper so the in-memory store's synchronous throw and the postgres
+      // store's rejected promise both normalize to a rejection for assert.rejects.
+      await assert.rejects(
+        async () => { await store.enqueueSessionCommand({
+          commandId: `${prefix}-command`,
+          tenantId,
+          userId,
+          sessionId: `${prefix}-page-a`,
+          kind: 'prompt',
+          payload: { text: 'contract prompt' },
+        }) },
+        /was reused with different content/,
+      )
       const runnableClaim = await store.claimRunnableSessions({
         workerId: `${prefix}-worker`,
         limit: 10,
