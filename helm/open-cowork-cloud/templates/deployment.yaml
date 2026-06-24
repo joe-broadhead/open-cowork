@@ -239,6 +239,10 @@ spec:
             - name: OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS
               value: {{ $role.pollMs | quote }}
             {{- end }}
+            {{- if or (eq $roleName "worker") (eq $roleName "scheduler") }}
+            - name: OPEN_COWORK_CLOUD_LIVENESS_PORT
+              value: {{ $role.livenessPort | default 8788 | quote }}
+            {{- end }}
           {{- if eq $roleName "web" }}
           ports:
             - name: http
@@ -268,6 +272,22 @@ spec:
             preStop:
               exec:
                 command: ["node", "-e", "setTimeout(() => {}, {{ mul (int ($role.preStopDrainSeconds | default 10)) 1000 }})"]
+          {{- end }}
+          {{- if or (eq $roleName "worker") (eq $roleName "scheduler") }}
+          # Worker/scheduler run no main HTTP server; the app exposes a tiny /livez
+          # liveness server so a wedged-event-loop pod is restarted instead of silently
+          # processing nothing. (Heartbeat ticks each poll, fresh through long commands.)
+          {{- $livenessProbe := $role.livenessProbe | default dict }}
+          ports:
+            - name: livez
+              containerPort: {{ $role.livenessPort | default 8788 }}
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: livez
+            periodSeconds: {{ $livenessProbe.periodSeconds | default 15 }}
+            timeoutSeconds: {{ $livenessProbe.timeoutSeconds | default 3 }}
+            failureThreshold: {{ $livenessProbe.failureThreshold | default 4 }}
           {{- end }}
           {{- with $role.resources }}
           resources:

@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import type { IncomingMessage } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { splitTrustedProxyCidrs, type KnowledgeStore } from '@open-cowork/shared'
 import { DEFAULT_CONFIG, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '@open-cowork/shared'
 import { CloudArtifactService } from './artifact-service.ts'
@@ -936,16 +936,62 @@ async function waitForLoopDrain(
   }
 }
 
+// Liveness heartbeat for the worker/scheduler loops. Beaten at the TOP of each timer
+// fire (independent of the async work), so it stays fresh through long legitimate
+// command execution and only goes stale when the event loop itself stalls — the failure
+// a liveness probe must catch on roles that run no HTTP server.
+type LoopHeartbeat = { beat(): void; ageMs(): number }
+
+function createLoopHeartbeat(): LoopHeartbeat {
+  let lastBeatMs = Date.now()
+  return {
+    beat() { lastBeatMs = Date.now() },
+    ageMs() { return Date.now() - lastBeatMs },
+  }
+}
+
+// Minimal /livez server for the worker + scheduler roles (which otherwise expose no HTTP
+// surface), so a wedged-event-loop pod is restarted instead of silently processing nothing.
+function startCloudLivenessServer(
+  port: number,
+  hostname: string,
+  isLive: () => boolean,
+): { close(): Promise<void> } {
+  const server = createServer((req, res) => {
+    if (req.url === '/livez' || req.url === '/healthz') {
+      const live = isLive()
+      res.writeHead(live ? 200 : 503, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: live }))
+      return
+    }
+    res.writeHead(404, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: false }))
+  })
+  server.requestTimeout = 10_000
+  server.headersTimeout = 8_000
+  server.maxConnections = 64
+  // A liveness server must never crash the role it protects; tolerate a bind failure.
+  server.on('error', () => undefined)
+  server.listen(port, hostname)
+  return {
+    async close() {
+      await new Promise<void>((done) => server.close(() => done()))
+    },
+  }
+}
+
 function startWorkerLoop(
   worker: CloudWorker,
   pollMs: number,
   observability: CloudObservabilityAdapter | null,
   shutdownGraceMs: number,
+  heartbeat?: LoopHeartbeat,
 ): LoopStopper {
   let active = false
   let stopping = false
   let current: Promise<void> | null = null
   const timer = setInterval(() => {
+    heartbeat?.beat()
     if (active || stopping) return
     active = true
     current = worker.processAllSessionCommands()
@@ -975,11 +1021,13 @@ function startSchedulerLoop(
   pollMs: number,
   observability: CloudObservabilityAdapter | null,
   shutdownGraceMs: number,
+  heartbeat?: LoopHeartbeat,
 ): LoopStopper {
   let active = false
   let stopping = false
   let current: Promise<void> | null = null
   const timer = setInterval(() => {
+    heartbeat?.beat()
     if (active || stopping) return
     active = true
     current = scheduler.processDueWorkflows()
@@ -1337,20 +1385,38 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         },
       })
     : null
+  // Worker/scheduler roles run no HTTP server, so a liveness heartbeat + a tiny /livez
+  // server lets the orchestrator restart a wedged-event-loop pod. The web (and all-in-one)
+  // role already exposes /livez through its main server, so it needs neither.
+  const workerPollMs = options.workerPollMs || envOptions.workerPollMs
+  const schedulerPollMs = options.schedulerPollMs || envOptions.schedulerPollMs
+  const loopHeartbeat = !shouldRunCloudWeb(policy.role) && (worker || scheduler) ? createLoopHeartbeat() : null
   const stopWorkerLoop = worker
     ? startWorkerLoop(
       worker,
-      options.workerPollMs || envOptions.workerPollMs,
+      workerPollMs,
       observability,
       options.shutdownGraceMs || envOptions.shutdownGraceMs,
+      loopHeartbeat ?? undefined,
     )
     : null
   const stopSchedulerLoop = scheduler
     ? startSchedulerLoop(
       scheduler,
-      options.schedulerPollMs || envOptions.schedulerPollMs,
+      schedulerPollMs,
       observability,
       options.shutdownGraceMs || envOptions.shutdownGraceMs,
+      loopHeartbeat ?? undefined,
+    )
+    : null
+  // Opt-in via an explicitly-set port (the Helm chart sets it for worker/scheduler).
+  // Unset (local/test runs) ⇒ no server, so the fixed port can't conflict across them.
+  const livenessPort = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_LIVENESS_PORT'), 0)
+  const livenessServer = loopHeartbeat && livenessPort > 0
+    ? startCloudLivenessServer(
+      livenessPort,
+      options.hostname || envOptions.hostname,
+      () => loopHeartbeat.ageMs() < Math.max(30_000, Math.max(workerPollMs, schedulerPollMs) * 10),
     )
     : null
 
@@ -1426,6 +1492,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         stopWorkerLoop?.(),
         stopSchedulerLoop?.(),
       ])
+      await livenessServer?.close()
       runtimeUnsubscribe?.()
       await server?.close()
       try {
