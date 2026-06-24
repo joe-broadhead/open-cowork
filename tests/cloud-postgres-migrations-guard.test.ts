@@ -14,6 +14,9 @@ function createFakePostgres() {
 
   async function query(text: string, values: unknown[] = []) {
     const sql = text.trim()
+    // Runner infrastructure (advisory locks, statement_timeout exemption) — not a
+    // migration statement; treat as a no-op so `executed` reflects DDL only.
+    if (sql.startsWith('SET ') || sql.startsWith('RESET ')) return { rows: [] }
     if (sql.includes('pg_advisory_xact_lock') || sql.includes('pg_advisory_unlock')) return { rows: [] }
     if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] }
     if (sql.startsWith('CREATE TABLE IF NOT EXISTS cloud_schema_migrations')) return { rows: [] }

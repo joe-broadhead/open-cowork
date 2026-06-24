@@ -10,8 +10,8 @@ test('cloud postgres pool plan defaults preserve behaviour with a safe idle-in-t
   assert.equal(config.connectionTimeoutMillis, 10_000)
   assert.equal(config.idleTimeoutMillis, 30_000)
   assert.equal(config.application_name, 'open-cowork-cloud')
-  // statement_timeout stays opt-in so migrations / long reads are never truncated.
-  assert.equal(config.statement_timeout, undefined)
+  // statement_timeout defaults to 30s (migrations + long reads are exempted/bounded).
+  assert.equal(config.statement_timeout, 30_000)
   // idle-in-transaction guard is on by default to bound leaked-transaction lock holds.
   assert.equal(config.idle_in_transaction_session_timeout, 120_000)
   assert.equal(lockTimeoutMs, 0)
@@ -39,6 +39,11 @@ test('cloud postgres pool plan is fully operator-tunable via env', () => {
 test('cloud postgres pool plan allows disabling the idle-in-transaction guard explicitly', () => {
   const { config } = cloudPostgresPoolPlan('postgres://db/main', { OPEN_COWORK_CLOUD_PG_IDLE_TX_TIMEOUT_MS: '0' })
   assert.equal(config.idle_in_transaction_session_timeout, undefined)
+})
+
+test('cloud postgres pool plan allows disabling the statement_timeout explicitly', () => {
+  const { config } = cloudPostgresPoolPlan('postgres://db/main', { OPEN_COWORK_CLOUD_PG_STATEMENT_TIMEOUT_MS: '0' })
+  assert.equal(config.statement_timeout, undefined)
 })
 
 test('cloud postgres pool plan ignores invalid env and falls back to safe defaults', () => {

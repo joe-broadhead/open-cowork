@@ -33,9 +33,11 @@ const DEFAULTS = {
   max: 10,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
-  // 0 = unlimited (opt-in): a global statement_timeout would also truncate DDL
-  // migrations and legitimate long reads, so operators enable it deliberately.
-  statementTimeoutMs: 0,
+  // 30s: bounds a runaway/blocked query so it can't pin a pooled connection. The only
+  // legitimately-long operations are exempted — DDL/backfill migrations (SET LOCAL /
+  // per-connection override in postgres-migrations) and the previously-unbounded event-log
+  // reads (now keyset-paged). Operators can override via OPEN_COWORK_CLOUD_PG_STATEMENT_TIMEOUT_MS.
+  statementTimeoutMs: 30_000,
   // 2 minutes: only ever fires for a transaction left IDLE mid-flight (a leak); healthy
   // transactions run queries back-to-back and never sit idle this long, so this is a
   // safe non-zero default that directly bounds the "stuck client pins locks" failure.

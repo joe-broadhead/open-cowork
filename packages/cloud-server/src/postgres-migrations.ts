@@ -9,7 +9,7 @@ type QueryResult<Row extends QueryRow = QueryRow> = { rows: Row[] }
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
 }
-type PgClient = PgExecutor & { release: () => void }
+type PgClient = PgExecutor & { release: (destroy?: boolean) => void }
 type PgPool = PgExecutor & { connect(): Promise<PgClient> }
 export type PostgresTransactionRunner = <T>(fn: (client: PgClient) => Promise<T>) => Promise<T>
 
@@ -36,6 +36,10 @@ export async function runPostgresControlPlaneMigrations(
       'SELECT pg_advisory_xact_lock($1, $2)',
       [...CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS],
     )
+    // Exempt DDL + one-shot backfills from the pool's statement_timeout — they can
+    // legitimately run longer than a normal query. SET LOCAL is transaction-scoped, so
+    // it auto-resets on commit and can't leak the exemption back into the pool.
+    await client.query('SET LOCAL statement_timeout = 0')
     // Skip migrations already recorded — their statements (incl. one-shot
     // backfills) must not re-execute on every boot. Bootstrap the ledger first
     // so the SELECT can't fail (a failed query would poison the transaction).
@@ -60,6 +64,11 @@ async function runNonTransactionalMigration(pool: PgPool, migration: CloudContro
   try {
     await acquireSessionMigrationLock(client)
     locked = true
+    // CREATE INDEX CONCURRENTLY can run long; disable the statement_timeout for this
+    // dedicated connection (it can't use SET LOCAL — CONCURRENTLY can't run in a
+    // transaction). The connection is destroyed on release (below) so the session-level
+    // override can never leak back into the pool.
+    await client.query('SET statement_timeout = 0')
     await dropInvalidConcurrentIndexes(client, migration.concurrentIndexes || [])
     const existing = await client.query('SELECT id FROM cloud_schema_migrations WHERE id = $1', [migration.id])
     if (existing.rows[0] && await allConcurrentIndexesValid(client, migration.concurrentIndexes || [])) return
@@ -77,7 +86,9 @@ async function runNonTransactionalMigration(pool: PgPool, migration: CloudContro
         )
       }
     } finally {
-      client.release()
+      // Destroy (don't pool) this connection — it carries the statement_timeout = 0
+      // override set above, which must never serve a normal pooled query.
+      client.release(true)
     }
   }
 }
