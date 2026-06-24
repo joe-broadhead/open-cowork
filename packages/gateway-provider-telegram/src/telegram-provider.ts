@@ -11,9 +11,8 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 import { Bot, InlineKeyboard, InputFile, type Context } from "grammy";
-import { timingSafeEqual } from "node:crypto";
 import type { Update } from "grammy/types";
 import { withTelegramRetry, type TelegramRateLimitEvent } from "./telegram-retry.js";
 
@@ -608,14 +607,3 @@ function headerValue(
   return undefined;
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string): boolean {
-  if (typeof left !== "string") {
-    return false;
-  }
-  const leftBuffer = Buffer.from(left, "utf8");
-  const rightBuffer = Buffer.from(right, "utf8");
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}

@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import type {
@@ -14,7 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface SlackProviderConfig {
   providerId?: ChannelProviderId;
@@ -561,13 +561,6 @@ function headerValue(headers: SlackWebhookAuth["headers"], name: string): string
     return typeof entry === "string" && entry.trim() ? entry.trim() : null;
   }
   return null;
-}
-
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined): boolean {
-  if (!left || !right) return false;
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {

@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import { connect as createTlsConnection } from "node:tls";
 
@@ -14,7 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface EmailProviderConfig {
   providerId?: ChannelProviderId;
@@ -649,13 +649,6 @@ function headerValue(headers: EmailWebhookAuth["headers"], name: string): string
 function bearerToken(value: string | null): string | null {
   if (!value) return null;
   return value.toLowerCase().startsWith("bearer ") ? value.slice("bearer ".length).trim() : null;
-}
-
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined): boolean {
-  if (!left || !right) return false;
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {

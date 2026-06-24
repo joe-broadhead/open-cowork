@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { timingSafeEqual } from 'node:crypto'
+import { constantTimeStringEqual } from '@open-cowork/gateway-channel'
 import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 
@@ -555,13 +555,6 @@ function hasForwardedHeaders(req: IncomingMessage) {
       || req.headers['x-forwarded-host']
       || req.headers['x-forwarded-proto'],
   )
-}
-
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
-  if (!left || !right) return false
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
 async function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024) {

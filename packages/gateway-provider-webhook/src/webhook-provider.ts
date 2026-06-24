@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
@@ -16,7 +16,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { channelProviderKindFromId, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { channelProviderKindFromId, constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 import {
   boundedPositiveInt,
   isAbortError,
@@ -869,17 +869,6 @@ function headerValue(
   return undefined;
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string): boolean {
-  if (typeof left !== "string") {
-    return false;
-  }
-  const leftBuffer = Buffer.from(left, "utf8");
-  const rightBuffer = Buffer.from(right, "utf8");
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}
 
 function containsControlCharacter(value: string): boolean {
   for (const character of value) {
