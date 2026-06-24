@@ -1,4 +1,3 @@
-import type { IpcMainInvokeEvent } from 'electron'
 import {
   WORKSPACE_SUPPORT_APIS,
   coordinationCapabilityFromWorkspaceApi,
@@ -107,7 +106,7 @@ export const LOCAL_WORKSPACE_ID = 'local'
 
 type WorkspaceRegistration = Omit<WorkspaceInfo, 'active'>
 
-type WorkspaceEventLike = Pick<IpcMainInvokeEvent, 'sender'> | null | undefined
+type WorkspaceEventLike = { sender?: { id?: number } } | null | undefined
 
 export type WorkspaceGatewayOptions = {
   workspaces?: WorkspaceRegistration[]

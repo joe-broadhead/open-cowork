@@ -1,4 +1,3 @@
-import type { IpcMainInvokeEvent } from 'electron'
 import type {
   CloudProjectSnapshotUploadInput,
   CloudProjectSnapshotUploadResult,
@@ -11,7 +10,7 @@ import type {
 } from '@open-cowork/shared'
 import type { CloudPromptInput, CloudWorkspaceSessionAdapter } from './cloud-workspace-adapter.ts'
 
-type WorkspaceEventLike = Pick<IpcMainInvokeEvent, 'sender'> | null | undefined
+type WorkspaceEventLike = { sender?: { id?: number } } | null | undefined
 
 export type ResolveCloudAdapter = (
   event: WorkspaceEventLike,

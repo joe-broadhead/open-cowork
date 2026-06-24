@@ -1,10 +1,17 @@
-import type { BrowserWindow } from 'electron'
 import type {
   KnowledgeProposalInput,
   KnowledgeReviewInput,
   KnowledgeSnapshotOptions,
   KnowledgeSpaceVisibility,
 } from '@open-cowork/shared'
+
+// Minimal structural view of the renderer window we notify on knowledge changes —
+// avoids a (type-only) Electron import so this module is package-resolvable. The
+// desktop injects the real BrowserWindow getter via configureKnowledgeService.
+type RendererWindow = {
+  isDestroyed(): boolean
+  webContents: { send(channel: string, ...args: unknown[]): void }
+}
 import {
   acceptKnowledgeProposal as acceptProposalState,
   createKnowledgeProposal as createProposalState,
@@ -29,7 +36,7 @@ type InternalKnowledgeSpaceInput = {
   workspaceId?: string | null
 } & KnowledgeStorageOptions
 
-let getMainWindow: (() => BrowserWindow | null) | null = null
+let getMainWindow: (() => RendererWindow | null) | null = null
 
 function publishKnowledgeUpdated() {
   const win = getMainWindow?.()
@@ -37,7 +44,7 @@ function publishKnowledgeUpdated() {
 }
 
 export function configureKnowledgeService(options: {
-  getMainWindow: () => BrowserWindow | null
+  getMainWindow: () => RendererWindow | null
 }) {
   getMainWindow = options.getMainWindow
 }
