@@ -1,12 +1,11 @@
-import electron from 'electron'
 import { execFile } from 'node:child_process'
+import { getAppPathHost } from '@open-cowork/shared/node'
 import { existsSync } from 'fs'
 import { createRequire } from 'module'
 import { delimiter, dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { promisify } from 'node:util'
 
-const electronApp = (electron as { app?: typeof import('electron').app }).app
 const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
   ? __filename
   : fileURLToPath(import.meta.url)
@@ -15,7 +14,7 @@ const require = createRequire(currentModulePath)
 const execFileAsync = promisify(execFile)
 
 function unpackedResourcePath(value: string) {
-  if (!electronApp?.isPackaged) return value
+  if (!getAppPathHost()?.isPackaged) return value
   return value.replace(`${resolve(process.resourcesPath, 'app.asar')}`, resolve(process.resourcesPath, 'app.asar.unpacked'))
 }
 
@@ -27,7 +26,7 @@ function resolveBundledNodeModuleDir(moduleName: string): string | null {
     // virtual-store node_modules, so fall through to explicit lookups.
   }
 
-  if (electronApp?.isPackaged) {
+  if (getAppPathHost()?.isPackaged) {
     const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', moduleName)
     if (existsSync(join(unpacked, 'package.json'))) return unpacked
   }
@@ -77,7 +76,7 @@ function resolvePackageJsonFromEntry(moduleName: string): string | null {
 }
 
 function resolveDevelopmentPackageJsonPath(moduleName: string): string | null {
-  if (electronApp?.isPackaged) return null
+  if (getAppPathHost()?.isPackaged) return null
   const moduleParts = moduleName.split('/').filter(Boolean)
   const candidate = resolve(currentModuleDir, '..', '..', 'node_modules', ...moduleParts, 'package.json')
   return existsSync(candidate) ? candidate : null
@@ -189,7 +188,7 @@ export function applyBundledOpencodeCliEnvironment() {
   const env = resolveBundledOpencodeCliEnvironment({
     binary,
     currentPath,
-    isPackaged: Boolean(electronApp?.isPackaged),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
     wrapper,
   })
 

@@ -1,11 +1,11 @@
 import { sanitizeForExport } from '@open-cowork/shared'
+import { getAppPathHost } from '@open-cowork/shared/node'
 import type {
   RuntimeComponentManifest,
   RuntimeComponentManifestEntry,
   RuntimeComponentVerificationIssue,
   RuntimeComponentVerificationReport,
 } from '@open-cowork/shared'
-import electron from 'electron'
 import { createHash } from 'node:crypto'
 import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
@@ -23,7 +23,6 @@ import { recordRuntimeComponentVerification } from './runtime-status.ts'
 
 const RUNTIME_COMPONENT_MANIFEST_FORMAT = 'open-cowork-runtime-component-manifest-v1' satisfies RuntimeComponentVerificationReport['format']
 const RUNTIME_COMPONENT_MANIFEST_FILE = 'runtime-components.manifest.json'
-const electronApp = (electron as { app?: typeof import('electron').app }).app
 
 type RuntimeComponentId =
   | 'opencode-cli'
@@ -126,7 +125,7 @@ function developmentOverrideAllowed(input: RuntimeComponentVerificationInput) {
 }
 
 function isPackaged(input: Pick<RuntimeComponentManifestBuildInput, 'isPackaged'> = {}) {
-  return input.isPackaged ?? Boolean(electronApp?.isPackaged)
+  return input.isPackaged ?? Boolean(getAppPathHost()?.isPackaged)
 }
 
 function normalizeComponentVersion(value: string | null | undefined) {
@@ -168,7 +167,7 @@ function readPackageVersion(path: string | null | undefined) {
 }
 
 function repoResourcePath(input: Pick<RuntimeComponentManifestBuildInput, 'resourcesPath'>, ...segments: string[]) {
-  if (electronApp?.isPackaged) return join(input.resourcesPath || process.resourcesPath, ...segments)
+  if (getAppPathHost()?.isPackaged) return join(input.resourcesPath || process.resourcesPath, ...segments)
   return resolve(process.cwd(), ...segments)
 }
 

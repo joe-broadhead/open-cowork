@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import { getAppPathHost } from '@open-cowork/shared/node'
 import {
   buildConfiguredModelFallbacks,
   buildProviderDescriptors,
@@ -53,21 +54,10 @@ export { normalizeProviderModelId } from './config-public.ts'
 export { resolveConfigEnvPlaceholders } from './config-layer-utils.ts'
 
 // Electron's `app` provides only path resolution here (isPackaged / getAppPath /
-// getPath). Inject it instead of importing electron, so this config core is
-// Electron-free and package-resolvable: the desktop wires the real app via the
-// `config-loader.ts` shim; the cloud server leaves it null and the fallbacks
-// (env override, homedir, cwd) apply — exactly what the build-cloud Electron shim
-// produced before, now structural rather than shimmed.
-export type ConfigAppPathHost = {
-  readonly isPackaged?: boolean
-  getAppPath?: () => string
-  getPath?: (name: 'home' | 'userData') => string
-}
-let electronApp: ConfigAppPathHost | null = null
-export function setConfigAppPathHost(host: ConfigAppPathHost | null) {
-  electronApp = host
-}
-
+// getPath). It is injected via the shared `AppPathHost` (set by the desktop
+// `config-loader.ts` shim at startup) instead of importing electron, so this
+// config core stays Electron-free and package-resolvable; the cloud server leaves
+// the host unset and the env/homedir/cwd fallbacks below apply.
 let configCache: OpenCoworkConfig | null = null
 let publicConfigCache: PublicAppConfig | null = null
 let dataDirCache: string | null = null
@@ -87,9 +77,9 @@ function firstExistingConfigPath(paths: string[]) {
 
 function getBundledConfigCandidates() {
   try {
-    if (electronApp?.isPackaged) return jsonConfigCandidates(join(process.resourcesPath, 'open-cowork.config.json'))
-    if (electronApp?.getAppPath) {
-      return jsonConfigCandidates(resolve(electronApp.getAppPath(), '..', '..', 'open-cowork.config.json'))
+    if (getAppPathHost()?.isPackaged) return jsonConfigCandidates(join(process.resourcesPath, 'open-cowork.config.json'))
+    if (getAppPathHost()?.getAppPath) {
+      return jsonConfigCandidates(resolve(getAppPathHost()!.getAppPath!(), '..', '..', 'open-cowork.config.json'))
     }
     return jsonConfigCandidates(resolve(process.cwd(), 'open-cowork.config.json'))
   } catch {
@@ -134,7 +124,7 @@ function getBaseConfigForPathResolution() {
 
 function getUserConfigCandidates(dataDirName: string) {
   try {
-    return jsonConfigCandidates(join(electronApp?.getPath?.('home') || homedir(), '.config', dataDirName, 'config.json'))
+    return jsonConfigCandidates(join(getAppPathHost()?.getPath?.('home') || homedir(), '.config', dataDirName, 'config.json'))
   } catch {
     return jsonConfigCandidates(join(homedir(), '.config', dataDirName, 'config.json'))
   }
@@ -157,7 +147,7 @@ function getUserDataRoot() {
     return resolve(override)
   }
   try {
-    return electronApp?.getPath?.('userData') || join(process.cwd(), '.open-cowork-test')
+    return getAppPathHost()?.getPath?.('userData') || join(process.cwd(), '.open-cowork-test')
   } catch {
     return join(process.cwd(), '.open-cowork-test')
   }

@@ -1,10 +1,9 @@
-import electron from 'electron'
 import Ajv2020 from 'ajv/dist/2020.js'
+import { getAppPathHost } from '@open-cowork/shared/node'
 import type { ErrorObject } from 'ajv'
 import { existsSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
 
-const electronApp = (electron as { app?: typeof import('electron').app }).app
 
 type JsonSchemaNode = {
   required?: string[]
@@ -40,7 +39,7 @@ function resolveSchemaPath() {
   const candidates = [
     process.resourcesPath ? join(process.resourcesPath, 'open-cowork.config.schema.json') : null,
     typeof __dirname === 'string' ? resolve(__dirname, '../../../../open-cowork.config.schema.json') : null,
-    electronApp?.getAppPath ? resolve(electronApp.getAppPath(), '..', '..', 'open-cowork.config.schema.json') : null,
+    getAppPathHost()?.getAppPath ? resolve(getAppPathHost()!.getAppPath!(), '..', '..', 'open-cowork.config.schema.json') : null,
     resolve(process.cwd(), 'open-cowork.config.schema.json'),
   ].filter((value): value is string => Boolean(value))
 

@@ -1,5 +1,4 @@
-import { writeFileAtomic } from '@open-cowork/shared/node'
-import electron from 'electron'
+import { getAppPathHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
@@ -11,7 +10,6 @@ import { pruneManagedSkillMirror } from './runtime-skill-mirror.ts'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.ts'
 import { findBundledSkillDirInRoot, getBundledSkillIndex } from './bundled-skill-index.ts'
 
-const { app } = electron
 
 function copySkillDirectory(source: string, destination: string) {
   rmSync(destination, { recursive: true, force: true })
@@ -32,8 +30,8 @@ export function writeRuntimeAgentsFile(runtimeHome: string, agentsSrc: string) {
 }
 
 function runtimeConfigSourceDir() {
-  if (app?.isPackaged) return join(process.resourcesPath, 'runtime-config')
-  if (app?.getAppPath) return join(app.getAppPath(), 'runtime-config')
+  if (getAppPathHost()?.isPackaged) return join(process.resourcesPath, 'runtime-config')
+  if (getAppPathHost()?.getAppPath) return join(getAppPathHost()!.getAppPath!(), 'runtime-config')
   const repoDesktopRuntimeConfig = join(process.cwd(), 'apps', 'desktop', 'runtime-config')
   return existsSync(repoDesktopRuntimeConfig)
     ? repoDesktopRuntimeConfig
@@ -48,13 +46,13 @@ function runtimeConfigSourceDir() {
 export function getBundledSkillRoots(): string[] {
   const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
   const roots: string[] = []
-  // `app` is undefined outside Electron (e.g. in node:test), so fall back
-  // to cwd-relative roots so tests can still resolve the repo's bundles.
-  if (app?.isPackaged) {
+  // The app-path host is unset outside Electron (cloud / node:test), so fall
+  // back to cwd-relative roots so tests can still resolve the repo's bundles.
+  if (getAppPathHost()?.isPackaged) {
     roots.push(join(process.resourcesPath, 'runtime-config', 'skills'))
     roots.push(join(process.resourcesPath, 'skills'))
-  } else if (app?.getAppPath) {
-    const appPath = app.getAppPath()
+  } else if (getAppPathHost()?.getAppPath) {
+    const appPath = getAppPathHost()!.getAppPath!()
     roots.push(join(appPath, 'runtime-config', 'skills'))
     roots.push(join(appPath, '..', '..', 'skills'))
   } else {

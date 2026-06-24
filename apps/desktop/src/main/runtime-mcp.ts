@@ -1,5 +1,5 @@
-import electron from 'electron'
 import { existsSync } from 'fs'
+import { getAppPathHost } from '@open-cowork/shared/node'
 import { isAbsolute, join, resolve } from 'path'
 import { credentialFieldIsVisible } from '@open-cowork/shared'
 import type { CustomMcpConfig } from '@open-cowork/shared'
@@ -14,13 +14,12 @@ import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridg
 import { getKnowledgeToolBridgeEnvironment } from './knowledge/knowledge-tool-bridge.ts'
 import { getSemanticUiBridgeEnvironment } from './semantic-ui-bridge.ts'
 
-const electronApp = (electron as { app?: typeof import('electron').app }).app
 
 function resourcePath(...segments: string[]) {
-  if (electronApp?.isPackaged) {
+  if (getAppPathHost()?.isPackaged) {
     return join(process.resourcesPath, ...segments)
   }
-  const appPath = electronApp?.getAppPath?.() || process.cwd()
+  const appPath = getAppPathHost()?.getAppPath?.() || process.cwd()
   return resolve(appPath, '..', '..', ...segments)
 }
 
@@ -41,7 +40,7 @@ export function resolveBundledMcpNodeCommand(scriptPath: string, options: {
   isPackaged?: boolean
   executablePath?: string
 } = {}): { command: string[]; environment: Record<string, string> } {
-  const isPackaged = options.isPackaged ?? Boolean(electronApp?.isPackaged)
+  const isPackaged = options.isPackaged ?? Boolean(getAppPathHost()?.isPackaged)
   if (!isPackaged) {
     return { command: ['node', scriptPath], environment: {} }
   }

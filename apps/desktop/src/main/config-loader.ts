@@ -12,9 +12,9 @@
 // produced before. Cutting that cloud→Electron edge for real means importing the
 // core directly + injecting a cloud host; see docs/design/cloud-server-extraction.md.
 import electron from 'electron'
-import { setConfigAppPathHost } from './config-loader-core.ts'
+import { setAppPathHost } from '@open-cowork/shared/node'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
-setConfigAppPathHost(electronApp ?? null)
+setAppPathHost(electronApp ?? null)
 
 export * from './config-loader-core.ts'
