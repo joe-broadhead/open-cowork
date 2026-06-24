@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import electron from 'electron'
+import { getDesktopShellHost } from '@open-cowork/shared/node'
 import type { CloudWorkspaceConnectionRecord } from './cloud-workspace-registry.ts'
 
 type CloudWorkspaceAuthResponse = {
@@ -57,7 +57,9 @@ function defaultFetch(): CloudWorkspaceAuthFetch {
 }
 
 function defaultOpenExternal(url: string) {
-  return electron.shell.openExternal(url)
+  const shell = getDesktopShellHost()
+  if (!shell) throw new Error('Desktop shell is unavailable; cannot open an external URL.')
+  return shell.openExternal(url)
 }
 
 function jsonRecord(value: unknown, label: string) {

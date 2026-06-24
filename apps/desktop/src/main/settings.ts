@@ -1,5 +1,4 @@
-import { getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
-import electron from 'electron'
+import { getAppPathHost, getDesktopShellHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import {
@@ -25,9 +24,6 @@ import {
   type SecretStorageMode,
 } from './secure-storage-policy.ts'
 
-// `app` is still used directly for the desktop-only setLoginItemSettings (launch
-// at login); credential encryption now goes through the injected SafeStorageHost.
-const electronApp = (electron as { app?: typeof import('electron').app }).app
 
 type SecretStorageAdapter = {
   mode: SecretStorageMode
@@ -457,7 +453,7 @@ function getLegacySettingsPath() {
 function getSecretStorageMode() {
   if (settingsSecretStorageForTests) return settingsSecretStorageForTests.mode
   return resolveSecretStorageMode({
-    isPackaged: Boolean(electronApp?.isPackaged),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
     encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
       getSafeStorageHost()?.getSelectedStorageBackend,
@@ -467,7 +463,7 @@ function getSecretStorageMode() {
 
 function applyWorkflowLaunchAtLogin(settings: AppSettings) {
   try {
-    electronApp?.setLoginItemSettings?.({ openAtLogin: settings.workflowLaunchAtLogin })
+    getDesktopShellHost()?.setLoginItemSettings({ openAtLogin: settings.workflowLaunchAtLogin })
   } catch (error) {
     log('error', `Failed to apply login item settings: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -496,7 +492,7 @@ function decryptLegacyDevelopmentSecret(raw: Buffer) {
   if (testDecrypt) {
     try { return testDecrypt(raw) } catch { return null }
   }
-  if (electronApp?.isPackaged) return null
+  if (getAppPathHost()?.isPackaged) return null
   const safeStorage = getSafeStorageHost()
   if (!safeStorage?.isEncryptionAvailable() || !safeStorage.decryptString) return null
   try { return safeStorage.decryptString(raw) } catch { return null }
@@ -611,7 +607,7 @@ export function loadSettings(): AppSettings {
     }
   }
 
-  if (!electronApp?.isPackaged) {
+  if (!getAppPathHost()?.isPackaged) {
     const legacyPath = getLegacySettingsPath()
     if (existsSync(legacyPath)) {
       try {

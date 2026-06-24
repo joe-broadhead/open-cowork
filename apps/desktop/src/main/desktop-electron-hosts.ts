@@ -7,10 +7,20 @@
 // fallback/guard, exactly as before. Keeping all desktop Electron-host wiring in one
 // place keeps the config core and the credential stores import-`electron`-free.
 import electron from 'electron'
-import { setAppPathHost, setSafeStorageHost } from '@open-cowork/shared/node'
+import { setAppPathHost, setDesktopShellHost, setSafeStorageHost } from '@open-cowork/shared/node'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 setAppPathHost(electronApp ?? null)
+
+const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
+setDesktopShellHost(
+  electronShell || electronApp
+    ? {
+        openExternal: (url) => electronShell?.openExternal(url),
+        setLoginItemSettings: (settings) => electronApp?.setLoginItemSettings?.(settings),
+      }
+    : null,
+)
 
 const electronSafeStorage = (electron as {
   safeStorage?: typeof import('electron').safeStorage & { getSelectedStorageBackend?: () => string }
