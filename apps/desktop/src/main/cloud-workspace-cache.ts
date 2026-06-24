@@ -260,6 +260,15 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   readonly mode: CloudWorkspaceCacheMode
   private readonly path: string
   private readonly secretStorage: SecretStorageAdapter | null
+  // Event cursors live in a tiny, plain (sequence numbers aren't secret) sibling file,
+  // written debounced — decoupled from the big encrypted views blob. setEventCursor is
+  // called per streamed cloud event; persisting it previously re-read, re-decrypted,
+  // re-serialized, re-encrypted and fsync'd EVERY transcript on each call, blocking the
+  // Electron main loop. Cursors are advisory (re-reading events is idempotent), so a
+  // debounced write — and losing the last few hundred ms on an abrupt quit — is safe.
+  private readonly cursorsPath: string
+  private cursorState: Map<string, Map<string, number>> | null = null
+  private cursorFlushTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: {
     path?: string
@@ -268,6 +277,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
     secretStorage?: SecretStorageAdapter | null
   } = {}) {
     this.path = options.path || defaultCachePath()
+    this.cursorsPath = `${this.path}.cursors.json`
     const requestedMode = options.mode || 'full'
     this.secretStorage = options.secretStorage === undefined ? null : options.secretStorage
     if (requestedMode === 'full' && this.storageMode() === 'unavailable') {
@@ -295,40 +305,86 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   }
 
   getEventCursor(workspaceId: string, scope: string): number | null {
-    return this.readRecord(workspaceId)?.eventCursors[scope] ?? null
+    const id = normalizeWorkspaceId(workspaceId)
+    if (!id) return null
+    return this.loadCursorState().get(id)?.get(scope) ?? null
   }
 
-  setEventCursor(workspaceId: string, scope: string, sequence: number, now = new Date()): void {
+  setEventCursor(workspaceId: string, scope: string, sequence: number, _now = new Date()): void {
     if (this.mode === 'disabled' || !scope || !Number.isFinite(sequence) || sequence < 0) return
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
-    const records = this.readRecords()
-    const existing = records.find((record) => record.workspaceId === id) || this.emptyRecord(id, now)
-    const current = existing.eventCursors[scope] || 0
-    this.writeRecord(records, {
-      ...existing,
-      eventCursors: {
-        ...existing.eventCursors,
-        [scope]: Math.max(current, Math.floor(sequence)),
-      },
-      updatedAt: now.toISOString(),
-    })
+    const state = this.loadCursorState()
+    const scopes = state.get(id) || new Map<string, number>()
+    const current = scopes.get(scope) || 0
+    scopes.set(scope, Math.max(current, Math.floor(sequence)))
+    state.set(id, scopes)
+    this.scheduleCursorFlush()
   }
 
-  resetEventCursor(workspaceId: string, scope: string, sequence = 0, now = new Date()): void {
+  resetEventCursor(workspaceId: string, scope: string, sequence = 0, _now = new Date()): void {
     if (this.mode === 'disabled' || !scope || !Number.isFinite(sequence) || sequence < 0) return
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
-    const records = this.readRecords()
-    const existing = records.find((record) => record.workspaceId === id) || this.emptyRecord(id, now)
-    this.writeRecord(records, {
-      ...existing,
-      eventCursors: {
-        ...existing.eventCursors,
-        [scope]: Math.floor(sequence),
-      },
-      updatedAt: now.toISOString(),
-    })
+    const state = this.loadCursorState()
+    const scopes = state.get(id) || new Map<string, number>()
+    scopes.set(scope, Math.floor(sequence))
+    state.set(id, scopes)
+    this.scheduleCursorFlush()
+  }
+
+  // Lazily load cursors from the dedicated file; on first run migrate any cursors that
+  // were previously stored inline in the (encrypted) records file.
+  private loadCursorState(): Map<string, Map<string, number>> {
+    if (this.cursorState) return this.cursorState
+    const state = new Map<string, Map<string, number>>()
+    if (this.mode === 'disabled') { this.cursorState = state; return state }
+    if (existsSync(this.cursorsPath)) {
+      try {
+        const parsed = JSON.parse(readFileSync(this.cursorsPath, 'utf-8')) as unknown
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [ws, scopes] of Object.entries(parsed as Record<string, unknown>)) {
+            if (!scopes || typeof scopes !== 'object') continue
+            const scopeMap = new Map<string, number>()
+            for (const [scope, seq] of Object.entries(scopes as Record<string, unknown>)) {
+              if (typeof seq === 'number' && Number.isFinite(seq) && seq >= 0) scopeMap.set(scope, Math.floor(seq))
+            }
+            if (scopeMap.size > 0) state.set(ws, scopeMap)
+          }
+        }
+      } catch { /* corrupt cursor file → start empty; cursors are advisory */ }
+    } else {
+      // Migration: seed from the inline cursors in the legacy records file.
+      for (const record of this.readRecords()) {
+        const scopeMap = new Map<string, number>()
+        for (const [scope, seq] of Object.entries(record.eventCursors || {})) {
+          if (typeof seq === 'number' && Number.isFinite(seq) && seq >= 0) scopeMap.set(scope, Math.floor(seq))
+        }
+        if (scopeMap.size > 0) state.set(record.workspaceId, scopeMap)
+      }
+    }
+    this.cursorState = state
+    return state
+  }
+
+  private scheduleCursorFlush(): void {
+    if (this.cursorFlushTimer) return
+    this.cursorFlushTimer = setTimeout(() => {
+      this.cursorFlushTimer = null
+      this.flushCursorState()
+    }, 250)
+    this.cursorFlushTimer.unref?.()
+  }
+
+  private flushCursorState(): void {
+    if (this.mode === 'disabled' || !this.cursorState) return
+    const serialized: Record<string, Record<string, number>> = {}
+    for (const [ws, scopes] of this.cursorState) {
+      serialized[ws] = Object.fromEntries(scopes)
+    }
+    try {
+      writeFileAtomic(this.cursorsPath, JSON.stringify(serialized), { mode: 0o600 })
+    } catch { /* best-effort; cursors are advisory and re-derive from replay */ }
   }
 
   getWorkflowList(workspaceId: string): WorkflowListPayload | null {
@@ -459,6 +515,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   removeWorkspace(workspaceId: string): void {
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
+    if (this.loadCursorState().delete(id)) this.scheduleCursorFlush()
     const records = this.readRecords()
     const next = records.filter((record) => record.workspaceId !== id)
     if (next.length === records.length) return
