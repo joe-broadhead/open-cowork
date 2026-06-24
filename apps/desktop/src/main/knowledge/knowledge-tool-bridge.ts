@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { KnowledgeProposalInput } from '@open-cowork/shared'
 import { createKnowledgeProposal } from './knowledge-service.ts'
-import { LOCAL_WORKSPACE_ID } from '../workspace-gateway.ts'
+import { LOCAL_WORKSPACE_ID } from '@open-cowork/shared/node'
 import { log } from '../logger.ts'
 
 // Loopback bridge that lets an in-session coworker (agent) propose a knowledge
