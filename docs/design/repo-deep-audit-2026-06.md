@@ -91,7 +91,7 @@ The material gaps are operational and performance-related, not correctness/secur
 - **Superseded-behavior docs** (Studio: single Mercury theme + glow removed): `docs/design-refinement-and-cloud-react-proposal.md` (argues to KEEP all presets + the glow), `docs/prototypes/mercury-polish-showcase.html` (Nord/Gruvbox/Dracula swatches), `docs/design-tokens.md`/`design-system.md` (ambient `--glow-*`). Archive / add superseded banners.
 - **Completed design docs to archive:** `docs/design/cloud-server-extraction.md` (Milestone C ✅ COMPLETE), `docs/design/studio-production-audit.md` (mostly ✅; **dead link to `handoff/BRIEF.md`**), and the prior `docs/design/production-readiness-audit.md`.
 - **Duplicate/overlapping:** `docs/production-readiness-audit.md` (2026-06-02, in `mkdocs.yml` nav) vs `docs/design/production-readiness-audit.md` (2026-06-16, broader, NOT in nav). Disambiguate; promote the newer or mark the older superseded.
-- **Stale error string:** `scripts/validate-deployment-configs.mjs:1368` checks the new path but the failure message still names `apps/desktop/src/main/cloud/http-server.ts`.
+- **Stale error string:** `scripts/validate-deployment-configs.mjs:1368` checks the new path but the failure message still names `packages/cloud-server/src/http-server.ts`.
 
 ---
 

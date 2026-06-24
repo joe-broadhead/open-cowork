@@ -1365,7 +1365,7 @@ function validateHybridSecurityGates() {
   const cloudHttpServer = read('@open-cowork/cloud-server/http-server')
   for (const phrase of ['Retry-After', 'quota_rejections']) {
     if (!cloudHttpServer.includes(phrase)) {
-      throw new Error(`apps/desktop/src/main/cloud/http-server.ts must include ${phrase}`)
+      throw new Error(`packages/cloud-server/src/http-server.ts must include ${phrase}`)
     }
   }
 

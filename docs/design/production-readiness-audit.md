@@ -1,5 +1,8 @@
 # Open Cowork — Production-Readiness Audit (whole product)
 
+> **Superseded by [`repo-deep-audit-2026-06.md`](repo-deep-audit-2026-06.md)** (2026-06-24).
+> Kept for history.
+
 **Date:** 2026-06-16 · **Scope:** product, features, design-vs-brief, security, scalability, modularity/code-quality, downstream configurability, deployment topologies. **Method:** seven parallel specialist audits, each grounded in `file:line` evidence verified by reading. This document consolidates and prioritizes them.
 
 > This is the broad *product* audit. The narrower Studio design/parity remediation log lives in [`studio-production-audit.md`](./studio-production-audit.md).

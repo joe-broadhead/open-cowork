@@ -155,7 +155,7 @@ policies:
 ### URL policy (HTTP MCPs)
 
 `evaluateHttpMcpUrl` / `evaluateHttpMcpUrlResolved` in
-`apps/desktop/src/main/mcp-url-policy.ts` reject literal and
+`packages/runtime-host/src/mcp-url-policy.ts` reject literal and
 DNS-resolved targets for:
 
 - Non-`http`/`https` schemes.

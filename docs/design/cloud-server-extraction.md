@@ -1,5 +1,9 @@
 # Cloud-server extraction — working plan
 
+> **✅ COMPLETE (2026-06-24).** All milestones (A: Electron-decouple, B: substrate →
+> `@open-cowork/runtime-host`, C: cloud → `@open-cowork/cloud-server`) shipped and gated.
+> Kept as the historical plan/record; see the per-milestone status sections below.
+
 Goal: lift `apps/desktop/src/main/cloud/**` out of the desktop app into its own
 workspace package (`packages/cloud-server`). A package **cannot** import from
 `apps/desktop/src/main/**`, so every module the cloud code reaches outside

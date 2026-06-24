@@ -20,7 +20,7 @@ If a change starts to mirror or replace OpenCode runtime behavior rather than co
 - Product runtime behavior lives in
   [apps/desktop/runtime-config/AGENTS.md](apps/desktop/runtime-config/AGENTS.md).
 - Built-in agent policy lives in
-  [apps/desktop/src/main/agent-config.ts](apps/desktop/src/main/agent-config.ts).
+  [packages/runtime-host/src/agent-config.ts](packages/runtime-host/src/agent-config.ts).
 - Architecture and ownership boundaries live in
   [docs/architecture.md](docs/architecture.md).
 - Workflow product behavior lives in
@@ -35,11 +35,11 @@ Start changes in the layer that owns the concept.
 ### Runtime composition
 
 Use these files when the change is about the OpenCode runtime boundary:
-- `apps/desktop/src/main/runtime.ts`
-- `apps/desktop/src/main/runtime-config-builder.ts`
-- `apps/desktop/src/main/runtime-mcp.ts`
-- `apps/desktop/src/main/effective-skills.ts`
-- `apps/desktop/src/main/agent-config.ts`
+- `packages/runtime-host/src/runtime.ts`
+- `packages/runtime-host/src/runtime-config-builder.ts`
+- `packages/runtime-host/src/runtime-mcp.ts`
+- `packages/runtime-host/src/effective-skills.ts`
+- `packages/runtime-host/src/agent-config.ts`
 
 Rules:
 - Prefer SDK-native config surfaces over app-side reinvention.
@@ -53,9 +53,9 @@ hydration:
 - `apps/desktop/src/main/event-runtime-handlers.ts`
 - `apps/desktop/src/main/event-message-handlers.ts`
 - `apps/desktop/src/main/event-task-state.ts`
-- `apps/desktop/src/main/session-engine.ts`
-- `apps/desktop/src/main/session-history-loader.ts`
-- `apps/desktop/src/main/session-history-projector.ts`
+- `packages/runtime-host/src/session-engine.ts`
+- `packages/runtime-host/src/session-history-loader.ts`
+- `packages/runtime-host/src/session-history-projector.ts`
 - `apps/desktop/src/lib/session-view-model.ts`
 
 Rules:
@@ -69,9 +69,9 @@ Workflows are a durable product layer wrapped around OpenCode-native
 execution.
 
 Primary files:
-- `apps/desktop/src/main/workflow/workflow-store.ts`
+- `packages/runtime-host/src/workflow/workflow-store.ts`
 - `apps/desktop/src/main/workflow/workflow-service.ts`
-- `apps/desktop/src/main/workflow/workflow-tool-actions.ts`
+- `packages/runtime-host/src/workflow/workflow-tool-actions.ts`
 - `apps/desktop/src/main/workflow/workflow-webhook-server.ts`
 - `mcps/workflows/src/index.ts`
 - `apps/desktop/src/renderer/components/workflows/`

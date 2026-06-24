@@ -1,5 +1,11 @@
 # Design Refinement + Cloud Web → React Proposal
 
+> **⚠️ Superseded (2026-06-24).** The Studio design pass reversed two premises here: Open
+> Cowork now ships a **single Mercury identity** (Mercury dark / Day light) — the multi-preset
+> theme list and the ambient radial glow were removed. Read this as a historical proposal;
+> current state is in `theme-presets.ts` (`USER_FACING_THEME_IDS`) and
+> [`design/repo-deep-audit-2026-06.md`](design/repo-deep-audit-2026-06.md).
+
 > Status: **Proposal / for review** · Author: design+arch pass · Date: 2026-06-05
 >
 > Two pillars, decided up front:

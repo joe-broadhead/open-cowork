@@ -234,8 +234,8 @@ This layer defines:
 Code:
 - `apps/desktop/src/main/config-loader.ts` — merges bundled config, override
   files, user config, and managed system config.
-- `apps/desktop/src/main/config-schema.ts` — schema validation.
-- `apps/desktop/src/main/settings.ts` — per-user settings and credentials.
+- `packages/runtime-host/src/config-schema.ts` — schema validation.
+- `packages/runtime-host/src/settings.ts` — per-user settings and credentials.
 
 See [Downstream Customization](downstream.md) for the merge order and
 environment variables that feed this layer.
@@ -252,15 +252,15 @@ This includes:
 - directory-scoped runtime behavior
 
 Code:
-- `apps/desktop/src/main/runtime.ts` — starts and stops the OpenCode server,
+- `packages/runtime-host/src/runtime.ts` — starts and stops the OpenCode server,
   manages the directory client cache, owns the token-refresh timer.
-- `apps/desktop/src/main/runtime-config-builder.ts` — builds the JSON config
+- `packages/runtime-host/src/runtime-config-builder.ts` — builds the JSON config
   handed to OpenCode (provider, compaction, MCP wiring).
-- `apps/desktop/src/main/runtime-opencode-cli.ts` — resolves and wraps the
+- `packages/runtime-host/src/runtime-opencode-cli.ts` — resolves and wraps the
   bundled OpenCode binary.
-- `apps/desktop/src/main/runtime-mcp.ts`,
-  `apps/desktop/src/main/runtime-content.ts`,
-  `apps/desktop/src/main/effective-skills.ts` — skill and MCP overlay
+- `packages/runtime-host/src/runtime-mcp.ts`,
+  `packages/runtime-host/src/runtime-content.ts`,
+  `packages/runtime-host/src/effective-skills.ts` — skill and MCP overlay
   resolution (the "downstream wins" behavior).
 
 ### 3. Main-process integration layer
@@ -282,10 +282,10 @@ Code:
   renderer and main.
 - `apps/desktop/src/main/content-security-policy.ts`,
   `apps/desktop/src/main/destructive-actions.ts`,
-  `apps/desktop/src/main/mcp-stdio-policy.ts`,
-  `apps/desktop/src/main/shell-env.ts` — policy and safety boundaries.
-- `apps/desktop/src/main/thread-index/thread-index-store.ts` and
-  `apps/desktop/src/main/thread-index/thread-index-service.ts` — the local Threads
+  `packages/runtime-host/src/mcp-stdio-policy.ts`,
+  `packages/runtime-host/src/shell-env.ts` — policy and safety boundaries.
+- `packages/runtime-host/src/thread-index/thread-index-store.ts` and
+  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local Threads
   search/tag projection over the session registry and session history.
 
 ### 4. Event projection layer
@@ -309,10 +309,10 @@ Code:
   `apps/desktop/src/main/event-message-handlers.ts`,
   `apps/desktop/src/main/event-task-state.ts` — normalizers for each event
   class.
-- `apps/desktop/src/main/session-engine.ts` — the state machine that applies
+- `packages/runtime-host/src/session-engine.ts` — the state machine that applies
   normalized events and derives the view model.
-- `apps/desktop/src/main/session-history-loader.ts`,
-  `apps/desktop/src/main/session-history-projector.ts` — hydration from
+- `packages/runtime-host/src/session-history-loader.ts`,
+  `packages/runtime-host/src/session-history-projector.ts` — hydration from
   OpenCode-persisted history.
 
 Key invariant: when history hydration and live event streams race,
@@ -359,12 +359,12 @@ It does **not** replace OpenCode sessions or subagents. It creates and tracks
 them.
 
 Code:
-- `apps/desktop/src/main/workflow/workflow-store.ts` — durable workflow definitions and
+- `packages/runtime-host/src/workflow/workflow-store.ts` — durable workflow definitions and
   run ledger
 - `apps/desktop/src/main/workflow/workflow-service.ts` — setup-thread creation,
   scheduler ticks, run-thread creation, and run completion projection
-- `apps/desktop/src/main/workflow/workflow-tool-bridge.ts` and
-  `apps/desktop/src/main/workflow/workflow-tool-actions.ts` — local MCP bridge used by
+- `packages/runtime-host/src/workflow/workflow-tool-bridge.ts` and
+  `packages/runtime-host/src/workflow/workflow-tool-actions.ts` — local MCP bridge used by
   Workflow Designer to preview and save workflows after user confirmation
 - `apps/desktop/src/main/workflow/workflow-webhook-server.ts` — loopback webhook intake
   for saved workflows
