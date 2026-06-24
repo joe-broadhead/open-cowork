@@ -1,10 +1,9 @@
+import { brandingAssetUrl, resolveAppIconFile, resolveBrandingAssetFile } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { brandingAssetUrl, resolveAppIconFile, resolveBrandingAssetFile } from '../apps/desktop/src/main/branding-assets.ts'
-
 function tempBrandingRoot() {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-branding-'))
   writeFileSync(join(root, 'acme-logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" />')

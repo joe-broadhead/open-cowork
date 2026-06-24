@@ -1,11 +1,9 @@
+import { buildPublicAppConfig, validateConfigSemantics, validateResolvedConfig } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
-import { validateResolvedConfig } from '../apps/desktop/src/main/config-schema.ts'
-import { validateConfigSemantics } from '../apps/desktop/src/main/config-layer-utils.ts'
-import { buildPublicAppConfig } from '../apps/desktop/src/main/config-public.ts'
 import { resolveCloudPublicBranding } from '../apps/desktop/src/main/cloud/app.ts'
 import { cloudWebsiteHtml } from '../apps/website/src/render.ts'
 

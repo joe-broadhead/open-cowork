@@ -1,21 +1,9 @@
+import { E2E_ALLOW_SETTINGS_MUTATION_KEY, appendE2ERemoteDebuggingSwitches, applyE2EArgEnvironment, buildE2EArgEnvironment, E2E_ARG_ENV_ENABLE_KEY, e2eSettingsMutationAllowed, e2eReadyFileRelativePathIsContained, e2eWindowReadyProbeEnabled, resolveE2ERemoteDebuggingPort, writeE2EWindowReadyProbe } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  E2E_ALLOW_SETTINGS_MUTATION_KEY,
-  appendE2ERemoteDebuggingSwitches,
-  applyE2EArgEnvironment,
-  buildE2EArgEnvironment,
-  E2E_ARG_ENV_ENABLE_KEY,
-  e2eSettingsMutationAllowed,
-  e2eReadyFileRelativePathIsContained,
-  e2eWindowReadyProbeEnabled,
-  resolveE2ERemoteDebuggingPort,
-  writeE2EWindowReadyProbe,
-} from '../apps/desktop/src/main/e2e-remote-debugging.ts'
-
 test('e2e remote debugging port is ignored unless smoke mode is enabled', () => {
   assert.equal(resolveE2ERemoteDebuggingPort({
     OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: '9222',

@@ -57,7 +57,7 @@ const legacyNamingAllowlist = new Set([
   '.github/workflows/release.yml',
   'apps/desktop/src/main/agent-config.ts',
   'apps/desktop/src/main/config-layer-utils.ts',
-  'apps/desktop/src/main/config-loader-core.ts',
+  'packages/runtime-host/src/config-loader-core.ts',
   'apps/desktop/src/main/config-public.ts',
   'packages/shared/src/config-types.ts',
   'apps/desktop/src/main/custom-agent-store.ts',

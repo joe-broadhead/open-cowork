@@ -1,3 +1,4 @@
+import { buildModelInfoSnapshot } from '@open-cowork/runtime-host'
 import { asRecord, readString } from '@open-cowork/shared'
 import {
   createOpencodeClient,
@@ -20,7 +21,6 @@ import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/wor
 import { ensureKnowledgeToolBridge, stopKnowledgeToolBridge } from './knowledge/knowledge-tool-bridge.ts'
 import { ensureSemanticUiBridge, stopSemanticUiBridge } from './semantic-ui-bridge.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
-import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
 import {
   getRuntimeEnvPaths,

@@ -1,3 +1,4 @@
+import { readJsoncFile, writeJsonFile } from '@open-cowork/runtime-host'
 import { join } from 'path'
 import {
   type CapabilityBundleInstallPlan,
@@ -15,7 +16,6 @@ import {
   createEmptyCapabilityBundleLifecycleState,
 } from './capability-bundle-engine.ts'
 import { getAppDataDir } from './config-loader.ts'
-import { readJsoncFile, writeJsonFile } from './jsonc.ts'
 import { log } from './logger.ts'
 
 const CAPABILITY_BUNDLE_STORE_SCHEMA_VERSION = 1

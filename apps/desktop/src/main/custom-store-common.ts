@@ -1,3 +1,4 @@
+import { resolveExistingJsonConfigPath } from '@open-cowork/runtime-host'
 import { mkdirSync } from 'fs'
 import { isAbsolute, relative, resolve } from 'path'
 import type { NativeConfigScope } from './runtime-paths.ts'
@@ -10,8 +11,6 @@ import {
   getProjectCoworkSkillsDir,
   resolveProjectDirectory,
 } from './runtime-paths.ts'
-import { resolveExistingJsonConfigPath } from './jsonc.ts'
-
 export type JsonRecord = Record<string, unknown>
 
 export function ensureDirectory(path: string) {

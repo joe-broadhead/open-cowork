@@ -1,7 +1,6 @@
+import { dedupByKey } from '@open-cowork/runtime-host'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { dedupByKey } from '../apps/desktop/src/main/inflight-dedup.ts'
-
 // The provider-catalog refresh path uses this primitive to collapse the
 // ~10 parallel `getProviderDescriptors()` reads that fire on cold boot
 // into a single HTTPS call. These tests pin the concurrency contract so a

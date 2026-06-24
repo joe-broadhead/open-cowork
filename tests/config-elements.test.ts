@@ -1,3 +1,4 @@
+import { normalizeConfigLayers } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'fs'
@@ -18,8 +19,6 @@ import {
   getPublicAppConfig,
   getProviderDescriptors,
 } from '../apps/desktop/src/main/config-loader.ts'
-import { normalizeConfigLayers } from '../apps/desktop/src/main/config-normalizer.ts'
-
 test('open core ships with built-in tools, skills, mcps, and agents configured by default', () => {
   const tools = getConfiguredToolsFromConfig()
   const skills = getConfiguredSkillsFromConfig()

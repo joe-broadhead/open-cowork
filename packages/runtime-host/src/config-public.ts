@@ -5,14 +5,14 @@ import type {
   PublicAppConfig,
   ToolTraceRule,
 } from '@open-cowork/shared'
-import { brandingAssetUrl } from './branding-assets.ts'
+import { brandingAssetUrl } from './branding-assets.js'
 import type {
   ConfiguredProviderDescriptor,
   ModelFallbackInfo,
   OpenCoworkConfig,
 } from '@open-cowork/shared'
-import { modelInfoKeys } from './model-info-utils.ts'
-import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-catalog.ts'
+import { modelInfoKeys } from './model-info-utils.js'
+import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-catalog.js'
 
 // Merge the descriptor's hardcoded `models[]` (marked featured) with the
 // latest cached dynamic catalog. Hardcoded entries take priority on

@@ -1,8 +1,8 @@
 import Ajv2020 from 'ajv/dist/2020.js'
 import { getAppPathHost } from '@open-cowork/shared/node'
 import type { ErrorObject } from 'ajv'
-import { existsSync, readFileSync } from 'fs'
-import { join, resolve } from 'path'
+import { existsSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
 
 type JsonSchemaNode = {
@@ -37,7 +37,7 @@ function cloneSchemaWithoutRequired(node: JsonSchemaNode): JsonSchemaNode {
 
 function resolveSchemaPath() {
   const candidates = [
-    process.resourcesPath ? join(process.resourcesPath, 'open-cowork.config.schema.json') : null,
+    ((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()) ? join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), 'open-cowork.config.schema.json') : null,
     typeof __dirname === 'string' ? resolve(__dirname, '../../../../open-cowork.config.schema.json') : null,
     getAppPathHost()?.getAppPath ? resolve(getAppPathHost()!.getAppPath!(), '..', '..', 'open-cowork.config.schema.json') : null,
     resolve(process.cwd(), 'open-cowork.config.schema.json'),

@@ -3,6 +3,7 @@
 // is the desktop's single Electron-host wiring point; the cloud server never loads
 // it and uses the Electron-free fallbacks. (Hosts are read lazily, so placement
 // here at the entry is in time for every consumer.)
+import { resolveAppIconFile, appendE2ERemoteDebuggingSwitches, e2eWindowReadyProbeEnabled } from '@open-cowork/runtime-host'
 import './desktop-electron-hosts.ts'
 import { app, ipcMain, Menu, nativeImage, session as electronSession, utilityProcess } from 'electron'
 import { join, resolve } from 'path'
@@ -45,7 +46,6 @@ import { primeShellEnvironment } from './shell-env.ts'
 import { restartRuntimeMcpStatusPolling } from './runtime-mcp-status-polling.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
-import { resolveAppIconFile } from './branding-assets.ts'
 import { registerBrandingAssetProtocol } from './branding-protocol.ts'
 import { setManagedOpencodeSupervisorForker } from './runtime-managed-server.ts'
 import type { ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
@@ -69,11 +69,6 @@ import { createMainWindowController } from './main-window-controller.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
-import {
-  appendE2ERemoteDebuggingSwitches,
-  e2eWindowReadyProbeEnabled,
-} from './e2e-remote-debugging.ts'
-
 registerAppProtocolSchemes()
 appendE2ERemoteDebuggingSwitches(app)
 

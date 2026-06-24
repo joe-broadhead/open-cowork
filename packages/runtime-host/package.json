@@ -18,6 +18,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -30,7 +34,8 @@
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*",
-    "@opencode-ai/sdk": "1.15.5"
+    "@opencode-ai/sdk": "1.15.5",
+    "ajv": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.12.0",

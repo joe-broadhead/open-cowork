@@ -87,7 +87,8 @@
     },
     "packages/runtime-host": {
       "entry": [
-        "src/index.ts"
+        "src/index.ts",
+        "src/config.ts"
       ],
       "project": [
         "src/**/*.ts"

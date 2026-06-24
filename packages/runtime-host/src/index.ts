@@ -7,3 +7,16 @@ export * from './opencode-adapter.js'
 export * from './runtime-managed-server-protocol.js'
 export * from './runtime-managed-server-output.js'
 export * from './runtime-managed-server-core.js'
+
+// Config substrate (Electron-free). config-loader-core itself is the `/config`
+// subpath; these are its supporting modules, consumed directly across the app.
+export * from './config-public.js'
+export * from './config-layer-utils.js'
+export * from './config-normalizer.js'
+export * from './config-schema.js'
+export * from './provider-catalog.js'
+export * from './model-info-utils.js'
+export * from './branding-assets.js'
+export * from './jsonc.js'
+export * from './inflight-dedup.js'
+export * from './e2e-remote-debugging.js'

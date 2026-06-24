@@ -1,6 +1,6 @@
 import type { PublicBrandingConfig } from '@open-cowork/shared'
 import { derivePublicBrandingThemeTokens, normalizeCloudProjectSource } from '@open-cowork/shared'
-import { deepMerge } from './config-layer-utils.ts'
+import { deepMerge } from './config-layer-utils.js'
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import type {
   CloudConfig,

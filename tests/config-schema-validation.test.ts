@@ -1,9 +1,7 @@
+import { validateConfigSemantics, validateResolvedConfig } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'fs'
-import { validateResolvedConfig } from '../apps/desktop/src/main/config-schema.ts'
-import { validateConfigSemantics } from '../apps/desktop/src/main/config-layer-utils.ts'
-
 function readRootConfig() {
   return JSON.parse(readFileSync('open-cowork.config.json', 'utf-8'))
 }

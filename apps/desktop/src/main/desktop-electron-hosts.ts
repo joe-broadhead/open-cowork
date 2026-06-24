@@ -9,7 +9,7 @@
 // import-`electron`-free.
 import electron from 'electron'
 import { setAppPathHost, setDesktopShellHost, setLogStorage, setSafeStorageHost } from '@open-cowork/shared/node'
-import { getAppDataDir, getLogFilePrefix } from './config-loader-core.ts'
+import { getAppDataDir, getLogFilePrefix } from '@open-cowork/runtime-host/config'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 setAppPathHost(electronApp ?? null)

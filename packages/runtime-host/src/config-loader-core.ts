@@ -1,6 +1,6 @@
-import { cpSync, existsSync, mkdirSync } from 'fs'
-import { homedir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { cpSync, existsSync, mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
 import { getAppPathHost } from '@open-cowork/shared/node'
 import {
@@ -10,23 +10,23 @@ import {
   findProviderDescriptor,
   getProviderDynamicCatalogFromConfig,
   resolveProviderDefaultModel as resolveProviderDefaultModelForConfig,
-} from './config-public.ts'
-import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
-import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
+} from './config-public.js'
+import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.js'
+import { jsonConfigCandidates, readJsoncFile } from './jsonc.js'
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
-import { normalizeAppConfig, normalizeConfigLayers } from './config-normalizer.ts'
+import { normalizeAppConfig, normalizeConfigLayers } from './config-normalizer.js'
 import {
   deepMerge,
   formatConfigError,
   resolveConfigEnvPlaceholders,
   validateConfigSemantics,
-} from './config-layer-utils.ts'
+} from './config-layer-utils.js'
 import type {
   ConfiguredTool,
   ModelFallbackInfo,
   OpenCoworkConfig,
 } from '@open-cowork/shared'
-import { applyE2EArgEnvironment } from './e2e-remote-debugging.ts'
+import { applyE2EArgEnvironment } from './e2e-remote-debugging.js'
 
 applyE2EArgEnvironment()
 
@@ -50,8 +50,8 @@ export type {
   OpenCoworkConfig,
 } from '@open-cowork/shared'
 
-export { normalizeProviderModelId } from './config-public.ts'
-export { resolveConfigEnvPlaceholders } from './config-layer-utils.ts'
+export { normalizeProviderModelId } from './config-public.js'
+export { resolveConfigEnvPlaceholders } from './config-layer-utils.js'
 
 // Electron's `app` provides only path resolution here (isPackaged / getAppPath /
 // getPath). It is injected via the shared `AppPathHost` (set by the desktop
@@ -77,7 +77,7 @@ function firstExistingConfigPath(paths: string[]) {
 
 function getBundledConfigCandidates() {
   try {
-    if (getAppPathHost()?.isPackaged) return jsonConfigCandidates(join(process.resourcesPath, 'open-cowork.config.json'))
+    if (getAppPathHost()?.isPackaged) return jsonConfigCandidates(join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), 'open-cowork.config.json'))
     if (getAppPathHost()?.getAppPath) {
       return jsonConfigCandidates(resolve(getAppPathHost()!.getAppPath!(), '..', '..', 'open-cowork.config.json'))
     }

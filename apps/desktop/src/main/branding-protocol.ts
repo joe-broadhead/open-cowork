@@ -3,10 +3,9 @@
 // branding-assets.ts (which stays Electron-free path-resolution shared with the
 // cloud) so the cloud server never pulls Electron's protocol/net into its graph.
 // Invoked once from the desktop entry after the app is ready.
+import { BRANDING_ASSET_HOST, BRANDING_ASSET_PROTOCOL, resolveBrandingAssetFile } from '@open-cowork/runtime-host'
 import electron from 'electron'
 import { pathToFileURL } from 'node:url'
-import { BRANDING_ASSET_HOST, BRANDING_ASSET_PROTOCOL, resolveBrandingAssetFile } from './branding-assets.ts'
-
 const electronNet = (electron as { net?: typeof import('electron').net }).net
 const electronProtocol = (electron as { protocol?: typeof import('electron').protocol }).protocol
 

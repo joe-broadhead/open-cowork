@@ -1,3 +1,4 @@
+import { readJsoncFile, writeJsonFile } from '@open-cowork/runtime-host'
 import { writeFileAtomic, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import {
   basename,
@@ -17,10 +18,6 @@ import {
   type ScopedArtifactRef,
 } from '@open-cowork/shared'
 import { getConfiguredToolPatterns, getConfiguredToolsFromConfig, getSidecarJsonSuffix } from './config-loader.ts'
-import {
-  readJsoncFile,
-  writeJsonFile,
-} from './jsonc.ts'
 import { log } from './logger.ts'
 import {
   resolveProjectDirectory,

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'fs'
-import { homedir } from 'os'
-import { join, resolve } from 'path'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
 
 export function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {

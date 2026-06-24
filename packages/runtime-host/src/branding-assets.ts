@@ -1,6 +1,6 @@
 import { getAppPathHost } from '@open-cowork/shared/node'
-import { existsSync, realpathSync, statSync } from 'fs'
-import { extname, isAbsolute, join, normalize, relative, resolve, sep } from 'path'
+import { existsSync, realpathSync, statSync } from 'node:fs'
+import { extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
 
 export const BRANDING_ASSET_PROTOCOL = 'open-cowork-asset'
 export const BRANDING_ASSET_HOST = 'branding'
@@ -8,7 +8,7 @@ const SUPPORTED_BRANDING_ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.j
 
 export function getBrandingAssetRoot() {
   const appPaths = getAppPathHost()
-  if (appPaths?.isPackaged) return join(process.resourcesPath, 'branding')
+  if (appPaths?.isPackaged) return join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), 'branding')
   if (appPaths?.getAppPath) return resolve(appPaths.getAppPath(), '..', '..', 'branding')
   return resolve(process.cwd(), 'branding')
 }

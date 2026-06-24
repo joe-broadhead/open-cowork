@@ -626,6 +626,9 @@ importers:
       '@opencode-ai/sdk':
         specifier: 1.15.5
         version: 1.15.5
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
     devDependencies:
       '@types/node':
         specifier: ^22.12.0

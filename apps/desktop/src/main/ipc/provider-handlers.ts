@@ -1,3 +1,4 @@
+import { refreshProviderCatalog, modelInfoKeys } from '@open-cowork/runtime-host'
 import type { IpcHandlerContext } from './context.ts'
 import {
   mergeRuntimeProviderModels,
@@ -10,8 +11,6 @@ import {
 } from './app-handler-support.ts'
 import { getProviderDescriptor, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
 import { log } from '../logger.ts'
-import { refreshProviderCatalog } from '../provider-catalog.ts'
-import { modelInfoKeys } from '../model-info-utils.ts'
 import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
 import { getClient } from '../runtime.ts'
 import { sdkErrorMessage } from '../sdk-error.ts'

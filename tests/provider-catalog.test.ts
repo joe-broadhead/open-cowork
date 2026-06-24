@@ -1,3 +1,4 @@
+import { mapResponseToModels, refreshProviderCatalog } from '@open-cowork/runtime-host'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -5,8 +6,6 @@ import { mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
-import { mapResponseToModels, refreshProviderCatalog } from '../apps/desktop/src/main/provider-catalog.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

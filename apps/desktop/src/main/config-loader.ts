@@ -5,4 +5,4 @@
 // therefore everything in the substrate that imports it — stays Electron-free.
 // The cloud server reaches this module too, with the hosts unset, and the core
 // takes its env/homedir/cwd fallbacks. See docs/design/cloud-server-extraction.md.
-export * from './config-loader-core.ts'
+export * from '@open-cowork/runtime-host/config'

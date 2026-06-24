@@ -1,3 +1,4 @@
+import { writeE2EWindowReadyProbe } from '@open-cowork/runtime-host'
 import type { App } from 'electron'
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
@@ -10,7 +11,6 @@ import {
   rendererUrlLooksWrong,
   shouldRecoverMainWindowFromDidFailLoad,
 } from './main-window-lifecycle.ts'
-import { writeE2EWindowReadyProbe } from './e2e-remote-debugging.ts'
 import { loadSettings } from './settings.ts'
 import { resolveStartupSplashTemplatePath, writeStartupSplashFile } from './startup-splash.ts'
 import { createWindowState } from './window-state.ts'

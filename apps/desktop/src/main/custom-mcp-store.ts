@@ -1,3 +1,4 @@
+import { readJsoncFile, writeJsonFile, writeTopLevelObjectPropertyFile } from '@open-cowork/runtime-host'
 import { rmSync } from 'fs'
 import { join } from 'path'
 import type {
@@ -5,11 +6,6 @@ import type {
   RuntimeContextOptions,
   ScopedArtifactRef,
 } from '@open-cowork/shared'
-import {
-  readJsoncFile,
-  writeJsonFile,
-  writeTopLevelObjectPropertyFile,
-} from './jsonc.ts'
 import { log } from './logger.ts'
 import {
   getMachineOpencodeDir,
