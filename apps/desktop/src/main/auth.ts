@@ -1,9 +1,8 @@
-import { getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
+import { getAppPathHost, getDesktopShellHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
 import type { AddressInfo } from 'net'
-import electron from 'electron'
 import { existsSync, readFileSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
@@ -17,9 +16,6 @@ import {
 } from './secure-storage-policy.ts'
 import { escapeHtml } from './html-escape.ts'
 
-// shell + BrowserWindow are still used directly for the desktop-only OAuth popup
-// flow; credential encryption now goes through the injected SafeStorageHost.
-const { shell, BrowserWindow } = electron
 
 type SecretStorageAdapter = {
   mode: SecretStorageMode
@@ -66,7 +62,7 @@ function getTokenPath() {
 function getSecretStorageMode() {
   if (authSecretStorageForTests) return authSecretStorageForTests.mode
   return resolveSecretStorageMode({
-    isPackaged: Boolean(electron.app?.isPackaged),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
     encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
       getSafeStorageHost()?.getSelectedStorageBackend,
@@ -137,7 +133,7 @@ function decryptLegacyDevelopmentSecret(raw: Buffer) {
   if (testDecrypt) {
     try { return testDecrypt(raw) } catch { return null }
   }
-  if (electron.app?.isPackaged) return null
+  if (getAppPathHost()?.isPackaged) return null
   const safeStorage = getSafeStorageHost()
   if (!safeStorage?.isEncryptionAvailable() || !safeStorage.decryptString) return null
   try { return safeStorage.decryptString(raw) } catch { return null }
@@ -312,11 +308,7 @@ export async function refreshAccessToken(): Promise<string | null> {
     log('auth', `Token refresh failed: ${errStr}`)
     if (errStr.includes('invalid_rapt') || errStr.includes('invalid_grant') || errStr.includes('Token has been expired')) {
       try {
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('auth:expired')
-          }
-        }
+        getDesktopShellHost()?.broadcastToRenderers('auth:expired')
       } catch {
         // Renderer notification is best-effort only.
       }
@@ -466,7 +458,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
           prompt: 'consent',
           state: oauthState,
         })
-        void shell.openExternal(authUrl)
+        void getDesktopShellHost()?.openExternal(authUrl)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         log('auth', `Login server error: ${message}`)

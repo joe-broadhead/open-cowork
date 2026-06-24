@@ -8,6 +8,9 @@
 export type DesktopShellHost = {
   openExternal(url: string): Promise<void> | void
   setLoginItemSettings(settings: { openAtLogin: boolean }): void
+  // Best-effort broadcast to every renderer window's webContents (desktop-only;
+  // the cloud has no windows and provides a no-op).
+  broadcastToRenderers(channel: string, ...args: unknown[]): void
 }
 
 let desktopShellHost: DesktopShellHost | null = null

@@ -1,18 +1,15 @@
-import electron from 'electron'
+import { getAppPathHost } from '@open-cowork/shared/node'
 import { existsSync, realpathSync, statSync } from 'fs'
 import { extname, isAbsolute, join, normalize, relative, resolve, sep } from 'path'
-import { pathToFileURL } from 'url'
 
 export const BRANDING_ASSET_PROTOCOL = 'open-cowork-asset'
-const BRANDING_ASSET_HOST = 'branding'
+export const BRANDING_ASSET_HOST = 'branding'
 const SUPPORTED_BRANDING_ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif'])
-const electronApp = (electron as { app?: typeof import('electron').app }).app
-const electronNet = (electron as { net?: typeof import('electron').net }).net
-const electronProtocol = (electron as { protocol?: typeof import('electron').protocol }).protocol
 
 export function getBrandingAssetRoot() {
-  if (electronApp?.isPackaged) return join(process.resourcesPath, 'branding')
-  if (electronApp?.getAppPath) return resolve(electronApp.getAppPath(), '..', '..', 'branding')
+  const appPaths = getAppPathHost()
+  if (appPaths?.isPackaged) return join(process.resourcesPath, 'branding')
+  if (appPaths?.getAppPath) return resolve(appPaths.getAppPath(), '..', '..', 'branding')
   return resolve(process.cwd(), 'branding')
 }
 
@@ -78,20 +75,4 @@ export function brandingAssetUrl(assetPath: string | undefined, root = getBrandi
   } catch {
     return undefined
   }
-}
-
-export function registerBrandingAssetProtocol() {
-  if (!electronProtocol || !electronNet) return
-  electronProtocol.handle(BRANDING_ASSET_PROTOCOL, (request) => {
-    try {
-      const url = new URL(request.url)
-      if (url.hostname !== BRANDING_ASSET_HOST) return new Response(null, { status: 404 })
-      const assetPath = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
-      const file = resolveBrandingAssetFile(assetPath)
-      if (!file) return new Response(null, { status: 404 })
-      return electronNet.fetch(pathToFileURL(file).toString())
-    } catch {
-      return new Response(null, { status: 404 })
-    }
-  })
 }

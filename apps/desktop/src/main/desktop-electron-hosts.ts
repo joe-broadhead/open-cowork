@@ -13,11 +13,17 @@ const electronApp = (electron as { app?: typeof import('electron').app }).app
 setAppPathHost(electronApp ?? null)
 
 const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
+const electronBrowserWindow = (electron as { BrowserWindow?: typeof import('electron').BrowserWindow }).BrowserWindow
 setDesktopShellHost(
-  electronShell || electronApp
+  electronShell || electronApp || electronBrowserWindow
     ? {
         openExternal: (url) => electronShell?.openExternal(url),
         setLoginItemSettings: (settings) => electronApp?.setLoginItemSettings?.(settings),
+        broadcastToRenderers: (channel, ...args) => {
+          for (const win of electronBrowserWindow?.getAllWindows() ?? []) {
+            if (!win.isDestroyed()) win.webContents.send(channel, ...args)
+          }
+        },
       }
     : null,
 )

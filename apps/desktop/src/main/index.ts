@@ -1,4 +1,4 @@
-import { app, ipcMain, Menu, nativeImage, session as electronSession } from 'electron'
+import { app, ipcMain, Menu, nativeImage, session as electronSession, utilityProcess } from 'electron'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { createApplicationMenuTemplate } from './app-menu.ts'
@@ -39,7 +39,20 @@ import { primeShellEnvironment } from './shell-env.ts'
 import { restartRuntimeMcpStatusPolling } from './runtime-mcp-status-polling.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
-import { registerBrandingAssetProtocol, resolveAppIconFile } from './branding-assets.ts'
+import { resolveAppIconFile } from './branding-assets.ts'
+import { registerBrandingAssetProtocol } from './branding-protocol.ts'
+import { setManagedOpencodeSupervisorForker } from './runtime-managed-server.ts'
+import type { ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
+
+// Inject Electron's utilityProcess as the managed OpenCode server's supervisor
+// forker (desktop-only; the cloud forks via node:child_process instead). Set at
+// module load, before any session starts a managed server.
+setManagedOpencodeSupervisorForker((modulePath) =>
+  utilityProcess.fork(modulePath, [], {
+    serviceName: 'opencode-managed-server',
+    stdio: 'pipe',
+  }) as ManagedOpencodeSupervisorProcess,
+)
 import { registerChartFrameAssetProtocol } from './chart-frame-assets.ts'
 import {
   attachPermissionGuards,
