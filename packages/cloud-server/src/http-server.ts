@@ -1417,6 +1417,14 @@ export class CloudHttpServer {
     this.server = createServer((req, res) => {
       void this.handle(req, res)
     })
+    // Slowloris + connection-exhaustion guards (Node defaults are 300s/60s/unbounded).
+    // The body reader caps bytes but not time; bound header/request receipt and total
+    // connections. keepAliveTimeout is left at the Node default deliberately — raising it
+    // is an LB-coordination concern (avoid 502 races), not part of this hardening.
+    this.server.requestTimeout = 30_000
+    this.server.headersTimeout = 20_000
+    const maxConnections = Number(process.env.OPEN_COWORK_CLOUD_MAX_CONNECTIONS)
+    this.server.maxConnections = Number.isInteger(maxConnections) && maxConnections > 0 ? maxConnections : 10_000
   }
 
   async listen(port = 0, hostname = '127.0.0.1') {

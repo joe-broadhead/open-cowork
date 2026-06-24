@@ -102,6 +102,12 @@ export function createStandaloneGatewayServer(input: {
       } : {});
     });
   });
+  // Slowloris + connection-exhaustion guards (the body reader caps bytes, not time),
+  // mirroring apps/gateway. This single daemon is internet-facing in webhook mode.
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 10_000;
+  server.maxConnections = 1_024;
   return {
     url() {
       const address = server.address();
