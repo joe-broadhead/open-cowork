@@ -27,6 +27,12 @@ const DISABLED_CLOUD_RETENTION: CloudRetentionOptions = {
 export class CloudScheduler {
   private readonly expiredClaimReapBatchSize = 100
   private readonly maxExpiredClaimReapBatches = 10
+  // Cap claims per tick so a large backlog drains across ticks instead of monopolizing one
+  // loop (which would starve the reaper/retention). The next tick continues the backlog.
+  private readonly maxClaimsPerLoop = 200
+  // Refresh the heartbeat every N claims during the bounded loop rather than per claim —
+  // a per-claim write of the growing activeSessionIds array was O(K²) serialized bytes.
+  private readonly heartbeatEveryClaims = 25
   private readonly store: ControlPlaneStore
   private readonly service: CloudSessionService
   private readonly schedulerId: string
@@ -74,17 +80,18 @@ export class CloudScheduler {
         status: 'cap_hit',
       })
     }
-    while (true) {
+    while (claimed < this.maxClaimsPerLoop) {
       const started = await this.service.claimAndStartDueWorkflow(now, this.schedulerId)
       if (!started) break
       claimed += 1
       activeSessionIds.push(started.sessionId)
-      await this.store.recordWorkerHeartbeat({
-        workerId: this.schedulerId,
-        role: 'scheduler',
-        activeSessionIds,
-        now,
-      })
+      // Periodic (not per-claim) heartbeat so a busy loop stays fresh without quadratic writes.
+      if (claimed % this.heartbeatEveryClaims === 0) {
+        await this.store.recordWorkerHeartbeat({ workerId: this.schedulerId, role: 'scheduler', activeSessionIds, now })
+      }
+    }
+    if (claimed > 0 && claimed % this.heartbeatEveryClaims !== 0) {
+      await this.store.recordWorkerHeartbeat({ workerId: this.schedulerId, role: 'scheduler', activeSessionIds, now })
     }
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_claims_total',

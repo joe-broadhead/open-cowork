@@ -140,3 +140,25 @@ test('cloud scheduler skips retention entirely when no window is configured', as
   await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
   assert.equal(pruneCalls, 0)
 })
+
+test('cloud scheduler caps claims per loop and throttles the heartbeat', async () => {
+  let heartbeats = 0
+  const store = {
+    async recordWorkerHeartbeat() { heartbeats += 1 },
+    async reapExpiredWorkflowClaims() { return [] },
+    async pruneTerminalChannelDeliveries() { return 0 },
+    async pruneExpiredChannelInteractions() { return 0 },
+  } as unknown as InMemoryControlPlaneStore
+  let serviceCalls = 0
+  const service = {
+    // Always returns a workflow so the loop would run forever without the cap.
+    async claimAndStartDueWorkflow() { serviceCalls += 1; return { sessionId: `s-${serviceCalls}` } },
+  } as unknown as CloudSessionService
+  const scheduler = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability())
+
+  const claimed = await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
+
+  assert.equal(claimed, 200) // maxClaimsPerLoop — the backlog drains across ticks, not in one
+  // Heartbeats: 1 start + every-25-claims during the loop (200/25 = 8). Far below per-claim (200).
+  assert.ok(heartbeats <= 12, `expected throttled heartbeats, got ${heartbeats}`)
+})
