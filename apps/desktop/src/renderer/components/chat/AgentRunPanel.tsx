@@ -182,7 +182,22 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
   return (
     <section
       className="rounded-xl border bg-surface overflow-hidden"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
+      style={{
+        // Coworker delegation lane (prototype .lane-card): a tone-colored left bar that
+        // turns accent + gains a soft glow ring while the lane is live/running.
+        borderColor: 'var(--color-border-subtle)',
+        borderInlineStartWidth: '3px',
+        borderInlineStartColor: anyRunning
+          ? 'color-mix(in srgb, var(--color-accent) 55%, transparent)'
+          : allComplete
+            ? 'color-mix(in srgb, var(--color-green) 45%, var(--color-border-subtle))'
+            : anyErrored
+              ? 'color-mix(in srgb, var(--color-red) 45%, var(--color-border-subtle))'
+              : 'color-mix(in srgb, var(--color-accent) 38%, var(--color-border-subtle))',
+        boxShadow: anyRunning
+          ? '0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent), var(--shadow-1)'
+          : 'var(--shadow-1), var(--specular)',
+      }}
       data-agent-run-task-ids={taskRuns.map((task) => task.id).join(' ')}
     >
       <button
@@ -213,6 +228,13 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
           {headerLabel}
         </span>
         <span className="text-[12px] text-text-secondary flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+          {anyRunning ? (
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
+              style={{ background: 'var(--color-accent)', animation: 'ui-status-pulse 1.7s var(--ease-out) infinite' }}
+              aria-hidden="true"
+            />
+          ) : null}
           <span>{taskSummary}</span>
           {runningStatusNote && (
             <>
