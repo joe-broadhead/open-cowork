@@ -223,7 +223,29 @@ module so the substrate stops importing `electron`:
   *(several may prove cloud-unreached on inspection → prunable, lowering the count)*
 - **A5** `runtime-paths` config-decouple → unblocks `runtime-environment` + `runtime-process-cleanup`. `[1–2]`
 
-### Milestone B — Relocate the Electron-free substrate into a package (~10–18 commits)
+### Milestone B — STATUS (2026-06-24): de-risked, ~3 mechanical moves remain
+**Done:** all Electron decoupling (A) + injection infra + substrate Electron-free (value+type);
+logger entry-injection; config cluster (11) relocated into `@open-cowork/runtime-host` (proven
+pattern: `/config` subpath + main barrel + export-collision curation + ajv/resourcesPath);
+the 6+2 type-only `BrowserWindow`/`IpcMainInvokeEvent` edges decoupled to minimal structural
+types. **Breakthrough:** a bulk-move dry run showed the substrate's *only* tie to the
+desktop+cloud bridge layer (`workspace-gateway → cloud/transport-adapter`, a would-be circular
+`runtime-host → cloud-server` edge) was a single constant — `knowledge-tool-bridge` importing
+`LOCAL_WORKSPACE_ID` (already in `@open-cowork/shared/node`). Repointing it dropped
+`workspace-gateway` + the `cloud-workspace-*` bridge modules out of the substrate closure
+(**115 → 102 modules, zero Electron, zero cloud/ edges**) — the substrate is now a clean, acyclic
+relocation target. **Remaining (mechanical, proven):**
+1. **lib cluster → `@open-cowork/shared`**: `lib/session-view-*` (browser-safe pure calc, used by
+   renderer + `session-engine`) — must land in shared before the substrate move.
+2. **102-module substrate → `@open-cowork/runtime-host`** via a **wildcard `./*` subpath export**
+   (each module by path — no flat-barrel collision management) + a runtime-host self-path in
+   tsconfig (for the config-cluster names already imported via the barrel). Script:
+   `git mv` (preserve subdirs) → rewire (`.ts`→`.js`, `config-loader`→`/config`, `logger`→
+   shared/node, builtins→`node:`) → repoint external (desktop-only) importers to the subpaths.
+   The dry run already validated the move + surfaced (and now fixed) the only blockers.
+3. **Milestone C** below.
+
+### Milestone B (original plan) — Relocate the Electron-free substrate into a package
 Batch-move the substrate (config-loader-core, settings-core, runtime-config-builder, capability-catalog,
 runtime.ts, session-engine, agent-config, the 32 config modules) into a shared package (expand
 `@open-cowork/runtime-host`, or new `@open-cowork/app-core`). Desktop + cloud both import it. Batched by
