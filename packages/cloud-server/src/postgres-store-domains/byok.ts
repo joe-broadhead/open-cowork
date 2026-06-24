@@ -141,7 +141,8 @@ export class PostgresByokSecretsRepository {
     const result = await this.options.pool.query(
       `SELECT * FROM cloud_byok_secrets
        WHERE org_id = $1
-       ORDER BY updated_at DESC, created_at DESC, provider_id, secret_id DESC`,
+       ORDER BY updated_at DESC, created_at DESC, provider_id, secret_id DESC
+       LIMIT 1000`,
       [orgId],
     )
     return result.rows.map(byokSecretFromRow)

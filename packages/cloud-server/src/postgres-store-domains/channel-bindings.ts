@@ -162,7 +162,8 @@ export class PostgresChannelBindingsRepository {
     const result = await this.options.pool.query(
       `SELECT * FROM cloud_channel_bindings
        WHERE org_id = $1 AND ($2::text IS NULL OR agent_id = $2)
-       ORDER BY updated_at DESC, binding_id`,
+       ORDER BY updated_at DESC, binding_id
+       LIMIT 1000`,
       [orgId, agentId || null],
     )
     return result.rows.map(channelBindingFromRow)

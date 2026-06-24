@@ -125,7 +125,8 @@ export class PostgresApiTokensRepository {
       `SELECT *
        FROM cloud_api_tokens
        WHERE org_id = $1
-       ORDER BY created_at DESC`,
+       ORDER BY created_at DESC
+       LIMIT 1000`,
       [orgId],
     )
     return result.rows.map(apiTokenFromRow)

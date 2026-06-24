@@ -155,7 +155,8 @@ export class PostgresThreadIndexRepository {
     const result = await this.options.pool.query(
       `SELECT * FROM cloud_thread_smart_filters
        WHERE tenant_id = $1
-       ORDER BY lower(name), filter_id`,
+       ORDER BY lower(name), filter_id
+       LIMIT 1000`,
       [tenantId],
     )
     return result.rows.map(threadSmartFilterFromRow)

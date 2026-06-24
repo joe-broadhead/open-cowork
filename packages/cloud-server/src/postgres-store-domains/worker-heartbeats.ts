@@ -48,8 +48,10 @@ export class PostgresWorkerHeartbeatsRepository {
   }
 
   async listWorkerHeartbeats() {
+    // Defensive bound on this cross-tenant fleet read so it can't become an unbounded
+    // full scan as the worker fleet grows.
     const result = await this.options.pool.query(
-      `SELECT * FROM cloud_worker_heartbeats ORDER BY worker_id`,
+      `SELECT * FROM cloud_worker_heartbeats ORDER BY worker_id LIMIT 1000`,
     )
     return result.rows.map(heartbeatFromRow)
   }
