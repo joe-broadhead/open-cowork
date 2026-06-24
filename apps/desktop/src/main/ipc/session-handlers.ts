@@ -72,7 +72,11 @@ function cloudWorkspaceIsStillActive(
   if (!sourceEvent || !workspaceId) return true
   try {
     return context.workspaceGateway.activeWorkspaceId(sourceEvent) === workspaceId
-  } catch {
+  } catch (error) {
+    // Resolving the active workspace failed (e.g. the source window/event is gone).
+    // Fail closed — don't deliver to a possibly-wrong workspace — but log it so a
+    // burst of silently-dropped projection refreshes is diagnosable.
+    log('session', `Active-workspace check failed for ${workspaceId}; treating workspace as inactive: ${error instanceof Error ? error.message : String(error)}`)
     return false
   }
 }

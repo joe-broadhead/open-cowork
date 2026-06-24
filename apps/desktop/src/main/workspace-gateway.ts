@@ -4,6 +4,7 @@ import {
   coordinationCapabilityStatus,
   workspaceApiSupportContextForAuthority,
 } from '@open-cowork/shared'
+import { log } from './logger.ts'
 import type {
   AddCloudWorkspaceInput,
   AddGatewayWorkspaceInput,
@@ -649,7 +650,11 @@ export class WorkspaceGateway {
     if (workspace.kind !== 'cloud') return DISABLED_REMOTE_POLICY
     try {
       return (await this.requireCloudAdapter(workspace)).policy()
-    } catch {
+    } catch (error) {
+      // Fail closed to the disabled policy, but log — otherwise a transient cloud
+      // outage (network/adapter failure) is indistinguishable from a real policy
+      // denial, so a workspace silently loses capabilities with no diagnostic trail.
+      log('workspace-gateway', `Cloud policy lookup failed for workspace ${workspace.id}; using disabled policy: ${error instanceof Error ? error.message : String(error)}`)
       return DISABLED_CLOUD_POLICY
     }
   }
