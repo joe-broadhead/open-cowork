@@ -1,8 +1,21 @@
 import { ControlPlaneQuotaExceededError, publicQuotaMessage, type QuotaPolicyCode } from '../control-plane-errors.ts'
 import { numberValue, type QueryResult, type QueryRow } from '../postgres-domains/shared.ts'
+import { CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS } from '../postgres-schema.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
+}
+
+// P2-7: recompute every maintained concurrency gauge from its source table (resetting idle scopes to
+// 0), self-healing drift the old write-clamp could accumulate. Runs the exact statements migration
+// 024 applies once on deploy; each RETURNs its touched scope_ids so we can total rows reconciled.
+export async function reconcilePostgresConcurrencyCounters(executor: PgExecutor): Promise<number> {
+  let touched = 0
+  for (const statement of CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS) {
+    const result = await executor.query(statement)
+    touched += result.rows.length
+  }
+  return touched
 }
 
 type CommandQueueQuota = {
@@ -78,7 +91,10 @@ export async function assertPostgresConcurrentSessionQuota(
   await deps.lockQuota(executor, orgId, 'concurrent_sessions', now)
   // O(1) read of the maintained gauge (kept by the cloud_sessions trigger).
   const countRow = await executor.query(
-    `SELECT value::int AS count
+    // Clamp on read (P2-7): the gauge is a running delta-sum that may sit transiently negative;
+    // the trigger no longer clamps writes (which silently lost decrements and drifted high), so the
+    // floor lives here where admission is decided.
+    `SELECT GREATEST(0, value)::int AS count
      FROM cloud_concurrency_counters
      WHERE scope_id = $1 AND counter_key = 'concurrent_sessions'`,
     [orgId],
@@ -141,7 +157,7 @@ export async function assertPostgresCommandQueueQuota(
   // trigger). The queue-AGE limit needs min(created_at), which a gauge can't
   // carry, so only run that bounded scan when an age limit is actually set.
   const counterRow = await executor.query(
-    `SELECT value::int AS queued_commands
+    `SELECT GREATEST(0, value)::int AS queued_commands
      FROM cloud_concurrency_counters
      WHERE scope_id = $1 AND counter_key = 'queued_commands'`,
     [orgId],
@@ -233,7 +249,7 @@ export async function assertPostgresWorkflowRunQuota(
     // cloud_workflow_runs trigger) instead of a COUNT(*)+JOIN on every create.
     // `orgId` is resolveOrgId(tenant) — the same scope the trigger writes.
     const result = await executor.query(
-      `SELECT value::int AS count
+      `SELECT GREATEST(0, value)::int AS count
        FROM cloud_concurrency_counters
        WHERE scope_id = $1 AND counter_key = 'concurrent_workflow_runs'`,
       [orgId],

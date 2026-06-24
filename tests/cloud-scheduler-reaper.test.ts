@@ -162,6 +162,32 @@ test('cloud scheduler prunes only the opt-in event logs whose window is configur
   assert.equal(calls.usage, 1)
 })
 
+test('cloud scheduler reconciles concurrency counters only when an interval is configured', async () => {
+  let reconciles = 0
+  const store = {
+    async recordWorkerHeartbeat() {},
+    async reapExpiredWorkflowClaims() { return [] },
+    async reconcileConcurrencyCounters() { reconciles += 1; return 3 },
+  } as unknown as InMemoryControlPlaneStore
+  const service = {
+    async claimAndStartDueWorkflow() { return null },
+  } as unknown as CloudSessionService
+
+  // No interval (default) → the gauge is already drift-free, so the sweep never runs.
+  const off = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability())
+  await off.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
+  assert.equal(reconciles, 0)
+
+  // Interval set → reconciles once, is throttled within the interval, then runs again past it.
+  const on = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability(), undefined, 10_000)
+  await on.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
+  assert.equal(reconciles, 1)
+  await on.processDueWorkflows(new Date('2030-01-01T00:00:05.000Z'))
+  assert.equal(reconciles, 1)
+  await on.processDueWorkflows(new Date('2030-01-01T00:00:15.000Z'))
+  assert.equal(reconciles, 2)
+})
+
 test('cloud scheduler skips retention entirely when no window is configured', async () => {
   let pruneCalls = 0
   const store = {

@@ -1022,6 +1022,104 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
     ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
+// Concurrency-gauge correctness (P2-7). The original triggers clamped the in-place write with
+// GREATEST(0, value + delta), which permanently LOST any decrement that momentarily took the value
+// below zero — so a later increment built on the wrongly-elevated floor and the gauge drifted high
+// forever, falsely rejecting legitimate work. The fix keeps the counter as a true running delta-sum
+// (allowed to sit transiently negative) and clamps GREATEST(0, value) on READ instead; combined
+// with the always-firing AFTER-row trigger this is drift-free for all post-migration activity. The
+// `reconcile` statements recompute every counter from its source table (resetting idle scopes to 0)
+// to wipe drift accumulated under the old clamp on deploy, and are reused by the periodic reconcile.
+function concurrencyReconcileStatements(counterKey: string, sourceTable: string, activeWhere: string) {
+  // counterKey/sourceTable/activeWhere are fixed literals below — never request input.
+  return [
+    `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+      SELECT COALESCE(o.org_id, s.tenant_id), '${counterKey}', count(*), now()
+      FROM ${sourceTable} s LEFT JOIN cloud_orgs o ON o.tenant_id = s.tenant_id
+      WHERE ${activeWhere}
+      GROUP BY COALESCE(o.org_id, s.tenant_id)
+      ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+      RETURNING scope_id`,
+    `UPDATE cloud_concurrency_counters SET value = 0, updated_at = now()
+      WHERE counter_key = '${counterKey}'
+        AND scope_id NOT IN (
+          SELECT COALESCE(o.org_id, s.tenant_id)
+          FROM ${sourceTable} s LEFT JOIN cloud_orgs o ON o.tenant_id = s.tenant_id
+          WHERE ${activeWhere}
+        )
+      RETURNING scope_id`,
+  ] as const
+}
+
+// Reused by migration 024's one-time correction AND the scheduler's periodic reconcile job.
+export const CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS = [
+  ...concurrencyReconcileStatements('concurrent_workflow_runs', 'cloud_workflow_runs', `s.status IN ('queued', 'running')`),
+  ...concurrencyReconcileStatements('concurrent_sessions', 'cloud_sessions', `s.status <> 'closed'`),
+  ...concurrencyReconcileStatements('queued_commands', 'cloud_session_commands', `s.status IN ('pending', 'running')`),
+] as const
+
+export const CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_MIGRATION_ID = '024_concurrency_counter_clamp_on_read'
+const CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_STATEMENTS = [
+  `CREATE OR REPLACE FUNCTION cloud_workflow_run_concurrency_counter() RETURNS trigger AS $func$
+    DECLARE
+      old_active int := 0;
+      new_active int := 0;
+      tid text;
+      scope text;
+    BEGIN
+      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status IN ('queued', 'running') THEN old_active := 1; END IF;
+      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status IN ('queued', 'running') THEN new_active := 1; END IF;
+      IF old_active = new_active THEN RETURN NULL; END IF;
+      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
+      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+        VALUES (scope, 'concurrent_workflow_runs', new_active - old_active, now())
+        ON CONFLICT (scope_id, counter_key) DO UPDATE
+          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
+      RETURN NULL;
+    END;
+    $func$ LANGUAGE plpgsql`,
+  `CREATE OR REPLACE FUNCTION cloud_session_concurrency_counter() RETURNS trigger AS $func$
+    DECLARE
+      old_active int := 0;
+      new_active int := 0;
+      tid text;
+      scope text;
+    BEGIN
+      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status <> 'closed' THEN old_active := 1; END IF;
+      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status <> 'closed' THEN new_active := 1; END IF;
+      IF old_active = new_active THEN RETURN NULL; END IF;
+      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
+      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+        VALUES (scope, 'concurrent_sessions', new_active - old_active, now())
+        ON CONFLICT (scope_id, counter_key) DO UPDATE
+          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
+      RETURN NULL;
+    END;
+    $func$ LANGUAGE plpgsql`,
+  `CREATE OR REPLACE FUNCTION cloud_command_concurrency_counter() RETURNS trigger AS $func$
+    DECLARE
+      old_active int := 0;
+      new_active int := 0;
+      tid text;
+      scope text;
+    BEGIN
+      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status IN ('pending', 'running') THEN old_active := 1; END IF;
+      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status IN ('pending', 'running') THEN new_active := 1; END IF;
+      IF old_active = new_active THEN RETURN NULL; END IF;
+      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
+      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
+        VALUES (scope, 'queued_commands', new_active - old_active, now())
+        ON CONFLICT (scope_id, counter_key) DO UPDATE
+          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
+      RETURN NULL;
+    END;
+    $func$ LANGUAGE plpgsql`,
+  ...CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS,
+] as const
+
 // findSession resolves a session globally by either id (session_id OR
 // opencode_session_id), so the (tenant_id, session_id) primary key and the
 // per-user indexes can't serve it — it was a full cross-tenant scan of
@@ -1176,5 +1274,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
       'cloud_usage_events_created_idx',
     ],
     transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_STATEMENTS,
   },
 ] as const

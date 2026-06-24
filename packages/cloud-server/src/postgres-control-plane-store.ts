@@ -6,6 +6,7 @@ import {
   stableJson,
   workspaceOperationFromType,
 } from './postgres-store-id-helpers.ts'
+import { reconcilePostgresConcurrencyCounters } from './postgres-store-domains/quotas.ts'
 import {
   normalizeNonNegativeInteger,
   normalizeNullableText,
@@ -1005,6 +1006,12 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [input.olderThan.toISOString(), limit],
     )
     return result.rows.length
+  }
+
+  // P2-7: recompute every concurrency gauge from its source table, self-healing any drift left by the
+  // old write-clamp. Co-located with the gauge reads in the quotas domain; returns rows touched.
+  async reconcileConcurrencyCounters() {
+    return reconcilePostgresConcurrencyCounters(this.pool)
   }
 
   async createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): Promise<CoordinationWatch> {

@@ -57,6 +57,50 @@ test('pglite webhook security store enforces fail-closed rate limit / auth backo
   }
 })
 
+// The concurrency gauge (P2-7) is a Postgres-only mechanism (in-memory counts live), so it gets a
+// dedicated pglite contract that inspects the raw counter row the parametrized contract can't reach.
+test('pglite concurrency gauge keeps a true running sum, clamps reads, and reconciles drift', async () => {
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
+  try {
+    const prefix = `conc-${randomUUID()}`
+    const tenantId = `${prefix}-tenant`
+    const userId = `${prefix}-user`
+    await store.createTenant({ tenantId, name: 'Concurrency' })
+    const org = await store.ensureOrgForTenant({ tenantId, orgId: `${prefix}-org`, name: 'Concurrency org', status: 'active' })
+    await store.ensureUser({ tenantId, userId, email: 'conc@example.test', role: 'owner' })
+
+    const rawValue = async () => {
+      const result = await pool.query(
+        `SELECT value FROM cloud_concurrency_counters WHERE scope_id = $1 AND counter_key = 'concurrent_sessions'`,
+        [org.orgId],
+      )
+      return Number((result.rows[0] as { value?: number } | undefined)?.value ?? 0)
+    }
+
+    await store.createSession({ tenantId, userId, sessionId: `${prefix}-s1`, opencodeSessionId: `${prefix}-r1`, profileName: 'default', title: 'one' })
+    await store.createSession({ tenantId, userId, sessionId: `${prefix}-s2`, opencodeSessionId: `${prefix}-r2`, profileName: 'default', title: 'two' })
+    assert.equal(await rawValue(), 2)
+
+    // Closing one session decrements the gauge — the decrement is NOT lost (no write-side clamp).
+    await store.updateSessionStatus({ tenantId, sessionId: `${prefix}-s1`, status: 'closed' })
+    assert.equal(await rawValue(), 1)
+
+    // Simulate drift accumulated under the old clamp by forcing the raw value negative. The admission
+    // read floors it at 0 (GREATEST), and reconcile restores the true active count (1 open session).
+    await pool.query(`UPDATE cloud_concurrency_counters SET value = -7 WHERE scope_id = $1 AND counter_key = 'concurrent_sessions'`, [org.orgId])
+    const clampedRead = await pool.query(
+      `SELECT GREATEST(0, value)::int AS v FROM cloud_concurrency_counters WHERE scope_id = $1 AND counter_key = 'concurrent_sessions'`,
+      [org.orgId],
+    )
+    assert.equal(Number((clampedRead.rows[0] as { v: number }).v), 0)
+    assert.ok(await store.reconcileConcurrencyCounters() >= 1, 'reconcile should touch the drifted counter row')
+    assert.equal(await rawValue(), 1)
+  } finally {
+    await store.close?.()
+  }
+})
+
 function runControlPlaneDomainContracts(
   name: string,
   createStore: () => Promise<ControlPlaneStore> | ControlPlaneStore,

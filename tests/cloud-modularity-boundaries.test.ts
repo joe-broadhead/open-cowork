@@ -290,6 +290,10 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
     assert.match(postgresStore, new RegExp(`async ${method}[\\s\\S]*pruneByCreatedAt\\(`), `${method} should delegate to the bounded created_at prune`)
   }
   assert.match(postgresChannelDeliveriesDomain, /async pruneTerminal[\s\S]*DELETE FROM cloud_channel_deliveries[\s\S]*WHERE ctid IN \([\s\S]*status IN \('sent', 'dead'\)[\s\S]*LIMIT \$2/)
+  // P2-7: the concurrency gauge is clamped on READ (the trigger no longer clamps writes), and the
+  // drift-correcting reconcile is co-located with the gauge reads in the quotas domain.
+  assert.match(postgresQuotaDomain, /SELECT GREATEST\(0, value\)::int AS count[\s\S]*counter_key = 'concurrent_sessions'/)
+  assert.match(postgresQuotaDomain, /export async function reconcilePostgresConcurrencyCounters/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)

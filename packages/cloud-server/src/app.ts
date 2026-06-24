@@ -1368,8 +1368,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     batchSize: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE'), 500),
     maxBatches: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES'), 20),
   }
+  // Opt-in periodic concurrency-gauge reconcile (P2-7). Off by default — the clamp-on-read trigger
+  // is already drift-free for post-migration activity; set this to recompute the gauges on an interval.
+  const concurrencyReconcileMs = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_CONCURRENCY_RECONCILE_MS'), 0) || null
   const scheduler = shouldRunCloudScheduler(policy.role)
-    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability, retention)
+    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability, retention, concurrencyReconcileMs)
     : null
 
   const runtimeUnsubscribe = worker && runtime.subscribeEvents

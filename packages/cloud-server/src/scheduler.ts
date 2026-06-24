@@ -53,6 +53,10 @@ export class CloudScheduler {
   private readonly observability: CloudObservabilityAdapter | null
   private readonly retention: CloudRetentionOptions
   private lastRetentionRunMs = 0
+  // Periodic concurrency-gauge reconcile (P2-7). null/0 = disabled; the clamp-on-read trigger is
+  // already drift-free for post-migration activity, so this is an opt-in belt-and-suspenders sweep.
+  private readonly concurrencyReconcileMs: number | null
+  private lastConcurrencyReconcileRunMs = 0
 
   constructor(
     store: ControlPlaneStore,
@@ -60,12 +64,14 @@ export class CloudScheduler {
     schedulerId: string,
     observability: CloudObservabilityAdapter | null = null,
     retention: CloudRetentionOptions = DISABLED_CLOUD_RETENTION,
+    concurrencyReconcileMs: number | null = null,
   ) {
     this.store = store
     this.service = service
     this.schedulerId = schedulerId
     this.observability = observability
     this.retention = retention
+    this.concurrencyReconcileMs = concurrencyReconcileMs && concurrencyReconcileMs > 0 ? concurrencyReconcileMs : null
   }
 
   async processDueWorkflows(now = new Date()): Promise<number> {
@@ -114,6 +120,7 @@ export class CloudScheduler {
       status: 'ok',
     })
     await this.maybeProcessRetention(now)
+    await this.maybeReconcileConcurrency(now)
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_loop_duration_ms',
       value: Date.now() - startedAt,
@@ -169,6 +176,20 @@ export class CloudScheduler {
         status: 'ok',
       })
     }
+  }
+
+  private async maybeReconcileConcurrency(now: Date) {
+    if (this.concurrencyReconcileMs === null) return
+    const nowMs = now.getTime()
+    if (this.lastConcurrencyReconcileRunMs !== 0 && nowMs - this.lastConcurrencyReconcileRunMs < this.concurrencyReconcileMs) return
+    this.lastConcurrencyReconcileRunMs = nowMs
+    const touched = await this.store.reconcileConcurrencyCounters()
+    await recordCloudSchedulerMetric(this.observability, {
+      name: 'open_cowork_cloud_scheduler_concurrency_reconciled_total',
+      value: touched,
+      schedulerId: this.schedulerId,
+      status: 'ok',
+    })
   }
 
   private async pruneInBatches(prune: (limit: number) => Promise<number> | number): Promise<number> {

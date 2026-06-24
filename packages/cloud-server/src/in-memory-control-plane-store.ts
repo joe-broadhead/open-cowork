@@ -887,6 +887,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.usageDomain.pruneStale(input.olderThan.toISOString(), limit)
   }
 
+  // The in-memory quota path counts active rows live (no maintained gauge), so there is nothing to
+  // reconcile — kept for contract parity with the postgres gauge. (P2-7)
+  reconcileConcurrencyCounters(): number {
+    return 0
+  }
+
   createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): CoordinationWatch { return this.coordinationWatchesDomain.create(input) }
   updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): CoordinationWatch | null { return this.coordinationWatchesDomain.update(input) }
   getCloudCoordinationWatch(workspaceId: string, watchId: string): CoordinationWatch | null { return this.coordinationWatchesDomain.get(workspaceId, watchId) }
