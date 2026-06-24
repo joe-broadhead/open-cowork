@@ -327,3 +327,43 @@ test('consumes pending prompt echo incrementally', () => {
   assert.equal(consumePendingPromptEcho('session-1', 'some'), '')
   assert.equal(consumePendingPromptEcho('session-1', 'Perfect!'), 'Perfect!')
 })
+
+test('sweepStaleTaskState bounds terminal task runs but keeps live ones', () => {
+  const store = new SessionTaskStateStore()
+  // 2100 completed runs + 5 running ones = 2105, above the 2000 cap.
+  for (let index = 0; index < 2100; index += 1) {
+    store.registerTaskRun({
+      id: `done-${index}`,
+      rootSessionId: 'root',
+      parentSessionId: 'root',
+      title: `Done ${index}`,
+      agent: null,
+      childSessionId: `child-done-${index}`,
+      status: 'complete',
+    })
+  }
+  for (let index = 0; index < 5; index += 1) {
+    store.registerTaskRun({
+      id: `live-${index}`,
+      rootSessionId: 'root',
+      parentSessionId: 'root',
+      title: `Live ${index}`,
+      agent: null,
+      childSessionId: `child-live-${index}`,
+      status: 'running',
+    })
+  }
+
+  store.sweepStaleTaskState()
+
+  // The oldest 105 terminal runs (and their child mappings) are evicted.
+  assert.equal(store.getTaskRun('done-0'), null)
+  assert.equal(store.getTaskRunIdForChild('child-done-0'), null)
+  // Newer terminal runs survive.
+  assert.ok(store.getTaskRun('done-2099'))
+  // Every running run is preserved regardless of the cap.
+  for (let index = 0; index < 5; index += 1) {
+    assert.ok(store.getTaskRun(`live-${index}`), `live-${index} should survive`)
+    assert.equal(store.getTaskRunIdForChild(`child-live-${index}`), `live-${index}`)
+  }
+})
