@@ -1,3 +1,9 @@
+// Wire the Electron-backed injection hosts (app paths, safeStorage, desktop shell)
+// before any other main-process module resolves config or reads credentials. This
+// is the desktop's single Electron-host wiring point; the cloud server never loads
+// it and uses the Electron-free fallbacks. (Hosts are read lazily, so placement
+// here at the entry is in time for every consumer.)
+import './desktop-electron-hosts.ts'
 import { app, ipcMain, Menu, nativeImage, session as electronSession, utilityProcess } from 'electron'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
