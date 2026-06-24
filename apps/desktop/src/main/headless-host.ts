@@ -1,6 +1,7 @@
 import { sanitizeForExport } from '@open-cowork/shared'
 import type { RuntimeDoctorCheck, RuntimeStatus } from '@open-cowork/shared'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { writeFileAtomic } from '@open-cowork/shared/node'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 export const HEADLESS_HOST_STATUS_VERSION = 1
 export const HEADLESS_HOST_STATE_VERSION = 1
@@ -211,20 +212,35 @@ export async function writeHeadlessHostState(
     status,
     redacted: true,
   }
-  await writeFile(statePathForDir(dir), `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 })
+  // Atomic write (P1-X3): a crash mid-write must never leave a truncated state.json. The reader's
+  // not-found path treats a missing file as "no host running", so a partial JSON would orphan a live
+  // --headless runtime; writeFileAtomic publishes via a temp-file rename so the file is all-or-nothing.
+  writeFileAtomic(statePathForDir(dir), `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 })
   return state
 }
 
 export async function readHeadlessHostState(stateDir?: string | null): Promise<HeadlessHostState | null> {
   const dir = await resolveHeadlessHostStateDir(stateDir)
+  let raw: string
   try {
-    const parsed = JSON.parse(await readFile(statePathForDir(dir), 'utf8')) as Partial<HeadlessHostState>
-    if (parsed.schemaVersion !== HEADLESS_HOST_STATE_VERSION || parsed.redacted !== true) return null
-    if (!parsed.status || parsed.status.redacted !== true) return null
-    return parsed as HeadlessHostState
-  } catch {
-    return null
+    raw = await readFile(statePathForDir(dir), 'utf8')
+  } catch (error) {
+    // Genuinely absent → no host. Any other read failure (permissions, I/O) is NOT "no host" and
+    // must surface rather than silently orphaning a live runtime.
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return null
+    throw error
   }
+  let parsed: Partial<HeadlessHostState>
+  try {
+    parsed = JSON.parse(raw) as Partial<HeadlessHostState>
+  } catch (error) {
+    // A corrupt state file is distinct from "no host running" (P1-X3) — do not let it read as absent.
+    throw new Error(`Headless host state file is corrupt at ${statePathForDir(dir)}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+  }
+  // A parseable but schema-incompatible/legacy state is treated as no usable host (unchanged).
+  if (parsed.schemaVersion !== HEADLESS_HOST_STATE_VERSION || parsed.redacted !== true) return null
+  if (!parsed.status || parsed.status.redacted !== true) return null
+  return parsed as HeadlessHostState
 }
 
 export async function clearHeadlessHostState(stateDir?: string | null) {
