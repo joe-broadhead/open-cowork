@@ -2272,6 +2272,48 @@ body {
   color: var(--accent-action-foreground);
 }
 
+/* Version history timeline (prototype .hist-row/.hist-line/.hist-dot): a dot rail with
+   a vertical connector, the current version marked in accent. */
+.studio-version-timeline {
+  display: flex;
+  flex-direction: column;
+}
+.studio-version-row {
+  display: flex;
+  gap: var(--space-3);
+}
+.studio-version-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 14px;
+  flex: none;
+}
+.studio-version-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+  border: 2px solid var(--color-surface);
+  margin-top: 5px;
+  flex: none;
+}
+.studio-version-dot.is-current {
+  background: var(--color-accent);
+}
+.studio-version-connector {
+  flex: 1;
+  width: 2px;
+  min-height: var(--space-3);
+  background: var(--color-border);
+  margin-top: 2px;
+}
+.studio-version-body {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: var(--space-4);
+}
+
 .home-motion-list {
   display: grid;
   gap: var(--space-2);

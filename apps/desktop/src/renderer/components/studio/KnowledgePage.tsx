@@ -107,7 +107,7 @@ function KnowledgeGraphPanel({
   onSelectPage: (pageId: string) => void
 }) {
   return (
-    <Card padding="md" className="flex min-h-[520px] flex-col">
+    <Card padding="md" className="flex h-full min-h-[520px] flex-col">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-text">{t('knowledge.graph.title', 'Knowledge graph')}</h2>
@@ -163,7 +163,11 @@ function ReviewQueue({
                   <h3 className="truncate text-[13px] font-semibold text-text">{proposal.pageTitle}</h3>
                   <p className="mt-1 text-[12px] text-text-muted">{proposal.summary}</p>
                 </div>
-                <Badge tone="neutral">+{proposal.add} / -{proposal.del}</Badge>
+                <span className="font-mono text-[12px] font-semibold whitespace-nowrap">
+                  <span className="text-[var(--color-green)]">+{proposal.add}</span>
+                  <span className="text-text-muted"> / </span>
+                  <span className="text-[var(--color-red)]">-{proposal.del}</span>
+                </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
                 <span>{space?.name || t('knowledge.review.unknownSpace', 'Unknown space')}</span>
@@ -199,30 +203,36 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
         <h2 className="text-sm font-semibold text-text">{t('knowledge.history.title', 'Version history')}</h2>
         <Badge tone="neutral">{versions.length}</Badge>
       </div>
-      <div className="space-y-2">
-        {versions.map((version) => {
+      <div className="studio-version-timeline">
+        {versions.map((version, index) => {
           const isCurrent = version.version === currentVersion
           return (
-            <div key={`${version.id}:${version.version}`} className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px]">
-              <div className="flex items-center justify-between gap-2">
-                <strong className="text-text">v{version.version}</strong>
-                <span className="text-text-muted">{formatDate(version.updatedAt)}</span>
+            <div key={`${version.id}:${version.version}`} className="studio-version-row">
+              <div className="studio-version-rail" aria-hidden="true">
+                <span className={`studio-version-dot${isCurrent ? ' is-current' : ''}`} />
+                {index < versions.length - 1 ? <span className="studio-version-connector" /> : null}
               </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-text-muted">
-                <span className="truncate">{version.updatedBy}{version.proposalId ? ` - ${version.proposalId}` : ''}</span>
-                {isCurrent ? (
-                  <Badge tone="neutral">{t('knowledge.history.current', 'Current')}</Badge>
-                ) : canRestore ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    leftIcon="rotate-ccw"
-                    disabled={Boolean(busyVersionId)}
-                    onClick={() => onRestore(version)}
-                  >
-                    {busyVersionId === version.versionId ? t('knowledge.history.restoring', 'Restoring') : t('knowledge.history.restore', 'Restore')}
-                  </Button>
-                ) : null}
+              <div className="studio-version-body text-[12px]">
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="text-text">v{version.version}</strong>
+                  <span className="text-text-muted">{formatDate(version.updatedAt)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-text-muted">
+                  <span className="truncate">{version.updatedBy}{version.proposalId ? ` - ${version.proposalId}` : ''}</span>
+                  {isCurrent ? (
+                    <Badge tone="accent">{t('knowledge.history.current', 'Current')}</Badge>
+                  ) : canRestore ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      leftIcon="rotate-ccw"
+                      disabled={Boolean(busyVersionId)}
+                      onClick={() => onRestore(version)}
+                    >
+                      {busyVersionId === version.versionId ? t('knowledge.history.restoring', 'Restoring') : t('knowledge.history.restore', 'Restore')}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </div>
           )
@@ -513,7 +523,7 @@ export function KnowledgePage() {
           </div>
         ) : null}
 
-        <div className="grid min-h-[720px] grid-cols-[260px_minmax(0,1fr)_330px] gap-4">
+        <div className={`grid min-h-[720px] gap-4 ${view === 'graph' ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-[260px_minmax(0,1fr)_330px]'}`}>
           <div className="flex min-h-0 flex-col gap-3">
             <Button
               variant="secondary"
@@ -598,6 +608,7 @@ export function KnowledgePage() {
             )}
           </div>
 
+          {view !== 'graph' && (
           <div className="space-y-4">
             <ReviewQueue
               snapshot={snapshot}
@@ -634,6 +645,7 @@ export function KnowledgePage() {
               </div>
             </Card>
           </div>
+          )}
         </div>
       </div>
       {proposeOpen && selectedPage && selectedSpace ? (

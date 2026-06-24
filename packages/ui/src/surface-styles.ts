@@ -1131,6 +1131,11 @@ export function projectsSurfaceCss(): string {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-4);
+  /* "Plan with Cleo" is the accent-emphasised plan panel (prototype .plan-panel):
+     accent-line border + a 3px accent-soft glow ring (a sanctioned accent glow). */
+  border-radius: var(--radius-2xl);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-1), var(--specular);
 }
 
 .studio-project-create__grid {
