@@ -1057,6 +1057,19 @@ const CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS = [
     ON cloud_memberships (account_id, updated_at DESC)`,
 ] as const
 
+// Age-leading indexes for the opt-in event-retention sweep (P1-C3). The existing event indexes all
+// lead with tenant/org, so a global "created_at < cutoff" bounded delete would seq-scan; these let
+// the retention prune find the oldest rows cheaply without disturbing the read-path indexes.
+export const CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_MIGRATION_ID = '022_event_retention_indexes'
+const CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_session_events_created_idx
+    ON cloud_session_events (created_at)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_audit_events_created_idx
+    ON cloud_audit_events (created_at)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_usage_events_created_idx
+    ON cloud_usage_events (created_at)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1151,6 +1164,16 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
       'cloud_channel_interactions_expiry_idx',
       'cloud_webhook_replay_claims_seen_idx',
       'cloud_memberships_account_idx',
+    ],
+    transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS,
+    concurrentIndexes: [
+      'cloud_session_events_created_idx',
+      'cloud_audit_events_created_idx',
+      'cloud_usage_events_created_idx',
     ],
     transactional: false,
   },

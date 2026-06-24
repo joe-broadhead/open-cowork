@@ -102,6 +102,9 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
     channelDeliveryMs: 1_000,
     channelInteractionMs: 1_000,
     staleThrottleMs: null,
+    sessionEventMs: null,
+    auditEventMs: null,
+    usageEventMs: null,
     intervalMs: 10_000,
     batchSize: 2,
     maxBatches: 5,
@@ -123,6 +126,40 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
   await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:15.000Z'))
   assert.equal(deliveryCalls, 4)
   assert.equal(interactionCalls, 2)
+})
+
+test('cloud scheduler prunes only the opt-in event logs whose window is configured', async () => {
+  const calls = { session: 0, audit: 0, usage: 0 }
+  const store = {
+    async recordWorkerHeartbeat() {},
+    async reapExpiredWorkflowClaims() { return [] },
+    async pruneTerminalChannelDeliveries() { return 0 },
+    async pruneExpiredChannelInteractions() { return 0 },
+    async pruneStaleThrottleState() { return 0 },
+    async pruneExpiredSessionEvents() { calls.session += 1; return 0 },
+    async pruneExpiredAuditEvents() { calls.audit += 1; return 0 },
+    async pruneExpiredUsageEvents() { calls.usage += 1; return 0 },
+  } as unknown as InMemoryControlPlaneStore
+  const service = {
+    async claimAndStartDueWorkflow() { return null },
+  } as unknown as CloudSessionService
+  const scheduler = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability(), {
+    channelDeliveryMs: null,
+    channelInteractionMs: null,
+    staleThrottleMs: null,
+    // Opt in to session + usage retention only; audit stays off (null) and must never be touched.
+    sessionEventMs: 1_000,
+    auditEventMs: null,
+    usageEventMs: 2_000,
+    intervalMs: 10_000,
+    batchSize: 500,
+    maxBatches: 5,
+  })
+
+  await scheduler.processDueWorkflows(new Date('2030-01-01T00:00:00.000Z'))
+  assert.equal(calls.session, 1) // window set → one bounded batch (returns 0 < batchSize, drains)
+  assert.equal(calls.audit, 0) // null window → never called, so compliance data is never deleted
+  assert.equal(calls.usage, 1)
 })
 
 test('cloud scheduler skips retention entirely when no window is configured', async () => {

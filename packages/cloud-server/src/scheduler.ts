@@ -6,8 +6,7 @@ import type { CloudSessionService } from './session-service.ts'
 // Data-retention windows for the transient channel tables. A null window means
 // that table is never pruned (the default), so retention is opt-in per the
 // operator's compliance policy — the scheduler does nothing destructive until a
-// window is configured. The compliance/projection-sensitive tables (audit,
-// usage, session/workspace events) are intentionally excluded here.
+// window is configured.
 export type CloudRetentionOptions = {
   channelDeliveryMs: number | null
   channelInteractionMs: number | null
@@ -15,6 +14,13 @@ export type CloudRetentionOptions = {
   // throttle bookkeeping, not compliance data, and it grows one row per client IP
   // forever — so this prune defaults ON (window via app.ts) unlike the others.
   staleThrottleMs: number | null
+  // Compliance/projection-sensitive event logs (P1-C3). These grow without bound on any active
+  // tenant, but they ARE compliance/replay data — so each defaults OFF (null) and is pruned only
+  // when the operator opts in with an explicit window per their retention policy. Pruning session
+  // events trims old SSE replay history; the durable projection still covers the gap.
+  sessionEventMs: number | null
+  auditEventMs: number | null
+  usageEventMs: number | null
   intervalMs: number
   batchSize: number
   maxBatches: number
@@ -24,6 +30,9 @@ const DISABLED_CLOUD_RETENTION: CloudRetentionOptions = {
   channelDeliveryMs: null,
   channelInteractionMs: null,
   staleThrottleMs: null,
+  sessionEventMs: null,
+  auditEventMs: null,
+  usageEventMs: null,
   intervalMs: 60 * 60 * 1000,
   batchSize: 500,
   maxBatches: 20,
@@ -118,8 +127,11 @@ export class CloudScheduler {
   // retention.intervalMs. No-op unless at least one window is configured. Each
   // table drains in bounded batches so a sweep can't monopolize the loop.
   private async maybeProcessRetention(now: Date) {
-    const { channelDeliveryMs, channelInteractionMs, staleThrottleMs, intervalMs } = this.retention
-    if (channelDeliveryMs === null && channelInteractionMs === null && staleThrottleMs === null) return
+    const { channelDeliveryMs, channelInteractionMs, staleThrottleMs, sessionEventMs, auditEventMs, usageEventMs, intervalMs } = this.retention
+    if (
+      channelDeliveryMs === null && channelInteractionMs === null && staleThrottleMs === null
+      && sessionEventMs === null && auditEventMs === null && usageEventMs === null
+    ) return
     const nowMs = now.getTime()
     if (this.lastRetentionRunMs !== 0 && nowMs - this.lastRetentionRunMs < intervalMs) return
     this.lastRetentionRunMs = nowMs
@@ -136,6 +148,18 @@ export class CloudScheduler {
     if (staleThrottleMs !== null) {
       const olderThan = new Date(nowMs - staleThrottleMs)
       pruned += await this.pruneInBatches((limit) => this.store.pruneStaleThrottleState({ olderThan, limit }))
+    }
+    if (sessionEventMs !== null) {
+      const olderThan = new Date(nowMs - sessionEventMs)
+      pruned += await this.pruneInBatches((limit) => this.store.pruneExpiredSessionEvents({ olderThan, limit }))
+    }
+    if (auditEventMs !== null) {
+      const olderThan = new Date(nowMs - auditEventMs)
+      pruned += await this.pruneInBatches((limit) => this.store.pruneExpiredAuditEvents({ olderThan, limit }))
+    }
+    if (usageEventMs !== null) {
+      const olderThan = new Date(nowMs - usageEventMs)
+      pruned += await this.pruneInBatches((limit) => this.store.pruneExpiredUsageEvents({ olderThan, limit }))
     }
     if (pruned > 0) {
       await recordCloudSchedulerMetric(this.observability, {

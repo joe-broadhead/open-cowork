@@ -394,6 +394,25 @@ function runControlPlaneDomainContracts(
       const prunedThrottle = await store.pruneStaleThrottleState({ olderThan: new Date(Date.now() + 3_600_000), limit: 100 })
       assert.ok(prunedThrottle >= 2, `expected stale throttle rows pruned, got ${prunedThrottle}`)
 
+      // Event-log retention (P1-C3) — opt-in, age-based, oldest-first, bounded, identical in both
+      // stores. Seed one old row in each of the three logs next to the recent rows already created;
+      // a cutoff between "old" and "now" must remove only the old, leaving the recent rows intact.
+      const oldStamp = new Date('2000-01-01T00:00:00.000Z')
+      await store.appendSessionEvent({ tenantId, sessionId, eventId: `${prefix}-old-event`, type: 'assistant.message', payload: { messageId: 'old', content: 'old' }, createdAt: oldStamp })
+      await store.recordAuditEvent({ orgId: org.orgId, actorType: 'system', eventType: 'contract.retention', metadata: {}, createdAt: oldStamp })
+      await store.recordUsageEvent({ orgId: org.orgId, eventType: 'contract.retention', quantity: 1, unit: 'count', metadata: {}, createdAt: oldStamp })
+      const sessionEventsBeforePrune = (await store.listSessionEvents(tenantId, sessionId, 0)).length
+      const retentionCutoff = { olderThan: new Date('2001-01-01T00:00:00.000Z'), limit: 100 }
+      assert.ok(await store.pruneExpiredSessionEvents(retentionCutoff) >= 1, 'expected an old session event pruned')
+      assert.ok(await store.pruneExpiredAuditEvents(retentionCutoff) >= 1, 'expected an old audit event pruned')
+      assert.ok(await store.pruneExpiredUsageEvents(retentionCutoff) >= 1, 'expected an old usage event pruned')
+      // The recent rows survive (only the pre-2001 ones were removed) and a no-op cutoff removes none.
+      assert.equal((await store.listSessionEvents(tenantId, sessionId, 0)).length, sessionEventsBeforePrune - 1)
+      const noopCutoff = { olderThan: new Date('1999-01-01T00:00:00.000Z'), limit: 100 }
+      assert.equal(await store.pruneExpiredSessionEvents(noopCutoff), 0)
+      assert.equal(await store.pruneExpiredAuditEvents(noopCutoff), 0)
+      assert.equal(await store.pruneExpiredUsageEvents(noopCutoff), 0)
+
       // Worker heartbeats — upsert by worker id (active session ids deduped), then list.
       await store.recordWorkerHeartbeat({ workerId: `${prefix}-hb-worker`, role: 'worker', activeSessionIds: [sessionId, sessionId] })
       const workerHeartbeat = (await store.listWorkerHeartbeats()).find((entry) => entry.workerId === `${prefix}-hb-worker`)

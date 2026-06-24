@@ -276,6 +276,13 @@ export type ControlPlaneStore = {
   // Delete stale per-source throttle rows (rate-limit windows + expired auth-backoff blocks)
   // older than the cutoff; returns the count removed so the scheduler can batch until drained.
   pruneStaleThrottleState(input: { olderThan: Date; limit: number }): MaybePromise<number>
+  // Opt-in retention for the compliance/projection-sensitive event logs (P1-C3). Each deletes up to
+  // `limit` rows created before the cutoff (oldest first) and returns the count, so the scheduler can
+  // batch until drained. Disabled (never called) unless the operator configures the window. Pruning
+  // session events trims old SSE replay history; the durable projection still covers the gap.
+  pruneExpiredSessionEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
+  pruneExpiredAuditEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
+  pruneExpiredUsageEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
   createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch>
   updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch | null>
   getCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<CoordinationWatch | null>

@@ -716,6 +716,23 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OTLP_MAX_QUEUE_SIZE` | Optional positive maximum queued spans and metrics per OTLP record type before oldest records are dropped and counted; defaults to `1000`. |
 | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED` | `true` enables worker runtime/workspace checkpoints in object storage. |
 
+Data-retention variables (scheduler/all-in-one roles). The scheduler runs a bounded, batched
+retention sweep no more than once per `OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS`. Every window is in
+milliseconds and deletes rows older than the window, oldest-first; a window of `0`/unset disables
+that prune (the scheduler does nothing destructive until you opt in). The event-log windows are
+compliance/replay-sensitive — they default **off**:
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS` | Minimum gap between retention sweeps. Defaults to one hour. |
+| `OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE` / `OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES` | Rows deleted per batch and max batches per table per sweep. Defaults `500` / `20`. |
+| `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS` | Prune terminal (`sent`/`dead`) channel deliveries older than this. Off by default. |
+| `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_INTERACTION_MS` | Prune expired one-shot channel-interaction tokens older than this. Off by default. |
+| `OPEN_COWORK_CLOUD_RETENTION_STALE_THROTTLE_MS` | Prune stale rate-limit windows + expired auth-backoff rows. Pure bookkeeping that grows one row per client IP, so this defaults **on** at one hour; `0` disables. |
+| `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default; the durable session projection still covers the trimmed window. |
+| `OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS` | Prune `cloud_audit_events` older than this. Off by default — enable only if your compliance/retention policy permits deleting the audit trail. |
+| `OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS` | Prune `cloud_usage_events` older than this. Off by default — enable only after the usage data has been exported/aggregated for billing. |
+
 Managed billing variables:
 
 | Variable | Meaning |

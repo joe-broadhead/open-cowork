@@ -284,6 +284,11 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assert.match(postgresStore, /async listSessions\b[\s\S]*WHERE s\.tenant_id = \$1 AND s\.user_id = \$2[\s\S]*LIMIT 1000/)
   assert.match(postgresStore, /async pruneExpiredChannelInteractions[\s\S]*DELETE FROM cloud_channel_interactions[\s\S]*WHERE ctid IN \([\s\S]*WHERE expires_at < \$1[\s\S]*LIMIT \$2/)
   assert.match(postgresStore, /async pruneStaleThrottleState[\s\S]*DELETE FROM cloud_rate_limits[\s\S]*window_started_at_ms < \$1[\s\S]*DELETE FROM cloud_auth_failures[\s\S]*blocked_until_ms < \$1/)
+  // Event-log retention (P1-C3) deletes via a ctid-keyed, ORDER BY created_at bounded subselect.
+  assert.match(postgresStore, /private async pruneByCreatedAt[\s\S]*DELETE FROM \$\{table\}[\s\S]*WHERE ctid IN \([\s\S]*WHERE created_at < \$1[\s\S]*ORDER BY created_at[\s\S]*LIMIT \$2/)
+  for (const method of ['pruneExpiredSessionEvents', 'pruneExpiredAuditEvents', 'pruneExpiredUsageEvents']) {
+    assert.match(postgresStore, new RegExp(`async ${method}[\\s\\S]*pruneByCreatedAt\\(`), `${method} should delegate to the bounded created_at prune`)
+  }
   assert.match(postgresChannelDeliveriesDomain, /async pruneTerminal[\s\S]*DELETE FROM cloud_channel_deliveries[\s\S]*WHERE ctid IN \([\s\S]*status IN \('sent', 'dead'\)[\s\S]*LIMIT \$2/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)

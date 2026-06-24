@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { clone, normalizePositiveInteger, nowIso } from './store-helpers.ts'
+import { clone, normalizePositiveInteger, nowIso, pruneOldestByCreatedAt } from './store-helpers.ts'
 import { redactAuditMetadata } from '../audit-redaction.ts'
 import type { RecordUsageEventInput, UsageEventRecord } from '../control-plane-store.ts'
 
@@ -46,6 +46,11 @@ export class InMemoryUsageDomain {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  // Opt-in retention (P1-C3): delete the oldest usage records created before the cutoff, bounded.
+  pruneStale(cutoffIso: string, limit: number): number {
+    return pruneOldestByCreatedAt(this.usageEvents, (event) => event.createdAt, cutoffIso, limit)
   }
 }
 

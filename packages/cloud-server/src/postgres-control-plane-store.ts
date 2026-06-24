@@ -976,6 +976,37 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return result.rows.length
   }
 
+  // Opt-in event-log retention (P1-C3). Each deletes the oldest rows created before the cutoff,
+  // bounded by a ctid-keyed subselect (ORDER BY created_at, supported by the 022 indexes) so a
+  // single batch never locks the whole table; the scheduler drains in batches.
+  async pruneExpiredSessionEvents(input: { olderThan: Date; limit: number }) {
+    return this.pruneByCreatedAt('cloud_session_events', 'event_id', input)
+  }
+
+  async pruneExpiredAuditEvents(input: { olderThan: Date; limit: number }) {
+    return this.pruneByCreatedAt('cloud_audit_events', 'event_id', input)
+  }
+
+  async pruneExpiredUsageEvents(input: { olderThan: Date; limit: number }) {
+    return this.pruneByCreatedAt('cloud_usage_events', 'event_id', input)
+  }
+
+  private async pruneByCreatedAt(table: string, returning: string, input: { olderThan: Date; limit: number }) {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const result = await this.pool.query(
+      `DELETE FROM ${table}
+       WHERE ctid IN (
+         SELECT ctid FROM ${table}
+         WHERE created_at < $1
+         ORDER BY created_at
+         LIMIT $2
+       )
+       RETURNING ${returning}`,
+      [input.olderThan.toISOString(), limit],
+    )
+    return result.rows.length
+  }
+
   async createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): Promise<CoordinationWatch> {
     return this.coordinationWatches.create(input)
   }

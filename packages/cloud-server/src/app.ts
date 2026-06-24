@@ -1358,6 +1358,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     // Stale throttle state is pure bookkeeping that grows one row per client IP forever, so
     // unlike the compliance tables this prune defaults ON (1h). 0 disables it.
     staleThrottleMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_STALE_THROTTLE_MS'), 60 * 60 * 1000) || null,
+    // Compliance/projection-sensitive event logs (P1-C3): default OFF (null). Set an explicit window
+    // (ms) to opt in — session events are the unbounded SSE replay log; audit/usage are billing and
+    // compliance trails, so prune them only if your retention policy allows it.
+    sessionEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS'), 0) || null,
+    auditEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS'), 0) || null,
+    usageEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS'), 0) || null,
     intervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS'), 60 * 60 * 1000),
     batchSize: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE'), 500),
     maxBatches: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES'), 20),

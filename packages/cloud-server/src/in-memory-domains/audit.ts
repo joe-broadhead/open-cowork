@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { clone, nowIso } from './store-helpers.ts'
+import { clone, nowIso, pruneOldestByCreatedAt } from './store-helpers.ts'
 import { redactAuditMetadata } from '../audit-redaction.ts'
 import type { AuditEventRecord, RecordAuditEventInput } from '../control-plane-store.ts'
 
@@ -50,6 +50,11 @@ export class InMemoryAuditDomain {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  // Opt-in retention (P1-C3): delete the oldest audit records created before the cutoff, bounded.
+  pruneStale(cutoffIso: string, limit: number): number {
+    return pruneOldestByCreatedAt(this.auditEvents, (event) => event.createdAt, cutoffIso, limit)
   }
 }
 

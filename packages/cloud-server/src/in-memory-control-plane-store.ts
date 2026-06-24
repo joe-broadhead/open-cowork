@@ -855,6 +855,38 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return stale.length
   }
 
+  // Opt-in event-log retention (P1-C3). Matches the postgres ctid `ORDER BY created_at LIMIT` delete:
+  // remove the oldest rows created before the cutoff, bounded by limit, oldest-first across sessions.
+  pruneExpiredSessionEvents(input: { olderThan: Date; limit: number }): number {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const cutoff = input.olderThan.toISOString()
+    const stale = Array.from(this.sessions.values())
+      .flatMap((session) => session.events.map((event) => ({ session, event })))
+      .filter(({ event }) => event.createdAt < cutoff)
+      .sort((left, right) => left.event.createdAt.localeCompare(right.event.createdAt))
+      .slice(0, limit)
+    const removeBySession = new Map<typeof stale[number]['session'], Set<string>>()
+    for (const { session, event } of stale) {
+      const ids = removeBySession.get(session) || new Set<string>()
+      ids.add(event.eventId)
+      removeBySession.set(session, ids)
+    }
+    for (const [session, ids] of removeBySession) {
+      session.events = session.events.filter((event) => !ids.has(event.eventId))
+    }
+    return stale.length
+  }
+
+  pruneExpiredAuditEvents(input: { olderThan: Date; limit: number }): number {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    return this.auditDomain.pruneStale(input.olderThan.toISOString(), limit)
+  }
+
+  pruneExpiredUsageEvents(input: { olderThan: Date; limit: number }): number {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    return this.usageDomain.pruneStale(input.olderThan.toISOString(), limit)
+  }
+
   createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): CoordinationWatch { return this.coordinationWatchesDomain.create(input) }
   updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): CoordinationWatch | null { return this.coordinationWatchesDomain.update(input) }
   getCloudCoordinationWatch(workspaceId: string, watchId: string): CoordinationWatch | null { return this.coordinationWatchesDomain.get(workspaceId, watchId) }
