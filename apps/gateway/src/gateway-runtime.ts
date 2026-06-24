@@ -53,6 +53,13 @@ export function createGatewayRuntime(
   const deliverySubscriptions: Array<{ close(): void }> = []
   const inFlightDeliveries = new Set<Promise<void>>()
   let started = false
+  // Tracks whether the cloud delivery subscription is live. The gateway's job is to
+  // relay between channels and the cloud, so a broken delivery pipe means it is not
+  // ready even when its channel providers are healthy. The subscription is not
+  // auto-reconnected here, so onError is effectively terminal until restart — this
+  // flag therefore reflects cloud reachability without flapping. /ready returning 503
+  // lets the orchestrator restart the gateway to re-establish a clean subscription.
+  let cloudDeliveriesHealthy = true
 
   const runtime: GatewayRuntime = {
     metrics,
@@ -69,10 +76,12 @@ export function createGatewayRuntime(
       }
       started = true
       if (options.subscribeDeliveries !== false) {
+        cloudDeliveriesHealthy = true
         deliverySubscriptions.push(cloud.subscribeDeliveries({
           claimedBy,
           channelBindingIds,
           onDelivery: (delivery) => {
+            cloudDeliveriesHealthy = true
             const task = handleDelivery(delivery, providers, cloud, metrics)
               .finally(() => {
                 inFlightDeliveries.delete(task)
@@ -80,6 +89,7 @@ export function createGatewayRuntime(
             inFlightDeliveries.add(task)
           },
           onError: () => {
+            cloudDeliveriesHealthy = false
             metrics.cloudSubscriptionErrors += 1
             metrics.errors += 1
           },
@@ -100,7 +110,8 @@ export function createGatewayRuntime(
     },
     ready() {
       refreshProviderHealth(providers, metrics)
-      return started && providers.registrations.every((registration) => registration.started && registration.healthy)
+      const cloudReachable = options.subscribeDeliveries === false || cloudDeliveriesHealthy
+      return started && cloudReachable && providers.registrations.every((registration) => registration.started && registration.healthy)
     },
     refreshProviderHealth() {
       refreshProviderHealth(providers, metrics)

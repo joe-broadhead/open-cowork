@@ -2036,3 +2036,42 @@ async function readJson(response: Response) {
   assert.equal(response.headers.get('content-type')?.includes('application/json'), true)
   return JSON.parse(await response.text()) as Record<string, unknown>
 }
+
+test('gateway runtime is not ready when the cloud delivery subscription fails', async () => {
+  const handlers: { onError?: () => void } = {}
+  const cloud = {
+    subscribeDeliveries(input: { onError?: () => void }) {
+      handlers.onError = input.onError
+      return { close() {} }
+    },
+  } as unknown as CloudGateway
+  const config = resolveGatewayConfig({
+    server: { adminToken: 'admin-token' },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+      credentials: { apiKey: 'provider-api-key-1234567890' },
+      settings: {
+        callbackSecret: 'provider-callback-secret-1234567890',
+        deliveryUrl: 'https://example.test/deliver?token=provider-token-1234567890',
+        workspacePath: '/home/alice/acme-private',
+      },
+    }],
+  }, { OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token', OPEN_COWORK_GATEWAY_PORT: '0' })
+
+  const runtime = createGatewayRuntime(config, cloud)
+  await runtime.start()
+  try {
+    assert.equal(runtime.ready(), true)
+    // A broken cloud delivery pipe makes the gateway not-ready even with healthy providers.
+    handlers.onError?.()
+    assert.equal(runtime.ready(), false)
+    // Restarting re-establishes a clean subscription and readiness.
+    await runtime.stop()
+    await runtime.start()
+    assert.equal(runtime.ready(), true)
+  } finally {
+    await runtime.stop()
+  }
+})
