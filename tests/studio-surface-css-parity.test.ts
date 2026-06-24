@@ -22,7 +22,7 @@ const SINGLE_SOURCED_PREFIXES = [
   '.studio-artifact-card',
   '.studio-approvals-',
   '.studio-approval-item',
-  '.studio-approval-details',
+  '.studio-approval-command',
   '.studio-question-',
   '.studio-wiki-page',
   '.studio-wiki-rail',
