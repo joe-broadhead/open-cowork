@@ -54,6 +54,10 @@ export type GatewayConfig = {
     smtpMs: number
     shutdownDrainMs: number
   }
+  // Max cloud→channel deliveries the bounded dispatcher runs at once (audit P1-G2). Deliveries to
+  // the same channel binding+target are serialized for ordering regardless; this caps the global
+  // outbound fan-out so a backlog drain can't storm providers into 429s.
+  maxDeliveryConcurrency: number
   providers: GatewayProviderConfig[]
 }
 
@@ -163,6 +167,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
       enabled: readBoolean(env.OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED, raw.diagnostics?.enabled ?? mode === 'self-host'),
     },
     timeouts,
+    maxDeliveryConcurrency: readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_DELIVERY_CONCURRENCY, 8, 1, 256),
     providers: normalizeProviders(raw.providers, env, serverPublicBaseUrl, serverMaxRequestBodyBytes),
   }
   assertGatewayConfigSafe(config, {

@@ -17,6 +17,10 @@ export type GatewayMetrics = {
   cloudSubscriptionErrors: number
   droppedSessionEvents: number
   streamBackpressureDisconnects: number
+  // High-water mark of deliveries queued in the bounded delivery dispatcher (audit P1-G2). A
+  // sustained high value means the gateway is being pushed deliveries faster than its bounded
+  // worker pool drains them — a backlog/backpressure signal for the operator.
+  deliveryQueueDepthMax: number
   errors: number
   providerMetrics: Record<string, GatewayProviderMetrics>
 }
@@ -59,6 +63,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     cloudSubscriptionErrors: 0,
     droppedSessionEvents: 0,
     streamBackpressureDisconnects: 0,
+    deliveryQueueDepthMax: 0,
     errors: 0,
     providerMetrics: {},
   }
@@ -166,6 +171,9 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# HELP open_cowork_gateway_stream_backpressure_disconnects_total Session streams detached from the upstream after the in-flight event queue hit its depth cap; recovered by resubscribing from the persisted cursor.',
     '# TYPE open_cowork_gateway_stream_backpressure_disconnects_total counter',
     `open_cowork_gateway_stream_backpressure_disconnects_total ${metrics.streamBackpressureDisconnects}`,
+    '# HELP open_cowork_gateway_delivery_queue_depth_max High-water mark of deliveries queued in the bounded delivery dispatcher.',
+    '# TYPE open_cowork_gateway_delivery_queue_depth_max gauge',
+    `open_cowork_gateway_delivery_queue_depth_max ${metrics.deliveryQueueDepthMax}`,
     ...renderProviderMetrics(metrics),
     '',
   ].join('\n')
