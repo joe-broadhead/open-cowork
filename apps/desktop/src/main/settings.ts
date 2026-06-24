@@ -1,4 +1,4 @@
-import { writeFileAtomic } from '@open-cowork/shared/node'
+import { getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
 import { existsSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -25,11 +25,9 @@ import {
   type SecretStorageMode,
 } from './secure-storage-policy.ts'
 
+// `app` is still used directly for the desktop-only setLoginItemSettings (launch
+// at login); credential encryption now goes through the injected SafeStorageHost.
 const electronApp = (electron as { app?: typeof import('electron').app }).app
-const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
-const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
-  getSelectedStorageBackend?: () => string
-}) | undefined
 
 type SecretStorageAdapter = {
   mode: SecretStorageMode
@@ -460,9 +458,9 @@ function getSecretStorageMode() {
   if (settingsSecretStorageForTests) return settingsSecretStorageForTests.mode
   return resolveSecretStorageMode({
     isPackaged: Boolean(electronApp?.isPackaged),
-    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
-      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+      getSafeStorageHost()?.getSelectedStorageBackend,
     ),
   })
 }
@@ -481,10 +479,11 @@ export function applySettingsSideEffects(settings = loadSettings()) {
 
 function requireSafeStorage() {
   if (settingsSecretStorageForTests) return settingsSecretStorageForTests
-  if (!electronSafeStorage) {
+  const safeStorage = getSafeStorageHost()
+  if (!safeStorage) {
     throw new Error('Electron safeStorage is unavailable')
   }
-  return electronSafeStorage
+  return safeStorage
 }
 
 export function setSettingsSecretStorageForTests(adapter: SecretStorageAdapter | null) {
@@ -498,8 +497,9 @@ function decryptLegacyDevelopmentSecret(raw: Buffer) {
     try { return testDecrypt(raw) } catch { return null }
   }
   if (electronApp?.isPackaged) return null
-  if (!electronSafeStorage?.isEncryptionAvailable?.() || !electronSafeStorage.decryptString) return null
-  try { return electronSafeStorage.decryptString(raw) } catch { return null }
+  const safeStorage = getSafeStorageHost()
+  if (!safeStorage?.isEncryptionAvailable() || !safeStorage.decryptString) return null
+  try { return safeStorage.decryptString(raw) } catch { return null }
 }
 
 // Sentinel rendered into masked credential fields returned by

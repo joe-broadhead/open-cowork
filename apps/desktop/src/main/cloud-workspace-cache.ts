@@ -1,5 +1,4 @@
-import { writeFileAtomic } from '@open-cowork/shared/node'
-import electron from 'electron'
+import { getAppPathHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import type {
@@ -17,11 +16,6 @@ import {
   resolveSecretStorageMode,
   type SecretStorageMode,
 } from './secure-storage-policy.ts'
-
-const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
-const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
-  getSelectedStorageBackend?: () => string
-}) | undefined
 
 type SecretStorageAdapter = {
   mode: SecretStorageMode
@@ -73,17 +67,18 @@ function defaultCachePath() {
 
 function defaultSecretStorageMode() {
   return resolveSecretStorageMode({
-    isPackaged: Boolean(electron.app?.isPackaged),
-    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
+    encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
-      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+      getSafeStorageHost()?.getSelectedStorageBackend,
     ),
   })
 }
 
 function requireSafeStorage() {
-  if (!electronSafeStorage) throw new Error('Electron safeStorage is unavailable')
-  return electronSafeStorage
+  const safeStorage = getSafeStorageHost()
+  if (!safeStorage) throw new Error('Electron safeStorage is unavailable')
+  return safeStorage
 }
 
 function normalizeWorkspaceId(value: unknown) {

@@ -11,10 +11,10 @@
 // env/homedir/cwd fallbacks apply — structurally the same result the shim+guards
 // produced before. Cutting that cloud→Electron edge for real means importing the
 // core directly + injecting a cloud host; see docs/design/cloud-server-extraction.md.
-import electron from 'electron'
-import { setAppPathHost } from '@open-cowork/shared/node'
-
-const electronApp = (electron as { app?: typeof import('electron').app }).app
-setAppPathHost(electronApp ?? null)
+// Side-effect import wires the Electron-backed hosts (app paths + safeStorage) into
+// the shared injection seams before any config function runs. See
+// desktop-electron-hosts.ts. The cloud reaches the same shim with Electron shimmed,
+// so the hosts stay null and the config core takes its Electron-free fallbacks.
+import './desktop-electron-hosts.ts'
 
 export * from './config-loader-core.ts'

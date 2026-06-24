@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import electron from 'electron'
+import { getAppPathHost, getSafeStorageHost } from '@open-cowork/shared/node'
 import type {
   CloudProjectionCheckpoint,
   CloudProjectionFenceToken,
@@ -52,12 +52,6 @@ let workflowDbForTests: DatabaseSync | null = null
 let transactionCounter = 0
 let workflowSecretStorageForTests: WorkflowSecretStorageAdapter | null = null
 
-const electronApp = (electron as { app?: typeof import('electron').app }).app
-const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
-const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
-  getSelectedStorageBackend?: () => string
-}) | undefined
-
 type DbRow = Record<string, unknown>
 type WorkflowWriteOptions = WorkflowDraftNormalizationOptions
 type WorkflowDraftOptions = WorkflowDraftNormalizationOptions
@@ -89,16 +83,16 @@ function parseJson<T>(value: unknown, fallback: T): T {
 function getWorkflowSecretStorage(): WorkflowSecretStorageAdapter {
   if (workflowSecretStorageForTests) return workflowSecretStorageForTests
   const mode = resolveSecretStorageMode({
-    isPackaged: Boolean(electronApp?.isPackaged),
-    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
+    encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
-      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+      getSafeStorageHost()?.getSelectedStorageBackend,
     ),
   })
   return {
     mode,
-    encryptString: electronSafeStorage?.encryptString?.bind(electronSafeStorage),
-    decryptString: electronSafeStorage?.decryptString?.bind(electronSafeStorage),
+    encryptString: getSafeStorageHost()?.encryptString,
+    decryptString: getSafeStorageHost()?.decryptString,
   }
 }
 
