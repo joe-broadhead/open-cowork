@@ -66,6 +66,19 @@ test("standalone runtime prompts private OpenCode and persists projected events"
   assert.equal(snapshot.audits[0]?.action, "standalone.prompt");
 });
 
+test("standalone runtime stops claiming jobs the instant the lease is inactive", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  await repository.enqueueJob({ kind: "prompt", payload: {} });
+  await repository.enqueueJob({ kind: "prompt", payload: {} });
+
+  // isActive() === false (lease lost) → the claim loop breaks before touching the queue.
+  assert.equal(await runtime.runDueJobs("worker-1", { isActive: () => false }), 0);
+  // With the lease active the same backlog drains normally.
+  assert.equal(await runtime.runDueJobs("worker-1", { isActive: () => true }), 2);
+});
+
 test("standalone runtime serializes concurrent work for one channel session", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
   await authorize(repository);

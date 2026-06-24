@@ -76,6 +76,11 @@ if (command === "smoke") {
       throw new Error("Another Standalone Gateway daemon owns the active provider/runtime lease.");
     }
     let leaseToken = lease.leaseToken;
+    // Single source of truth for "this daemon still owns the lease". Flipped to false synchronously
+    // the moment a renewal fails (audit P1-G4) so the maintenance loop, the job claimer and the
+    // provider message handler all stop BEFORE process.exit completes — closing the window where a
+    // lease-losing daemon kept claiming/prompting while a successor acquired the lease.
+    let leaseActive = true;
     const leaseRenewal = setInterval(() => {
       void repository.renewDaemonLease({
         leaseId: daemonLeaseId,
@@ -86,23 +91,27 @@ if (command === "smoke") {
         if (!renewed) throw new Error("Lost Standalone Gateway daemon lease.");
         leaseToken = renewed.leaseToken;
       }).catch((error: unknown) => {
+        leaseActive = false;
         process.stderr.write(`Standalone Gateway lease renewal failed: ${error instanceof Error ? error.message : String(error)}\n`);
         process.exit(1);
       });
     }, daemonLeaseRenewalMs);
 
     const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+    const leaseRef = { leaseId: daemonLeaseId, ownerId, get leaseToken() { return leaseToken; } };
     const providers = createStandaloneProviderRegistry(config);
-    await providers.start((providerConfig, message) =>
-      runtime.handleMessage(providers.get(providerConfig.id)!.provider, providerConfig, message)
-    );
+    await providers.start((providerConfig, message) => {
+      // Don't prompt OpenCode once the lease is lost — a successor daemon owns the workspace.
+      if (!leaseActive) return Promise.resolve();
+      return runtime.handleMessage(providers.get(providerConfig.id)!.provider, providerConfig, message);
+    });
     let maintenanceRunning = false;
     let nextRetentionAt = 0;
     const maintenanceRunner = setInterval(() => {
-      if (maintenanceRunning) return;
+      if (maintenanceRunning || !leaseActive) return;
       maintenanceRunning = true;
       void (async () => {
-        await runtime.runDueJobs(ownerId);
+        await runtime.runDueJobs(ownerId, { lease: leaseRef, isActive: () => leaseActive });
         const now = Date.now();
         if (now < nextRetentionAt) return;
         const result = await runStandaloneGatewayRetention({

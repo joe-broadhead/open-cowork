@@ -113,6 +113,17 @@ function runStandaloneRepositoryContracts(
         const finished = await repository.finishJob({ jobId: job.jobId, claimToken: claimed!.claimToken!, status: 'completed' })
         assert.equal(finished.status, 'completed')
 
+        // Lease-aware claim (P1-G4): a stale/absent lease cannot claim a job (split-brain guard);
+        // only the live lease token can, verified atomically with the claim in both stores.
+        const leasedJob = await repository.enqueueJob({ kind: 'prompt', sessionId: session.sessionId, payload: { note: 'leased' } })
+        assert.equal(
+          await repository.claimNextJob({ claimedBy: 'worker-1', ttlMs: 30_000, lease: { leaseId: 'daemon', ownerId: 'node-1', leaseToken: 'stale-token' } }),
+          null,
+        )
+        const leasedClaim = await repository.claimNextJob({ claimedBy: 'worker-1', ttlMs: 30_000, lease: { leaseId: 'daemon', ownerId: 'node-1', leaseToken: renewed!.leaseToken } })
+        assert.equal(leasedClaim?.jobId, leasedJob.jobId)
+        await repository.finishJob({ jobId: leasedJob.jobId, claimToken: leasedClaim!.claimToken!, status: 'completed' })
+
         // Audit — secret redaction survives the jsonb round-trip.
         await repository.recordAudit('test.audit', 'user-1', { token: 'secret-token', note: 'ok' })
 

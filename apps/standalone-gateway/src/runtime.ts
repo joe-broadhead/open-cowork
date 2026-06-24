@@ -2,12 +2,12 @@ import type { ChannelProvider, IncomingChannelMessage } from "@open-cowork/gatew
 
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
 import { canIdentityPrompt } from "./repository.js";
-import type { StandaloneGatewayRepository } from "./repository.js";
+import type { StandaloneGatewayRepository, StandaloneGatewayLeaseRef } from "./repository.js";
 import type { StandaloneGatewayProviderConfig, StandaloneRuntimeEvent } from "./types.js";
 
 export interface StandaloneGatewayRuntime {
   handleMessage(provider: ChannelProvider, providerConfig: StandaloneGatewayProviderConfig, message: IncomingChannelMessage): Promise<void>;
-  runDueJobs(claimedBy: string): Promise<number>;
+  runDueJobs(claimedBy: string, options?: { lease?: StandaloneGatewayLeaseRef | null; isActive?: () => boolean }): Promise<number>;
 }
 
 export function createStandaloneGatewayRuntime(input: {
@@ -111,10 +111,13 @@ export function createStandaloneGatewayRuntime(input: {
         }
       });
     },
-    async runDueJobs(claimedBy) {
+    async runDueJobs(claimedBy, options = {}) {
       let processed = 0;
       for (;;) {
-        const job = await repository.claimNextJob({ claimedBy, ttlMs: 30_000 });
+        // Stop claiming the instant the daemon lease is lost (audit P1-G4) — the claim itself is
+        // also lease-guarded, so a stale daemon can neither start a new job nor race a successor.
+        if (options.isActive && !options.isActive()) break;
+        const job = await repository.claimNextJob({ claimedBy, ttlMs: 30_000, lease: options.lease });
         if (!job) break;
         try {
           await repository.recordAudit("standalone.job.claimed", claimedBy, { jobId: job.jobId, kind: job.kind });

@@ -12,7 +12,7 @@ import {
   retentionResult,
 } from "./repository.js";
 import { redactSecretText } from "./redaction.js";
-import type { StandaloneGatewayRepository } from "./repository.js";
+import type { StandaloneGatewayRepository, StandaloneGatewayLeaseRef } from "./repository.js";
 import type {
   StandaloneGatewayAuditRecord,
   StandaloneGatewayChannelIdentityRecord,
@@ -289,8 +289,12 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
     return jobFromRow(result.rows[0]!);
   }
 
-  async claimNextJob(input: { claimedBy: string; ttlMs: number; now?: Date }): Promise<StandaloneGatewayJobRecord | null> {
+  async claimNextJob(input: { claimedBy: string; ttlMs: number; lease?: StandaloneGatewayLeaseRef | null; now?: Date }): Promise<StandaloneGatewayJobRecord | null> {
     const now = input.now || new Date();
+    // Lease-aware claim (audit P1-G4): when a daemon lease is supplied, the claim only succeeds if
+    // that lease is still active, verified in the SAME statement as the FOR UPDATE SKIP LOCKED claim.
+    // A daemon whose lease expired or was taken over therefore cannot claim a job — no split-brain
+    // window between losing the lease and the process exiting. ($5 NULL bypasses for non-leased callers.)
     const result = await this.pool.query<JobRow>(
       `WITH candidate AS (
          SELECT job_id
@@ -299,6 +303,13 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
            AND (
              status = 'pending'
              OR (status = 'claimed' AND claim_expires_at IS NOT NULL AND claim_expires_at <= $1)
+           )
+           AND (
+             $5::text IS NULL
+             OR EXISTS (
+               SELECT 1 FROM standalone_gateway_daemon_leases
+               WHERE lease_id = $5 AND owner_id = $6 AND lease_token = $7 AND expires_at > $1
+             )
            )
          ORDER BY available_at ASC, created_at ASC
          LIMIT 1
@@ -314,7 +325,15 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
        FROM candidate
        WHERE jobs.job_id = candidate.job_id
        RETURNING jobs.*`,
-      [now.toISOString(), input.claimedBy, randomUUID(), new Date(now.getTime() + input.ttlMs).toISOString()],
+      [
+        now.toISOString(),
+        input.claimedBy,
+        randomUUID(),
+        new Date(now.getTime() + input.ttlMs).toISOString(),
+        input.lease?.leaseId ?? null,
+        input.lease?.ownerId ?? null,
+        input.lease?.leaseToken ?? null,
+      ],
     );
     return result.rows[0] ? jobFromRow(result.rows[0]) : null;
   }

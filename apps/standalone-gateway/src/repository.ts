@@ -19,6 +19,10 @@ import type {
   StandalonePromptInput,
 } from "./types.js";
 
+// Identifies a held daemon lease so an operation can verify ownership atomically with its own work
+// (audit P1-G4) — the claim/prune only proceeds if this exact lease is still active.
+export type StandaloneGatewayLeaseRef = { leaseId: string; ownerId: string; leaseToken: string };
+
 export interface StandaloneGatewayRepository {
   migrate(): Promise<void>;
   readiness(): Promise<{ ok: boolean; detail: string }>;
@@ -29,7 +33,7 @@ export interface StandaloneGatewayRepository {
   updateSessionRuntime(input: { sessionId: string; opencodeSessionId: string | null; status?: StandaloneGatewaySessionRecord["status"]; now?: Date }): Promise<StandaloneGatewaySessionRecord>;
   appendEvent(input: { sessionId: string; type: StandaloneGatewayEventType; payload?: Record<string, unknown>; now?: Date }): Promise<StandaloneGatewayEventRecord>;
   enqueueJob(input: { kind: StandaloneGatewayJobKind; sessionId?: string | null; payload?: Record<string, unknown>; availableAt?: Date; now?: Date }): Promise<StandaloneGatewayJobRecord>;
-  claimNextJob(input: { claimedBy: string; ttlMs: number; now?: Date }): Promise<StandaloneGatewayJobRecord | null>;
+  claimNextJob(input: { claimedBy: string; ttlMs: number; lease?: StandaloneGatewayLeaseRef | null; now?: Date }): Promise<StandaloneGatewayJobRecord | null>;
   finishJob(input: { jobId: string; claimToken: string; status: "completed" | "failed" | "dead"; lastError?: string | null; now?: Date }): Promise<StandaloneGatewayJobRecord>;
   findChannelIdentity(input: { provider: string; externalUserId: string; providerWorkspaceId?: string | null }): Promise<StandaloneGatewayChannelIdentityRecord | null>;
   upsertChannelIdentity(input: {
@@ -190,8 +194,18 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
     return cloneJob(job);
   }
 
-  async claimNextJob(input: { claimedBy: string; ttlMs: number; now?: Date }): Promise<StandaloneGatewayJobRecord | null> {
+  async claimNextJob(input: { claimedBy: string; ttlMs: number; lease?: StandaloneGatewayLeaseRef | null; now?: Date }): Promise<StandaloneGatewayJobRecord | null> {
     const now = input.now || new Date();
+    // Lease-aware claim (audit P1-G4): a daemon whose lease is no longer active cannot claim a job,
+    // mirroring the postgres EXISTS guard so the split-brain window closes in both stores.
+    if (input.lease) {
+      const lease = this.leases.get(input.lease.leaseId);
+      const active = lease
+        && lease.ownerId === input.lease.ownerId
+        && lease.leaseToken === input.lease.leaseToken
+        && new Date(lease.expiresAt).getTime() > now.getTime();
+      if (!active) return null;
+    }
     const candidate = [...this.jobs.values()]
       .filter((job) => job.status === "pending" || (job.status === "claimed" && job.claimExpiresAt && new Date(job.claimExpiresAt).getTime() <= now.getTime()))
       .filter((job) => new Date(job.availableAt).getTime() <= now.getTime())
