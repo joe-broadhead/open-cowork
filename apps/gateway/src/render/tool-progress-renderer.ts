@@ -10,7 +10,7 @@ import {
   normalizeChannelCapabilities,
 } from './operations.js'
 import { sanitizeChannelText } from './sanitize.js'
-import type { GatewaySessionRenderState } from './state.js'
+import { setRenderStateEntry, type GatewaySessionRenderState } from './state.js'
 
 export type RenderToolProgressInput = {
   provider: ChannelProvider
@@ -57,7 +57,7 @@ export async function renderToolProgress(input: RenderToolProgressInput): Promis
       : `${summary.slice(0, Math.max(0, capabilities.maxTextLength - 15)).trimEnd()}\n...[truncated]`,
   })
   const providerMessageId = sent.sentMessage?.messageId ?? existing?.providerMessageId ?? null
-  input.state.toolProgress.set(toolCallId, {
+  setRenderStateEntry(input.state.toolProgress, toolCallId, {
     toolCallId,
     providerMessageId,
     renderedSummary: summary,
