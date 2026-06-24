@@ -351,7 +351,9 @@ async function runBootRuntime(projectDirectory?: string | null) {
 }
 
 let reconnectDelay = 3000
+let reconnectAttempts = 0
 const MAX_RECONNECT_DELAY = 60000
+const MAX_RECONNECT_ATTEMPTS = 10
 
 function scheduleReconnect() {
   if (!shouldScheduleRuntimeReconnect({
@@ -359,7 +361,22 @@ function scheduleReconnect() {
     appIsQuitting,
     reconnectTimerActive: Boolean(reconnectTimer),
   })) return
-  log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s...`)
+  // Circuit breaker: a persistently-crashing runtime (bad config, corrupt state, missing
+  // binary) would otherwise reconnect-loop forever. Stop after a window of failures and
+  // surface a terminal error; a manual restart resets the counter.
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    log('error', `Runtime failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts; giving up until restart.`)
+    const stalledWin = getMainWindow()
+    if (stalledWin && !stalledWin.isDestroyed()) {
+      publishNotification(stalledWin, {
+        type: 'error',
+        sessionId: null,
+        message: 'The runtime could not reconnect. Restart Open Cowork to try again.',
+      })
+    }
+    return
+  }
+  log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})...`)
   runtimeStarted = false
   setRuntimeReady(false)
   const win = getMainWindow()
@@ -375,7 +392,9 @@ function scheduleReconnect() {
     await rebootRuntime()
     if (runtimeStarted) {
       reconnectDelay = 3000 // Reset on success
+      reconnectAttempts = 0
     } else {
+      reconnectAttempts += 1
       reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY) // Exponential backoff
     }
   }, reconnectDelay)

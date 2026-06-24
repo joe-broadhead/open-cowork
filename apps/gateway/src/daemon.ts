@@ -149,6 +149,14 @@ export function createGatewayHttpServer(config: GatewayConfig, runtime: GatewayR
     })
   })
 
+  // Socket-level limits on the internet-facing webhook endpoint. The body reader caps bytes
+  // but not time, so without these a client trickling bytes under the size cap (slowloris)
+  // could hold a connection open indefinitely.
+  server.requestTimeout = 30_000
+  server.headersTimeout = 15_000
+  server.keepAliveTimeout = 10_000
+  server.maxConnections = 1_024
+
   return {
     server,
     listen() {

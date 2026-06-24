@@ -26,6 +26,9 @@ export type WorkerScopedRuntimeFactoryInput = {
   config: OpenCoworkConfig
   execution: CloudRuntimeExecutionContext
   runtimeConfig: import('@opencode-ai/sdk/v2/server').ServerOptions['config']
+  // Fired when the managed OpenCode subprocess dies unexpectedly; the cache evicts this
+  // entry so the next access rebuilds a fresh runtime instead of using the dead one.
+  onUnexpectedExit?: () => void
 }
 
 export type WorkerScopedRuntimeFactory = (
@@ -131,8 +134,10 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
     await recordRuntimeCacheMetric('open_cowork_cloud_runtime_cache_entries', runtimes.size)
   }
 
-  async function closeRuntime(key: string, entry: RuntimeEntry, reason: 'idle_ttl' | 'max_entries' | 'shutdown') {
-    if (entry.activeUses > 0) return false
+  async function closeRuntime(key: string, entry: RuntimeEntry, reason: 'idle_ttl' | 'max_entries' | 'shutdown' | 'unexpected_exit') {
+    // A dead child must be evicted even mid-request (the adapter is already broken), so the
+    // next access rebuilds; idle/max eviction keeps the in-use guard.
+    if (reason !== 'unexpected_exit' && entry.activeUses > 0) return false
     if (runtimes.get(key) !== entry) return true
     runtimes.delete(key)
     try {
@@ -207,6 +212,12 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       config: options.config,
       execution: context,
       runtimeConfig,
+      // Crash recovery: if the managed OpenCode child dies unexpectedly, evict this entry so
+      // the next getRuntimeEntry rebuilds a live runtime rather than reusing the dead one.
+      onUnexpectedExit: () => {
+        const current = runtimes.get(key)
+        if (current) void closeRuntime(key, current, 'unexpected_exit')
+      },
     })
     const unsubscribe = await subscribeRuntimeEvents(context, adapter)
     const entry = {

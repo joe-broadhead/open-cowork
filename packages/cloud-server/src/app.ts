@@ -105,6 +105,7 @@ export type CloudRoleRuntimeFactoryInput = {
     profileName?: string | null
   }
   runtimeConfig: import('@opencode-ai/sdk/v2/server').ServerOptions['config']
+  onUnexpectedExit?: () => void
 }
 
 export type CloudRuntimeFactory = (
@@ -386,6 +387,8 @@ export function createDefaultCloudRuntimeFactory(
       config: runtimeConfig as CloudRoleRuntimeFactoryInput['runtimeConfig'],
       configDelivery: 'ephemeral-file',
       cwd: input.paths.resolveWorkspacePath(input.execution.tenantId, input.execution.sessionId),
+      // Crash recovery: forward the cache-eviction hook so a dead managed child is rebuilt.
+      onUnexpectedExit: input.onUnexpectedExit,
     })
   }
 }
