@@ -130,9 +130,13 @@ function roleLabel(role: ChannelIdentityRole | CoordinationWatchRecipientRole | 
 }
 
 function roleTone(role: ChannelIdentityRole | CoordinationWatchRecipientRole | null | undefined): BadgeTone {
+  // Five distinct role treatments (prototype .role-badge.owner/.admin/.member/.approver/.viewer):
+  // owner = accent, admin = blue (info), approver = green (success), member = neutral,
+  // viewer = muted.
   if (role === 'owner') return 'accent'
-  if (role === 'admin') return 'success'
-  if (role === 'approver') return 'warning'
+  if (role === 'admin') return 'info'
+  if (role === 'approver') return 'success'
+  if (role === 'viewer') return 'muted'
   return 'neutral'
 }
 

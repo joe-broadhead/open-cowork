@@ -1712,6 +1712,12 @@ body {
   color: var(--color-text-secondary);
 }
 
+.ui-badge--muted {
+  background: var(--color-surface);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-muted);
+}
+
 .ui-badge--accent {
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--color-accent) 34%, transparent);

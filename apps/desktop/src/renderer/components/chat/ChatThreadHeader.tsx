@@ -119,11 +119,13 @@ export function ChatThreadHeader({
         items={[
           {
             id: 'capture-knowledge',
-            label: captureToKnowledgeDone ? 'Captured' : 'Capture to knowledge',
+            label: captureToKnowledgeDone ? 'Proposed — pending review' : 'Capture to knowledge',
             icon: captureToKnowledgeDone ? 'check' : 'book-open',
             disabled: captureToKnowledgePending,
             hidden: !onCaptureToKnowledge,
-            title: 'Create a reviewable Knowledge proposal from this conversation',
+            title: captureToKnowledgeDone
+              ? 'Proposed to the knowledge base — pending review'
+              : 'Create a reviewable Knowledge proposal from this conversation',
             onAction: onCaptureToKnowledge,
           },
           {
