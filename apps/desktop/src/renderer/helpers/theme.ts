@@ -3,6 +3,7 @@ import {
   getThemeTokens,
   getUiThemeOptions,
   isUiTheme,
+  isUserFacingTheme,
   isUiAccentPresetId,
   accentActionFillToken,
   DEFAULT_UI_ACCENT_PRESET_ID,
@@ -103,9 +104,12 @@ function readColorScheme(): ColorScheme {
 
 function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
-  if (isUiTheme(stored)) return stored
-  if (stored && stored in LEGACY_THEME_MAP) return LEGACY_THEME_MAP[stored]!
-  return getDefaultThemeId()
+  const resolved = isUiTheme(stored)
+    ? stored
+    : (stored && stored in LEGACY_THEME_MAP) ? LEGACY_THEME_MAP[stored]! : getDefaultThemeId()
+  // Only the branded Mercury identity (Mercury/Day schemes) is user-facing; any
+  // legacy code-editor preset still stored from earlier builds collapses to it.
+  return isUserFacingTheme(resolved) ? resolved : getDefaultThemeId()
 }
 
 function readAccent(): UiAccentPresetId {

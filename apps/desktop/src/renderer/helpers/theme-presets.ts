@@ -79,6 +79,16 @@ export function isUiTheme(value: string | null | undefined): value is UiTheme {
   return Boolean(value && themeRegistry.has(value))
 }
 
+// Open Cowork ships a single branded identity — Mercury — surfaced as the
+// Mercury (dark) and Day (light) color schemes. The remaining presets stay in the
+// registry as data (and as a getThemeTokens fallback) but are never user-facing or
+// applied: the code-editor theme list belongs to a dev tool, not a branded People OS.
+const USER_FACING_THEME_IDS = new Set<string>(['mercury'])
+
+export function isUserFacingTheme(value: string | null | undefined): value is UiTheme {
+  return Boolean(value && USER_FACING_THEME_IDS.has(value) && themeRegistry.has(value))
+}
+
 export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme, accentId?: UiAccentPresetId | null): ThemeTokens {
   const entry = themeRegistry.get(theme) || themeRegistry.get(defaultThemeId)
   if (!entry) {
@@ -90,10 +100,12 @@ export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme, acce
 }
 
 export function getUiThemeOptions() {
-  return Array.from(themeRegistry.values()).map(({ id, label, description, swatches }) => ({
-    id,
-    label,
-    description,
-    swatches,
-  }))
+  return Array.from(themeRegistry.values())
+    .filter(({ id }) => USER_FACING_THEME_IDS.has(id))
+    .map(({ id, label, description, swatches }) => ({
+      id,
+      label,
+      description,
+      swatches,
+    }))
 }

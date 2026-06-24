@@ -156,49 +156,6 @@ function readHomeCoachmarkDismissed() {
   }
 }
 
-function HomeBackdrop() {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0"
-      style={{
-        backgroundImage: [
-          'linear-gradient(to bottom, color-mix(in srgb, var(--color-accent) 7%, transparent), transparent 52%)',
-          'linear-gradient(rgba(148, 148, 172, 0.045) 1px, transparent 1px)',
-          'linear-gradient(90deg, rgba(148, 148, 172, 0.04) 1px, transparent 1px)',
-        ].join(', '),
-        backgroundSize: '100% 100%, 56px 56px, 56px 56px',
-        maskImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.38) 48%, transparent 88%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.38) 48%, transparent 88%)',
-      }}
-    />
-  )
-}
-
-function HomeEyebrow({ brandName }: { brandName: string }) {
-  return (
-    <div
-      className="mb-5 max-w-full inline-flex items-center gap-3 rounded-full px-3 py-1.5 text-[11px] font-medium text-text-secondary border border-border-subtle"
-      style={{
-        background: 'color-mix(in srgb, var(--color-elevated) 64%, transparent)',
-        boxShadow: '0 16px 55px rgba(0, 0, 0, 0.18)',
-      }}
-    >
-      <span
-        className="h-px w-7"
-        style={{ background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent) 70%, var(--color-text-muted)))' }}
-        aria-hidden="true"
-      />
-      <span className="truncate">{brandName}</span>
-      <span
-        className="h-px w-7"
-        style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 70%, var(--color-text-muted)), transparent)' }}
-        aria-hidden="true"
-      />
-    </div>
-  )
-}
-
 function HomeComposer({
   onSubmit,
   disabled,
@@ -1149,10 +1106,9 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
-      <HomeBackdrop />
-      <div className="measure-column relative px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
-        <HomeEyebrow brandName={brandName} />
+    // Flat surface on --color-base — no hero gradient / grid glow / atmosphere (brief §1).
+    <div className="flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
+      <div className="measure-column px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
         <h1 className="font-display text-role-hero font-bold text-text text-center">
           {greeting}
         </h1>
