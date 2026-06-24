@@ -1,7 +1,7 @@
 import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
 import { writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DesktopPairingCredentialMetadata } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
@@ -104,6 +104,12 @@ function metadata(record: DesktopPairingCredentialRecord): DesktopPairingCredent
 export class FileDesktopPairingCredentialStore implements DesktopPairingCredentialStore {
   private readonly path: string
   private readonly secretStorage: SecretStorageAdapter | null
+  // Cache of the decrypted+normalized records, keyed on the file's mtime.
+  // get() runs per online pairing on every runtime event (observeRuntimeEvent),
+  // and each miss cost a disk read plus an Electron safeStorage decryptString
+  // round-trip. This store is the sole writer, so we refresh on write and fall
+  // back to mtime to catch any out-of-band edit.
+  private cache: { mtimeMs: number; records: DesktopPairingCredentialRecord[] } | null = null
 
   constructor(options: { path?: string; secretStorage?: SecretStorageAdapter | null } = {}) {
     this.path = options.path || defaultCredentialPath()
@@ -152,9 +158,14 @@ export class FileDesktopPairingCredentialStore implements DesktopPairingCredenti
   }
 
   private readRecords(): DesktopPairingCredentialRecord[] {
-    if (!existsSync(this.path)) return []
+    if (!existsSync(this.path)) {
+      this.cache = null
+      return []
+    }
     const mode = this.storageMode()
     if (mode === 'unavailable') return []
+    const mtimeMs = this.currentMtimeMs()
+    if (this.cache && mtimeMs !== null && this.cache.mtimeMs === mtimeMs) return this.cache.records
     try {
       const raw = readFileSync(this.path)
       const json = mode === 'encrypted'
@@ -162,8 +173,11 @@ export class FileDesktopPairingCredentialStore implements DesktopPairingCredenti
         : raw.toString('utf-8')
       const parsed = JSON.parse(json) as unknown
       if (!Array.isArray(parsed)) return []
-      return parsed.map(normalizeRecord).filter((record): record is DesktopPairingCredentialRecord => Boolean(record))
+      const records = parsed.map(normalizeRecord).filter((record): record is DesktopPairingCredentialRecord => Boolean(record))
+      if (mtimeMs !== null) this.cache = { mtimeMs, records }
+      return records
     } catch {
+      this.cache = null
       if (mode === 'encrypted') {
         try { rmSync(this.path, { force: true }) } catch { /* corrupted credential cleanup is best effort */ }
       }
@@ -176,13 +190,21 @@ export class FileDesktopPairingCredentialStore implements DesktopPairingCredenti
     const mode = this.storageMode()
     if (mode === 'encrypted') {
       writeFileAtomic(this.path, this.storage().encryptString(json), { mode: 0o600 })
-      return
-    }
-    if (mode === 'plaintext') {
+    } else if (mode === 'plaintext') {
       writeFileAtomic(this.path, json, { mode: 0o600 })
-      return
+    } else {
+      throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist desktop pairing tokens without OS-backed secret storage.')
     }
-    throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist desktop pairing tokens without OS-backed secret storage.')
+    const mtimeMs = this.currentMtimeMs()
+    this.cache = mtimeMs !== null ? { mtimeMs, records } : null
+  }
+
+  private currentMtimeMs(): number | null {
+    try {
+      return statSync(this.path).mtimeMs
+    } catch {
+      return null
+    }
   }
 }
 
