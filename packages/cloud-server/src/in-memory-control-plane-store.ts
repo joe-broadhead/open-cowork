@@ -925,6 +925,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         right.record.updatedAt.localeCompare(left.record.updatedAt)
         || left.record.sessionId.localeCompare(right.record.sessionId)
       ))
+      // Mirror the postgres listSessions bound (most-recent-first, capped at 1000);
+      // callers needing more page via listSessionsPage.
+      .slice(0, 1000)
       .map((session) => this.sessionRecordWithProjectSource(session.record))
   }
 

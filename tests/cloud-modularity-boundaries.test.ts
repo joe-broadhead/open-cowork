@@ -253,6 +253,9 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_sessions_user_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_user_status_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, status, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_user_profile_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, profile_name, updated_at DESC, session_id')
+  assertIndexShape('cloud_sessions_session_id_idx', 'cloud_sessions', 'session_id')
+  assertIndexShape('cloud_sessions_opencode_session_idx', 'cloud_sessions', 'opencode_session_id')
+  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
   assertIndexShape('cloud_session_events_sequence_idx', 'cloud_session_events', 'tenant_id, session_id, sequence')
   assertIndexShape('cloud_workspace_events_sequence_idx', 'cloud_workspace_events', 'tenant_id, user_id, sequence')
   assertIndexShape('cloud_session_commands_available_idx', 'cloud_session_commands', 'status, available_at, tenant_id, session_id, created_sequence')
@@ -272,6 +275,7 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_managed_worker_heartbeats_org_idx', 'cloud_managed_worker_heartbeats', 'org_id, received_at DESC')
 
   assert.match(postgresStore, /async listSessionsPage[\s\S]*LIMIT \$\$\{params\.length\}/)
+  assert.match(postgresStore, /async listSessions\b[\s\S]*WHERE s\.tenant_id = \$1 AND s\.user_id = \$2[\s\S]*LIMIT 1000/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)

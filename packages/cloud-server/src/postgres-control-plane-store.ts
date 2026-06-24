@@ -1044,6 +1044,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listSessions(tenantId: string, userId: string) {
     await this.requireTenantUser(tenantId, userId)
+    // Defensively bound this per-user read so it can never become an unbounded
+    // scan that grows with a user's lifetime session count; the result is ordered
+    // most-recent-first, and UI callers that need to page beyond this use
+    // listSessionsPage (keyset cursor). Mirrors the listAllSessions cap.
     const result = await this.pool.query(
       `SELECT s.*, p.view -> 'projectSource' AS projection_project_source
        FROM cloud_sessions s
@@ -1051,7 +1055,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          ON p.tenant_id = s.tenant_id
         AND p.session_id = s.session_id
        WHERE s.tenant_id = $1 AND s.user_id = $2
-       ORDER BY s.updated_at DESC, s.session_id`,
+       ORDER BY s.updated_at DESC, s.session_id
+       LIMIT 1000`,
       [tenantId, userId],
     )
     return result.rows.map(sessionFromRowWithProjectSource)

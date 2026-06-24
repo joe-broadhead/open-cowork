@@ -1022,6 +1022,20 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
     ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
+// findSession resolves a session globally by either id (session_id OR
+// opencode_session_id), so the (tenant_id, session_id) primary key and the
+// per-user indexes can't serve it — it was a full cross-tenant scan of
+// cloud_sessions. Index both lookup columns so the OR-query can BitmapOr two
+// index seeks instead. Built CONCURRENTLY (non-transactional) so adding them to
+// a populated table never holds a write lock.
+export const CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID = '020_session_lookup_indexes'
+const CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_sessions_session_id_idx
+    ON cloud_sessions (session_id)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_sessions_opencode_session_idx
+    ON cloud_sessions (opencode_session_id)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1100,5 +1114,11 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS,
+    concurrentIndexes: ['cloud_sessions_session_id_idx', 'cloud_sessions_opencode_session_idx'],
+    transactional: false,
   },
 ] as const
