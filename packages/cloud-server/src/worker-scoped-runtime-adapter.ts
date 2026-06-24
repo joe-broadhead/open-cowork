@@ -91,6 +91,11 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
   const listeners = new Map<CloudRuntimeEventListener, RuntimeEventSubscription>()
   const maxRuntimeEntries = Math.max(1, Math.floor(options.maxRuntimeEntries || DEFAULT_MAX_RUNTIME_ENTRIES))
   const runtimeIdleTtlMs = Math.max(1, Math.floor(options.runtimeIdleTtlMs || DEFAULT_RUNTIME_IDLE_TTL_MS))
+  // Reap idle runtimes on a timer, not only on a cache miss — without this, a worker that
+  // processed a burst of sessions then went quiet would keep up to maxRuntimeEntries live
+  // OpenCode child processes + workspaces resident until new traffic arrived.
+  const sweepTimer = setInterval(() => { void evictRuntimes() }, Math.max(1_000, Math.floor(runtimeIdleTtlMs / 2)))
+  sweepTimer.unref?.()
 
   async function subscribeRuntimeEvents(context: CloudRuntimeExecutionContext, adapter: CloudRuntimeAdapter) {
     if (!adapter.subscribeEvents || listeners.size === 0) return null
@@ -295,6 +300,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       return unsubscribeListener
     },
     async close() {
+      clearInterval(sweepTimer)
       for (const [key, entry] of Array.from(runtimes.entries())) {
         await closeRuntime(key, entry, 'shutdown')
       }
