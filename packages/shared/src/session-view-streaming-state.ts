@@ -1,4 +1,4 @@
-import { cloneCompactionNotice } from './session-view-compaction.ts'
+import { cloneCompactionNotice } from './session-view-compaction.js'
 import {
   buildMessageSegments,
   importMessage,
@@ -6,11 +6,11 @@ import {
   nextHasRealMessageOfRole,
   renderMessageSegments,
   type MessageStateShape,
-} from './session-view-messages.ts'
-import { renderTaskTranscript } from './session-view-task-runs.ts'
-import { cloneTokens } from './session-view-tokens.ts'
-import { preferNewerStreamingText } from './session-view-text.ts'
-import type { SessionViewState } from './session-view-model.ts'
+} from './session-view-messages.js'
+import { renderTaskTranscript } from './session-view-task-runs.js'
+import { cloneTokens } from './session-view-tokens.js'
+import { preferNewerStreamingText } from './session-view-text.js'
+import type { SessionViewState } from './session-view-model.js'
 
 export function mergeStreamingStateFromExisting(next: SessionViewState, existing: SessionViewState) {
   let messageState: MessageStateShape = {

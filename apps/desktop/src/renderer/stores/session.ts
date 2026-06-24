@@ -1,3 +1,4 @@
+import { buildSessionStateFromView, createEmptySessionViewState, deriveVisibleSessionPatch, getOrCreateSessionState, pruneSessionDetailCache, type SessionViewState } from '@open-cowork/shared'
 import { create } from 'zustand'
 import type {
   McpStatus,
@@ -9,14 +10,6 @@ import type {
   SessionView,
   PermissionRequest,
 } from '@open-cowork/shared'
-import {
-  buildSessionStateFromView,
-  createEmptySessionViewState,
-  deriveVisibleSessionPatch,
-  getOrCreateSessionState,
-  pruneSessionDetailCache,
-  type SessionViewState,
-} from '../../lib/session-view-model.ts'
 import {
   applySessionPatchToState,
   orderSessionPatches,
@@ -46,7 +39,7 @@ export type {
   ToolCall,
   TodoItem,
 } from '@open-cowork/shared'
-export type { HistoryItem, SessionViewState } from '../../lib/session-view-model.ts'
+export type { HistoryItem, SessionViewState } from '@open-cowork/shared'
 
 export type Session = SessionInfo
 export type PrimaryAgentMode = 'build' | 'plan' | 'chief-of-staff'

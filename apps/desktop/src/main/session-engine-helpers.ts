@@ -1,8 +1,5 @@
+import type { HistoryItem } from '@open-cowork/shared'
 import type { ToolCall } from '@open-cowork/shared'
-import {
-  type HistoryItem,
-} from '../lib/session-view-model.ts'
-
 export function getLatestHistoryEventAt(items: HistoryItem[]) {
   let latest = 0
   for (const item of items) {

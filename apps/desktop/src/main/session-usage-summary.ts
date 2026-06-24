@@ -1,10 +1,9 @@
+import { cloneTokens } from '@open-cowork/shared'
 import type {
   AgentUsageEntry,
   SessionUsageSummary,
   SessionView,
 } from '@open-cowork/shared'
-import { cloneTokens } from '../lib/session-view-tokens.ts'
-
 export function buildSessionUsageSummary(view: SessionView): SessionUsageSummary {
   const messages = view.messages.length
   const userMessages = view.messages.filter((message) => message.role === 'user').length

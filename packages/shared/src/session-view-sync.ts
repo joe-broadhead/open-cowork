@@ -1,6 +1,6 @@
-import type { SessionViewState } from './session-view-model.ts'
+import type { SessionViewState } from './session-view-model.js'
 
-import { finiteOrder } from './session-view-order.ts'
+import { finiteOrder } from './session-view-order.js'
 
 function maxOrder(current: number, value: number | null | undefined) {
   const order = finiteOrder(value)

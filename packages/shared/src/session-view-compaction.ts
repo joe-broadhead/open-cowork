@@ -1,6 +1,6 @@
 import type { CompactionNotice, TaskRun } from '@open-cowork/shared'
 
-import { nextOrderFrom } from './session-view-order.ts'
+import { nextOrderFrom } from './session-view-order.js'
 
 export function cloneCompactionNotice(notice: CompactionNotice): CompactionNotice {
   return {

@@ -1,11 +1,7 @@
+import { createEmptySessionViewState, deriveVisibleSessionPatch, type SessionViewState } from '@open-cowork/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionArtifact, SessionView } from '@open-cowork/shared'
 import type { Session } from './session'
-import {
-  createEmptySessionViewState,
-  deriveVisibleSessionPatch,
-  type SessionViewState,
-} from '../../lib/session-view-model'
 import { useSessionStore } from './session'
 import { sessionWorkspaceKey } from './session-workspace-keys'
 

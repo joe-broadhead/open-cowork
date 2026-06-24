@@ -1,17 +1,5 @@
+import { deriveVisibleSessionPatch, getOrCreateSessionState, hasMessageTextSegment, hasSplitMessageTextSegment, pruneSessionDetailCache, withMessageReasoning, withMessageText, withTaskReasoning, withTaskRun, withTaskTranscript, type SessionViewState } from '@open-cowork/shared'
 import type { SessionPatch, TaskRun } from '@open-cowork/shared'
-import {
-  deriveVisibleSessionPatch,
-  getOrCreateSessionState,
-  hasMessageTextSegment,
-  hasSplitMessageTextSegment,
-  pruneSessionDetailCache,
-  withMessageReasoning,
-  withMessageText,
-  withTaskReasoning,
-  withTaskRun,
-  withTaskTranscript,
-  type SessionViewState,
-} from '../../lib/session-view-model.ts'
 import type { SessionStore } from './session.ts'
 import { activeSessionWorkspaceKey } from './session-workspace-keys.ts'
 

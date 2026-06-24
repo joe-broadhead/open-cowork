@@ -1,9 +1,6 @@
+import { withTaskRun, type SessionViewState } from '@open-cowork/shared'
 import type { SessionTokens } from '@open-cowork/shared'
 
-import {
-  withTaskRun,
-  type SessionViewState,
-} from '../lib/session-view-model.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 
 type RuntimeCostEventData = NonNullable<RuntimeSessionEvent['data']>

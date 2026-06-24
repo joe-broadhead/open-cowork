@@ -1,3 +1,4 @@
+import type { upsertTaskRunList } from '@open-cowork/shared'
 import type {
   PendingApproval,
   PendingQuestion,
@@ -5,7 +6,6 @@ import type {
   ToolCall,
 } from '@open-cowork/shared'
 
-import type { upsertTaskRunList } from '../lib/session-view-model.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 
 type RuntimeEventData = NonNullable<RuntimeSessionEvent['data']>

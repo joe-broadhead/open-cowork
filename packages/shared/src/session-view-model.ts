@@ -17,7 +17,7 @@ import {
   cloneCompactionNotice,
   finishCompactionNotice,
   hasPendingCompactions,
-} from './session-view-compaction.ts'
+} from './session-view-compaction.js'
 import {
   buildMessages,
   createEmptyMessageState,
@@ -28,8 +28,8 @@ import {
   type MessageEntity,
   type MessagePartEntity,
   type MessageStateShape,
-} from './session-view-messages.ts'
-import { nextOrderFrom, nowMsFromTiming, type SessionViewTiming } from './session-view-order.ts'
+} from './session-view-messages.js'
+import { nextOrderFrom, nowMsFromTiming, type SessionViewTiming } from './session-view-order.js'
 import {
   deriveExecutionPlan,
   ensureTaskRunTimingsForView,
@@ -37,11 +37,11 @@ import {
   withTaskReasoning,
   withTaskRun,
   withTaskTranscript,
-} from './session-view-task-runs.ts'
-import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
-import { mergeStreamingStateFromExisting } from './session-view-streaming-state.ts'
+} from './session-view-task-runs.js'
+import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.js'
+import { mergeStreamingStateFromExisting } from './session-view-streaming-state.js'
 
-export { beginCompactionNotice, cloneCompactionNotice, finishCompactionNotice } from './session-view-compaction.ts'
+export { beginCompactionNotice, cloneCompactionNotice, finishCompactionNotice } from './session-view-compaction.js'
 export {
   buildMessages,
   hasMessageTextSegment,
@@ -49,17 +49,17 @@ export {
   importMessage,
   withMessageReasoning,
   withMessageText,
-} from './session-view-messages.ts'
+} from './session-view-messages.js'
 export {
   createEmptyTaskRun,
   upsertTaskRunList,
   withTaskReasoning,
   withTaskRun,
   withTaskTranscript,
-} from './session-view-task-runs.ts'
-export { maxSessionViewOrder } from './session-view-sync.ts'
-export { mergeStreamingText } from './session-view-text.ts'
-export { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
+} from './session-view-task-runs.js'
+export { maxSessionViewOrder } from './session-view-sync.js'
+export { mergeStreamingText } from './session-view-text.js'
+export { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.js'
 
 export const MAX_WARM_SESSION_DETAILS = 12
 

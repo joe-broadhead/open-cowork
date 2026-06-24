@@ -5,8 +5,8 @@ import type {
   MessageSegment,
 } from '@open-cowork/shared'
 
-import { nextOrderFrom, nowIsoFromTiming, orderAfterSplitBoundary, type SessionViewTiming } from './session-view-order.ts'
-import { mergeStreamingText, preferNewerStreamingText, splitReplacementTextByPreviousSegments } from './session-view-text.ts'
+import { nextOrderFrom, nowIsoFromTiming, orderAfterSplitBoundary, type SessionViewTiming } from './session-view-order.js'
+import { mergeStreamingText, preferNewerStreamingText, splitReplacementTextByPreviousSegments } from './session-view-text.js'
 
 const LIVE_ASSISTANT_MESSAGE_SUFFIX = ':assistant:live'
 const LIVE_ASSISTANT_SEGMENT_SUFFIX = ':segment:live'

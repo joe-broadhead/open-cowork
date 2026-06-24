@@ -1,9 +1,9 @@
+import { MAX_WARM_SESSION_DETAILS } from '@open-cowork/shared'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAX_SEEN_COST_EVENT_IDS_PER_SESSION, SessionEngine } from '../apps/desktop/src/main/session-engine.ts'
-import { MAX_WARM_SESSION_DETAILS } from '../apps/desktop/src/lib/session-view-model.ts'
 import { resetSessionScopedFallbackIdsForTests } from '../apps/desktop/src/main/runtime-fallback-ids.ts'
 
 function apply(engine: SessionEngine, sessionId: string, data: Record<string, unknown>) {

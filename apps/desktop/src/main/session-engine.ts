@@ -1,3 +1,4 @@
+import { MAX_WARM_SESSION_DETAILS, beginCompactionNotice, buildSessionStateFromItems, deriveVisibleSessionPatch, finishCompactionNotice, getOrCreateSessionState, hasMessageTextSegment, hasSplitMessageTextSegment, maxSessionViewOrder, pruneSessionDetailCache, refreshContextState, upsertTaskRunList, withMessageReasoning, withMessageText, withTaskReasoning, withTaskRun, withTaskTranscript, type HistoryItem, type SessionViewState } from '@open-cowork/shared'
 import type {
   PendingApproval,
   PendingQuestion,
@@ -6,27 +7,6 @@ import type {
   TaskRun,
   TodoItem,
 } from '@open-cowork/shared'
-import {
-  MAX_WARM_SESSION_DETAILS,
-  beginCompactionNotice,
-  buildSessionStateFromItems,
-  deriveVisibleSessionPatch,
-  finishCompactionNotice,
-  getOrCreateSessionState,
-  hasMessageTextSegment,
-  hasSplitMessageTextSegment,
-  maxSessionViewOrder,
-  pruneSessionDetailCache,
-  refreshContextState,
-  upsertTaskRunList,
-  withMessageReasoning,
-  withMessageText,
-  withTaskReasoning,
-  withTaskRun,
-  withTaskTranscript,
-  type HistoryItem,
-  type SessionViewState,
-} from '../lib/session-view-model.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import type { SessionUsageSummary } from '@open-cowork/shared'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'

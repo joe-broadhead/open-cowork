@@ -7,16 +7,16 @@ import type {
   TaskTranscriptSegment,
   ToolCall,
 } from '@open-cowork/shared'
-import { cloneCompactionNotice } from './session-view-compaction.ts'
+import { cloneCompactionNotice } from './session-view-compaction.js'
 import {
   nextOrderFrom,
   nowIsoFromTiming,
   orderAfterSplitBoundary,
   timestampIsoFromTiming,
   type SessionViewTiming,
-} from './session-view-order.ts'
-import { mergeStreamingText, splitReplacementTextByPreviousSegments } from './session-view-text.ts'
-import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
+} from './session-view-order.js'
+import { mergeStreamingText, splitReplacementTextByPreviousSegments } from './session-view-text.js'
+import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.js'
 
 function appendTaskTranscript(existing: string, incoming: string, options?: { boundary?: boolean }) {
   if (!incoming) return existing
