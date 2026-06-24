@@ -14,6 +14,26 @@ test('sanitizeLogMessage redacts env-backed secrets, emails, and token-like valu
   )
 })
 
+test('sanitizeLogMessage stays linear on adversarial input (ReDoS regression)', () => {
+  // The prior EMAIL/KEYED patterns backtracked quadratically: ~11s on a 160 KB dotted
+  // domain. The bounded patterns complete in tens of ms; assert a generous budget so a
+  // regression to quadratic (which would blow past 1s) fails loudly without flakiness.
+  const dottedDomain = `a@${'a.'.repeat(120_000)}`
+  const keywordRun = 'token'.repeat(40_000)
+  const longLocal = 'a'.repeat(240_000)
+  for (const input of [dottedDomain, keywordRun, longLocal]) {
+    const startedAt = Date.now()
+    sanitizeLogMessage(input)
+    assert.ok(Date.now() - startedAt < 1_000, `sanitizeLogMessage took too long on a ${input.length}-char input`)
+  }
+})
+
+test('sanitizeLogMessage caps pathological input length', () => {
+  const sanitized = sanitizeLogMessage('x'.repeat(2_000_000))
+  assert.ok(sanitized.endsWith('…[truncated]'))
+  assert.ok(sanitized.length < 300_000)
+})
+
 test('shortSessionId keeps the tail for readable session references', () => {
   assert.equal(shortSessionId('ses_1234567890abcdef'), '90abcdef')
   assert.equal(shortSessionId('short-id'), 'short-id')

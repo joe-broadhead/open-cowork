@@ -139,7 +139,8 @@ function redactCloudAttributeString(value: string) {
     .replace(/\b(?:gcp-sm|aws-sm|azure-kv):\/\/[^\s"'<>]+/gi, '[redacted-secret-ref]')
     .replace(/\bhttps:\/\/[A-Za-z0-9.-]+\.vault\.azure\.net\/secrets\/[^\s"'<>]+/gi, '[redacted-secret-ref]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+  // Email redaction is already done by sanitizeLogMessage above; the previous local
+  // copy here was both redundant and a ReDoS (overlapping domain/TLD quantifiers).
   for (const pattern of LOCAL_PATH_PATTERNS) {
     redacted = redacted.replace(pattern, (match) => {
       const prefix = match.match(/^(\/Users|\/home|[A-Z]:\\Users)/i)?.[0] || '[home]'

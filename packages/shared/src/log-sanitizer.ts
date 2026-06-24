@@ -45,8 +45,19 @@ const TOKEN_PATTERNS = [
   /\bDefaultEndpointsProtocol=https?;AccountName=[^;\s]+;AccountKey=[^;\s]+(?:;EndpointSuffix=[^;\s]+)?\b/gi,
 ]
 
-const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
-const KEYED_SECRET_PATTERN = /\b([A-Za-z0-9_-]*(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]*)\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{32,}\2/gi
+// Every quantifier is bounded to its RFC ceiling (local ≤64, label ≤63, ≤16 labels,
+// TLD ≤24) so the match is strictly linear. Any open-ended `+`/`*` here (local part,
+// domain labels, or the TLD tail) backtracks quadratically on adversarial input with no
+// valid boundary — the source of the prior ReDoS, which de-ambiguation alone didn't fix.
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]{1,64}@(?:[A-Z0-9-]{1,63}\.){1,16}[A-Z]{2,24}\b/gi
+// Bound the key-name runs around the keyword to a constant so a long keyword-dense
+// string with no `=`/`:` value can't force quadratic backtracking on the leading/trailing
+// `*` (ReDoS). Real key names are far shorter than 64 chars.
+const KEYED_SECRET_PATTERN = /\b([A-Za-z0-9_-]{0,64}(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]{0,64})\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{32,}\2/gi
+// Hard ceiling on input length before any pattern runs. The patterns above are now
+// linear, so this is defense-in-depth against pathological multi-MB inputs blocking the
+// event loop; far above any real log line / error message / diagnostics field.
+const MAX_SANITIZE_INPUT_LENGTH = 256 * 1024
 const SECRET_REF_PATTERN = /\b(?:gcp-sm|aws-sm|azure-kv):\/\/[^\s"'<>]+/gi
 const AZURE_VAULT_SECRET_URL_PATTERN = /\bhttps:\/\/[A-Za-z0-9.-]+\.vault\.azure\.net\/secrets\/[^\s"'<>]+/gi
 const SECRET_ENVELOPE_PATTERN = /\b(?:enc|plain):v1:[A-Za-z0-9_-]+\b/g
@@ -82,7 +93,9 @@ function secretEnvValue(key: string): string | undefined {
 }
 
 export function sanitizeLogMessage(message: string) {
-  let sanitized = message
+  let sanitized = message.length > MAX_SANITIZE_INPUT_LENGTH
+    ? `${message.slice(0, MAX_SANITIZE_INPUT_LENGTH)}…[truncated]`
+    : message
 
   for (const key of SECRET_ENV_KEYS) {
     const value = secretEnvValue(key)
