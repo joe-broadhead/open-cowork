@@ -14,8 +14,16 @@ export type RuntimeSkillBundle = {
   files: Array<{ path: string; content: string }>
 }
 
+// Drop any `..`/`.`/empty/leading-slash segment so a bundle file path can never traverse out
+// of the skill root (P3 defense-in-depth: today only curated built-in bundles reach this, but
+// the write below trusts the result). Returns '' when nothing safe remains, so the caller skips.
 function normalizeBundlePath(value: string) {
-  return value.replace(/\\/g, '/').replace(/^\.\/+/, '').trim()
+  return value
+    .replace(/\\/g, '/')
+    .trim()
+    .split('/')
+    .filter((segment) => segment && segment !== '.' && segment !== '..')
+    .join('/')
 }
 
 function uniqueByBasename(files: Array<{ path: string; content: string }>) {
@@ -137,7 +145,9 @@ export function writeRuntimeSkillBundle(root: string, bundle: RuntimeSkillBundle
   writeFileAtomic(join(skillRoot, 'SKILL.md'), skillContent, { mode: 0o600 })
   if (options?.includeFiles !== false) {
     for (const file of bundle.files) {
-      const output = join(skillRoot, normalizeBundlePath(file.path))
+      const safePath = normalizeBundlePath(file.path)
+      if (!safePath) continue
+      const output = join(skillRoot, safePath)
       mkdirSync(dirname(output), { recursive: true })
       writeFileAtomic(output, file.content, { mode: 0o600 })
     }

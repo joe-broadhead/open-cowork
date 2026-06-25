@@ -278,7 +278,9 @@ export class ThreadIndexService {
       for (const record of records) {
         this.upsertThreadFromSessionRecord(record)
       }
-      this.store.deleteThreadsNotIn(records.map((record) => record.id))
+      const keptIds = records.map((record) => record.id)
+      this.store.deleteThreadsNotIn(keptIds)
+      this.pruneSignaturesNotIn(keptIds)
     } catch (err) {
       log('thread-index', `Registry reconciliation failed: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -312,6 +314,15 @@ export class ThreadIndexService {
       const oldest = this.lastIndexSignatures.keys().next().value
       if (typeof oldest !== 'string') break
       this.lastIndexSignatures.delete(oldest)
+    }
+  }
+
+  // Drop signature-cache entries for sessions removed by a bulk deleteThreadsNotIn (P3): unlike
+  // removeThread, those paths left stale entries that the 4096-cap only bounded, not cleared.
+  private pruneSignaturesNotIn(keptIds: string[]) {
+    const kept = new Set(keptIds)
+    for (const key of this.lastIndexSignatures.keys()) {
+      if (!kept.has(key)) this.lastIndexSignatures.delete(key)
     }
   }
 
@@ -406,7 +417,11 @@ export class ThreadIndexService {
     for (const record of records) {
       this.refreshThreadMetadata(record.id)
     }
-    if (!sessionIds) this.store.deleteThreadsNotIn(records.map((record) => record.id))
+    if (!sessionIds) {
+      const keptIds = records.map((record) => record.id)
+      this.store.deleteThreadsNotIn(keptIds)
+      this.pruneSignaturesNotIn(keptIds)
+    }
     return true
   }
 
