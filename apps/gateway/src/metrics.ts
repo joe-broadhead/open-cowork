@@ -34,6 +34,9 @@ export type GatewayMetrics = {
   // sustained high value means the gateway is being pushed deliveries faster than its bounded
   // worker pool drains them — a backlog/backpressure signal for the operator.
   deliveryQueueDepthMax: number
+  // Deliveries shed (not enqueued) because the local dispatcher queue hit its cap (P1-C); they
+  // stay unacked and the cloud re-serves them, so this is a sustained-overload backpressure signal.
+  deliverySheds: number
   errors: number
   providerMetrics: Record<string, GatewayProviderMetrics>
 }
@@ -103,6 +106,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     droppedSessionEvents: 0,
     streamBackpressureDisconnects: 0,
     deliveryQueueDepthMax: 0,
+    deliverySheds: 0,
     errors: 0,
     providerMetrics: {},
   }
@@ -214,6 +218,9 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# HELP open_cowork_gateway_delivery_queue_depth_max High-water mark of deliveries queued in the bounded delivery dispatcher.',
     '# TYPE open_cowork_gateway_delivery_queue_depth_max gauge',
     `open_cowork_gateway_delivery_queue_depth_max ${metrics.deliveryQueueDepthMax}`,
+    '# HELP open_cowork_gateway_delivery_sheds_total Deliveries shed because the local dispatcher queue hit its cap (re-served by the cloud).',
+    '# TYPE open_cowork_gateway_delivery_sheds_total counter',
+    `open_cowork_gateway_delivery_sheds_total ${metrics.deliverySheds}`,
     ...renderProviderMetrics(metrics),
     '',
   ].join('\n')

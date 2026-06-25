@@ -87,3 +87,26 @@ test('delivery dispatcher caps global concurrency and drain waits for completion
   assert.equal(maxActive, 2)
   assert.equal(active, 0)
 })
+
+test('delivery dispatcher sheds deliveries past maxQueueDepth instead of growing unbounded (P1-C)', async () => {
+  const handled: string[] = []
+  const shed: string[] = []
+  let release: () => void = () => {}
+  const dispatcher = createDeliveryDispatcher({
+    maxConcurrency: 1,
+    maxQueueDepth: 2,
+    handle: async (delivery) => {
+      handled.push((delivery as { deliveryId: string }).deliveryId)
+      await new Promise<void>((resolve) => { release = resolve })
+    },
+    onShed: (delivery) => shed.push((delivery as { deliveryId: string }).deliveryId),
+  })
+
+  // d1 starts (concurrency 1, blocks); d2 + d3 fill the queue (cap 2); d4 + d5 are shed
+  // (left unacked for the cloud to re-serve) rather than growing the heap without bound.
+  for (const id of ['d1', 'd2', 'd3', 'd4', 'd5']) dispatcher.enqueue(makeDelivery('A', { chat: 1 }, id))
+  await tick()
+  assert.deepEqual(shed, ['d4', 'd5'])
+  assert.deepEqual(handled, ['d1'])
+  release()
+})

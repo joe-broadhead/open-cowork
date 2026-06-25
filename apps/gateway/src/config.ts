@@ -58,6 +58,9 @@ export type GatewayConfig = {
   // the same channel binding+target are serialized for ordering regardless; this caps the global
   // outbound fan-out so a backlog drain can't storm providers into 429s.
   maxDeliveryConcurrency: number
+  // Hard cap on locally-queued deliveries (P1-C); beyond it, deliveries are shed (left unacked
+  // for the cloud to re-serve) instead of growing the heap past their claim TTL.
+  maxDeliveryQueueDepth: number
   providers: GatewayProviderConfig[]
 }
 
@@ -168,6 +171,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     },
     timeouts,
     maxDeliveryConcurrency: readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_DELIVERY_CONCURRENCY, 8, 1, 256),
+    maxDeliveryQueueDepth: readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_DELIVERY_QUEUE_DEPTH, 512, 16, 100_000),
     providers: normalizeProviders(raw.providers, env, serverPublicBaseUrl, serverMaxRequestBodyBytes),
   }
   assertGatewayConfigSafe(config, {

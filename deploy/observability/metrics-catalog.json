@@ -243,6 +243,12 @@
       "description": "Channel deliveries scheduled for retry."
     },
     {
+      "name": "open_cowork_gateway_delivery_sheds_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Deliveries shed because the local dispatcher queue hit its cap (re-served by the cloud); a sustained-overload backpressure signal."
+    },
+    {
       "name": "open_cowork_gateway_delivery_dead_letters_total",
       "type": "counter",
       "owner": "gateway",

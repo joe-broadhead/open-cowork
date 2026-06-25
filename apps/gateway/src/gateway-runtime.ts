@@ -146,10 +146,18 @@ function deliveryLaneKey(delivery: ChannelDeliveryRecord): string {
 export function createDeliveryDispatcher(input: {
   handle: (delivery: ChannelDeliveryRecord) => Promise<void>
   maxConcurrency?: number
+  maxQueueDepth?: number
   laneKey?: (delivery: ChannelDeliveryRecord) => string
   onQueueDepth?: (depth: number) => void
+  onShed?: (delivery: ChannelDeliveryRecord) => void
 }): DeliveryDispatcher {
   const maxConcurrency = Math.max(1, Math.floor(input.maxConcurrency ?? 8))
+  // Hard cap on locally-queued deliveries (P1-C). A backlog drain streams the whole
+  // cloud-side queue at once; without this, every claimed delivery is retained in memory
+  // (heap cliff) and waits past its server-side claim TTL (→ reclaim + duplicate send). When
+  // the cap is hit we simply stop accepting: the delivery is never acked, so its claim expires
+  // and the cloud re-serves it later — bounded memory, no message loss.
+  const maxQueueDepth = Math.max(maxConcurrency, Math.floor(input.maxQueueDepth ?? 512))
   const laneKey = input.laneKey ?? deliveryLaneKey
   const lanes = new Map<string, { queue: ChannelDeliveryRecord[]; running: boolean }>()
   const inFlight = new Set<Promise<void>>()
@@ -180,6 +188,12 @@ export function createDeliveryDispatcher(input: {
 
   return {
     enqueue(delivery) {
+      // Shed when at capacity: leave the delivery unacked so the cloud re-serves it after its
+      // claim expires, rather than growing the local queue without bound past the claim TTL.
+      if (queued >= maxQueueDepth) {
+        input.onShed?.(delivery)
+        return
+      }
       const key = laneKey(delivery)
       let lane = lanes.get(key)
       if (!lane) { lane = { queue: [], running: false }; lanes.set(key, lane) }
@@ -228,9 +242,11 @@ export function createGatewayRuntime(
   const deliveryDispatcher = createDeliveryDispatcher({
     handle: (delivery) => handleDelivery(delivery, providers, cloud, metrics),
     maxConcurrency: config.maxDeliveryConcurrency,
+    maxQueueDepth: config.maxDeliveryQueueDepth,
     onQueueDepth: (depth) => {
       if (depth > metrics.deliveryQueueDepthMax) metrics.deliveryQueueDepthMax = depth
     },
+    onShed: () => { metrics.deliverySheds += 1 },
   })
   let started = false
   // Tracks whether the cloud delivery subscription is live. The gateway's job is to relay between
