@@ -184,6 +184,6 @@ test("standalone OpenCode adapter does not fall back when SDK prompt itself fail
     opencodeSessionId: "oc-1",
     text: "hello",
     onEvent: () => undefined,
-  }), /OpenCode SDK prompt failed: sdk transport failed Authorization: Bearer \[redacted\]/);
+  }), /OpenCode SDK prompt failed: sdk transport failed \[REDACTED_TOKEN\]/);
   assert.equal(fetchCalled, false);
 });
