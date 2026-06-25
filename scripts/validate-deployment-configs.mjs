@@ -1362,11 +1362,16 @@ function validateHybridSecurityGates() {
     throw new Error('apps/standalone-gateway/src/network-policy.ts must reject public OpenCode endpoint')
   }
 
-  const cloudHttpServer = read('@open-cowork/cloud-server/http-server')
-  for (const phrase of ['Retry-After', 'quota_rejections']) {
-    if (!cloudHttpServer.includes(phrase)) {
-      throw new Error(`packages/cloud-server/src/http-server.ts must include ${phrase}`)
-    }
+  // Rate-limit handling is split after the cloud-server extraction: the HTTP server
+  // emits the quota_rejections metric + the 429 path, while the shared response writer
+  // sets the Retry-After header. Assert each phrase in its owning module.
+  const cloudHttpServer = read('packages/cloud-server/src/http-server.ts')
+  if (!cloudHttpServer.includes('quota_rejections')) {
+    throw new Error('packages/cloud-server/src/http-server.ts must include quota_rejections')
+  }
+  const cloudHttpResponseWriters = read('packages/cloud-server/src/http-response-writers.ts')
+  if (!cloudHttpResponseWriters.includes('Retry-After')) {
+    throw new Error('packages/cloud-server/src/http-response-writers.ts must include Retry-After')
   }
 
   const workspace = read('packages/shared/src/workspace.ts')
@@ -1714,7 +1719,7 @@ function validateDocs() {
     'open_cowork_cloud_scheduler_claims_total',
     'open_cowork_cloud_projection_lag_events',
     'open_cowork_cloud_byok_reveal_failures_total',
-    'open_cowork_object_store_errors_total',
+    'open_cowork_cloud_object_store_operations_total',
     'pg_up',
     'pg_stat_activity_count',
     'open_cowork_gateway_delivery_retries_total',

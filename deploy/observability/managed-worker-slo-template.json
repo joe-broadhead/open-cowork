@@ -43,7 +43,7 @@
     {
       "id": "checkpoint-failures",
       "objective": "Checkpoint restore/save failures remain rare and actionable.",
-      "metric": "open_cowork_object_store_errors_total",
+      "metric": "open_cowork_cloud_object_store_operations_total",
       "exampleTarget": "< 1 percent of worker commands"
     },
     {

@@ -934,7 +934,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
     'open_cowork_cloud_quota_rejections_total',
     'open_cowork_cloud_auth_failures_total',
     'open_cowork_cloud_byok_reveal_failures_total',
-    'open_cowork_object_store_errors_total',
+    'open_cowork_cloud_object_store_operations_total',
     'pg_up',
     'pg_stat_activity_count',
     'open_cowork_gateway_deliveries_received_total',

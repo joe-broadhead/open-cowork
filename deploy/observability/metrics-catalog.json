@@ -165,10 +165,16 @@
       "description": "BYOK plaintext reveal failures without including secret material."
     },
     {
-      "name": "open_cowork_object_store_errors_total",
+      "name": "open_cowork_cloud_object_store_operations_total",
       "type": "counter",
       "owner": "object-store-adapter",
-      "description": "Object-store read/write/list/delete failures by adapter kind and operation."
+      "description": "Object-store read/write/list/delete operations by cloud_object_store_kind + operation, tagged status=ok|error (errors are a status filter)."
+    },
+    {
+      "name": "open_cowork_cloud_object_store_operation_duration_ms",
+      "type": "histogram",
+      "owner": "object-store-adapter",
+      "description": "Object-store operation latency in milliseconds by cloud_object_store_kind + operation + status."
     },
     {
       "name": "pg_up",

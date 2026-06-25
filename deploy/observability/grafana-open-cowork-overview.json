@@ -81,7 +81,7 @@
       "type": "timeseries",
       "title": "Object-store errors",
       "targets": [
-        { "expr": "sum(rate(open_cowork_object_store_errors_total[5m])) by (kind, operation)" }
+        { "expr": "sum(rate(open_cowork_cloud_object_store_operations_total{status=\"error\"}[5m])) by (cloud_object_store_kind, operation)" }
       ]
     },
     {
