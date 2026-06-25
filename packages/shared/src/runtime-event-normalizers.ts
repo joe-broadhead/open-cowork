@@ -16,6 +16,19 @@ export function readRuntimeSessionId(properties: Record<string, unknown> | null 
   return readFirstString(properties, ['sessionID', 'sessionId'])
 }
 
+export type RuntimeToolStatus = 'complete' | 'error' | 'running'
+
+// Single source of truth for tool-part status across the live runtime paths (cloud + desktop)
+// and history replay. Error takes precedence; otherwise a part with output (or an explicit
+// completed/complete status) is complete, and a part with neither is still running. The history
+// replay paths previously defaulted the no-output/no-error case to 'complete', so an interrupted
+// tool rendered as a live spinner that flipped to "complete" on reload.
+export function deriveToolStatus(input: { hasOutput: boolean, hasError: boolean, statusHint?: string }): RuntimeToolStatus {
+  if (input.hasError) return 'error'
+  if (input.hasOutput || input.statusHint === 'completed' || input.statusHint === 'complete') return 'complete'
+  return 'running'
+}
+
 export function extractRuntimeErrorMessage(
   properties: Record<string, unknown> | null | undefined,
   error: Record<string, unknown> | null | undefined,

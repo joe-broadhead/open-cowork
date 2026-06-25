@@ -632,7 +632,7 @@ export class CloudSessionService {
     // org must be active, membership must be active — so a deactivated org or
     // revoked/expired membership is rejected on the very next request. Nothing
     // is mutated server-side; only the redundant upserts are avoided.
-    const bootstrapKey = `${principal.tenantId} ${principal.accountId || principal.userId}`
+    const bootstrapKey = `${principal.tenantId}\u0000${principal.accountId || principal.userId}`
     const bootstrappedUntil = this.bootstrappedPrincipals.get(bootstrapKey)
     if (
       bootstrappedUntil !== undefined

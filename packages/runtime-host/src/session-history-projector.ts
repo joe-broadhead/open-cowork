@@ -1,6 +1,7 @@
 import { normalizeTodoItems, normalizeSessionMessages, normalizeSessionStatuses, type NormalizedMessagePart } from '@open-cowork/runtime-host'
 import { isInternalCoworkMessage } from './internal-message-utils.js'
 import type { TodoItem } from '@open-cowork/shared'
+import { deriveToolStatus } from '@open-cowork/shared'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -635,7 +636,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           tool: {
             name: part.tool === 'task' && part.title ? part.title : part.tool,
             input: state.input,
-            status: state.output ? 'complete' : state.error ? 'error' : 'complete',
+            status: deriveToolStatus({ hasOutput: Boolean(state.output), hasError: state.error !== undefined }),
             output: state.output,
             agent: typeof state.metadata.agent === 'string'
               ? state.metadata.agent
@@ -835,7 +836,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             tool: {
               name: part.tool === 'task' && title ? title : part.tool,
               input: state.input,
-              status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
+              status: deriveToolStatus({ hasOutput: Boolean(toolOutput), hasError: state.error !== undefined }),
               output: toolOutput,
               attachments: state.attachments,
               agent: normalizeAgentName(

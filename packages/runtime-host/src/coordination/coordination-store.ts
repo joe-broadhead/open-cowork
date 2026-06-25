@@ -574,10 +574,14 @@ export function listMatchingCoordinationWatches(options: {
   const predicates = targets.map(() => '(target_kind = ? and target_id = ?)').join(' or ')
   const values: SQLInputValue[] = [workspaceId, 'active']
   for (const target of targets) values.push(target.kind, target.id)
+  // Bound the read like the cloud match path (P2): the notification fan-out hits this per matching
+  // event, and an unbounded `select *` over a popular target's watches is a latent scaling cliff.
+  values.push(1000)
   const rows = getCoordinationDb().prepare(`
     select * from coordination_watches
     where workspace_id = ? and status = ? and (${predicates})
     order by updated_at desc
+    limit ?
   `).all(...values) as DbRow[]
   return rows.map(rowToWatch).filter((watch) => watch.events.includes(options.eventType))
 }

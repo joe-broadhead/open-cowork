@@ -2,7 +2,7 @@ import { chooseTaskTitle, extractAgentName, isPlaceholderTaskTitle, normalizeAge
 import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { nextSessionScopedFallbackId } from '@open-cowork/runtime-host/runtime-fallback-ids'
 import { normalizeMessagePart, normalizeSessionInfo } from '@open-cowork/runtime-host'
-import { asRecord, readRecordValue, readString } from '@open-cowork/shared'
+import { asRecord, deriveToolStatus, readRecordValue, readString } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { resolveDisplayCost } from './pricing.ts'
 import {
@@ -782,9 +782,13 @@ function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
   if (ctx.part.type !== 'tool') return false
   const state = ctx.part.state
   const statusValue = state.status || ''
-  const isError = statusValue === 'error' || state.error !== undefined
-  const isComplete = !isError && (statusValue === 'completed' || statusValue === 'complete' || state.output !== undefined)
-  const status = isError ? 'error' : isComplete ? 'complete' : 'running'
+  const status = deriveToolStatus({
+    hasOutput: state.output !== undefined,
+    hasError: statusValue === 'error' || state.error !== undefined,
+    statusHint: typeof statusValue === 'string' ? statusValue : undefined,
+  })
+  const isError = status === 'error'
+  const isComplete = status === 'complete'
   const title = ctx.part.title || state.title || ''
   const metadata = {
     ...state.metadata,

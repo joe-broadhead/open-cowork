@@ -1,7 +1,7 @@
 import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
 import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtime-environment'
 import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionInfo, createManagedOpencodeServerAuth, type ManagedOpencodeServerAuth, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit } from '@open-cowork/runtime-host'
-import { normalizePermissionEvent } from '@open-cowork/shared'
+import { deriveToolStatus, normalizePermissionEvent } from '@open-cowork/shared'
 import {
   createOpencodeClient,
   type OpencodeClientConfig,
@@ -110,9 +110,11 @@ function eventFromMessagePartUpdated(properties: Record<string, unknown>): Cloud
 
   if (part.type === 'tool') {
     const state = part.state
-    const isError = state.status === 'error' || state.error !== undefined
-    const isComplete = !isError && (state.status === 'completed' || state.status === 'complete' || state.output !== undefined)
-    const status = isError ? 'error' : isComplete ? 'complete' : 'running'
+    const status = deriveToolStatus({
+      hasOutput: state.output !== undefined,
+      hasError: state.status === 'error' || state.error !== undefined,
+      statusHint: typeof state.status === 'string' ? state.status : undefined,
+    })
     const input = Object.keys(state.input).length > 0 ? state.input : state.args
     const sessionId = readSessionId(properties)
     return [{
