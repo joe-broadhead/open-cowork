@@ -102,6 +102,12 @@ jobs:
       - name: Cloud bundle build
         run: pnpm cloud:build
 
+      - name: Cloud bundle startup smoke
+        # Boots the built bundle (sqlite all-in-one, no postgres) and waits for the
+        # ready line — catches an unresolvable external (e.g. ajv) at import time in
+        # seconds, without the heavyweight docker-compose stack.
+        run: pnpm cloud:smoke:import
+
   cloud-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 45

@@ -67,6 +67,8 @@
     "cloud:start": "node apps/desktop/dist/cloud/open-cowork-cloud.mjs",
     "cloud:migrate": "node --no-warnings --experimental-strip-types scripts/open-cowork-cloud-migrate.ts",
     "cloud:migrate:start": "node apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs",
+    "cloud:smoke:import": "node scripts/cloud-bundle-import-smoke.mjs",
+    "cloud:smoke": "pnpm cloud:build && pnpm cloud:smoke:import",
     "cloud:smoke:compose": "bash scripts/ci-cloud-compose-smoke.sh",
     "deploy:validate": "node scripts/validate-deployment-configs.mjs",
     "deploy:smoke": "node scripts/smoke-deployment.mjs",
