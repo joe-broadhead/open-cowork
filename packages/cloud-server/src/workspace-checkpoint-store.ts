@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { readdir, readFile, lstat, mkdir, writeFile } from 'node:fs/promises'
+import { readdir, readFile, lstat, mkdir, realpath, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { PortableRuntimeEntryKind } from './runtime-portability.ts'
 import { isRuntimeSnapshotSecretBearingPath } from './runtime-portability.ts'
@@ -137,6 +137,29 @@ function resolveInside(root: string, relativePath: string) {
     throw new Error(`Checkpoint restore path escapes root ${resolvedRoot}.`)
   }
   return target
+}
+
+// The lexical resolveInside check above cannot see symlinks. A compromised agent could
+// pre-plant a symlinked directory in a writable restore root (workspace/artifacts), then a
+// restore whose path traverses it would have mkdir/writeFile follow the link out of the root.
+// After creating the parent, confirm its realpath is still inside the realpath'd root, and
+// refuse to write through a pre-existing symlink at the target.
+async function assertCheckpointTargetSafe(root: string, target: string) {
+  const realRoot = await realpath(resolve(root))
+  let realParent: string
+  try {
+    realParent = await realpath(dirname(target))
+  } catch {
+    return
+  }
+  const rel = relative(realRoot, realParent)
+  if (rel && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Checkpoint restore path escapes root ${realRoot} via a symlink.`)
+  }
+  const existing = await lstat(target).catch(() => null)
+  if (existing?.isSymbolicLink()) {
+    throw new Error(`Checkpoint restore target is a symlink and was refused: ${target}.`)
+  }
 }
 
 function rootKey(root: WorkspaceCheckpointRoot) {
@@ -503,6 +526,7 @@ export function createObjectWorkspaceCheckpointStore(
         }
         const target = resolveInside(root.path, entry.relativePath)
         await mkdir(dirname(target), { recursive: true })
+        await assertCheckpointTargetSafe(root.path, target)
         await writeFile(target, body, { mode: entry.mode ?? 0o600 })
         restoredEntries += 1
       }

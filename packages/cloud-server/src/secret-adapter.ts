@@ -258,6 +258,10 @@ function parseAwsSecretRef(url: URL, env: Record<string, string | undefined>) {
   const region = url.searchParams.get('region')?.trim() || envValue(env, 'AWS_REGION') || envValue(env, 'AWS_DEFAULT_REGION')
   const secretId = decodeURIComponent(`${url.host}${url.pathname}`.replace(/^\/+/, ''))
   if (!region) throw new Error('AWS Secrets Manager references require a region query parameter or AWS_REGION.')
+  // The region is interpolated into the endpoint host (secretsmanager.<region>.amazonaws.com);
+  // a value like "evil.com/?" would redirect the credentialed SigV4 request (and its session
+  // token) to an attacker host. Constrain it to the AWS region-name shape.
+  if (!/^[a-z0-9-]+$/i.test(region)) throw new Error('AWS Secrets Manager region must be a valid region name.')
   if (!secretId) throw new Error('AWS Secrets Manager references require a secret id.')
   return {
     region,

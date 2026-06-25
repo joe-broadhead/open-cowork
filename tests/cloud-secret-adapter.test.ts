@@ -249,3 +249,15 @@ test('createCloudSecretAdapterFromEnv loads previous keys for rotation (P2-1)', 
   })
   assert.equal(adapter.reveal(cipher1, 'ctx'), 'env-secret')
 })
+
+test('AWS Secrets Manager ref rejects a region that would redirect the SigV4 host (P2)', async () => {
+  await assert.rejects(
+    () => resolveCloudSecretRef('aws-sm://my/secret?region=evil.com/%3F', { env: {} }),
+    /region must be a valid region name/,
+  )
+  // A well-formed region still gets past the region check (then fails later for missing creds).
+  await assert.rejects(
+    () => resolveCloudSecretRef('aws-sm://my/secret?region=us-east-1', { env: {} }),
+    /require AWS credentials/,
+  )
+})

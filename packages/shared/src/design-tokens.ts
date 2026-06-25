@@ -572,9 +572,14 @@ function parseRgbColor(value: string) {
 }
 
 function colorFunctionArgs(value: string, name: string) {
-  const match = value.match(new RegExp(`^${name}a?\\(\\s*([^)]+?)\\s*\\)$`, 'i'))
+  // Bound the input and use a linear pattern: the previous `\s*([^)]+?)\s*` overlapped the
+  // surrounding whitespace with the lazy body, giving catastrophic backtracking on a long run
+  // of spaces (operator branding tokens reach this). `[^)]*` then `\)$` is deterministic; trim
+  // in code. `name` is always a literal ('rgb'/'hsl'), never user input.
+  if (value.length > 256) return null
+  const match = value.match(new RegExp(`^${name}a?\\(([^)]*)\\)$`, 'i'))
   if (!match) return null
-  const body = match[1] || ''
+  const body = (match[1] || '').trim()
   if (body.includes('/')) return null
   return (body.includes(',') ? body.split(',') : body.trim().split(/\s+/))
     .map((part) => part.trim())
