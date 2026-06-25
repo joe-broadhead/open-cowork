@@ -1613,6 +1613,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return row ? projectionFromRow(row) : null
   }
 
+  async getMaxProjectionLag(): Promise<number> {
+    const result = await this.pool.query(
+      `SELECT coalesce(max(GREATEST(0, s.next_event_sequence - 1 - coalesce(p.sequence, 0))), 0) AS lag
+       FROM cloud_sessions s
+       LEFT JOIN cloud_session_projections p ON p.tenant_id = s.tenant_id AND p.session_id = s.session_id
+       WHERE s.next_event_sequence > 0`,
+    )
+    return numberValue(result.rows[0]?.lag)
+  }
+
   async claimSessionLease(
     tenantId: string,
     sessionId: string,

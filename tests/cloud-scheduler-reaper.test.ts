@@ -84,6 +84,7 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
   const store = {
     async recordWorkerHeartbeat() {},
     async reapExpiredWorkflowClaims() { return [] },
+    async getMaxProjectionLag() { return 0 },
     async pruneTerminalChannelDeliveries() {
       const value = deliveryReturns[deliveryCalls] ?? 0
       deliveryCalls += 1
@@ -134,6 +135,7 @@ test('cloud scheduler prunes only the opt-in event logs whose window is configur
   const store = {
     async recordWorkerHeartbeat() {},
     async reapExpiredWorkflowClaims() { return [] },
+    async getMaxProjectionLag() { return 0 },
     async pruneTerminalChannelDeliveries() { return 0 },
     async pruneExpiredChannelInteractions() { return 0 },
     async pruneStaleThrottleState() { return 0 },
@@ -171,6 +173,7 @@ test('cloud scheduler reconciles concurrency counters only when an interval is c
   const store = {
     async recordWorkerHeartbeat() {},
     async reapExpiredWorkflowClaims() { return [] },
+    async getMaxProjectionLag() { return 0 },
     async reconcileConcurrencyCounters() { reconciles += 1; return 3 },
   } as unknown as InMemoryControlPlaneStore
   const service = {
@@ -197,6 +200,7 @@ test('cloud scheduler skips retention entirely when no window is configured', as
   const store = {
     async recordWorkerHeartbeat() {},
     async reapExpiredWorkflowClaims() { return [] },
+    async getMaxProjectionLag() { return 0 },
     async pruneTerminalChannelDeliveries() { pruneCalls += 1; return 0 },
     async pruneExpiredChannelInteractions() { pruneCalls += 1; return 0 },
   } as unknown as InMemoryControlPlaneStore
@@ -214,6 +218,7 @@ test('cloud scheduler caps claims per loop and throttles the heartbeat', async (
   const store = {
     async recordWorkerHeartbeat() { heartbeats += 1 },
     async reapExpiredWorkflowClaims() { return [] },
+    async getMaxProjectionLag() { return 0 },
     async pruneTerminalChannelDeliveries() { return 0 },
     async pruneExpiredChannelInteractions() { return 0 },
   } as unknown as InMemoryControlPlaneStore

@@ -62,6 +62,10 @@ export class CloudScheduler {
   // already drift-free for post-migration activity, so this is an opt-in belt-and-suspenders sweep.
   private readonly concurrencyReconcileMs: number | null
   private lastConcurrencyReconcileRunMs = 0
+  // Throttle for the projection-lag gauge (P1-F): the aggregate scans cloud_sessions, so emit it
+  // at most once a minute rather than on every (sub-second) scheduler loop.
+  private readonly projectionLagIntervalMs = 60_000
+  private lastProjectionLagRunMs = 0
 
   constructor(
     store: ControlPlaneStore,
@@ -126,6 +130,7 @@ export class CloudScheduler {
     })
     await this.maybeProcessRetention(now)
     await this.maybeReconcileConcurrency(now)
+    await this.maybeEmitProjectionLag(now)
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_loop_duration_ms',
       value: Date.now() - startedAt,
@@ -196,6 +201,21 @@ export class CloudScheduler {
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_concurrency_reconciled_total',
       value: touched,
+      schedulerId: this.schedulerId,
+      status: 'ok',
+    })
+  }
+
+  // Emit the durable-event-to-projection lag gauge (P1-F). Previously this metric was alerted,
+  // graphed, and cataloged but had zero emit sites, so the projection-lag page could never fire.
+  private async maybeEmitProjectionLag(now: Date) {
+    const nowMs = now.getTime()
+    if (this.lastProjectionLagRunMs !== 0 && nowMs - this.lastProjectionLagRunMs < this.projectionLagIntervalMs) return
+    this.lastProjectionLagRunMs = nowMs
+    const lag = await this.store.getMaxProjectionLag()
+    await recordCloudSchedulerMetric(this.observability, {
+      name: 'open_cowork_cloud_projection_lag_events',
+      value: lag,
       schedulerId: this.schedulerId,
       status: 'ok',
     })

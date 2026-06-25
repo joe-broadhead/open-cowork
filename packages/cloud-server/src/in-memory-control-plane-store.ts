@@ -1236,6 +1236,17 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(session.projection)
   }
 
+  getMaxProjectionLag(): number {
+    let maxLag = 0
+    for (const session of this.sessions.values()) {
+      if (session.nextEventSequence <= 0) continue
+      const latest = session.nextEventSequence - 1
+      const projected = session.projection?.sequence ?? 0
+      maxLag = Math.max(maxLag, latest - projected)
+    }
+    return maxLag
+  }
+
   claimSessionLease(
     tenantId: string,
     sessionId: string,

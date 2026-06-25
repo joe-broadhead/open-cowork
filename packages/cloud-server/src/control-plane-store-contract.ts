@@ -331,6 +331,10 @@ export type ControlPlaneStore = {
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>
   writeSessionProjection(input: WriteProjectionInput): MaybePromise<SessionProjectionRecord>
   getSessionProjection(tenantId: string, sessionId: string): MaybePromise<SessionProjectionRecord | null>
+  // Max durable-event-to-projection gap across sessions (P1-F), emitted as the
+  // open_cowork_cloud_projection_lag_events gauge so the (previously phantom) projection-lag
+  // alert can fire. A single aggregate; the scheduler throttles how often it runs.
+  getMaxProjectionLag(): MaybePromise<number>
   claimSessionLease(
     tenantId: string,
     sessionId: string,
