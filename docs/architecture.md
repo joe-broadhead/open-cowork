@@ -341,7 +341,7 @@ Code:
 - `apps/desktop/src/renderer/stores/` — renderer-side state stores.
 - `apps/desktop/src/renderer/hooks/useOpenCodeEvents.ts` — the single event
   consumer on the renderer side.
-- `apps/desktop/src/lib/session-view-model.ts` — shared view-model builders
+- `packages/shared/src/session-view-model.ts` — shared view-model builders
   used by the main-process session engine.
 
 ### 6. Workflow control plane
@@ -366,7 +366,7 @@ Code:
 - `packages/runtime-host/src/workflow/workflow-tool-bridge.ts` and
   `packages/runtime-host/src/workflow/workflow-tool-actions.ts` — local MCP bridge used by
   Workflow Designer to preview and save workflows after user confirmation
-- `apps/desktop/src/main/workflow/workflow-webhook-server.ts` — loopback webhook intake
+- `packages/shared/src/node/workflow-webhook-server.ts` — loopback webhook intake
   for saved workflows
 - `apps/desktop/src/renderer/components/workflows/` — saved workflow list,
   manual run controls, webhook invocation details, and setup/run thread links

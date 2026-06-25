@@ -1,7 +1,7 @@
 # Iconography
 
 Open Cowork uses Lucide through the renderer `Icon` wrapper at
-`apps/desktop/src/renderer/components/ui/Icon.tsx`.
+`packages/ui/src/Icon.tsx`.
 
 Use the wrapper instead of bespoke inline SVGs for app chrome, navigation,
 toolbars, menus, and shared primitives:

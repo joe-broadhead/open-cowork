@@ -639,8 +639,10 @@ Each skill entry can map to:
 
 The upstream core ships:
 - `agents`
-- `clock`
 - `charts`
+- `clock`
+- `knowledge`
+- `semantic-ui`
 - `skills`
 - `workflows`
 

@@ -367,7 +367,7 @@ specific URLs:
    above).
 2. No other origin can navigate the renderer: `frame-ancestors 'none'`
    blocks embedding, `form-action 'self'` blocks redirect-via-POST,
-   `will-navigate` in `main/index.ts` intercepts navigation attempts.
+   `will-navigate` in `main/main-window-security.ts` intercepts navigation attempts.
 
 ## Supply chain verification
 

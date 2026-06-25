@@ -56,7 +56,7 @@ hydration:
 - `packages/runtime-host/src/session-engine.ts`
 - `packages/runtime-host/src/session-history-loader.ts`
 - `packages/runtime-host/src/session-history-projector.ts`
-- `apps/desktop/src/lib/session-view-model.ts`
+- `packages/shared/src/session-view-model.ts`
 
 Rules:
 - Preserve the separation between parent-session UI and delegated child-session task runs.
@@ -72,7 +72,7 @@ Primary files:
 - `packages/runtime-host/src/workflow/workflow-store.ts`
 - `apps/desktop/src/main/workflow/workflow-service.ts`
 - `packages/runtime-host/src/workflow/workflow-tool-actions.ts`
-- `apps/desktop/src/main/workflow/workflow-webhook-server.ts`
+- `packages/shared/src/node/workflow-webhook-server.ts`
 - `mcps/workflows/src/index.ts`
 - `apps/desktop/src/renderer/components/workflows/`
 

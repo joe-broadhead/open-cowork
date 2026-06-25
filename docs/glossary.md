@@ -71,10 +71,11 @@ Skill bundle
     so they can't be invoked through a Cowork-only path.
 
 MCP (Model Context Protocol)
-:   A protocol for exposing tools to a model. Open Cowork ships five bundled
-    MCPs: `agents` (custom-agent authoring), `clock` (time and calendar math),
-    `charts` (Vega-Lite + Mermaid rendering), `skills` (skill-bundle management), and `workflows`
-    (workflow preview and creation). Users can also add stdio or HTTP MCPs.
+:   A protocol for exposing tools to a model. Open Cowork ships seven bundled
+    MCPs: `agents` (custom-agent authoring), `charts` (Vega-Lite + Mermaid rendering),
+    `clock` (time and calendar math), `knowledge` (knowledge-wiki proposals),
+    `semantic-ui` (approval-gated UI actions), `skills` (skill-bundle management), and
+    `workflows` (workflow preview and creation). Users can also add stdio or HTTP MCPs.
     See [Skills & MCPs](skills-and-mcps.md).
 
 Capability

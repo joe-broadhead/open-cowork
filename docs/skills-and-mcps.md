@@ -23,7 +23,7 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Six bundled MCPs and six bundled skills, used as worked examples below.
+Seven bundled MCPs and six bundled skills, used as worked examples below.
 When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
 uses `mcp__<server>__<tool>` form, for example
 `mcp__charts__bar_chart`. Source MCP code and tests may still refer to the
@@ -237,7 +237,7 @@ stdio MCPs) or holds an HTTP client (for HTTP MCPs).
 Bundled MCPs are looked up at:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
-2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/skills`, `mcps/workflows`)
+2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/knowledge`, `mcps/semantic-ui`, `mcps/skills`, `mcps/workflows`)
 
 User-added MCPs live under `mcps.user.*` in `settings.enc` and are added
 through Tools & Skills. They are validated by:
