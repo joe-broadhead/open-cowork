@@ -180,3 +180,32 @@ Every session-events SSE connection registers its own `setInterval(pollMs=1000)`
 6. **P2/P3 + dead code + doc drift** as a cleanup sweep.
 
 Each fix should land as its own gated commit (tsc 0, node + renderer tests, lint, knip ≤ baseline, cloud:build, vite build), with new regression tests where the finding is verifiable — same discipline as pass 1.
+
+---
+
+## Resolution status (2026-06-25)
+
+All findings were remediated as individually gated commits (tsc, node + renderer
+tests, lint, knip, cloud:build), with regression tests wherever the finding was
+verifiable — same discipline as pass 1.
+
+- **P0 ×4, P1 (all), P2-2/3/4/5/7/8/10–16, P3-1/2/3/4/6/7/10–14**, the store-parity
+  divergences, the dead-code shortlist, and the doc drift: fixed in the earlier
+  remediation sweep.
+- **P2-1** envelope key rotation (kid + previous-key ring); **P2-6** per-credential
+  random salts (worker + channel-interaction); **P2-9** SSE TCP keep-alive +
+  max-lifetime; **P3-5** webhook `config.fetch` redirect pin; **P3-8** shared
+  `withRetry` (telegram + webhook); **P3-9** shared `CoordinationWatch` row
+  coercers; **P3-15** gateway delivery-latency histogram + dashboard quantile;
+  **P3-16** bounded per-session worker concurrency pool: fixed in the closing sweep.
+- **P2-17** — the encrypt/decrypt boot canary and the cookie/secret key-reuse
+  rejection are done. Two sub-parts are **intentionally deferred** (documented in
+  the P2-17 commit): (a) escalating the strong-secret/durable-store checks onto any
+  non-loopback bind would break the deliberate tier/auth-posture separation — the
+  default bind is `0.0.0.0`, `assertCloudAuthDeploymentSafe` already escalates auth
+  posture on non-loopback (skippable via `ALLOW_INSECURE_AUTH`), and
+  `self_host_beta`/`private_beta` deliberately permit ephemeral storage and weaker
+  secrets on non-loopback (encoded in tests), so this is a focused contract
+  redesign, not a drop-in check; (b) `docker-compose.cloud.yml` is a documented
+  local/demo artifact whose `${VAR:?}` conversion would break the one-command
+  stack, and the boot-asserts already block production misuse.
