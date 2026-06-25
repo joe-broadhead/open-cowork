@@ -7,9 +7,12 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import type { SecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import {
   assertCloudProductionDeploymentSafe,
   assertCloudAuthDeploymentSafe,
+  assertSecretAdapterRoundTrips,
   describeUnacknowledgedEphemeralStorage,
   createControlPlaneStoreForCloud,
   createHeaderCloudAuthResolver,
@@ -1905,4 +1908,64 @@ test('cloud header auth resolver maps request headers to tenant principal', asyn
   await assert.rejects(async () => {
     await auth({ headers: spoofed } as unknown as IncomingMessage)
   }, /signature is invalid/)
+})
+
+test('public production deployment guard rejects reusing the secret key as the cookie secret (P2-17)', () => {
+  const productionConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      storage: {
+        controlPlane: { kind: 'postgres' as const },
+        objectStore: { kind: 'gcs' as const, bucket: 'open-cowork-test-bucket' },
+      },
+    },
+  }
+  const reusedKeyEnv = {
+    OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
+    OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_SECRET, // identical → crypto key reuse
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+  }
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: reusedKeyEnv,
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /distinct from OPEN_COWORK_CLOUD_SECRET_KEY/)
+
+  // A distinct cookie secret passes the reuse check.
+  assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: { ...reusedKeyEnv, OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }))
+})
+
+test('secret adapter boot canary passes a healthy adapter and fails a broken one (P2-17)', () => {
+  assert.doesNotThrow(() => assertSecretAdapterRoundTrips(createEnvelopeSecretAdapter(STRONG_CLOUD_SECRET)))
+
+  // A non-envelope adapter is skipped (the canary only guards the encryption path).
+  const plaintextAdapter: SecretAdapter = { mode: 'plaintext', protect: (value) => value, reveal: (value) => value }
+  assert.doesNotThrow(() => assertSecretAdapterRoundTrips(plaintextAdapter))
+
+  // An envelope adapter that cannot round-trip fails the canary instead of corrupting work.
+  const brokenAdapter: SecretAdapter = { mode: 'envelope-v1', protect: (value) => value, reveal: () => 'tampered' }
+  assert.throws(() => assertSecretAdapterRoundTrips(brokenAdapter), /did not round-trip/)
+
+  const throwingAdapter: SecretAdapter = {
+    mode: 'envelope-v1',
+    protect: (value) => value,
+    reveal: () => { throw new Error('key unavailable') },
+  }
+  assert.throws(() => assertSecretAdapterRoundTrips(throwingAdapter), /boot canary/)
 })

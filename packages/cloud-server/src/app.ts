@@ -765,6 +765,15 @@ export function assertCloudProductionDeploymentSafe(input: {
     if (!hasProductionSecretMaterial(input.env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET', 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF', input.config.cloud.auth.cookieSecretRef)) {
       throw new Error('Public production cloud web deployments require OPEN_COWORK_CLOUD_COOKIE_SECRET with at least 32 characters or a managed OPEN_COWORK_CLOUD_COOKIE_SECRET_REF.')
     }
+    // Reject reusing the envelope encryption key as the cookie-signing key (audit P2-17).
+    // The runtime resolver falls back to OPEN_COWORK_CLOUD_SECRET_KEY when no distinct cookie
+    // secret is set; the material check above already blocks that omission, and this blocks a
+    // copy-pasted identical value so the two keys cannot share one secret.
+    const inlineCookieSecret = envValue(input.env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
+    const inlineSecretKey = envValue(input.env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
+    if (inlineCookieSecret && inlineSecretKey && inlineCookieSecret === inlineSecretKey) {
+      throw new Error('Public production cloud web deployments require a cookie secret distinct from OPEN_COWORK_CLOUD_SECRET_KEY. Reusing the envelope encryption key to sign browser cookies is crypto key reuse — set a separate OPEN_COWORK_CLOUD_COOKIE_SECRET.')
+    }
     if (input.autoProcessCommands) {
       throw new Error('Public production cloud web deployments must not process commands inline. Set OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS=false and run worker roles separately.')
     }
@@ -808,6 +817,27 @@ function assertCloudProductionCoreAdaptersSafe(input: {
   }
   if (input.secretAdapter.mode !== 'envelope-v1') {
     throw new Error('Public production cloud deployments require envelope-encrypted secret storage.')
+  }
+}
+
+// Encrypt/decrypt boot canary (audit P2-17). A worker or scheduler whose envelope key
+// cannot round-trip would only discover it when revealing a real BYOK secret mid-run —
+// after it had already claimed work. Verify the adapter round-trips at boot so a wrong,
+// corrupt, or mis-rotated key fails fast instead of corrupting in-flight execution.
+export function assertSecretAdapterRoundTrips(secretAdapter: SecretAdapter) {
+  if (secretAdapter.mode !== 'envelope-v1') return
+  const probe = 'open-cowork-cloud-secret-boot-canary'
+  let revealed: string
+  try {
+    revealed = secretAdapter.reveal(secretAdapter.protect(probe, 'boot-canary'), 'boot-canary')
+  } catch (error) {
+    throw new Error(
+      `Cloud secret adapter failed its encrypt/decrypt boot canary (${error instanceof Error ? error.message : String(error)}). The configured cloud secret key cannot round-trip — refusing to start a worker/scheduler that would fail to reveal stored secrets at runtime.`,
+      { cause: error },
+    )
+  }
+  if (revealed !== probe) {
+    throw new Error('Cloud secret adapter boot canary did not round-trip; refusing to start the worker/scheduler.')
   }
 }
 
@@ -1129,6 +1159,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     objectStore,
     secretAdapter,
   })
+  if (shouldRunCloudWorker(policy.role) || shouldRunCloudScheduler(policy.role)) {
+    assertSecretAdapterRoundTrips(secretAdapter)
+  }
   const ephemeralStorageRisk = describeUnacknowledgedEphemeralStorage({
     tier: envOptions.deploymentTier,
     store,
