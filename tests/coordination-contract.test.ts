@@ -13,6 +13,8 @@ import {
   COORDINATION_WATCH_EVENTS,
   COORDINATION_WORKSPACE_SUPPORT_APIS,
   COORDINATION_WATCH_TARGETS,
+  coerceCoordinationWatchChannel,
+  coerceCoordinationWatchEvents,
   coordinationCapabilityFromWorkspaceApi,
   coordinationCapabilityStatus,
   coordinationSupportForAuthority,
@@ -131,4 +133,25 @@ test('coordination docs and public contracts use the shared vocabulary', () => {
   ]) {
     assert.match(coordination, new RegExp(escapeRegex(phrase)), `coordination doc must preserve boundary: ${phrase}`)
   }
+})
+
+test('coordination watch row coercers degrade malformed channel/events identically across backends (P3-9)', () => {
+  const emptyChannel = { provider: '', agentId: '', channelBindingId: '', sessionBindingId: null, target: {} }
+  // Non-object / legacy rows collapse to the same safe shape on both SQLite and Postgres.
+  assert.deepEqual(coerceCoordinationWatchChannel(null), emptyChannel)
+  assert.deepEqual(coerceCoordinationWatchChannel('garbage'), emptyChannel)
+  assert.deepEqual(coerceCoordinationWatchChannel([]), emptyChannel)
+  // Wrong-typed fields fall back per-field (provider was the documented divergence: '' vs undefined).
+  assert.deepEqual(coerceCoordinationWatchChannel({ provider: 5, target: [] }), emptyChannel)
+  // Valid channels pass through untouched.
+  assert.deepEqual(
+    coerceCoordinationWatchChannel({ provider: 'telegram', agentId: 'a', channelBindingId: 'b', sessionBindingId: 's', target: { chatId: 1 } }),
+    { provider: 'telegram', agentId: 'a', channelBindingId: 'b', sessionBindingId: 's', target: { chatId: 1 } },
+  )
+
+  // Events: invalid entries are filtered (the SQLite behaviour) rather than passed through (the old Postgres behaviour).
+  const validEvent = COORDINATION_WATCH_EVENTS[0]
+  assert.deepEqual(coerceCoordinationWatchEvents([validEvent, 'not-an-event', 42]), [validEvent])
+  assert.deepEqual(coerceCoordinationWatchEvents(null), [])
+  assert.deepEqual(coerceCoordinationWatchEvents('nope'), [])
 })

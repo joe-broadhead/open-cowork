@@ -27,6 +27,8 @@ import type {
 } from '@open-cowork/shared'
 import {
   WORKSPACE_PRODUCT_SURFACES,
+  coerceCoordinationWatchChannel,
+  coerceCoordinationWatchEvents,
   coordinationTaskColumnForStatus,
   isCoordinationProjectStatus,
   isCoordinationTaskColumn,
@@ -478,14 +480,8 @@ function rowToWatch(row: DbRow): CoordinationWatch {
       kind: targetKind,
       id: String(row.target_id || ''),
     },
-    events: parseJson<CoordinationWatchEventType[]>(row.events_json, []).filter(isCoordinationWatchEvent),
-    channel: parseJson<CoordinationWatchChannel>(row.channel_json, {
-      provider: '',
-      agentId: '',
-      channelBindingId: '',
-      sessionBindingId: null,
-      target: {},
-    }),
+    events: coerceCoordinationWatchEvents(parseJson<unknown>(row.events_json, [])),
+    channel: coerceCoordinationWatchChannel(parseJson<unknown>(row.channel_json, {})),
     recipient: parseJson<CoordinationWatchRecipient | null>(row.recipient_json, null),
     deliverySurface: normalizeWatchDeliverySurface(row.delivery_surface, 'gateway_channel'),
     verbosity,
