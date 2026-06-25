@@ -1,4 +1,4 @@
-import { writeFileAtomic } from '@open-cowork/shared/node'
+import { quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -181,6 +181,9 @@ export class FileCloudWorkspaceRegistry implements CloudWorkspaceRegistry {
         .map(normalizeRecord)
         .filter((record): record is CloudWorkspaceConnectionRecord => Boolean(record))
     } catch {
+      // A corrupt/half-written file is NOT "no workspaces" (audit P2-13): quarantine it so the good
+      // data is preserved for recovery and the next writeRecords can't clobber it.
+      quarantineCorruptFile(this.path)
       return []
     }
   }

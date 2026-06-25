@@ -1,4 +1,4 @@
-import { writeFileAtomic } from '@open-cowork/shared/node'
+import { quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
 import {
   DEFAULT_DESKTOP_PAIRING_POLICY,
   type DesktopPairingAuditEvent,
@@ -340,6 +340,10 @@ export class FileDesktopPairingStore implements DesktopPairingStore {
       if (mtimeMs !== null) this.cache = { mtimeMs, state }
       return state
     } catch {
+      // A corrupt/half-written file is NOT "no pairings" (audit P2-13): quarantine it to .corrupt so
+      // the good-but-unreadable data is preserved for recovery and the next writeState can't clobber
+      // it down to only the newest entry.
+      quarantineCorruptFile(this.path)
       this.cache = null
       return { pairings: [], audit: [] }
     }

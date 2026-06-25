@@ -1,8 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+
+test('cloud workspace registry quarantines a corrupt file instead of clobbering it (P2-13)', async () => {
+  const { FileCloudWorkspaceRegistry } = await import('../apps/desktop/src/main/cloud-workspace-registry.ts')
+  const path = join(mkdtempSync(join(tmpdir(), 'open-cowork-cloud-workspaces-corrupt-')), 'cloud-workspaces.json')
+  new FileCloudWorkspaceRegistry(path).upsert({ baseUrl: 'https://cloud.example.test', label: 'Original' }, new Date('2026-05-27T10:00:00.000Z'))
+
+  // Simulate a half-written / corrupt file.
+  const corrupt = '[{"baseUrl":"https://cloud.example.test"'
+  writeFileSync(path, corrupt)
+
+  // A fresh read sees corruption: returns empty AND moves the file aside (NOT "no workspaces").
+  const recovered = new FileCloudWorkspaceRegistry(path)
+  assert.deepEqual(recovered.list(), [])
+  assert.equal(existsSync(`${path}.corrupt`), true)
+  assert.equal(readFileSync(`${path}.corrupt`, 'utf-8'), corrupt)
+
+  // The next write creates a fresh file with only the new entry; the corrupt data is preserved in
+  // .corrupt for recovery rather than clobbered out of existence.
+  recovered.upsert({ baseUrl: 'https://other.example.test', label: 'New' }, new Date('2026-05-27T12:00:00.000Z'))
+  assert.deepEqual(new FileCloudWorkspaceRegistry(path).list().map((entry) => entry.label), ['New'])
+  assert.equal(readFileSync(`${path}.corrupt`, 'utf-8'), corrupt)
+})
 import {
   FileCloudWorkspaceRegistry,
   cloudWorkspaceIdForBaseUrl,
