@@ -1,14 +1,13 @@
 import type { Buffer } from 'node:buffer'
-import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './browser-app.ts'
 import { CLOUD_WEB_FONT_ASSET_PREFIX, CLOUD_WEB_FONT_CACHE_CONTROL, getCloudWebFontAsset } from './web-font-assets.ts'
-import { getCloudWebReactClientAsset } from './web-client-assets.ts'
+import { getCloudWebReactClientAsset, isCloudWebReactClientAssetPath } from './web-client-assets.ts'
 
 export type CloudWebStaticAssetResponse =
   | { status: 'ok'; body: Buffer; contentType: string; cacheControl: string }
   | { status: 'not-found'; message: string }
 
 export function resolveCloudWebStaticAsset(pathname: string): CloudWebStaticAssetResponse | null {
-  if (pathname === CLOUD_WEB_REACT_CLIENT_ASSET_PATH) {
+  if (isCloudWebReactClientAssetPath(pathname)) {
     const body = getCloudWebReactClientAsset(pathname)
     return body
       ? { status: 'ok', body, contentType: 'application/javascript; charset=utf-8', cacheControl: 'no-store' }

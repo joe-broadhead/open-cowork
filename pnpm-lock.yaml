@@ -16,7 +16,7 @@ overrides:
   qs@>=6.11.1 <=6.15.1: 6.15.2
   tar@>=7.0.0 <7.5.16: '>=7.5.16'
   tmp@<0.2.7: 0.2.7
-  undici@>=7.0.0 <7.28.0: '>=7.28.0'
+  undici@>=7.0.0 <7.28.0: '>=7.28.0 <8'
   undici@<6.27.0: ^6.27.0
   vite@>=8.0.0 <8.0.16: '>=8.0.16'
 
@@ -99,6 +99,9 @@ importers:
       electron-updater:
         specifier: ^6.8.3
         version: 6.8.3
+      google-auth-library:
+        specifier: ^10.6.2
+        version: 10.6.2
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.5)
@@ -5060,9 +5063,9 @@ packages:
     resolution: {integrity: sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==}
     engines: {node: '>=18.17'}
 
-  undici@8.5.0:
-    resolution: {integrity: sha512-xamtWoB1EshgjpmlXd7GGm2VfdDtw1+rD8uhry8pSNW3If6S8E0m2T2+orSKeZXEn/aPJMviCpDBA65WJt8zhg==}
-    engines: {node: '>=22.19.0'}
+  undici@7.28.0:
+    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
+    engines: {node: '>=20.18.1'}
 
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
@@ -6065,7 +6068,7 @@ snapshots:
       semver: 7.8.1
       sumchecker: 3.0.1
     optionalDependencies:
-      undici: 8.5.0
+      undici: 7.28.0
     transitivePeerDependencies:
       - supports-color
 
@@ -8957,7 +8960,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 8.5.0
+      undici: 7.28.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -10604,7 +10607,7 @@ snapshots:
 
   undici@6.27.0: {}
 
-  undici@8.5.0: {}
+  undici@7.28.0: {}
 
   unified@11.0.5:
     dependencies:

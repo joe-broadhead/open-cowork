@@ -46,6 +46,7 @@
     "@tanstack/react-virtual": "^3.13.24",
     "dompurify": "^3.4.6",
     "electron-updater": "^6.8.3",
+    "google-auth-library": "^10.6.2",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.3",
     "mermaid": "^11.15.0",

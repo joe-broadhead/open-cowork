@@ -59,12 +59,18 @@ export async function runSessionBenchmarks() {
 
   try {
     const results = [
-      await runBenchmark('history.project.large', 10, async () => {
+      // This is the suite's only *async* benchmark and it runs first, so its
+      // measured window inherits the GC/JIT churn from the heavy fixture setup
+      // above. At 10 samples `p95` is just the max sample, so a single inherited
+      // pause spiked p95 to ~4 ms (vs a ~0.4 ms steady state that matches the
+      // baseline) and failed the gate. More warmup absorbs the setup churn and
+      // more samples make p95 a real percentile rather than the lone worst run.
+      await runBenchmark('history.project.large', 40, async () => {
         const items = await buildProjectedHistory(historyFixture)
         if (items.length === 0) {
           throw new Error('history.project.large produced no items')
         }
-      }, { batchSize: 4, warmupIterations: 3 }),
+      }, { batchSize: 4, warmupIterations: 16 }),
       await runBenchmark('engine.hydrate.large', 24, () => {
         const engine = new SessionEngine()
         engine.activateSession('perf-hydrate')
