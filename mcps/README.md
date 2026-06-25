@@ -7,6 +7,8 @@ This directory contains MCP servers that ship with Open Cowork.
 - `skills/` manages local OpenCode skill bundles.
 - `agents/` previews and manages custom OpenCode agents through the app bridge.
 - `workflows/` previews and creates Open Cowork workflows through the app bridge.
+- `knowledge/` proposes human-reviewed knowledge-base (wiki) edits through the app bridge.
+- `semantic-ui/` reports UI status/snapshots and runs approval-gated local UI actions through the app bridge.
 
 Each MCP is still an OpenCode-native MCP server. Open Cowork packages,
 configures, and permission-scopes these servers; it does not replace
@@ -26,6 +28,8 @@ pnpm --dir mcps/clock build
 pnpm --dir mcps/skills build
 pnpm --dir mcps/agents build
 pnpm --dir mcps/workflows build
+pnpm --dir mcps/knowledge build
+pnpm --dir mcps/semantic-ui build
 ```
 
 Each bundled MCP has a local contract test under `mcps/<name>/tests/`.

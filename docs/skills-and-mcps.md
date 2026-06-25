@@ -95,6 +95,16 @@ short tool name such as `bar_chart`.
     screenshots, hidden secrets, local MCP process details, or artifact bodies.
     Source: `mcps/semantic-ui/src/index.ts`.
 
+-   :material-book-edit: **`knowledge` MCP** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Lets a coworker propose knowledge-base (wiki) edits for human review through a
+    tokenized bridge (loopback `http://` on desktop, the cloud `https://` public
+    URL in cloud). Proposals stay `PENDING` until a Maintainer reviews them — the
+    agent can never publish directly. Runtime id:
+    `mcp__knowledge__propose_knowledge_edit`. Source: `mcps/knowledge/src/index.ts`.
+
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>
 
     ---

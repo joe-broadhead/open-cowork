@@ -225,7 +225,7 @@ grows. The queue-depth signal is a bounded estimate from worker scans; use it
 with oldest queued age and claim latency rather than as an exact backlog count.
 
 1. Check `open_cowork_cloud_command_queue_depth_estimate`,
-   `open_cowork_cloud_command_oldest_age_ms`, and
+   `open_cowork_cloud_runnable_session_claim_duration_ms`, and
    `open_cowork_cloud_worker_loop_duration_ms`.
 2. Check worker heartbeats and active sessions in `GET /api/workers/heartbeats`.
 3. Check lease signals: `open_cowork_cloud_worker_lease_claims_total`,

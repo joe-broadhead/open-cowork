@@ -676,8 +676,19 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_ROLE` | `all-in-one`, `web`, `worker`, or `scheduler`. |
 | `OPEN_COWORK_CLOUD_PROFILE` | Deployment profile such as `full`, `focused-agent`, or `custom`. |
 | `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Postgres connection URL for durable cloud state. |
+| `OPEN_COWORK_CLOUD_PG_POOL_MAX` | Max Postgres pool connections (default 10). The control plane saturates here first under load — size against your Postgres `max_connections` and replica count. |
+| `OPEN_COWORK_CLOUD_PG_STATEMENT_TIMEOUT_MS` | Per-statement timeout (default 30000); a non-zero default bounds an unbounded read from pinning a connection. DDL/migrations are exempt. |
+| `OPEN_COWORK_CLOUD_PG_IDLE_TX_TIMEOUT_MS` | `idle_in_transaction_session_timeout` (default 120000) so an abandoned transaction can't hold a connection forever. |
+| `OPEN_COWORK_CLOUD_PG_CONNECTION_TIMEOUT_MS` / `_PG_IDLE_TIMEOUT_MS` | Pool connect timeout and idle-connection eviction window. |
+| `OPEN_COWORK_CLOUD_PG_APP_NAME` | `application_name` set on each connection for Postgres-side observability. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_KIND` | `filesystem`, `minio`, `s3`, `gcs`, `azure-blob`, or `digitalocean-spaces`. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET` | Bucket/container name for artifacts and snapshots. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT` | Custom endpoint URL (MinIO / S3-compatible / DigitalOcean Spaces). |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_REGION` | Region for the S3/Spaces backend. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_PREFIX` | Optional key prefix namespacing all objects. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_SESSION_TOKEN` | S3/MinIO/Spaces static credentials (session token optional for STS). |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCOUNT_NAME` / `_SAS_TOKEN` | Azure Blob account name + SAS token. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_BEARER_TOKEN` | GCS OAuth bearer token (when not using ambient ADC). |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS` / `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF` | Comma-separated retired envelope keys (raw values or secret-manager refs) kept in the decrypt keyring for rotation. New writes always use the current key and stamp its key id; already-stored ciphertexts decrypt with the matching retired key. Re-encrypt and drop the old key once migration completes. |
@@ -823,6 +834,11 @@ to `0` to disable that quota for self-hosted/private installs.
 | `OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG` | Maximum non-closed cloud sessions per org. |
 | `OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG` | Maximum active worker leases per org. |
 | `OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR` | Per-org prompt enqueue quota. |
+| `OPEN_COWORK_CLOUD_MAX_GATEWAY_PROMPTS_PER_HOUR` | Per-org prompt quota for channel-gateway-originated prompts. |
+| `OPEN_COWORK_CLOUD_MAX_WORKFLOW_RUNS_PER_HOUR` | Per-org workflow-run start quota. |
+| `OPEN_COWORK_CLOUD_MAX_CONCURRENT_WORKFLOW_RUNS_PER_ORG` | Maximum simultaneously-running workflow runs per org. |
+| `OPEN_COWORK_CLOUD_MAX_QUEUED_COMMANDS_PER_ORG` | Maximum pending session commands queued per org. |
+| `OPEN_COWORK_CLOUD_MAX_QUEUE_AGE_MS` | Maximum age of the oldest pending command before new enqueues are rejected (backpressure). |
 | `OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR` | Per-org worker-minute quota used to block new execution after hourly usage is exhausted. |
 | `OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR` | Per-org gateway delivery claim quota. |
 | `OPEN_COWORK_CLOUD_MAX_GATEWAY_CHANNEL_BINDINGS_PER_ORG` | Maximum active gateway channel bindings per org. |

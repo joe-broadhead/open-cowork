@@ -166,8 +166,10 @@ DNS-resolved targets for:
 - Private-network RFC1918 ranges (`10/8`, `172.16/12`, `192.168/16`)
   and IPv6 ULAs (`fc00::/7`) — blocks corporate-internal pivot.
 
-The `allowPrivateNetwork` flag on `CustomMcpConfig` is the only way to
-bypass the guard, and the UI surfaces a warning when it's set. The guard
+The `allowPrivateNetwork` flag on `CustomMcpConfig` relaxes the private-IP
+guard (the UI surfaces a warning when it's set) — but cloud-metadata endpoints
+(`169.254.169.254`, `metadata.google.internal`, etc.) stay blocked even with the
+flag, so it cannot be used to reach an instance metadata service. The guard
 runs at save time (`custom:add-mcp`), test time (`custom:test-mcp`), and
 runtime registration, so public-looking hostnames that resolve into
 private networks at those policy checkpoints are skipped before OpenCode
@@ -246,7 +248,7 @@ runtime restart.
 
 The OpenCode server process also receives a curated environment, not the
 user's full login shell environment. On macOS/Linux, Open Cowork may execute a
-trusted login shell (`bash`, `sh`, or `zsh` from a fixed allowlist, with nushell
+trusted login shell (`bash`, `dash`, `sh`, or `zsh` from a fixed allowlist, with nushell
 blocked) to discover the user's normal toolchain `PATH`. That shell execution is
 only an environment-discovery step. The result is filtered before it reaches
 OpenCode: Open Cowork preserves toolchain basics such as `PATH`, locale,
@@ -345,9 +347,10 @@ The main renderer runs under a strict CSP:
 default-src 'self'
 script-src 'self'                                  (packaged)
 style-src 'self' 'unsafe-inline'
-img-src 'self' data: blob:
+img-src 'self' data: blob: open-cowork-asset:
 connect-src 'self'
 font-src 'self' data:
+frame-src 'self'                                   (permits the sandboxed chart iframe)
 object-src 'none'
 base-uri 'self'
 form-action 'self'
