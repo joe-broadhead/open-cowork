@@ -31,6 +31,17 @@ export function KnowledgeGraph({ graph, selectedPageId = null, onSelectPage }: K
 
   const nodeById = useMemo(() => new Map(layout.nodes.map((node) => [node.id, node])), [layout.nodes])
 
+  // Per-Space colour key, in node order so the legend hues match the graph.
+  const legendSpaces = useMemo(() => {
+    const seen = new Map<number, string>()
+    for (const node of layout.nodes) {
+      if (node.kind === 'space' && !seen.has(node.spaceIndex)) seen.set(node.spaceIndex, node.label)
+    }
+    return [...seen.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([spaceIndex, label]) => ({ spaceIndex, label, hue: hueForSpace(spaceIndex) }))
+  }, [layout.nodes])
+
   const neighbours = useMemo(() => {
     if (!hovered) return null
     const set = new Set<string>([hovered])
@@ -56,9 +67,20 @@ export function KnowledgeGraph({ graph, selectedPageId = null, onSelectPage }: K
   }
 
   return (
-    <div className="studio-graph">
-      <svg
-        className="studio-graph-svg"
+    <div className="studio-graph-panel">
+      {legendSpaces.length > 0 ? (
+        <div className="studio-graph-legend" aria-label="Spaces">
+          {legendSpaces.map((space) => (
+            <span key={space.spaceIndex} className="studio-graph-legend-item">
+              <span className="studio-graph-legend-dot" style={{ background: space.hue }} aria-hidden="true" />
+              {truncateLabel(space.label, 22)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="studio-graph">
+        <svg
+          className="studio-graph-svg"
         viewBox={`0 0 ${layout.width} ${layout.height}`}
         preserveAspectRatio="xMidYMid meet"
         role="img"
@@ -137,7 +159,8 @@ export function KnowledgeGraph({ graph, selectedPageId = null, onSelectPage }: K
             )
           })}
         </g>
-      </svg>
+        </svg>
+      </div>
     </div>
   )
 }

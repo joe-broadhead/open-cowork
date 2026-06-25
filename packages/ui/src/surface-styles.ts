@@ -210,6 +210,32 @@ export function artifactsSurfaceCss(): string {
 
 export function knowledgeGraphCss(): string {
   return `
+    .studio-graph-panel {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .studio-graph-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-4);
+    }
+    .studio-graph-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+    .studio-graph-legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex: none;
+    }
     .studio-graph {
       display: flex;
       flex: 1;
@@ -236,7 +262,7 @@ export function knowledgeGraphCss(): string {
       transition: opacity 200ms ease;
     }
     .studio-graph-node[data-dim="true"] {
-      opacity: 0.22;
+      opacity: 0.25;
     }
     .studio-graph-label {
       fill: var(--color-text-secondary);
