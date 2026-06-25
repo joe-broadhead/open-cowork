@@ -134,3 +134,45 @@ The single `mcps/knowledge` source is bundled verbatim for desktop **and** cloud
 8. **P2 store-parity + doc env tables + MCP docs**, then the P3 polish sweep.
 
 Each fix should land as its own gated commit (tsc, node + renderer tests, lint, knip, cloud:build, **plus `ops:validate` + `deploy:validate`** — the two gates this pass found red) with regression tests where verifiable — same discipline as passes 1–2.
+
+---
+
+## Resolution status (2026-06-25)
+
+Remediated as individually gated commits (tsc, node + package tests, lint, knip,
+cloud:build, **and now `ops:validate` + `deploy:validate`**), with regression
+tests wherever verifiable.
+
+**Fixed during this pass:**
+- The two CI release-gates (ops:validate / deploy:validate) that the pass-2
+  metric rename + a path edit had left red.
+- **P1-A** desktop cloud-login OIDC SSRF + `redirect:'manual'`; **P1-B**
+  `cloud_workspace_events` retention + index (+ channel-interaction pending
+  index); **P1-C** gateway delivery queue bound + shed (heap-cliff half);
+  **P1-D** runnable-estimate parity + reaper contract coverage; **P1-E** batched
+  cloud `sync()` writes; **P1-F** projection-lag gauge emission + catalog
+  reconcile; **P1-G** cloud knowledge-MCP https bridge.
+- P2s: AWS-region validation, branding ReDoS cap, checkpoint-restore symlink
+  guard, standalone-gateway scrubber consolidation, terminal-/workspace-event +
+  channel-interaction indexes, worker `restoredSessions` leak + per-org lane
+  fairness, shared `deriveToolStatus`, coordination-watch match LIMIT, charts
+  Vega field escaping, the cloud env-table / MCP / runbook / security-model doc
+  drift.
+- P3s: the remaining NUL byte (session-service), skill-bundle path traversal
+  guard, thread-index signature prune on bulk delete.
+
+**Deliberately deferred (documented, lower-value or needs a larger design):**
+- **P1-C duplicate-delivery half** — renewing a delivery's server-side claim
+  while it is in-flight past the 30s TTL needs a cloud-side claim-renew API; the
+  multi-chunk resume needs a per-chunk progress cursor.
+- **P1-D** — porting the full lease-loss/renewal + command-steal concurrency
+  proofs off the postgres-only `skip`, and the reaper `org_id`-resolution
+  divergence (audit-event-only, single-org configs unaffected).
+- **P2** — worker-minute reservation refund on mid-drain quota denial; auto-update
+  release-manifest authenticity (needs manifest signing or a pinned feed host);
+  desktop-pairing + cloud-login DNS-rebind connect-time IP pin (needs a pinned
+  dispatcher).
+- **P3** — thread-index granular query-cache invalidation (now low-impact after
+  the signature-skip), knowledge/coordination `chmod`-once, broker
+  `requestHeaders` allowlist, `command:run` allowlisting, worker-heartbeat
+  accumulation. Tracked for a follow-up sweep.
