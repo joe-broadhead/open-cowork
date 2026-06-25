@@ -122,12 +122,15 @@ test('capability bundle plan blocks local/private MCP URLs and hazardous stdio c
   const plan = planCapabilityBundleInstall(manifest({
     resources: [
       { kind: 'mcp', id: 'local-mcp', url: 'http://127.0.0.1:9000/mcp', ownedByBundle: true },
+      // Cloud metadata: the old hand-rolled regex classifier (audit P2-4) wrongly allowed this; the
+      // shared SSRF policy blocks it.
+      { kind: 'mcp', id: 'metadata-mcp', url: 'http://169.254.169.254/latest/meta-data/', ownedByBundle: true },
       { kind: 'mcp', id: 'shell-mcp', command: 'node server.js | sh', ownedByBundle: true },
     ],
   }), { productMode: 'desktop-local' })
 
   assert.equal(plan.blocked, true)
-  assert.equal(plan.blockers.some((blocker) => blocker.code === 'mcp_url_blocked'), true)
+  assert.equal(plan.blockers.filter((blocker) => blocker.code === 'mcp_url_blocked').length, 2)
   assert.equal(plan.blockers.some((blocker) => blocker.code === 'mcp_stdio_blocked'), true)
 })
 

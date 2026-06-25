@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProviderModelDescriptor } from '@open-cowork/shared'
+import { evaluateHttpMcpUrl } from './mcp-url-policy.js'
 import { getAppDataDir } from './config-loader-core.js'
 import { dedupByKey } from './inflight-dedup.js'
 
@@ -159,11 +160,15 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 
 function isAllowedCatalogUrl(url: string): boolean {
   try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:'
+    if (new URL(url).protocol !== 'https:') return false
   } catch {
     return false
   }
+  // Route the authenticated outbound catalog fetch through the shared SSRF policy (audit P2-5): a
+  // descriptor must not be able to aim the auth-bearing request at a loopback/private/cloud-metadata
+  // host. Uses the literal (non-DNS) check — catalog URLs come from trusted local config, so the
+  // value is blocking literal private/metadata targets, not resolve-time DNS-rebinding defense.
+  return evaluateHttpMcpUrl(url).ok
 }
 
 function responseHashMatches(text: string, expectedSha256?: string) {
@@ -205,7 +210,7 @@ async function fetchCatalog(
   catalog: ProviderDynamicCatalog,
 ): Promise<ProviderModelDescriptor[] | null> {
   if (!isAllowedCatalogUrl(catalog.url)) {
-    log('provider', `Catalog ${providerId} skipped: unsupported URL scheme`)
+    log('provider', `Catalog ${providerId} skipped: unsupported or private URL`)
     return null
   }
   try {

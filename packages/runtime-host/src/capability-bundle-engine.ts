@@ -1,4 +1,5 @@
 import { CAPABILITY_BUNDLE_FORMAT } from '@open-cowork/shared'
+import { evaluateHttpMcpUrl } from './mcp-url-policy.js'
 import type {
   CapabilityBundleCompatibilityTier,
   CapabilityBundleInstallPlan,
@@ -305,13 +306,10 @@ export function normalizeCapabilityBundleManifest(
 }
 
 function mcpUrlIsPrivateOrLocal(rawUrl: string) {
-  const match = /^(https?):\/\/(\[[^\]]+\]|[^/:?#]+)(?::\d+)?(?:[/?#]|$)/i.exec(rawUrl.trim())
-  if (!match) return true
-  const host = match[2]?.replace(/^\[|\]$/g, '').toLowerCase() || ''
-  if (host === 'localhost' || host === '0.0.0.0' || host === '::1' || host.endsWith('.local')) return true
-  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)) return true
-  const private172 = /^172\.(\d+)\./.exec(host)
-  return Boolean(private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31)
+  // Delegate to the shared SSRF policy (audit P2-4) instead of a hand-rolled regex that classified
+  // 169.254.169.254 (cloud metadata) and IPv6-mapped/NAT64 private addresses as public. Returns true
+  // when the URL is local/private/metadata/unsupported (i.e. should be blocked).
+  return !evaluateHttpMcpUrl(rawUrl).ok
 }
 
 function commandHasShellHazard(command: string) {
