@@ -848,6 +848,8 @@ Role-specific knobs:
 | `OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS` | `all-in-one` | Process queued commands inline for local/demo use. |
 | `OPEN_COWORK_CLOUD_WORKER_ID` | `worker`, `all-in-one` | Stable worker identity for leases and heartbeats. |
 | `OPEN_COWORK_CLOUD_WORKER_POLL_MS` | `worker`, `all-in-one` | Durable command polling interval. |
+| `OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY` | `worker`, `all-in-one` | How many distinct sessions one worker tick processes concurrently (default `4`, clamped `1`–`32`). Sessions are independent, so this stops one long-running command from head-of-line-blocking other tenants on the worker; set to `1` for the previous strictly-serial behaviour. Each concurrent session can run its own runtime, so size it against the worker's CPU/memory and the per-org worker entitlement. |
+| `OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK` | `worker`, `all-in-one` | How many commands a single session drains before yielding its lane back to the pool (default `50`, clamped `1`–`10000`). Bounds a session with a large backlog from monopolising a lane; the session is re-surveyed on the next pass while it still has pending commands. |
 | `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` | `worker`, `scheduler`, `all-in-one` | Grace window used during process shutdown to let an active worker/scheduler loop finish after a drain or termination signal. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_ID` | `scheduler`, `all-in-one` | Stable scheduler identity for heartbeats. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS` | `scheduler`, `all-in-one` | Workflow scheduler polling interval. |

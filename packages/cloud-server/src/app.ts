@@ -1350,6 +1350,10 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         },
         abuseConfig,
         observability,
+        {
+          sessionConcurrency: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY'), 4),
+          maxCommandsPerSessionPerTick: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK'), 50),
+        },
       )
     : null
   const retention: CloudRetentionOptions = {

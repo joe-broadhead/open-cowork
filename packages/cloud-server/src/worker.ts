@@ -23,10 +23,24 @@ export class CloudWorkerLeaseLostError extends Error {
   }
 }
 
+export type CloudWorkerOptions = {
+  // How many distinct sessions one worker tick processes concurrently. Sessions are
+  // independent (per-session lease, per-session workspace), so a slow command on one
+  // session no longer head-of-line-blocks every other tenant on the worker. Clamped
+  // to [1, 32]; 1 preserves the previous strictly-serial behaviour.
+  sessionConcurrency?: number
+  // How many commands a single session drains per tick before yielding its lane back
+  // to the pool. Bounds a session with a large backlog from monopolising a lane; the
+  // session is re-surveyed on the next pass while it still has pending commands.
+  maxCommandsPerSessionPerTick?: number
+}
+
 export class CloudWorker {
   private readonly claimBatchSize = 100
   private readonly expiredLeaseReapBatchSize = 100
   private readonly maxExpiredLeaseReapBatches = 10
+  private readonly sessionConcurrency: number
+  private readonly maxCommandsPerSessionPerTick: number
   private readonly leases = new Map<string, WorkerLeaseRecord>()
   private readonly restoredLeaseTokens = new Set<string>()
   private readonly store: ControlPlaneStore
@@ -45,6 +59,7 @@ export class CloudWorker {
     checkpointHooks: CloudWorkerCheckpointHooks = {},
     abuse: CloudAbuseConfig | null = null,
     observability: CloudObservabilityAdapter | null = null,
+    options: CloudWorkerOptions = {},
   ) {
     this.store = store
     this.service = service
@@ -53,6 +68,8 @@ export class CloudWorker {
     this.checkpointHooks = checkpointHooks
     this.abuse = abuse
     this.observability = observability
+    this.sessionConcurrency = clampInteger(options.sessionConcurrency, 4, 1, 32)
+    this.maxCommandsPerSessionPerTick = clampInteger(options.maxCommandsPerSessionPerTick, 50, 1, 10_000)
   }
 
   async processSessionCommands(tenantId: string, sessionId: string): Promise<number> {
@@ -155,6 +172,9 @@ export class CloudWorker {
       await this.checkpointHooks.saveAfterCommand?.(lease)
       this.leases.set(this.leaseKey(tenantId, sessionId), lease)
       processed += 1
+      // Yield the lane after a bounded run so one session's backlog cannot monopolise
+      // it; the session is re-surveyed next pass while it still has pending commands.
+      if (processed >= this.maxCommandsPerSessionPerTick) break
     }
     return processed
   }
@@ -201,10 +221,7 @@ export class CloudWorker {
         })
         break
       }
-      let processedThisBatch = 0
-      for (const session of runnable.sessions) {
-        processedThisBatch += await this.processSessionCommands(session.tenantId, session.sessionId)
-      }
+      const processedThisBatch = await this.processSessionsConcurrently(runnable.sessions)
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_runnable_sessions_claimed_total',
         value: processedThisBatch,
@@ -226,6 +243,43 @@ export class CloudWorker {
       status: 'ok',
     })
     return processed
+  }
+
+  // Process a claimed batch of independent sessions across a bounded pool of lanes so a
+  // slow command on one session does not head-of-line-block other tenants on this worker.
+  // With sessionConcurrency = 1 this is exactly the previous strictly-serial drain. On a
+  // session error, lanes stop pulling new sessions, in-flight sessions settle, and the
+  // first error is surfaced to the loop-failure path (so a bad session no longer silently
+  // aborts the others it had not yet reached).
+  private async processSessionsConcurrently(
+    sessions: Array<{ tenantId: string, sessionId: string }>,
+  ): Promise<number> {
+    if (sessions.length === 0) return 0
+    const laneCount = Math.min(this.sessionConcurrency, sessions.length)
+    // `cursor` is shared but only ever read-then-incremented synchronously (no await
+    // between), so lanes never claim the same index. Each lane accumulates its own count
+    // — a shared `processed += await …` would lose updates because the read happens
+    // before the await resolves.
+    let cursor = 0
+    let firstError: unknown = null
+    const runLane = async (): Promise<number> => {
+      let laneProcessed = 0
+      while (cursor < sessions.length && firstError === null) {
+        const session = sessions[cursor]
+        cursor += 1
+        if (!session) break
+        try {
+          laneProcessed += await this.processSessionCommands(session.tenantId, session.sessionId)
+        } catch (error) {
+          if (firstError === null) firstError = error
+          break
+        }
+      }
+      return laneProcessed
+    }
+    const laneTotals = await Promise.all(Array.from({ length: laneCount }, () => runLane()))
+    if (firstError !== null) throw firstError
+    return laneTotals.reduce((sum, count) => sum + count, 0)
   }
 
   async appendRuntimeEvent(tenantId: string, sessionId: string, event: CloudRuntimeEvent): Promise<boolean> {
@@ -436,4 +490,9 @@ export class CloudWorker {
       // Lease ownership is authoritative; telemetry failures must not change command execution.
     }
   }
+}
+
+function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return fallback
+  return Math.min(max, Math.max(min, value))
 }
