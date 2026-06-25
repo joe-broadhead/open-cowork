@@ -277,3 +277,19 @@ test('custom Vega-Lite specs get date-only temporal axis polish', async () => {
     assert.deepEqual(spec.encoding.x.axis.tickCount, { interval: 'day', step: 1 })
   })
 })
+
+test('waterfall_chart escapes field names so they cannot inject a Vega expression (P2)', async () => {
+  await withChartsClient(async (client) => {
+    const malicious = 'value"] ? 1 : (0'
+    const rows = sampleRows.map((row) => ({ ...row, [malicious]: row.value }))
+    const parsed = parseTextResult(await client.callTool({
+      name: 'waterfall_chart',
+      arguments: { data: rows, category: 'category', value: malicious, title: 'Escape Contract' },
+    }))
+    const spec = getVegaLiteSpec(parsed)
+    const calc = (spec.transform as Array<{ calculate?: string }>).map((entry) => entry.calculate || '').join('\n')
+    // The double-quote in the field name is escaped (\"), so it stays inside datum["…"] and the
+    // injected `? 1 : (0` cannot break out into a top-level expression.
+    assert.ok(calc.includes('value\\"'), `expected escaped field name in: ${calc}`)
+  })
+})

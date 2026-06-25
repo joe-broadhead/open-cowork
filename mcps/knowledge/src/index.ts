@@ -53,11 +53,14 @@ function bridgeUrl() {
   } catch {
     throw new Error('OPEN_COWORK_KNOWLEDGE_TOOL_URL must be a valid URL.')
   }
-  if (url.protocol !== 'http:') {
-    throw new Error('OPEN_COWORK_KNOWLEDGE_TOOL_URL must use http:// for the local bridge.')
+  // The desktop runtime points this at a loopback http bridge; the cloud runtime points it at
+  // its own https public URL (.../api/knowledge/agent). Both are runtime-set, never agent-set.
+  // Allow https to any host (cloud) but keep http restricted to loopback (the local bridge).
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('OPEN_COWORK_KNOWLEDGE_TOOL_URL must use http:// (local bridge) or https:// (cloud).')
   }
-  if (!LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error('OPEN_COWORK_KNOWLEDGE_TOOL_URL must point at the local knowledge bridge.')
+  if (url.protocol === 'http:' && !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new Error('OPEN_COWORK_KNOWLEDGE_TOOL_URL with http:// must point at the local knowledge bridge (loopback).')
   }
   if (url.username || url.password) {
     throw new Error('OPEN_COWORK_KNOWLEDGE_TOOL_URL must not include URL credentials.')
