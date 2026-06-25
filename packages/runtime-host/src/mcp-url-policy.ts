@@ -86,6 +86,28 @@ function ipv4MappedAddress(hostname: string) {
   return match?.[1] || null
 }
 
+// NAT64 (64:ff9b::/96) embeds an IPv4 address that a NAT64 gateway translates to (audit P3-4).
+// `[64:ff9b::127.0.0.1]` would otherwise classify as a plain (non-private) IPv6 and bypass the
+// SSRF block lists, so extract the embedded IPv4 and re-check it. Mirrors webhook-url-policy.
+function ipv4FromNat64(hostname: string): string | null {
+  const prefix = '64:ff9b::'
+  if (!hostname.toLowerCase().startsWith(prefix)) return null
+  const suffix = hostname.slice(prefix.length)
+  if (suffix.includes('.')) return suffix // dotted form, e.g. 64:ff9b::169.254.169.254
+  const parts = suffix.split(':')
+  if (parts.length !== 2) return null
+  const high = parseIpv6MappedPart(parts[0])
+  const low = parseIpv6MappedPart(parts[1])
+  if (high === null || low === null) return null
+  return [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join('.')
+}
+
+function parseIpv6MappedPart(value: string | undefined): number | null {
+  if (!value || !/^[0-9a-f]{1,4}$/iu.test(value)) return null
+  const parsed = Number.parseInt(value, 16)
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 0xffff ? parsed : null
+}
+
 function blockListAddressType(address: string) {
   const type = isIP(address)
   if (type === 4) return 'ipv4'
@@ -102,7 +124,7 @@ function classifyBlockedNetwork(hostname: string): BlockedNetwork | null {
     return { kind: 'loopback', address: hostname }
   }
 
-  const mapped = ipv4MappedAddress(hostname)
+  const mapped = ipv4MappedAddress(hostname) ?? ipv4FromNat64(hostname)
   const address = mapped || hostname
   const type = blockListAddressType(address)
   if (!type) return null

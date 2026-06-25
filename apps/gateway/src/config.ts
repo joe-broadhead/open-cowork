@@ -328,12 +328,15 @@ function deepMergeGateway(base: unknown, override: unknown): unknown {
     return Object.fromEntries(Object.entries({
       ...current,
       ...(override as Record<string, unknown>),
-    }).map(([key, value]) => [
-      key,
-      Object.prototype.hasOwnProperty.call(override as Record<string, unknown>, key)
-        ? deepMergeGateway(current[key], value)
-        : value,
-    ]))
+    })
+      // Prototype-pollution insurance (audit P3-6): never merge a key onto the prototype chain.
+      .filter(([key]) => key !== '__proto__' && key !== 'constructor' && key !== 'prototype')
+      .map(([key, value]) => [
+        key,
+        Object.prototype.hasOwnProperty.call(override as Record<string, unknown>, key)
+          ? deepMergeGateway(current[key], value)
+          : value,
+      ]))
   }
   return override === undefined ? base : override
 }

@@ -157,3 +157,17 @@ test('evaluateHttpMcpUrlResolved still fails closed on DNS failures with private
   assert.equal(empty.ok, false)
   if (empty.ok === false) assert.match(empty.reason, /Could not resolve/i)
 })
+
+test('evaluateHttpMcpUrl extracts and re-checks NAT64-embedded IPv4 (P3-4)', () => {
+  // NAT64 (64:ff9b::/96) addresses with a private/metadata embedded IPv4 must be blocked, not allowed.
+  for (const url of [
+    'http://[64:ff9b::127.0.0.1]/',
+    'http://[64:ff9b::169.254.169.254]/latest/meta-data/',
+    'http://[64:ff9b::10.0.0.5]/',
+  ]) {
+    const result = evaluateHttpMcpUrl(url)
+    assert.equal(result.ok, false, `expected reject for ${url}`)
+  }
+  // A NAT64 address embedding a PUBLIC IPv4 stays allowed (the embedded address is what matters).
+  assert.equal(evaluateHttpMcpUrl('http://[64:ff9b::8.8.8.8]/mcp').ok, true)
+})

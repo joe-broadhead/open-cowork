@@ -6,6 +6,10 @@ import type { OpenCoworkConfig } from '@open-cowork/shared'
 export function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {
   const next: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(override || {})) {
+    // Cheap prototype-pollution insurance (audit P3-6): never let an override key reach the prototype
+    // chain. Operator-config-only today and the own-slot assignment can't pollute Object.prototype,
+    // but skipping these keys keeps it true regardless of how deepMerge gets reused.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
     if (Array.isArray(value)) {
       next[key] = value
       continue
