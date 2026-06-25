@@ -11,6 +11,7 @@
 
 import tsParser from '@typescript-eslint/parser'
 import jsxA11yPlugin from 'eslint-plugin-jsx-a11y'
+import reactHooksPlugin from 'eslint-plugin-react-hooks'
 
 export default [
   {
@@ -24,6 +25,11 @@ export default [
   },
   {
     files: ['apps/desktop/src/renderer/**/*.tsx'],
+    // The renderer carries `eslint-disable react-hooks/exhaustive-deps` directives for the MAIN
+    // lint config; here that rule is off, so don't flag those directives as unused.
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -33,8 +39,12 @@ export default [
     },
     plugins: {
       'jsx-a11y': jsxA11yPlugin,
+      // Registered (rule off) only so the inline `eslint-disable react-hooks/exhaustive-deps`
+      // directives in the chart components resolve — hooks are actually linted by the main config.
+      'react-hooks': reactHooksPlugin,
     },
     rules: {
+      'react-hooks/exhaustive-deps': 'off',
       'jsx-a11y/alt-text': 'warn',
       'jsx-a11y/anchor-has-content': 'warn',
       'jsx-a11y/anchor-is-valid': 'warn',
