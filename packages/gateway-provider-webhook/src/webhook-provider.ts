@@ -388,7 +388,10 @@ export class WebhookProvider implements ChannelProvider {
             host: this.deliveryUrl.host
           },
           body: signed.body,
-          signal: controller.signal
+          signal: controller.signal,
+          // Never auto-follow a redirect: it would re-resolve to an unpinned (possibly
+          // private) host and defeat the SSRF address pin. A 3xx surfaces as !ok below.
+          redirect: "manual"
         });
         if (!attempt.ok) {
           throw WebhookDeliveryError.fromResponse(attempt);
