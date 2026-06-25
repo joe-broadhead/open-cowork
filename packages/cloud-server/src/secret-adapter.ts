@@ -26,6 +26,15 @@ type SecretEnvelope = {
   iv: string
   tag: string
   ciphertext: string
+  // Key id of the envelope key (audit P2-1). New envelopes always carry it so reveal can pick the
+  // right key during rotation; envelopes written before kid support carry none and are trial-decrypted.
+  kid?: string
+}
+
+// Stable, non-secret key id derived from the key material. Domain-separated from deriveKey so the kid
+// never reveals the encryption key, and short enough to keep envelopes compact.
+function keyIdFor(keyMaterial: string | Buffer): string {
+  return createHash('sha256').update('open-cowork-secret-kid\0').update(keyMaterial).digest('hex').slice(0, 16)
 }
 
 export type CloudSecretStoreKind =
@@ -406,13 +415,34 @@ export async function resolveCloudSecretRef(
   throw new Error(`Unsupported cloud secret reference ${trimmed}.`)
 }
 
-export function createEnvelopeSecretAdapter(keyMaterial: string | Buffer): SecretAdapter {
-  const key = deriveKey(keyMaterial)
+// `previousKeyMaterials` are retired keys kept in the ring for rotation (audit P2-1): protect always
+// writes with the current key (and stamps its kid), while reveal selects the matching key by kid for
+// keyed envelopes and trial-decrypts legacy (no-kid) envelopes against the whole ring.
+export function createEnvelopeSecretAdapter(
+  keyMaterial: string | Buffer,
+  previousKeyMaterials: Array<string | Buffer> = [],
+): SecretAdapter {
+  const currentKey = deriveKey(keyMaterial)
+  const currentKid = keyIdFor(keyMaterial)
+  // kid → derived key. Insertion order is current-first so legacy trial-decrypt tries the likely key first.
+  const keyring = new Map<string, Buffer>([[currentKid, currentKey]])
+  for (const previous of previousKeyMaterials) {
+    keyring.set(keyIdFor(previous), deriveKey(previous))
+  }
+  const decryptWith = (key: Buffer, envelope: SecretEnvelope, context: string | undefined) => {
+    const decipher = createDecipheriv('aes-256-gcm', key, base64urlDecode(envelope.iv))
+    setAad(decipher, context)
+    decipher.setAuthTag(base64urlDecode(envelope.tag))
+    return Buffer.concat([
+      decipher.update(base64urlDecode(envelope.ciphertext)),
+      decipher.final(),
+    ]).toString('utf8')
+  }
   return {
     mode: 'envelope-v1',
     protect(plaintext, context) {
       const iv = randomBytes(12)
-      const cipher = createCipheriv('aes-256-gcm', key, iv)
+      const cipher = createCipheriv('aes-256-gcm', currentKey, iv)
       setAad(cipher, context)
       const ciphertext = Buffer.concat([
         cipher.update(plaintext, 'utf8'),
@@ -420,6 +450,7 @@ export function createEnvelopeSecretAdapter(keyMaterial: string | Buffer): Secre
       ])
       const envelope: SecretEnvelope = {
         alg: 'A256GCM',
+        kid: currentKid,
         iv: iv.toString('base64url'),
         tag: cipher.getAuthTag().toString('base64url'),
         ciphertext: ciphertext.toString('base64url'),
@@ -433,13 +464,23 @@ export function createEnvelopeSecretAdapter(keyMaterial: string | Buffer): Secre
       const raw = base64urlDecode(stored.slice(CLOUD_SECRET_ENVELOPE_PREFIX.length)).toString('utf8')
       const envelope = JSON.parse(raw) as SecretEnvelope
       if (envelope.alg !== 'A256GCM') throw new Error(`Unsupported cloud secret algorithm ${envelope.alg}.`)
-      const decipher = createDecipheriv('aes-256-gcm', key, base64urlDecode(envelope.iv))
-      setAad(decipher, context)
-      decipher.setAuthTag(base64urlDecode(envelope.tag))
-      return Buffer.concat([
-        decipher.update(base64urlDecode(envelope.ciphertext)),
-        decipher.final(),
-      ]).toString('utf8')
+      if (envelope.kid !== undefined) {
+        const key = keyring.get(envelope.kid)
+        if (!key) throw new Error(`No cloud secret key available for kid ${envelope.kid}; supply the matching previous key to rotate.`)
+        return decryptWith(key, envelope, context)
+      }
+      // Legacy envelope (written before kid support): it was sealed with whichever key was current at
+      // write time, possibly now a previous key. GCM's auth tag fails cleanly on the wrong key, so try
+      // each ring key (current first) and return the first that decrypts.
+      let lastError: unknown = null
+      for (const key of keyring.values()) {
+        try {
+          return decryptWith(key, envelope, context)
+        } catch (error) {
+          lastError = error
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error('Could not decrypt cloud secret envelope with any available key.')
     },
   }
 }
@@ -481,6 +522,22 @@ export function createEnvSecretAdapter(
     : createUnavailableSecretAdapter(`Secret storage is not configured; set ${envName}.`)
 }
 
+// Retired keys kept in the ring so already-stored ciphertexts stay decryptable through a rotation
+// (audit P2-1): OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS is a comma-separated list of raw key materials,
+// OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF a comma-separated list of secret refs. Not strength-checked
+// — the whole point is to rotate AWAY from them. Returns [] when none are configured.
+async function resolvePreviousSecretKeys(
+  env: Record<string, string | undefined>,
+  options: CreateCloudSecretAdapterOptions,
+): Promise<string[]> {
+  const splitList = (value: string | null | undefined) => (value || '').split(',').map((entry) => entry.trim()).filter(Boolean)
+  const keys = splitList(envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS'))
+  for (const ref of splitList(envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF'))) {
+    keys.push(await resolveCloudSecretRef(ref, { ...options, env }))
+  }
+  return keys
+}
+
 export async function createCloudSecretAdapterFromEnv(
   env: Record<string, string | undefined> = process.env,
   options: CreateCloudSecretAdapterOptions = {},
@@ -490,7 +547,7 @@ export async function createCloudSecretAdapterFromEnv(
     if (options.requireStrongKeyMaterial) {
       assertCloudSecretKeyMaterialStrong(keyMaterial, 'OPEN_COWORK_CLOUD_SECRET_KEY')
     }
-    return createEnvelopeSecretAdapter(keyMaterial)
+    return createEnvelopeSecretAdapter(keyMaterial, await resolvePreviousSecretKeys(env, options))
   }
 
   const ref = envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF')
@@ -504,5 +561,5 @@ export async function createCloudSecretAdapterFromEnv(
   if (options.requireStrongKeyMaterial) {
     assertCloudSecretKeyMaterialStrong(resolved, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF')
   }
-  return createEnvelopeSecretAdapter(resolved)
+  return createEnvelopeSecretAdapter(resolved, await resolvePreviousSecretKeys(env, options))
 }

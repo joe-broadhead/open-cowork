@@ -680,6 +680,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET` | Bucket/container name for artifacts and snapshots. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
+| `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS` / `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF` | Comma-separated retired envelope keys (raw values or secret-manager refs) kept in the decrypt keyring for rotation. New writes always use the current key and stamp its key id; already-stored ciphertexts decrypt with the matching retired key. Re-encrypt and drop the old key once migration completes. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies; falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
