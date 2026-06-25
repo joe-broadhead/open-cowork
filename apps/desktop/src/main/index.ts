@@ -524,6 +524,13 @@ void app.whenReady().then(async () => {
   app.on('activate', () => {
     showOrCreateMainWindow('activate')
   })
+}).catch((err: unknown) => {
+  // The whole startup body ran unguarded (audit P2-14): a throw here became an unhandled rejection
+  // that escalated a recoverable hiccup to a full process exit. Log it so the app can stay up and
+  // surface the failure through the normal runtime-initialization-error path instead.
+  const message = err instanceof Error ? err.message : String(err)
+  log('error', `App startup failed: ${message}`)
+  resolveRuntimeInitializationError(message)
 })
 
 app.on('second-instance', () => {
