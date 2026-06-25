@@ -161,6 +161,27 @@ tests wherever verifiable.
 - P3s: the remaining NUL byte (session-service), skill-bundle path traversal
   guard, thread-index signature prune on bulk delete.
 
+**Final release-blocker sweep (post-autoreview, same day):**
+- **`pnpm audit --audit-level high`** (hard CI gate) — 6 high advisories in
+  desktop build/release tooling (form-data, vite, undici ×2 paths) + a residual
+  moderate (tar) closed via scoped pnpm `overrides` kept within-major; prod and
+  full audit both clean.
+- **THIRD_PARTY_NOTICES.md + bundled THIRD_PARTY_LICENSES/** regenerated against
+  the re-resolved tree; re-resolution also applied the pre-existing
+  dompurify/hono/js-yaml overrides the stale lockfile predated. The js-yaml
+  override (`>=4.2.0`, authored before 5.x existed) was capped to `<5` so it
+  patches in-major instead of pulling a surprise major into the bundled renderer.
+- **AWS IMDSv6** (`fd00:ec2::254`) hard-denied in the MCP SSRF policy at parity
+  with the webhook policy (+ test); **knowledge MCP link kinds** corrected to the
+  shared `thread/task/artifact` contract (distinct from the P1-G URL-scheme fix);
+  **second NUL byte** (worker.ts) swept — repo is now NUL-clean.
+- **a11y lint config** registers `react-hooks` (rule off) so the renderer's
+  inline disable directives resolve under `lint:a11y --max-warnings=0`; the
+  long-standing eslint-plugin-jsx-a11y→eslint@10 peer mismatch declared accepted
+  via `peerDependencyRules` so re-resolution is deterministic.
+- **Docs freshness:** the whole `/design/**` subtree declared `not_in_nav`, so
+  `mkdocs build --strict` no longer emits a growing orphaned-doc list.
+
 **Deliberately deferred (documented, lower-value or needs a larger design):**
 - **P1-C duplicate-delivery half** — renewing a delivery's server-side claim
   while it is in-flight past the 30s TTL needs a cloud-side claim-renew API; the
