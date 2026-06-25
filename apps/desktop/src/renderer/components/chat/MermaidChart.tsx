@@ -43,6 +43,10 @@ function sanitizeMermaidSvg(svg: string) {
   if (!DOMPurify.isSupported) return ''
   return DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
+    // Defense-in-depth (audit P2-3): the SVG profile permits <foreignObject>, which can embed
+    // arbitrary HTML. Mermaid runs with securityLevel:'strict' + htmlLabels:false so it never emits
+    // one, but forbid it outright so the downstream label-styling code can't trust attacker HTML.
+    FORBID_TAGS: ['foreignObject'],
   })
 }
 

@@ -32,6 +32,20 @@ describe('MarkdownContent', () => {
     expect(button.getAttribute('aria-label')).toBe('Copied')
   })
 
+  it('forces rel=noopener on links and strips dangerous href protocols (P2-2)', async () => {
+    const { container } = render(
+      <MarkdownContent text={'[ok](https://example.com) and [bad](javascript:alert(1))'} />,
+    )
+
+    await waitFor(() => expect(container.querySelector('a')).not.toBeNull())
+    // Every rendered anchor carries rel=noopener noreferrer.
+    const anchors = Array.from(container.querySelectorAll('a'))
+    expect(anchors.length).toBeGreaterThan(0)
+    expect(anchors.every((a) => a.getAttribute('rel') === 'noopener noreferrer')).toBe(true)
+    // No anchor retains a javascript: href (blocked by the explicit protocol allowlist).
+    expect(anchors.some((a) => (a.getAttribute('href') || '').toLowerCase().startsWith('javascript:'))).toBe(false)
+  })
+
   it('falls back to the browser clipboard when the app clipboard bridge returns false', async () => {
     vi.mocked(window.coworkApi.clipboard.writeText).mockResolvedValueOnce(false)
     const browserWrite = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValueOnce(undefined)
