@@ -1,9 +1,50 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { FileCloudWorkspaceCredentialStore } from '../apps/desktop/src/main/cloud-workspace-credentials.ts'
+
+test('credential store preserves the file on a transient decrypt failure, recovers when unlocked (P2-12)', () => {
+  const path = credentialPath()
+  let failDecrypt = false
+  const storage = {
+    mode: 'encrypted' as const,
+    encryptString: (plaintext: string) => Buffer.from(`encrypted:${Buffer.from(plaintext, 'utf-8').toString('base64')}`, 'utf-8'),
+    decryptString: (encrypted: Buffer) => {
+      if (failDecrypt) throw new Error('safeStorage is locked')
+      return Buffer.from(encrypted.toString('utf-8').slice('encrypted:'.length), 'base64').toString('utf-8')
+    },
+  }
+  new FileCloudWorkspaceCredentialStore({ path, secretStorage: storage }).save(
+    { workspaceId: 'cloud:test', accessToken: 'access-token-secret', expiresAt: '2026-05-27T12:00:00.000Z' },
+    new Date('2026-05-27T10:00:00.000Z'),
+  )
+
+  // Keychain locked: a fresh read returns nothing but must NOT delete or quarantine — it's transient.
+  failDecrypt = true
+  assert.equal(new FileCloudWorkspaceCredentialStore({ path, secretStorage: storage }).get('cloud:test'), null)
+  assert.equal(existsSync(path), true)
+  assert.equal(existsSync(`${path}.corrupt`), false)
+
+  // Unlocked again: the data was never lost.
+  failDecrypt = false
+  assert.equal(new FileCloudWorkspaceCredentialStore({ path, secretStorage: storage }).get('cloud:test')?.accessToken, 'access-token-secret')
+})
+
+test('credential store quarantines (does not delete) a decryptable-but-corrupt file (P2-12)', () => {
+  const path = credentialPath()
+  const storage = {
+    mode: 'encrypted' as const,
+    encryptString: (plaintext: string) => Buffer.from(`encrypted:${Buffer.from(plaintext, 'utf-8').toString('base64')}`, 'utf-8'),
+    decryptString: (encrypted: Buffer) => Buffer.from(encrypted.toString('utf-8').slice('encrypted:'.length), 'base64').toString('utf-8'),
+  }
+  // Decryptable bytes whose plaintext is not valid JSON → genuinely corrupt.
+  writeFileSync(path, `encrypted:${Buffer.from('this is not json', 'utf-8').toString('base64')}`)
+  assert.deepEqual(new FileCloudWorkspaceCredentialStore({ path, secretStorage: storage }).listMetadata(), [])
+  assert.equal(existsSync(path), false)
+  assert.equal(existsSync(`${path}.corrupt`), true)
+})
 
 function credentialPath() {
   return join(mkdtempSync(join(tmpdir(), 'open-cowork-cloud-credentials-')), 'cloud-workspace-credentials.json')

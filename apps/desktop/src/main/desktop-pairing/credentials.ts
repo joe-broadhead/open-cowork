@@ -1,7 +1,7 @@
 import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
-import { writeFileAtomic } from '@open-cowork/shared/node'
+import { quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
 import electron from 'electron'
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DesktopPairingCredentialMetadata } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
@@ -166,23 +166,35 @@ export class FileDesktopPairingCredentialStore implements DesktopPairingCredenti
     if (mode === 'unavailable') return []
     const mtimeMs = this.currentMtimeMs()
     if (this.cache && mtimeMs !== null && this.cache.mtimeMs === mtimeMs) return this.cache.records
+    let raw: Buffer
     try {
-      const raw = readFileSync(this.path)
-      const json = mode === 'encrypted'
-        ? this.storage().decryptString(raw)
-        : raw.toString('utf-8')
-      const parsed = JSON.parse(json) as unknown
-      if (!Array.isArray(parsed)) return []
-      const records = parsed.map(normalizeRecord).filter((record): record is DesktopPairingCredentialRecord => Boolean(record))
-      if (mtimeMs !== null) this.cache = { mtimeMs, records }
-      return records
+      raw = readFileSync(this.path)
     } catch {
       this.cache = null
-      if (mode === 'encrypted') {
-        try { rmSync(this.path, { force: true }) } catch { /* corrupted credential cleanup is best effort */ }
-      }
       return []
     }
+    let json: string
+    try {
+      json = mode === 'encrypted' ? this.storage().decryptString(raw) : raw.toString('utf-8')
+    } catch {
+      // Transient decrypt failure (keychain locked / safeStorage unavailable): the ciphertext is
+      // intact (audit P2-12) — do NOT delete. Return empty so a later read retries once unlocked.
+      this.cache = null
+      return []
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json) as unknown
+    } catch {
+      // Decrypted but not valid JSON → genuinely corrupt. Quarantine for diagnosis, never destroy.
+      this.cache = null
+      if (mode === 'encrypted') quarantineCorruptFile(this.path)
+      return []
+    }
+    if (!Array.isArray(parsed)) return []
+    const records = parsed.map(normalizeRecord).filter((record): record is DesktopPairingCredentialRecord => Boolean(record))
+    if (mtimeMs !== null) this.cache = { mtimeMs, records }
+    return records
   }
 
   private writeRecords(records: DesktopPairingCredentialRecord[]) {

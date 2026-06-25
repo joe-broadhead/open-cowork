@@ -1,6 +1,6 @@
 import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
-import { getAppPathHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { getAppPathHost, getSafeStorageHost, quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type {
   CloudProjectSourceSummary,
@@ -553,20 +553,31 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
     if (this.mode === 'disabled' || !existsSync(this.path)) return []
     const storageMode = this.storageMode()
     if (storageMode === 'unavailable' && this.mode === 'full') return []
+    const encrypted = this.mode === 'full' && storageMode === 'encrypted'
+    let raw: Buffer
     try {
-      const raw = readFileSync(this.path)
-      const json = this.mode === 'full' && storageMode === 'encrypted'
-        ? this.storage().decryptString(raw)
-        : raw.toString('utf-8')
-      const parsed = JSON.parse(json) as unknown
-      if (!Array.isArray(parsed)) return []
-      return parsed.map(normalizeRecord).filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
+      raw = readFileSync(this.path)
     } catch {
-      if (this.mode === 'full' && storageMode === 'encrypted') {
-        try { rmSync(this.path, { force: true }) } catch { /* ignore corrupted cache cleanup */ }
-      }
       return []
     }
+    let json: string
+    try {
+      json = encrypted ? this.storage().decryptString(raw) : raw.toString('utf-8')
+    } catch {
+      // Transient decrypt failure (keychain locked): the encrypted transcript cache is intact
+      // (audit P2-12) — do NOT delete, just skip it for this read so it isn't lost on a hiccup.
+      return []
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json) as unknown
+    } catch {
+      // Decrypted but not valid JSON → genuinely corrupt. Quarantine for diagnosis, never destroy.
+      if (encrypted) quarantineCorruptFile(this.path)
+      return []
+    }
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeRecord).filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
   }
 
   private writeRecord(records: CloudWorkspaceCacheRecord[], nextRecord: CloudWorkspaceCacheRecord) {
