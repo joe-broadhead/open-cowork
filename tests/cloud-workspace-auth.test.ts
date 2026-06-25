@@ -18,6 +18,30 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   }
 }
 
+// Stub DNS so the OIDC SSRF validation (P1-A) is deterministic against reserved `.test`
+// hostnames; maps a hostname to the address the policy checks against the blocklists.
+function resolverFor(map: Record<string, string>) {
+  return async (hostname: string) => {
+    const address = map[hostname]
+    if (!address) throw new Error(`no DNS stub for ${hostname}`)
+    return [{ address, family: address.includes(':') ? 6 : 4 }]
+  }
+}
+
+const PUBLIC_RESOLVER = resolverFor({ 'issuer.example.test': '93.184.216.34' })
+
+function connectionRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'cloud:test',
+    baseUrl: 'https://cloud.example.test',
+    label: 'Cloud',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    lastSyncedAt: null,
+    ...overrides,
+  } as never
+}
+
 test('cloud workspace desktop authenticator performs OIDC PKCE loopback login', async () => {
   const calls: string[] = []
   let tokenBody: URLSearchParams | null = null
@@ -78,6 +102,7 @@ test('cloud workspace desktop authenticator performs OIDC PKCE loopback login', 
     },
     callbackTimeoutMs: 2000,
     brandName: 'Acme <Cowork>',
+    dnsResolver: PUBLIC_RESOLVER,
   })
 
   const result = await authenticator.login({
@@ -132,6 +157,7 @@ test('cloud workspace desktop authenticator rejects invalid callback state', asy
       await fetch(`${redirectUri}?code=code-1&state=wrong-state`)
     },
     callbackTimeoutMs: 2000,
+    dnsResolver: PUBLIC_RESOLVER,
   })
 
   await assert.rejects(
@@ -182,7 +208,7 @@ test('cloud workspace desktop authenticator refreshes OIDC access tokens', async
     }
     throw new Error(`Unexpected URL ${url}`)
   }
-  const authenticator = new CloudWorkspaceDesktopAuthenticator({ fetch: fetcher })
+  const authenticator = new CloudWorkspaceDesktopAuthenticator({ fetch: fetcher, dnsResolver: PUBLIC_RESOLVER })
 
   const result = await authenticator.refresh({
     id: 'cloud:test',
@@ -198,4 +224,59 @@ test('cloud workspace desktop authenticator refreshes OIDC access tokens', async
   assert.equal(tokenBody?.get('grant_type'), 'refresh_token')
   assert.equal(tokenBody?.get('refresh_token'), 'refresh-token-1')
   assert.equal(tokenBody?.get('client_id'), 'open-cowork-desktop')
+})
+
+test('cloud-login rejects an OIDC issuer that resolves to a private address (SSRF) — P1-A', async () => {
+  const auth = new CloudWorkspaceDesktopAuthenticator({
+    fetch: async (url) => jsonResponse(url.includes('/auth/desktop/config')
+      ? { mode: 'oidc', issuerUrl: 'https://evil.example.test', clientId: 'c' }
+      : { error: 'unexpected' }),
+    dnsResolver: resolverFor({ 'evil.example.test': '10.0.0.5' }),
+  })
+  await assert.rejects(() => auth.refresh(connectionRecord(), 'rt'), /OIDC issuer endpoint is not allowed/)
+})
+
+test('cloud-login rejects a literal cloud-metadata token endpoint (SSRF) — P1-A', async () => {
+  const auth = new CloudWorkspaceDesktopAuthenticator({
+    fetch: async (url) => jsonResponse(
+      url.includes('/auth/desktop/config') ? { mode: 'oidc', issuerUrl: 'https://issuer.example.test', clientId: 'c' }
+      : url.includes('/.well-known/openid-configuration') ? { token_endpoint: 'http://169.254.169.254/token' }
+      : { error: 'unexpected' }),
+    dnsResolver: PUBLIC_RESOLVER,
+  })
+  await assert.rejects(() => auth.refresh(connectionRecord(), 'rt'), /OIDC token endpoint is not allowed/)
+})
+
+test('cloud-login pins redirect:manual on every outbound fetch (credential-redirect SSRF) — P1-A', async () => {
+  const redirects: Array<string | undefined> = []
+  const auth = new CloudWorkspaceDesktopAuthenticator({
+    fetch: async (url, init) => {
+      redirects.push(init?.redirect)
+      return jsonResponse(
+        url.includes('/auth/desktop/config') ? { mode: 'oidc', issuerUrl: 'https://issuer.example.test', clientId: 'c' }
+        : url.includes('/.well-known/openid-configuration') ? { token_endpoint: 'https://issuer.example.test/token' }
+        : url.includes('/token') ? { access_token: 'at', refresh_token: 'rt2', expires_in: 3600 }
+        : url.includes('/auth/me') ? { principal: { tenantId: 't1', userId: 'u1' } }
+        : { error: 'unexpected' })
+    },
+    dnsResolver: PUBLIC_RESOLVER,
+  })
+  const result = await auth.refresh(connectionRecord(), 'rt')
+  assert.equal(result.accessToken, 'at')
+  assert.ok(redirects.length >= 3)
+  for (const redirect of redirects) assert.equal(redirect, 'manual')
+})
+
+test('cloud-login allows loopback endpoints only when the base URL is loopback (local dev) — P1-A', async () => {
+  const auth = new CloudWorkspaceDesktopAuthenticator({
+    fetch: async (url) => jsonResponse(
+      url.includes('/auth/desktop/config') ? { mode: 'oidc', issuerUrl: 'http://localhost:8787', clientId: 'c' }
+      : url.includes('/.well-known/openid-configuration') ? { token_endpoint: 'http://localhost:8787/token' }
+      : url.includes('/token') ? { access_token: 'at', refresh_token: 'rt2', expires_in: 3600 }
+      : url.includes('/auth/me') ? { principal: { tenantId: 't1', userId: 'u1' } }
+      : { error: 'unexpected' }),
+    dnsResolver: resolverFor({ localhost: '127.0.0.1' }),
+  })
+  const result = await auth.refresh(connectionRecord({ baseUrl: 'http://localhost:8787' }), 'rt')
+  assert.equal(result.accessToken, 'at')
 })
