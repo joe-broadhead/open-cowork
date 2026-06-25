@@ -28,9 +28,12 @@ services:
       OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS: ${OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS:-31536000000}
       OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES: ${OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES:-desktop,gateway,admin,operator}
       OPEN_COWORK_CLOUD_PORT: 8787
-      OPEN_COWORK_CLOUD_SECRET_KEY: change-me-for-local-dev
-      OPEN_COWORK_CLOUD_COOKIE_SECRET: change-me-for-local-cookie-secret
-      OPEN_COWORK_CLOUD_INTERNAL_TOKEN: change-me-for-local-internal-token
+      # Demo defaults for zero-config local use, but overridable from the environment so the same
+      # file can take real secrets without editing (audit P2-17). The cookie secret is DISTINCT from
+      # the envelope key — do not reuse one key for both. A real deploy must export all three.
+      OPEN_COWORK_CLOUD_SECRET_KEY: ${OPEN_COWORK_CLOUD_SECRET_KEY:-change-me-for-local-dev}
+      OPEN_COWORK_CLOUD_COOKIE_SECRET: ${OPEN_COWORK_CLOUD_COOKIE_SECRET:-change-me-for-local-cookie-secret}
+      OPEN_COWORK_CLOUD_INTERNAL_TOKEN: ${OPEN_COWORK_CLOUD_INTERNAL_TOKEN:-change-me-for-local-internal-token}
       OPEN_COWORK_CLOUD_COOKIE_SECURE: "false"
       OPEN_COWORK_CLOUD_PUBLIC_URL: http://localhost:8787
       OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
