@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `0da97ad3b50d874e9ed9fda1464bff96c208c524bbc233878ac3849707a4718a`
-- Production package entries: 507
-- Bundled license directories: 463 (44 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `888cd2a85cbdfa2380ffef8ce74a39d088e35beeb8b20d58d29c01f65864c2fd`
+- Production package entries: 511
+- Bundled license directories: 463 (48 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -55,6 +55,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
 | @open-cowork/cloud-client | link:../../packages/cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/cloud-client | link:../cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../../packages/gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-cli | link:../../packages/gateway-provider-cli | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
@@ -67,9 +68,12 @@ Each package remains licensed under its own license terms. The table below is pr
 | @open-cowork/gateway-provider-webhook | link:../gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-whatsapp | link:../../packages/gateway-provider-whatsapp | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-testing | link:../../packages/gateway-testing | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/runtime-host | link:../runtime-host | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/ui | link:../../packages/ui | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/ui | link:../ui | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/website | link:../../apps/website | UNKNOWN |  |  |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
 | @smithy/core | 3.24.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__core@3.24.4/ | https://github.com/smithy-lang/smithy-typescript.git |
 | @smithy/credential-provider-imds | 4.3.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__credential-provider-imds@4.3.4/ | https://github.com/smithy-lang/smithy-typescript.git |
@@ -213,7 +217,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | depd | 2.0.0 | MIT | THIRD_PARTY_LICENSES/depd@2.0.0/ | dougwilson/nodejs-depd |
 | dequal | 2.0.3 | MIT | THIRD_PARTY_LICENSES/dequal@2.0.3/ | lukeed/dequal |
 | devlop | 1.1.0 | MIT | THIRD_PARTY_LICENSES/devlop@1.1.0/ | wooorm/devlop |
-| dompurify | 3.4.6 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.6/ | git://github.com/cure53/DOMPurify.git |
+| dompurify | 3.4.11 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.11/ | git://github.com/cure53/DOMPurify.git |
 | dunder-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/dunder-proto@1.0.1/ | git+https://github.com/es-shims/dunder-proto.git |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | THIRD_PARTY_LICENSES/ecdsa-sig-formatter@1.0.11/ | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
 | ee-first | 1.1.1 | MIT | THIRD_PARTY_LICENSES/ee-first@1.1.1/ | jonathanong/ee-first |
@@ -260,10 +264,10 @@ Each package remains licensed under its own license terms. The table below is pr
 | grammy | 1.43.0 | MIT | THIRD_PARTY_LICENSES/grammy@1.43.0/ | git+https://github.com/grammyjs/grammY.git |
 | hachure-fill | 0.5.2 | MIT | THIRD_PARTY_LICENSES/hachure-fill@0.5.2/ | git+https://github.com/pshihn/hachure-fill.git |
 | has-symbols | 1.1.0 | MIT | THIRD_PARTY_LICENSES/has-symbols@1.1.0/ | git://github.com/inspect-js/has-symbols.git |
-| hasown | 2.0.2 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.2/ | git+https://github.com/inspect-js/hasOwn.git |
+| hasown | 2.0.3 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.3/ | git+https://github.com/inspect-js/hasOwn.git |
 | hast-util-to-jsx-runtime | 2.3.6 | MIT | THIRD_PARTY_LICENSES/hast-util-to-jsx-runtime@2.3.6/ | syntax-tree/hast-util-to-jsx-runtime |
 | hast-util-whitespace | 3.0.0 | MIT | THIRD_PARTY_LICENSES/hast-util-whitespace@3.0.0/ | syntax-tree/hast-util-whitespace |
-| hono | 4.12.21 | MIT | THIRD_PARTY_LICENSES/hono@4.12.21/ | git+https://github.com/honojs/hono.git |
+| hono | 4.12.27 | MIT | THIRD_PARTY_LICENSES/hono@4.12.27/ | git+https://github.com/honojs/hono.git |
 | html-url-attributes | 3.0.1 | MIT | THIRD_PARTY_LICENSES/html-url-attributes@3.0.1/ | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
 | http-errors | 2.0.1 | MIT | THIRD_PARTY_LICENSES/http-errors@2.0.1/ | jshttp/http-errors |
 | https-proxy-agent | 7.0.6 | MIT | THIRD_PARTY_LICENSES/https-proxy-agent@7.0.6/ | https://github.com/TooTallNate/proxy-agents.git |
@@ -283,7 +287,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | is-promise | 4.0.0 | MIT | THIRD_PARTY_LICENSES/is-promise@4.0.0/ | https://github.com/then/is-promise.git |
 | isexe | 2.0.0 | ISC | THIRD_PARTY_LICENSES/isexe@2.0.0/ | git+https://github.com/isaacs/isexe.git |
 | jose | 6.2.2 | MIT | THIRD_PARTY_LICENSES/jose@6.2.2/ | panva/jose |
-| js-yaml | 4.1.1 | MIT | THIRD_PARTY_LICENSES/js-yaml@4.1.1/ | nodeca/js-yaml |
+| js-yaml | 4.2.0 | MIT | THIRD_PARTY_LICENSES/js-yaml@4.2.0/ | nodeca/js-yaml |
 | json-bigint | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-bigint@1.0.0/ | git@github.com:sidorares/json-bigint.git |
 | json-schema-traverse | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-schema-traverse@1.0.0/ | git+https://github.com/epoberezkin/json-schema-traverse.git |
 | json-schema-typed | 8.0.2 | BSD-2-Clause | THIRD_PARTY_LICENSES/json-schema-typed@8.0.2/ | https://github.com/RemyRylan/json-schema-typed.git |
