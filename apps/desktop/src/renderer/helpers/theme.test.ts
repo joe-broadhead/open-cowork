@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { applyAppearancePreferences, getAppearancePreferences, saveAppearancePreferences, UI_FONT_OPTIONS } from './theme'
+import { isUserFacingTheme } from './theme-presets'
+
+describe('branded theme identity (Studio brief §2)', () => {
+  it('exposes only Mercury as a user-facing theme; the code-editor presets stay hidden', () => {
+    // Mercury (surfaced as the Mercury/Day color schemes) is the single shipped
+    // identity. The bundled code-editor presets remain as migration data but must
+    // never be user-facing — re-exposing one would fail this guard.
+    expect(isUserFacingTheme('mercury')).toBe(true)
+    for (const devToolPreset of ['tokyostorm', 'gruvbox', 'nord', 'dracula', 'synthwave', 'frappe', 'ayu', 'kanagawa']) {
+      expect(isUserFacingTheme(devToolPreset)).toBe(false)
+    }
+    expect(isUserFacingTheme(null)).toBe(false)
+    expect(isUserFacingTheme(undefined)).toBe(false)
+  })
+})
 
 describe('appearance theme defaults', () => {
   it('defaults first-run appearance to Mercury with the Azure accent', () => {
