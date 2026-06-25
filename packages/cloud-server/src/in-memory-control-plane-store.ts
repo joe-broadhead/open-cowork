@@ -1201,6 +1201,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.workspaceEventsDomain.getWorkspaceEventCursor(tenantId, userId)
   }
 
+  pruneExpiredWorkspaceEvents(input: { olderThan: Date, limit: number }): number {
+    return this.workspaceEventsDomain.pruneExpiredWorkspaceEvents(input)
+  }
+
   writeSessionProjection(input: WriteProjectionInput): SessionProjectionRecord {
     const session = this.requireSession(input.tenantId, input.sessionId)
     if (session.lease && session.lease.leaseToken !== input.leaseToken) {

@@ -1003,6 +1003,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.pruneByCreatedAt('cloud_usage_events', 'event_id', input)
   }
 
+  async pruneExpiredWorkspaceEvents(input: { olderThan: Date; limit: number }) {
+    return this.pruneByCreatedAt('cloud_workspace_events', 'event_id', input)
+  }
+
   private async pruneByCreatedAt(table: string, returning: string, input: { olderThan: Date; limit: number }) {
     const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
     const result = await this.pool.query(

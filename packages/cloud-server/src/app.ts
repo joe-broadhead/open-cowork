@@ -1402,6 +1402,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     sessionEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS'), 0) || null,
     auditEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS'), 0) || null,
     usageEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS'), 0) || null,
+    workspaceEventMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS'), 0) || null,
     intervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS'), 60 * 60 * 1000),
     batchSize: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE'), 500),
     maxBatches: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES'), 20),

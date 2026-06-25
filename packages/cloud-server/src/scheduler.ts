@@ -21,6 +21,10 @@ export type CloudRetentionOptions = {
   sessionEventMs: number | null
   auditEventMs: number | null
   usageEventMs: number | null
+  // cloud_workspace_events is written 1:1 with cloud_session_events (P1-B); same opt-in
+  // semantics — trimming it advances the workspace-event min(sequence), and the durable
+  // projection covers the gap, just like the session-event log.
+  workspaceEventMs: number | null
   intervalMs: number
   batchSize: number
   maxBatches: number
@@ -33,6 +37,7 @@ const DISABLED_CLOUD_RETENTION: CloudRetentionOptions = {
   sessionEventMs: null,
   auditEventMs: null,
   usageEventMs: null,
+  workspaceEventMs: null,
   intervalMs: 60 * 60 * 1000,
   batchSize: 500,
   maxBatches: 20,
@@ -134,10 +139,10 @@ export class CloudScheduler {
   // retention.intervalMs. No-op unless at least one window is configured. Each
   // table drains in bounded batches so a sweep can't monopolize the loop.
   private async maybeProcessRetention(now: Date) {
-    const { channelDeliveryMs, channelInteractionMs, staleThrottleMs, sessionEventMs, auditEventMs, usageEventMs, intervalMs } = this.retention
+    const { channelDeliveryMs, channelInteractionMs, staleThrottleMs, sessionEventMs, auditEventMs, usageEventMs, workspaceEventMs, intervalMs } = this.retention
     if (
       channelDeliveryMs === null && channelInteractionMs === null && staleThrottleMs === null
-      && sessionEventMs === null && auditEventMs === null && usageEventMs === null
+      && sessionEventMs === null && auditEventMs === null && usageEventMs === null && workspaceEventMs === null
     ) return
     const nowMs = now.getTime()
     if (this.lastRetentionRunMs !== 0 && nowMs - this.lastRetentionRunMs < intervalMs) return
@@ -167,6 +172,10 @@ export class CloudScheduler {
     if (usageEventMs !== null) {
       const olderThan = new Date(nowMs - usageEventMs)
       pruned += await this.pruneInBatches((limit) => this.store.pruneExpiredUsageEvents({ olderThan, limit }))
+    }
+    if (workspaceEventMs !== null) {
+      const olderThan = new Date(nowMs - workspaceEventMs)
+      pruned += await this.pruneInBatches((limit) => this.store.pruneExpiredWorkspaceEvents({ olderThan, limit }))
     }
     if (pruned > 0) {
       await recordCloudSchedulerMetric(this.observability, {

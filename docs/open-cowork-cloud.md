@@ -733,6 +733,7 @@ compliance/replay-sensitive — they default **off**:
 | `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default; the durable session projection still covers the trimmed window. |
 | `OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS` | Prune `cloud_audit_events` older than this. Off by default — enable only if your compliance/retention policy permits deleting the audit trail. |
 | `OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS` | Prune `cloud_usage_events` older than this. Off by default — enable only after the usage data has been exported/aggregated for billing. |
+| `OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` | Prune `cloud_workspace_events` older than this. Written 1:1 with `cloud_session_events`, so set this alongside `RETENTION_SESSION_EVENT_MS` to bound the workspace-event log's growth; the durable projection still covers the trimmed window. Off by default. |
 | `OPEN_COWORK_CLOUD_CONCURRENCY_RECONCILE_MS` | Optional interval for the scheduler to recompute the concurrency gauges (`cloud_concurrency_counters`) from their source tables. Off by default — the gauges are drift-free for normal activity; enable as a belt-and-suspenders correction (e.g. one hour). |
 
 Managed billing variables:

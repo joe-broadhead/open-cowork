@@ -87,4 +87,29 @@ export class InMemoryWorkspaceEventsDomain {
     this.host.requireTenantUser(tenantId, userId)
     return workspaceEventCursor(this.workspaceEvents.get(`${tenantId}:${userId}`)?.events || [])
   }
+
+  // Opt-in retention (P1-B): cloud_workspace_events is written 1:1 with cloud_session_events
+  // (which got retention in P1-C3) but was missed. Remove the oldest rows created before the
+  // cutoff, bounded by limit, oldest-first across workspaces — mirroring the session-event prune
+  // and the postgres ctid `ORDER BY created_at LIMIT` delete.
+  pruneExpiredWorkspaceEvents(input: { olderThan: Date, limit: number }): number {
+    const limit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const cutoff = input.olderThan.toISOString()
+    const stale = Array.from(this.workspaceEvents.entries())
+      .flatMap(([key, state]) => state.events.map((event) => ({ key, event })))
+      .filter(({ event }) => event.createdAt < cutoff)
+      .sort((left, right) => left.event.createdAt.localeCompare(right.event.createdAt))
+      .slice(0, limit)
+    const removeByKey = new Map<string, Set<string>>()
+    for (const { key, event } of stale) {
+      const ids = removeByKey.get(key) || new Set<string>()
+      ids.add(event.eventId)
+      removeByKey.set(key, ids)
+    }
+    for (const [key, ids] of removeByKey) {
+      const state = this.workspaceEvents.get(key)
+      if (state) state.events = state.events.filter((event) => !ids.has(event.eventId))
+    }
+    return stale.length
+  }
 }

@@ -283,6 +283,7 @@ export type ControlPlaneStore = {
   pruneExpiredSessionEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
   pruneExpiredAuditEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
   pruneExpiredUsageEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
+  pruneExpiredWorkspaceEvents(input: { olderThan: Date; limit: number }): MaybePromise<number>
   // Recompute the maintained concurrency gauges from their source tables (P2-7), correcting any
   // drift accumulated under the old write-clamp; returns the number of counter rows touched. The
   // in-memory store counts live, so it has no gauge to reconcile and returns 0.

@@ -105,6 +105,7 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
     sessionEventMs: null,
     auditEventMs: null,
     usageEventMs: null,
+    workspaceEventMs: null,
     intervalMs: 10_000,
     batchSize: 2,
     maxBatches: 5,
@@ -129,7 +130,7 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
 })
 
 test('cloud scheduler prunes only the opt-in event logs whose window is configured', async () => {
-  const calls = { session: 0, audit: 0, usage: 0 }
+  const calls = { session: 0, audit: 0, usage: 0, workspace: 0 }
   const store = {
     async recordWorkerHeartbeat() {},
     async reapExpiredWorkflowClaims() { return [] },
@@ -139,6 +140,7 @@ test('cloud scheduler prunes only the opt-in event logs whose window is configur
     async pruneExpiredSessionEvents() { calls.session += 1; return 0 },
     async pruneExpiredAuditEvents() { calls.audit += 1; return 0 },
     async pruneExpiredUsageEvents() { calls.usage += 1; return 0 },
+    async pruneExpiredWorkspaceEvents() { calls.workspace += 1; return 0 },
   } as unknown as InMemoryControlPlaneStore
   const service = {
     async claimAndStartDueWorkflow() { return null },
@@ -147,10 +149,11 @@ test('cloud scheduler prunes only the opt-in event logs whose window is configur
     channelDeliveryMs: null,
     channelInteractionMs: null,
     staleThrottleMs: null,
-    // Opt in to session + usage retention only; audit stays off (null) and must never be touched.
+    // Opt in to session + usage retention only; audit + workspace stay off (null) and must never be touched.
     sessionEventMs: 1_000,
     auditEventMs: null,
     usageEventMs: 2_000,
+    workspaceEventMs: null,
     intervalMs: 10_000,
     batchSize: 500,
     maxBatches: 5,
@@ -160,6 +163,7 @@ test('cloud scheduler prunes only the opt-in event logs whose window is configur
   assert.equal(calls.session, 1) // window set → one bounded batch (returns 0 < batchSize, drains)
   assert.equal(calls.audit, 0) // null window → never called, so compliance data is never deleted
   assert.equal(calls.usage, 1)
+  assert.equal(calls.workspace, 0) // null window → workspace events never touched
 })
 
 test('cloud scheduler reconciles concurrency counters only when an interval is configured', async () => {

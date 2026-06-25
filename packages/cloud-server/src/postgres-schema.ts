@@ -1168,6 +1168,17 @@ const CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS = [
     ON cloud_usage_events (created_at)`,
 ] as const
 
+// P1-B: created_at index so the cloud_workspace_events retention prune (the twin of the P1-C3
+// session-event prune, previously missed) doesn't seq-scan. P2: a partial (org_id, expires_at)
+// index so the channel-interaction token lookup's pending scan is bounded to one org's pending set.
+export const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_MIGRATION_ID = '025_workspace_event_retention_and_interaction_index'
+const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workspace_events_created_idx
+    ON cloud_workspace_events (created_at)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_channel_interactions_pending_idx
+    ON cloud_channel_interactions (org_id, expires_at) WHERE status = 'pending'`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1278,5 +1289,11 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS,
+    concurrentIndexes: ['cloud_workspace_events_created_idx', 'cloud_channel_interactions_pending_idx'],
+    transactional: false,
   },
 ] as const
