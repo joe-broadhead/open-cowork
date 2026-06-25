@@ -93,7 +93,8 @@
         { "expr": "sum(rate(open_cowork_gateway_deliveries_sent_total[5m]))" },
         { "expr": "sum(rate(open_cowork_gateway_delivery_retries_total[5m]))" },
         { "expr": "sum(rate(open_cowork_gateway_delivery_dead_letters_total[5m]))" },
-        { "expr": "max(open_cowork_gateway_delivery_latency_ms_total)" }
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(open_cowork_gateway_delivery_latency_ms_bucket[5m])))" },
+        { "expr": "histogram_quantile(0.95, sum by (le, provider_id, provider_kind) (rate(open_cowork_gateway_provider_delivery_latency_ms_bucket[5m])))" }
       ]
     },
     {

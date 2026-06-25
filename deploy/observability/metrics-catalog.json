@@ -219,10 +219,10 @@
       "description": "Channel deliveries dead-lettered."
     },
     {
-      "name": "open_cowork_gateway_delivery_latency_ms_total",
-      "type": "counter",
+      "name": "open_cowork_gateway_delivery_latency_ms",
+      "type": "histogram",
       "owner": "gateway",
-      "description": "Total gateway delivery handling latency in milliseconds."
+      "description": "Gateway delivery handling latency in milliseconds (cloud delivery received to channel send). Use histogram_quantile over the _bucket series; the per-provider open_cowork_gateway_provider_delivery_latency_ms histogram carries provider_id/provider_kind labels."
     },
     {
       "name": "open_cowork_gateway_session_streams",

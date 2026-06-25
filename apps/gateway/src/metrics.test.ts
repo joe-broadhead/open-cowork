@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createGatewayMetrics, renderPrometheusMetrics } from '../dist/index.js'
+import { createGatewayMetrics, createLatencyHistogram, observeGatewayDeliveryLatency, renderPrometheusMetrics } from '../dist/index.js'
 
 test('gateway Prometheus metrics include delivery, stream, and webhook operational counters', () => {
   const metrics = createGatewayMetrics(() => new Date('2026-01-01T00:00:00.000Z').getTime())
@@ -11,7 +11,6 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   metrics.deliveriesSent = 2
   metrics.deliveryRetries = 1
   metrics.deliveryDeadLetters = 1
-  metrics.deliveryLatencyMsTotal = 123
   metrics.webhookRequests = 4
   metrics.streamReconnects = 5
   metrics.sessionRenderRetries = 2
@@ -33,7 +32,11 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
     deliveryRetries: 1,
     deliveryDeadLetters: 1,
     webhookRequests: 4,
+    deliveryLatency: createLatencyHistogram(),
   }
+  // One 120ms delivery — lands in the le="250" bucket on both the gateway-wide and
+  // the per-provider histogram.
+  observeGatewayDeliveryLatency(metrics, metrics.providerMetrics.fake, 120)
 
   const text = renderPrometheusMetrics(metrics, 2, 7, () => new Date('2026-01-01T00:01:00.000Z').getTime())
 
@@ -43,7 +46,13 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   assert.match(text, /open_cowork_gateway_deliveries_sent_total 2/)
   assert.match(text, /open_cowork_gateway_delivery_retries_total 1/)
   assert.match(text, /open_cowork_gateway_delivery_dead_letters_total 1/)
-  assert.match(text, /open_cowork_gateway_delivery_latency_ms_total 123/)
+  assert.match(text, /open_cowork_gateway_delivery_latency_ms_bucket\{le="50"\} 0/)
+  assert.match(text, /open_cowork_gateway_delivery_latency_ms_bucket\{le="250"\} 1/)
+  assert.match(text, /open_cowork_gateway_delivery_latency_ms_bucket\{le="\+Inf"\} 1/)
+  assert.match(text, /open_cowork_gateway_delivery_latency_ms_sum 120/)
+  assert.match(text, /open_cowork_gateway_delivery_latency_ms_count 1/)
+  assert.match(text, /open_cowork_gateway_provider_delivery_latency_ms_bucket\{provider_id="fake",provider_kind="fake",le="250"\} 1/)
+  assert.match(text, /open_cowork_gateway_provider_delivery_latency_ms_count\{provider_id="fake",provider_kind="fake"\} 1/)
   assert.match(text, /open_cowork_gateway_webhook_requests_total 4/)
   assert.match(text, /open_cowork_gateway_stream_reconnects_total 5/)
   assert.match(text, /open_cowork_gateway_session_render_retries_total 2/)

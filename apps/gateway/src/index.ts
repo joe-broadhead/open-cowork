@@ -33,6 +33,8 @@ export {
 } from './gateway-runtime.js'
 export {
   createGatewayMetrics,
+  createLatencyHistogram,
+  observeGatewayDeliveryLatency,
   renderPrometheusMetrics,
   type GatewayMetrics,
 } from './metrics.js'
