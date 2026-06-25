@@ -271,3 +271,23 @@ test('cloud workspace cache can reset a cursor after replay snapshot recovery', 
   cache.resetEventCursor('cloud:test', 'workspace')
   assert.equal(cache.getEventCursor('cloud:test', 'workspace'), 0)
 })
+
+test('cloud workspace cache batches sync upserts into one durable write (P1-E)', () => {
+  const path = cachePath()
+  const cache = new FileCloudWorkspaceCache({ path, mode: 'metadata-only', secretStorage: encryptedStorage() })
+  const session = (id: string, title: string) => ({ id, title, directory: null, createdAt: '2026-05-27T10:00:00.000Z', updatedAt: '2026-05-27T10:00:00.000Z' })
+  cache.upsertSessionList('cloud:test', [session('session-1', 'One')])
+
+  cache.beginCacheBatch()
+  cache.upsertSessionList('cloud:test', [session('session-1', 'One'), session('session-2', 'Two')])
+  // The in-memory read reflects the buffered change immediately…
+  assert.equal(cache.listSessions('cloud:test')?.length, 2)
+  // …but nothing is written to disk until the batch ends (the coalescing that avoids O(n^2)).
+  assert.equal(readFileSync(path, 'utf-8').includes('"Two"'), false)
+
+  cache.endCacheBatch()
+  // The single coalesced write persisted the full batch.
+  assert.equal(readFileSync(path, 'utf-8').includes('"Two"'), true)
+  const reopened = new FileCloudWorkspaceCache({ path, mode: 'metadata-only', secretStorage: encryptedStorage() })
+  assert.equal(reopened.listSessions('cloud:test')?.length, 2)
+})

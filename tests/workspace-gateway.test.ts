@@ -52,6 +52,8 @@ function recordingCloudCache(removedWorkspaceIds: string[]): CloudWorkspaceCache
     upsertSessionList: () => {},
     upsertSessionInfo: () => {},
     upsertSessionView: () => {},
+    beginCacheBatch: () => {},
+    endCacheBatch: () => {},
     removeWorkspace: (workspaceId) => {
       removedWorkspaceIds.push(workspaceId)
     },

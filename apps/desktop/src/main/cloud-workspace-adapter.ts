@@ -661,24 +661,32 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const plan = await this.listSessionsForSync(cacheKey, generation)
     if (generation !== this.syncGeneration) return
-    await settleWithConcurrency(plan.viewRefreshCandidates, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
-      if (generation !== this.syncGeneration) return
-      await retrySyncRefresh(() => this.getSessionView(session.id))
-    })
-    if (generation !== this.syncGeneration) return
-    if (this.transport.listArtifacts) {
-      await settleWithConcurrency(plan.artifactRefreshCandidates, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
+    // Coalesce every per-session view/artifact upsert this pass performs into one durable cache
+    // read + write (P1-E): otherwise each of up to 100 upserts re-serializes + encrypts + fsyncs
+    // the whole transcript cache on the Electron main thread (O(n^2)).
+    this.cache?.beginCacheBatch()
+    try {
+      await settleWithConcurrency(plan.viewRefreshCandidates, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
         if (generation !== this.syncGeneration) return
-        await retrySyncRefresh(() => this.listArtifacts(session.id))
+        await retrySyncRefresh(() => this.getSessionView(session.id))
       })
-    }
-    if (generation !== this.syncGeneration) return
-    if (this.transport.listWorkflows) {
-      await this.listWorkflows().catch(() => undefined)
-    }
-    if (generation !== this.syncGeneration) return
-    if (this.transport.listSettings) {
-      await this.listSettings().catch(() => undefined)
+      if (generation !== this.syncGeneration) return
+      if (this.transport.listArtifacts) {
+        await settleWithConcurrency(plan.artifactRefreshCandidates, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
+          if (generation !== this.syncGeneration) return
+          await retrySyncRefresh(() => this.listArtifacts(session.id))
+        })
+      }
+      if (generation !== this.syncGeneration) return
+      if (this.transport.listWorkflows) {
+        await this.listWorkflows().catch(() => undefined)
+      }
+      if (generation !== this.syncGeneration) return
+      if (this.transport.listSettings) {
+        await this.listSettings().catch(() => undefined)
+      }
+    } finally {
+      this.cache?.endCacheBatch()
     }
   }
 

@@ -52,6 +52,9 @@ export type CloudWorkspaceCache = {
   upsertSessionInfo(workspaceId: string, session: SessionInfo, now?: Date): void
   upsertSessionView(workspaceId: string, sessionId: string, view: SessionView, now?: Date): void
   removeWorkspace(workspaceId: string): void
+  // Coalesce a sync pass's per-session upserts into one durable read + write (P1-E).
+  beginCacheBatch(): void
+  endCacheBatch(): void
 }
 
 function defaultCachePath() {
@@ -268,6 +271,9 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   // debounced write — and losing the last few hundred ms on an abrupt quit — is safe.
   private readonly cursorsPath: string
   private cursorState: Map<string, Map<string, number>> | null = null
+  // Non-null while a sync batch is open: upserts mutate this buffer instead of re-reading +
+  // re-writing the whole cache per call (P1-E). Persisted once on endCacheBatch.
+  private batchBuffer: CloudWorkspaceCacheRecord[] | null = null
   private cursorFlushTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: {
@@ -550,6 +556,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   }
 
   private readRecords(): CloudWorkspaceCacheRecord[] {
+    if (this.batchBuffer !== null) return this.batchBuffer
     if (this.mode === 'disabled' || !existsSync(this.path)) return []
     const storageMode = this.storageMode()
     if (storageMode === 'unavailable' && this.mode === 'full') return []
@@ -596,6 +603,17 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       }))
       .filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
       .sort((a, b) => a.workspaceId.localeCompare(b.workspaceId))
+    // During a sync batch, accumulate in memory and persist once at endCacheBatch (P1-E). The
+    // n per-session upserts a sync performs would otherwise each re-serialize + encrypt + fsync
+    // the entire cache — O(n^2) bytes on the Electron main thread.
+    if (this.batchBuffer !== null) {
+      this.batchBuffer = safeRecords
+      return
+    }
+    this.persistRecords(safeRecords)
+  }
+
+  private persistRecords(safeRecords: CloudWorkspaceCacheRecord[]) {
     const json = JSON.stringify(safeRecords, null, 2)
     const storageMode = this.storageMode()
     if (this.mode === 'full' && storageMode === 'encrypted') {
@@ -606,6 +624,19 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist full cloud workspace cache in production without OS-backed secret storage.')
     }
     writeFileAtomic(this.path, json, { mode: 0o600 })
+  }
+
+  // Coalesce the durable writes of a sync pass: read the cache once, let every upsert mutate the
+  // in-memory buffer, then write once. Idempotent + always paired with endCacheBatch in a finally.
+  beginCacheBatch(): void {
+    if (this.mode === 'disabled' || this.batchBuffer !== null) return
+    this.batchBuffer = this.readRecords()
+  }
+
+  endCacheBatch(): void {
+    const buffered = this.batchBuffer
+    this.batchBuffer = null
+    if (buffered) this.persistRecords(buffered)
   }
 }
 
