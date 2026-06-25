@@ -51,7 +51,11 @@ test('evaluateHttpMcpUrl accepts private ranges when allowPrivateNetwork is true
 })
 
 test('evaluateHttpMcpUrl hard-denies cloud metadata endpoints even with private-network opt-in', () => {
-  for (const url of ['http://169.254.169.254/latest/meta-data/', 'http://metadata.google.internal/computeMetadata/v1/']) {
+  for (const url of [
+    'http://169.254.169.254/latest/meta-data/',
+    'http://metadata.google.internal/computeMetadata/v1/',
+    'http://[fd00:ec2::254]/latest/meta-data/', // AWS IMDSv6
+  ]) {
     const result = evaluateHttpMcpUrl(url, { allowPrivateNetwork: true })
     assert.equal(result.ok, false, `expected metadata endpoint reject for ${url}`)
     if (result.ok === false) assert.match(result.reason, /metadata/i)

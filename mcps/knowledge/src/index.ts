@@ -10,10 +10,13 @@ const server = new McpServer({
 const BRIDGE_REQUEST_TIMEOUT_MS = 10_000
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
 
+// Must match KNOWLEDGE_LINK_KINDS in @open-cowork/shared (knowledge.ts) — the bridge rejects any
+// other kind, so advertising 'page'/'external' produced proposals the store refused while hiding
+// the valid 'thread' kind. (Hardcoded rather than imported: the bundled MCP has no shared dep.)
 const knowledgeLinkSchema = z.object({
-  kind: z.enum(['page', 'task', 'artifact', 'external']).describe('Relationship type for this link.'),
+  kind: z.enum(['thread', 'task', 'artifact']).describe('Relationship type for this link.'),
   label: z.string().min(1).describe('Human-readable label for the link target.'),
-  targetId: z.string().optional().nullable().describe('Optional id of the linked page/task/artifact.'),
+  targetId: z.string().optional().nullable().describe('Optional id of the linked thread/task/artifact.'),
 })
 
 const knowledgeBlockSchema = z.union([

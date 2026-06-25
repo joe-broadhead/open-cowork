@@ -70,6 +70,7 @@ const CLOUD_METADATA_HOSTS = new Set([
 
 const cloudMetadataBlocks = new BlockList()
 cloudMetadataBlocks.addAddress('169.254.169.254', 'ipv4')
+cloudMetadataBlocks.addAddress('fd00:ec2::254', 'ipv6') // AWS IMDSv6 (parity with webhook-url-policy)
 
 function normalizeHostname(hostname: string) {
   const lower = hostname.toLowerCase()
@@ -129,7 +130,7 @@ function classifyBlockedNetwork(hostname: string): BlockedNetwork | null {
   const type = blockListAddressType(address)
   if (!type) return null
 
-  if (type === 'ipv4' && cloudMetadataBlocks.check(address, type)) {
+  if (cloudMetadataBlocks.check(address, type)) {
     return { kind: 'cloud-metadata', address }
   }
   if (loopbackBlocks.check(address, type)) {
