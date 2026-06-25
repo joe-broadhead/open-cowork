@@ -8,8 +8,20 @@
 // restart rather than surviving as stale grants across app launches.
 const permissionSessionMap = new Map<string, string>()
 
+// Bounds the routing map (audit P3-13). Auto-resolved/superseded permissions whose ids are never
+// explicitly cleared would otherwise accumulate for the process lifetime; far above any plausible
+// count of concurrently-pending prompts, so eviction only ever drops genuinely-stale entries.
+const MAX_TRACKED_PERMISSIONS = 1000
+
 export function trackPermission(permissionId: string, sessionId: string) {
+  // Re-insert as newest so eviction targets the oldest leaked entries first.
+  permissionSessionMap.delete(permissionId)
   permissionSessionMap.set(permissionId, sessionId)
+  while (permissionSessionMap.size > MAX_TRACKED_PERMISSIONS) {
+    const oldest = permissionSessionMap.keys().next().value
+    if (typeof oldest !== 'string') break
+    permissionSessionMap.delete(oldest)
+  }
 }
 
 export function getPermissionSession(permissionId: string) {

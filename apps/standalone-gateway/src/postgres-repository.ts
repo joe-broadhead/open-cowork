@@ -705,8 +705,14 @@ function auditFromRow(row: AuditRow): StandaloneGatewayAuditRecord {
 
 function jsonRecord(value: Record<string, unknown> | string): Record<string, unknown> {
   if (typeof value === "string") {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    } catch {
+      // A corrupt JSON column must not throw out of the row mapper (audit P3-10) — the cloud-server
+      // readers already tolerate this. Treat unparseable metadata as empty.
+      return {};
+    }
   }
   return value || {};
 }

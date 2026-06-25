@@ -165,6 +165,9 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
   }
 
   let clearAbort: () => void = () => undefined
+  // Detaches the long-lived message/exit/error/spawn listeners (audit P3-12). Without it, close()
+  // tore down the process but left its listeners attached — a per-reboot leak on the parent process.
+  let detachSupervisorListeners: () => void = () => undefined
   let closeRequested = false
   let startupSettled = false
   let started = false
@@ -275,6 +278,12 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
     proc.on('spawn', onSpawn)
     proc.on('exit', onExit)
     proc.on('error', onError)
+    detachSupervisorListeners = () => {
+      proc.off('message', onMessage)
+      proc.off('spawn', onSpawn)
+      proc.off('exit', onExit)
+      proc.off('error', onError)
+    }
     clearAbort = bindManagedOpencodeAbort(proc, resolved.signal, () => {
       const reason = resolved.signal?.reason
       rejectStartup(reason instanceof Error
@@ -297,6 +306,8 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
     url,
     close() {
       shutdownSupervisor()
+      // Remove the runtime listeners so a closed supervisor leaves nothing attached to the parent.
+      detachSupervisorListeners()
     },
   }
 }
