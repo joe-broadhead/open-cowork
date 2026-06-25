@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { deriveToolStatus } from '../packages/shared/src/runtime-event-normalizers.ts'
+import { deriveToolStatus } from '@open-cowork/shared'
 
 test('deriveToolStatus is consistent across live + history paths (P2)', () => {
   // Error wins, even with output.
