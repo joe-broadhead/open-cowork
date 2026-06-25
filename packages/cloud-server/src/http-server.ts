@@ -272,6 +272,31 @@ const SSE_REPLAY_BATCH = 1_000
 // (heap pressure); past the cap the connection is dropped (cleanup unsubscribes on close).
 export const SSE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024
 
+// TCP keep-alive probe interval applied to every SSE socket so the kernel detects a
+// half-open peer (gone without FIN/RST) instead of the gap only surfacing once the OS
+// send buffer fills. Independent of the app-level ': keep-alive' comments, which a dead
+// peer silently absorbs.
+const SSE_TCP_KEEPALIVE_MS = 30_000
+
+// Hard ceiling on a single SSE stream's lifetime. A wedged or half-open connection
+// cannot pin a server slot indefinitely; EventSource clients reconnect transparently
+// (with their Last-Event-ID), so the cap is invisible to healthy clients.
+function sseMaxStreamLifetimeMs(): number {
+  const raw = Number(process.env.OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS)
+  return Number.isInteger(raw) && raw > 0 ? raw : 30 * 60_000
+}
+
+// Enable TCP keep-alive on the SSE socket and arm a max-lifetime timer that ends the
+// response. Returns the timer so the caller clears it from its cleanup path.
+function armSseSocketLifetime(req: IncomingMessage, res: ServerResponse): ReturnType<typeof setTimeout> {
+  req.socket?.setKeepAlive(true, SSE_TCP_KEEPALIVE_MS)
+  const timer = setTimeout(() => {
+    if (!res.destroyed) res.end()
+  }, sseMaxStreamLifetimeMs())
+  timer.unref?.()
+  return timer
+}
+
 async function processCommandIfConfigured(
   options: CloudHttpServerOptions,
   principal: CloudPrincipal,
@@ -560,14 +585,17 @@ async function handleSse(
   let unsubscribe: (() => void) | null = null
   let replayUnsubscribe: (() => void) | null = null
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+  let lifetimeTimer: ReturnType<typeof setTimeout> | null = null
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
     if (keepAliveTimer) clearInterval(keepAliveTimer)
+    if (lifetimeTimer) clearTimeout(lifetimeTimer)
     replayUnsubscribe?.()
     unsubscribe?.()
   }
   if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
+  lifetimeTimer = armSseSocketLifetime(req, res)
   const writeIfNew = (event: {
     sequence: number
     type: string
@@ -636,14 +664,17 @@ async function handleWorkspaceSse(
   let unsubscribe: (() => void) | null = null
   let replayUnsubscribe: (() => void) | null = null
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+  let lifetimeTimer: ReturnType<typeof setTimeout> | null = null
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
     if (keepAliveTimer) clearInterval(keepAliveTimer)
+    if (lifetimeTimer) clearTimeout(lifetimeTimer)
     replayUnsubscribe?.()
     unsubscribe?.()
   }
   if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
+  lifetimeTimer = armSseSocketLifetime(req, res)
   const writeIfNew = (event: {
     tenantId?: string
     userId?: string
