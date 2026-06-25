@@ -8,7 +8,8 @@ import {
   nowIso,
   stableJson,
 } from './store-helpers.ts'
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, scryptSync } from 'node:crypto'
+import { constantTimeEquals as constantTimeStringEquals } from '@open-cowork/shared/node'
 import type {
   CreateManagedWorkerPoolInput,
   IssueManagedWorkerCredentialInput,
@@ -487,8 +488,3 @@ function normalizeRecord(value: unknown, label: string, maxBytes: number): Recor
 }
 
 
-function constantTimeStringEquals(left: string, right: string) {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
-}

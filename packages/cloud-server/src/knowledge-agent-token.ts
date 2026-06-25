@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac } from 'node:crypto'
+import { constantTimeEquals } from '@open-cowork/shared/node'
 
 // Stateless, HMAC-signed, per-session knowledge-agent token. A coworker (agent)
 // running in a CLOUD session proposes a knowledge-wiki edit through the knowledge
@@ -28,12 +29,6 @@ export const KNOWLEDGE_AGENT_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 
 function sign(secret: string | Buffer, payload: string): string {
   return createHmac('sha256', secret).update(payload).digest('base64url')
-}
-
-function constantTimeEquals(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
 }
 
 export function signKnowledgeAgentToken(secret: string | Buffer, payload: KnowledgeAgentTokenPayload): string {

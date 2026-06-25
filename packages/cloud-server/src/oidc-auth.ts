@@ -1,4 +1,5 @@
-import { createHash, createHmac, createPublicKey, randomBytes, timingSafeEqual, type JsonWebKey, verify } from 'node:crypto'
+import { createHash, createHmac, createPublicKey, randomBytes, type JsonWebKey, verify } from 'node:crypto'
+import { constantTimeEquals } from '@open-cowork/shared/node'
 import type { IncomingMessage } from 'node:http'
 import type { CloudAuthConfig } from '@open-cowork/shared'
 import { CloudHttpError, type CloudAuthResolver, type CloudBrowserAuthProvider } from './http-server.ts'
@@ -354,12 +355,6 @@ type OidcStatePayload = {
 
 function signState(secret: string | Buffer, payload: string) {
   return createHmac('sha256', secret).update(payload).digest('base64url')
-}
-
-function constantTimeEquals(left: string, right: string) {
-  const leftBuffer = Buffer.from(left)
-  const rightBuffer = Buffer.from(right)
-  return leftBuffer.byteLength === rightBuffer.byteLength && timingSafeEqual(leftBuffer, rightBuffer)
 }
 
 function parseCookieHeader(req: IncomingMessage) {

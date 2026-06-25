@@ -1,5 +1,8 @@
-import { timingSafeEqual } from 'node:crypto'
+import { constantTimeEquals } from '@open-cowork/shared/node'
 import type { IncomingMessage } from 'node:http'
+
+// Re-exported for the existing importers that resolved it from here.
+export { constantTimeEquals }
 
 // Pure header / constant-time-token auth helpers for the cloud HTTP server,
 // extracted from http-server.ts. No server state — read a request header, compare
@@ -9,12 +12,6 @@ export function readHeader(req: IncomingMessage, name: string) {
   const value = req.headers[name.toLowerCase()]
   if (Array.isArray(value)) return value[0] || null
   return value || null
-}
-
-export function constantTimeEquals(left: string, right: string) {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
 export function internalTokenIsValid(req: IncomingMessage, expected: string | null | undefined) {

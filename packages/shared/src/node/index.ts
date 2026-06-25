@@ -7,6 +7,7 @@
 // `"types": []` so only files with an explicit `/// <reference types="node" />`
 // see the Node globals, keeping the rest of the package browser-safe.
 export * from './app-environment.js'
+export * from './constant-time.js'
 export * from './safe-storage.js'
 export * from './desktop-shell.js'
 export * from './fs-atomic.js'

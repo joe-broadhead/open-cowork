@@ -1,4 +1,5 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { randomBytes, scryptSync } from 'node:crypto'
+import { constantTimeEquals as constantTimeStringEqual } from '@open-cowork/shared/node'
 
 const legacyCloudApiTokenSalt = 'open-cowork-cloud-api-token-hash-v1'
 const channelInteractionTokenSalt = 'open-cowork-channel-interaction-token-v1'
@@ -46,9 +47,4 @@ function legacyCloudApiTokenHash(plaintext: string) {
   return `scrypt:${scryptSync(plaintext, legacyCloudApiTokenSalt, 32).toString('base64url')}`
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
-  if (!left || !right) return false
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-}
+

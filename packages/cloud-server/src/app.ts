@@ -2,7 +2,8 @@ import { createPostgresKnowledgeStore } from '@open-cowork/runtime-host/knowledg
 import type { WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac } from 'node:crypto'
+import { constantTimeEquals as constantTimeStringEqual } from '@open-cowork/shared/node'
 import { mkdir } from 'node:fs/promises'
 import { createServer, type IncomingMessage } from 'node:http'
 import { splitTrustedProxyCidrs, type KnowledgeStore } from '@open-cowork/shared'
@@ -414,12 +415,7 @@ function readHeader(req: IncomingMessage, name: string) {
   return value || null
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
-  if (!left || !right) return false
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-}
+
 
 export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}, options: {
   headerSecret?: string | null

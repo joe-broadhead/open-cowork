@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac } from 'node:crypto'
+import { constantTimeEquals } from '@open-cowork/shared/node'
 
 import type { ControlPlaneRole } from './control-plane-enums.ts'
 
@@ -19,12 +20,6 @@ export type MembershipInvitePayload = {
 
 function sign(secret: string | Buffer, payload: string): string {
   return createHmac('sha256', secret).update(payload).digest('base64url')
-}
-
-function constantTimeEquals(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
 }
 
 export function signMembershipInviteToken(secret: string | Buffer, payload: MembershipInvitePayload): string {
