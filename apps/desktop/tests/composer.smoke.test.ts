@@ -13,8 +13,9 @@ test('Home composer starts a thread and the @-mention picker opens in chat', asy
   const { page, cleanup } = await launchSmokeApp()
   try {
     // New Home is composer-first — the textarea is the primary action,
-    // not a "New thread" button.
-    await page.waitForSelector('h1:has-text("What should your team tackle today?")', { timeout: 30_000 })
+    // not a "New thread" button. The greeting H1 reads "Good {morning|afternoon|evening}."
+    // (the time-of-day word varies by wall-clock), so match the stable lead word "Good".
+    await page.waitForSelector('h1:has-text("Good")', { timeout: 30_000 })
 
     const homeComposer = page.locator('textarea').first()
     await homeComposer.waitFor({ timeout: 10_000 })
@@ -24,7 +25,7 @@ test('Home composer starts a thread and the @-mention picker opens in chat', asy
     // Submitting on Home creates + activates a session and routes the
     // view to chat. Wait for the Home greeting to drop out of the DOM
     // as our transition signal, then confirm the chat composer mounted.
-    await page.waitForSelector('h1:has-text("What should your team tackle today?")', {
+    await page.waitForSelector('h1:has-text("Good")', {
       state: 'detached',
       timeout: 15_000,
     })

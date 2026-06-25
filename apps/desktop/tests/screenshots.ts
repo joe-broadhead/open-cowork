@@ -73,7 +73,8 @@ async function shoot(page: Page, outputDir: string, name: string) {
 
 async function gotoHome(page: Page) {
   await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("What should your team tackle today?")', { timeout: 30_000 })
+  // Home greeting is "Good {morning|afternoon|evening}." — match the stable lead word.
+  await page.waitForSelector('h1:has-text("Good")', { timeout: 30_000 })
 }
 
 async function gotoAgents(page: Page) {
@@ -227,7 +228,7 @@ async function captureChatViews(page: Page, outputDir: string) {
   // on API keys or capture a missing-credential error banner.
   await page.getByRole('button', { name: 'New Chat', exact: true }).click()
   await page.getByRole('button', { name: /^Blank chat\b/ }).click()
-  await page.waitForSelector('h1:has-text("What should your team tackle today?")', {
+  await page.waitForSelector('h1:has-text("Good")', {
     state: 'detached',
     timeout: 15_000,
   })

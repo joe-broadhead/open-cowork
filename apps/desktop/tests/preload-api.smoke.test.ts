@@ -69,6 +69,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       'diagnostics',
       'dialog',
       'explorer',
+      'knowledge',
       'launchpad',
       'mcp',
       'model',
