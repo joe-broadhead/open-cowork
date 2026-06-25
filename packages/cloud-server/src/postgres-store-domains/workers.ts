@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import {
   generateManagedWorkerCredential,
   hashManagedWorkerCredential,
+  verifyManagedWorkerCredentialHash,
 } from '../in-memory-domains/workers.ts'
 import type {
   CreateManagedWorkerPoolInput,
@@ -318,15 +319,26 @@ export class PostgresManagedWorkersRepository {
   }
 
   async findCredentialByPlaintext(plaintext: string, now = new Date()): Promise<ResolvedManagedWorkerCredentialRecord | null> {
-    const tokenHash = hashManagedWorkerCredential(plaintext)
     return this.options.withTransaction(async (client) => {
       const nowText = nowIso(now)
-      const result = await client.query(
-        `SELECT * FROM cloud_worker_credentials WHERE token_hash = $1`,
-        [tokenHash],
-      )
-      if (!result.rows[0]) return null
-      const credential = managedWorkerCredentialFromRow(result.rows[0])
+      // Resolve the candidate by the credential id embedded in the plaintext
+      // (`ocw_<credentialId>_<secret>`), then verify its per-credential salted hash.
+      // Standard ids (`mwcred_`+16 base64url) seek the primary key; custom ids fall back
+      // to a prefix scan. A forged id cannot pass the hash verification below.
+      const standardCredentialId = /^ocw_(mwcred_[A-Za-z0-9_-]{16})_/.exec(plaintext)?.[1]
+      const candidates = standardCredentialId
+        ? await client.query(
+          `SELECT * FROM cloud_worker_credentials WHERE credential_id = $1`,
+          [standardCredentialId],
+        )
+        : await client.query(
+          `SELECT * FROM cloud_worker_credentials
+           WHERE left($1, length('ocw_' || credential_id || '_')) = ('ocw_' || credential_id || '_')`,
+          [plaintext],
+        )
+      const matched = candidates.rows.find((row) => verifyManagedWorkerCredentialHash(plaintext, String(row.token_hash)))
+      if (!matched) return null
+      const credential = managedWorkerCredentialFromRow(matched)
       if (credential.revokedAt) {
         await this.recordHeartbeatRejected(client, credential, 'credential_revoked', now)
         return null

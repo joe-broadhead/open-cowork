@@ -16,6 +16,7 @@ export {
   hashChannelInteractionToken,
   hashCloudApiToken,
   plaintextMatchesCloudApiTokenId,
+  verifyChannelInteractionTokenHash,
   verifyCloudApiTokenHash,
 } from './control-plane-tokens.ts'
 export {

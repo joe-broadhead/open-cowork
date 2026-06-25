@@ -55,6 +55,8 @@ import {
 import {
   generateChannelInteractionToken,
   hashChannelInteractionToken,
+  plaintextMatchesChannelInteractionId,
+  verifyChannelInteractionTokenHash,
 } from './control-plane-tokens.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page-cursor.ts'
 import type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
@@ -252,7 +254,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
-  private readonly channelInteractionsByTokenHash = new Map<string, string>()
   private readonly channelInteractionsByExternal = new Map<string, string>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
@@ -742,21 +743,31 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       updatedAt: now,
     }
     this.channelInteractions.set(record.interactionId, record)
-    this.channelInteractionsByTokenHash.set(record.tokenHash, record.interactionId)
     if (record.externalInteractionId) {
       this.channelInteractionsByExternal.set(key(record.orgId, record.provider, record.externalInteractionId), record.interactionId)
     }
     return { interaction: clone(record), plaintextToken }
   }
 
+  private findChannelInteractionByToken(token: string, orgId: string): ChannelInteractionRecord | null {
+    // Pre-filter by the interaction id embedded in the presented token
+    // (`occi_<interactionId>_<secret>`), then verify the per-interaction salted hash.
+    for (const interaction of this.channelInteractions.values()) {
+      if (interaction.orgId !== orgId) continue
+      if (!plaintextMatchesChannelInteractionId(token, interaction.interactionId)) continue
+      if (verifyChannelInteractionTokenHash(token, interaction.tokenHash)) return interaction
+    }
+    return null
+  }
+
   private findChannelInteractionMutable(input: FindChannelInteractionInput): ChannelInteractionRecord | null {
-    const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
-    const interactionId = tokenHash
-      ? this.channelInteractionsByTokenHash.get(tokenHash)
-      : input.externalInteractionId && input.provider
-        ? this.channelInteractionsByExternal.get(key(input.orgId, input.provider, input.externalInteractionId))
-        : undefined
-    const interaction = interactionId ? this.channelInteractions.get(interactionId) : null
+    let interaction: ChannelInteractionRecord | null = null
+    if (input.token) {
+      interaction = this.findChannelInteractionByToken(input.token, input.orgId)
+    } else if (input.externalInteractionId && input.provider) {
+      const interactionId = this.channelInteractionsByExternal.get(key(input.orgId, input.provider, input.externalInteractionId))
+      interaction = interactionId ? this.channelInteractions.get(interactionId) ?? null : null
+    }
     if (!interaction || interaction.orgId !== input.orgId) return null
     const now = input.now || new Date()
     if (interaction.status !== 'pending') return null

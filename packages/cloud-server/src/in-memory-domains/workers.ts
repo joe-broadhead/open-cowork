@@ -9,7 +9,7 @@ import {
   stableJson,
 } from './store-helpers.ts'
 import { createHash, randomBytes, scryptSync } from 'node:crypto'
-import { constantTimeEquals as constantTimeStringEquals } from '@open-cowork/shared/node'
+import { hashSecretWithRandomSalt, verifySecretHash } from '../control-plane-tokens.ts'
 import type {
   CreateManagedWorkerPoolInput,
   IssueManagedWorkerCredentialInput,
@@ -262,9 +262,11 @@ export class InMemoryManagedWorkersDomain {
   }
 
   findCredentialByPlaintext(plaintext: string, now = new Date()): ResolvedManagedWorkerCredentialRecord | null {
-    const tokenHash = hashManagedWorkerCredential(plaintext)
     for (const credential of this.credentials.values()) {
-      if (!constantTimeStringEquals(credential.tokenHash, tokenHash)) continue
+      // Pre-filter by the credential id embedded in the presented plaintext, then verify
+      // the per-credential salted hash. A forged id cannot pass the hash check.
+      if (!plaintextMatchesManagedWorkerCredentialId(plaintext, credential.credentialId)) continue
+      if (!verifyManagedWorkerCredentialHash(plaintext, credential.tokenHash)) continue
       if (credential.revokedAt) {
         this.recordHeartbeatRejected(credential, 'credential_revoked', now)
         return null
@@ -397,6 +399,18 @@ export class InMemoryManagedWorkersDomain {
 }
 
 export function hashManagedWorkerCredential(plaintext: string) {
+  return hashSecretWithRandomSalt(plaintext)
+}
+
+export function verifyManagedWorkerCredentialHash(plaintext: string, tokenHash: string) {
+  return verifySecretHash(plaintext, tokenHash, legacyManagedWorkerCredentialHash)
+}
+
+export function plaintextMatchesManagedWorkerCredentialId(plaintext: string, credentialId: string) {
+  return plaintext.startsWith(`ocw_${credentialId}_`)
+}
+
+function legacyManagedWorkerCredentialHash(plaintext: string) {
   return `scrypt:${scryptSync(plaintext, 'open-cowork-managed-worker-credential-v1', 32).toString('base64url')}`
 }
 

@@ -20,6 +20,7 @@ import {
 import {
   generateChannelInteractionToken,
   hashChannelInteractionToken,
+  verifyChannelInteractionTokenHash,
   decodeSessionPageCursor,
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
@@ -762,50 +763,67 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return { interaction: channelInteractionFromRow(result.rows[0]), plaintextToken }
   }
 
-  async findChannelInteraction(input: FindChannelInteractionInput) {
-    const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
-    const now = nowIso(input.now)
-    const row = await this.maybeOne(
+  // Resolve a pending interaction by the token's embedded interaction id, then verify the
+  // per-interaction salted hash in app code (the SQL prefix match only narrows the id, it
+  // does not check the secret). A forged id cannot pass the hash verification.
+  private async findPendingChannelInteractionRowByToken(orgId: string, token: string, now: string, client?: PgExecutor) {
+    const executor = client ?? this.pool
+    const candidates = await executor.query(
       `SELECT * FROM cloud_channel_interactions
        WHERE org_id = $1
          AND status = 'pending'
-         AND expires_at > $5
-         AND (
-           ($2::text IS NOT NULL AND token_hash = $2)
-           OR (
-             $3::text IS NOT NULL
-             AND $4::text IS NOT NULL
-             AND provider = $3
-             AND external_interaction_id = $4
-           )
-         )`,
-      [input.orgId, tokenHash, input.provider || null, input.externalInteractionId || null, now],
+         AND expires_at > $3
+         AND left($2, length('occi_' || interaction_id || '_')) = ('occi_' || interaction_id || '_')${client ? '\n       FOR UPDATE' : ''}`,
+      [orgId, token, now],
     )
-    return row ? channelInteractionFromRow(row) : null
+    return candidates.rows.find((row) => verifyChannelInteractionTokenHash(token, String(row.token_hash))) ?? null
+  }
+
+  async findChannelInteraction(input: FindChannelInteractionInput) {
+    const now = nowIso(input.now)
+    if (input.token) {
+      const row = await this.findPendingChannelInteractionRowByToken(input.orgId, input.token, now)
+      return row ? channelInteractionFromRow(row) : null
+    }
+    if (input.provider && input.externalInteractionId) {
+      const row = await this.maybeOne(
+        `SELECT * FROM cloud_channel_interactions
+         WHERE org_id = $1 AND status = 'pending' AND expires_at > $4
+           AND provider = $2 AND external_interaction_id = $3`,
+        [input.orgId, input.provider, input.externalInteractionId, now],
+      )
+      return row ? channelInteractionFromRow(row) : null
+    }
+    return null
   }
 
   async resolveChannelInteraction(input: ResolveChannelInteractionInput) {
-    const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
     const now = nowIso(input.usedAt)
-    const result = await this.pool.query(
-      `UPDATE cloud_channel_interactions
-       SET status = 'used', used_at = $5, updated_at = $5
-       WHERE org_id = $1
-         AND status = 'pending'
-         AND expires_at > $5
-         AND (
-           ($2::text IS NOT NULL AND token_hash = $2)
-           OR (
-             $3::text IS NOT NULL
-             AND $4::text IS NOT NULL
-             AND provider = $3
-             AND external_interaction_id = $4
-           )
-         )
-       RETURNING *`,
-      [input.orgId, tokenHash, input.provider || null, input.externalInteractionId || null, now],
-    )
-    const interaction = result.rows[0] ? channelInteractionFromRow(result.rows[0]) : null
+    let updatedRow: QueryRow | null = null
+    if (input.token) {
+      const candidate = await this.findPendingChannelInteractionRowByToken(input.orgId, input.token, now)
+      if (candidate) {
+        const result = await this.pool.query(
+          `UPDATE cloud_channel_interactions
+           SET status = 'used', used_at = $3, updated_at = $3
+           WHERE org_id = $1 AND interaction_id = $2 AND status = 'pending' AND expires_at > $3
+           RETURNING *`,
+          [input.orgId, String(candidate.interaction_id), now],
+        )
+        updatedRow = result.rows[0] ?? null
+      }
+    } else if (input.provider && input.externalInteractionId) {
+      const result = await this.pool.query(
+        `UPDATE cloud_channel_interactions
+         SET status = 'used', used_at = $4, updated_at = $4
+         WHERE org_id = $1 AND status = 'pending' AND expires_at > $4
+           AND provider = $2 AND external_interaction_id = $3
+         RETURNING *`,
+        [input.orgId, input.provider, input.externalInteractionId, now],
+      )
+      updatedRow = result.rows[0] ?? null
+    }
+    const interaction = updatedRow ? channelInteractionFromRow(updatedRow) : null
     if (interaction) {
       await this.recordAuditEvent({
         orgId: interaction.orgId,
@@ -823,26 +841,19 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput) {
     return this.withTransaction(async (client) => {
-      const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
       const usedAt = nowIso(input.usedAt)
-      const selected = await this.maybeOne(
-        `SELECT * FROM cloud_channel_interactions
-         WHERE org_id = $1
-           AND status = 'pending'
-           AND expires_at > $5
-           AND (
-             ($2::text IS NOT NULL AND token_hash = $2)
-             OR (
-               $3::text IS NOT NULL
-               AND $4::text IS NOT NULL
-               AND provider = $3
-               AND external_interaction_id = $4
-             )
-           )
-         FOR UPDATE`,
-        [input.orgId, tokenHash, input.provider || null, input.externalInteractionId || null, usedAt],
-        client,
-      )
+      const selected = input.token
+        ? await this.findPendingChannelInteractionRowByToken(input.orgId, input.token, usedAt, client)
+        : input.provider && input.externalInteractionId
+          ? await this.maybeOne(
+            `SELECT * FROM cloud_channel_interactions
+             WHERE org_id = $1 AND status = 'pending' AND expires_at > $4
+               AND provider = $2 AND external_interaction_id = $3
+             FOR UPDATE`,
+            [input.orgId, input.provider, input.externalInteractionId, usedAt],
+            client,
+          )
+          : null
       if (!selected) return null
       const interaction = channelInteractionFromRow(selected)
       if (input.command.sessionId !== interaction.sessionId) {
@@ -1255,14 +1266,14 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           [selected.rows.map((row) => String(row.tenant_id)), selected.rows.map((row) => String(row.session_id))],
         )
         for (const leaseRow of leaseRows.rows) {
-          leaseByKey.set(`${String(leaseRow.tenant_id)} ${String(leaseRow.session_id)}`, leaseFromRow(leaseRow))
+          leaseByKey.set(`${String(leaseRow.tenant_id)}\u0000${String(leaseRow.session_id)}`, leaseFromRow(leaseRow))
         }
       }
       const leases = []
       for (const row of selected.rows) {
         const tenantId = String(row.tenant_id)
         const sessionId = String(row.session_id)
-        const currentLease = leaseByKey.get(`${tenantId} ${sessionId}`) || null
+        const currentLease = leaseByKey.get(`${tenantId}\u0000${sessionId}`) || null
         if (currentLease && currentLease.leaseExpiresAt > nowMs) continue
         const attempt = numberValue(row.next_lease_attempt) + 1
         const leaseRecord = {
