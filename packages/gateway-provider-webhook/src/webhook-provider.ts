@@ -16,9 +16,8 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { channelProviderKindFromId, constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { boundedPositiveInt, channelProviderKindFromId, constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 import {
-  boundedPositiveInt,
   isAbortError,
   isRetryableWebhookDeliveryError,
   parseRetryAfterMs,

@@ -1,3 +1,5 @@
+import { cappedBackoffMs as sharedCappedBackoffMs, withRetry } from "@open-cowork/gateway-channel";
+
 export interface TelegramRetryOptions {
   attempts?: number;
   sleep?: (ms: number) => Promise<void>;
@@ -9,30 +11,24 @@ export interface TelegramRateLimitEvent {
   delayMs: number;
 }
 
+// Bounded to maxAttempts so a misconfigured attempts value can't spin forever. No
+// jitter and no delay clamp, so an explicit Telegram retry_after is honoured verbatim.
 export async function withTelegramRetry<T>(
   operation: () => Promise<T>,
   options: TelegramRetryOptions = {},
 ): Promise<T> {
-  const attempts = options.attempts ?? 3;
-  const sleep = options.sleep ?? delay;
-  let attempt = 0;
-
-  while (true) {
-    try {
-      return await operation();
-    } catch (error) {
-      attempt += 1;
-      const status = telegramErrorStatus(error);
-      const delayMs = telegramRetryDelayMs(error, attempt);
-      if (attempt >= attempts || delayMs === null) {
-        throw error;
+  return withRetry(operation, {
+    attempts: options.attempts,
+    defaultAttempts: 3,
+    maxAttempts: 10,
+    classifyDelayMs: telegramRetryDelayMs,
+    sleep: options.sleep,
+    onRetry: async (error, _attempt, delayMs) => {
+      if (telegramErrorStatus(error) === 429) {
+        await options.onRateLimit?.({ attempt: _attempt, delayMs });
       }
-      if (status === 429) {
-        await options.onRateLimit?.({ attempt, delayMs });
-      }
-      await sleep(delayMs);
-    }
-  }
+    },
+  });
 }
 
 export function telegramRetryDelayMs(error: unknown, attempt: number): number | null {
@@ -74,13 +70,7 @@ function numericStatus(value: unknown): number | null {
 }
 
 function cappedBackoffMs(attempt: number): number {
-  return Math.min(10_000, 1000 * 2 ** Math.max(0, attempt - 1));
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+  return sharedCappedBackoffMs(attempt);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
