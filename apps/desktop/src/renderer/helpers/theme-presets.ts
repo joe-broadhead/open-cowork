@@ -99,13 +99,3 @@ export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme, acce
   return accentId ? applyThemeAccent(tokens, accentId) : tokens
 }
 
-export function getUiThemeOptions() {
-  return Array.from(themeRegistry.values())
-    .filter(({ id }) => USER_FACING_THEME_IDS.has(id))
-    .map(({ id, label, description, swatches }) => ({
-      id,
-      label,
-      description,
-      swatches,
-    }))
-}

@@ -229,7 +229,3 @@ export const CLOUD_WEB_ROUTE_GROUPS: CloudWebRouteGroup[] = [
 export function findCloudWebRoute(routeId: string | null | undefined) {
   return CLOUD_WEB_ROUTES.find((route) => route.id === routeId) || null
 }
-
-export function cloudWebRoutesForSurface(surface: CloudWebSurface) {
-  return CLOUD_WEB_ROUTES.filter((route) => route.surface === surface)
-}

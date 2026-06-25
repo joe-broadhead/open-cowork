@@ -1,7 +1,6 @@
 import {
   getDefaultThemeId,
   getThemeTokens,
-  getUiThemeOptions,
   isUiTheme,
   isUserFacingTheme,
   isUiAccentPresetId,
@@ -12,7 +11,7 @@ import {
   type UiTheme,
 } from './theme-presets'
 
-export { getThemeTokens, getUiThemeOptions, getDefaultThemeId, UI_ACCENT_PRESETS }
+export { getThemeTokens, getDefaultThemeId, UI_ACCENT_PRESETS }
 export type { UiTheme, UiAccentPresetId }
 
 export type ColorScheme = 'system' | 'dark' | 'light'

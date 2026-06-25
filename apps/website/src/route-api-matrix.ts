@@ -441,7 +441,3 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     tests: ['browser-e2e.test.ts', 'render.test.ts'],
   },
 ]
-
-export function findCloudWebRouteApiMatrix(routeId: CloudWebRouteId) {
-  return CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === routeId) || null
-}
