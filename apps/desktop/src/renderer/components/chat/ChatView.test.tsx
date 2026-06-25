@@ -410,6 +410,65 @@ describe('ChatView', () => {
     expect(document.querySelector('[data-action-id="capture-knowledge"]')).not.toBeInTheDocument()
   })
 
+  it('captures the conversation to Knowledge and flips the action to pending', async () => {
+    const user = userEvent.setup()
+    const api = installChatViewApi()
+    seedCurrentSession()
+    useSessionStore.setState({ activeWorkspaceId: 'local' })
+
+    render(<ChatView />)
+    await screen.findByRole('toolbar', { name: 'Chat actions' })
+
+    await user.click(await screen.findByRole('button', { name: 'Capture to knowledge' }))
+
+    await waitFor(() => expect(api.knowledge.propose).toHaveBeenCalledTimes(1))
+    // The proposal links the originating thread so it can be deduped on reload.
+    expect(api.knowledge.propose).toHaveBeenCalledWith(
+      expect.objectContaining({
+        links: expect.arrayContaining([
+          expect.objectContaining({ kind: 'thread', targetId: 'session-1' }),
+        ]),
+      }),
+    )
+    // The action flips to the pending state and the capture button is gone.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Capture to knowledge' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /Proposed/ })).toBeInTheDocument()
+  })
+
+  it('reflects an existing pending capture so the same thread is not proposed twice', async () => {
+    const api = installChatViewApi()
+    // A pending proposal already links this session — the action must show as
+    // proposed on load instead of re-enabling a duplicate capture.
+    vi.mocked(api.knowledge.snapshot).mockResolvedValue({
+      spaces: [{ id: 'space-local', name: 'Company OS', visibility: 'company', role: 'Maintainer' }],
+      pages: [],
+      proposals: [{
+        id: 'proposal-existing',
+        spaceId: 'space-local',
+        pageTitle: 'Conversation: Launch analysis',
+        by: 'you',
+        when: '2026-06-15T00:00:00.000Z',
+        summary: 'Capture',
+        add: 1,
+        del: 0,
+        status: 'pending',
+        links: [{ kind: 'thread', label: 'Launch analysis', targetId: 'session-1' }],
+        body: [{ id: 'b', type: 'p', text: 'x' }],
+      }],
+      graph: { nodes: [], edges: [] },
+    })
+    seedCurrentSession()
+    useSessionStore.setState({ activeWorkspaceId: 'local' })
+
+    render(<ChatView />)
+    await screen.findByRole('toolbar', { name: 'Chat actions' })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Proposed/ })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Capture to knowledge' })).not.toBeInTheDocument()
+  })
+
   it('shows linked project and task context only when coordination links the session', async () => {
     const user = userEvent.setup()
     const onNavigate = vi.fn()

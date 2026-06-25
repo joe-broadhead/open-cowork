@@ -153,6 +153,30 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
     }
   }, [activeWorkspaceId, activeWorkspaceIsLocal, addGlobalError, currentSession, currentSessionId, messages])
 
+  // Reflect an already-pending capture for this conversation so navigating away
+  // and back doesn't reset the action and let a second proposal be created for
+  // the same thread (the button state is otherwise component-local). Only the
+  // Local desktop workspace can capture; the proposal records the session id as a
+  // 'thread' link targetId, so a pending one for this session means "already proposed".
+  useEffect(() => {
+    if (!activeWorkspaceIsLocal || !currentSessionId) return
+    let disposed = false
+    void (async () => {
+      try {
+        const snapshot = await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId })
+        const alreadyPending = snapshot.proposals.some(
+          (proposal) => proposal.status === 'pending'
+            && proposal.links.some((link) => link.targetId === currentSessionId),
+        )
+        if (!disposed && alreadyPending) setCapturedSessionId(currentSessionId)
+      } catch {
+        // Best-effort hydration; if the snapshot can't be read the button simply
+        // stays actionable.
+      }
+    })()
+    return () => { disposed = true }
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, currentSessionId])
+
   useEffect(() => {
     let disposed = false
     const loadBoard = async () => {
