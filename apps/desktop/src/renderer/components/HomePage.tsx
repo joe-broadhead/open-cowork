@@ -80,32 +80,41 @@ const HOME_COACHMARK_DISMISSED_KEY = 'open-cowork-home-coachmark-dismissed'
 // consistent across Home → chat transitions.
 const MAX_COMPOSER_HEIGHT = 220
 
+// Each starter card carries a tone so its icon sits in a soft colored tile
+// (matching the Studio reference's teal/blue/amber suggestion tiles) instead of
+// a flat inline accent icon. Tones map to the muted Mercury palette tokens.
+type SuggestionTone = 'accent' | 'green' | 'amber' | 'info'
+
 const EXAMPLE_PROMPTS = [
   {
     title: 'Plan a release',
     prompt: 'Draft a release plan for the next milestone.',
     agentMode: 'plan',
     icon: 'kanban',
+    tone: 'accent',
   },
   {
     title: 'Review a change',
     prompt: 'Review the recent changes and call out production risks.',
     agentMode: 'build',
     icon: 'file-diff',
+    tone: 'green',
   },
   {
     title: 'Create a workflow',
     prompt: 'Help me turn a repeated task into a saved workflow.',
     agentMode: 'chief-of-staff',
     icon: 'workflow',
+    tone: 'amber',
   },
   {
     title: 'Investigate an issue',
     prompt: 'Trace this bug from symptoms to a concrete fix.',
     agentMode: 'build',
     icon: 'search',
+    tone: 'info',
   },
-] satisfies Array<{ title: string; prompt: string; agentMode: PrimaryAgentMode; icon: IconName }>
+] satisfies Array<{ title: string; prompt: string; agentMode: PrimaryAgentMode; icon: IconName; tone: SuggestionTone }>
 
 const DEFAULT_PRIMARY_AGENT_MODE: PrimaryAgentMode = 'build'
 
@@ -737,8 +746,8 @@ function LaunchpadSuggestions({
           const agentMode = constrainedPrimaryAgentMode(example.agentMode, allowedPrimaryModes)
           const content = (
               <div className="flex items-start gap-3">
-                <span className="mt-0.5 text-accent">
-                  <Icon name={example.icon} size={16} />
+                <span className="home-sug-tile" data-tone={example.tone} aria-hidden="true">
+                  <Icon name={example.icon} size={20} />
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[13px] font-medium text-text">{example.title}</span>

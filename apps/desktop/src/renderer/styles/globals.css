@@ -2099,6 +2099,26 @@ body {
   margin-top: var(--space-3);
 }
 
+/* Starter-card icon tile: a soft colored rounded square per card tone (Studio
+   reference) with a white glyph. The tones are the muted Mercury palette tokens,
+   so the tiles read as calm accents, not loud chips. */
+.home-sug-tile {
+  display: inline-flex;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: #fff;
+  box-shadow: var(--shadow-1);
+}
+
+.home-sug-tile[data-tone='green'] { background: var(--color-green); }
+.home-sug-tile[data-tone='amber'] { background: var(--color-amber); }
+.home-sug-tile[data-tone='info'] { background: var(--color-info); }
+
 .home-coworker-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
