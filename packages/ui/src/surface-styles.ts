@@ -652,16 +652,11 @@ export function channelsSurfaceCss(): string {
   font-size: var(--text-xs);
 }
 
-.studio-channel-reach-grid,
 .studio-channel-dashboard,
 .studio-channel-grid,
 .studio-channel-form__grid {
   display: grid;
   gap: var(--space-3);
-}
-
-.studio-channel-reach-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .studio-channel-dashboard {
@@ -670,7 +665,6 @@ export function channelsSurfaceCss(): string {
 }
 
 .studio-channel-panel,
-.studio-channel-reach-card,
 .studio-channel-card,
 .studio-channel-form,
 .studio-channel-notice {
@@ -699,7 +693,6 @@ export function channelsSurfaceCss(): string {
 .studio-channel-panel__head h2,
 .studio-channel-form h3,
 .studio-channel-card h3,
-.studio-channel-reach-card h3,
 .studio-channel-watch h3,
 .studio-channel-delivery-row h3 {
   margin: 0;
@@ -711,7 +704,6 @@ export function channelsSurfaceCss(): string {
 
 .studio-channel-panel__head p,
 .studio-channel-card p,
-.studio-channel-reach-card p,
 .studio-channel-watch p,
 .studio-channel-delivery-row p,
 .studio-channel-watch small {
@@ -721,14 +713,6 @@ export function channelsSurfaceCss(): string {
   line-height: var(--lh-xs);
 }
 
-.studio-channel-reach-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
-.studio-channel-reach-card__icon,
 .studio-channel-card__icon {
   display: inline-flex;
   flex: none;
@@ -895,8 +879,7 @@ export function channelsSurfaceCss(): string {
 }
 
 @media (max-width: 1080px) {
-  .studio-channel-dashboard,
-  .studio-channel-reach-grid {
+  .studio-channel-dashboard {
     grid-template-columns: 1fr;
   }
 }

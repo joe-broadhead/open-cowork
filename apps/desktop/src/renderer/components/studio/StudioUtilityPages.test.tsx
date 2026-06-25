@@ -461,7 +461,7 @@ describe('StudioChannelsPage', () => {
     resetSessionStore()
   })
 
-  it('renders provider reach, People roles, Watches, and desktop channel actions', async () => {
+  it('renders the provider grid, People roles, Watches, and desktop channel actions', async () => {
     const connectBinding = vi.fn(async () => ({ bindingId: 'binding-new', agentId: 'agent-1', provider: 'whatsapp', displayName: 'WhatsApp channel', status: 'auth_required', settings: {} }))
     const createWatch = vi.fn(async () => ({
       id: 'watch-2',
@@ -548,9 +548,6 @@ describe('StudioChannelsPage', () => {
     render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
 
     expect(await screen.findByText('Team Telegram')).toBeInTheDocument()
-    expect(screen.getByText('Start work')).toBeInTheDocument()
-    expect(screen.getByText('Get updates')).toBeInTheDocument()
-    expect(screen.getByText('Approve on the go')).toBeInTheDocument()
     for (const label of ['WhatsApp', 'Telegram', 'Slack', 'Discord', 'Signal', 'Email', 'Webhook']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     }

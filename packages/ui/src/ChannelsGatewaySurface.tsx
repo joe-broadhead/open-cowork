@@ -25,7 +25,7 @@ import {
 import { Badge, type BadgeTone } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
-import { Icon, type IconName } from './Icon.js'
+import { Icon } from './Icon.js'
 import { CoworkerAvatar, StudioPageHeader } from './StudioPrimitives.js'
 import { cn } from './utils.js'
 
@@ -58,24 +58,6 @@ const ROLE_DESCRIPTIONS: Record<ChannelIdentityRole, string> = {
   approver: 'Can approve requests and unblock work on the go.',
   viewer: 'Can follow safe delivery updates.',
 }
-
-const REACH_CARDS: Array<{ title: string; body: string; icon: IconName }> = [
-  {
-    title: 'Start work',
-    body: 'Inbound channel messages can open or continue Cloud work without changing OpenCode execution semantics.',
-    icon: 'message-square',
-  },
-  {
-    title: 'Get updates',
-    body: 'Watches route project and conversation events back to the right people.',
-    icon: 'bell',
-  },
-  {
-    title: 'Approve on the go',
-    body: 'Approver identities can receive permission and question prompts through trusted channels.',
-    icon: 'badge-check',
-  },
-]
 
 type Notice = {
   tone: 'success' | 'warning'
@@ -280,24 +262,6 @@ function ChannelsNotice({ notice, error }: { notice: Notice | null; error?: stri
   if (error) return <p className="studio-channel-notice" data-tone="warning">{safeDisplay(error, 'Channel surface failed to load.')}</p>
   if (!notice) return null
   return <p className="studio-channel-notice" data-tone={notice.tone}>{notice.message}</p>
-}
-
-function ReachCards() {
-  return (
-    <div className="studio-channel-reach-grid" id="channel-reach-cards">
-      {REACH_CARDS.map((card) => (
-        <article className="studio-channel-reach-card" key={card.title}>
-          <span className="studio-channel-reach-card__icon" aria-hidden="true">
-            <Icon name={card.icon} size={16} />
-          </span>
-          <div>
-            <h3>{card.title}</h3>
-            <p>{card.body}</p>
-          </div>
-        </article>
-      ))}
-    </div>
-  )
 }
 
 function ConnectedChannels({
@@ -827,7 +791,6 @@ export function ChannelsGatewaySurface({
         ]}
       />
       <ChannelsNotice notice={notice} error={error} />
-      <ReachCards />
       <div className="studio-channel-dashboard">
         <div className="studio-channel-panel">
           <div className="studio-channel-panel__head">

@@ -66,7 +66,7 @@ void test('cloud web browser gates admin controls for member workspaces', async 
     const beforeChannels = harness.requests.length
     harness.clickText('[data-route-link]', 'Channels')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
-    await waitFor(() => assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Start work/))
+    await waitFor(() => assert.match(harness.document.querySelector('#channel-gateway-surface')?.textContent || '', /Connected|Add a channel|People|Watches/))
     const channelRequestPaths = harness.requests.slice(beforeChannels).map((request) => request.path)
     const allRequestPaths = harness.requests.map((request) => request.path)
     for (const adminOnlyChannelPath of [
@@ -451,9 +451,6 @@ void test('cloud web browser exposes desktop parity boundaries and workbench sta
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
     assert.match(harness.document.querySelector('[data-parity-route="channels"]')?.textContent || '', /provider reach|People roles|Watches|admin-gated/i)
     const channelSurfaceText = harness.document.querySelector('#channel-gateway-surface')?.textContent || ''
-    assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Start work/)
-    assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Get updates/)
-    assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Approve on the go/)
     for (const provider of ['WhatsApp', 'Telegram', 'Slack', 'Discord', 'Signal', 'Email', 'Webhook']) {
       assert.match(harness.document.querySelector('#channel-add-grid')?.textContent || '', new RegExp(provider))
     }
