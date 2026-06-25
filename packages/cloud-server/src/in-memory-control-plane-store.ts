@@ -1055,7 +1055,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         tenantId: candidate.session.record.tenantId,
         sessionId: candidate.session.record.sessionId,
       })),
-      pendingSessionCountEstimate: candidates.length,
+      // Bound the estimate like the postgres backend (which probes limit+1), so the
+      // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
+      pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,
     }
   }
 
@@ -1085,7 +1087,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     }
     return {
       leases,
-      pendingSessionCountEstimate: candidates.length,
+      // Bound the estimate like the postgres backend (which probes limit+1), so the
+      // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
+      pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,
     }
   }
 

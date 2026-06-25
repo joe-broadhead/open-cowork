@@ -271,6 +271,16 @@ function runControlPlaneDomainContracts(
       const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2026-01-01T00:00:05.000Z') })
       assert.equal(Array.isArray(runnableList.sessions), true)
       assert.equal(Number.isFinite(runnableList.pendingSessionCountEstimate), true)
+      // pendingSessionCountEstimate is bounded to limit+1 identically on both stores (P2 parity).
+      const boundedList = await store.listRunnableSessions({ limit: 1, now: new Date('2026-01-01T00:00:05.000Z') })
+      assert.ok(boundedList.pendingSessionCountEstimate <= 2, 'estimate must be bounded to limit+1')
+
+      // reapExpiredSessionLeases (P1-D — previously exercised by neither the always-on contract nor an
+      // un-skipped concurrency proof): the lease claimed above (ttl 30s from 00:00:00) is expired by
+      // 00:01:00 and is reaped identically on both stores.
+      const reaped = await store.reapExpiredSessionLeases({ now: new Date('2026-01-01T00:01:00.000Z'), limit: 10 })
+      assert.ok(Array.isArray(reaped))
+      assert.equal(reaped.some((entry) => entry.sessionId === sessionId), true, 'expected the expired session lease reaped')
 
       // The provider-event claim is atomic: the first claim wins, a re-claim of the same event id is a
       // no-op duplicate (the prod cross-gateway dedup guarantee).
