@@ -16,6 +16,18 @@
 //     `apps/website/src/styles.ts` embeds them in the assembled stylesheet.
 //   - Desktop:   `apps/desktop/src/renderer/index.tsx` injects
 //     `studioSurfaceStyles()` into a <style> element at renderer startup.
+//
+// Radius is assigned by surface ROLE, not by eye (pick the var, never a px):
+//   --radius-xs  inline code chips, kbd, tiny inset rectangles
+//   --radius-sm  ALL interaction controls (button, input, select trigger, menu)
+//   --radius-md  icon tiles/chips, task/kanban cards, mini previews, notices
+//   --radius-lg  panels, lanes, rows, dialogs, empty-state, toast, callouts
+//   --radius-xl  the studio shell, chat composer shell
+//   --radius-2xl primary content cards (coworker/decision/artifact/plan)
+//   --radius-3xl the composer (single most-rounded surface)
+//   --radius-full badges, chips, pills, count bubbles, avatars, status dots
+// Depth is the fixed ladder --shadow-1/2/3 + --specular(-strong) on raised/
+// floating surfaces — never bespoke rgba shadows, scale-on-hover, or glows.
 
 export function artifactsSurfaceCss(): string {
   return `
@@ -227,7 +239,8 @@ export function knowledgeGraphCss(): string {
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      font-size: 12px;
+      font-size: var(--text-xs);
+      line-height: var(--lh-xs);
       color: var(--color-text-secondary);
     }
     .studio-graph-legend-dot {

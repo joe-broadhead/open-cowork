@@ -28,6 +28,7 @@ import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-wo
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
 import {
+  Button,
   Card,
   Icon,
   StudioPageHeader,
@@ -244,10 +245,9 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
         onDeleteWatch={(watchId) => window.coworkApi.channels.deleteWatch(watchId, { workspaceId: activeWorkspaceId })}
       />
       <div className="flex justify-end">
-        <button type="button" className="ui-button ui-button--ghost ui-button--sm" onClick={onOpenSettings}>
-          <Icon name="settings-2" size={16} />
-          <span>{t('studio.channels.settings', 'Open settings')}</span>
-        </button>
+        <Button variant="ghost" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
+          {t('studio.channels.settings', 'Open settings')}
+        </Button>
       </div>
     </StudioPageShell>
   )
