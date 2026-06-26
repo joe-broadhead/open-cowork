@@ -291,7 +291,7 @@ describe('ThreadList', () => {
     expect(importInventory).toHaveBeenCalledWith('session-1')
     expect(workspaceList).toHaveBeenCalled()
 
-    expect(screen.getByLabelText('Cloud workspace')).toHaveTextContent('Acme Cloud')
+    expect(screen.getByRole('button', { name: /Cloud workspace/ })).toHaveTextContent('Acme Cloud')
     expect(dialog).toHaveTextContent('Messages')
     expect(dialog).toHaveTextContent('3')
     expect(dialog).toHaveTextContent('Artifacts')

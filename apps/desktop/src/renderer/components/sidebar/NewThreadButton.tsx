@@ -340,7 +340,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
                     : t('newThread.chooseSnapshot', 'Choose directory')}
                 </Button>
                 {snapshotInventory && (
-                  <div className="rounded-lg border border-border-subtle p-3 text-2xs text-text-muted">
+                  <Card variant="flat" padding="sm" specular={false} className="text-2xs text-text-muted">
                     <div className="text-text">
                       {snapshotInventory.fileCount} {t('newThread.files', 'files')} · {Math.ceil(snapshotInventory.byteCount / 1024)} KB
                     </div>
@@ -354,7 +354,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
                         ))}
                       </div>
                     )}
-                  </div>
+                  </Card>
                 )}
               </div>
             )}

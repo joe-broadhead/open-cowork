@@ -16,7 +16,7 @@ import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
-import { Icon, type IconName } from '../ui'
+import { Badge, Button, Card, Icon, Input, type BadgeTone, type IconName } from '../ui'
 import { buildDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 
 interface Props {
@@ -195,9 +195,11 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
 
   return (
     <div className="px-3 pt-3 pb-2">
-      <div
-        className={`flex min-h-10 items-center gap-2.5 rounded-lg border border-border-subtle px-2.5 py-2 text-text-secondary ${iconOnly ? sidebarBrandJustifyClass(mediaAlign) : ''}`}
-        style={{ background: 'color-mix(in srgb, var(--color-elevated) 42%, transparent)' }}
+      <Card
+        variant="flat"
+        padding="sm"
+        specular={false}
+        className={`flex min-h-10 items-center gap-2.5 text-text-secondary ${iconOnly ? sidebarBrandJustifyClass(mediaAlign) : ''}`}
         role={iconOnly ? 'img' : undefined}
         aria-label={iconOnly ? ariaLabel : undefined}
       >
@@ -225,7 +227,7 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
             {subtitle && <div className="mt-0.5 truncate text-2xs text-text-muted">{subtitle}</div>}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }
@@ -239,8 +241,7 @@ function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig })
   if (!text && !secondaryText && !(linkLabel && linkUrl)) return null
 
   return (
-    <div className="mb-2 rounded-md border border-border-subtle px-2 py-2 text-2xs text-text-muted"
-      style={{ background: 'color-mix(in srgb, var(--color-elevated) 34%, transparent)' }}>
+    <Card variant="flat" padding="sm" specular={false} className="mb-2 text-2xs text-text-muted">
       {text && <div className="truncate font-medium text-text-secondary">{text}</div>}
       {secondaryText && <div className="mt-0.5 line-clamp-2 leading-snug">{secondaryText}</div>}
       {linkLabel && linkUrl && (
@@ -253,7 +254,7 @@ function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig })
           <span className="truncate">{linkLabel}</span>
         </a>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -284,11 +285,11 @@ function workspaceStatusLabel(status: WorkspaceInfo['status']) {
   }
 }
 
-function workspaceStatusClass(status: WorkspaceInfo['status']) {
-  if (status === 'online') return 'border-green/30 text-green'
-  if (status === 'offline') return 'border-amber/30 text-amber'
-  if (status === 'auth_required') return 'border-info/30 text-info'
-  return 'border-red/30 text-red'
+function workspaceStatusTone(status: WorkspaceInfo['status']): BadgeTone {
+  if (status === 'online') return 'success'
+  if (status === 'offline') return 'warning'
+  if (status === 'auth_required') return 'info'
+  return 'danger'
 }
 
 function workspaceSupportReason(support: WorkspaceApiSupport[] | undefined, ...apis: string[]) {
@@ -480,9 +481,9 @@ function WorkspaceSwitcher() {
       >
         <div className="flex min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 truncate font-medium">{activeWorkspace.label}</span>
-          <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-2xs ${workspaceStatusClass(activeWorkspace.status)}`}>
+          <Badge tone={workspaceStatusTone(activeWorkspace.status)} className="max-w-[96px] shrink-0 truncate">
             {workspaceStatusLabel(activeWorkspace.status)}
-          </span>
+          </Badge>
         </div>
         <div className="mt-0.5 truncate text-2xs text-text-muted">
           {workspaceDescription(activeWorkspace, supportByWorkspace[activeWorkspace.id])}
@@ -492,7 +493,7 @@ function WorkspaceSwitcher() {
       {open && (
         <div
           role="menu"
-          className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border-subtle bg-elevated shadow-card"
+          className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg theme-popover"
         >
           {workspaces.map((workspace) => (
             <button
@@ -504,9 +505,9 @@ function WorkspaceSwitcher() {
             >
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate font-medium">{workspace.label}</span>
-                <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-2xs ${workspaceStatusClass(workspace.status)}`}>
+                <Badge tone={workspaceStatusTone(workspace.status)} className="max-w-[96px] shrink-0 truncate">
                   {workspaceStatusLabel(workspace.status)}
-                </span>
+                </Badge>
               </div>
               <div className="mt-0.5 truncate text-2xs text-text-muted">
                 {workspaceDescription(workspace, supportByWorkspace[workspace.id])}
@@ -516,55 +517,58 @@ function WorkspaceSwitcher() {
           <div className="border-t border-border-subtle p-2">
             {showGatewayForm ? (
               <div className="space-y-2">
-                <input
+                <Input
                   type="url"
+                  size="sm"
                   value={gatewayUrl}
                   onChange={(event) => setGatewayUrl(event.target.value)}
                   placeholder={t('workspace.gatewayUrl', 'Gateway URL')}
                   aria-label={t('workspace.gatewayUrl', 'Gateway URL')}
-                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-border"
                 />
-                <input
+                <Input
                   type="text"
+                  size="sm"
                   value={gatewayLabel}
                   onChange={(event) => setGatewayLabel(event.target.value)}
                   placeholder={t('workspace.gatewayLabel', 'Label')}
                   aria-label={t('workspace.gatewayLabel', 'Label')}
-                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-border"
                 />
-                <input
+                <Input
                   type="password"
+                  size="sm"
                   value={gatewayToken}
                   onChange={(event) => setGatewayToken(event.target.value)}
                   placeholder={t('workspace.gatewayToken', 'Gateway token')}
                   aria-label={t('workspace.gatewayToken', 'Gateway token')}
-                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-border"
                 />
                 <div className="flex gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
                     onClick={() => void addGatewayWorkspace()}
-                    className="flex-1 rounded-md border border-border-subtle px-2 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
                   >
                     {t('workspace.addGateway', 'Add Gateway')}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setShowGatewayForm(false)}
-                    className="rounded-md border border-border-subtle px-2 py-1.5 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
                   >
                     {t('workspace.cancel', 'Cancel')}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
+                fullWidth
+                className="justify-start"
                 onClick={() => setShowGatewayForm(true)}
-                className="w-full rounded-md border border-border-subtle px-2 py-1.5 text-start text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
               >
                 {t('workspace.connectGateway', 'Connect Gateway workspace')}
-              </button>
+              </Button>
             )}
           </div>
         </div>

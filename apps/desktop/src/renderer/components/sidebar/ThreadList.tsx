@@ -12,6 +12,7 @@ import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { cloudGitRepositoryLabel } from '@open-cowork/shared'
 import type { CloudProjectSourceSummary, SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
+import { Badge, Button, Card, Input, Select } from '../ui'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -402,11 +403,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       <div key={session.id} className="relative group">
         {isEditing ? (
               <div className="px-1">
-                <input autoFocus type="text" value={editTitle}
+                <Input autoFocus type="text" size="sm" value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') void handleRename(session.id); if (e.key === 'Escape') setEditingId(null) }}
-                  onBlur={() => handleRename(session.id)}
-                  className="w-full px-2 py-[6px] rounded-md text-sm bg-elevated border border-accent text-text outline-none" />
+                  onBlur={() => handleRename(session.id)} />
               </div>
             ) : (
               <button type="button"
@@ -469,21 +469,18 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                         className="shrink-0 inline-flex items-center gap-1 text-2xs leading-none"
                       >
                         {session.changeSummary.synthetic && <span className="text-text-muted">est</span>}
-                        <span style={{ color: 'var(--color-green)' }}>+{session.changeSummary.additions}</span>
-                        <span style={{ color: 'var(--color-red)' }}>−{session.changeSummary.deletions}</span>
+                        <span className="text-green">+{session.changeSummary.additions}</span>
+                        <span className="text-red">−{session.changeSummary.deletions}</span>
                       </span>
                     )}
                     {session.revertedMessageId && (
-                      <span
+                      <Badge
+                        tone="warning"
                         title={t('threadList.revertedTitle', 'Session is reverted to an earlier message')}
-                        className="shrink-0 text-2xs uppercase tracking-[0.04em] px-1 py-px rounded"
-                        style={{
-                          color: 'var(--color-warning)',
-                          background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',
-                        }}
+                        className="shrink-0 uppercase"
                       >
                         {t('threadList.reverted', 'reverted')}
-                      </span>
+                      </Badge>
                     )}
                   </span>
                 </span>
@@ -513,9 +510,9 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           <span aria-hidden="true" className="text-2xs leading-none">{group.kind === 'sandbox' ? 'S' : 'P'}</span>
           <span className="truncate">{group.label}</span>
         </span>
-        <span className="shrink-0 rounded border border-border-subtle px-1 py-px text-2xs normal-case tracking-normal text-text-muted">
+        <Badge tone="muted" className="shrink-0 normal-case tracking-normal">
           {group.sessions.length}
-        </span>
+        </Badge>
       </div>
       <div className="truncate px-1.5 text-2xs text-text-muted">{group.description}</div>
     </div>
@@ -631,13 +628,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               {t('thread.viewChanges', 'View Changes')}
             </button>
           )}
-          <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
+          <div className="my-1 border-t border-border-subtle" />
           <button type="button" onClick={() => {
             void handleDelete(menuId)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-xs hover:bg-surface-hover cursor-pointer transition-colors"
-            style={{ color: 'var(--color-red)' }}>
+            className="w-full text-start px-3 py-1.5 text-xs text-red hover:bg-surface-hover cursor-pointer transition-colors">
             {t('thread.delete', 'Delete')}
           </button>
         </div>
@@ -669,37 +665,33 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               </div>
             </div>
             <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
-              <label className="block text-2xs font-medium text-text-muted">
-                {t('thread.copyToCloudTarget', 'Cloud workspace')}
-                <select
-                  value={copyDialog.targetWorkspaceId}
-                  disabled={copyDialog.busy}
-                  onChange={(event) => setCopyDialog({ ...copyDialog, targetWorkspaceId: event.target.value })}
-                  className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-2 py-2 text-xs text-text outline-none focus:border-border"
-                >
-                  {copyDialog.cloudWorkspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>{workspace.label}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="text-2xs font-medium text-text-muted">{t('thread.copyToCloudTarget', 'Cloud workspace')}</div>
+              <Select
+                className="mt-1 w-full"
+                label={t('thread.copyToCloudTarget', 'Cloud workspace')}
+                value={copyDialog.targetWorkspaceId}
+                disabled={copyDialog.busy}
+                onChange={(value) => setCopyDialog({ ...copyDialog, targetWorkspaceId: value })}
+                options={copyDialog.cloudWorkspaces.map((workspace) => ({ value: workspace.id, label: workspace.label }))}
+              />
 
               <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-md border border-border-subtle px-3 py-2">
+                <Card variant="flat" padding="sm" specular={false}>
                   <div className="text-text-muted">{t('thread.copyMessages', 'Messages')}</div>
                   <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.messages}</div>
-                </div>
-                <div className="rounded-md border border-border-subtle px-3 py-2">
+                </Card>
+                <Card variant="flat" padding="sm" specular={false}>
                   <div className="text-text-muted">{t('thread.copyArtifacts', 'Artifacts')}</div>
                   <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.artifacts}</div>
-                </div>
-                <div className="rounded-md border border-border-subtle px-3 py-2">
+                </Card>
+                <Card variant="flat" padding="sm" specular={false}>
                   <div className="text-text-muted">{t('thread.copyAttachments', 'Attachments')}</div>
                   <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.attachments}</div>
-                </div>
-                <div className="rounded-md border border-border-subtle px-3 py-2">
+                </Card>
+                <Card variant="flat" padding="sm" specular={false}>
                   <div className="text-text-muted">{t('thread.copyExcluded', 'Excluded')}</div>
                   <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.excluded}</div>
-                </div>
+                </Card>
               </div>
 
               <div className="mt-4 space-y-2">
@@ -740,37 +732,34 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               </div>
 
               {(copyDialog.inventory.warnings.length > 0 || copyDialog.inventory.excluded.length > 0) && (
-                <div className="mt-4 rounded-md border border-border-subtle px-3 py-2">
+                <Card variant="flat" padding="sm" specular={false} className="mt-4">
                   {copyDialog.inventory.warnings.map((warning) => (
                     <div key={warning.code} className="text-2xs text-text-secondary">{warning.message}</div>
                   ))}
                   {copyDialog.inventory.excluded.map((item) => (
                     <div key={item.kind} className="mt-1 text-2xs text-text-muted">{item.reason}</div>
                   ))}
-                </div>
+                </Card>
               )}
             </div>
             <div className="flex justify-end gap-2 border-t border-border-subtle px-4 py-3">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={copyDialog.busy}
                 onClick={() => setCopyDialog(null)}
-                className="rounded-md border border-border-subtle px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-60"
               >
                 {t('common.cancel', 'Cancel')}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 disabled={copyDialog.busy || !copyDialog.targetWorkspaceId}
+                loading={copyDialog.busy}
                 onClick={() => void confirmCopyToCloud()}
-                className="rounded-md px-3 py-2 text-xs font-medium disabled:cursor-wait disabled:opacity-60"
-                style={{
-                  background: 'var(--color-accent)',
-                  color: 'var(--color-accent-foreground)',
-                }}
               >
                 {copyDialog.busy ? t('thread.copyingToCloud', 'Copying...') : t('thread.copyToCloudConfirm', 'Copy to Cloud')}
-              </button>
+              </Button>
             </div>
           </div>
         </>
