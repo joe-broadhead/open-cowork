@@ -29,6 +29,7 @@ import {
   selectAgentRunVisibleTasks,
   writeAgentRunFilterState,
 } from './agent-run-filter-model'
+import { Badge, Button, Card, EmptyState, Select } from '../ui'
 
 // Swim-lane block that renders delegated OpenCode tasks as a compact
 // timeline. Nested sub-agent delegations render as indented child lanes.
@@ -206,27 +207,12 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
         className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover transition-colors cursor-pointer text-start"
         aria-expanded={expanded}
       >
-        <span
-          className="text-2xs uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded shrink-0"
-          style={{
-            color: anyRunning
-              ? 'var(--color-accent)'
-              : allComplete
-                ? 'var(--color-green)'
-                : anyErrored
-                  ? 'var(--color-red)'
-                  : 'var(--color-text-secondary)',
-            background: anyRunning
-              ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-              : allComplete
-                ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-                : anyErrored
-                  ? 'color-mix(in srgb, var(--color-red) 12%, transparent)'
-                  : 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
-          }}
+        <Badge
+          tone={anyRunning ? 'accent' : allComplete ? 'success' : anyErrored ? 'danger' : 'neutral'}
+          className="shrink-0 uppercase tracking-[0.08em] font-semibold"
         >
           {headerLabel}
-        </span>
+        </Badge>
         <span className="text-xs text-text-secondary flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
           {anyRunning ? (
             <span
@@ -288,9 +274,11 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
           />
         )}
         {scaleEnabled && visibleTaskRuns.length === 0 ? (
-          <div className="rounded-lg border border-border-subtle bg-elevated px-3 py-4 text-center text-xs text-text-muted">
-            No delegated tasks match the current task filters.
-          </div>
+          <EmptyState
+            icon="list-checks"
+            title="No matching tasks"
+            body="No delegated tasks match the current task filters."
+          />
         ) : null}
         {tree.map((lane) => (
           <div key={lane.taskRun.id} className="flex flex-col">
@@ -349,67 +337,60 @@ function AgentRunFilterControls({
   }
 
   return (
-    <div className="mb-2 rounded-lg border border-border-subtle bg-elevated px-3 py-3">
+    <Card variant="tile" padding="md" className="mb-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {statusOutlineOptions.map((option) => {
             const active = state.statusFilter === option.id
             const count = summary.statuses[option.id]
             return (
-              <button
+              <Button
                 key={option.id}
                 type="button"
+                size="sm"
+                variant={active ? 'primary' : 'ghost'}
                 onClick={() => update({ statusFilter: active ? 'all' : option.id })}
-                className="rounded-md border px-2 py-1 text-2xs font-medium transition-colors hover:bg-surface-hover"
-                style={{
-                  color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                  borderColor: active ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-border-subtle)',
-                  background: active ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
-                }}
               >
                 {option.label} {count}
-              </button>
+              </Button>
             )
           })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
+          <span className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
             Status
-            <select
+            <Select
+              label="Status"
               value={state.statusFilter}
-              onChange={(event) => update({ statusFilter: event.target.value as AgentRunStatusFilter })}
-              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-2xs normal-case tracking-normal text-text-secondary"
-            >
-              {statusOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
+              onChange={(value) => update({ statusFilter: value as AgentRunStatusFilter })}
+              options={statusOptions.map((option) => ({ value: option.id, label: option.label }))}
+            />
+          </span>
+          <span className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
             Coworker
-            <select
+            <Select
+              label="Coworker"
               value={state.agentFilter}
-              onChange={(event) => update({ agentFilter: event.target.value })}
-              className="max-w-[160px] rounded-md border border-border-subtle bg-surface px-2 py-1 text-2xs normal-case tracking-normal text-text-secondary"
-            >
-              <option value="all">All coworkers</option>
-              {summary.agents.map((agent) => (
-                <option key={agent.id || 'unassigned'} value={agent.id}>{agent.label} ({agent.count})</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
+              onChange={(value) => update({ agentFilter: value })}
+              options={[
+                { value: 'all', label: 'All coworkers' },
+                ...summary.agents.map((agent) => ({ value: agent.id, label: `${agent.label} (${agent.count})` })),
+              ]}
+            />
+          </span>
+          <span className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
             Activity
-            <select
+            <Select
+              label="Activity"
               value={state.activityFilter}
-              onChange={(event) => update({ activityFilter: event.target.value as AgentRunActivityFilter })}
-              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-2xs normal-case tracking-normal text-text-secondary"
-            >
-              {activityOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-            </select>
-          </label>
+              onChange={(value) => update({ activityFilter: value as AgentRunActivityFilter })}
+              options={activityOptions.map((option) => ({ value: option.id, label: option.label }))}
+            />
+          </span>
           {hasFilters ? (
-            <button type="button" onClick={onReset} className="rounded-md border border-border-subtle px-2 py-1 text-2xs text-text-muted hover:bg-surface-hover hover:text-text">
+            <Button type="button" size="sm" variant="ghost" onClick={onReset}>
               Reset
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -421,16 +402,16 @@ function AgentRunFilterControls({
         <ScaleMetric label="Artifacts" value={String(summary.metrics.artifactCount)} />
         <ScaleMetric label="Last event" value={formatLastEvent(summary.metrics.lastEventAt)} />
       </div>
-    </div>
+    </Card>
   )
 }
 
 function ScaleMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-border-subtle bg-surface px-2 py-2">
+    <Card variant="flat" padding="sm">
       <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="mt-1 truncate text-xs font-medium text-text-secondary">{value}</div>
-    </div>
+    </Card>
   )
 }
 

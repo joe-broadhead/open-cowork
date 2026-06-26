@@ -14,6 +14,7 @@ import {
 } from './agent-run-utils'
 import type { TaskRunMetrics } from './agent-run-filter-model'
 import { latestTranscriptLine } from './task-timeline-utils'
+import { Badge } from '../ui'
 
 // A single horizontal swim lane showing one delegated sub-agent task.
 // Kept compact so multiple lanes stack cleanly in a parallel-dispatch
@@ -120,10 +121,10 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
           {statusLabel(taskRun.status)}
         </span>
         {handoffLabel && (
-          <span className="inline-flex min-w-0 max-w-[150px] items-center gap-1 rounded-full border border-border-subtle px-1.5 py-0.5 text-2xs text-text-muted">
+          <Badge tone="muted" className="min-w-0 max-w-[150px] gap-1">
             <span className="shrink-0">from</span>
             <span className="truncate text-text-secondary">{handoffLabel}</span>
-          </span>
+          </Badge>
         )}
         {(taskRun.startedAt || isRunning) && (
           <ElapsedClock startedAt={taskRun.startedAt ?? null} finishedAt={taskRun.finishedAt ?? null} />

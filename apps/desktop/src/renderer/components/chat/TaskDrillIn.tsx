@@ -24,6 +24,14 @@ import { buildTaskTimeline } from './task-timeline-utils'
 import { useLiveNow } from './useLiveNow'
 import { useTaskDrillInLayout } from './useTaskDrillInLayout'
 import { listArtifactsForTools } from './session-artifacts'
+import { Badge, Button, Card, IconButton, type BadgeTone } from '../ui'
+
+function statusBadgeTone(status: TaskRun['status']): BadgeTone {
+  if (status === 'error') return 'danger'
+  if (status === 'complete') return 'success'
+  if (status === 'running') return 'accent'
+  return 'neutral'
+}
 
 // Slide-over drawer shown when a user clicks an agent-run lane.
 // Superset of the previous TaskRunCard: same transcript / tools / todos /
@@ -45,13 +53,6 @@ interface Props {
   onOpenApproval?: (approval: PendingApproval) => void
   onOpenQuestion?: (question: PendingQuestion) => void
   onClose: () => void
-}
-
-function statusIntent(status: TaskRun['status']): string {
-  if (status === 'error') return 'var(--color-red)'
-  if (status === 'complete') return 'var(--color-green)'
-  if (status === 'running') return 'var(--color-accent)'
-  return 'var(--color-text-muted)'
 }
 
 function statusLabel(status: TaskRun['status']): string {
@@ -262,22 +263,14 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           style={{ borderColor: 'var(--color-border-subtle)' }}
         >
           {focusStack.length > 1 && (
-            <button
-              type="button"
+            <IconButton
+              icon="chevron-left"
+              label={t('taskDrillIn.backToParent', 'Back to parent task')}
+              variant="secondary"
+              size="sm"
               onClick={onPopFocus}
-              aria-label={t('taskDrillIn.backToParent', 'Back to parent task')}
-              className="shrink-0 inline-flex items-center justify-center rounded-lg border hover:bg-surface-hover transition-colors cursor-pointer"
-              style={{
-                width: 28,
-                height: 28,
-                borderColor: 'var(--color-border-subtle)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="7,2 3,6 7,10" />
-              </svg>
-            </button>
+              className="shrink-0"
+            />
           )}
           <div
             className="shrink-0 rounded-2xl"
@@ -295,18 +288,12 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold text-text truncate">
+              <h2 className="font-display text-role-title text-text truncate">
                 {formatAgentName(focused.agent)}
               </h2>
-              <span
-                className="text-2xs uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded"
-                style={{
-                  color: statusIntent(focused.status),
-                  background: `color-mix(in srgb, ${statusIntent(focused.status)} 12%, transparent)`,
-                }}
-              >
+              <Badge tone={statusBadgeTone(focused.status)} className="uppercase tracking-[0.08em] font-semibold">
                 {statusLabel(focused.status)}
-              </span>
+              </Badge>
               <ElapsedClock
                 startedAt={focused.startedAt ?? null}
                 finishedAt={focused.finishedAt ?? null}
@@ -326,62 +313,63 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           </div>
           <div className="shrink-0 flex items-center gap-1">
             {onOpenTaskInTranscript && (
-              <button
+              <Button
                 type="button"
                 onClick={() => onOpenTaskInTranscript(focused)}
-                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+                variant="secondary"
+                size="sm"
+                className="uppercase tracking-[0.08em]"
               >
                 Source
-              </button>
+              </Button>
             )}
             {previousTask && (
-              <button
+              <Button
                 type="button"
                 onClick={() => navigateTo(previousTask)}
                 aria-label={t('taskDrillIn.previousTask', 'Previous task in current filter')}
-                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+                variant="secondary"
+                size="sm"
+                className="uppercase tracking-[0.08em]"
               >
                 Prev
-              </button>
+              </Button>
             )}
             {nextTask && (
-              <button
+              <Button
                 type="button"
                 onClick={() => navigateTo(nextTask)}
                 aria-label={t('taskDrillIn.nextTask', 'Next task in current filter')}
-                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+                variant="secondary"
+                size="sm"
+                className="uppercase tracking-[0.08em]"
               >
                 Next
-              </button>
+              </Button>
             )}
             {canAbort && (
-              <button
+              <Button
                 type="button"
                 onClick={onAbortFocused}
                 disabled={abortInFlight}
+                loading={abortInFlight}
                 aria-label={t('taskDrillIn.abortTask', 'Abort this task')}
                 title={t('taskDrillIn.abortTaskDescription', 'Abort just this sub-agent; siblings and the primary keep running')}
-                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded cursor-pointer disabled:opacity-40"
-                style={{
-                  color: 'var(--color-amber)',
-                  background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--color-amber) 28%, transparent)',
-                }}
+                variant="danger"
+                size="sm"
+                className="uppercase tracking-[0.08em]"
               >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-                  <rect x="2" y="2" width="6" height="6" rx="1" />
-                </svg>
                 {abortInFlight ? 'Aborting…' : 'Abort'}
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
+            <IconButton
+              icon="x"
+              label={t('taskDrillIn.closeDrawer', 'Close drawer')}
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              aria-label={t('taskDrillIn.closeDrawer', 'Close drawer')}
-              className="text-text-muted hover:text-text cursor-pointer leading-none text-2xl -me-1 -mt-1"
-            >
-              ×
-            </button>
+              className="-me-1 -mt-1"
+            />
           </div>
         </header>
 
@@ -398,32 +386,36 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
             <section className="px-5 pb-4">
               <div className="flex flex-wrap items-center gap-2">
                 {focusedApprovals[0] && onOpenApproval ? (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onOpenApproval(focusedApprovals[0]!)}
-                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text"
+                    variant="secondary"
+                    size="sm"
                   >
                     Open approval ({focusedApprovals.length})
-                  </button>
+                  </Button>
                 ) : null}
                 {focusedQuestions[0] && onOpenQuestion ? (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onOpenQuestion(focusedQuestions[0]!)}
-                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text"
+                    variant="secondary"
+                    size="sm"
                   >
                     Open question ({focusedQuestions.length})
-                  </button>
+                  </Button>
                 ) : null}
                 {artifacts[0] && rootSessionId ? (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => void revealFirstArtifact()}
                     disabled={artifactRevealInFlight}
-                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text disabled:cursor-wait disabled:opacity-60"
+                    loading={artifactRevealInFlight}
+                    variant="secondary"
+                    size="sm"
                   >
                     {artifactRevealInFlight ? 'Revealing...' : `Open artifact (${artifacts.length})`}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             </section>
@@ -434,7 +426,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
               <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-2">
                 Nested sub-agents ({nestedChildren.length})
               </div>
-              <div className="flex flex-col gap-0.5 rounded-lg border" style={{ borderColor: 'var(--color-border-subtle)' }}>
+              <Card variant="flat" padding="sm" className="flex flex-col gap-0.5">
                 {nestedTree.map((lane) => (
                   <AgentRunLane
                     key={lane.taskRun.id}
@@ -447,7 +439,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                     onToggle={() => onPushFocus(lane.taskRun.id)}
                   />
                 ))}
-              </div>
+              </Card>
             </section>
           )}
 
@@ -482,20 +474,13 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                     return <CompactionNoticeCard key={item.id} notice={item.notice} />
                   }
                   return (
-                    <div
-                      key={item.id}
-                      className="rounded-lg border px-3 py-2.5"
-                      style={{
-                        background: 'color-mix(in srgb, var(--color-base) 90%, var(--color-text) 10%)',
-                        borderColor: 'var(--color-border-subtle)',
-                      }}
-                    >
+                    <Card key={item.id} variant="tile" padding="sm">
                       <MarkdownContent
                         text={item.content}
                         className="text-xs"
                         streaming={focused.status === 'running'}
                       />
-                    </div>
+                    </Card>
                   )
                 })}
               </div>
@@ -557,14 +542,7 @@ function Scorecard({
     <section className="px-5 py-4">
       <div className="grid grid-cols-3 gap-2">
         {cells.map((cell) => (
-          <div
-            key={cell.label}
-            className="rounded-lg px-2.5 py-2 border"
-            style={{
-              background: 'var(--color-elevated)',
-              borderColor: 'var(--color-border-subtle)',
-            }}
-          >
+          <Card key={cell.label} variant="tile" padding="sm">
             <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{cell.label}</div>
             <div
               className="text-sm font-medium font-mono tabular-nums mt-0.5"
@@ -572,7 +550,7 @@ function Scorecard({
             >
               {cell.value}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </section>

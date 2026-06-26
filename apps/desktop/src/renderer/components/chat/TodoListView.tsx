@@ -1,6 +1,14 @@
 import type { TodoItem } from '@open-cowork/shared'
 import { sortTodos, todoPriorityVisual, todoStatusVisual } from './todo-utils'
 import { t } from '../../helpers/i18n'
+import { Badge, type BadgeTone } from '../ui'
+
+function priorityBadgeTone(priority: string | null | undefined): BadgeTone {
+  const normalized = (priority || '').toLowerCase()
+  if (normalized === 'high') return 'danger'
+  if (normalized === 'medium') return 'warning'
+  return 'muted'
+}
 
 type Props = {
   todos: TodoItem[]
@@ -55,16 +63,13 @@ export function TodoListView({ todos, variant = 'default', showPriorityTag = tru
               {todo.content || <em style={{ color: 'var(--color-text-muted)' }}>{t('todo.untitled', 'Untitled todo')}</em>}
             </span>
             {showPriorityTag && priority.accent && (
-              <span
-                className="shrink-0 px-1.5 py-px rounded-full text-2xs font-medium uppercase tracking-[0.04em]"
+              <Badge
+                tone={priorityBadgeTone(todo.priority)}
+                className="shrink-0 uppercase tracking-[0.04em]"
                 title={`${priority.label} priority`}
-                style={{
-                  color: priority.accent,
-                  background: `color-mix(in srgb, ${priority.accent} 12%, transparent)`,
-                }}
               >
                 {priority.label}
-              </span>
+              </Badge>
             )}
           </li>
         )

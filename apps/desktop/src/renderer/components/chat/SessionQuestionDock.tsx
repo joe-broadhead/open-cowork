@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { Badge, Button, Card, Textarea } from '../ui'
 
 type Props = {
   request: PendingQuestion
@@ -120,25 +121,18 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
   return (
     <div className="px-6 pt-2">
       <div className="measure-column">
-        <div
-          className="rounded-2xl border border-border p-4"
-          style={{ background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-elevated) 12%)' }}
-        >
+        <Card variant="tile" padding="md" className="rounded-2xl">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <div className="text-2xs uppercase tracking-[0.16em] text-text-muted">{t('questionDock.question', 'Question')}</div>
                 {queueCount > 1 && (
-                  <span
-                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-2xs font-medium"
+                  <Badge
+                    tone="warning"
                     title={t('questionDock.pendingCount', '{{count}} questions pending on this thread', { count: String(queueCount) })}
-                    style={{
-                      background: 'color-mix(in srgb, var(--color-warning) 18%, transparent)',
-                      color: 'var(--color-warning)',
-                    }}
                   >
                     {queueCount} pending
-                  </span>
+                  </Badge>
                 )}
                 {scopedTool && (
                   <button
@@ -156,7 +150,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   </button>
                 )}
               </div>
-              <div className="mt-1 text-lg font-semibold text-text">{current.header}</div>
+              <div className="mt-1 font-display text-role-title text-text">{current.header}</div>
             </div>
             {total > 1 && (
               <div className="text-2xs text-text-muted shrink-0">
@@ -198,7 +192,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
             })}
 
             {current.custom !== false && (
-              <div className="rounded-xl border border-border px-3 py-3">
+              <Card variant="flat" padding="sm" className="rounded-xl">
                 <label className="flex items-center gap-2 text-xs font-medium text-text">
                   <input
                     type={current.multiple ? 'checkbox' : 'radio'}
@@ -208,54 +202,53 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   />
                   Custom answer
                 </label>
-                <textarea
+                <Textarea
                   value={customValues[step] || ''}
                   onChange={(event) => updateCustom(event.target.value)}
                   disabled={submitting || !(customEnabled[step] ?? false)}
                   rows={2}
-                  className="mt-2 w-full bg-transparent resize-none text-xs text-text placeholder:text-text-muted leading-relaxed"
+                  className="mt-2 resize-none leading-relaxed"
                   placeholder={t('questionDock.typeOwnAnswer', 'Type your own answer')}
-                  style={{ outline: 'none' }}
                 />
-              </div>
+              </Card>
             )}
           </div>
 
           <div className="mt-4 flex items-center justify-between gap-3">
-            <button
+            <Button
               type="button"
               onClick={reject}
               disabled={submitting}
-              className="px-3 py-2 rounded-lg text-xs text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+              variant="ghost"
+              size="sm"
             >
               Dismiss
-            </button>
+            </Button>
             <div className="flex items-center gap-2">
               {step > 0 && (
-                <button
+                <Button
                   type="button"
                   onClick={() => setStep((value) => Math.max(0, value - 1))}
                   disabled={submitting}
-                  className="px-3 py-2 rounded-lg border border-border text-xs text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+                  variant="secondary"
+                  size="sm"
                 >
                   Back
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 type="button"
                 onClick={goNext}
                 disabled={submitting}
-                className="px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
-                style={{
-                  background: 'var(--color-accent)',
-                  color: 'var(--color-accent-foreground)',
-                }}
+                loading={submitting}
+                variant="primary"
+                size="sm"
               >
                 {submitting ? 'Submitting…' : isLast ? 'Submit' : 'Next'}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   )

@@ -283,7 +283,8 @@ describe('AgentRunPanel', () => {
     expect(screen.getByText('Showing')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Writer — running' })).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Activity'), 'approvals')
+    await user.click(screen.getByRole('button', { name: /^Activity:/ }))
+    await user.click(screen.getByRole('option', { name: 'Approvals' }))
 
     expect(screen.getByText('2/3')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Writer — running' })).not.toBeInTheDocument()
