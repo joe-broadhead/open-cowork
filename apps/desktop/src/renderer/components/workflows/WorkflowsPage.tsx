@@ -3,7 +3,7 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { Badge, Button, EmptyState, Skeleton, StudioPageHeader, type BadgeTone } from '../ui'
+import { Badge, Button, Card, EmptyState, Skeleton, StudioPageHeader, type BadgeTone } from '../ui'
 
 type Props = {
   onOpenThread: (sessionId: string) => void
@@ -242,7 +242,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
           }]}
         />
         {feedback ? (
-          <div className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-secondary">
+          <div className="mt-4 rounded-md border border-border bg-surface px-3 py-2 text-sm text-secondary shadow-card">
             {feedback}
           </div>
         ) : null}
@@ -280,7 +280,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
         ) : (
           <div className="grid gap-4">
             {activeWorkflows.map((workflow) => (
-              <article key={workflow.id} className="rounded-lg border border-border bg-surface p-4 shadow-card">
+              <Card key={workflow.id} variant="surface">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -348,7 +348,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                 <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={t('workflows.stepsAriaLabel', '{{title}} steps', { title: workflow.title })}>
                   {workflowDisplaySteps(workflow).map((step, index) => (
                     <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border bg-base/40 p-3">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-accent/40 bg-accent/15 text-xs font-bold text-accent">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-active text-xs font-bold text-text-secondary">
                         {index + 1}
                       </span>
                       <span className="min-w-0">
@@ -371,9 +371,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.triggers', 'Triggers')}</div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {workflow.triggers.map((trigger) => (
-                        <span key={trigger.id} className="rounded border border-border bg-muted px-2 py-0.5 text-xs text-secondary">
+                        <Badge key={trigger.id} tone="muted">
                           {triggerLabel(trigger)}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                     <div className="mt-2 text-xs text-muted">{t('workflows.next', 'Next:')} {formatWorkflowDate(workflow.nextRunAt)}</div>
@@ -400,7 +400,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     ) : null}
                   </div>
                 ) : null}
-              </article>
+              </Card>
             ))}
           </div>
         )}
