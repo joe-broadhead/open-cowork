@@ -518,7 +518,7 @@ export function KnowledgePage() {
         />
 
         {error ? (
-          <div role="alert" className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+          <div role="alert" className="rounded-lg border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
             {error}
           </div>
         ) : null}

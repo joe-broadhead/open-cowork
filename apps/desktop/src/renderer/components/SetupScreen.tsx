@@ -664,14 +664,14 @@ export function SetupScreen({
         </section>
 
         {connectionNeedsRetest ? (
-          <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          <div role="status" className="rounded-xl border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-amber">
             {t('setup.connectionStale', 'The provider or model changed. Test the connection again before continuing.')}
           </div>
         ) : null}
         {error ? (
-          <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+          <div role="alert" className="rounded-xl border border-red/30 bg-red/10 px-3 py-2 text-sm text-red">
             <div>{error}</div>
-            <a href={docsHref(localIntent.primaryDocs)} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-red-50 underline">
+            <a href={docsHref(localIntent.primaryDocs)} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-red underline">
               {t('setup.errorDocs', 'Open setup help')}
             </a>
           </div>

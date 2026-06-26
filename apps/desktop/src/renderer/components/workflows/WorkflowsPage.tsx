@@ -46,9 +46,9 @@ function statusTone(status: WorkflowSummary['status']): BadgeTone {
 }
 
 function runStatusTone(status?: WorkflowRun['status'] | null) {
-  if (status === 'completed') return 'text-emerald-300'
-  if (status === 'running' || status === 'queued') return 'text-sky-300'
-  if (status === 'failed') return 'text-red-300'
+  if (status === 'completed') return 'text-green'
+  if (status === 'running' || status === 'queued') return 'text-info'
+  if (status === 'failed') return 'text-red'
   return 'text-muted'
 }
 

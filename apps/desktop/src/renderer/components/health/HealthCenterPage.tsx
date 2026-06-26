@@ -36,10 +36,10 @@ const INITIAL_SNAPSHOT: HealthSnapshot = {
 }
 
 function statusTone(status: SetupHealthStatus | WorkspaceInfo['status']) {
-  if (status === 'ready' || status === 'online') return 'border-green-500/30 text-green-200'
-  if (status === 'degraded' || status === 'offline') return 'border-amber-500/30 text-amber-200'
-  if (status === 'action_required' || status === 'auth_required') return 'border-sky-400/30 text-sky-200'
-  return 'border-red-400/30 text-red-200'
+  if (status === 'ready' || status === 'online') return 'border-green/30 text-green'
+  if (status === 'degraded' || status === 'offline') return 'border-amber/30 text-amber'
+  if (status === 'action_required' || status === 'auth_required') return 'border-info/30 text-info'
+  return 'border-red/30 text-red'
 }
 
 function statusLabel(status: SetupHealthStatus | WorkspaceInfo['status']) {
@@ -47,10 +47,10 @@ function statusLabel(status: SetupHealthStatus | WorkspaceInfo['status']) {
 }
 
 function capabilityTone(status: RuntimeCapabilityStatus) {
-  if (status === 'active' || status === 'available') return 'border-green-500/30 text-green-200'
-  if (status === 'auth-pending' || status === 'ask-gated') return 'border-sky-400/30 text-sky-200'
-  if (status === 'disabled' || status === 'missing' || status === 'unknown') return 'border-amber-500/30 text-amber-200'
-  return 'border-red-400/30 text-red-200'
+  if (status === 'active' || status === 'available') return 'border-green/30 text-green'
+  if (status === 'auth-pending' || status === 'ask-gated') return 'border-info/30 text-info'
+  if (status === 'disabled' || status === 'missing' || status === 'unknown') return 'border-amber/30 text-amber'
+  return 'border-red/30 text-red'
 }
 
 function capabilityStatusPriority(status: RuntimeCapabilityStatus) {
@@ -247,7 +247,7 @@ export function HealthCenterPage() {
         </div>
 
         {error ? (
-          <div role="alert" className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+          <div role="alert" className="rounded-lg border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
             {error}
           </div>
         ) : null}
@@ -296,7 +296,7 @@ export function HealthCenterPage() {
                   <dd className="text-text-secondary">{snapshot.runtimeInputs?.credentialOverrideKeys.length ?? 0}</dd>
                 </div>
                 {snapshot.runtime?.error ? (
-                  <div className="rounded border border-red-400/25 bg-red-500/10 px-2 py-1 text-red-100">
+                  <div className="rounded border border-red/25 bg-red/10 px-2 py-1 text-red">
                     {snapshot.runtime.error}
                   </div>
                 ) : null}
@@ -355,12 +355,12 @@ export function HealthCenterPage() {
                   <div className="text-2xs font-semibold text-text-secondary">{t('health.conflictsHeading', 'Conflicts')}</div>
                   <div className="mt-2 flex flex-col gap-2">
                     {runtimeConflicts.map((conflict) => (
-                      <div key={`${conflict.kind}:${conflict.id}:${conflict.reasonCode}`} className="rounded border border-amber-500/25 bg-amber-500/10 px-3 py-2">
-                        <div className="text-2xs font-medium text-amber-100">{conflict.kind}: {conflict.id}</div>
-                        <div className="mt-1 text-2xs text-amber-100/80">
+                      <div key={`${conflict.kind}:${conflict.id}:${conflict.reasonCode}`} className="rounded border border-amber/25 bg-amber/10 px-3 py-2">
+                        <div className="text-2xs font-medium text-amber">{conflict.kind}: {conflict.id}</div>
+                        <div className="mt-1 text-2xs text-amber/80">
                           {t('health.conflictWinnerLosers', 'winner {{winner}} · losers {{losers}}', { winner: conflict.winnerSource, losers: conflict.loserSources.join(', ') })}
                         </div>
-                        <div className="mt-1 break-all font-mono text-2xs text-amber-100/80">{conflict.reasonCode}</div>
+                        <div className="mt-1 break-all font-mono text-2xs text-amber/80">{conflict.reasonCode}</div>
                       </div>
                     ))}
                   </div>
@@ -439,7 +439,7 @@ export function HealthCenterPage() {
                         <span>{t('health.workspacePaths', 'paths: {{value}}', { value: contract.defaultPathExposure })}</span>
                       </div>
                       {workspace.error ? (
-                        <div className="mt-2 rounded border border-red-400/25 bg-red-500/10 px-2 py-1 text-2xs text-red-100">{workspace.error}</div>
+                        <div className="mt-2 rounded border border-red/25 bg-red/10 px-2 py-1 text-2xs text-red">{workspace.error}</div>
                       ) : null}
                     </div>
                   )

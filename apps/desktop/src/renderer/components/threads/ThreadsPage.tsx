@@ -769,7 +769,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
             {selectedIds.length ? <span>{selectedIds.length} selected. Use Add tag or Remove tag, or drag rows onto a tag.</span> : <span>Project activity and suggestions are kept separate.</span>}
           </div>
         </div>
-        {error ? <div role="alert" className="border-b border-red-400/30 bg-red-500/10 px-4 py-2 text-xs text-red-100">{error}</div> : null}
+        {error ? <div role="alert" className="border-b border-red/30 bg-red/10 px-4 py-2 text-xs text-red">{error}</div> : null}
         <div className="scroll-shadow-x min-h-0 flex-1 overflow-auto">
           <div role="grid" aria-label={t('threads.resultsGrid', 'Project results')} className="min-w-[920px]">
             <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">

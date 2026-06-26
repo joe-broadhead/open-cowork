@@ -667,14 +667,14 @@ export function App() {
         <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
       ) : null}
       {rendererErrorNotice ? (
-        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-50 shadow-card">
+        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red/30 bg-red/10 px-3 py-2 text-xs text-red shadow-card">
           <div className="min-w-0 flex-1">
             <div className="font-semibold">App error</div>
-            <div className="mt-0.5 text-red-100/85">{rendererErrorNotice}</div>
+            <div className="mt-0.5 text-red/85">{rendererErrorNotice}</div>
           </div>
           <button
             type="button"
-            className="no-drag rounded border border-red-300/25 px-2 py-1 text-2xs text-red-50 hover:bg-red-200/10"
+            className="no-drag rounded border border-red/25 px-2 py-1 text-2xs text-red hover:bg-red/10"
             onClick={() => setRendererErrorNotice(null)}
           >
             Dismiss
@@ -686,15 +686,15 @@ export function App() {
           role="alert"
           data-testid="resource-navigation-notice"
           data-status={resourceNavigationNotice.status}
-          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-50 shadow-card"
+          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber/30 bg-amber/10 px-3 py-2 text-xs text-amber shadow-card"
         >
           <div className="min-w-0 flex-1">
             <div className="font-semibold">Resource unavailable</div>
-            <div className="mt-0.5 text-amber-100/85">{resourceNavigationNotice.message}</div>
+            <div className="mt-0.5 text-amber/85">{resourceNavigationNotice.message}</div>
           </div>
           <button
             type="button"
-            className="no-drag rounded border border-amber-300/25 px-2 py-1 text-2xs text-amber-50 hover:bg-amber-200/10"
+            className="no-drag rounded border border-amber/25 px-2 py-1 text-2xs text-amber hover:bg-amber/10"
             onClick={() => setResourceNavigationNotice(null)}
           >
             Dismiss

@@ -316,7 +316,7 @@ export function AgentBuilderPage({
 
         {error && (
           <div
-            className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-xs text-red-100"
+            className="mb-4 rounded-xl border border-red/30 bg-red/10 px-4 py-3 text-xs text-red"
           >
             {error}
           </div>

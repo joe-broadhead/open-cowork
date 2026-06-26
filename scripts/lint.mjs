@@ -92,6 +92,10 @@ const privateSdkAccessPatterns = [
 const rendererArbitraryFontSizeLimit = 0
 const arbitraryFontSizePattern = /\btext-\[\d+px\]/g
 let rendererArbitraryFontSizeCount = 0
+const rendererRawPaletteLimit = 0
+const rawPaletteStatusPattern =
+  /\b(?:text|bg|border|ring|ring-offset|from|to|via|fill|stroke|outline|divide|decoration|caret|accent)-(?:green|emerald|lime|teal|amber|yellow|orange|red|rose|pink|sky|cyan|blue|indigo|violet|purple)-[0-9]{2,3}\b/g
+let rendererRawPaletteCount = 0
 
 function visit(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -151,6 +155,7 @@ function lintFile(fullPath) {
 
   if (shouldLintStyle && relPath.startsWith('apps/desktop/src/renderer/')) {
     rendererArbitraryFontSizeCount += content.match(arbitraryFontSizePattern)?.length || 0
+    rendererRawPaletteCount += content.match(rawPaletteStatusPattern)?.length || 0
     if (ext === '.tsx') validateIconButtonLabels(relPath, content)
   }
 
@@ -233,6 +238,13 @@ function validateRendererDesignSystemGates() {
       `apps/desktop/src/renderer: ${rendererArbitraryFontSizeCount} arbitrary text-[Npx] utilities found; `
       + `these are banned. Use a paired type-scale utility instead (text-2xs/xs/sm/md/lg/xl/2xl/3xl/hero) `
       + `or a .text-role-* class so size and line-height stay on the token scale.`,
+    )
+  }
+  if (rendererRawPaletteCount > rendererRawPaletteLimit) {
+    errors.push(
+      `apps/desktop/src/renderer: ${rendererRawPaletteCount} raw Tailwind palette status utilities found `
+      + `(e.g. text-amber-200, bg-red-500, border-sky-400); these bypass the cool theme. Use the semantic `
+      + `token utilities instead (text/bg/border-{green|amber|red|info|accent}) so the themed hues apply.`,
     )
   }
 }

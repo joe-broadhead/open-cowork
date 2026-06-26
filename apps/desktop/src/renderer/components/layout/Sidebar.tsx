@@ -285,10 +285,10 @@ function workspaceStatusLabel(status: WorkspaceInfo['status']) {
 }
 
 function workspaceStatusClass(status: WorkspaceInfo['status']) {
-  if (status === 'online') return 'border-green-500/30 text-green-200'
-  if (status === 'offline') return 'border-amber-500/30 text-amber-200'
-  if (status === 'auth_required') return 'border-sky-400/30 text-sky-200'
-  return 'border-red-400/30 text-red-200'
+  if (status === 'online') return 'border-green/30 text-green'
+  if (status === 'offline') return 'border-amber/30 text-amber'
+  if (status === 'auth_required') return 'border-info/30 text-info'
+  return 'border-red/30 text-red'
 }
 
 function workspaceSupportReason(support: WorkspaceApiSupport[] | undefined, ...apis: string[]) {
