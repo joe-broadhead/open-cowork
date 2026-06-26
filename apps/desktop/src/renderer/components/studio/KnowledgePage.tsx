@@ -110,7 +110,7 @@ function KnowledgeGraphPanel({
     <Card padding="md" className="flex h-full min-h-[520px] flex-col">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-text">{t('knowledge.graph.title', 'Knowledge graph')}</h2>
+          <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.graph.title', 'Knowledge graph')}</h2>
           <p className="mt-1 text-xs text-text-muted">
             {t('knowledge.graph.subtitle', 'Every page, clustered by Space. Hover to trace links; click a page to open it.')}
           </p>
@@ -148,7 +148,7 @@ function ReviewQueue({
   return (
     <Card padding="md">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-text">{t('knowledge.review.title', 'Review queue')}</h2>
+        <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.review.title', 'Review queue')}</h2>
         <Badge tone="warning">{snapshot.proposals.length}</Badge>
       </div>
       <div className="space-y-3">
@@ -157,16 +157,16 @@ function ReviewQueue({
           const canReview = Boolean(space && knowledgeRoleCanReview(space.role))
           const busy = busyProposalId === proposal.id
           return (
-            <article key={proposal.id} className="rounded-lg border border-border-subtle bg-surface px-3 py-3">
+            <Card key={proposal.id} variant="flat" padding="sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold text-text">{proposal.pageTitle}</h3>
                   <p className="mt-1 text-xs text-text-muted">{proposal.summary}</p>
                 </div>
                 <span className="font-mono text-xs font-semibold whitespace-nowrap">
-                  <span className="text-[var(--color-green)]">+{proposal.add}</span>
+                  <span className="text-green">+{proposal.add}</span>
                   <span className="text-text-muted"> / </span>
-                  <span className="text-[var(--color-red)]">-{proposal.del}</span>
+                  <span className="text-red">-{proposal.del}</span>
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-2xs text-text-muted">
@@ -182,7 +182,7 @@ function ReviewQueue({
                   {t('knowledge.review.accept', 'Accept')}
                 </Button>
               </div>
-            </article>
+            </Card>
           )
         })}
       </div>
@@ -200,7 +200,7 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
   return (
     <Card padding="md">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-text">{t('knowledge.history.title', 'Version history')}</h2>
+        <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.history.title', 'Version history')}</h2>
         <Badge tone="neutral">{versions.length}</Badge>
       </div>
       <div className="studio-version-timeline">
@@ -629,7 +629,7 @@ export function KnowledgePage() {
                   <Icon name="shield-check" size={16} />
                 </span>
                 <div>
-                  <h2 className="text-sm font-semibold text-text">{t('knowledge.permissions.title', 'Space permissions')}</h2>
+                  <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.permissions.title', 'Space permissions')}</h2>
                   <p className="mt-1 text-xs text-text-muted">
                     {selectedSpace
                       ? `${selectedSpace.role}: read ${knowledgeRoleCanPropose(selectedSpace.role) ? '+ propose' : ''} ${knowledgeRoleCanReview(selectedSpace.role) ? '+ review' : ''}`
