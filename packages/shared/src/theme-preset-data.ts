@@ -55,8 +55,10 @@ function accentLineToken() {
 
 const GRADIENT_NONE = 'none'
 
-const DARK_SHADOW_SOFT = '0 1px 1px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(0, 0, 0, 0.16)'
-const DARK_SHADOW_SOFT_LG = '0 2px 6px rgba(0, 0, 0, 0.30), 0 18px 44px rgba(0, 0, 0, 0.24)'
+// Hue-matched, single-light-source shadows (tinted toward the deep cool base, not
+// pure black) — tight vertical offset + modest blur, no decorative spread.
+const DARK_SHADOW_SOFT = '0 1px 2px rgba(7, 7, 15, 0.50), 0 4px 12px rgba(7, 7, 15, 0.30)'
+const DARK_SHADOW_SOFT_LG = '0 2px 6px rgba(7, 7, 15, 0.50), 0 12px 32px rgba(7, 7, 15, 0.40)'
 const DARK_SHADOW_FLAT = '0 1px 1px rgba(0, 0, 0, 0.28), 0 3px 8px rgba(0, 0, 0, 0.18)'
 const DARK_SHADOW_FLAT_LG = '0 2px 4px rgba(0, 0, 0, 0.32), 0 10px 24px rgba(0, 0, 0, 0.22)'
 
@@ -251,7 +253,9 @@ const UI_THEME_PRESET_SEEDS = {
       accentForeground: '#0f0f18',
       shadowCard: DARK_SHADOW_SOFT,
       shadowElevated: DARK_SHADOW_SOFT_LG,
-      bgImage: 'radial-gradient(56% 46% at 6% -10%, rgba(124, 140, 248, 0.22), transparent 54%), radial-gradient(50% 44% at 100% 2%, rgba(176, 111, 247, 0.15), transparent 54%), radial-gradient(64% 58% at 96% 100%, rgba(95, 214, 255, 0.13), transparent 56%)',
+      // Precise operator console: one faint cool wash from the top edge instead of
+      // a three-point aurora — flat base, no decorative bloom.
+      bgImage: 'radial-gradient(120% 80% at 50% -30%, rgba(124, 140, 248, 0.05), transparent 55%)',
     },
     light: {
       ...DEFAULT_LIGHT_BRAND_THEME,

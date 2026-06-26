@@ -773,7 +773,7 @@ export const DESIGN_TOKENS = {
     full: '9999px',
   },
   shadow: {
-    1: '0 1px 2px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.28)',
+    1: '0 1px 2px rgba(7,7,15,.5), 0 2px 5px rgba(7,7,15,.3)',
     card: DEFAULT_DARK_BRAND_THEME.shadowCard,
     elevated: DEFAULT_DARK_BRAND_THEME.shadowElevated,
   },
@@ -781,20 +781,21 @@ export const DESIGN_TOKENS = {
     popover: 'var(--shadow-3)',
   },
   specular: {
-    default: 'inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent)',
-    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 11%, transparent)',
+    default: 'inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent)',
+    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent)',
   },
   glass: {
-    bg: 'color-mix(in srgb, var(--color-elevated) 72%, transparent)',
-    blur: 'blur(22px) saturate(1.5)',
+    bg: 'color-mix(in srgb, var(--color-elevated) 86%, transparent)',
+    blur: 'blur(14px) saturate(1.05)',
     border: 'color-mix(in srgb, var(--color-accent) 24%, transparent)',
   },
+  // Precise operator console: accent emphasis is a crisp 1px ring, not a bloom.
   glow: {
-    accent: '0 0 0 1px color-mix(in srgb, var(--color-accent) 38%, transparent), 0 0 12px color-mix(in srgb, var(--color-accent) 18%, transparent)',
-    soft: '0 0 14px color-mix(in srgb, var(--color-accent) 12%, transparent)',
+    accent: '0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent)',
+    soft: 'none',
   },
   ring: {
-    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 8px color-mix(in srgb, var(--color-accent) 14%, transparent)',
+    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent)',
     selected: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent)',
   },
   ease: {

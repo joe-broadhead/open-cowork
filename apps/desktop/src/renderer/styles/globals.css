@@ -497,19 +497,16 @@ body {
 .ui-card {
   border: var(--border-width-1) solid var(--color-border);
   border-radius: var(--radius-2xl);
-  /* Glass: a top specular wash over a translucent elevated tint, blurred so the
-     themed --bg-image aurora reads softly through every surface. */
-  background:
-    linear-gradient(180deg, color-mix(in srgb, #fff 6%, transparent), transparent 40%),
-    color-mix(in srgb, var(--color-elevated) 66%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  backdrop-filter: blur(16px) saturate(1.1);
-  box-shadow: var(--shadow-2), var(--specular), 0 18px 48px rgba(0, 0, 0, 0.30);
+  /* Precise operator console: a flat, solid surface step. Depth comes from a
+     hairline border + one tight hue-matched shadow and a faint specular top
+     edge — no glass, no backdrop blur, no decorative drop bloom. */
+  background: var(--color-elevated);
+  box-shadow: var(--shadow-1);
   color: var(--color-text);
 }
 
 .ui-card--specular {
-  box-shadow: var(--shadow-2), var(--specular);
+  box-shadow: var(--shadow-1), var(--specular);
 }
 
 .ui-card--sm { padding: calc(var(--row-pad) + var(--space-1)); }
