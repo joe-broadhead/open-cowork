@@ -28,6 +28,7 @@ import {
   ProjectCard,
   RunTimeline,
   StudioPageHeader,
+  StudioStatusDot,
   type KanbanPriority,
   type StudioTone,
 } from './StudioPrimitives.js'
@@ -494,7 +495,7 @@ function TaskDrawer({
     <aside className="studio-task-drawer" aria-label="Task detail">
       <header className="studio-task-drawer__header">
         <div>
-          <Badge tone={task.status === 'running' ? 'accent' : task.column === 'done' ? 'success' : 'neutral'}>{task.status}</Badge>
+          <StudioStatusDot tone={task.status === 'running' ? 'accent' : task.column === 'done' ? 'success' : 'neutral'} label={task.status} />
           <h2>{task.title}</h2>
           {task.description ? <p>{task.description}</p> : null}
         </div>

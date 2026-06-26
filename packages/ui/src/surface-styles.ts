@@ -1795,6 +1795,39 @@ export function controlsSurfaceCss(): string {
 // web. Single-sourced here so both apps render them identically.
 export function primitivesSurfaceCss(): string {
   return `
+/* Shared status-dot — the dot + label that replaces filled status pills across
+   the studio surfaces (desktop + web). "live" breathes (reduced-motion guarded);
+   the rest are static semantic dots. */
+.studio-status-dot-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+  color: var(--color-text-secondary);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.studio-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  flex: 0 0 auto;
+}
+.studio-status-dot--ok { background: var(--color-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent); }
+.studio-status-dot--warn { background: var(--color-amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-amber) 18%, transparent); }
+.studio-status-dot--error { background: var(--color-red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 18%, transparent); }
+.studio-status-dot--info { background: var(--color-info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-info) 16%, transparent); }
+.studio-status-dot--idle { background: var(--color-text-muted); }
+.studio-status-dot--live {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  animation: studio-status-heartbeat 2s var(--ease-out) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-status-dot--live { animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent); }
+}
+
 .ui-empty-state {
   display: grid;
   place-items: center;
@@ -1905,6 +1938,11 @@ export function sharedKeyframesCss(): string {
 @keyframes ui-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes studio-status-heartbeat {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-accent) 0%, transparent); }
 }
 
 @keyframes ui-popover-in {

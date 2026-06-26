@@ -26,7 +26,7 @@ import { Badge, type BadgeTone } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Icon } from './Icon.js'
-import { CoworkerAvatar, StudioPageHeader } from './StudioPrimitives.js'
+import { CoworkerAvatar, StudioPageHeader, StudioStatusDot, type StudioStatusTone } from './StudioPrimitives.js'
 import { cn } from './utils.js'
 
 const DISPLAY_PROVIDER_ORDER: ChannelProviderKind[] = [
@@ -119,7 +119,7 @@ function roleTone(role: ChannelIdentityRole | CoordinationWatchRecipientRole | n
   return 'neutral'
 }
 
-function statusTone(status: string | null | undefined): BadgeTone {
+function statusTone(status: string | null | undefined): StudioStatusTone {
   const value = String(status || '').toLowerCase()
   if (value === 'active' || value === 'connected' || value === 'sent') return 'success'
   // Only states that genuinely need the user are warning; benign transitional states stay neutral.
@@ -301,7 +301,7 @@ function ConnectedChannels({
             </div>
           </div>
           <div className="studio-channel-card__meta">
-            <Badge tone={statusTone(binding.status)}>{binding.status}</Badge>
+            <StudioStatusDot tone={statusTone(binding.status)} label={binding.status} />
             <span>{safeDisplay(bindingAgentName(binding, agents), 'channel coworker')}</span>
           </div>
           <div className="studio-channel-actions">
@@ -363,7 +363,7 @@ function ProviderGrid({
               </div>
             </div>
             <div className="studio-channel-card__meta">
-              <Badge tone={connected ? 'success' : setupInProgress ? 'warning' : 'neutral'}>{connected ? 'Connected' : setupInProgress ? 'Pending' : 'Available'}</Badge>
+              <StudioStatusDot tone={connected ? 'success' : setupInProgress ? 'warning' : 'neutral'} label={connected ? 'Connected' : setupInProgress ? 'Pending' : 'Available'} />
             </div>
             <div className="studio-channel-actions">
               <Button
@@ -589,7 +589,7 @@ function WatchesPanel({
               <small>{watchRecipientLabel(watch)} - {roleLabel(watch.recipient?.role)}</small>
             </div>
             <div className="studio-channel-actions">
-              <Badge tone={statusTone(watch.status)}>{watch.status}</Badge>
+              <StudioStatusDot tone={statusTone(watch.status)} label={watch.status} />
               {watch.status === 'paused' ? (
                 <Button size="sm" variant="ghost" data-admin-control="true" loading={busy === `resume:${watch.id}`} disabledReason={actionDisabledReason(canManage, disabledReason)} onClick={() => onResume(watch.id)}>Resume</Button>
               ) : (
@@ -675,7 +675,7 @@ function DeliveryRows({
               <p>{providerDisplayName(delivery.provider)} - {bindingLabel(bindings, delivery.channelBindingId)} - attempt {delivery.attemptCount}</p>
             </div>
             <div className="studio-channel-actions">
-              <Badge tone={statusTone(delivery.status)}>{delivery.status}</Badge>
+              <StudioStatusDot tone={statusTone(delivery.status)} label={delivery.status} />
               {sessionId && onOpenDeliverySession ? (
                 <Button size="sm" variant="ghost" onClick={() => void onOpenDeliverySession(sessionId)}>Open chat</Button>
               ) : null}

@@ -91,7 +91,7 @@ function requesterLine(item: ApprovalsQueueItem) {
 function metaChips(item: ApprovalsQueueItem) {
   return (
     <div className="studio-approval-item__chips">
-      <Badge tone={item.kind === 'permission' ? 'accent' : 'info'}>
+      <Badge tone="muted">
         {item.kind === 'permission' ? 'Permission' : 'Question'}
       </Badge>
       <Badge tone="neutral">via {item.viaLabel}</Badge>

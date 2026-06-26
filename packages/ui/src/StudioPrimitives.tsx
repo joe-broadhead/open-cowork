@@ -25,6 +25,27 @@ const statusToneMap: Record<StudioStatusTone, BadgeTone> = {
   danger: 'danger',
 }
 
+function studioStatusDotClass(tone: StudioStatusTone): string {
+  switch (tone) {
+    case 'success': return 'studio-status-dot--ok'
+    case 'warning': return 'studio-status-dot--warn'
+    case 'danger': return 'studio-status-dot--error'
+    case 'accent': return 'studio-status-dot--live'
+    default: return 'studio-status-dot--idle'
+  }
+}
+
+// A live/health STATUS reads as a semantic dot + label, not a filled pill. (Use a
+// Badge only for a neutral/accent LABEL like a role — not for a status.)
+export function StudioStatusDot({ tone = 'neutral', label }: { tone?: StudioStatusTone; label: ReactNode }) {
+  return (
+    <span className="studio-status-dot-label">
+      <span className={cn('studio-status-dot', studioStatusDotClass(tone))} aria-hidden />
+      {label}
+    </span>
+  )
+}
+
 function toneStyle(tone: StudioTone): CSSProperties {
   return { '--studio-tone': `var(--coworker-${tone})` } as CSSProperties
 }
@@ -321,7 +342,7 @@ export function CoworkerCard({
           <h3>{name}</h3>
           <p>{role}</p>
         </div>
-        {status ? <Badge tone={statusToneMap[status.tone || 'neutral']}>{status.label}</Badge> : null}
+        {status ? <StudioStatusDot tone={status.tone} label={status.label} /> : null}
       </div>
       {summary ? <p className="studio-coworker-card__summary">{summary}</p> : null}
       {abilities?.length ? (
@@ -424,7 +445,7 @@ export function TaskLane({
                 <h4>{item.title}</h4>
                 {item.meta ? <p className="studio-task-lane__meta">{item.meta}</p> : null}
               </div>
-              {item.status ? <Badge tone={statusToneMap[item.status.tone || 'neutral']}>{item.status.label}</Badge> : null}
+              {item.status ? <StudioStatusDot tone={item.status.tone} label={item.status.label} /> : null}
               {item.description ? <p>{item.description}</p> : null}
             </li>
           ))}
@@ -773,7 +794,7 @@ export function ReviewPanel({
           <h2>{title}</h2>
           {summary ? <p>{summary}</p> : null}
         </div>
-        {status ? <Badge tone={statusToneMap[status.tone || 'neutral']}>{status.label}</Badge> : null}
+        {status ? <StudioStatusDot tone={status.tone} label={status.label} /> : null}
       </header>
       <div className="studio-review-panel__body">{children}</div>
       <StudioActions actions={actions} />
@@ -941,7 +962,7 @@ export function ChannelRow({
         {description ? <p className="studio-u-card-text">{description}</p> : null}
       </div>
       {meta ? <div className="studio-channel-row__meta">{meta}</div> : null}
-      {status ? <Badge tone={statusToneMap[status.tone || 'neutral']}>{status.label}</Badge> : null}
+      {status ? <StudioStatusDot tone={status.tone} label={status.label} /> : null}
     </article>
   )
 }
@@ -1241,7 +1262,7 @@ function StudioObjectCard({
       <div className="studio-object-card__copy">
         <div className="studio-object-card__title-row">
           <h3>{title}</h3>
-          {status ? <Badge tone={statusToneMap[status.tone || 'neutral']}>{status.label}</Badge> : null}
+          {status ? <StudioStatusDot tone={status.tone} label={status.label} /> : null}
         </div>
         {description ? <p>{description}</p> : null}
         {meta ? <div className="studio-object-card__meta">{meta}</div> : null}
