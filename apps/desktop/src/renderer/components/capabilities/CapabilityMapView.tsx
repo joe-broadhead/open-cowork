@@ -1,6 +1,7 @@
 import type { CapabilitySkill, CapabilityTool, RuntimeToolDescriptor } from '@open-cowork/shared'
 import { PluginIcon } from '../plugins/PluginIcon'
 import { t } from '../../helpers/i18n'
+import { entityChroma } from '../../helpers/entity-chroma'
 import {
   buildCapabilityMapSections,
   linkedToolsForSkill,
@@ -247,8 +248,10 @@ function SkillRows({
             }}
           >
             <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${highlighted ? 'border-transparent text-accent' : 'bg-surface border-border-subtle text-text-secondary'}`}
-              style={highlighted ? { background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' } : undefined}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${highlighted ? 'border border-transparent text-accent' : 'entity-tile'}`}
+              style={highlighted
+                ? { background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' }
+                : ({ '--entity-chroma': entityChroma(skill.name) } as React.CSSProperties)}
               aria-hidden="true"
             >
               <Icon name="sparkles" size={16} />

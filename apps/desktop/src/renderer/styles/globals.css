@@ -3055,6 +3055,27 @@ body {
   }
 }
 
+/* Entity identity tile — the "gallery" treatment for non-agent entities (tools,
+   skills, channels, spaces, artifacts, playbooks). Same opaque graphite-darkened
+   chroma recipe as the agent avatars; the hue comes from --entity-chroma
+   (entityChroma(seed)). The glyph sits in light ink on the saturated tile. */
+.entity-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--color-text);
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 88%, var(--color-base)) 0%,
+    color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 58%, var(--color-base)) 100%);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 45%, transparent);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  transition: border-color var(--dur-1) var(--ease-out);
+}
+.group:hover .entity-tile {
+  border-color: color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 68%, transparent);
+}
+
 /* Tabular settle — a changing count does a 1px flight-board flip so motion always
    means "a real value updated" (static labels never animate). */
 .mcp-count,
