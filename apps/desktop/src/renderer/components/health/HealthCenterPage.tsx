@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   SETUP_HEALTH_CHECKS,
   SETUP_INTENTS,
@@ -13,6 +13,7 @@ import {
   type WorkspaceInfo,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { Badge, Button, Card, type BadgeTone } from '../ui'
 
 type WorkspaceHealth = {
   workspace: WorkspaceInfo
@@ -35,22 +36,22 @@ const INITIAL_SNAPSHOT: HealthSnapshot = {
   loadedAt: null,
 }
 
-function statusTone(status: SetupHealthStatus | WorkspaceInfo['status']) {
-  if (status === 'ready' || status === 'online') return 'border-green/30 text-green'
-  if (status === 'degraded' || status === 'offline') return 'border-amber/30 text-amber'
-  if (status === 'action_required' || status === 'auth_required') return 'border-info/30 text-info'
-  return 'border-red/30 text-red'
+function statusBadgeTone(status: SetupHealthStatus | WorkspaceInfo['status']): BadgeTone {
+  if (status === 'ready' || status === 'online') return 'success'
+  if (status === 'degraded' || status === 'offline') return 'warning'
+  if (status === 'action_required' || status === 'auth_required') return 'info'
+  return 'danger'
 }
 
 function statusLabel(status: SetupHealthStatus | WorkspaceInfo['status']) {
   return status.replace(/_/g, ' ')
 }
 
-function capabilityTone(status: RuntimeCapabilityStatus) {
-  if (status === 'active' || status === 'available') return 'border-green/30 text-green'
-  if (status === 'auth-pending' || status === 'ask-gated') return 'border-info/30 text-info'
-  if (status === 'disabled' || status === 'missing' || status === 'unknown') return 'border-amber/30 text-amber'
-  return 'border-red/30 text-red'
+function capabilityBadgeTone(status: RuntimeCapabilityStatus): BadgeTone {
+  if (status === 'active' || status === 'available') return 'success'
+  if (status === 'auth-pending' || status === 'ask-gated') return 'info'
+  if (status === 'disabled' || status === 'missing' || status === 'unknown') return 'warning'
+  return 'danger'
 }
 
 function capabilityStatusPriority(status: RuntimeCapabilityStatus) {
@@ -124,27 +125,19 @@ function checkStatus(checkId: string, snapshot: HealthSnapshot): SetupHealthStat
   return 'unknown'
 }
 
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <section className={`rounded-lg border border-border-subtle bg-elevated p-4 ${className}`}>
-      {children}
-    </section>
-  )
-}
-
 function StatusPill({ status }: { status: SetupHealthStatus | WorkspaceInfo['status'] }) {
   return (
-    <span className={`shrink-0 rounded border px-2 py-0.5 text-2xs font-medium capitalize ${statusTone(status)}`}>
+    <Badge tone={statusBadgeTone(status)} className="shrink-0 capitalize">
       {statusLabel(status)}
-    </span>
+    </Badge>
   )
 }
 
 function CapabilityPill({ status }: { status: RuntimeCapabilityStatus }) {
   return (
-    <span className={`shrink-0 rounded border px-2 py-0.5 text-2xs font-medium ${capabilityTone(status)}`}>
+    <Badge tone={capabilityBadgeTone(status)} className="shrink-0 capitalize">
       {status.replace(/-/g, ' ')}
-    </span>
+    </Badge>
   )
 }
 
@@ -236,14 +229,15 @@ export function HealthCenterPage() {
               {t('health.subtitle', 'Setup paths, execution authority, sync state, and operator recovery checks for Desktop, Cloud, and Gateway.')}
             </p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void refresh()}
             disabled={loading}
-            className="rounded-md border border-border-subtle px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-60"
+            loading={loading}
           >
             {loading ? t('health.refreshing', 'Refreshing...') : t('health.refreshButton', 'Refresh')}
-          </button>
+          </Button>
         </div>
 
         {error ? (
@@ -259,8 +253,8 @@ export function HealthCenterPage() {
                 <div className="text-sm font-semibold text-text">{intent.label}</div>
                 <div className="mt-1 text-2xs leading-relaxed text-text-muted">{intent.summary}</div>
                 <div className="mt-3 flex flex-wrap gap-1">
-                  <span className="rounded border border-border-subtle px-2 py-0.5 text-2xs text-text-secondary">{intent.topologyProfile}</span>
-                  <span className="rounded border border-border-subtle px-2 py-0.5 text-2xs text-text-secondary">{intent.authority}</span>
+                  <Badge tone="muted">{intent.topologyProfile}</Badge>
+                  <Badge tone="muted">{intent.authority}</Badge>
                 </div>
                 <div className="mt-auto pt-3 text-2xs leading-relaxed text-text-muted">
                   {intent.validationCommands[0] || intent.primaryDocs}
@@ -301,14 +295,16 @@ export function HealthCenterPage() {
                   </div>
                 ) : null}
               </dl>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => void restartRuntime()}
                 disabled={busyAction === 'runtime:restart'}
-                className="mt-3 rounded-md border border-border-subtle px-3 py-1.5 text-2xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-60"
+                loading={busyAction === 'runtime:restart'}
+                className="mt-3 self-start"
               >
                 {busyAction === 'runtime:restart' ? t('health.restarting', 'Restarting...') : t('health.restartRuntimeButton', 'Restart runtime')}
-              </button>
+              </Button>
             </Card>
 
             <Card>
@@ -380,7 +376,7 @@ export function HealthCenterPage() {
                   <div key={pairing.id} className="rounded border border-border-subtle bg-base px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 truncate text-xs font-medium text-text">{pairing.label}</div>
-                      <span className="rounded border border-border-subtle px-2 py-0.5 text-2xs text-text-secondary">{pairing.status}</span>
+                      <Badge tone="neutral" className="shrink-0 capitalize">{pairing.status.replace(/_/g, ' ')}</Badge>
                     </div>
                     <div className="mt-1 text-2xs text-text-muted">
                       {t('health.pairingHeartbeatToken', 'Last heartbeat: {{heartbeat}} · token: {{token}}', {
@@ -417,18 +413,19 @@ export function HealthCenterPage() {
                         <div className="flex items-center gap-2">
                           <StatusPill status={workspace.status} />
                           {action ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="secondary"
+                              size="sm"
                               onClick={() => void runWorkspaceAction(workspace)}
                               disabled={busyAction === `${workspace.id}:${action}`}
-                              className="rounded border border-border-subtle px-2 py-1 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text disabled:opacity-60"
+                              loading={busyAction === `${workspace.id}:${action}`}
                             >
                               {busyAction === `${workspace.id}:${action}`
                                 ? t('health.workspaceActionWorking', 'Working...')
                                 : action === 'Sign in'
                                   ? t('health.workspaceActionSignIn', 'Sign in')
                                   : t('health.workspaceActionSync', 'Sync')}
-                            </button>
+                            </Button>
                           ) : null}
                         </div>
                       </div>
