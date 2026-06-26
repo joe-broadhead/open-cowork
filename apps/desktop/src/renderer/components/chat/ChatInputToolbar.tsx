@@ -25,6 +25,7 @@ type ChatInputToolbarProps = {
   modelControlsManaged?: boolean
   modelControlsReason?: string | null
   reasoningControlsManaged?: boolean
+  showAgentModeControl?: boolean
   onAddFiles: (files: FileList | File[]) => Promise<void> | void
   onToggleModelMenu: () => void
   onToggleReasoningMenu?: () => void
@@ -55,6 +56,7 @@ export function ChatInputToolbar({
   modelControlsManaged = false,
   modelControlsReason,
   reasoningControlsManaged = false,
+  showAgentModeControl = true,
   onAddFiles,
   onToggleModelMenu,
   onToggleReasoningMenu,
@@ -127,14 +129,16 @@ export function ChatInputToolbar({
           </Badge>
         ) : null}
 
-        <Button
-          onClick={onToggleAgentMode}
-          variant={activeAgentLabel || agentMode !== 'build' ? 'secondary' : 'ghost'}
-          size="sm"
-          rightIcon="chevron-down"
-        >
-          {activeAgentLabel || primaryAgentModeLabel(agentMode)}
-        </Button>
+        {showAgentModeControl ? (
+          <Button
+            onClick={onToggleAgentMode}
+            variant={activeAgentLabel || agentMode !== 'build' ? 'secondary' : 'ghost'}
+            size="sm"
+            rightIcon="chevron-down"
+          >
+            {activeAgentLabel || primaryAgentModeLabel(agentMode)}
+          </Button>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-1.5">

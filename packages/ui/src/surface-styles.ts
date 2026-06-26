@@ -1768,6 +1768,16 @@ export function controlsSurfaceCss(): string {
   line-height: var(--lh-xs);
 }
 
+/* Visible helper text for the active segmented option (on-screen guidance for
+   consequential choices, instead of an invisible title tooltip). */
+.ui-segmented-description {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
 .ui-segmented-option:hover:not(:disabled) {
   color: var(--color-text-secondary);
 }

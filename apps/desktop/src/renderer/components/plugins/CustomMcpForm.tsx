@@ -3,6 +3,7 @@ import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig } from '@o
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import { TOOL_TRACE_RULES_CHANGED_EVENT } from '../../helpers/tool-trace-events'
+import { Button, Dialog } from '../ui'
 import { LinkedSkillsCard, McpPreviewCard, ToolApprovalsCard } from './CustomMcpFormCards'
 import {
   buildCustomMcpDraft,
@@ -81,17 +82,16 @@ export function CustomMcpForm({
   const [permissionMode, setPermissionMode] = useState<'ask' | 'allow'>(
     existing?.permissionMode === 'allow' ? 'allow' : 'ask',
   )
+  // Toggling private-network access on is gated behind a styled confirm
+  // dialog; until the user confirms, the checkbox stays unchecked.
+  const [privateNetworkConfirmOpen, setPrivateNetworkConfirmOpen] = useState(false)
 
   const handleAllowPrivateNetworkChange = (checked: boolean) => {
     if (!checked) {
       setAllowPrivateNetwork(false)
       return
     }
-    const confirmed = window.confirm(t(
-      'mcpForm.allowPrivateNetworkConfirm',
-      'Allow this MCP to reach localhost and private network addresses? Only enable this for endpoints you control or trust.',
-    ))
-    if (confirmed) setAllowPrivateNetwork(true)
+    setPrivateNetworkConfirmOpen(true)
   }
 
   useEffect(() => {
@@ -500,6 +500,38 @@ export function CustomMcpForm({
 
         <p className="mt-5 text-2xs text-text-muted">{t('mcpForm.reloadsRuntimeNote', '{{brand}} reloads the runtime automatically after saving.', { brand: getBrandName() })}</p>
       </div>
+
+      {privateNetworkConfirmOpen && (
+        <Dialog
+          title={t('mcpForm.allowPrivateNetwork', 'Allow private network')}
+          size="sm"
+          onClose={() => setPrivateNetworkConfirmOpen(false)}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPrivateNetworkConfirmOpen(false)}>
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setAllowPrivateNetwork(true)
+                  setPrivateNetworkConfirmOpen(false)
+                }}
+              >
+                {t('mcpForm.allowPrivateNetworkConfirmAction', 'Allow')}
+              </Button>
+            </div>
+          )}
+        >
+          <p className="text-sm text-text-secondary">
+            {t(
+              'mcpForm.allowPrivateNetworkConfirm',
+              'Allow this MCP to reach localhost and private network addresses? Only enable this for endpoints you control or trust.',
+            )}
+          </p>
+        </Dialog>
+      )}
     </div>
   )
 }

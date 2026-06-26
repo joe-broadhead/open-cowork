@@ -27,6 +27,7 @@ import { Badge, type BadgeTone } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Icon } from './Icon.js'
+import { Skeleton } from './Skeleton.js'
 import { CoworkerAvatar, StudioPageHeader, StudioStatusDot, type StudioStatusTone } from './StudioPrimitives.js'
 import { cn, entityChroma } from './utils.js'
 
@@ -268,6 +269,7 @@ function ConnectedChannels({
   agents,
   canManage,
   busy,
+  loading,
   disabledReason,
   onDisconnect,
 }: {
@@ -275,11 +277,21 @@ function ConnectedChannels({
   agents: ChannelAgentRecord[]
   canManage: boolean
   busy: string | null
+  loading: boolean
   disabledReason: string
   onDisconnect: (bindingId: string) => void
 }) {
   const visible = bindings.filter((binding) => binding.status !== 'disabled')
   if (!visible.length) {
+    if (loading) {
+      return (
+        <div className="studio-channel-grid" id="channel-connected-grid" aria-hidden="true">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="card" className="studio-channel-card" />
+          ))}
+        </div>
+      )
+    }
     return (
       <EmptyState
         icon="radio"
@@ -403,6 +415,7 @@ function PeopleRoster({
   bindings,
   canManage,
   busy,
+  loading,
   disabledReason,
   onInvite,
 }: {
@@ -410,6 +423,7 @@ function PeopleRoster({
   bindings: ChannelBindingPublicRecord[]
   canManage: boolean
   busy: string | null
+  loading: boolean
   disabledReason: string
   onInvite: (input: ChannelPersonResolveInput) => void
 }) {
@@ -467,7 +481,11 @@ function PeopleRoster({
               <span>{ROLE_DESCRIPTIONS[person.role]}</span>
             </div>
           </div>
-        )) : (
+        )) : loading ? (
+          Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="row" className="studio-person-row" />
+          ))
+        ) : (
           <p className="empty">No people loaded.</p>
         )}
       </div>
@@ -513,6 +531,7 @@ function WatchesPanel({
   bindings,
   canManage,
   busy,
+  loading,
   disabledReason,
   onCreate,
   onPause,
@@ -523,6 +542,7 @@ function WatchesPanel({
   bindings: ChannelBindingPublicRecord[]
   canManage: boolean
   busy: string | null
+  loading: boolean
   disabledReason: string
   onCreate: (input: CoordinationWatchInput) => void
   onPause: (watchId: string) => void
@@ -607,7 +627,11 @@ function WatchesPanel({
               <Button size="sm" variant="danger" data-admin-control="true" loading={busy === `delete:${watch.id}`} disabledReason={actionDisabledReason(canManage, disabledReason)} onClick={() => onDelete(watch.id)}>Delete</Button>
             </div>
           </div>
-        )) : (
+        )) : loading ? (
+          Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="row" className="studio-channel-watch" />
+          ))
+        ) : (
           <p className="empty">No watches loaded.</p>
         )}
       </div>
@@ -670,9 +694,21 @@ function WatchesPanel({
 function DeliveryRows({
   deliveries,
   bindings,
+  loading,
   onOpenDeliverySession,
-}: Pick<ChannelsGatewaySurfaceProps, 'deliveries' | 'bindings' | 'onOpenDeliverySession'>) {
-  if (!deliveries.length) return <p className="empty">No channel deliveries loaded.</p>
+}: Pick<ChannelsGatewaySurfaceProps, 'deliveries' | 'bindings' | 'onOpenDeliverySession'> & { loading: boolean }) {
+  if (!deliveries.length) {
+    if (loading) {
+      return (
+        <div className="studio-channel-list studio-channel-deliveries" id="channel-delivery-list" aria-hidden="true">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="row" className="studio-channel-delivery-row" />
+          ))}
+        </div>
+      )
+    }
+    return <p className="empty">No channel deliveries loaded.</p>
+  }
   return (
     <div className="studio-channel-list studio-channel-deliveries" id="channel-delivery-list">
       {deliveries.slice(0, 50).map((delivery) => {
@@ -811,6 +847,7 @@ export function ChannelsGatewaySurface({
             agents={agents}
             canManage={canManage}
             busy={busy}
+            loading={loading}
             disabledReason={manageDisabledReason}
             onDisconnect={disconnectBinding}
           />
@@ -836,6 +873,7 @@ export function ChannelsGatewaySurface({
           bindings={bindings}
           canManage={canManage}
           busy={busy}
+          loading={loading}
           disabledReason={manageDisabledReason}
           onInvite={invitePerson}
         />
@@ -844,6 +882,7 @@ export function ChannelsGatewaySurface({
           bindings={bindings}
           canManage={canManage}
           busy={busy}
+          loading={loading}
           disabledReason={manageDisabledReason}
           onCreate={createWatch}
           onPause={pauseWatch}
@@ -858,7 +897,7 @@ export function ChannelsGatewaySurface({
             </div>
             <Badge tone="neutral">{Math.min(deliveries.length, 50)} shown</Badge>
           </div>
-          <DeliveryRows deliveries={deliveries} bindings={bindings} onOpenDeliverySession={onOpenDeliverySession} />
+          <DeliveryRows deliveries={deliveries} bindings={bindings} loading={loading} onOpenDeliverySession={onOpenDeliverySession} />
         </div>
       </div>
     </section>

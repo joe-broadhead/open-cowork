@@ -3,6 +3,7 @@ import { Badge } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Textarea } from './Input.js'
+import { Skeleton } from './Skeleton.js'
 import { ApprovalCard, CoworkerAvatar, type StudioAction, type StudioTone } from './StudioPrimitives.js'
 import { cn } from './utils.js'
 
@@ -368,6 +369,12 @@ export function ApprovalsQueueSurface({
                 onRejectQuestion={onRejectQuestion}
               />
             ))}
+        </div>
+      ) : loading ? (
+        <div className="studio-approvals-list" aria-hidden="true">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="card" className="studio-approval-item" />
+          ))}
         </div>
       ) : (
         <EmptyState icon="badge-check" title={emptyTitle} body={emptyBody} />

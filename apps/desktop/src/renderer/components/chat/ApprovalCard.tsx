@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { PendingApproval } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
@@ -42,13 +43,21 @@ export function ApprovalCard({
   onOpenSource?: () => void
 }) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
+  // The trust gate must respond exactly once: a re-entry guard + per-button pending
+  // state stops a double-click from firing permission.respond twice.
+  const [responding, setResponding] = useState<'allow' | 'deny' | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const respond = async (allowed: boolean) => {
+    if (responding) return
+    setResponding(allowed ? 'allow' : 'deny')
+    setError(null)
     try {
       await window.coworkApi.permission.respond(approval.id, allowed, approval.sessionId, {
         workspaceId: approval.workspaceId || activeWorkspaceId,
       })
-    } catch {
-      // Permission response errors are surfaced through the session error channel.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('approval.respondFailed', 'Could not send your response — please try again.'))
+      setResponding(null)
     }
   }
 
@@ -75,14 +84,17 @@ export function ApprovalCard({
               {t('approval.openSource', 'Source')}
             </Button>
           ) : null}
-          <Button onClick={() => respond(false)} size="sm" variant="danger">
+          <Button onClick={() => respond(false)} size="sm" variant="danger" loading={responding === 'deny'} disabled={responding !== null}>
             {t('approval.deny', 'Deny')}
           </Button>
-          <Button onClick={() => respond(true)} size="sm" variant="primary">
+          <Button onClick={() => respond(true)} size="sm" variant="primary" loading={responding === 'allow'} disabled={responding !== null}>
             {t('approval.approve', 'Approve')}
           </Button>
         </div>
       </div>
+      {error ? (
+        <div role="alert" className="mt-2 text-2xs text-red">{error}</div>
+      ) : null}
     </Card>
   )
 }

@@ -9,6 +9,7 @@ import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Icon, type IconName } from './Icon.js'
 import { Input } from './Input.js'
+import { Skeleton } from './Skeleton.js'
 import { cn, entityChroma } from './utils.js'
 
 type ArtifactFilter = 'all' | ArtifactKind | ArtifactStatus
@@ -406,11 +407,17 @@ export function ArtifactsLibrarySurface({
             />
           ))}
         </div>
+      ) : loading ? (
+        <div className="studio-artifacts-grid" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={index} variant="card" className="studio-artifact-card" />
+          ))}
+        </div>
       ) : (
         <EmptyState
           icon="file"
-          title={loading ? 'Loading artifacts' : emptyTitle}
-          body={loading ? 'The artifact library is loading across projects and chats.' : emptyBody}
+          title={emptyTitle}
+          body={emptyBody}
         />
       )}
     </section>

@@ -76,7 +76,7 @@ export function RuntimeConfigPanel({
             options={RUNTIME_CONFIG_SOURCE_OPTIONS.map((option) => ({
               value: option.value,
               label: t(`settings.permissions.runtimeConfigSource.${option.value}`, option.label),
-              disabledReason: option.description,
+              description: t(`settings.permissions.runtimeConfigSourceHint.${option.value}`, option.description),
             }))}
           />
         </div>
@@ -192,8 +192,10 @@ export function PermissionsPanel({
                     value: option.value,
                     label: t(`settings.permissions.mode.${option.value}`, option.label),
                     disabled: !allowed,
+                    // Visible on-screen guidance for the selected policy.
+                    description: t(`settings.permissions.modeDescription.${option.value}`, option.description),
                     disabledReason: allowed
-                      ? option.description
+                      ? undefined
                       : t('settings.permissions.maximumHint', 'This build limits {{tool}} to {{mode}}.', { tool: row.title, mode: row.maximum }),
                   }
                 })}

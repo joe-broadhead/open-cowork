@@ -661,6 +661,7 @@ function HomeComposer({
           modelControlsManaged={modelControlsManaged}
           modelControlsReason={modelControlsReason}
           reasoningControlsManaged={modelControlsManaged}
+          showAgentModeControl={false}
           onToggleModelMenu={() => {
             if (modelControlsManaged) return
             setInlinePicker(null)
@@ -935,6 +936,9 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   const [launchpadFeed, setLaunchpadFeed] = useState<LaunchpadFeedPayload>(EMPTY_LAUNCHPAD_FEED)
   const [launchpadLoading, setLaunchpadLoading] = useState(true)
   const [launchpadError, setLaunchpadError] = useState<string | null>(null)
+  // Bumped by the "Refresh" affordance so a failed feed fetch isn't a dead end;
+  // wired into the feed effect deps below to re-run the same fetch on demand.
+  const [launchpadRefreshNonce, setLaunchpadRefreshNonce] = useState(0)
   const launchpadRequestIdRef = useRef(0)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
@@ -1048,6 +1052,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
     sessionFeedKey,
     currentView.lastEventAt,
     currentView.revision,
+    launchpadRefreshNonce,
   ])
 
   const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => {
@@ -1179,6 +1184,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
           onNavigate={onNavigate}
           onOpenThread={handleOpenThread}
           onOpenArtifact={handleOpenArtifact}
+          onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
         />
 
         <TeamStrip

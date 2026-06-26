@@ -1,16 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { t } from '../helpers/i18n'
+import { Button } from './ui'
 
 export function LoadingScreen({
   brandName,
   stage,
   errorMessage,
+  onRetry,
 }: {
   brandName: string
   stage: 'boot' | 'auth' | 'config' | 'runtime'
   errorMessage?: string | null
+  onRetry?: (() => void | Promise<void>) | null
 }) {
   const [elapsed, setElapsed] = useState(0)
+  const [retrying, setRetrying] = useState(false)
+
+  const handleRetry = async () => {
+    if (!onRetry || retrying) return
+    setRetrying(true)
+    try {
+      await onRetry()
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   useEffect(() => {
     const startedAt = Date.now()
@@ -59,6 +73,13 @@ export function LoadingScreen({
             <div className="text-xs font-medium text-red mb-1">{t('loading.error.title', '{{brandName}} could not start the runtime', { brandName })}</div>
             <div className="text-xs leading-relaxed text-text-secondary">{errorMessage}</div>
             <div className="text-2xs text-text-muted mt-2">{t('loading.error.hint', 'Fix the invalid runtime or config input, then relaunch the app.')}</div>
+            {onRetry ? (
+              <div className="mt-3">
+                <Button variant="secondary" size="sm" leftIcon="rotate-ccw" loading={retrying} onClick={() => void handleRetry()}>
+                  {retrying ? t('loading.error.retrying', 'Retrying…') : t('loading.error.tryAgain', 'Try again')}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex items-center gap-1.5">

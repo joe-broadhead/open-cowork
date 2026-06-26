@@ -17,7 +17,7 @@ const approval: PendingApproval = {
 }
 
 describe('ApprovalCard', () => {
-  it('summarizes risky tool actions and sends explicit allow/deny decisions', async () => {
+  it('summarizes a risky tool action and sends an explicit allow decision', async () => {
     const user = userEvent.setup()
     render(<ApprovalCard approval={approval} />)
 
@@ -25,11 +25,32 @@ describe('ApprovalCard', () => {
     expect(screen.getByText(/To: user@example\.com.*Launch notes/)).toBeTruthy()
 
     await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    await waitFor(() => expect(window.coworkApi.permission.respond).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(1, 'permission-1', true, 'session-1', { workspaceId: 'local' })
+  })
+
+  it('sends an explicit deny decision', async () => {
+    const user = userEvent.setup()
+    render(<ApprovalCard approval={approval} />)
+
     await user.click(screen.getByRole('button', { name: 'Deny' }))
 
-    await waitFor(() => expect(window.coworkApi.permission.respond).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(window.coworkApi.permission.respond).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(1, 'permission-1', false, 'session-1', { workspaceId: 'local' })
+  })
+
+  it('guards the trust gate: a second click after responding does not fire again', async () => {
+    const user = userEvent.setup()
+    render(<ApprovalCard approval={approval} />)
+
+    // The card stays mounted in this isolated test, so the re-entry guard + disabled
+    // state must prevent a double-click from sending a second permission response.
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await user.click(screen.getByRole('button', { name: 'Deny' }))
+
+    await waitFor(() => expect(window.coworkApi.permission.respond).toHaveBeenCalledTimes(1))
     expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(1, 'permission-1', true, 'session-1', { workspaceId: 'local' })
-    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(2, 'permission-1', false, 'session-1', { workspaceId: 'local' })
   })
 
   it('shows an optional source action for the triggering tool', async () => {

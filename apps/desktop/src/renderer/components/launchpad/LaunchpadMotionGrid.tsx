@@ -6,7 +6,7 @@ import type {
 } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../../app-types'
 import { formatDate, t } from '../../helpers/i18n'
-import { Badge, Icon, type IconName, type StudioTone } from '../ui'
+import { Badge, Button, Icon, type IconName, type StudioTone } from '../ui'
 
 // The "In motion" launchpad: three columns (In progress / Waiting on you /
 // Fresh artifacts) summarising live work. Extracted from HomePage so the home
@@ -91,6 +91,7 @@ export function LaunchpadMotionGrid({
   onNavigate,
   onOpenThread,
   onOpenArtifact,
+  onRefresh,
 }: {
   feed: LaunchpadFeedPayload
   loading: boolean
@@ -98,6 +99,7 @@ export function LaunchpadMotionGrid({
   onNavigate: (target: AppNavigationTarget) => void
   onOpenThread: (sessionId: string) => void
   onOpenArtifact: (item: LaunchpadFreshArtifactItem) => void
+  onRefresh?: () => void
 }) {
   const inProgressColumn: MotionColumnConfig<LaunchpadInProgressItem> = {
     key: 'in-progress',
@@ -153,9 +155,22 @@ export function LaunchpadMotionGrid({
         <MotionColumn config={artifactsColumn} />
       </div>
       {error && (
-        <p className="mt-3 text-center text-xs text-text-muted">
-          {t('home.motion.errorDetail', 'Showing the launchpad shell while live feed data reconnects.')}
-        </p>
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <p className="text-center text-xs text-text-muted">
+            {t('home.motion.errorDetail', 'Showing the launchpad shell while live feed data reconnects.')}
+          </p>
+          {onRefresh ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon="rotate-ccw"
+              loading={loading}
+              onClick={onRefresh}
+            >
+              {loading ? t('home.motion.refreshing', 'Refreshing…') : t('home.motion.refresh', 'Refresh')}
+            </Button>
+          ) : null}
+        </div>
       )}
     </div>
   )

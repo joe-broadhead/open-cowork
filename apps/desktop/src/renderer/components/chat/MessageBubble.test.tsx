@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Message, SessionInfo } from '@open-cowork/shared'
@@ -89,7 +89,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetSessionStore()
   installMessageApi()
-  vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
 describe('MessageBubble', () => {
@@ -170,7 +169,9 @@ describe('MessageBubble', () => {
     expect(screen.queryByTestId('diff-viewer')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Revert to here' }))
-    expect(window.confirm).toHaveBeenCalledWith('Revert the session to this message? Later turns will be hidden until you un-revert.')
+    const revertDialog = await screen.findByRole('dialog', { name: 'Revert to here' })
+    expect(revertDialog).toHaveTextContent('Revert the session to this message? Later turns will be hidden until you un-revert.')
+    await user.click(within(revertDialog).getByRole('button', { name: 'Revert to here' }))
     await waitFor(() => expect(api.session.revert).toHaveBeenCalledWith('session-1', 'assistant-message'))
   })
 

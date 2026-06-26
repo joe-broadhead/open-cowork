@@ -193,8 +193,8 @@ describe('HomePage', () => {
 
     expect(await screen.findByRole('button', { name: /Claude Sonnet 4/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Attach file' })).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Build' }))
-    expect(screen.getAllByRole('button', { name: 'Plan' }).length).toBeGreaterThan(0)
+    await user.click(await screen.findByRole('button', { name: /Build.*default/i }))
+    await user.click(await screen.findByRole('menuitemradio', { name: /Plan/i }))
 
     await user.type(screen.getByPlaceholderText('Ask anything, or @mention a coworker'), 'Draft a release note')
     await user.keyboard('{Enter}')

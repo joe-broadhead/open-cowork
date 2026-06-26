@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  AgentBundle,
   AgentCatalog,
   BuiltInAgentDetail,
   CustomAgentConfig,
@@ -13,7 +14,7 @@ import {
   CustomSelectionCard,
   RuntimeSelectionCard,
 } from './AgentSelectionCard'
-import { Button, EmptyState, Input, SegmentedControl, Skeleton, StudioPageHeader } from '../ui'
+import { Button, Dialog, EmptyState, Input, SegmentedControl, Skeleton, StudioPageHeader, toast } from '../ui'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -62,6 +63,10 @@ export function AgentsPage({
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  // When an import collides with an existing custom coworker, we hold the
+  // decoded bundle here and surface a styled confirm before overwriting.
+  const [importConflict, setImportConflict] = useState<{ name: string } | null>(null)
+  const pendingImportBundle = useRef<AgentBundle | null>(null)
 
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
@@ -219,24 +224,9 @@ export function AgentsPage({
     await window.coworkApi.dialog.saveText(defaultBundleFilename(agent.name), stringifyAgentBundle(bundle))
   }
 
-  const onImportAgent = async () => {
-    const result = await window.coworkApi.dialog.openJson()
-    if (!result) return
-    const decoded = decodeAgentBundle(result.content)
-    if (!decoded.ok) {
-      window.alert(t('studioTeamPage.importFailed', 'Could not import {{filename}}: {{error}}', { filename: result.filename, error: decoded.error }))
-      return
-    }
-    const existingNames = new Set(customs.map((entry) => entry.name))
-    let targetName = decoded.bundle.name
-    if (existingNames.has(targetName)) {
-      const replace = window.confirm(
-        t('studioTeamPage.importConflict', 'A custom coworker named "{{name}}" already exists. Replace it with the imported one?', { name: targetName }),
-      )
-      if (!replace) return
-    }
+  const finalizeImport = async (targetName: string) => {
     const config = bundleToAgentConfig(
-      { ...decoded.bundle, name: targetName },
+      { ...pendingImportBundle.current!, name: targetName },
       projectDirectory
         ? { scope: 'project', directory: projectDirectory }
         : { scope: 'machine' },
@@ -244,6 +234,29 @@ export function AgentsPage({
     await window.coworkApi.agents.create(config)
     refresh()
     setSelected({ kind: 'custom', name: targetName })
+  }
+
+  const onImportAgent = async () => {
+    const result = await window.coworkApi.dialog.openJson()
+    if (!result) return
+    const decoded = decodeAgentBundle(result.content)
+    if (!decoded.ok) {
+      toast({
+        tone: 'error',
+        message: t('studioTeamPage.importFailed', 'Could not import {{filename}}: {{error}}', { filename: result.filename, error: decoded.error }),
+      })
+      return
+    }
+    const existingNames = new Set(customs.map((entry) => entry.name))
+    const targetName = decoded.bundle.name
+    pendingImportBundle.current = decoded.bundle
+    if (existingNames.has(targetName)) {
+      // Surface a styled confirm before overwriting an existing coworker;
+      // the replace runs once the user confirms in the dialog.
+      setImportConflict({ name: targetName })
+      return
+    }
+    await finalizeImport(targetName)
   }
 
   return (
@@ -416,6 +429,48 @@ export function AgentsPage({
           </ListSection>
         )}
       </div>
+
+      {importConflict ? (
+        <Dialog
+          title={t('studioTeamPage.importConflictTitle', 'Replace existing coworker?')}
+          size="sm"
+          onClose={() => {
+            setImportConflict(null)
+            pendingImportBundle.current = null
+          }}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setImportConflict(null)
+                  pendingImportBundle.current = null
+                }}
+              >
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  const targetName = importConflict.name
+                  setImportConflict(null)
+                  void finalizeImport(targetName).finally(() => {
+                    pendingImportBundle.current = null
+                  })
+                }}
+              >
+                {t('studioTeamPage.importConflictReplace', 'Replace')}
+              </Button>
+            </div>
+          )}
+        >
+          <p className="text-sm text-text-secondary">
+            {t('studioTeamPage.importConflict', 'A custom coworker named "{{name}}" already exists. Replace it with the imported one?', { name: importConflict.name })}
+          </p>
+        </Dialog>
+      ) : null}
     </div>
   )
 }

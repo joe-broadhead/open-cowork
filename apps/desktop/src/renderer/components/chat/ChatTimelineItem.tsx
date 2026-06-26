@@ -1,4 +1,5 @@
-import type { PendingQuestion } from '@open-cowork/shared'
+import { useState } from 'react'
+import type { PendingQuestion, SessionError } from '@open-cowork/shared'
 import type { PendingApproval, TaskRun } from '../../stores/session'
 import type { TimelineItem } from './chat-view-timeline'
 import { MessageBubble } from './MessageBubble'
@@ -7,7 +8,30 @@ import { AgentRunPanel } from './AgentRunPanel'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { ApprovalCard } from './ApprovalCard'
 import { agentRunFilterStorageKey } from './agent-run-filter-model'
-import { Icon } from '../ui'
+import { Icon, IconButton } from '../ui'
+import { t } from '../../helpers/i18n'
+
+// Error timeline entries are append-only per-session runtime errors with no
+// store-level dismiss action and no reference to the user turn that produced
+// them, so there is no safe "Retry" to wire here. Instead the card is locally
+// dismissible so a transient error is no longer a dead end in the transcript.
+function ChatErrorCard({ error }: { error: SessionError }) {
+  const [dismissed, setDismissed] = useState(false)
+  if (dismissed) return null
+  return (
+    <div className="chat-error-card">
+      <Icon name="alert-circle" size={16} className="mt-0.5 shrink-0" />
+      <span className="min-w-0 flex-1">{error.message}</span>
+      <IconButton
+        icon="x"
+        size="sm"
+        label={t('chat.error.dismiss', 'Dismiss')}
+        className="shrink-0 -my-1 -me-1"
+        onClick={() => setDismissed(true)}
+      />
+    </div>
+  )
+}
 
 type ChatTimelineItemProps = {
   item: TimelineItem
@@ -102,11 +126,6 @@ export function ChatTimelineItem({
         </div>
       )
     case 'error':
-      return (
-        <div className="chat-error-card">
-          <Icon name="alert-circle" size={16} className="mt-0.5 shrink-0" />
-          <span>{item.data.message}</span>
-        </div>
-      )
+      return <ChatErrorCard error={item.data} />
   }
 }

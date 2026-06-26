@@ -7,7 +7,7 @@ import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
-import { Card } from '../ui'
+import { Card, toast } from '../ui'
 import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
 import { sectionLabelCls } from './settings-panel-styles'
 
@@ -83,7 +83,7 @@ export function StoragePanel({
     } catch (err) {
       setResetting(false)
       const message = err instanceof Error ? err.message : t('settings.updates.resetCheckLogs', 'Reset failed. Check the logs.')
-      window.alert(t('settings.updates.resetFailed', 'Could not reset app data: {{message}}', { message }))
+      toast({ tone: 'error', message: t('settings.updates.resetFailed', 'Could not reset app data: {{message}}', { message }) })
     }
   }
 

@@ -561,6 +561,7 @@ export function App() {
           brandName={config?.branding.name || 'Cowork'}
           stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
           errorMessage={bootstrapError || runtimeError}
+          onRetry={runtimeError ? handleRuntimeRestart : null}
         />
         <Toaster />
       </>
@@ -578,6 +579,7 @@ export function App() {
           brandName={config.branding.name}
           stage="runtime"
           errorMessage={runtimeError}
+          onRetry={handleRuntimeRestart}
         />
         <Toaster />
       </>

@@ -4,7 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
-import { IconButton, Tooltip } from '../ui'
+import { Button, Dialog, IconButton, Tooltip } from '../ui'
 import { DiffViewer } from './DiffViewer'
 
 // Live-placeholder messages have no server-side anchor yet; action
@@ -25,6 +25,7 @@ export function MessageActions({
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const [busy, setBusy] = useState<'copy' | 'fork' | 'revert' | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
+  const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
 
   if (!currentSessionId) return null
   if (isLivePlaceholderId(message.id)) return null
@@ -58,9 +59,14 @@ export function MessageActions({
     }
   }
 
-  async function handleRevert() {
+  function handleRevert() {
     if (busy || !currentSessionId) return
-    if (!confirm(t('messageActions.revertConfirm', 'Revert the session to this message? Later turns will be hidden until you un-revert.'))) return
+    setRevertConfirmOpen(true)
+  }
+
+  async function confirmRevert() {
+    setRevertConfirmOpen(false)
+    if (busy || !currentSessionId) return
     setBusy('revert')
     try {
       const ok = await window.coworkApi.session.revert(currentSessionId, message.id)
@@ -127,6 +133,27 @@ export function MessageActions({
           messageId={message.id}
           onClose={() => setDiffOpen(false)}
         />
+      )}
+      {revertConfirmOpen && (
+        <Dialog
+          title={t('messageActions.revertHere', 'Revert to here')}
+          size="sm"
+          onClose={() => setRevertConfirmOpen(false)}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setRevertConfirmOpen(false)}>
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => void confirmRevert()}>
+                {t('messageActions.revertHere', 'Revert to here')}
+              </Button>
+            </div>
+          )}
+        >
+          <p className="text-sm text-text-secondary">
+            {t('messageActions.revertConfirm', 'Revert the session to this message? Later turns will be hidden until you un-revert.')}
+          </p>
+        </Dialog>
       )}
     </>
   )

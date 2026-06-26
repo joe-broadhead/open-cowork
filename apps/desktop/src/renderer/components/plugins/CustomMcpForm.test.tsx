@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { CustomMcpForm } from './CustomMcpForm'
@@ -34,7 +34,6 @@ describe('CustomMcpForm', () => {
   it('requires explicit confirmation before allowing private network MCP URLs', async () => {
     const onSave = vi.fn()
     const onCancel = vi.fn()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
     render(<CustomMcpForm onSave={onSave} onCancel={onCancel} />)
 
@@ -42,11 +41,19 @@ describe('CustomMcpForm', () => {
     const checkbox = await screen.findByLabelText(/Allow private network/)
     fireEvent.click(checkbox)
 
-    expect(confirm).toHaveBeenCalledTimes(1)
+    // The toggle stays off until the styled confirm dialog is accepted.
+    const dialog = await screen.findByRole('dialog', { name: 'Allow private network' })
     expect(checkbox).not.toBeChecked()
 
-    confirm.mockReturnValue(true)
+    // Dismissing the dialog leaves the toggle unchecked.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Allow private network' })).not.toBeInTheDocument())
+    expect(checkbox).not.toBeChecked()
+
+    // Re-opening and confirming flips the toggle on.
     fireEvent.click(checkbox)
+    const reopened = await screen.findByRole('dialog', { name: 'Allow private network' })
+    fireEvent.click(within(reopened).getByRole('button', { name: 'Allow' }))
     expect(checkbox).toBeChecked()
   })
 

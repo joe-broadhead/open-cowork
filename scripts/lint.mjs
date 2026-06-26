@@ -156,6 +156,9 @@ function lintFile(fullPath) {
   if (shouldLintStyle && relPath.startsWith('apps/desktop/src/renderer/')) {
     rendererArbitraryFontSizeCount += content.match(arbitraryFontSizePattern)?.length || 0
     rendererRawPaletteCount += content.match(rawPaletteStatusPattern)?.length || 0
+    if (/\bwindow\.(?:alert|confirm)\s*\(/.test(content)) {
+      errors.push(`${relPath}: native window.alert/window.confirm is banned in the renderer — it blocks the window and breaks the design system. Use toast() for messages and the shared <Dialog> or confirm.requestDestructive for confirmations.`)
+    }
     if (ext === '.tsx') validateIconButtonLabels(relPath, content)
   }
 
