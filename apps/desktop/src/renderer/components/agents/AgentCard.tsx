@@ -103,7 +103,7 @@ export function AgentCard({
                 </svg>
               </span>
             </button>
-            <span className="text-[10px] font-medium text-text-muted">
+            <span className="text-2xs font-medium text-text-muted">
               Customize
             </span>
           </div>
@@ -118,17 +118,17 @@ export function AgentCard({
             )}
           </div>
           {readOnly ? (
-            <div className="text-[16px] font-semibold text-text truncate">{draft.name || 'New coworker'}</div>
+            <div className="text-lg font-semibold text-text truncate">{draft.name || 'New coworker'}</div>
           ) : (
             <input
               value={draft.name}
               onChange={(event) => onNameChange?.(event.target.value.toLowerCase())}
               placeholder={t('agentCard.idPlaceholder', 'agent-id')}
-              className="w-full text-[16px] font-semibold text-text bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
+              className="w-full text-lg font-semibold text-text bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
             />
           )}
           {readOnly ? (
-            <div className="text-[12px] text-text-muted mt-0.5 leading-relaxed line-clamp-2">
+            <div className="text-xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
               {draft.description || 'No description'}
             </div>
           ) : (
@@ -136,7 +136,7 @@ export function AgentCard({
               value={draft.description}
               onChange={(event) => onDescriptionChange?.(event.target.value)}
               placeholder={t('agentCard.descriptionPlaceholder', 'What is this agent specialised to do?')}
-              className="w-full text-[12px] text-text-muted mt-0.5 bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
+              className="w-full text-xs text-text-muted mt-0.5 bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
             />
           )}
         </div>
@@ -160,9 +160,9 @@ export function AgentCard({
         <ReadinessChecklist issues={readinessIssues} readOnly={readOnly} />
 
         <details className="group rounded-xl border border-border-subtle" open style={{ background: 'var(--color-elevated)' }}>
-          <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-text-secondary flex items-center justify-between">
+          <summary className="cursor-pointer list-none px-3 py-2 text-2xs font-medium text-text-secondary flex items-center justify-between">
             Selected capabilities
-            <span className="text-[10px] text-text-muted group-open:hidden">Show</span>
+            <span className="text-2xs text-text-muted group-open:hidden">Show</span>
           </summary>
           <div className="px-3 pb-3 flex flex-col gap-3">
             <CapabilitySection label="Skills">
@@ -235,12 +235,12 @@ function CapabilitySummary({ skillCount, toolCount, tone }: { skillCount: number
       }}
     >
       <div>
-        <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Capabilities</div>
-        <div className="text-[12px] text-text-secondary mt-0.5">
+        <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Capabilities</div>
+        <div className="text-xs text-text-secondary mt-0.5">
           {skillCount} skill{skillCount === 1 ? '' : 's'} · {toolCount} tool{toolCount === 1 ? '' : 's'}
         </div>
       </div>
-      <div className="text-[10px] font-medium" style={{ color: tone }}>
+      <div className="text-2xs font-medium" style={{ color: tone }}>
         {skillCount === 0 && toolCount === 0 ? 'Empty' : 'Ready'}
       </div>
     </div>
@@ -299,7 +299,7 @@ function TypeBadge({ label }: { label: 'Custom' | 'Built-in' | 'Runtime' }) {
       : 'var(--color-info)'
   return (
     <span
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
+      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 12%, transparent)`,
@@ -323,7 +323,7 @@ function EnableToggle({
     <button
       onClick={() => !readOnly && onChange?.(!enabled)}
       disabled={readOnly}
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium cursor-pointer disabled:cursor-default"
+      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium cursor-pointer disabled:cursor-default"
       style={{
         color: enabled ? 'var(--color-green)' : 'var(--color-text-muted)',
         background: enabled
@@ -346,8 +346,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
         borderColor: 'var(--color-border-subtle)',
       }}
     >
-      <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
-      <div className="text-[12px] font-medium text-text truncate mt-0.5" title={value}>{value}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="text-xs font-medium text-text truncate mt-0.5" title={value}>{value}</div>
     </div>
   )
 }
@@ -355,7 +355,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
 function CapabilitySection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1.5">{label}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-1.5">{label}</div>
       {children}
     </div>
   )
@@ -363,7 +363,7 @@ function CapabilitySection({ label, children }: { label: string; children: React
 
 function EmptyHint({ text }: { text: string }) {
   return (
-    <div className="text-[11px] text-text-muted italic">{text}</div>
+    <div className="text-2xs text-text-muted italic">{text}</div>
   )
 }
 
@@ -371,7 +371,7 @@ function SkillPill({ label, missing, onRemove }: { label: string; missing?: bool
   const tone = missing ? 'var(--color-amber)' : 'var(--color-accent)'
   return (
     <span
-      className="agent-capability-snap inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium"
+      className="agent-capability-snap inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full font-medium"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 12%, transparent)`,
@@ -381,7 +381,7 @@ function SkillPill({ label, missing, onRemove }: { label: string; missing?: bool
       {onRemove && (
         <button
           onClick={onRemove}
-          className="text-[9px] leading-none cursor-pointer hover:opacity-80"
+          className="text-2xs leading-none cursor-pointer hover:opacity-80"
           aria-label={t('agentCard.removeLabel', 'Remove {{label}}', { label })}
         >
           x
@@ -402,11 +402,11 @@ function ToolTile({ icon, label, missing, onRemove }: { icon: string; label: str
       title={missing ? t('agentCard.missingTool', 'Missing tool: {{label}}', { label }) : label}
     >
       <PluginIcon icon={icon} size={18} />
-      <span className="text-[11px] text-text-secondary truncate max-w-[100px]">{label}</span>
+      <span className="text-2xs text-text-secondary truncate max-w-[100px]">{label}</span>
       {onRemove && (
         <button
           onClick={onRemove}
-          className="text-[10px] leading-none text-text-muted hover:text-text opacity-0 group-hover:opacity-100 cursor-pointer"
+          className="text-2xs leading-none text-text-muted hover:text-text opacity-0 group-hover:opacity-100 cursor-pointer"
           aria-label={t('agentCard.removeLabel', 'Remove {{label}}', { label })}
         >
           x

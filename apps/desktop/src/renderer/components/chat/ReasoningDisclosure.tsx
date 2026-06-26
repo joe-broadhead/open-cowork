@@ -30,14 +30,14 @@ export function ReasoningDisclosure({
 
   return (
     <div
-      className={`max-w-full min-w-0 ${compact ? 'text-[12px]' : 'text-[13px]'}`}
+      className={`max-w-full min-w-0 ${compact ? 'text-xs' : 'text-sm'}`}
     >
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-label={ariaLabel}
-        className="reasoning-disclosure-trigger group inline-flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[12px] text-text-muted transition-colors hover:text-text"
+        className="reasoning-disclosure-trigger group inline-flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs text-text-muted transition-colors hover:text-text"
       >
         <span className="inline-flex items-center gap-2">
           <span className="font-medium">{label}</span>
@@ -68,7 +68,7 @@ export function ReasoningDisclosure({
           <MarkdownContent
             text={content}
             streaming={streaming}
-            className="max-w-full min-w-0 overflow-hidden break-words text-[12px] text-text-secondary prose-pre:max-w-full prose-pre:overflow-x-auto"
+            className="max-w-full min-w-0 overflow-hidden break-words text-xs text-text-secondary prose-pre:max-w-full prose-pre:overflow-x-auto"
           />
         </div>
       )}

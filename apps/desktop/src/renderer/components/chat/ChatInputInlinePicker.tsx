@@ -51,7 +51,7 @@ export function ChatInputInlinePicker({
       }}
     >
       <div
-        className="shrink-0 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
+        className="shrink-0 px-3 py-2 text-2xs font-semibold uppercase tracking-[0.08em] border-b"
         style={{
           color: 'var(--color-text-muted)',
           borderColor: 'var(--color-border-subtle)',
@@ -73,7 +73,7 @@ export function ChatInputInlinePicker({
         >
           <div className="flex items-center gap-2">
             <span
-              className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-[0.06em] border"
+              className="px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-[0.06em] border"
               style={{
                 background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
                 color: 'var(--color-text-secondary)',
@@ -82,14 +82,14 @@ export function ChatInputInlinePicker({
             >
               Agent
             </span>
-            <span className="text-[11px] font-medium text-text-secondary">{item.label}</span>
-            <span className="text-[10px] text-text-muted font-mono">@{item.id}</span>
+            <span className="text-2xs font-medium text-text-secondary">{item.label}</span>
+            <span className="text-2xs text-text-muted font-mono">@{item.id}</span>
           </div>
-          <div className="mt-1 text-[10px] text-text-muted">{compactDescription(item.description, 72)}</div>
+          <div className="mt-1 text-2xs text-text-muted">{compactDescription(item.description, 72)}</div>
         </button>
       ))}
       {suggestions.length === 0 ? (
-        <div className="px-3 py-3 text-[11px] text-text-muted">
+        <div className="px-3 py-3 text-2xs text-text-muted">
           No agents match “{picker.query}”.
         </div>
       ) : null}

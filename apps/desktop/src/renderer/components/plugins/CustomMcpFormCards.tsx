@@ -14,8 +14,8 @@ export function ToolApprovalsCard({
   return (
     <div className="rounded-xl border border-border-subtle bg-surface p-5">
       <div className="mb-3">
-        <div className="text-[14px] font-semibold text-text">{t('mcpForm.toolApprovals', 'Tool approvals')}</div>
-        <div className="text-[11px] text-text-muted mt-1">
+        <div className="text-md font-semibold text-text">{t('mcpForm.toolApprovals', 'Tool approvals')}</div>
+        <div className="text-2xs text-text-muted mt-1">
           Choose how assigned agents should handle this MCP&apos;s tool calls.
         </div>
       </div>
@@ -34,8 +34,8 @@ export function ToolApprovalsCard({
               : 'var(--color-elevated)',
           }}
         >
-          <span className="block text-[12px] font-medium text-text">{t('mcpForm.approvalAsk', 'Ask before tool calls')}</span>
-          <span className="mt-1 block text-[10px] leading-relaxed text-text-muted">
+          <span className="block text-xs font-medium text-text">{t('mcpForm.approvalAsk', 'Ask before tool calls')}</span>
+          <span className="mt-1 block text-2xs leading-relaxed text-text-muted">
             OpenCode asks for approval before an assigned agent uses this MCP.
           </span>
         </button>
@@ -53,8 +53,8 @@ export function ToolApprovalsCard({
               : 'var(--color-elevated)',
           }}
         >
-          <span className="block text-[12px] font-medium text-text">{t('mcpForm.approvalAllow', 'Trusted, auto-approve')}</span>
-          <span className="mt-1 block text-[10px] leading-relaxed text-text-muted">
+          <span className="block text-xs font-medium text-text">{t('mcpForm.approvalAllow', 'Trusted, auto-approve')}</span>
+          <span className="mt-1 block text-2xs leading-relaxed text-text-muted">
             Assigned agents can call this MCP without approval prompts. Use only for MCPs you control or trust.
           </span>
         </button>
@@ -75,8 +75,8 @@ export function LinkedSkillsCard({
   return (
     <div className="rounded-xl border border-border-subtle bg-surface p-5">
       <div className="mb-3">
-        <div className="text-[14px] font-semibold text-text">{t('mcpForm.linkedSkills', 'Linked skills')}</div>
-        <div className="text-[11px] text-text-muted mt-1">
+        <div className="text-md font-semibold text-text">{t('mcpForm.linkedSkills', 'Linked skills')}</div>
+        <div className="text-2xs text-text-muted mt-1">
           Pre-wire this MCP into custom skills that should request it automatically.
           {getBrandName()} writes this MCP&apos;s id into each selected skill&apos;s
           SKILL.md frontmatter <span className="font-mono">toolIds</span>.
@@ -91,7 +91,7 @@ export function LinkedSkillsCard({
                 key={skill.name}
                 type="button"
                 onClick={() => onToggleSkill(skill.name)}
-                className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] border cursor-pointer transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-2xs border cursor-pointer transition-colors"
                 style={{
                   color: selected ? 'var(--color-accent)' : 'var(--color-text-secondary)',
                   background: selected
@@ -109,7 +109,7 @@ export function LinkedSkillsCard({
           })}
         </div>
       ) : (
-        <div className="text-[11px] text-text-muted italic">
+        <div className="text-2xs text-text-muted italic">
           No custom skills discovered yet. Add a skill bundle from the Tools & Skills page
           and it will show up here.
         </div>
@@ -150,19 +150,19 @@ export function McpPreviewCard({
 
   return (
     <div className="rounded-xl border border-border-subtle bg-surface p-4">
-      <div className="text-[12px] font-semibold text-text mb-3">{t('mcpForm.preview', 'MCP preview')}</div>
+      <div className="text-xs font-semibold text-text mb-3">{t('mcpForm.preview', 'MCP preview')}</div>
       <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
-        <div className="text-[11px] text-text-secondary mb-1">{t('mcpForm.displayName', 'Display name')}</div>
-        <div className="text-[13px] font-medium text-text">{displayName}</div>
-        <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.runtimeNamespace', 'Runtime namespace')}</div>
-        <div className="text-[12px] text-text">{namespace}</div>
-        <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.permissionPrefix', 'Permission prefix')}</div>
-        <div className="text-[11px] text-text-muted font-mono">{permissionPrefix}</div>
-        <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.tracePreview', 'Trace preview')}</div>
-        <div className="text-[11px] text-text-muted">{traceSummary}</div>
+        <div className="text-2xs text-text-secondary mb-1">{t('mcpForm.displayName', 'Display name')}</div>
+        <div className="text-sm font-medium text-text">{displayName}</div>
+        <div className="mt-3 text-2xs text-text-secondary mb-1">{t('mcpForm.runtimeNamespace', 'Runtime namespace')}</div>
+        <div className="text-xs text-text">{namespace}</div>
+        <div className="mt-3 text-2xs text-text-secondary mb-1">{t('mcpForm.permissionPrefix', 'Permission prefix')}</div>
+        <div className="text-2xs text-text-muted font-mono">{permissionPrefix}</div>
+        <div className="mt-3 text-2xs text-text-secondary mb-1">{t('mcpForm.tracePreview', 'Trace preview')}</div>
+        <div className="text-2xs text-text-muted">{traceSummary}</div>
       </div>
 
-      <div className="flex flex-col gap-3 text-[11px] text-text-muted">
+      <div className="flex flex-col gap-3 text-2xs text-text-muted">
         <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
           <div className="text-text-secondary mb-1">{t('mcpForm.connectionSummary', 'Connection summary')}</div>
           <div>{type === 'stdio' ? 'Starts a local MCP server process.' : 'Connects to a remote MCP endpoint.'}</div>
@@ -183,7 +183,7 @@ export function McpPreviewCard({
             <button
               onClick={onTest}
               disabled={testing || hasIssues}
-              className="px-2.5 py-1 rounded-md text-[10px] border border-border-subtle text-accent disabled:opacity-40 cursor-pointer"
+              className="px-2.5 py-1 rounded-md text-2xs border border-border-subtle text-accent disabled:opacity-40 cursor-pointer"
             >
               {testing ? 'Testing…' : 'Test MCP'}
             </button>
@@ -191,18 +191,18 @@ export function McpPreviewCard({
           {testResult ? (
             testResult.ok ? (
               <div className="flex flex-col gap-2">
-                <div className="text-[11px]" style={{ color: 'var(--color-green)' }}>
+                <div className="text-2xs" style={{ color: 'var(--color-green)' }}>
                   Connected successfully. Found {testResult.methods.length} {testResult.methods.length === 1 ? 'method' : 'methods'}.
                 </div>
                 {testResult.methods.slice(0, 6).map((method) => (
-                  <div key={method.id} className="text-[10px] text-text-muted">
+                  <div key={method.id} className="text-2xs text-text-muted">
                     <span className="text-text-secondary">{method.id}</span>
                     {method.description ? ` · ${method.description}` : ''}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-[11px]" style={{ color: 'var(--color-amber)' }}>
+              <div className="text-2xs" style={{ color: 'var(--color-amber)' }}>
                 {testResult.error || t('mcpForm.couldNotConnect', 'Could not connect to this MCP.')}
               </div>
             )

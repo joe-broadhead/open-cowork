@@ -34,7 +34,7 @@ export function TitleBar({ view }: { view?: AppView }) {
           className="no-drag"
         />
         {crumb ? (
-          <span className="truncate text-[13px] font-semibold text-text">{t(crumb.key, crumb.fallback)}</span>
+          <span className="truncate text-sm font-semibold text-text">{t(crumb.key, crumb.fallback)}</span>
         ) : null}
       </div>
       <div className="flex-1" />

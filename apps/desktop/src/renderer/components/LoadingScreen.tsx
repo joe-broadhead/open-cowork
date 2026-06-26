@@ -44,21 +44,21 @@ export function LoadingScreen({
             borderColor: 'color-mix(in srgb, var(--color-accent) 18%, var(--color-border))',
           }}
         >
-          <span className="text-[28px] font-semibold text-accent">O</span>
+          <span className="text-3xl font-semibold text-accent">O</span>
           <span
             className="absolute inset-0 rounded-[22px] animate-pulse"
             style={{ boxShadow: '0 0 0 1px color-mix(in srgb, var(--color-accent) 16%, transparent), 0 0 26px color-mix(in srgb, var(--color-accent) 16%, transparent)' }}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <div className="text-[16px] font-semibold text-text">{brandName}</div>
-          <div className="text-[13px] text-text-secondary">{message}</div>
+          <div className="text-lg font-semibold text-text">{brandName}</div>
+          <div className="text-sm text-text-secondary">{message}</div>
         </div>
         {errorMessage ? (
           <div className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-start">
-            <div className="text-[12px] font-medium text-red mb-1">{t('loading.error.title', '{{brandName}} could not start the runtime', { brandName })}</div>
-            <div className="text-[12px] leading-relaxed text-text-secondary">{errorMessage}</div>
-            <div className="text-[11px] text-text-muted mt-2">{t('loading.error.hint', 'Fix the invalid runtime or config input, then relaunch the app.')}</div>
+            <div className="text-xs font-medium text-red mb-1">{t('loading.error.title', '{{brandName}} could not start the runtime', { brandName })}</div>
+            <div className="text-xs leading-relaxed text-text-secondary">{errorMessage}</div>
+            <div className="text-2xs text-text-muted mt-2">{t('loading.error.hint', 'Fix the invalid runtime or config input, then relaunch the app.')}</div>
           </div>
         ) : (
           <div className="flex items-center gap-1.5">

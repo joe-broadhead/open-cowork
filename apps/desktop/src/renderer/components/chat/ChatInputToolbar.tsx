@@ -122,7 +122,7 @@ export function ChatInputToolbar({
 
         {currentDirectory ? (
           <span
-            className="chat-current-directory px-2 py-1 rounded-lg text-[10px] text-text-muted flex items-center gap-1 truncate"
+            className="chat-current-directory px-2 py-1 rounded-lg text-2xs text-text-muted flex items-center gap-1 truncate"
             title={currentDirectory}
           >
             <Icon name="folder" size={16} className="shrink-0" />

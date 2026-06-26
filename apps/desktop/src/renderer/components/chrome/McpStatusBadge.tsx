@@ -47,7 +47,7 @@ export function McpStatusBadge() {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-label={badgeLabel}
-        className="inline-flex h-[20px] items-center gap-1.5 rounded-md border border-border-subtle px-2 text-[10px] text-text-muted hover:bg-surface-hover"
+        className="inline-flex h-[20px] items-center gap-1.5 rounded-md border border-border-subtle px-2 text-2xs text-text-muted hover:bg-surface-hover"
         title={t('mcpStatus.badgeTitle', 'MCP status')}
       >
         <span
@@ -60,9 +60,9 @@ export function McpStatusBadge() {
       </button>
       {open && (
         <div
-          className="absolute bottom-[25px] right-0 z-50 w-[260px] rounded-lg border border-border-subtle bg-elevated p-2 text-[11px] shadow-xl"
+          className="absolute bottom-[25px] right-0 z-50 w-[260px] rounded-lg border border-border-subtle bg-elevated p-2 text-2xs shadow-xl"
         >
-          <div className="mb-1 px-2 py-1 text-[10px] font-semibold uppercase text-text-muted">MCP status</div>
+          <div className="mb-1 px-2 py-1 text-2xs font-semibold uppercase text-text-muted">MCP status</div>
           <div className="max-h-[220px] overflow-auto">
             {connections.map((connection) => {
               const needsAuth = isMcpAuthRequiredStatus(connection.rawStatus)
@@ -70,7 +70,7 @@ export function McpStatusBadge() {
                 <div key={connection.name} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover">
                   <div className="min-w-0">
                     <div className="truncate text-text-secondary">{connection.name}</div>
-                    <div className="truncate text-[10px] text-text-muted">
+                    <div className="truncate text-2xs text-text-muted">
                       {connection.connected ? 'connected' : (connection.rawStatus || 'failed').replace(/_/g, ' ')}
                     </div>
                   </div>
@@ -79,7 +79,7 @@ export function McpStatusBadge() {
                       type="button"
                       disabled={busyName === connection.name}
                       onClick={() => handleAction(connection.name, connection.rawStatus)}
-                      className="rounded border border-border-subtle px-2 py-1 text-[10px] text-accent hover:bg-accent/10 disabled:opacity-50"
+                      className="rounded border border-border-subtle px-2 py-1 text-2xs text-accent hover:bg-accent/10 disabled:opacity-50"
                     >
                       {busyName === connection.name ? '...' : needsAuth ? 'Auth' : 'Retry'}
                     </button>

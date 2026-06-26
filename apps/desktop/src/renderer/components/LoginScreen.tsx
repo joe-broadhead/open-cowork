@@ -36,7 +36,7 @@ export function LoginScreen({
             <span className="text-2xl font-bold text-accent">O</span>
           </div>
           <h1 className="text-xl font-semibold text-text">{brandName}</h1>
-          <p className="text-[13px] text-text-muted text-center">
+          <p className="text-sm text-text-muted text-center">
             {t('login.welcome', 'Sign in to enable the configured authentication provider for this {{brandName}} build.', { brandName })}
           </p>
         </div>
@@ -44,7 +44,7 @@ export function LoginScreen({
         <button
           onClick={handleLogin}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl text-[14px] font-medium transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl text-md font-medium transition-colors cursor-pointer"
           style={{
             background: loading ? 'var(--color-surface-hover)' : 'var(--color-accent)',
             color: loading ? 'var(--color-text-muted)' : 'var(--color-accent-foreground)',
@@ -54,7 +54,7 @@ export function LoginScreen({
           {loading ? t('common.loading', 'Waiting for browser...') : t('common.continue', 'Continue')}
         </button>
 
-        {error ? <p className="text-[12px] text-red text-center">{error}</p> : null}
+        {error ? <p className="text-xs text-red text-center">{error}</p> : null}
       </div>
     </div>
   )

@@ -34,7 +34,7 @@ export function WorkbenchTabs({
         <button
           key={entry.id}
           onClick={() => onChange(entry.id)}
-          className="flex-1 min-w-0 px-2.5 py-2.5 text-[12px] font-medium leading-tight cursor-pointer transition-colors"
+          className="flex-1 min-w-0 px-2.5 py-2.5 text-xs font-medium leading-tight cursor-pointer transition-colors"
           style={{
             color: tab === entry.id ? 'var(--color-text)' : 'var(--color-text-muted)',
             background: tab === entry.id ? 'var(--color-surface-active)' : 'transparent',
@@ -68,8 +68,8 @@ export function ScopeRow({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[12px] font-medium text-text">{t('agentBuilder.saveThisAgentIn', 'Save this agent in')}</div>
-          <div className="text-[11px] text-text-muted mt-0.5">
+          <div className="text-xs font-medium text-text">{t('agentBuilder.saveThisAgentIn', 'Save this agent in')}</div>
+          <div className="text-2xs text-text-muted mt-0.5">
             {draft.scope === 'project'
               ? projectTargetDirectory || 'Choose a project directory'
               : 'Machine scope - available across all your Cowork sessions'}
@@ -82,7 +82,7 @@ export function ScopeRow({
           >
             <button
               onClick={() => onScopeChange('machine')}
-              className="px-3 py-1.5 text-[12px] font-medium cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
               style={{
                 color: draft.scope === 'machine' ? 'var(--color-text)' : 'var(--color-text-muted)',
                 background: draft.scope === 'machine' ? 'var(--color-surface-active)' : 'transparent',
@@ -92,7 +92,7 @@ export function ScopeRow({
             </button>
             <button
               onClick={() => onScopeChange('project')}
-              className="px-3 py-1.5 text-[12px] font-medium cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
               style={{
                 color: draft.scope === 'project' ? 'var(--color-text)' : 'var(--color-text-muted)',
                 background: draft.scope === 'project' ? 'var(--color-surface-active)' : 'transparent',
@@ -104,7 +104,7 @@ export function ScopeRow({
           {draft.scope === 'project' && (
             <button
               onClick={onChooseDirectory}
-              className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-2xs font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
             >
               {projectTargetDirectory ? 'Change' : 'Choose directory'}
             </button>

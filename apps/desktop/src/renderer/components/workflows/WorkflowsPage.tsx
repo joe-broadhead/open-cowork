@@ -361,14 +361,14 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('workflows.leadCoworker', 'Lead coworker')}</div>
+                    <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.leadCoworker', 'Lead coworker')}</div>
                     <div className="mt-1 text-sm text-primary">{workflow.agentName || 'build'}</div>
                     <div className="mt-1 text-xs text-muted">
                       {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || t('workflows.usesSelectedTools', 'Uses selected tools and skills from the setup chat')}
                     </div>
                   </div>
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('workflows.triggers', 'Triggers')}</div>
+                    <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.triggers', 'Triggers')}</div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {workflow.triggers.map((trigger) => (
                         <span key={trigger.id} className="rounded border border-border bg-muted px-2 py-0.5 text-xs text-secondary">
@@ -379,7 +379,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     <div className="mt-2 text-xs text-muted">{t('workflows.next', 'Next:')} {formatWorkflowDate(workflow.nextRunAt)}</div>
                   </div>
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('workflows.latestRun', 'Latest run')}</div>
+                    <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.latestRun', 'Latest run')}</div>
                     <div className={`mt-1 text-sm ${runStatusTone(workflow.latestRunStatus)}`}>
                       {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
                     </div>

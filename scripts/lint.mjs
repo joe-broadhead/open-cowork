@@ -89,7 +89,7 @@ const privateSdkAccessPatterns = [
     guidance: 'Use OAuth2ClientOptions.redirectUri or GetTokenOptions.redirect_uri instead.',
   },
 ]
-const rendererArbitraryFontSizeLimit = 833
+const rendererArbitraryFontSizeLimit = 0
 const arbitraryFontSizePattern = /\btext-\[\d+px\]/g
 let rendererArbitraryFontSizeCount = 0
 
@@ -230,8 +230,9 @@ function validateArchitectureSdkVersionPolicy() {
 function validateRendererDesignSystemGates() {
   if (rendererArbitraryFontSizeCount > rendererArbitraryFontSizeLimit) {
     errors.push(
-      `apps/desktop/src/renderer: arbitrary font-size utility count is ${rendererArbitraryFontSizeCount}; `
-      + `limit is ${rendererArbitraryFontSizeLimit}. Use text tokens/classes or lower the ratchet intentionally.`,
+      `apps/desktop/src/renderer: ${rendererArbitraryFontSizeCount} arbitrary text-[Npx] utilities found; `
+      + `these are banned. Use a paired type-scale utility instead (text-2xs/xs/sm/md/lg/xl/2xl/3xl/hero) `
+      + `or a .text-role-* class so size and line-height stay on the token scale.`,
     )
   }
 }

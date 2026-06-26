@@ -53,12 +53,12 @@ export function McpStatus() {
           {mcpConnections.map((mcp) => {
             const needsAuth = isMcpAuthRequiredStatus(mcp.rawStatus)
             return (
-              <div key={mcp.name} className="flex items-center justify-between px-3 py-[3px] text-[11px] text-text-muted group/mcp">
+              <div key={mcp.name} className="flex items-center justify-between px-3 py-[3px] text-2xs text-text-muted group/mcp">
                 <div className="flex items-center gap-2">
                   <Icon name={mcp.connected ? 'check' : 'circle-x'} size={16} className={mcp.connected ? 'text-text-muted' : 'text-red'} />
                   {mcp.name}
                   {!mcp.connected && mcp.rawStatus && (
-                    <span className="text-[10px] font-medium uppercase tracking-[0.05em] text-text-muted">
+                    <span className="text-2xs font-medium uppercase tracking-[0.05em] text-text-muted">
                       {mcp.rawStatus.replace(/_/g, ' ')}
                     </span>
                   )}

@@ -54,7 +54,7 @@ export function AppearancePreview({
                     className="h-5 w-5 rounded-full border border-border-subtle"
                     style={{ background: `linear-gradient(150deg, ${accent.accent2}, ${accent.accent})` }}
                   />
-                  <span className="min-w-0 text-[12px] font-semibold text-text">{accent.label}</span>
+                  <span className="min-w-0 text-xs font-semibold text-text">{accent.label}</span>
                 </span>
               </button>
             )
@@ -105,20 +105,20 @@ export function AppearancePreview({
       </div>
 
       <div className="rounded-2xl border border-border-subtle p-4 bg-base">
-        <div className="text-[12px] font-semibold text-text mb-3">{t('settings.appearance.preview', 'Preview')}</div>
+        <div className="text-xs font-semibold text-text mb-3">{t('settings.appearance.preview', 'Preview')}</div>
         <div className="rounded-xl border border-border-subtle bg-surface p-3 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[13px] font-semibold text-text">{t('settings.appearance.previewHealth', 'Workspace health')}</div>
-              <div className="text-[11px] text-text-muted">{t('settings.appearance.previewHealthDescription', 'Provider connected, runtime ready')}</div>
+              <div className="text-sm font-semibold text-text">{t('settings.appearance.previewHealth', 'Workspace health')}</div>
+              <div className="text-2xs text-text-muted">{t('settings.appearance.previewHealthDescription', 'Provider connected, runtime ready')}</div>
             </div>
             <Badge tone="accent" className="settings-mini-badge">
               {t('settings.appearance.previewActive', 'Active')}
             </Badge>
           </div>
           <div className="rounded-lg border border-border-subtle p-3 bg-elevated">
-            <div className="text-[12px] text-text mb-1">{t('settings.appearance.previewMessage', 'Theme changes apply immediately.')}</div>
-            <div className="text-[11px] text-text-muted">{t('settings.appearance.previewMessageSecondary', 'Provider and permission changes still use the save button below.')}</div>
+            <div className="text-xs text-text mb-1">{t('settings.appearance.previewMessage', 'Theme changes apply immediately.')}</div>
+            <div className="text-2xs text-text-muted">{t('settings.appearance.previewMessageSecondary', 'Provider and permission changes still use the save button below.')}</div>
           </div>
         </div>
       </div>

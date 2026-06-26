@@ -14,8 +14,8 @@ import { panelCardCls, sectionLabelCls } from './settings-panel-styles'
 function StorageStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
-      <div className="mt-1.5 text-[13px] font-medium text-text">{value}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="mt-1.5 text-sm font-medium text-text">{value}</div>
     </div>
   )
 }
@@ -109,7 +109,7 @@ export function StoragePanel({
   if (!stats) {
     return (
       <div className={panelCardCls}>
-        <div className="text-[12px] text-text-muted">{t('settings.storage.loading', 'Loading sandbox storage…')}</div>
+        <div className="text-xs text-text-muted">{t('settings.storage.loading', 'Loading sandbox storage…')}</div>
       </div>
     )
   }
@@ -117,8 +117,8 @@ export function StoragePanel({
   return (
     <div className="flex flex-col gap-5">
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-text">{t('settings.storage.supportDiagnostics', 'Support Diagnostics')}</div>
-        <div className="text-[11px] text-text-muted leading-relaxed">
+        <div className="text-xs font-semibold text-text">{t('settings.storage.supportDiagnostics', 'Support Diagnostics')}</div>
+        <div className="text-2xs text-text-muted leading-relaxed">
           {t('settings.storage.supportDescription', "Copies a plaintext report (config, runtime inputs, recent log lines) to your clipboard. Credentials are masked / redacted so it's safe to paste into a bug report.")}
         </div>
         <Card
@@ -127,7 +127,7 @@ export function StoragePanel({
           disabled={diagnosticsStatus === 'working'}
           className="settings-action-card"
         >
-          <div className="text-[12px] font-semibold text-text">
+          <div className="text-xs font-semibold text-text">
             {diagnosticsStatus === 'working'
               ? t('settings.storage.preparing', 'Preparing…')
               : diagnosticsStatus === 'copied'
@@ -136,7 +136,7 @@ export function StoragePanel({
                   ? t('settings.storage.copyFailed', 'Could not build diagnostics — try again')
                   : t('settings.storage.copyDiagnostics', 'Copy diagnostics to clipboard')}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">
+          <div className="text-2xs text-text-muted mt-1">
             {t('settings.storage.diagnosticsHint', 'Useful when filing an issue — include this bundle in your report.')}
           </div>
         </Card>
@@ -152,13 +152,13 @@ export function StoragePanel({
           <StorageStat label={t('settings.storage.stale', 'Stale')} value={String(stats.staleWorkspaceCount)} />
           <StorageStat label={t('settings.storage.retention', 'Retention')} value={t('settings.storage.retentionDays', '{{days}} days', { days: String(stats.staleThresholdDays) })} />
         </div>
-        <div className="text-[11px] text-text-muted leading-relaxed">
+        <div className="text-2xs text-text-muted leading-relaxed">
           {t('settings.storage.sandboxNote', 'Sandbox threads write into a private Cowork workspace under {{root}}. Older unreferenced workspaces are pruned automatically, and you can run cleanup manually here.', { root: stats.root })}
         </div>
       </div>
 
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-text">{t('settings.storage.cleanup', 'Cleanup')}</div>
+        <div className="text-xs font-semibold text-text">{t('settings.storage.cleanup', 'Cleanup')}</div>
         <div className="flex flex-col gap-3">
           <Card
             interactive
@@ -166,10 +166,10 @@ export function StoragePanel({
             disabled={runningCleanup !== null}
             className="settings-action-card"
           >
-            <div className="text-[12px] font-semibold text-text">
+            <div className="text-xs font-semibold text-text">
               {runningCleanup === 'old-unreferenced' ? t('settings.storage.cleaning', 'Cleaning…') : t('settings.storage.clearOld', 'Clear old sandbox artifacts')}
             </div>
-            <div className="text-[11px] text-text-muted mt-1">
+            <div className="text-2xs text-text-muted mt-1">
               {t('settings.storage.clearOldDescription', 'Removes unreferenced sandbox workspaces older than {{days}} days.', { days: String(stats.staleThresholdDays) })}
             </div>
           </Card>
@@ -180,17 +180,17 @@ export function StoragePanel({
             disabled={runningCleanup !== null}
             className="settings-action-card"
           >
-            <div className="text-[12px] font-semibold text-text">
+            <div className="text-xs font-semibold text-text">
               {runningCleanup === 'all-unreferenced' ? t('settings.storage.cleaning', 'Cleaning…') : t('settings.storage.clearAll', 'Clear all unused sandbox artifacts')}
             </div>
-            <div className="text-[11px] text-text-muted mt-1">
+            <div className="text-2xs text-text-muted mt-1">
               {t('settings.storage.clearAllDescription', 'Removes every unreferenced sandbox workspace while keeping active thread workspaces intact.')}
             </div>
           </Card>
         </div>
 
         {lastCleanup ? (
-          <div className="rounded-xl border border-border-subtle bg-base px-3 py-3 text-[11px] text-text-muted">
+          <div className="rounded-xl border border-border-subtle bg-base px-3 py-3 text-2xs text-text-muted">
             {t('settings.storage.lastCleanup', 'Last cleanup removed {{count}} workspace(s) and freed {{size}}.', {
               count: String(lastCleanup.removedWorkspaces),
               size: formatBytes(lastCleanup.removedBytes),
@@ -204,8 +204,8 @@ export function StoragePanel({
 
       <span className={sectionLabelCls}>{t('settings.reset.header', 'Reset')}</span>
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-red">{t('settings.reset.title', 'Reset all app data')}</div>
-        <div className="text-[11px] text-text-muted leading-relaxed">
+        <div className="text-xs font-semibold text-red">{t('settings.reset.title', 'Reset all app data')}</div>
+        <div className="text-2xs text-text-muted leading-relaxed">
           {t('settings.reset.description', 'Deletes every thread, credential, custom agent, skill, and MCP from this machine. The app relaunches into the first-run flow. Useful before uninstalling or for a clean-slate downstream demo; destructive and cannot be undone.')}
         </div>
         <Card
@@ -214,10 +214,10 @@ export function StoragePanel({
           disabled={resetting}
           className="settings-action-card settings-danger-card"
         >
-          <div className="text-[12px] font-semibold text-red">
+          <div className="text-xs font-semibold text-red">
             {resetting ? t('settings.reset.resetting', 'Resetting…') : t('settings.reset.button', 'Reset app data')}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">
+          <div className="text-2xs text-text-muted mt-1">
             {t('settings.reset.requiresConfirm', 'Requires explicit confirmation. The app will close and relaunch.')}
           </div>
         </Card>

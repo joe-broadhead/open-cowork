@@ -127,10 +127,10 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">{t('questionDock.question', 'Question')}</div>
+                <div className="text-2xs uppercase tracking-[0.16em] text-text-muted">{t('questionDock.question', 'Question')}</div>
                 {queueCount > 1 && (
                   <span
-                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-2xs font-medium"
                     title={t('questionDock.pendingCount', '{{count}} questions pending on this thread', { count: String(queueCount) })}
                     style={{
                       background: 'color-mix(in srgb, var(--color-warning) 18%, transparent)',
@@ -145,7 +145,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                     type="button"
                     onClick={scrollToScopedTool}
                     title={t('questionDock.scrollToToolCall', 'Scroll to the tool call this question is about')}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs font-medium cursor-pointer hover:opacity-80 transition-opacity"
                     style={{
                       background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)',
                       color: 'var(--color-accent)',
@@ -156,16 +156,16 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   </button>
                 )}
               </div>
-              <div className="mt-1 text-[15px] font-semibold text-text">{current.header}</div>
+              <div className="mt-1 text-lg font-semibold text-text">{current.header}</div>
             </div>
             {total > 1 && (
-              <div className="text-[11px] text-text-muted shrink-0">
+              <div className="text-2xs text-text-muted shrink-0">
                 {step + 1} / {total}
               </div>
             )}
           </div>
 
-          <div className="mt-3 text-[13px] leading-relaxed text-text-secondary">
+          <div className="mt-3 text-sm leading-relaxed text-text-secondary">
             {current.question}
           </div>
 
@@ -191,15 +191,15 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                       : 'transparent',
                   }}
                 >
-                  <div className="text-[12px] font-medium text-text">{option.label}</div>
-                  <div className="mt-1 text-[11px] text-text-muted">{option.description}</div>
+                  <div className="text-xs font-medium text-text">{option.label}</div>
+                  <div className="mt-1 text-2xs text-text-muted">{option.description}</div>
                 </button>
               )
             })}
 
             {current.custom !== false && (
               <div className="rounded-xl border border-border px-3 py-3">
-                <label className="flex items-center gap-2 text-[12px] font-medium text-text">
+                <label className="flex items-center gap-2 text-xs font-medium text-text">
                   <input
                     type={current.multiple ? 'checkbox' : 'radio'}
                     checked={customEnabled[step] ?? false}
@@ -213,7 +213,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   onChange={(event) => updateCustom(event.target.value)}
                   disabled={submitting || !(customEnabled[step] ?? false)}
                   rows={2}
-                  className="mt-2 w-full bg-transparent resize-none text-[12px] text-text placeholder:text-text-muted leading-relaxed"
+                  className="mt-2 w-full bg-transparent resize-none text-xs text-text placeholder:text-text-muted leading-relaxed"
                   placeholder={t('questionDock.typeOwnAnswer', 'Type your own answer')}
                   style={{ outline: 'none' }}
                 />
@@ -226,7 +226,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
               type="button"
               onClick={reject}
               disabled={submitting}
-              className="px-3 py-2 rounded-lg text-[12px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+              className="px-3 py-2 rounded-lg text-xs text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Dismiss
             </button>
@@ -236,7 +236,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   type="button"
                   onClick={() => setStep((value) => Math.max(0, value - 1))}
                   disabled={submitting}
-                  className="px-3 py-2 rounded-lg border border-border text-[12px] text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+                  className="px-3 py-2 rounded-lg border border-border text-xs text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
                 >
                   Back
                 </button>
@@ -245,7 +245,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                 type="button"
                 onClick={goNext}
                 disabled={submitting}
-                className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer"
+                className="px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
                 style={{
                   background: 'var(--color-accent)',
                   color: 'var(--color-accent-foreground)',

@@ -119,7 +119,7 @@ export function SessionArtifactList({
 
   if (artifacts.length === 0) {
     return (
-      <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3 text-[12px] text-text-muted">
+      <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3 text-xs text-text-muted">
         No generated artifacts yet.
       </div>
     )
@@ -133,7 +133,7 @@ export function SessionArtifactList({
         const canOpenArtifact = isSafeArtifactOpenTarget({ filename: artifact.filename, mime: artifact.mime })
         const bodyActionsBlocked = !canDownloadArtifact
         const bodyActionTitle = bodyActionsBlocked ? downloadDisabledReason : undefined
-        const actionClassName = 'px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary'
+        const actionClassName = 'px-2.5 py-1.5 rounded-lg border border-border-subtle text-2xs text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary'
 
         return (
           <div
@@ -150,7 +150,7 @@ export function SessionArtifactList({
                       className="block h-16 w-full object-contain bg-base"
                     />
                   ) : (
-                    <div className="flex h-16 w-full items-center justify-center px-2 text-center text-[10px] font-medium text-text-muted">
+                    <div className="flex h-16 w-full items-center justify-center px-2 text-center text-2xs font-medium text-text-muted">
                       {bodyActionsBlocked ? 'Preview disabled' : previewState?.status === 'failed' ? 'Preview unavailable' : 'Loading preview…'}
                     </div>
                   )}
@@ -158,10 +158,10 @@ export function SessionArtifactList({
               )}
 
               <div className="min-w-0 flex-1">
-                <div className="text-[12px] font-medium leading-relaxed text-text break-words">
+                <div className="text-xs font-medium leading-relaxed text-text break-words">
                   {artifact.filename}
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-text-muted">
                   <span>{artifact.toolName}</span>
                   <span aria-hidden="true">•</span>
                   <span>{artifact.taskRunId ? 'via sub-agent' : 'in thread'}</span>
@@ -254,12 +254,12 @@ export function SessionArtifactList({
                       ...artifactWorkspaceScope(workspaceId),
                     })
                   }}
-                  className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+                  className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-2xs text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
                 >
                   Reveal
                 </button>
               ) : (
-                <span className="px-2.5 py-1.5 text-[11px] text-text-muted" title={revealDisabledReason}>
+                <span className="px-2.5 py-1.5 text-2xs text-text-muted" title={revealDisabledReason}>
                   {artifact.source === 'cloud' ? 'Cloud artifact' : 'Reveal disabled'}
                 </span>
               )}

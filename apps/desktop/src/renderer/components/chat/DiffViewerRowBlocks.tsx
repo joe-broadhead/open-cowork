@@ -34,7 +34,7 @@ export function UnifiedHunkBlock({ hunk }: { hunk: DiffHunk }) {
   return (
     <div className="mt-2">
       <div
-        className="px-4 py-1 text-[10px] font-mono text-text-muted"
+        className="px-4 py-1 text-2xs font-mono text-text-muted"
         style={{ background: 'var(--color-surface-hover)' }}
       >
         {hunk.header}
@@ -86,7 +86,7 @@ export function SplitHunkBlock({ hunk }: { hunk: DiffHunk }) {
   return (
     <div className="mt-2">
       <div
-        className="px-4 py-1 text-[10px] font-mono text-text-muted"
+        className="px-4 py-1 text-2xs font-mono text-text-muted"
         style={{ background: 'var(--color-surface-hover)' }}
       >
         {hunk.header}
@@ -340,7 +340,7 @@ export function HunkGapRow({
         })}
         <button
           onClick={() => setExpanded(false)}
-          className="w-full text-center text-[10px] py-1 text-text-muted hover:text-text cursor-pointer"
+          className="w-full text-center text-2xs py-1 text-text-muted hover:text-text cursor-pointer"
           style={{ background: 'var(--color-surface-hover)' }}
         >
           {t('diff.collapse', 'Collapse')}
@@ -353,7 +353,7 @@ export function HunkGapRow({
     <button
       onClick={() => void onExpand()}
       disabled={loading}
-      className="w-full flex items-center justify-center gap-2 py-1 text-[10px] text-text-muted hover:text-text cursor-pointer transition-colors"
+      className="w-full flex items-center justify-center gap-2 py-1 text-2xs text-text-muted hover:text-text cursor-pointer transition-colors"
       style={{ background: 'var(--color-surface-hover)' }}
     >
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -379,7 +379,7 @@ export function StatusBadge({ status }: { status: 'added' | 'deleted' | 'modifie
       : 'var(--color-accent)'
   return (
     <span
-      className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium uppercase tracking-[0.04em]"
+      className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-2xs font-medium uppercase tracking-[0.04em]"
       style={{
         color,
         background: `color-mix(in srgb, ${color} 12%, transparent)`,

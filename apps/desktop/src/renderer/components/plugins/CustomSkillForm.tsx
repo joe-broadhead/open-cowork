@@ -214,17 +214,17 @@ export function CustomSkillForm({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1180px] mx-auto px-8 py-8">
-        <button onClick={onCancel} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
+        <button onClick={onCancel} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary cursor-pointer mb-6">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
           {t('capabilities.title', 'Tools & Skills')}
         </button>
 
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">
+            <h1 className="text-xl font-semibold text-text mb-1">
               {isEditing ? t('skillForm.titleEdit', 'Edit skill bundle — {{name}}', { name: existing?.name || '' }) : t('skillForm.titleAdd', 'Add skill bundle')}
             </h1>
-            <p className="text-[13px] text-text-secondary leading-relaxed">
+            <p className="text-sm text-text-secondary leading-relaxed">
               {t('skillForm.subtitle', 'Create a real OpenCode skill bundle with `SKILL.md` plus any supporting references, examples, or templates it needs.')}
             </p>
           </div>
@@ -233,16 +233,16 @@ export function CustomSkillForm({
               <button
                 onClick={handleImportDirectory}
                 disabled={importing}
-                className="px-3 py-1.5 rounded-lg text-[12px] text-accent border border-border-subtle cursor-pointer disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg text-xs text-accent border border-border-subtle cursor-pointer disabled:opacity-40"
               >
                 {importing ? t('skillForm.importing', 'Importing…') : t('skillForm.importDirectory', 'Import directory')}
               </button>
             ) : null}
-            <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">{t('common.cancel', 'Cancel')}</button>
+            <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-xs text-text-secondary bg-surface-hover cursor-pointer">{t('common.cancel', 'Cancel')}</button>
             <button
               onClick={handleSave}
               disabled={issues.length > 0 || saving}
-              className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent cursor-pointer disabled:opacity-40"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-accent cursor-pointer disabled:opacity-40"
               style={{ color: 'var(--color-accent-foreground)' }}
             >
               {saving ? t('mcpForm.saving', 'Saving…') : isEditing ? t('mcpForm.saveChanges', 'Save changes') : t('skillForm.addSkill', 'Add skill')}
@@ -252,8 +252,8 @@ export function CustomSkillForm({
 
         {issues.length > 0 ? (
           <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3">
-            <div className="text-[12px] font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
-            <div className="flex flex-col gap-1 text-[11px] text-text-muted">
+            <div className="text-xs font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
+            <div className="flex flex-col gap-1 text-2xs text-text-muted">
               {issues.map((issue) => (
                 <div key={issue}>{issue}</div>
               ))}
@@ -262,13 +262,13 @@ export function CustomSkillForm({
         ) : null}
 
         {importError ? (
-          <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-[11px] text-red">
+          <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-2xs text-red">
             {importError}
           </div>
         ) : null}
 
         {saveError ? (
-          <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-[11px] text-red">
+          <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-2xs text-red">
             {saveError}
           </div>
         ) : null}
@@ -281,10 +281,10 @@ export function CustomSkillForm({
             background: 'color-mix(in srgb, var(--color-amber) 6%, var(--color-surface))',
           }}
         >
-          <div className="text-[12px] font-medium text-text mb-1">
+          <div className="text-xs font-medium text-text mb-1">
             {t('skillForm.trustWarningTitle', 'Unsigned skill bundle')}
           </div>
-          <div className="text-[11px] text-text-muted leading-relaxed">
+          <div className="text-2xs text-text-muted leading-relaxed">
             {t(
               'skillForm.trustWarningBody',
               'Custom skills are loaded into the OpenCode runtime as instructions and may ask agents to use tools. Only save or import bundles you wrote or trust.',
@@ -295,22 +295,22 @@ export function CustomSkillForm({
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5">
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.whereToSave', 'Where to save it')}</div>
+              <div className="text-md font-semibold text-text mb-3">{t('mcpForm.whereToSave', 'Where to save it')}</div>
               <div className="flex rounded-lg border border-border-subtle overflow-hidden">
                 <button
                   onClick={() => setScope('machine')}
-                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
+                  className={`flex-1 px-3 py-2 text-xs font-medium cursor-pointer ${scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
                   Cowork only (private)
                 </button>
                 <button
                   onClick={() => setScope('project')}
-                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
+                  className={`flex-1 px-3 py-2 text-xs font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
                   Project (Cowork only)
                 </button>
               </div>
-              <div className="mt-2 text-[11px] text-text-muted">
+              <div className="mt-2 text-2xs text-text-muted">
                 {scope === 'project'
                   ? (projectTargetDirectory || 'Choose a project directory to save this into Cowork’s private project skill bundle directory.')
                   : 'Saved into Cowork’s private machine skill directory. This stays separate from your normal CLI OpenCode machine config.'}
@@ -318,7 +318,7 @@ export function CustomSkillForm({
               {scope === 'project' ? (
                 <button
                   onClick={() => void chooseProjectDirectory()}
-                  className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                  className="mt-3 px-3 py-1.5 rounded-lg text-2xs font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
                 >
                   {projectTargetDirectory ? 'Change directory' : 'Choose directory'}
                 </button>
@@ -326,35 +326,35 @@ export function CustomSkillForm({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">{t('skillForm.bundleIdentity', 'Bundle identity')}</div>
+              <div className="text-md font-semibold text-text mb-3">{t('skillForm.bundleIdentity', 'Bundle identity')}</div>
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-text-muted">{t('skillForm.skillDirectory', 'Skill directory')}</span>
+                <span className="text-2xs text-text-muted">{t('skillForm.skillDirectory', 'Skill directory')}</span>
                 <input
                   type="text"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder={t('skillForm.skillDirectoryPlaceholder', 'e.g. code-review, data-pipeline')}
                   disabled={isEditing}
-                  className={`w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border ${isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border ${isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
                 />
-                <span className="text-[10px] text-text-muted">{t('skillForm.skillDirectoryHint', 'Saved as a skill bundle directory. Keep it lowercase and stable.')}</span>
+                <span className="text-2xs text-text-muted">{t('skillForm.skillDirectoryHint', 'Saved as a skill bundle directory. Keep it lowercase and stable.')}</span>
               </label>
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">SKILL.md</div>
+              <div className="text-md font-semibold text-text mb-3">SKILL.md</div>
               <textarea
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 rows={24}
-                className="w-full min-h-[560px] px-3 py-2 rounded-lg text-[11px] font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
+                className="w-full min-h-[560px] px-3 py-2 rounded-lg text-2xs font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
               />
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
               <div className="mb-3">
-                <div className="text-[14px] font-semibold text-text">{t('skillForm.requiredTools', 'Required tools')}</div>
-                <div className="text-[11px] text-text-muted mt-1">
+                <div className="text-md font-semibold text-text">{t('skillForm.requiredTools', 'Required tools')}</div>
+                <div className="text-2xs text-text-muted mt-1">
                   When you attach this skill to an agent, the agent builder surfaces a
                   <span className="font-mono"> Needs tools </span> hint with a one-click
                   button to add anything listed here that the agent doesn't already have.
@@ -370,7 +370,7 @@ export function CustomSkillForm({
                         key={tool.id}
                         type="button"
                         onClick={() => toggleTool(tool.id)}
-                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] border cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-2xs border cursor-pointer transition-colors"
                         style={{
                           color: selected ? 'var(--color-accent)' : 'var(--color-text-secondary)',
                           background: selected
@@ -389,7 +389,7 @@ export function CustomSkillForm({
                   })}
                 </div>
               ) : (
-                <div className="text-[11px] text-text-muted italic">
+                <div className="text-2xs text-text-muted italic">
                   No tools discovered yet. Add a custom MCP from the Tools & Skills page and it
                   will show up here.
                 </div>
@@ -399,12 +399,12 @@ export function CustomSkillForm({
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
-                  <div className="text-[14px] font-semibold text-text">{t('skillForm.additionalFiles', 'Additional files')}</div>
-                  <div className="text-[11px] text-text-muted mt-1">Add optional references, examples, templates, or helper files inside this bundle.</div>
+                  <div className="text-md font-semibold text-text">{t('skillForm.additionalFiles', 'Additional files')}</div>
+                  <div className="text-2xs text-text-muted mt-1">Add optional references, examples, templates, or helper files inside this bundle.</div>
                 </div>
                 <button
                   onClick={() => setFiles((current) => [...current, createSkillFileDraft()])}
-                  className="text-[11px] text-accent cursor-pointer"
+                  className="text-2xs text-accent cursor-pointer"
                 >
                   + Add file
                 </button>
@@ -415,10 +415,10 @@ export function CustomSkillForm({
                   {files.map((file, index) => (
                     <div key={file.id} className="rounded-xl border border-border-subtle bg-elevated p-3">
                       <div className="flex items-center justify-between gap-3 mb-2">
-                        <div className="text-[11px] text-text-secondary">File {index + 1}</div>
+                        <div className="text-2xs text-text-secondary">File {index + 1}</div>
                         <button
                           onClick={() => setFiles((current) => current.filter((entry) => entry.id !== file.id))}
-                          className="text-[11px] text-text-muted hover:text-red cursor-pointer"
+                          className="text-2xs text-text-muted hover:text-red cursor-pointer"
                         >
                           Remove
                         </button>
@@ -429,21 +429,21 @@ export function CustomSkillForm({
                           value={file.path}
                           onChange={(event) => setFiles((current) => current.map((entry) => entry.id === file.id ? { ...entry, path: event.target.value } : entry))}
                           placeholder="references/example.md"
-                          className="w-full px-3 py-2 rounded-lg text-[12px] bg-surface border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+                          className="w-full px-3 py-2 rounded-lg text-xs bg-surface border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
                         />
                         <textarea
                           value={file.content}
                           onChange={(event) => setFiles((current) => current.map((entry) => entry.id === file.id ? { ...entry, content: event.target.value } : entry))}
                           rows={8}
                           placeholder={t('skillForm.fileContents', 'File contents')}
-                          className="w-full min-h-[180px] px-3 py-2 rounded-lg text-[11px] font-mono bg-surface border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
+                          className="w-full min-h-[180px] px-3 py-2 rounded-lg text-2xs font-mono bg-surface border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
                         />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl border border-border-subtle border-dashed px-4 py-6 text-[12px] text-text-muted text-center">
+                <div className="rounded-xl border border-border-subtle border-dashed px-4 py-6 text-xs text-text-muted text-center">
                   No extra files yet. Keep the bundle simple unless a reference, example, or template genuinely helps.
                 </div>
               )}
@@ -452,17 +452,17 @@ export function CustomSkillForm({
 
           <div className="xl:sticky xl:top-6 self-start flex flex-col gap-4">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[12px] font-semibold text-text mb-3">{t('skillForm.bundlePreview', 'Bundle preview')}</div>
+              <div className="text-xs font-semibold text-text mb-3">{t('skillForm.bundlePreview', 'Bundle preview')}</div>
               <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
-                <div className="text-[11px] text-text-secondary mb-1">{t('skillForm.bundleId', 'Bundle id')}</div>
-                <div className="text-[13px] font-medium text-text">{name.trim() || 'new-skill'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('skillForm.frontmatterName', 'Frontmatter name')}</div>
-                <div className="text-[12px] text-text">{frontmatterName || 'Missing'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.description', 'Description')}</div>
-                <div className="text-[11px] text-text-muted leading-relaxed">{frontmatterDescription || 'Add a frontmatter description so the bundle is discoverable.'}</div>
+                <div className="text-2xs text-text-secondary mb-1">{t('skillForm.bundleId', 'Bundle id')}</div>
+                <div className="text-sm font-medium text-text">{name.trim() || 'new-skill'}</div>
+                <div className="mt-3 text-2xs text-text-secondary mb-1">{t('skillForm.frontmatterName', 'Frontmatter name')}</div>
+                <div className="text-xs text-text">{frontmatterName || 'Missing'}</div>
+                <div className="mt-3 text-2xs text-text-secondary mb-1">{t('mcpForm.description', 'Description')}</div>
+                <div className="text-2xs text-text-muted leading-relaxed">{frontmatterDescription || 'Add a frontmatter description so the bundle is discoverable.'}</div>
               </div>
 
-              <div className="flex flex-col gap-3 text-[11px] text-text-muted">
+              <div className="flex flex-col gap-3 text-2xs text-text-muted">
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
                   <div className="text-text-secondary mb-1">{t('skillForm.whatWillBeSaved', 'What will be saved')}</div>
                   <div>`SKILL.md` + {populatedFiles.length} additional {populatedFiles.length === 1 ? 'file' : 'files'}</div>
@@ -472,7 +472,7 @@ export function CustomSkillForm({
                   {populatedFiles.length > 0 ? (
                     <div className="flex flex-col gap-1">
                       {populatedFiles.map((file) => (
-                        <div key={file.id} className="text-[10px] text-text-muted">{file.path || 'Unnamed file'}</div>
+                        <div key={file.id} className="text-2xs text-text-muted">{file.path || 'Unnamed file'}</div>
                       ))}
                     </div>
                   ) : (
@@ -484,7 +484,7 @@ export function CustomSkillForm({
           </div>
         </div>
 
-        <p className="mt-5 text-[10px] text-text-muted">{getBrandName()} reloads the runtime automatically after saving.</p>
+        <p className="mt-5 text-2xs text-text-muted">{getBrandName()} reloads the runtime automatically after saving.</p>
       </div>
     </div>
   )

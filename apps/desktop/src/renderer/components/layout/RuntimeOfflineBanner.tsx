@@ -34,7 +34,7 @@ export function RuntimeOfflineBanner({ error, onRestart }: Props) {
     <div
       role="status"
       aria-live="assertive"
-      className="flex items-center justify-between gap-3 px-4 py-2 text-[12px]"
+      className="flex items-center justify-between gap-3 px-4 py-2 text-xs"
       style={{
         background: 'color-mix(in srgb, var(--color-red) 12%, transparent)',
         borderBottom: '1px solid color-mix(in srgb, var(--color-red) 30%, var(--color-border-subtle))',
@@ -49,14 +49,14 @@ export function RuntimeOfflineBanner({ error, onRestart }: Props) {
         </svg>
         <span className="truncate">
           {t('runtime.offlineLabel', 'Runtime unavailable:')}{' '}
-          <span className="font-mono text-[11px]">{error}</span>
+          <span className="font-mono text-2xs">{error}</span>
         </span>
       </div>
       <button
         type="button"
         onClick={() => void handleRestart()}
         disabled={restarting}
-        className="shrink-0 px-3 py-1 rounded border text-[11px] font-medium cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+        className="shrink-0 px-3 py-1 rounded border text-2xs font-medium cursor-pointer disabled:opacity-60 disabled:cursor-wait"
         style={{
           borderColor: 'color-mix(in srgb, var(--color-red) 50%, transparent)',
           color: 'var(--color-red)',

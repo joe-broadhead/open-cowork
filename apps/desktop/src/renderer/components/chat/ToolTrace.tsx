@@ -152,8 +152,8 @@ function ArtifactCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Badge tone="neutral" className="mb-1">{t('toolTrace.artifact', 'Artifact')}</Badge>
-          <div className="text-[12px] font-medium text-text truncate">{artifact.filename}</div>
-          <div className="mt-1 text-[11px] text-text-muted">
+          <div className="text-xs font-medium text-text truncate">{artifact.filename}</div>
+          <div className="mt-1 text-2xs text-text-muted">
             {artifact.taskRunId
               ? t('toolTrace.generatedInSubAgent', 'Generated via {{tool}} in sub-agent work', { tool: artifact.toolName })
               : t('toolTrace.generatedInThread', 'Generated via {{tool}} in this thread', { tool: artifact.toolName })}
@@ -249,7 +249,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
             </Badge>
           </>
         )}
-        <span className="text-[11px] text-text-muted">{summarizeTools(tools, toolTraceRules)}</span>
+        <span className="text-2xs text-text-muted">{summarizeTools(tools, toolTraceRules)}</span>
       </div>
     )
   }
@@ -322,7 +322,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
           return (
             <div key={`chart-${tool.id}`} className="chat-tool-chart-frame mt-1 mb-1">
               {chart.type === 'vega' && chart.title && (
-                <div className="px-4 pt-3 pb-1 text-[12px] font-medium text-text">
+                <div className="px-4 pt-3 pb-1 text-xs font-medium text-text">
                   {chart.title}
                 </div>
               )}
@@ -386,7 +386,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                     size={16}
                     className={`${statusIconClass(tool.status)} ${tool.status !== 'complete' && tool.status !== 'error' ? 'ui-spin' : ''}`}
                   />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-secondary">{tool.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-2xs text-text-secondary">{tool.name}</span>
                   <Badge tone={statusTone(tool.status)}>{statusLabel(tool.status)}</Badge>
                   <Icon name={isToolExpanded ? 'chevron-down' : 'chevron-right'} size={16} className="text-text-muted" />
                 </Card>
@@ -397,7 +397,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                       <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <Badge tone="neutral" className="mb-1">{t('toolTrace.artifact', 'Artifact')}</Badge>
-                          <div className="text-[11px] text-text truncate">{artifact.filename}</div>
+                          <div className="text-2xs text-text truncate">{artifact.filename}</div>
                         </div>
                         <Button
                           onClick={async (event) => {
@@ -448,22 +448,22 @@ export function ToolTrace({ tools, compact = false }: Props) {
                     )}
                     {Object.keys(displayInput).length > 0 && (
                       <div className="px-3 py-2 border-b border-border-subtle">
-                        <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.input', 'Input')}</div>
-                        <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all">
+                        <div className="text-2xs font-medium text-text-muted mb-1">{t('toolTrace.input', 'Input')}</div>
+                        <pre className="text-2xs font-mono text-text-secondary whitespace-pre-wrap break-all">
                           {JSON.stringify(displayInput, null, 2)}
                         </pre>
                       </div>
                     )}
                     {tool.output != null && !tryParseChartOutput(tool.output) && (
                       <div className="px-3 py-2">
-                        <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.output', 'Output')}</div>
-                        <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
+                        <div className="text-2xs font-medium text-text-muted mb-1">{t('toolTrace.output', 'Output')}</div>
+                        <pre className="text-2xs font-mono text-text-secondary whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
                           {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
                         </pre>
                       </div>
                     )}
                     {Object.keys(displayInput).length === 0 && tool.output == null && !artifact && (
-                      <div className="px-3 py-2 text-[10px] text-text-muted">{t('toolTrace.noDetails', 'No details available')}</div>
+                      <div className="px-3 py-2 text-2xs text-text-muted">{t('toolTrace.noDetails', 'No details available')}</div>
                     )}
                   </div>
                 )}

@@ -316,7 +316,7 @@ export function AgentBuilderPage({
 
         {error && (
           <div
-            className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-[12px] text-red-100"
+            className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-xs text-red-100"
           >
             {error}
           </div>
@@ -324,8 +324,8 @@ export function AgentBuilderPage({
 
         {issues.length > 0 && (
           <div className="mb-4 rounded-xl border border-border-subtle bg-surface px-4 py-3">
-            <div className="text-[12px] font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
-            <div className="flex flex-col gap-1 text-[11px] text-text-muted">
+            <div className="text-xs font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
+            <div className="flex flex-col gap-1 text-2xs text-text-muted">
               {issues.map((issue) => (
                 <div key={issue.code}>{issue.message}</div>
               ))}
@@ -454,7 +454,7 @@ export function AgentBuilderPage({
               )}
             </div>
             {!readOnly && (
-              <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2 text-[10px] text-text-muted">
+              <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2 text-2xs text-text-muted">
                 <Button
                   onClick={() => {
                     const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
@@ -526,7 +526,7 @@ function StarterTemplatePanel({
     <section className="mb-5">
       <div className="mb-3">
         <h2 className="font-display text-role-section-title font-bold text-text">{t('agentTemplate.title', 'Start a new agent')}</h2>
-        <p className="mt-1 text-[12px] text-text-muted">
+        <p className="mt-1 text-xs text-text-muted">
           {t('agentTemplate.inlineSubtitle', 'Pick a starter or keep the blank draft; everything remains editable below.')}
         </p>
       </div>
@@ -537,8 +537,8 @@ function StarterTemplatePanel({
               <Icon name="plus" size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold text-text">{t('agentTemplate.startBlank', 'Start from blank')}</div>
-              <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+              <div className="text-sm font-semibold text-text">{t('agentTemplate.startBlank', 'Start from blank')}</div>
+              <div className="mt-1 text-2xs leading-relaxed text-text-muted">
                 {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions - design the agent from scratch.')}
               </div>
             </div>
@@ -555,10 +555,10 @@ function StarterTemplatePanel({
               <div className="flex items-start gap-3">
                 <AgentAvatar name={template.label} color={template.color} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-text">{template.label}</div>
-                  <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-text-muted">{template.description}</div>
+                  <div className="text-sm font-semibold text-text">{template.label}</div>
+                  <div className="mt-1 line-clamp-2 text-2xs leading-relaxed text-text-muted">{template.description}</div>
                   {availableHints.length ? (
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+                    <div className="mt-2 flex flex-wrap gap-2 text-2xs text-text-muted">
                       {availableHints.map((hint) => <span key={hint}>{hint}</span>)}
                     </div>
                   ) : null}
@@ -602,7 +602,7 @@ function BuilderStepNav({
             }}
           >
             <span
-              className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold"
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-2xs font-bold"
               style={{
                 background: active ? 'var(--color-accent)' : 'var(--color-surface)',
                 color: active ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',

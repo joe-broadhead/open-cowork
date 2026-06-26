@@ -224,7 +224,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
               <Icon name="plus" size={16} className="text-text-muted" />
               <div>
                 <div className="font-medium">{t('newChat.blank', 'Blank chat')}</div>
-                <div className="text-[10px] text-text-muted mt-px">{blankHint}</div>
+                <div className="text-2xs text-text-muted mt-px">{blankHint}</div>
               </div>
             </Card>
             <div className="new-thread-menu-separator" />
@@ -258,7 +258,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
               <Icon name="folder" size={16} className="text-text-muted" />
               <div>
                 <div className="font-medium">{t('newThread.project', 'Open Project')}</div>
-                <div className="text-[10px] text-text-muted mt-px">{projectHint}</div>
+                <div className="text-2xs text-text-muted mt-px">{projectHint}</div>
               </div>
             </Card>
           </div>
@@ -270,8 +270,8 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
           <div className="fixed inset-x-4 top-20 z-[60] mx-auto max-w-[520px] rounded-xl theme-popover p-4 shadow-xl">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[13px] font-semibold text-text">{t('newThread.cloudProjectTitle', 'Cloud project source')}</div>
-                <div className="text-[11px] text-text-muted mt-1">{t('newChat.cloudProjectSubtitle', 'Start a cloud project chat from Git or an explicit uploaded snapshot.')}</div>
+                <div className="text-sm font-semibold text-text">{t('newThread.cloudProjectTitle', 'Cloud project source')}</div>
+                <div className="text-2xs text-text-muted mt-1">{t('newChat.cloudProjectSubtitle', 'Start a cloud project chat from Git or an explicit uploaded snapshot.')}</div>
               </div>
               <IconButton
                 icon="x"
@@ -340,7 +340,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
                     : t('newThread.chooseSnapshot', 'Choose directory')}
                 </Button>
                 {snapshotInventory && (
-                  <div className="rounded-lg border border-border-subtle p-3 text-[11px] text-text-muted">
+                  <div className="rounded-lg border border-border-subtle p-3 text-2xs text-text-muted">
                     <div className="text-text">
                       {snapshotInventory.fileCount} {t('newThread.files', 'files')} · {Math.ceil(snapshotInventory.byteCount / 1024)} KB
                     </div>
@@ -360,7 +360,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
             )}
 
             {projectError && (
-              <div className="new-thread-error mt-3 rounded-md border px-3 py-2 text-[12px]">
+              <div className="new-thread-error mt-3 rounded-md border px-3 py-2 text-xs">
                 {projectError}
               </div>
             )}

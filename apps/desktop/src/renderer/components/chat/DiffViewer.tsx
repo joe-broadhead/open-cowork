@@ -69,18 +69,18 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
                 onClick={onClose}
                 aria-label={t('diff.closeChanges', 'Close changes')}
                 title={t('common.close', 'Close')}
-                className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none ps-1"
+                className="text-text-muted hover:text-text cursor-pointer text-xl leading-none ps-1"
               >&times;</button>
             </>
           )}
         >
           <div className="flex-1 overflow-y-auto">
             {loading && (
-              <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.loading', 'Loading changes...')}</div>
+              <div className="px-4 py-8 text-xs text-text-muted text-center">{t('diff.loading', 'Loading changes...')}</div>
             )}
 
             {!loading && diffs.length === 0 && (
-              <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
+              <div className="px-4 py-8 text-xs text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
             )}
 
             {diffs.map((diff) => (

@@ -4,7 +4,7 @@ import type {
   CustomSkillConfig,
 } from '@open-cowork/shared'
 
-export const customMcpInputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
+export const customMcpInputClass = 'w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
 const CUSTOM_MCP_VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
 export type CustomMcpFormType = 'stdio' | 'http'

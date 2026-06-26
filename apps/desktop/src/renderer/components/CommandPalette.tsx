@@ -193,7 +193,7 @@ export function CommandPalette({
             aria-controls={listboxId}
             aria-activedescendant={activeOptionId}
             placeholder={t('commandPalette.search', 'Search actions, agents, and commands...')}
-            className="w-full bg-transparent text-[14px] text-text outline-none placeholder:text-text-muted"
+            className="w-full bg-transparent text-md text-text outline-none placeholder:text-text-muted"
           />
         </div>
 
@@ -204,14 +204,14 @@ export function CommandPalette({
           className="max-h-[520px] overflow-y-auto px-2 py-2"
         >
           {groupedItems.length === 0 && (
-            <div className="px-4 py-10 text-center text-[12px] text-text-muted">
+            <div className="px-4 py-10 text-center text-xs text-text-muted">
               {t('commandPalette.noMatches', 'No matching actions. Try a broader search.')}
             </div>
           )}
 
           {groupedItems.map((group) => (
             <div key={group.section} role="group" aria-label={group.section} className="mb-2">
-              <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+              <div className="px-3 py-2 text-2xs font-semibold uppercase tracking-[0.18em] text-text-muted">
                 {group.section}
               </div>
               <div className="space-y-1">
@@ -229,9 +229,9 @@ export function CommandPalette({
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-medium text-text">{item.title}</span>
+                          <span className="text-sm font-medium text-text">{item.title}</span>
                           <span
-                            className="rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]"
+                            className="rounded-md px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.14em]"
                             style={{
                               background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
                               color: 'var(--color-accent)',
@@ -240,12 +240,12 @@ export function CommandPalette({
                             {item.badge}
                           </span>
                         </div>
-                        <div className="mt-0.5 text-[11px] leading-5 text-text-muted">
+                        <div className="mt-0.5 text-2xs leading-5 text-text-muted">
                           {item.subtitle}
                         </div>
                       </div>
                       {item.hint && (
-                        <div className="mt-0.5 shrink-0 text-[10px] text-text-muted">
+                        <div className="mt-0.5 shrink-0 text-2xs text-text-muted">
                           {item.hint}
                         </div>
                       )}
@@ -257,7 +257,7 @@ export function CommandPalette({
           ))}
         </div>
 
-        <div className="border-t px-4 py-2 text-[11px] text-text-muted" style={{ borderColor: 'var(--color-border-subtle)' }}>
+        <div className="border-t px-4 py-2 text-2xs text-text-muted" style={{ borderColor: 'var(--color-border-subtle)' }}>
           {t('commandPalette.hint', 'Enter to run. Esc to close.')}
         </div>
       </div>

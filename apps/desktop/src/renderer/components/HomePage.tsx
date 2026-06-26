@@ -620,7 +620,7 @@ function HomeComposer({
           // `max-h-[220px]` must match MAX_COMPOSER_HEIGHT above —
           // Tailwind JIT reads the literal at build time so we can't
           // interpolate the const into the class string.
-          className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-muted resize-none outline-none min-h-[28px] max-h-[220px] leading-[1.45]"
+          className="flex-1 bg-transparent text-lg text-text placeholder:text-text-muted resize-none outline-none min-h-[28px] max-h-[220px] leading-[1.45]"
         />
       </div>
       {attachments.length > 0 && !text.trim() && (
@@ -754,9 +754,9 @@ function LaunchpadSuggestions({
                   <Icon name={example.icon} size={20} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[13px] font-medium text-text">{example.title}</span>
-                  <span className="mt-1 block text-[11px] leading-snug text-text-muted">{example.prompt}</span>
-                  <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-text-secondary">
+                  <span className="block text-sm font-medium text-text">{example.title}</span>
+                  <span className="mt-1 block text-2xs leading-snug text-text-muted">{example.prompt}</span>
+                  <span className="mt-2 inline-flex items-center gap-1 text-2xs font-medium text-text-secondary">
                     <Icon name="at-sign" size={16} />
                     {primaryLeadAvailable
                       ? primaryAgentLeadLabel(agentMode)
@@ -914,7 +914,7 @@ function StatusStrip({ readyLabel }: { readyLabel: string }) {
   const total = summary.total
 
   return (
-    <div className="home-status-strip mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-[12px] text-text-muted">
+    <div className="home-status-strip mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-xs text-text-muted">
       <span className="inline-flex items-center gap-1.5">
         <Badge tone={total > 0 && connected === total ? 'success' : 'warning'}>
           {readyLabel}
@@ -1139,12 +1139,12 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
     // Sits on the themed --color-base + its --bg-image aurora wash (set per theme).
     <div className="flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <div className="measure-column px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
-        <h1 className="font-display text-[44px] leading-[1.04] font-semibold tracking-[-0.03em] text-text text-center">
+        <h1 className="font-display text-hero leading-[1.04] font-semibold tracking-[-0.03em] text-text text-center">
           {brandedGreeting ?? (
             <>{timeGreeting.lead} <span className="studio-greeting-accent">{timeGreeting.accent}</span>.</>
           )}
         </h1>
-        <p className="mt-3 text-[13px] text-text-muted text-center">
+        <p className="mt-3 text-sm text-text-muted text-center">
           {subtitle}
         </p>
 

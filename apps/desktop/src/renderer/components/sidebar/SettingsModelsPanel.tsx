@@ -119,8 +119,8 @@ export function ModelsPanel({
         <div className={panelCardCls}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-[12px] font-semibold text-text">{t('settings.models.googleSignIn', 'Google sign-in')}</div>
-              <div className="text-[11px] text-text-muted leading-relaxed mt-1">
+              <div className="text-xs font-semibold text-text">{t('settings.models.googleSignIn', 'Google sign-in')}</div>
+              <div className="text-2xs text-text-muted leading-relaxed mt-1">
                 {t('settings.models.googleSignInDescription', 'Sign out to force a fresh Google consent flow when this build adds new Workspace or Gemini scopes.')}
               </div>
             </div>
@@ -166,10 +166,10 @@ export function ModelsPanel({
                       effectiveSmallModel: smallModelFollowsMainModel ? nextModelId : entry.smallModel || nextModelId,
                     })}
                   >
-                    <div className="text-[12px] font-semibold text-text">{entry.name}</div>
-                    <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
+                    <div className="text-xs font-semibold text-text">{entry.name}</div>
+                    <div className="text-2xs text-text-muted mt-1 leading-relaxed">{entry.description}</div>
                     {typeof entry.connected === 'boolean' ? (
-                      <div className="text-[10px] text-text-muted mt-2">
+                      <div className="text-2xs text-text-muted mt-2">
                         {entry.connected ? t('settings.models.connected', 'Signed in') : t('settings.models.notConnected', 'Not signed in')}
                       </div>
                     ) : null}
@@ -220,7 +220,7 @@ export function ModelsPanel({
                           onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
                           placeholder={credential.placeholder}
                         />
-                        <span className="text-[10px] text-text-muted">{credential.description}</span>
+                        <span className="text-2xs text-text-muted">{credential.description}</span>
                       </div>
                     )
                   })}
@@ -229,8 +229,8 @@ export function ModelsPanel({
               <div id="settings-model-test" className={`${panelCardCls} scroll-mt-4`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[12px] font-semibold text-text">{t('settings.models.testConnection', 'Test connection')}</div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                    <div className="text-xs font-semibold text-text">{t('settings.models.testConnection', 'Test connection')}</div>
+                    <div className="mt-1 text-2xs leading-relaxed text-text-muted">
                       {t('settings.models.testConnectionDescription', 'Validate the selected provider credentials before restarting the app runtime.')}
                     </div>
                   </div>
@@ -256,7 +256,7 @@ export function ModelsPanel({
                 onChange={(event) => updateMainModel(event.target.value)}
                 placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
               />
-              <span className="text-[10px] text-text-muted px-1">
+              <span className="text-2xs text-text-muted px-1">
                 {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
               </span>
             </div>
@@ -299,7 +299,7 @@ export function ModelsPanel({
               {useListView ? (
                 <div className="settings-model-list">
                   {filteredModels.length === 0 ? (
-                    <div className="px-3 py-6 text-[12px] text-text-muted text-center">{t('settings.models.noMatches', 'No models match this search.')}</div>
+                    <div className="px-3 py-6 text-xs text-text-muted text-center">{t('settings.models.noMatches', 'No models match this search.')}</div>
                   ) : (
                     filteredModels.map((model, index) => {
                       const isActive = settings.effectiveModel === model.id
@@ -308,7 +308,7 @@ export function ModelsPanel({
                       return (
                         <div key={model.id}>
                           {showFeaturedBoundary && (
-                            <div className="px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-text-muted bg-surface-hover">
+                            <div className="px-3 py-1 text-2xs uppercase tracking-[0.08em] text-text-muted bg-surface-hover">
                               {t('settings.models.allModels', 'All models')}
                             </div>
                           )}
@@ -320,21 +320,21 @@ export function ModelsPanel({
                             onClick={() => updateMainModel(model.id)}
                           >
                             <div className="flex items-baseline gap-2">
-                              <span className="text-[12px] font-medium text-text truncate">{model.name}</span>
+                              <span className="text-xs font-medium text-text truncate">{model.name}</span>
                               {model.featured ? (
                                 <Badge tone="accent" className="settings-featured-badge">
                                   {t('settings.models.featured', 'Featured')}
                                 </Badge>
                               ) : null}
                               {formatContextLength(model.contextLength) ? (
-                                <span className="shrink-0 text-[10px] text-text-muted">
+                                <span className="shrink-0 text-2xs text-text-muted">
                                   {formatContextLength(model.contextLength)}
                                 </span>
                               ) : null}
                             </div>
-                            <div className="text-[10px] text-text-muted font-mono truncate">{model.id}</div>
+                            <div className="text-2xs text-text-muted font-mono truncate">{model.id}</div>
                             {model.description ? (
-                              <div className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{model.description}</div>
+                              <div className="text-2xs text-text-muted mt-0.5 line-clamp-2">{model.description}</div>
                             ) : null}
                           </Card>
                         </div>
@@ -353,8 +353,8 @@ export function ModelsPanel({
                       className="settings-choice-card"
                       onClick={() => updateMainModel(model.id)}
                     >
-                      <div className="text-[12px] font-semibold text-text">{model.name}</div>
-                      {model.description ? <div className="text-[11px] text-text-muted mt-1">{model.description}</div> : null}
+                      <div className="text-xs font-semibold text-text">{model.name}</div>
+                      {model.description ? <div className="text-2xs text-text-muted mt-1">{model.description}</div> : null}
                     </Card>
                   ))}
                 </div>
@@ -368,7 +368,7 @@ export function ModelsPanel({
         <div id="settings-advanced-small-model" className="flex flex-col gap-3 scroll-mt-4">
           <div>
             <span className={sectionLabelCls}>{t('settings.models.smallModel', 'Small model')}</span>
-            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+            <div className="text-2xs text-text-muted mt-1 leading-relaxed">
               {t('settings.models.smallModelDescription', 'OpenCode uses this for lightweight work such as thread titles. Leave it empty to use the provider default, or the selected chat model when no default is configured.')}
             </div>
           </div>
@@ -394,7 +394,7 @@ export function ModelsPanel({
                 </datalist>
               ) : null}
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 text-[10px] text-text-muted">
+                <div className="min-w-0 text-2xs text-text-muted">
                   {smallModelUsesMainModel
                     ? t('settings.models.smallModelUsingMain', 'Using the selected chat model.')
                     : smallModelUsesProviderDefault

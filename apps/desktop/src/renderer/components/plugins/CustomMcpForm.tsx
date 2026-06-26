@@ -223,28 +223,28 @@ export function CustomMcpForm({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1120px] mx-auto px-8 py-8">
-        <button onClick={onCancel} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
+        <button onClick={onCancel} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary cursor-pointer mb-6">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
           {t('capabilities.title', 'Tools & Skills')}
         </button>
 
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">
+            <h1 className="text-xl font-semibold text-text mb-1">
               {isEditing ? t('mcpForm.titleEdit', 'Edit MCP tool — {{name}}', { name: existing?.name || '' }) : t('mcpForm.titleAdd', 'Add MCP tool')}
             </h1>
-            <p className="text-[13px] text-text-secondary leading-relaxed">
+            <p className="text-sm text-text-secondary leading-relaxed">
               {isEditing
                 ? t('mcpForm.subtitleEdit', 'Update the configuration for this MCP. Changes take effect after {{brand}} reloads the runtime.', { brand: getBrandName() })
                 : t('mcpForm.subtitleAdd', 'Connect a Model Context Protocol server and make its toolset available inside {{brand}} and OpenCode.', { brand: getBrandName() })}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">{t('common.cancel', 'Cancel')}</button>
+            <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-xs text-text-secondary bg-surface-hover cursor-pointer">{t('common.cancel', 'Cancel')}</button>
             <button
               onClick={handleSave}
               disabled={saving || issues.length > 0}
-              className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent cursor-pointer disabled:opacity-40"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-accent cursor-pointer disabled:opacity-40"
               style={{ color: 'var(--color-accent-foreground)' }}
             >
               {saving ? t('mcpForm.saving', 'Saving…') : isEditing ? t('mcpForm.saveChanges', 'Save changes') : t('mcpForm.addMcp', 'Add MCP')}
@@ -254,8 +254,8 @@ export function CustomMcpForm({
 
         {issues.length > 0 ? (
           <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3">
-            <div className="text-[12px] font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
-            <div className="flex flex-col gap-1 text-[11px] text-text-muted">
+            <div className="text-xs font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
+            <div className="flex flex-col gap-1 text-2xs text-text-muted">
               {issues.map((issue) => (
                 <div key={issue}>{issue}</div>
               ))}
@@ -266,22 +266,22 @@ export function CustomMcpForm({
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.whereToSave', 'Where to save it')}</div>
+              <div className="text-md font-semibold text-text mb-3">{t('mcpForm.whereToSave', 'Where to save it')}</div>
               <div className="flex rounded-lg border border-border-subtle overflow-hidden">
                 <button
                   onClick={() => setScope('machine')}
-                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
+                  className={`flex-1 px-3 py-2 text-xs font-medium cursor-pointer ${scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
                   Cowork only (private)
                 </button>
                 <button
                   onClick={() => setScope('project')}
-                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
+                  className={`flex-1 px-3 py-2 text-xs font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
                   Project (Cowork only)
                 </button>
               </div>
-              <div className="mt-2 text-[11px] text-text-muted">
+              <div className="mt-2 text-2xs text-text-muted">
                 {scope === 'project'
                   ? (projectTargetDirectory || 'Choose a project directory to save this into Cowork’s private project config overlay.')
                   : 'Saved into Cowork’s private machine config. This stays separate from your normal CLI OpenCode machine config.'}
@@ -289,7 +289,7 @@ export function CustomMcpForm({
               {scope === 'project' ? (
                 <button
                   onClick={() => void chooseProjectDirectory()}
-                  className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                  className="mt-3 px-3 py-1.5 rounded-lg text-2xs font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
                 >
                   {projectTargetDirectory ? 'Change directory' : 'Choose directory'}
                 </button>
@@ -297,12 +297,12 @@ export function CustomMcpForm({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.connectionType', 'Connection type')}</div>
+              <div className="text-md font-semibold text-text mb-3">{t('mcpForm.connectionType', 'Connection type')}</div>
               <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-                <button onClick={() => setType('stdio')} className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${type === 'stdio' ? 'bg-surface-active text-text' : 'text-text-muted'}`}>
+                <button onClick={() => setType('stdio')} className={`flex-1 px-3 py-2 text-xs font-medium cursor-pointer ${type === 'stdio' ? 'bg-surface-active text-text' : 'text-text-muted'}`}>
                   stdio (local process)
                 </button>
-                <button onClick={() => setType('http')} className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${type === 'http' ? 'bg-surface-active text-text' : 'text-text-muted'}`}>
+                <button onClick={() => setType('http')} className={`flex-1 px-3 py-2 text-xs font-medium cursor-pointer ${type === 'http' ? 'bg-surface-active text-text' : 'text-text-muted'}`}>
                   HTTP / SSE (remote)
                 </button>
               </div>
@@ -311,7 +311,7 @@ export function CustomMcpForm({
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted">{t('mcpForm.mcpId', 'MCP id')}</span>
+                  <span className="text-2xs text-text-muted">{t('mcpForm.mcpId', 'MCP id')}</span>
                   <input
                     type="text"
                     value={name}
@@ -320,30 +320,30 @@ export function CustomMcpForm({
                     disabled={isEditing}
                     className={`${inputClass} ${isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
                   />
-                  <span className="text-[10px] text-text-muted">{t('mcpForm.mcpIdHint', 'This becomes the runtime namespace and permission prefix.')}</span>
+                  <span className="text-2xs text-text-muted">{t('mcpForm.mcpIdHint', 'This becomes the runtime namespace and permission prefix.')}</span>
                 </label>
 
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted">{t('mcpForm.displayName', 'Display name')}</span>
+                  <span className="text-2xs text-text-muted">{t('mcpForm.displayName', 'Display name')}</span>
                   <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('mcpForm.displayNamePlaceholder', 'e.g. GitHub, Jira, Slack')} className={inputClass} />
-                  <span className="text-[10px] text-text-muted">Optional. If blank, the UI will humanize the MCP id.</span>
+                  <span className="text-2xs text-text-muted">Optional. If blank, the UI will humanize the MCP id.</span>
                 </label>
               </div>
 
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-text-muted">{t('mcpForm.description', 'Description')}</span>
+                <span className="text-2xs text-text-muted">{t('mcpForm.description', 'Description')}</span>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
                   placeholder={t('mcpForm.descriptionPlaceholder', 'What this MCP gives agents access to.')}
-                  className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y"
+                  className="w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y"
                 />
               </label>
 
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted">{t('mcpForm.traceLabel', 'Trace label')}</span>
+                  <span className="text-2xs text-text-muted">{t('mcpForm.traceLabel', 'Trace label')}</span>
                   <input
                     type="text"
                     value={traceLabel}
@@ -351,12 +351,12 @@ export function CustomMcpForm({
                     placeholder={t('mcpForm.traceLabelPlaceholder', 'e.g. ticket action')}
                     className={inputClass}
                   />
-                  <span className="text-[10px] text-text-muted">
+                  <span className="text-2xs text-text-muted">
                     Used in chat summaries for this MCP&apos;s tool calls.
                   </span>
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted">{t('mcpForm.tracePluralLabel', 'Plural trace label')}</span>
+                  <span className="text-2xs text-text-muted">{t('mcpForm.tracePluralLabel', 'Plural trace label')}</span>
                   <input
                     type="text"
                     value={tracePluralLabel}
@@ -364,7 +364,7 @@ export function CustomMcpForm({
                     placeholder={t('mcpForm.tracePluralLabelPlaceholder', 'e.g. ticket actions')}
                     className={inputClass}
                   />
-                  <span className="text-[10px] text-text-muted">
+                  <span className="text-2xs text-text-muted">
                     Optional. Defaults to the trace label plus “s”.
                   </span>
                 </label>
@@ -372,26 +372,26 @@ export function CustomMcpForm({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.connectionDetails', 'Connection details')}</div>
+              <div className="text-md font-semibold text-text mb-3">{t('mcpForm.connectionDetails', 'Connection details')}</div>
               {type === 'stdio' ? (
                 <div className="flex flex-col gap-4">
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">{t('mcpForm.command', 'Command')}</span>
+                    <span className="text-2xs text-text-muted">{t('mcpForm.command', 'Command')}</span>
                     <input type="text" value={command} onChange={(e) => setCommand(e.target.value)} placeholder={t('mcpForm.commandPlaceholder', 'e.g. npx, node, python')} className={inputClass} />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">{t('mcpForm.arguments', 'Arguments')}</span>
+                    <span className="text-2xs text-text-muted">{t('mcpForm.arguments', 'Arguments')}</span>
                     <input type="text" value={args} onChange={(e) => setArgs(e.target.value)} placeholder={t('mcpForm.argumentsPlaceholder', 'e.g. -y @modelcontextprotocol/server-github')} className={inputClass} />
                   </label>
                   <div className="flex flex-col gap-2">
-                    <span className="text-[11px] text-text-muted">{t('mcpForm.envVars', 'Environment variables')}</span>
+                    <span className="text-2xs text-text-muted">{t('mcpForm.envVars', 'Environment variables')}</span>
                     {envPairs.map((pair) => (
                       <div key={pair.id} className="flex gap-2">
                         <input type="text" value={pair.key} onChange={(e) => setEnvPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, key: e.target.value } : entry))} placeholder="GITHUB_TOKEN" className={`${inputClass} flex-1`} />
                         <input type="password" value={pair.value} onChange={(e) => setEnvPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, value: e.target.value } : entry))} placeholder={t('mcpForm.envValuePlaceholder', 'value')} className={`${inputClass} flex-1`} />
                       </div>
                     ))}
-                    <button onClick={() => setEnvPairs((current) => [...current, createKeyValueDraft()])} className="text-[11px] text-accent cursor-pointer text-start">+ Add variable</button>
+                    <button onClick={() => setEnvPairs((current) => [...current, createKeyValueDraft()])} className="text-2xs text-accent cursor-pointer text-start">+ Add variable</button>
                   </div>
                   {authModeAvailable ? (
                     // Label + checkbox are explicitly paired via htmlFor/id;
@@ -407,8 +407,8 @@ export function CustomMcpForm({
                         className="mt-0.5"
                       />
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] text-text">Reuse {getBrandName()} Google sign-in</span>
-                        <span className="text-[10px] text-text-muted leading-relaxed">
+                        <span className="text-xs text-text">Reuse {getBrandName()} Google sign-in</span>
+                        <span className="text-2xs text-text-muted leading-relaxed">
                           Injects <span className="font-mono">GOOGLE_APPLICATION_CREDENTIALS</span> into this subprocess
                           pointing at your Google ADC file. Useful for trusted Google MCPs (Sheets, BigQuery, Drive) so
                           they skip a second OAuth prompt. Only takes effect once you&apos;re signed in; otherwise the
@@ -421,19 +421,19 @@ export function CustomMcpForm({
               ) : (
                 <div className="flex flex-col gap-4">
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">{t('mcpForm.url', 'URL')}</span>
+                    <span className="text-2xs text-text-muted">{t('mcpForm.url', 'URL')}</span>
                     <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/sse" className={inputClass} />
                   </label>
                   <div className="flex flex-col gap-2">
-                    <span className="text-[11px] text-text-muted">{t('mcpForm.headers', 'Headers')}</span>
+                    <span className="text-2xs text-text-muted">{t('mcpForm.headers', 'Headers')}</span>
                     {headerPairs.map((pair) => (
                       <div key={pair.id} className="flex gap-2">
                         <input type="text" value={pair.key} onChange={(e) => setHeaderPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, key: e.target.value } : entry))} placeholder="Authorization" className={`${inputClass} flex-1`} />
                         <input type="password" value={pair.value} onChange={(e) => setHeaderPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, value: e.target.value } : entry))} placeholder="Bearer ..." className={`${inputClass} flex-1`} />
                       </div>
                     ))}
-                    <button onClick={() => setHeaderPairs((current) => [...current, createKeyValueDraft()])} className="text-[11px] text-accent cursor-pointer text-start">+ Add header</button>
-                    <div className="text-[10px] text-text-muted">
+                    <button onClick={() => setHeaderPairs((current) => [...current, createKeyValueDraft()])} className="text-2xs text-accent cursor-pointer text-start">+ Add header</button>
+                    <div className="text-2xs text-text-muted">
                       Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow. After
                       saving, authenticate the MCP from the status panel once the runtime reloads.
                     </div>
@@ -457,8 +457,8 @@ export function CustomMcpForm({
                       className="mt-0.5"
                     />
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[12px] text-text">{t('mcpForm.allowPrivateNetwork', 'Allow private network')}</span>
-                      <span className="text-[10px] text-text-muted leading-relaxed">
+                      <span className="text-xs text-text">{t('mcpForm.allowPrivateNetwork', 'Allow private network')}</span>
+                      <span className="text-2xs text-text-muted leading-relaxed">
                         Unblock <span className="font-mono">localhost</span>, <span className="font-mono">127.*</span>, and
                         RFC1918 ranges (<span className="font-mono">10.*</span>, <span className="font-mono">192.168.*</span>).
                         Only enable this for on-prem or dev MCPs you trust — prompts can otherwise abuse it to reach
@@ -498,7 +498,7 @@ export function CustomMcpForm({
           </div>
         </div>
 
-        <p className="mt-5 text-[10px] text-text-muted">{t('mcpForm.reloadsRuntimeNote', '{{brand}} reloads the runtime automatically after saving.', { brand: getBrandName() })}</p>
+        <p className="mt-5 text-2xs text-text-muted">{t('mcpForm.reloadsRuntimeNote', '{{brand}} reloads the runtime automatically after saving.', { brand: getBrandName() })}</p>
       </div>
     </div>
   )

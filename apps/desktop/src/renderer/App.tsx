@@ -645,14 +645,14 @@ export function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar view={view} />
       {showPreviewNotice && metadata ? (
-        <div className="flex items-center gap-3 border-b px-4 py-2 text-[12px]" style={previewNoticeStyle}>
+        <div className="flex items-center gap-3 border-b px-4 py-2 text-xs" style={previewNoticeStyle}>
           <span className="font-semibold">Public preview {metadata.version}</span>
           <span className="min-w-0 flex-1 text-text-muted">
             This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
           </span>
           <button
             type="button"
-            className="rounded border px-2 py-1 text-[11px] hover:bg-surface-hover"
+            className="rounded border px-2 py-1 text-2xs hover:bg-surface-hover"
             style={previewNoticeButtonStyle}
             onClick={() => {
               dismissPreview(metadata.version)
@@ -667,14 +667,14 @@ export function App() {
         <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
       ) : null}
       {rendererErrorNotice ? (
-        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-50 shadow-card">
+        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-50 shadow-card">
           <div className="min-w-0 flex-1">
             <div className="font-semibold">App error</div>
             <div className="mt-0.5 text-red-100/85">{rendererErrorNotice}</div>
           </div>
           <button
             type="button"
-            className="no-drag rounded border border-red-300/25 px-2 py-1 text-[11px] text-red-50 hover:bg-red-200/10"
+            className="no-drag rounded border border-red-300/25 px-2 py-1 text-2xs text-red-50 hover:bg-red-200/10"
             onClick={() => setRendererErrorNotice(null)}
           >
             Dismiss
@@ -686,7 +686,7 @@ export function App() {
           role="alert"
           data-testid="resource-navigation-notice"
           data-status={resourceNavigationNotice.status}
-          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-50 shadow-card"
+          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-50 shadow-card"
         >
           <div className="min-w-0 flex-1">
             <div className="font-semibold">Resource unavailable</div>
@@ -694,7 +694,7 @@ export function App() {
           </div>
           <button
             type="button"
-            className="no-drag rounded border border-amber-300/25 px-2 py-1 text-[11px] text-amber-50 hover:bg-amber-200/10"
+            className="no-drag rounded border border-amber-300/25 px-2 py-1 text-2xs text-amber-50 hover:bg-amber-200/10"
             onClick={() => setResourceNavigationNotice(null)}
           >
             Dismiss

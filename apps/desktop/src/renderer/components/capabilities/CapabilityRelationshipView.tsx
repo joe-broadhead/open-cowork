@@ -141,8 +141,8 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
       <section className="rounded-xl border border-border-subtle bg-surface">
         <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
           <div>
-            <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.consumerMatrixTitle', 'Consumer access matrix')}</div>
-            <div className="mt-0.5 text-[11px] text-text-muted">
+            <div className="text-xs font-semibold text-text">{t('capabilities.relationships.consumerMatrixTitle', 'Consumer access matrix')}</div>
+            <div className="mt-0.5 text-2xs text-text-muted">
               {t('capabilities.relationships.consumerMatrixSubtitle', 'Rows are coworkers and playbooks; cells summarize the OpenCode tools and skills they inherit or request.')}
             </div>
           </div>
@@ -150,7 +150,7 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
             type="button"
             onClick={() => copyImpactedConsumers(rows)}
             disabled={consumerRows.length === 0}
-            className="shrink-0 rounded-lg border border-border-subtle px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            className="shrink-0 rounded-lg border border-border-subtle px-2.5 py-1.5 text-2xs text-text-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             {t('capabilities.relationships.copyConsumers', 'Copy consumers')}
           </button>
@@ -161,8 +161,8 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-left text-[12px]" aria-label={t('capabilities.relationships.consumerMatrixLabel', 'Consumer access matrix')}>
-              <thead className="border-b border-border-subtle text-[10px] uppercase tracking-[0.12em] text-text-muted">
+            <table className="w-full min-w-[760px] border-collapse text-left text-xs" aria-label={t('capabilities.relationships.consumerMatrixLabel', 'Consumer access matrix')}>
+              <thead className="border-b border-border-subtle text-2xs uppercase tracking-[0.12em] text-text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.consumer', 'Consumer')}</th>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.matrixCapabilityCells', 'Tools & skills')}</th>
@@ -174,13 +174,13 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
                   <tr key={row.id} className="border-b border-border-subtle align-top last:border-b-0">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-text">{row.name}</div>
-                      <div className="mt-1 text-[11px] capitalize text-text-muted">{consumerKindLabel(row.kind)}</div>
-                      <div className="mt-1 text-[11px] text-text-secondary">{row.source}</div>
+                      <div className="mt-1 text-2xs capitalize text-text-muted">{consumerKindLabel(row.kind)}</div>
+                      <div className="mt-1 text-2xs text-text-secondary">{row.source}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex max-w-[620px] flex-wrap gap-1.5">
                         {row.capabilities.map((capability) => (
-                          <span key={`${row.id}:${capability.id}`} className="rounded-full border border-border-subtle px-2 py-0.5 text-[10px] text-text-secondary" title={`${capability.policyState} / ${capability.credentialState}`}>
+                          <span key={`${row.id}:${capability.id}`} className="rounded-full border border-border-subtle px-2 py-0.5 text-2xs text-text-secondary" title={`${capability.policyState} / ${capability.credentialState}`}>
                             {capability.label} · {capability.policyState.replace(/_/g, ' ')}
                           </span>
                         ))}
@@ -199,8 +199,8 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
 
       <section className="rounded-xl border border-border-subtle bg-surface">
         <div className="border-b border-border-subtle px-4 py-3">
-          <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.matrixTitle', 'Access matrix')}</div>
-          <div className="mt-0.5 text-[11px] text-text-muted">
+          <div className="text-xs font-semibold text-text">{t('capabilities.relationships.matrixTitle', 'Access matrix')}</div>
+          <div className="mt-0.5 text-2xs text-text-muted">
             {t('capabilities.relationships.matrixSubtitle', 'Tool and skill rows show risk, credential health, access policy, known consumers, and remediation entry points.')}
           </div>
         </div>
@@ -210,8 +210,8 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] border-collapse text-left text-[12px]" aria-label={t('capabilities.relationships.capabilityMatrixLabel', 'Tool and skill access matrix')}>
-              <thead className="border-b border-border-subtle text-[10px] uppercase tracking-[0.12em] text-text-muted">
+            <table className="w-full min-w-[920px] border-collapse text-left text-xs" aria-label={t('capabilities.relationships.capabilityMatrixLabel', 'Tool and skill access matrix')}>
+              <thead className="border-b border-border-subtle text-2xs uppercase tracking-[0.12em] text-text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.capability', 'Tool or skill')}</th>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.risk', 'Risk')}</th>
@@ -226,40 +226,40 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
                   <tr key={row.id} className="border-b border-border-subtle align-top last:border-b-0">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-text">{row.label}</div>
-                      <div className="mt-1 line-clamp-2 max-w-[260px] text-[11px] leading-5 text-text-secondary">{row.description}</div>
-                      <div className="mt-2 text-[10px] uppercase tracking-[0.1em] text-text-muted">{row.source}</div>
+                      <div className="mt-1 line-clamp-2 max-w-[260px] text-2xs leading-5 text-text-secondary">{row.description}</div>
+                      <div className="mt-2 text-2xs uppercase tracking-[0.1em] text-text-muted">{row.source}</div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge label={riskLabel(row.risk)} tone={RISK_TONE[row.risk]} />
-                      <div className="mt-2 max-w-[190px] text-[11px] leading-5 text-text-secondary">{row.riskReason}</div>
+                      <div className="mt-2 max-w-[190px] text-2xs leading-5 text-text-secondary">{row.riskReason}</div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge label={row.credentialHealth.label} tone={statusTone(row.credentialHealth.state)} />
-                      {row.credentialHealth.detail ? <div className="mt-2 max-w-[180px] text-[11px] leading-5 text-text-secondary">{row.credentialHealth.detail}</div> : null}
+                      {row.credentialHealth.detail ? <div className="mt-2 max-w-[180px] text-2xs leading-5 text-text-secondary">{row.credentialHealth.detail}</div> : null}
                     </td>
                     <td className="px-4 py-3">
                       <Badge label={row.accessPolicy.state.replace(/_/g, ' ')} tone={statusTone(row.accessPolicy.state)} />
-                      <div className="mt-2 max-w-[190px] text-[11px] leading-5 text-text-secondary">{row.accessPolicy.reason}</div>
+                      <div className="mt-2 max-w-[190px] text-2xs leading-5 text-text-secondary">{row.accessPolicy.reason}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex max-w-[260px] flex-wrap gap-1.5">
                         {row.consumers.slice(0, 6).map((consumer) => (
-                          <span key={`${consumer.kind}:${consumer.id}`} className="rounded-full border border-border-subtle px-2 py-0.5 text-[10px] text-text-secondary" title={consumer.source}>
+                          <span key={`${consumer.kind}:${consumer.id}`} className="rounded-full border border-border-subtle px-2 py-0.5 text-2xs text-text-secondary" title={consumer.source}>
                             {consumer.name}
                           </span>
                         ))}
-                        {row.consumers.length > 6 ? <span className="text-[10px] text-text-muted">+{row.consumers.length - 6}</span> : null}
-                        {row.consumers.length === 0 ? <span className="text-[11px] text-text-muted">No known consumers</span> : null}
+                        {row.consumers.length > 6 ? <span className="text-2xs text-text-muted">+{row.consumers.length - 6}</span> : null}
+                        {row.consumers.length === 0 ? <span className="text-2xs text-text-muted">No known consumers</span> : null}
                       </div>
                       {row.requiredCapabilities.length > 0 ? (
-                        <div className="mt-2 text-[11px] text-text-muted">Requires {row.requiredCapabilities.join(', ')}</div>
+                        <div className="mt-2 text-2xs text-text-muted">Requires {row.requiredCapabilities.join(', ')}</div>
                       ) : null}
                     </td>
                     <td className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => row.type === 'tool' ? onOpenTool(row.id.replace(/^tool:/, '')) : onOpenSkill(row.id.replace(/^skill:/, ''))}
-                        className="rounded-lg border border-border-subtle px-2.5 py-1.5 text-[11px] text-accent hover:bg-surface-hover cursor-pointer"
+                        className="rounded-lg border border-border-subtle px-2.5 py-1.5 text-2xs text-accent hover:bg-surface-hover cursor-pointer"
                       >
                         {row.type === 'tool' ? t('capabilities.relationships.openTool', 'Open tool') : t('capabilities.relationships.openSkill', 'Open skill')}
                       </button>
@@ -274,19 +274,19 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
 
       {rows.length > 0 ? (
         <section className="rounded-xl border border-border-subtle bg-surface px-4 py-3">
-          <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.graphTitle', 'Dependency graph')}</div>
-          <div className="mt-0.5 text-[11px] text-text-muted">{t('capabilities.relationships.graphSubtitle', 'A compact graph list optimized for scanning large inventories. Each line reads consumer to tool or skill, with skill requirements shown inline.')}</div>
+          <div className="text-xs font-semibold text-text">{t('capabilities.relationships.graphTitle', 'Dependency graph')}</div>
+          <div className="mt-0.5 text-2xs text-text-muted">{t('capabilities.relationships.graphSubtitle', 'A compact graph list optimized for scanning large inventories. Each line reads consumer to tool or skill, with skill requirements shown inline.')}</div>
           <div className="mt-3 grid gap-2 lg:grid-cols-2">
             {rows.slice(0, 12).map((row) => (
               <div key={`${row.id}:graph`} className="rounded-lg border border-border-subtle px-3 py-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-[12px] font-semibold text-text">{row.label}</div>
-                    <div className="mt-1 text-[11px] text-text-muted">{row.edges.length} edge{row.edges.length === 1 ? '' : 's'} · {row.methodsCount} method/link{row.methodsCount === 1 ? '' : 's'}</div>
+                    <div className="truncate text-xs font-semibold text-text">{row.label}</div>
+                    <div className="mt-1 text-2xs text-text-muted">{row.edges.length} edge{row.edges.length === 1 ? '' : 's'} · {row.methodsCount} method/link{row.methodsCount === 1 ? '' : 's'}</div>
                   </div>
                   <Badge label={riskLabel(row.risk)} tone={RISK_TONE[row.risk]} />
                 </div>
-                <div className="mt-2 text-[11px] leading-5 text-text-secondary">
+                <div className="mt-2 text-2xs leading-5 text-text-secondary">
                   {row.consumers.length > 0 ? row.consumers.slice(0, 3).map((consumer) => consumer.name).join(' -> ') : 'No known inbound consumers'}
                   {' -> '}
                   {row.label}
@@ -303,10 +303,10 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
 function Metric({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {
   return (
     <div className="rounded-xl border border-border-subtle bg-surface px-3 py-3">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="mt-1 flex items-end gap-2">
-        <div className="text-[20px] font-semibold leading-none" style={{ color: tone }}>{value}</div>
-        <div className="pb-0.5 text-[10px] text-text-muted">{detail}</div>
+        <div className="text-xl font-semibold leading-none" style={{ color: tone }}>{value}</div>
+        <div className="pb-0.5 text-2xs text-text-muted">{detail}</div>
       </div>
     </div>
   )
@@ -315,7 +315,7 @@ function Metric({ label, value, detail, tone }: { label: string; value: number; 
 function Badge({ label, tone }: { label: string; tone: string }) {
   return (
     <span
-      className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium capitalize"
+      className="inline-flex rounded-full px-2 py-0.5 text-2xs font-medium capitalize"
       style={{ color: tone, background: `color-mix(in srgb, ${tone} 12%, transparent)` }}
     >
       {label}

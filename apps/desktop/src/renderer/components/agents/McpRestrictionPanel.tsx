@@ -83,8 +83,8 @@ export function McpRestrictionPanel({
   return (
     <div className="mt-4 rounded-xl border border-border-subtle bg-surface overflow-hidden">
       <div className="px-3 py-2.5 border-b border-border-subtle">
-        <div className="text-[12px] font-semibold text-text">Restrict MCP methods</div>
-        <div className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
+        <div className="text-xs font-semibold text-text">Restrict MCP methods</div>
+        <div className="text-2xs text-text-muted mt-0.5 leading-relaxed">
           Block specific tool ids on this agent without removing the whole MCP. Useful for scoping an agent&apos;s role —
           e.g. attach GitHub but disable <span className="font-mono">delete_repo</span>.
         </div>
@@ -115,9 +115,9 @@ export function McpRestrictionPanel({
                   >
                     <polyline points="4,2 8,6 4,10" />
                   </svg>
-                  <span className="text-[12px] font-medium text-text">{tool.name}</span>
+                  <span className="text-xs font-medium text-text">{tool.name}</span>
                 </div>
-                <span className="text-[10px] text-text-muted">
+                <span className="text-2xs text-text-muted">
                   {deniedForMcp.length > 0 ? `${deniedForMcp.length} restricted` : 'all methods allowed'}
                 </span>
               </button>
@@ -125,7 +125,7 @@ export function McpRestrictionPanel({
               {isOpen ? (
                 <div className="px-3 pb-3">
                   {state.status === 'loading' ? (
-                    <div className="text-[11px] text-text-muted py-2">Discovering methods…</div>
+                    <div className="text-2xs text-text-muted py-2">Discovering methods…</div>
                   ) : state.status === 'error' ? (
                     <ManualRestrictionFallback
                       mcpId={tool.id}
@@ -137,7 +137,7 @@ export function McpRestrictionPanel({
                     />
                   ) : state.status === 'ready' ? (
                     state.methods.length === 0 ? (
-                      <div className="text-[11px] text-text-muted py-2">
+                      <div className="text-2xs text-text-muted py-2">
                         This MCP didn&apos;t expose any methods.
                       </div>
                     ) : (
@@ -148,7 +148,7 @@ export function McpRestrictionPanel({
                           return (
                             <label
                               key={method.id}
-                              className="flex items-start gap-2 text-[11px] cursor-pointer"
+                              className="flex items-start gap-2 text-2xs cursor-pointer"
                               style={{ opacity: readOnly ? 0.6 : 1 }}
                             >
                               <input
@@ -212,11 +212,11 @@ function ManualRestrictionFallback({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-[11px] leading-relaxed" style={{ color: 'var(--color-amber)' }}>
+      <div className="text-2xs leading-relaxed" style={{ color: 'var(--color-amber)' }}>
         Could not auto-discover methods: {message}
         <button onClick={onRetry} className="ms-2 underline cursor-pointer">Retry</button>
       </div>
-      <div className="text-[10px] text-text-muted leading-relaxed">
+      <div className="text-2xs text-text-muted leading-relaxed">
         Common for MCPs behind OAuth. You can still block specific methods by id — type it below.
       </div>
       <div className="flex items-center gap-2">
@@ -232,12 +232,12 @@ function ManualRestrictionFallback({
           }}
           placeholder="e.g. delete_repo"
           disabled={readOnly}
-          className="flex-1 px-2 py-1 rounded-md text-[11px] font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+          className="flex-1 px-2 py-1 rounded-md text-2xs font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
         />
         <button
           onClick={submit}
           disabled={readOnly || !input.trim()}
-          className="px-2.5 py-1 rounded-md text-[10px] font-medium border border-border-subtle text-accent cursor-pointer disabled:opacity-40"
+          className="px-2.5 py-1 rounded-md text-2xs font-medium border border-border-subtle text-accent cursor-pointer disabled:opacity-40"
         >
           Block
         </button>
@@ -249,7 +249,7 @@ function ManualRestrictionFallback({
               key={pattern}
               onClick={() => !readOnly && onTogglePattern(pattern)}
               disabled={readOnly}
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border cursor-pointer"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs border cursor-pointer"
               style={{
                 color: 'var(--color-amber)',
                 background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',

@@ -63,10 +63,10 @@ export function ApprovalCard({
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-[13px] font-medium text-text">{verb}</div>
+              <div className="text-sm font-medium text-text">{verb}</div>
               {queueCount > 1 ? <Badge tone="warning">{t('approval.queueCount', '{{count}} pending', { count: queueCount })}</Badge> : null}
             </div>
-            {detail && <div className="text-[11px] text-text-muted">{detail}</div>}
+            {detail && <div className="text-2xs text-text-muted">{detail}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2">

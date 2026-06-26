@@ -108,8 +108,8 @@ export function SettingsPairingPanel() {
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
-        <div className="text-[12px] font-semibold text-text">{t('settings.pairing.title', 'Outbound pairing')}</div>
-        <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+        <div className="text-xs font-semibold text-text">{t('settings.pairing.title', 'Outbound pairing')}</div>
+        <div className="mt-1 text-2xs leading-relaxed text-text-muted">
           {t('settings.pairing.description', 'Pairings let an approved gateway claim local desktop commands over a Desktop-initiated connection. Local paths, MCP details, and artifact bodies stay redacted by default.')}
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1.4fr_auto]">
@@ -139,39 +139,39 @@ export function SettingsPairingPanel() {
         {pairingToken ? (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-elevated px-3 py-2">
             <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('settings.pairing.oneTimeToken', 'One-time token')}</div>
-              <div className="truncate font-mono text-[11px] text-text" title={pairingToken}>{pairingToken}</div>
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('settings.pairing.oneTimeToken', 'One-time token')}</div>
+              <div className="truncate font-mono text-2xs text-text" title={pairingToken}>{pairingToken}</div>
             </div>
             <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={() => void copyToken()}>
               {t('settings.pairing.copy', 'Copy')}
             </Button>
           </div>
         ) : null}
-        {error ? <div className="mt-3 text-[11px] text-red">{error}</div> : null}
+        {error ? <div className="mt-3 text-2xs text-red">{error}</div> : null}
       </div>
 
       <div className="grid gap-3">
         {pairings.length === 0 ? (
-          <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-5 text-[12px] text-text-muted">
+          <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-5 text-xs text-text-muted">
             {t('settings.pairing.empty', 'No desktop pairings configured.')}
           </div>
         ) : pairings.map((record) => (
           <div key={record.id} className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate text-[12px] font-semibold text-text">{record.label}</div>
-                <div className="mt-1 truncate text-[11px] text-text-muted">{record.brokerUrl || t('settings.pairing.noBroker', 'Broker URL not configured')}</div>
+                <div className="truncate text-xs font-semibold text-text">{record.label}</div>
+                <div className="mt-1 truncate text-2xs text-text-muted">{record.brokerUrl || t('settings.pairing.noBroker', 'Broker URL not configured')}</div>
               </div>
               <Badge tone={statusTone(record)} className="shrink-0">
                 {statusLabel(record)}
               </Badge>
             </div>
-            <div className="mt-3 grid gap-2 text-[11px] text-text-muted sm:grid-cols-3">
+            <div className="mt-3 grid gap-2 text-2xs text-text-muted sm:grid-cols-3">
               <div>{t('settings.pairing.lastSeen', 'Last seen')}: {formatTime(record.lastHeartbeatAt)}</div>
               <div>{t('settings.pairing.sequence', 'Sequence')}: {record.lastCommandSequence}</div>
               <div>{record.credential.hasToken ? t('settings.pairing.tokenStored', 'Token stored') : t('settings.pairing.tokenMissing', 'Token missing')}</div>
             </div>
-            {record.error ? <div className="mt-2 text-[11px] text-red">{record.error}</div> : null}
+            {record.error ? <div className="mt-2 text-2xs text-red">{record.error}</div> : null}
             <div className="mt-3 flex flex-wrap gap-2">
               {record.enabled ? (
                 <Button type="button" size="sm" variant="secondary" disabled={busyId === record.id} onClick={() => void runAction(record, 'disconnect')}>
@@ -198,15 +198,15 @@ export function SettingsPairingPanel() {
       </div>
 
       <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
-        <div className="text-[12px] font-semibold text-text">{t('settings.pairing.audit', 'Remote access audit')}</div>
+        <div className="text-xs font-semibold text-text">{t('settings.pairing.audit', 'Remote access audit')}</div>
         <div className="mt-3 grid gap-2">
           {audit.slice(0, 8).map((entry) => (
-            <div key={entry.id} className="flex items-center justify-between gap-3 text-[11px]">
+            <div key={entry.id} className="flex items-center justify-between gap-3 text-2xs">
               <div className="min-w-0 truncate text-text">{entry.action}</div>
               <div className="shrink-0 text-text-muted">{formatTime(entry.createdAt)}</div>
             </div>
           ))}
-          {audit.length === 0 ? <div className="text-[11px] text-text-muted">{t('settings.pairing.auditEmpty', 'No remote access events yet.')}</div> : null}
+          {audit.length === 0 ? <div className="text-2xs text-text-muted">{t('settings.pairing.auditEmpty', 'No remote access events yet.')}</div> : null}
         </div>
       </div>
     </div>

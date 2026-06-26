@@ -72,8 +72,8 @@ export function CapabilityToolDetailView({
                   {selectedTool.source === 'custom' ? 'Installed' : 'Built-in'}
                 </Badge>
               </div>
-              <h1 className="text-[20px] font-semibold text-text mb-1">{selectedTool.name}</h1>
-              <p className="text-[13px] text-text-secondary leading-relaxed">{selectedTool.description}</p>
+              <h1 className="text-xl font-semibold text-text mb-1">{selectedTool.name}</h1>
+              <p className="text-sm text-text-secondary leading-relaxed">{selectedTool.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button
@@ -108,7 +108,7 @@ export function CapabilityToolDetailView({
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <StatBox label="Identifier" value={selectedTool.id} />
                 <StatBox
@@ -126,10 +126,10 @@ export function CapabilityToolDetailView({
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+                <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">
                   {selectedTool.origin === 'opencode' ? 'Runtime metadata' : 'Available methods'}
                 </div>
-                <span className="text-[10px] text-text-muted">
+                <span className="text-2xs text-text-muted">
                   {selectedTool.origin === 'opencode' ? `${availableTools.length} entries` : `${availableTools.length} methods`}
                 </span>
               </div>
@@ -137,13 +137,13 @@ export function CapabilityToolDetailView({
                 <div className="flex flex-col gap-2">
                   {availableTools.map((entry) => (
                     <div key={entry.id} className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
-                      <div className="text-[12px] font-medium text-text">{entry.id}</div>
-                      <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
+                      <div className="text-xs font-medium text-text">{entry.id}</div>
+                      <div className="text-2xs text-text-muted mt-1 leading-relaxed">{entry.description}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">
+                <div className="text-xs text-text-muted">
                   {selectedTool.origin === 'opencode'
                     ? 'No runtime metadata is available for this tool yet.'
                     : 'No MCP methods have been discovered for this tool yet.'}
@@ -153,7 +153,7 @@ export function CapabilityToolDetailView({
 
             {custom ? (
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.connection', 'Connection')}</div>
+                <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.connection', 'Connection')}</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <StatBox label="Type" value={custom.type === 'stdio' ? 'Local stdio MCP' : 'Remote HTTP / SSE MCP'} />
                   {custom.type === 'stdio' ? (
@@ -184,7 +184,7 @@ export function CapabilityToolDetailView({
 
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedSkills', 'Linked skills')}</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedSkills', 'Linked skills')}</div>
               {linkedSkills.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {linkedSkills.map((skill) => (
@@ -200,22 +200,22 @@ export function CapabilityToolDetailView({
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No skills are linked to this tool yet.</div>
+                <div className="text-xs text-text-muted">No skills are linked to this tool yet.</div>
               )}
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedCoworkers', 'Linked coworkers')}</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedCoworkers', 'Linked coworkers')}</div>
               {selectedTool.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedTool.agentNames.map((agentName) => (
-                    <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
+                    <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-2xs text-text-secondary">
                       {agentName}
                     </span>
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No built-in or custom coworkers use this tool yet.</div>
+                <div className="text-xs text-text-muted">No built-in or custom coworkers use this tool yet.</div>
               )}
             </div>
           </div>
@@ -261,8 +261,8 @@ export function CapabilitySkillDetailView({
                   {prettySkillKind(selectedSkill)}
                 </Badge>
               </div>
-              <h1 className="text-[20px] font-semibold text-text mb-1">{selectedSkill.label}</h1>
-              <p className="text-[13px] text-text-secondary leading-relaxed">{selectedSkill.description}</p>
+              <h1 className="text-xl font-semibold text-text mb-1">{selectedSkill.label}</h1>
+              <p className="text-sm text-text-secondary leading-relaxed">{selectedSkill.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button
@@ -296,23 +296,23 @@ export function CapabilitySkillDetailView({
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5 min-w-0">
           <div className="rounded-xl border border-border-subtle bg-surface p-4 min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
+            <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
             {bundle?.content ? (
               <div className="min-w-0 max-w-full overflow-x-auto">
-                <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
+                <div className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {stripFrontmatter(bundle.content)}
                   </ReactMarkdown>
                 </div>
               </div>
             ) : (
-              <div className="text-[12px] text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>
+              <div className="text-xs text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>
             )}
           </div>
 
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
               <div className="flex flex-col gap-3">
                 <StatBox label="Identifier" value={selectedSkill.name} />
                 <StatBox label="Source" value={prettySkillSource(selectedSkill)} />
@@ -323,7 +323,7 @@ export function CapabilitySkillDetailView({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
               {linkedTools.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {linkedTools.map((tool) => (
@@ -339,30 +339,30 @@ export function CapabilitySkillDetailView({
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">{t('capabilities.skillNotTiedToTool', 'This skill is not tied to a specific tool.')}</div>
+                <div className="text-xs text-text-muted">{t('capabilities.skillNotTiedToTool', 'This skill is not tied to a specific tool.')}</div>
               )}
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByCoworkers', 'Used by coworkers')}</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByCoworkers', 'Used by coworkers')}</div>
               {selectedSkill.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedSkill.agentNames.map((agentName) => (
-                    <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
+                    <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-2xs text-text-secondary">
                       {agentName}
                     </span>
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No built-in or custom coworkers use this skill yet.</div>
+                <div className="text-xs text-text-muted">No built-in or custom coworkers use this skill yet.</div>
               )}
             </div>
 
             {bundle?.files.length ? (
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">{t('capabilities.bundleFiles', 'Bundle files')}</div>
-                  <span className="text-[10px] text-text-muted">{bundle.files.length} files</span>
+                  <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">{t('capabilities.bundleFiles', 'Bundle files')}</div>
+                  <span className="text-2xs text-text-muted">{bundle.files.length} files</span>
                 </div>
                 <div className="flex flex-col gap-2">
                   {bundle.files.map((file) => (

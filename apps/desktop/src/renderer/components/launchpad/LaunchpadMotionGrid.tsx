@@ -153,7 +153,7 @@ export function LaunchpadMotionGrid({
         <MotionColumn config={artifactsColumn} />
       </div>
       {error && (
-        <p className="mt-3 text-center text-[12px] text-text-muted">
+        <p className="mt-3 text-center text-xs text-text-muted">
           {t('home.motion.errorDetail', 'Showing the launchpad shell while live feed data reconnects.')}
         </p>
       )}

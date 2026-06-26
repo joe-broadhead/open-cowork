@@ -57,13 +57,13 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] text-text-muted leading-relaxed">
+        <div className="text-2xs text-text-muted leading-relaxed">
           {t('instructions.headerHint', 'Shape tone, priorities, and output format. Good instructions are specific and operational.')}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setPreview((current) => !current)}
-            className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
+            className="text-2xs px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
           >
             {preview ? 'Edit' : 'Preview'}
           </button>
@@ -71,7 +71,7 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((open) => !open)}
-                className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
+                className="text-2xs px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
               >
                 {t('instructions.addSnippet', '+ Snippet')}
               </button>
@@ -89,10 +89,10 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
                       <button
                         key={snippet.id}
                         onClick={() => prepend(snippet.body)}
-                        className="w-full text-start px-3 py-2 text-[12px] hover:bg-surface-hover transition-colors cursor-pointer border-b border-border-subtle last:border-b-0"
+                        className="w-full text-start px-3 py-2 text-xs hover:bg-surface-hover transition-colors cursor-pointer border-b border-border-subtle last:border-b-0"
                       >
                         <div className="font-medium text-text">{snippet.label}</div>
-                        <div className="text-[10px] text-text-muted mt-0.5 line-clamp-2">
+                        <div className="text-2xs text-text-muted mt-0.5 line-clamp-2">
                           {snippet.body}
                         </div>
                       </button>
@@ -111,9 +111,9 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
           style={{ minHeight: 280, maxHeight: 520 }}
         >
           {value.trim() ? (
-            <MarkdownContent text={value} className="markdown-content text-[12px] leading-relaxed text-text" />
+            <MarkdownContent text={value} className="markdown-content text-xs leading-relaxed text-text" />
           ) : (
-            <div className="text-[12px] text-text-muted">
+            <div className="text-xs text-text-muted">
               {t('instructions.noInstructions', 'No instructions.')}
             </div>
           )}
@@ -127,12 +127,12 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
           placeholder={readOnly
             ? t('instructions.noInstructions', 'No instructions.')
             : t('instructions.placeholderExamples', 'Examples:\n- Summarize findings as 3 bullets plus evidence.\n- Prefer official docs over blogs.\n- Never send email; draft only.\n- Ask for approval before any external write.')}
-          className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
+          className="w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
           style={{ minHeight: 280 }}
         />
       )}
 
-      <div className="text-[10px] text-text-muted flex items-center justify-between">
+      <div className="text-2xs text-text-muted flex items-center justify-between">
         <span>{t('instructions.charCount', '{{count}} chars', { count: String(value.trim().length) })}</span>
         {value.trim().length > 2000 && (
           <span style={{ color: 'var(--color-amber)' }}>

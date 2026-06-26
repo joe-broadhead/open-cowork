@@ -28,8 +28,8 @@ function reportCapabilityError(error: unknown, scope: string) {
 export function StatBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">{label}</div>
-      <div className="text-[12px] text-text-secondary break-all">{value}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-1">{label}</div>
+      <div className="text-xs text-text-secondary break-all">{value}</div>
     </div>
   )
 }
@@ -104,23 +104,23 @@ export function SkillBundleFileEntry({
         >
           <polyline points="4,2 8,6 4,10" />
         </svg>
-        <span className="text-[12px] font-medium text-text flex-1 truncate">{filePath}</span>
+        <span className="text-xs font-medium text-text flex-1 truncate">{filePath}</span>
       </button>
       {expanded ? (
         <div className="px-3 pb-3 border-t border-border-subtle pt-3">
           {loading ? (
-            <div className="text-[11px] text-text-muted">{t('capabilities.bundleFileLoading', 'Loading…')}</div>
+            <div className="text-2xs text-text-muted">{t('capabilities.bundleFileLoading', 'Loading…')}</div>
           ) : error ? (
-            <div className="text-[11px] text-red">{error}</div>
+            <div className="text-2xs text-red">{error}</div>
           ) : isMarkdown ? (
             <div className="min-w-0 max-w-full overflow-x-auto">
-              <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
+              <div className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || ''}</ReactMarkdown>
               </div>
             </div>
           ) : (
             <div className="min-w-0 max-w-full overflow-x-auto">
-              <pre className="text-[11px] text-text-secondary whitespace-pre-wrap break-all font-mono">{content || ''}</pre>
+              <pre className="text-2xs text-text-secondary whitespace-pre-wrap break-all font-mono">{content || ''}</pre>
             </div>
           )}
         </div>
@@ -258,11 +258,11 @@ export function ToolCredentialsCard({
   return (
     <div className="rounded-xl border border-border-subtle bg-surface p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+        <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">
           {t('capabilities.credentials', 'Credentials')}
         </div>
         {savedAt ? (
-          <span className="text-[10px] text-text-muted">{t('capabilities.credentialsSaved', 'Saved')}</span>
+          <span className="text-2xs text-text-muted">{t('capabilities.credentialsSaved', 'Saved')}</span>
         ) : null}
       </div>
       <div className="flex flex-col gap-3">
@@ -283,7 +283,7 @@ export function ToolCredentialsCard({
             if (credential.type === 'radio') {
               return (
                 <fieldset key={credential.key} className="flex flex-col gap-1">
-                  <legend className="text-[11px] font-medium text-text-secondary">
+                  <legend className="text-2xs font-medium text-text-secondary">
                     {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
                   </legend>
                   <div className="flex flex-col gap-2">
@@ -303,16 +303,16 @@ export function ToolCredentialsCard({
                           className="mt-0.5"
                         />
                         <span className="min-w-0">
-                          <span className="block text-[12px] font-medium text-text-secondary">{option.label}</span>
+                          <span className="block text-xs font-medium text-text-secondary">{option.label}</span>
                           {option.hint ? (
-                            <span className="block text-[10px] text-text-muted leading-relaxed">{option.hint}</span>
+                            <span className="block text-2xs text-text-muted leading-relaxed">{option.hint}</span>
                           ) : null}
                         </span>
                       </label>
                     ))}
                   </div>
                   {credential.description ? (
-                    <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+                    <span className="text-2xs text-text-muted leading-relaxed">{credential.description}</span>
                   ) : null}
                 </fieldset>
               )
@@ -320,7 +320,7 @@ export function ToolCredentialsCard({
 
             return (
               <label key={credential.key} className="flex flex-col gap-1">
-                <span className="text-[11px] font-medium text-text-secondary">
+                <span className="text-2xs font-medium text-text-secondary">
                   {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
                 </span>
                 <select
@@ -328,7 +328,7 @@ export function ToolCredentialsCard({
                   onChange={(event) => {
                     setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
                   }}
-                  className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text outline-none focus:border-border"
+                  className="px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text outline-none focus:border-border"
                 >
                   <option value="">{credential.placeholder || t('capabilities.credentialsSelectPlaceholder', 'Select an option')}</option>
                   {options.map((option) => (
@@ -336,10 +336,10 @@ export function ToolCredentialsCard({
                   ))}
                 </select>
                 {selectedOption?.hint ? (
-                  <span className="text-[10px] text-text-muted leading-relaxed">{selectedOption.hint}</span>
+                  <span className="text-2xs text-text-muted leading-relaxed">{selectedOption.hint}</span>
                 ) : null}
                 {credential.description ? (
-                  <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+                  <span className="text-2xs text-text-muted leading-relaxed">{credential.description}</span>
                 ) : null}
               </label>
             )
@@ -347,7 +347,7 @@ export function ToolCredentialsCard({
 
           return (
             <label key={credential.key} className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-text-secondary">
+              <span className="text-2xs font-medium text-text-secondary">
                 {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
               </span>
               <input
@@ -363,12 +363,12 @@ export function ToolCredentialsCard({
                 onChange={(event) => {
                   setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
                 }}
-                className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+                className="px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
                 autoComplete="off"
                 spellCheck={false}
               />
               {credential.description ? (
-                <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+                <span className="text-2xs text-text-muted leading-relaxed">{credential.description}</span>
               ) : null}
             </label>
           )
@@ -380,7 +380,7 @@ export function ToolCredentialsCard({
             type="button"
             onClick={() => { void runPreflight() }}
             disabled={dirty || saving || testing}
-            className="px-3 py-2 rounded-lg text-[12px] font-medium border border-border-subtle text-text-secondary hover:bg-surface-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle text-text-secondary hover:bg-surface-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {testing ? t('capabilities.credentialsTesting', 'Testing…') : t('capabilities.credentialsTest', 'Test')}
           </button>
@@ -389,20 +389,20 @@ export function ToolCredentialsCard({
           type="button"
           onClick={handleSave}
           disabled={!dirty || saving || testing}
-          className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-2 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
         >
           {saving ? t('capabilities.credentialsSaving', 'Saving…') : t('capabilities.credentialsSave', 'Save')}
         </button>
       </div>
       {errorMessage ? (
-        <div className="mt-3 text-[11px]" style={{ color: 'var(--color-red)' }}>
+        <div className="mt-3 text-2xs" style={{ color: 'var(--color-red)' }}>
           {errorMessage}
         </div>
       ) : null}
       {preflightMessage ? (
         <div
-          className="mt-3 text-[11px] leading-relaxed"
+          className="mt-3 text-2xs leading-relaxed"
           style={{
             color: preflightTone === 'success'
               ? 'var(--color-green)'
@@ -506,15 +506,15 @@ export function ToolIntegrationToggleCard({
     <div className="rounded-xl border border-border-subtle bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1 min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+          <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">
             {t('capabilities.integrationStatus', 'Integration')}
           </div>
-          <div className="text-[12px] text-text-primary">
+          <div className="text-xs text-text-primary">
             {effectiveOn
               ? t('capabilities.integrationOn', 'Enabled')
               : t('capabilities.integrationOff', 'Disabled')}
           </div>
-          <div className="text-[10px] text-text-muted leading-relaxed">{helpText}</div>
+          <div className="text-2xs text-text-muted leading-relaxed">{helpText}</div>
         </div>
         <button
           type="button"
@@ -522,7 +522,7 @@ export function ToolIntegrationToggleCard({
           aria-checked={effectiveOn}
           disabled={pending}
           onClick={() => { void setEnabled(!effectiveOn) }}
-          className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          className="px-3 py-2 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           style={effectiveOn
             ? { background: 'var(--color-surface-active)', color: 'var(--color-text-secondary)' }
             : { background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
@@ -535,7 +535,7 @@ export function ToolIntegrationToggleCard({
         </button>
       </div>
       {errorMessage ? (
-        <div className="mt-3 text-[11px] text-red" role="alert">
+        <div className="mt-3 text-2xs text-red" role="alert">
           {t('capabilities.integrationToggleFailed', 'Couldn’t update this integration:')} {errorMessage}
         </div>
       ) : null}

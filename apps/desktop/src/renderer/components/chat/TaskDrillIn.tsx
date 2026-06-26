@@ -295,11 +295,11 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-[15px] font-semibold text-text truncate">
+              <h2 className="text-lg font-semibold text-text truncate">
                 {formatAgentName(focused.agent)}
               </h2>
               <span
-                className="text-[10px] uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded"
+                className="text-2xs uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded"
                 style={{
                   color: statusIntent(focused.status),
                   background: `color-mix(in srgb, ${statusIntent(focused.status)} 12%, transparent)`,
@@ -310,16 +310,16 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
               <ElapsedClock
                 startedAt={focused.startedAt ?? null}
                 finishedAt={focused.finishedAt ?? null}
-                className="text-[11px] text-text-muted font-mono"
+                className="text-2xs text-text-muted font-mono"
               />
             </div>
             {focused.title && focused.title !== formatAgentName(focused.agent) && (
-              <div className="mt-0.5 text-[12px] text-text-secondary line-clamp-2">
+              <div className="mt-0.5 text-xs text-text-secondary line-clamp-2">
                 {focused.title}
               </div>
             )}
             {focused.sourceSessionId && (
-              <div className="mt-1 text-[10px] text-text-muted font-mono">
+              <div className="mt-1 text-2xs text-text-muted font-mono">
                 id: {formatSessionId(focused.sourceSessionId)}
               </div>
             )}
@@ -329,7 +329,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
               <button
                 type="button"
                 onClick={() => onOpenTaskInTranscript(focused)}
-                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
               >
                 Source
               </button>
@@ -339,7 +339,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                 type="button"
                 onClick={() => navigateTo(previousTask)}
                 aria-label={t('taskDrillIn.previousTask', 'Previous task in current filter')}
-                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
               >
                 Prev
               </button>
@@ -349,7 +349,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                 type="button"
                 onClick={() => navigateTo(nextTask)}
                 aria-label={t('taskDrillIn.nextTask', 'Next task in current filter')}
-                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
               >
                 Next
               </button>
@@ -361,7 +361,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                 disabled={abortInFlight}
                 aria-label={t('taskDrillIn.abortTask', 'Abort this task')}
                 title={t('taskDrillIn.abortTaskDescription', 'Abort just this sub-agent; siblings and the primary keep running')}
-                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded cursor-pointer disabled:opacity-40"
+                className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded cursor-pointer disabled:opacity-40"
                 style={{
                   color: 'var(--color-amber)',
                   background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
@@ -378,7 +378,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
               type="button"
               onClick={onClose}
               aria-label={t('taskDrillIn.closeDrawer', 'Close drawer')}
-              className="text-text-muted hover:text-text cursor-pointer leading-none text-[22px] -me-1 -mt-1"
+              className="text-text-muted hover:text-text cursor-pointer leading-none text-2xl -me-1 -mt-1"
             >
               ×
             </button>
@@ -401,7 +401,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                   <button
                     type="button"
                     onClick={() => onOpenApproval(focusedApprovals[0]!)}
-                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text"
+                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text"
                   >
                     Open approval ({focusedApprovals.length})
                   </button>
@@ -410,7 +410,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                   <button
                     type="button"
                     onClick={() => onOpenQuestion(focusedQuestions[0]!)}
-                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text"
+                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text"
                   >
                     Open question ({focusedQuestions.length})
                   </button>
@@ -420,7 +420,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                     type="button"
                     onClick={() => void revealFirstArtifact()}
                     disabled={artifactRevealInFlight}
-                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text disabled:cursor-wait disabled:opacity-60"
+                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text disabled:cursor-wait disabled:opacity-60"
                   >
                     {artifactRevealInFlight ? 'Revealing...' : `Open artifact (${artifacts.length})`}
                   </button>
@@ -431,7 +431,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
 
           {nestedTree.length > 0 && (
             <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-2">
                 Nested sub-agents ({nestedChildren.length})
               </div>
               <div className="flex flex-col gap-0.5 rounded-lg border" style={{ borderColor: 'var(--color-border-subtle)' }}>
@@ -452,7 +452,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           )}
 
           <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-3">
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-3">
               Transcript
             </div>
             {reasoning.length > 0 && (
@@ -465,7 +465,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
               </div>
             )}
             {timeline.length === 0 && !focused.error ? (
-              <div className="text-[11px] text-text-muted">
+              <div className="text-2xs text-text-muted">
                 {focused.status === 'running' ? 'Waiting for output…' : 'No transcript captured.'}
               </div>
             ) : (
@@ -492,7 +492,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                     >
                       <MarkdownContent
                         text={item.content}
-                        className="text-[12px]"
+                        className="text-xs"
                         streaming={focused.status === 'running'}
                       />
                     </div>
@@ -501,7 +501,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
               </div>
             )}
             {focused.error && (
-              <div className="mt-3 rounded-lg px-3 py-2.5 text-[11px]" style={{
+              <div className="mt-3 rounded-lg px-3 py-2.5 text-2xs" style={{
                 color: 'var(--color-red)',
                 background: 'color-mix(in srgb, var(--color-red) 8%, transparent)',
                 border: '1px solid color-mix(in srgb, var(--color-red) 30%, transparent)',
@@ -513,7 +513,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
 
           {focused.todos.length > 0 && (
             <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-2">
                 Todos
               </div>
               <TodoListView todos={focused.todos} variant="compact" />
@@ -565,9 +565,9 @@ function Scorecard({
               borderColor: 'var(--color-border-subtle)',
             }}
           >
-            <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{cell.label}</div>
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{cell.label}</div>
             <div
-              className="text-[13px] font-medium font-mono tabular-nums mt-0.5"
+              className="text-sm font-medium font-mono tabular-nums mt-0.5"
               style={{ color: cell.tone || 'var(--color-text)' }}
             >
               {cell.value}

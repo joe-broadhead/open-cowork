@@ -15,10 +15,10 @@ type AgentAvatarProps = {
 // Size-spec lookup instead of arbitrary numbers so the font / border /
 // radius all scale together.
 const SIZE_CLASSES: Record<NonNullable<AgentAvatarProps['size']>, string> = {
-  sm: 'w-8 h-8 text-[11px] rounded-lg',
-  md: 'w-10 h-10 text-[13px] rounded-xl',
-  lg: 'w-14 h-14 text-[16px] rounded-2xl',
-  xl: 'w-20 h-20 text-[22px] rounded-2xl',
+  sm: 'w-8 h-8 text-2xs rounded-lg',
+  md: 'w-10 h-10 text-sm rounded-xl',
+  lg: 'w-14 h-14 text-lg rounded-2xl',
+  xl: 'w-20 h-20 text-2xl rounded-2xl',
 }
 
 // Gradient-initial avatar shared across the builder, the list grid, and

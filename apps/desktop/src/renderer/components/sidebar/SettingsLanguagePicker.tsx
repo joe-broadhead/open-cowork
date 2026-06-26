@@ -32,7 +32,7 @@ export function LanguagePicker() {
             })),
           ]}
         />
-        <span className="text-[11px] text-text-muted leading-relaxed mt-1">
+        <span className="text-2xs text-text-muted leading-relaxed mt-1">
           {t(
             'settings.language.description',
             'Choose the interface language. The selection is remembered on this device. Partially-translated languages fall back to English for unlisted strings.',

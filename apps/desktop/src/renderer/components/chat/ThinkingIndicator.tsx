@@ -42,9 +42,9 @@ export function ThinkingIndicator() {
 
   return (
     <div className="py-2">
-      <span className="thinking-shimmer text-[13px] font-medium">{label}</span>
+      <span className="thinking-shimmer text-sm font-medium">{label}</span>
       {contextState === 'compacting' && (
-        <div className="mt-1 text-[11px]" style={{ color: 'var(--color-amber)' }}>
+        <div className="mt-1 text-2xs" style={{ color: 'var(--color-amber)' }}>
           {t('thinking.compacting', 'Compacting conversation to preserve context...')}
         </div>
       )}
@@ -52,7 +52,7 @@ export function ThinkingIndicator() {
         <div className="mt-3 flex flex-col gap-3">
           {hasPlan && (
             <div>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-1">
                 {t('thinking.agentPlan', 'Agent plan')}
               </div>
               <TodoListView todos={executionPlan} variant="compact" showPriorityTag={false} />
@@ -60,7 +60,7 @@ export function ThinkingIndicator() {
           )}
           {hasTodos && (
             <div>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-1">
                 {t('thinking.sessionTodos', 'Session todos')}
               </div>
               <TodoListView todos={todos} variant="compact" />

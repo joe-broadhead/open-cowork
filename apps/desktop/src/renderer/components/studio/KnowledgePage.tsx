@@ -111,7 +111,7 @@ function KnowledgeGraphPanel({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-text">{t('knowledge.graph.title', 'Knowledge graph')}</h2>
-          <p className="mt-1 text-[12px] text-text-muted">
+          <p className="mt-1 text-xs text-text-muted">
             {t('knowledge.graph.subtitle', 'Every page, clustered by Space. Hover to trace links; click a page to open it.')}
           </p>
         </div>
@@ -160,16 +160,16 @@ function ReviewQueue({
             <article key={proposal.id} className="rounded-lg border border-border-subtle bg-surface px-3 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="truncate text-[13px] font-semibold text-text">{proposal.pageTitle}</h3>
-                  <p className="mt-1 text-[12px] text-text-muted">{proposal.summary}</p>
+                  <h3 className="truncate text-sm font-semibold text-text">{proposal.pageTitle}</h3>
+                  <p className="mt-1 text-xs text-text-muted">{proposal.summary}</p>
                 </div>
-                <span className="font-mono text-[12px] font-semibold whitespace-nowrap">
+                <span className="font-mono text-xs font-semibold whitespace-nowrap">
                   <span className="text-[var(--color-green)]">+{proposal.add}</span>
                   <span className="text-text-muted"> / </span>
                   <span className="text-[var(--color-red)]">-{proposal.del}</span>
                 </span>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-2xs text-text-muted">
                 <span>{space?.name || t('knowledge.review.unknownSpace', 'Unknown space')}</span>
                 <span>{t('knowledge.review.byAuthor', 'by')} {proposal.by}</span>
                 <span>{formatDate(proposal.when)}</span>
@@ -212,7 +212,7 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
                 <span className={`studio-version-dot${isCurrent ? ' is-current' : ''}`} />
                 {index < versions.length - 1 ? <span className="studio-version-connector" /> : null}
               </div>
-              <div className="studio-version-body text-[12px]">
+              <div className="studio-version-body text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <strong className="text-text">v{version.version}</strong>
                   <span className="text-text-muted">{formatDate(version.updatedAt)}</span>
@@ -237,7 +237,7 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
             </div>
           )
         })}
-        {!versions.length && <p className="text-[12px] text-text-muted">{t('knowledge.history.empty', 'No versions found for this page.')}</p>}
+        {!versions.length && <p className="text-xs text-text-muted">{t('knowledge.history.empty', 'No versions found for this page.')}</p>}
       </div>
     </Card>
   )
@@ -518,7 +518,7 @@ export function KnowledgePage() {
         />
 
         {error ? (
-          <div role="alert" className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">
+          <div role="alert" className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
             {error}
           </div>
         ) : null}
@@ -551,7 +551,7 @@ export function KnowledgePage() {
             reviewAction={(
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text"
+                className="flex w-full items-center justify-between rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover hover:text-text"
               >
                 <span className="inline-flex items-center gap-2"><Icon name="circle-help" size={16} /> {t('knowledge.review.railLabel', 'Review queue')}</span>
                 <Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length}</Badge>
@@ -583,7 +583,7 @@ export function KnowledgePage() {
                   </Button>
                 ) : undefined}
                 meta={(
-                  <div className="flex flex-wrap gap-2 text-[12px] text-text-muted">
+                  <div className="flex flex-wrap gap-2 text-xs text-text-muted">
                     <Badge tone="neutral">v{selectedPage.version}</Badge>
                     <span>{t('knowledge.page.updatedBy', 'Updated by')} {selectedPage.updatedBy}</span>
                     <span>{formatDate(selectedPage.updatedAt)}</span>
@@ -630,12 +630,12 @@ export function KnowledgePage() {
                 </span>
                 <div>
                   <h2 className="text-sm font-semibold text-text">{t('knowledge.permissions.title', 'Space permissions')}</h2>
-                  <p className="mt-1 text-[12px] text-text-muted">
+                  <p className="mt-1 text-xs text-text-muted">
                     {selectedSpace
                       ? `${selectedSpace.role}: read ${knowledgeRoleCanPropose(selectedSpace.role) ? '+ propose' : ''} ${knowledgeRoleCanReview(selectedSpace.role) ? '+ review' : ''}`
                       : t('knowledge.permissions.noSelection', 'Select a page to inspect Space role gates.')}
                   </p>
-                  <p className="mt-2 text-[11px] text-text-muted">
+                  <p className="mt-2 text-2xs text-text-muted">
                     {canReviewAny(snapshot)
                       ? t('knowledge.permissions.canReview', 'Maintainers can accept or decline pending proposals.')
                       : t('knowledge.permissions.noMaintainer', 'This workspace has no visible Maintainer Space.')}

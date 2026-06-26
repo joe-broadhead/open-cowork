@@ -162,11 +162,11 @@ function FacetButton({
       aria-pressed={selected}
       aria-label={`${bucket.label} (${bucket.count})`}
       onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[12px] transition-colors ${selected ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs transition-colors ${selected ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
     >
       {color ? <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} /> : null}
       <span className="min-w-0 flex-1 truncate">{bucket.label}</span>
-      <span className="tabular shrink-0 text-[10px] text-text-muted">{bucket.count}</span>
+      <span className="tabular shrink-0 text-2xs text-text-muted">{bucket.count}</span>
     </button>
   )
 }
@@ -185,7 +185,7 @@ function FacetGroup({
   if (buckets.length === 0) return null
   return (
     <section className="border-b border-border-subtle px-3 py-3">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{title}</h3>
+      <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">{title}</h3>
       <div className="flex flex-col gap-1">
         {buckets.slice(0, 12).map((bucket) => (
           <FacetButton
@@ -213,7 +213,7 @@ function StatusFacet({
   const counts = new Map(buckets.map((bucket) => [bucket.value, bucket.count]))
   return (
     <section className="border-b border-border-subtle px-3 py-3">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('threads.status', 'Status')}</h3>
+      <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('threads.status', 'Status')}</h3>
       <div className="flex flex-col gap-1">
         {STATUS_OPTIONS.map((status) => (
           <FacetButton
@@ -242,7 +242,7 @@ function DateFacet({
   ]
   return (
     <section className="border-b border-border-subtle px-3 py-3">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('threads.date', 'Date')}</h3>
+      <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('threads.date', 'Date')}</h3>
       <div className="flex flex-col gap-1">
         {options.map((option) => (
           <button
@@ -250,7 +250,7 @@ function DateFacet({
             type="button"
             aria-pressed={option.selected}
             onClick={() => onChange(option.range)}
-            className={`rounded-md px-2 py-1.5 text-start text-[12px] transition-colors ${option.selected ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
+            className={`rounded-md px-2 py-1.5 text-start text-xs transition-colors ${option.selected ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
           >
             {option.label}
           </button>
@@ -263,15 +263,15 @@ function DateFacet({
 function ThreadBadges({ thread }: { thread: ThreadListItem }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {thread.providerId ? <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Provider: {thread.providerId}</span> : null}
+      {thread.providerId ? <span className="rounded bg-surface px-1.5 py-0.5 text-2xs text-text-muted">Provider: {thread.providerId}</span> : null}
       {thread.actualAgents.slice(0, 2).map((agent) => (
-        <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Coworker: {agent.name}</span>
+        <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-2xs text-text-muted">Coworker: {agent.name}</span>
       ))}
       {thread.actualTools.slice(0, 2).map((tool) => (
-        <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Tool: {tool.name}</span>
+        <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-2xs text-text-muted">Tool: {tool.name}</span>
       ))}
       {thread.suggestions.slice(0, 2).map((suggestion) => (
-        <span key={suggestion.id} className="rounded border border-dashed border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted">Suggested: {suggestion.label}</span>
+        <span key={suggestion.id} className="rounded border border-dashed border-border-subtle px-1.5 py-0.5 text-2xs text-text-muted">Suggested: {suggestion.label}</span>
       ))}
     </div>
   )
@@ -297,7 +297,7 @@ function ThreadRow({
       role="row"
       draggable
       onDragStart={onDragStart}
-      className={`grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] items-center gap-3 border-b border-border-subtle px-3 py-2.5 text-[12px] transition-colors ${selected ? 'bg-surface-active/70' : 'hover:bg-surface-hover'}`}
+      className={`grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] items-center gap-3 border-b border-border-subtle px-3 py-2.5 text-xs transition-colors ${selected ? 'bg-surface-active/70' : 'hover:bg-surface-hover'}`}
     >
       <div role="gridcell" className="flex items-center justify-center">
         <input
@@ -310,8 +310,8 @@ function ThreadRow({
       </div>
       <div role="gridcell" className="min-w-0">
         <button type="button" onClick={onSelect} className="w-full min-w-0 text-start">
-          <span className="block truncate text-[13px] font-medium text-text">{thread.title}</span>
-          <span className="mt-1 flex min-w-0 items-center gap-2 text-[11px] text-text-muted">
+          <span className="block truncate text-sm font-medium text-text">{thread.title}</span>
+          <span className="mt-1 flex min-w-0 items-center gap-2 text-2xs text-text-muted">
             {thread.projectLabel ? <span className="truncate">{thread.projectLabel}</span> : <span>Personal workspace</span>}
             <span aria-hidden="true">·</span>
             <span>{thread.usage.messages} messages</span>
@@ -330,12 +330,12 @@ function ThreadRow({
       <div role="gridcell" className="truncate text-text-secondary">{thread.providerId || '—'}{thread.modelId ? ` / ${thread.modelId.split('/').pop()}` : ''}</div>
       <div role="gridcell" className="flex flex-wrap gap-1">
         {thread.tags.length ? thread.tags.map((tag) => (
-          <span key={tag.id} className="rounded px-1.5 py-0.5 text-[10px] text-white" style={{ background: tag.color }}>{tag.name}</span>
+          <span key={tag.id} className="rounded px-1.5 py-0.5 text-2xs text-white" style={{ background: tag.color }}>{tag.name}</span>
         )) : <span className="text-text-muted">No tags</span>}
       </div>
       <div role="gridcell" className="flex items-center justify-between gap-2">
-        <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-[0.04em] text-text-muted">{thread.status}</span>
-        <button type="button" onClick={onOpen} className="rounded-md border border-border-subtle px-2 py-1 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text">
+        <span className="rounded bg-surface px-1.5 py-0.5 text-2xs uppercase tracking-[0.04em] text-text-muted">{thread.status}</span>
+        <button type="button" onClick={onOpen} className="rounded-md border border-border-subtle px-2 py-1 text-2xs text-text-secondary hover:bg-surface-hover hover:text-text">
           Open
         </button>
       </div>
@@ -364,7 +364,7 @@ function TagManager({
   const [color, setColor] = useState(TAG_COLORS[0]!)
   return (
     <section className="border-b border-border-subtle px-3 py-3">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('threads.tags', 'Tags')}</h3>
+      <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('threads.tags', 'Tags')}</h3>
       <form
         className="mb-2 flex gap-1.5"
         onSubmit={(event) => {
@@ -380,18 +380,18 @@ function TagManager({
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder={t('threads.newTag', 'New tag')}
-          className="min-w-0 flex-1 rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-accent"
+          className="min-w-0 flex-1 rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-accent"
         />
         <label className="sr-only" htmlFor="thread-tag-color">Tag color</label>
         <select
           id="thread-tag-color"
           value={color}
           onChange={(event) => setColor(event.target.value)}
-          className="w-8 rounded-md border border-border-subtle bg-base text-[12px] text-text"
+          className="w-8 rounded-md border border-border-subtle bg-base text-xs text-text"
         >
           {TAG_COLORS.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
         </select>
-        <button type="submit" className="rounded-md border border-border-subtle px-2 text-[11px] text-text-secondary hover:bg-surface-hover">Add</button>
+        <button type="submit" className="rounded-md border border-border-subtle px-2 text-2xs text-text-secondary hover:bg-surface-hover">Add</button>
       </form>
       <div className="flex flex-col gap-1">
         {tags.map((tag) => (
@@ -409,11 +409,11 @@ function TagManager({
               className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-surface-hover aria-disabled:opacity-60"
             >
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tag.color }} />
-              <span className="min-w-0 flex-1 truncate text-[12px] text-text-secondary">{tag.name}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-text-secondary">{tag.name}</span>
             </button>
-            <button type="button" disabled={selectedIds.length === 0} onClick={() => onApplyTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover disabled:opacity-40">Add tag</button>
-            <button type="button" disabled={selectedIds.length === 0} onClick={() => onRemoveTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover disabled:opacity-40">Remove tag</button>
-            <button type="button" onClick={() => onDeleteTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover">Delete</button>
+            <button type="button" disabled={selectedIds.length === 0} onClick={() => onApplyTag(tag.id)} className="rounded px-1.5 py-0.5 text-2xs text-text-muted hover:bg-surface-hover disabled:opacity-40">Add tag</button>
+            <button type="button" disabled={selectedIds.length === 0} onClick={() => onRemoveTag(tag.id)} className="rounded px-1.5 py-0.5 text-2xs text-text-muted hover:bg-surface-hover disabled:opacity-40">Remove tag</button>
+            <button type="button" onClick={() => onDeleteTag(tag.id)} className="rounded px-1.5 py-0.5 text-2xs text-text-muted hover:bg-surface-hover">Delete</button>
           </div>
         ))}
       </div>
@@ -435,7 +435,7 @@ function SmartFilters({
   const [name, setName] = useState('')
   return (
     <section className="border-b border-border-subtle px-3 py-3">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('threads.smartFilters', 'Smart filters')}</h3>
+      <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('threads.smartFilters', 'Smart filters')}</h3>
       <form
         className="mb-2 flex gap-1.5"
         onSubmit={(event) => {
@@ -451,17 +451,17 @@ function SmartFilters({
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder={t('threads.saveFilter', 'Save filter')}
-          className="min-w-0 flex-1 rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-accent"
+          className="min-w-0 flex-1 rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-accent"
         />
-        <button type="submit" className="rounded-md border border-border-subtle px-2 text-[11px] text-text-secondary hover:bg-surface-hover">Save</button>
+        <button type="submit" className="rounded-md border border-border-subtle px-2 text-2xs text-text-secondary hover:bg-surface-hover">Save</button>
       </form>
       <div className="flex flex-col gap-1">
         {filters.map((filter) => (
           <div key={filter.id} className="flex items-center gap-1.5">
-            <button type="button" onClick={() => onApply(filter)} className="min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-start text-[12px] text-text-secondary hover:bg-surface-hover">
+            <button type="button" onClick={() => onApply(filter)} className="min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-start text-xs text-text-secondary hover:bg-surface-hover">
               {filter.name}
             </button>
-            <button type="button" onClick={() => onDelete(filter.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover">Delete</button>
+            <button type="button" onClick={() => onDelete(filter.id)} className="rounded px-1.5 py-0.5 text-2xs text-text-muted hover:bg-surface-hover">Delete</button>
           </div>
         ))}
       </div>
@@ -494,12 +494,12 @@ function DetailDrawer({
   return (
     <aside aria-label={t('threads.detailPanel', 'Project detail')} className="threads-detail-panel shrink-0 border-s border-border-subtle bg-base">
       <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-        <h2 className="min-w-0 truncate text-[14px] font-semibold text-text">{thread.title}</h2>
-        <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[12px] text-text-muted hover:bg-surface-hover">Close</button>
+        <h2 className="min-w-0 truncate text-md font-semibold text-text">{thread.title}</h2>
+        <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface-hover">Close</button>
       </div>
-      <div className="threads-detail-body space-y-5 overflow-y-auto p-4 text-[12px] text-text-secondary">
+      <div className="threads-detail-body space-y-5 overflow-y-auto p-4 text-xs text-text-secondary">
         <section>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Overview</h3>
+          <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">Overview</h3>
           <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-1">
             <span className="text-text-muted">Updated</span><span>{formatThreadDate(thread.updatedAt)}</span>
             <span className="text-text-muted">Project</span><span>{thread.projectLabel || 'Personal workspace'}</span>
@@ -511,15 +511,15 @@ function DetailDrawer({
           </Button>
         </section>
         <section>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Coworker activity</h3>
+          <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">Coworker activity</h3>
           <div className="flex flex-wrap gap-1.5">
-            {thread.actualAgents.map((agent) => <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Coworker: {agent.name} ×{agent.count}</span>)}
-            {thread.actualTools.map((tool) => <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Tool: {tool.name} ×{tool.count}</span>)}
+            {thread.actualAgents.map((agent) => <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-2xs">Coworker: {agent.name} ×{agent.count}</span>)}
+            {thread.actualTools.map((tool) => <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-2xs">Tool: {tool.name} ×{tool.count}</span>)}
             {!thread.actualAgents.length && !thread.actualTools.length ? <span className="text-text-muted">No coworker or tool usage recorded yet.</span> : null}
           </div>
         </section>
         <section>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Suggestions</h3>
+          <h3 className="mb-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">Suggestions</h3>
           <div className="flex flex-col gap-2">
             {thread.suggestions.length ? thread.suggestions.map((suggestion) => (
               <div key={suggestion.id} className="rounded-md border border-dashed border-border-subtle p-2">
@@ -532,17 +532,17 @@ function DetailDrawer({
                     }}
                   >
                     <label className="sr-only" htmlFor={`suggestion-${suggestion.id}`}>Suggestion label</label>
-                    <input id={`suggestion-${suggestion.id}`} value={editLabel} onChange={(event) => setEditLabel(event.target.value)} className="min-w-0 flex-1 rounded border border-border-subtle bg-base px-2 py-1 text-[12px] text-text" />
-                    <button type="submit" className="rounded border border-border-subtle px-2 text-[11px]">Save</button>
+                    <input id={`suggestion-${suggestion.id}`} value={editLabel} onChange={(event) => setEditLabel(event.target.value)} className="min-w-0 flex-1 rounded border border-border-subtle bg-base px-2 py-1 text-xs text-text" />
+                    <button type="submit" className="rounded border border-border-subtle px-2 text-2xs">Save</button>
                   </form>
                 ) : (
                   <>
                     <div className="font-medium text-text">Suggested: {suggestion.label}</div>
-                    <div className="mt-1 text-[11px] text-text-muted">{suggestion.reason}</div>
+                    <div className="mt-1 text-2xs text-text-muted">{suggestion.reason}</div>
                     <div className="mt-2 flex gap-1.5">
-                      <button type="button" onClick={() => onAcceptSuggestion(suggestion.id)} className="rounded border border-border-subtle px-2 py-1 text-[11px] hover:bg-surface-hover">Accept</button>
-                      <button type="button" onClick={() => { setEditSuggestionId(suggestion.id); setEditLabel(suggestion.label) }} className="rounded border border-border-subtle px-2 py-1 text-[11px] hover:bg-surface-hover">Edit</button>
-                      <button type="button" onClick={() => onDismissSuggestion(suggestion.id)} className="rounded border border-border-subtle px-2 py-1 text-[11px] hover:bg-surface-hover">Dismiss</button>
+                      <button type="button" onClick={() => onAcceptSuggestion(suggestion.id)} className="rounded border border-border-subtle px-2 py-1 text-2xs hover:bg-surface-hover">Accept</button>
+                      <button type="button" onClick={() => { setEditSuggestionId(suggestion.id); setEditLabel(suggestion.label) }} className="rounded border border-border-subtle px-2 py-1 text-2xs hover:bg-surface-hover">Edit</button>
+                      <button type="button" onClick={() => onDismissSuggestion(suggestion.id)} className="rounded border border-border-subtle px-2 py-1 text-2xs hover:bg-surface-hover">Dismiss</button>
                     </div>
                   </>
                 )}
@@ -679,8 +679,8 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
     <div className="threads-page-shell flex h-full min-h-0 bg-base text-text">
       <aside aria-label={t('threads.filterPanel', 'Project filters')} className="threads-filter-panel flex shrink-0 flex-col border-e border-border-subtle bg-base">
         <div className="border-b border-border-subtle px-3 py-3">
-          <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Projects')}</div>
-          <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search project chats, metadata, tags, and saved filters.')}</div>
+          <div className="text-lg font-semibold text-text">{t('threads.title', 'Projects')}</div>
+          <div className="mt-1 text-2xs text-text-muted">{t('threads.subtitle', 'Search project chats, metadata, tags, and saved filters.')}</div>
         </div>
         <div className="threads-filter-scroll min-h-0 flex-1 overflow-y-auto">
           <SmartFilters
@@ -764,15 +764,15 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
               </Button>
             ) : null}
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-text-muted">
+          <div className="mt-2 flex items-center justify-between text-2xs text-text-muted">
             <span>{loading ? 'Loading...' : `${total} project chat${total === 1 ? '' : 's'}`}</span>
             {selectedIds.length ? <span>{selectedIds.length} selected. Use Add tag or Remove tag, or drag rows onto a tag.</span> : <span>Project activity and suggestions are kept separate.</span>}
           </div>
         </div>
-        {error ? <div role="alert" className="border-b border-red-400/30 bg-red-500/10 px-4 py-2 text-[12px] text-red-100">{error}</div> : null}
+        {error ? <div role="alert" className="border-b border-red-400/30 bg-red-500/10 px-4 py-2 text-xs text-red-100">{error}</div> : null}
         <div className="scroll-shadow-x min-h-0 flex-1 overflow-auto">
           <div role="grid" aria-label={t('threads.resultsGrid', 'Project results')} className="min-w-[920px]">
-            <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+            <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-2xs font-semibold uppercase tracking-widest text-text-muted">
               <span role="columnheader" aria-label={t('threads.selectColumn', 'Select')} />
               <span role="columnheader">Project chat</span>
               <span role="columnheader">Provider / model</span>
@@ -801,7 +801,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
               />
             )) : (
               <div role="row">
-                <div role="gridcell" aria-colspan={5} className="p-8 text-center text-[13px] text-text-muted">
+                <div role="gridcell" aria-colspan={5} className="p-8 text-center text-sm text-text-muted">
                   <EmptyState
                     icon="search"
                     title={hasFilters(query) ? 'No project chats match your filters' : 'Your project chats'}

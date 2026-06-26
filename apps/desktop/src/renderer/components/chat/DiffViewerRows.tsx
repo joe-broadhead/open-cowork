@@ -30,7 +30,7 @@ export function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (
           <button
             key={option}
             onClick={() => onChange(option)}
-            className="px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors"
+            className="px-2.5 py-1 text-2xs font-medium cursor-pointer transition-colors"
             style={{
               color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
               background: isActive ? 'var(--color-surface-active)' : 'transparent',
@@ -72,17 +72,17 @@ export const DiffFileRow = memo(function DiffFileRowComponent({
       >
         <div className="flex items-center gap-2 min-w-0">
           <StatusBadge status={status} />
-          <span className="text-[12px] font-mono text-text truncate">{diff.file}</span>
+          <span className="text-xs font-mono text-text truncate">{diff.file}</span>
           {isSynthetic && (
             <span
               title={t('diff.syntheticTitle', 'Estimated from projected tool output; not an authoritative OpenCode snapshot diff')}
-              className="text-[9px] uppercase tracking-[0.04em] text-text-muted border border-border-subtle rounded px-1 py-px"
+              className="text-2xs uppercase tracking-[0.04em] text-text-muted border border-border-subtle rounded px-1 py-px"
             >
               {t('diff.estimated', 'estimated')}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 text-[11px] shrink-0">
+        <div className="flex items-center gap-2 text-2xs shrink-0">
           {diff.additions > 0 && <span style={{ color: 'var(--color-green)' }}>+{diff.additions}</span>}
           {diff.deletions > 0 && <span style={{ color: 'var(--color-red)' }}>−{diff.deletions}</span>}
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3"
@@ -95,11 +95,11 @@ export const DiffFileRow = memo(function DiffFileRowComponent({
       {expanded && (
         <div className="pb-3 overflow-x-auto">
           {hunks.length === 0 ? (
-            <div className="px-4 py-3 text-[11px] text-text-muted">
+            <div className="px-4 py-3 text-2xs text-text-muted">
               {t('diff.noTextual', 'No textual diff available (binary file, rename, or whitespace-only change).')}
             </div>
           ) : (
-            <div className="font-mono text-[11px] leading-relaxed">
+            <div className="font-mono text-2xs leading-relaxed">
               {hunks.map((hunk, i) => {
                 const prev = i > 0 ? hunks[i - 1] : null
                 const gap = prev ? computeHunkGap(prev, hunk) : null

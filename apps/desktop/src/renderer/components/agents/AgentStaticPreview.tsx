@@ -22,13 +22,13 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
     >
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-text">{t('agentPreview.title', 'Static preview')}</h3>
-          <p className="text-[11px] text-text-muted mt-0.5">
+          <h3 className="text-sm font-semibold text-text">{t('agentPreview.title', 'Static preview')}</h3>
+          <p className="text-2xs text-text-muted mt-0.5">
             {t('agentPreview.subtitle', "How OpenCode will see this agent when it's invoked. No network call — just the compiled view.")}
           </p>
         </div>
         <div
-          className="shrink-0 text-[10px] uppercase tracking-[0.08em] px-2 py-1 rounded-full font-medium"
+          className="shrink-0 text-2xs uppercase tracking-[0.08em] px-2 py-1 rounded-full font-medium"
           style={{
             color: scopeColor,
             background: `color-mix(in srgb, ${scopeColor} 12%, transparent)`,
@@ -46,7 +46,7 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
 
       {(preview.missingTools.length > 0 || preview.missingSkills.length > 0) && (
         <div
-          className="rounded-lg px-3 py-2 mb-4 text-[11px]"
+          className="rounded-lg px-3 py-2 mb-4 text-2xs"
           style={{
             color: 'var(--color-amber)',
             background: 'color-mix(in srgb, var(--color-amber) 8%, transparent)',
@@ -64,7 +64,7 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
 
       <PreviewSection label={t('agentPreview.systemPrompt', 'System prompt')}>
         <div
-          className="rounded-lg px-3.5 py-3 text-[12px] text-text-secondary whitespace-pre-wrap leading-relaxed"
+          className="rounded-lg px-3.5 py-3 text-xs text-text-secondary whitespace-pre-wrap leading-relaxed"
           style={{
             background: 'var(--color-elevated)',
             border: '1px solid var(--color-border-subtle)',
@@ -82,7 +82,7 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
             {preview.selectedTools.flatMap((tool) => tool.patterns.map((pattern) => (
               <code
                 key={`${tool.id}:${pattern}`}
-                className="text-[10px] font-mono px-2 py-0.5 rounded border"
+                className="text-2xs font-mono px-2 py-0.5 rounded border"
                 style={{
                   borderColor: 'var(--color-border-subtle)',
                   background: 'var(--color-elevated)',
@@ -102,7 +102,7 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
             {preview.selectedSkills.map((skill) => (
               <div
                 key={skill.name}
-                className="rounded-lg px-3 py-2 text-[11px]"
+                className="rounded-lg px-3 py-2 text-2xs"
                 style={{
                   background: 'var(--color-elevated)',
                   border: '1px solid var(--color-border-subtle)',
@@ -128,8 +128,8 @@ function PreviewTile({ label, value, mono }: { label: string; value: string; mon
         borderColor: 'var(--color-border-subtle)',
       }}
     >
-      <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
-      <div className={`text-[12px] font-medium text-text truncate mt-0.5 ${mono ? 'font-mono' : ''}`} title={value}>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className={`text-xs font-medium text-text truncate mt-0.5 ${mono ? 'font-mono' : ''}`} title={value}>
         {value}
       </div>
     </div>
@@ -139,7 +139,7 @@ function PreviewTile({ label, value, mono }: { label: string; value: string; mon
 function PreviewSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-4 last:mb-0">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">{label}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-2">{label}</div>
       {children}
     </div>
   )

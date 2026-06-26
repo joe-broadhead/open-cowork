@@ -207,7 +207,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
         aria-expanded={expanded}
       >
         <span
-          className="text-[10px] uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded shrink-0"
+          className="text-2xs uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded shrink-0"
           style={{
             color: anyRunning
               ? 'var(--color-accent)'
@@ -227,7 +227,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
         >
           {headerLabel}
         </span>
-        <span className="text-[12px] text-text-secondary flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs text-text-secondary flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
           {anyRunning ? (
             <span
               className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
@@ -288,7 +288,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
           />
         )}
         {scaleEnabled && visibleTaskRuns.length === 0 ? (
-          <div className="rounded-lg border border-border-subtle bg-elevated px-3 py-4 text-center text-[12px] text-text-muted">
+          <div className="rounded-lg border border-border-subtle bg-elevated px-3 py-4 text-center text-xs text-text-muted">
             No delegated tasks match the current task filters.
           </div>
         ) : null}
@@ -360,7 +360,7 @@ function AgentRunFilterControls({
                 key={option.id}
                 type="button"
                 onClick={() => update({ statusFilter: active ? 'all' : option.id })}
-                className="rounded-md border px-2 py-1 text-[10px] font-medium transition-colors hover:bg-surface-hover"
+                className="rounded-md border px-2 py-1 text-2xs font-medium transition-colors hover:bg-surface-hover"
                 style={{
                   color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
                   borderColor: active ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-border-subtle)',
@@ -373,22 +373,22 @@ function AgentRunFilterControls({
           })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
+          <label className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
             Status
             <select
               value={state.statusFilter}
               onChange={(event) => update({ statusFilter: event.target.value as AgentRunStatusFilter })}
-              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
+              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-2xs normal-case tracking-normal text-text-secondary"
             >
               {statusOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
+          <label className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
             Coworker
             <select
               value={state.agentFilter}
               onChange={(event) => update({ agentFilter: event.target.value })}
-              className="max-w-[160px] rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
+              className="max-w-[160px] rounded-md border border-border-subtle bg-surface px-2 py-1 text-2xs normal-case tracking-normal text-text-secondary"
             >
               <option value="all">All coworkers</option>
               {summary.agents.map((agent) => (
@@ -396,18 +396,18 @@ function AgentRunFilterControls({
               ))}
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
+          <label className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
             Activity
             <select
               value={state.activityFilter}
               onChange={(event) => update({ activityFilter: event.target.value as AgentRunActivityFilter })}
-              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
+              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-2xs normal-case tracking-normal text-text-secondary"
             >
               {activityOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </label>
           {hasFilters ? (
-            <button type="button" onClick={onReset} className="rounded-md border border-border-subtle px-2 py-1 text-[11px] text-text-muted hover:bg-surface-hover hover:text-text">
+            <button type="button" onClick={onReset} className="rounded-md border border-border-subtle px-2 py-1 text-2xs text-text-muted hover:bg-surface-hover hover:text-text">
               Reset
             </button>
           ) : null}
@@ -428,8 +428,8 @@ function AgentRunFilterControls({
 function ScaleMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border-subtle bg-surface px-2 py-2">
-      <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
-      <div className="mt-1 truncate text-[12px] font-medium text-text-secondary">{value}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="mt-1 truncate text-xs font-medium text-text-secondary">{value}</div>
     </div>
   )
 }

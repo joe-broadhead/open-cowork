@@ -142,11 +142,11 @@ export function ChatInputReasoningMenu({
                   onSelect(variant)
                   onClose()
                 }}
-                className="chat-menu-option text-[12px]"
+                className="chat-menu-option text-xs"
               >
                 <span className="min-w-0">
                   <span className="block font-medium truncate">{label}</span>
-                  <span className="block text-[10px] text-text-muted truncate">{description}</span>
+                  <span className="block text-2xs text-text-muted truncate">{description}</span>
                 </span>
                 {isActive ? (
                   <Icon name="check" size={16} className="shrink-0" />

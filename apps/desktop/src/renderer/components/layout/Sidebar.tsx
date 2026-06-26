@@ -212,7 +212,7 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
         )}
         {showIcon && (
           <span
-            className={`grid shrink-0 place-items-center rounded-md border border-border-subtle text-[14px] ${!iconOnly ? 'self-center' : ''}`}
+            className={`grid shrink-0 place-items-center rounded-md border border-border-subtle text-md ${!iconOnly ? 'self-center' : ''}`}
             style={iconStyle}
             aria-hidden={iconOnly ? undefined : 'true'}
           >
@@ -221,8 +221,8 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
         )}
         {showText && (
           <div className="min-w-0 flex-1">
-            {title && <div className="truncate text-[12px] font-medium text-text">{title}</div>}
-            {subtitle && <div className="mt-0.5 truncate text-[10px] text-text-muted">{subtitle}</div>}
+            {title && <div className="truncate text-xs font-medium text-text">{title}</div>}
+            {subtitle && <div className="mt-0.5 truncate text-2xs text-text-muted">{subtitle}</div>}
           </div>
         )}
       </div>
@@ -239,7 +239,7 @@ function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig })
   if (!text && !secondaryText && !(linkLabel && linkUrl)) return null
 
   return (
-    <div className="mb-2 rounded-md border border-border-subtle px-2 py-2 text-[11px] text-text-muted"
+    <div className="mb-2 rounded-md border border-border-subtle px-2 py-2 text-2xs text-text-muted"
       style={{ background: 'color-mix(in srgb, var(--color-elevated) 34%, transparent)' }}>
       {text && <div className="truncate font-medium text-text-secondary">{text}</div>}
       {secondaryText && <div className="mt-0.5 line-clamp-2 leading-snug">{secondaryText}</div>}
@@ -248,7 +248,7 @@ function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig })
           href={linkUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-1.5 inline-flex max-w-full text-[11px] text-text-secondary hover:text-text underline-offset-2 hover:underline"
+          className="mt-1.5 inline-flex max-w-full text-2xs text-text-secondary hover:text-text underline-offset-2 hover:underline"
         >
           <span className="truncate">{linkLabel}</span>
         </a>
@@ -476,15 +476,15 @@ function WorkspaceSwitcher() {
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="w-full rounded-lg border border-border-subtle px-3 py-2 text-start text-[12px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
+        className="w-full rounded-lg border border-border-subtle px-3 py-2 text-start text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
       >
         <div className="flex min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 truncate font-medium">{activeWorkspace.label}</span>
-          <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(activeWorkspace.status)}`}>
+          <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-2xs ${workspaceStatusClass(activeWorkspace.status)}`}>
             {workspaceStatusLabel(activeWorkspace.status)}
           </span>
         </div>
-        <div className="mt-0.5 truncate text-[10px] text-text-muted">
+        <div className="mt-0.5 truncate text-2xs text-text-muted">
           {workspaceDescription(activeWorkspace, supportByWorkspace[activeWorkspace.id])}
         </div>
       </button>
@@ -500,15 +500,15 @@ function WorkspaceSwitcher() {
               type="button"
               role="menuitem"
               onClick={() => void activateWorkspace(workspace)}
-              className={`w-full px-3 py-2 text-start text-[12px] transition-colors hover:bg-surface-hover ${workspace.active ? 'text-text' : 'text-text-secondary'}`}
+              className={`w-full px-3 py-2 text-start text-xs transition-colors hover:bg-surface-hover ${workspace.active ? 'text-text' : 'text-text-secondary'}`}
             >
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate font-medium">{workspace.label}</span>
-                <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(workspace.status)}`}>
+                <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-2xs ${workspaceStatusClass(workspace.status)}`}>
                   {workspaceStatusLabel(workspace.status)}
                 </span>
               </div>
-              <div className="mt-0.5 truncate text-[10px] text-text-muted">
+              <div className="mt-0.5 truncate text-2xs text-text-muted">
                 {workspaceDescription(workspace, supportByWorkspace[workspace.id])}
               </div>
             </button>
@@ -522,7 +522,7 @@ function WorkspaceSwitcher() {
                   onChange={(event) => setGatewayUrl(event.target.value)}
                   placeholder={t('workspace.gatewayUrl', 'Gateway URL')}
                   aria-label={t('workspace.gatewayUrl', 'Gateway URL')}
-                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-border"
+                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-border"
                 />
                 <input
                   type="text"
@@ -530,7 +530,7 @@ function WorkspaceSwitcher() {
                   onChange={(event) => setGatewayLabel(event.target.value)}
                   placeholder={t('workspace.gatewayLabel', 'Label')}
                   aria-label={t('workspace.gatewayLabel', 'Label')}
-                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-border"
+                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-border"
                 />
                 <input
                   type="password"
@@ -538,20 +538,20 @@ function WorkspaceSwitcher() {
                   onChange={(event) => setGatewayToken(event.target.value)}
                   placeholder={t('workspace.gatewayToken', 'Gateway token')}
                   aria-label={t('workspace.gatewayToken', 'Gateway token')}
-                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-border"
+                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-xs text-text outline-none focus:border-border"
                 />
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => void addGatewayWorkspace()}
-                    className="flex-1 rounded-md border border-border-subtle px-2 py-1.5 text-[12px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
+                    className="flex-1 rounded-md border border-border-subtle px-2 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
                   >
                     {t('workspace.addGateway', 'Add Gateway')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowGatewayForm(false)}
-                    className="rounded-md border border-border-subtle px-2 py-1.5 text-[12px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+                    className="rounded-md border border-border-subtle px-2 py-1.5 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
                   >
                     {t('workspace.cancel', 'Cancel')}
                   </button>
@@ -561,7 +561,7 @@ function WorkspaceSwitcher() {
               <button
                 type="button"
                 onClick={() => setShowGatewayForm(true)}
-                className="w-full rounded-md border border-border-subtle px-2 py-1.5 text-start text-[12px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+                className="w-full rounded-md border border-border-subtle px-2 py-1.5 text-start text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
               >
                 {t('workspace.connectGateway', 'Connect Gateway workspace')}
               </button>
@@ -629,14 +629,14 @@ function SidebarPresenceFooter({
       <div className={`flex ${collapsed ? 'flex-col items-center justify-center gap-1.5' : 'items-center gap-2.5'}`}>
         <span
           aria-hidden="true"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border-subtle bg-surface-active font-display text-[11px] font-bold text-text"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border-subtle bg-surface-active font-display text-2xs font-bold text-text"
         >
           OC
         </span>
         {!collapsed ? (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[12px] font-medium text-text">{t('sidebar.presenceName', 'You')}</div>
-            <div className="truncate text-[10px] text-text-muted">{workspaceLabel} · {t('workspace.status.online', 'Online')}</div>
+            <div className="truncate text-xs font-medium text-text">{t('sidebar.presenceName', 'You')}</div>
+            <div className="truncate text-2xs text-text-muted">{workspaceLabel} · {t('workspace.status.online', 'Online')}</div>
           </div>
         ) : null}
         <button
@@ -717,7 +717,7 @@ export function Sidebar({
       >
           {!collapsed ? <SidebarBrandTop top={branding?.top} /> : (
             <div className="px-2 pt-3 pb-2">
-              <div className="grid h-10 w-10 place-items-center rounded-lg border border-border-subtle bg-elevated text-[12px] font-bold text-text">OC</div>
+              <div className="grid h-10 w-10 place-items-center rounded-lg border border-border-subtle bg-elevated text-xs font-bold text-text">OC</div>
             </div>
           )}
           {!collapsed ? <WorkspaceSwitcher /> : null}
@@ -753,13 +753,13 @@ export function Sidebar({
                 onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery('') } }}
                 aria-label={t('sidebar.search', 'Search projects and chats...')}
                 placeholder={t('sidebar.search', 'Search projects and chats...')}
-                className="w-full px-3 py-1.5 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+                className="w-full px-3 py-1.5 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
               />
             </div>
           )}
 
           <div className={`min-h-0 overflow-y-auto px-2 pt-2 pb-1 ${collapsed ? 'max-h-none' : 'max-h-[40vh]'}`}>
-            {!collapsed ? <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div> : null}
+            {!collapsed ? <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div> : null}
             {primaryNavItems.map((item) => (
               <SidebarNavButton
                 key={item.view}
@@ -782,8 +782,8 @@ export function Sidebar({
                 <Icon name={manageOpen ? 'chevron-down' : 'chevron-right'} size={16} />
                 {!collapsed ? (
                   <>
-                    <span className="truncate font-semibold uppercase tracking-widest text-[10px]">{t('sidebar.manage', 'Manage')}</span>
-                    <span className="min-w-0 flex-1 truncate text-end text-[10px] normal-case tracking-normal text-text-muted">
+                    <span className="truncate font-semibold uppercase tracking-widest text-2xs">{t('sidebar.manage', 'Manage')}</span>
+                    <span className="min-w-0 flex-1 truncate text-end text-2xs normal-case tracking-normal text-text-muted">
                       {manageActive
                         ? t(manageNavItems.find((item) => item.view === currentView)?.labelKey || 'sidebar.manage', manageNavItems.find((item) => item.view === currentView)?.fallback || 'Manage')
                         : t('sidebar.manageHint', 'Team · Playbooks · Tools')}
@@ -815,7 +815,7 @@ export function Sidebar({
               type="button"
               onClick={() => onViewChange('projects')}
               aria-current={currentView === 'projects' ? 'page' : undefined}
-              className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-[10px] font-semibold uppercase tracking-widest transition-colors ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
+              className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-2xs font-semibold uppercase tracking-widest transition-colors ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
             >
               {t('sidebar.recentWork', 'Recent work')}
             </button>
@@ -828,11 +828,11 @@ export function Sidebar({
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
               title={t('sidebar.diagnostics', 'Diagnostics')}
-              className={`sidebar-nav-item mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[12px] transition-colors ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
+              className={`sidebar-nav-item mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs transition-colors ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
               <Icon name="heart-pulse" size={16} />
               {t('sidebar.diagnostics', 'Diagnostics')}
             </button>
-            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
+            <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
             <McpStatus />
           </div> : (
             <div className="shrink-0 border-t border-border-subtle px-2 py-2">
@@ -849,7 +849,7 @@ export function Sidebar({
           <SidebarPresenceFooter collapsed={collapsed} showSettings={showSettings} onSettings={() => setShowSettings(true)} />
       </aside>
       {showSettings ? (
-        <Suspense fallback={<div className="fixed inset-0 z-[60] grid place-items-center text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
+        <Suspense fallback={<div className="fixed inset-0 z-[60] grid place-items-center text-xs text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
           <SettingsPanel
             onClose={() => setShowSettings(false)}
           />

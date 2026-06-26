@@ -325,7 +325,7 @@ export function CapabilitiesPage({
               <h1 className="font-display text-role-page-title font-bold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
               <GlossaryHelp />
             </div>
-            <p className="text-[13px] text-text-secondary mt-1">
+            <p className="text-sm text-text-secondary mt-1">
               {t('capabilities.subtitle', 'Inspect the OpenCode tools and skills available to coworkers and playbooks in the current workspace.')}
             </p>
           </div>
@@ -373,7 +373,7 @@ export function CapabilitiesPage({
           </Button>
         </div>
         {!relationshipEnabled ? (
-          <div className="mb-6 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-[11px] text-text-muted">
+          <div className="mb-6 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-2xs text-text-muted">
             {t('capabilities.relationshipsDisabled', 'The relationship view is available behind the Tools & Skills relationship feature flag. The main tools and skills lists remain available here.')}
           </div>
         ) : (
@@ -466,8 +466,8 @@ export function CapabilitiesPage({
                       <section key={group.id} className="rounded-2xl border border-border-subtle bg-surface p-3">
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <div>
-                            <div className="text-[12px] font-semibold text-text">{group.label}</div>
-                            <div className="text-[10px] text-text-muted">
+                            <div className="text-xs font-semibold text-text">{group.label}</div>
+                            <div className="text-2xs text-text-muted">
                               {group.type === 'tool'
                                 ? t('capabilities.skillsLinkedToTool', 'Skills linked to this tool')
                                 : t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}
@@ -477,7 +477,7 @@ export function CapabilitiesPage({
                             <button
                               type="button"
                               onClick={() => setSelection({ type: 'tool', id: group.tool!.id })}
-                              className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-muted hover:text-accent hover:bg-surface-hover cursor-pointer"
+                              className="px-2 py-1 rounded-md border border-border-subtle text-2xs text-text-muted hover:text-accent hover:bg-surface-hover cursor-pointer"
                             >
                               Open tool
                             </button>
@@ -554,9 +554,9 @@ function CapabilitySectionHeading({
     <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
       <div>
         <h2 className="font-display text-role-card-title font-bold text-text">{section.label}</h2>
-        <p className="mt-0.5 text-[11px] text-text-muted">{section.description}</p>
+        <p className="mt-0.5 text-2xs text-text-muted">{section.description}</p>
       </div>
-      <span className="text-[10px] text-text-muted">
+      <span className="text-2xs text-text-muted">
         {count} {count === 1 ? unit : `${unit}s`}
       </span>
     </div>

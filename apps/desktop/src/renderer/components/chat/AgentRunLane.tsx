@@ -109,18 +109,18 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
       </div>
 
       <div className="flex items-center gap-1.5 min-w-0 flex-1">
-        <span className="text-[12px] font-medium text-text truncate">
+        <span className="text-xs font-medium text-text truncate">
           {formatAgentName(taskRun.agent)}
         </span>
         <StatusDot color={dotColor} pulse={isRunning} />
         <span
-          className="text-[10px] lowercase"
+          className="text-2xs lowercase"
           style={{ color: 'var(--color-text-muted)' }}
         >
           {statusLabel(taskRun.status)}
         </span>
         {handoffLabel && (
-          <span className="inline-flex min-w-0 max-w-[150px] items-center gap-1 rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
+          <span className="inline-flex min-w-0 max-w-[150px] items-center gap-1 rounded-full border border-border-subtle px-1.5 py-0.5 text-2xs text-text-muted">
             <span className="shrink-0">from</span>
             <span className="truncate text-text-secondary">{handoffLabel}</span>
           </span>
@@ -130,7 +130,7 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
         )}
         {deeperCount > 0 && (
           <span
-            className="inline-flex items-center gap-0.5 text-[10px] text-text-muted"
+            className="inline-flex items-center gap-0.5 text-2xs text-text-muted"
             title={t('taskRun.deeperTitle', 'This sub-agent dispatched {{count}} further sub-task(s). Click the lane to drill in.', { count: String(deeperCount) })}
           >
             <span aria-hidden="true">↳</span>
@@ -143,27 +143,27 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
 
       <div className="shrink-0 flex items-center gap-1.5 ms-2">
         {tokens > 0 && (
-          <span className="text-[10px] text-text-muted font-mono tabular-nums">
+          <span className="text-2xs text-text-muted font-mono tabular-nums">
             {formatTokensCompact(tokens)} tok
           </span>
         )}
         {taskRun.sessionCost > 0 && (
-          <span className="text-[10px] text-text-muted font-mono tabular-nums">
+          <span className="text-2xs text-text-muted font-mono tabular-nums">
             {formatCost(taskRun.sessionCost)}
           </span>
         )}
         {metrics && metrics.toolCount > 0 && (
-          <span className="text-[10px] text-text-muted tabular-nums">
+          <span className="text-2xs text-text-muted tabular-nums">
             {metrics.toolCount} tools
           </span>
         )}
         {metrics && (metrics.approvalCount > 0 || metrics.questionCount > 0) && (
-          <span className="text-[10px] text-amber tabular-nums">
+          <span className="text-2xs text-amber tabular-nums">
             {metrics.approvalCount + metrics.questionCount} review
           </span>
         )}
         {metrics && metrics.artifactCount > 0 && (
-          <span className="text-[10px] text-text-muted tabular-nums">
+          <span className="text-2xs text-text-muted tabular-nums">
             {metrics.artifactCount} artifacts
           </span>
         )}
@@ -171,7 +171,7 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
     </button>
     {liveActivity && (
       <div
-        className="text-[11px] text-text-muted leading-relaxed line-clamp-1 px-3 pb-2 italic"
+        className="text-2xs text-text-muted leading-relaxed line-clamp-1 px-3 pb-2 italic"
         style={{
           paddingLeft: indentLevel > 0 ? 10 : 48, // align with the lane text baseline (avatar 24 + gap 10)
         }}

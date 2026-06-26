@@ -51,11 +51,11 @@ export function CompactionNoticeCard({ notice }: { notice: CompactionNotice }) {
       </div>
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-medium" style={{ color: accent }}>
+          <span className="text-2xs font-medium" style={{ color: accent }}>
             {notice.status === 'compacting' ? t('compaction.running', 'Compacting') : t('compaction.done', 'Compacted')}
           </span>
           <span
-            className="text-[10px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full"
+            className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full"
             style={{
               color: accent,
               background: `color-mix(in srgb, ${accent} 14%, transparent)`,
@@ -64,7 +64,7 @@ export function CompactionNoticeCard({ notice }: { notice: CompactionNotice }) {
             {causeLabel(notice)}
           </span>
         </div>
-        <div className="text-[12px] text-text-secondary leading-relaxed">
+        <div className="text-xs text-text-secondary leading-relaxed">
           {noticeText(notice)}
         </div>
       </div>

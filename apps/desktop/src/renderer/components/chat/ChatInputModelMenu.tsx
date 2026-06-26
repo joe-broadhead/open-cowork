@@ -138,7 +138,7 @@ export function ChatInputModelMenu({
       >
         <div className="chat-menu-header">
           <span>{t('settings.models.model', 'Model')}</span>
-          <span className="text-[10px] text-text-muted font-normal">
+          <span className="text-2xs text-text-muted font-normal">
             {filtered.length === models.length
               ? `${models.length}`
               : `${filtered.length} / ${models.length}`}
@@ -162,7 +162,7 @@ export function ChatInputModelMenu({
         )}
         <div className="overflow-y-auto flex-1" ref={listRef}>
           {filtered.length === 0 ? (
-            <div className="px-3 py-6 text-[12px] text-text-muted text-center">{t('chatModelMenu.noMatches', 'No matches.')}</div>
+            <div className="px-3 py-6 text-xs text-text-muted text-center">{t('chatModelMenu.noMatches', 'No matches.')}</div>
           ) : (
             filtered.map((model, index) => {
               const isActive = currentModel === model.id
@@ -185,7 +185,7 @@ export function ChatInputModelMenu({
                     data-highlighted={isHighlighted || undefined}
                     onClick={() => void onSelect(model.id)}
                     onMouseEnter={() => setHighlightIndex(index)}
-                    className="chat-menu-option text-[12px]"
+                    className="chat-menu-option text-xs"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
@@ -197,7 +197,7 @@ export function ChatInputModelMenu({
                         )}
                       </span>
                       {model.id !== model.label && (
-                        <span className="block text-[10px] text-text-muted font-mono truncate">
+                        <span className="block text-2xs text-text-muted font-mono truncate">
                           {model.id}
                         </span>
                       )}

@@ -247,7 +247,7 @@ export function MermaidChart({ diagram, title }: Props) {
 
   if (error) {
     return (
-      <div className="px-3 py-2 text-[11px] rounded-lg" style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>
+      <div className="px-3 py-2 text-2xs rounded-lg" style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>
         Mermaid error: {error}
       </div>
     )
@@ -257,13 +257,13 @@ export function MermaidChart({ diagram, title }: Props) {
     <div className="my-1 rounded-lg overflow-hidden border border-border-subtle bg-surface px-3 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
         {title ? (
-          <div className="text-[12px] font-medium text-text-secondary">{title}</div>
+          <div className="text-xs font-medium text-text-secondary">{title}</div>
         ) : <div />}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => adjustZoom(zoom - 0.1)}
-            className="h-7 min-w-7 px-2 rounded-md border border-border-subtle text-[12px] text-text-secondary hover:bg-surface-hover cursor-pointer"
+            className="h-7 min-w-7 px-2 rounded-md border border-border-subtle text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
             aria-label={t('mermaid.zoomOut', 'Zoom out mermaid diagram')}
           >
             -
@@ -271,7 +271,7 @@ export function MermaidChart({ diagram, title }: Props) {
           <button
             type="button"
             onClick={() => adjustZoom(1)}
-            className="h-7 min-w-12 px-2 rounded-md border border-border-subtle text-[11px] text-text-secondary hover:bg-surface-hover cursor-pointer"
+            className="h-7 min-w-12 px-2 rounded-md border border-border-subtle text-2xs text-text-secondary hover:bg-surface-hover cursor-pointer"
             aria-label={t('mermaid.resetZoom', 'Reset mermaid zoom')}
           >
             {Math.round(zoom * 100)}%
@@ -279,7 +279,7 @@ export function MermaidChart({ diagram, title }: Props) {
           <button
             type="button"
             onClick={() => adjustZoom(zoom + 0.1)}
-            className="h-7 min-w-7 px-2 rounded-md border border-border-subtle text-[12px] text-text-secondary hover:bg-surface-hover cursor-pointer"
+            className="h-7 min-w-7 px-2 rounded-md border border-border-subtle text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
             aria-label={t('mermaid.zoomIn', 'Zoom in mermaid diagram')}
           >
             +

@@ -228,11 +228,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }, [activeWorkspaceIsLocal])
 
   if (interactiveSessions.length === 0) {
-    return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
+    return <div className="px-2 py-3 text-2xs text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
   }
 
   if (searchQuery && filtered.length === 0) {
-    return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noMatches', 'No matches')}</div>
+    return <div className="px-2 py-3 text-2xs text-text-muted text-center">{t('sidebar.noMatches', 'No matches')}</div>
   }
 
   const handleSelect = async (sessionId: string) => {
@@ -406,7 +406,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   onChange={e => setEditTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') void handleRename(session.id); if (e.key === 'Escape') setEditingId(null) }}
                   onBlur={() => handleRename(session.id)}
-                  className="w-full px-2 py-[6px] rounded-md text-[13px] bg-elevated border border-accent text-text outline-none" />
+                  className="w-full px-2 py-[6px] rounded-md text-sm bg-elevated border border-accent text-text outline-none" />
               </div>
             ) : (
               <button type="button"
@@ -422,14 +422,14 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 data-active={isActive ? 'true' : undefined}
                 data-polish-stagger={staggered ? 'true' : undefined}
                 style={rowStyle}
-                className={`ui-polish-list-row w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                className={`ui-polish-list-row w-full text-start px-3 py-[7px] rounded-md text-sm truncate cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
                     {isAwaitingQuestion ? (
                       <span
                         title={t('threadList.waitingForAnswer', 'Waiting for your answer')}
                         aria-label={t('threadList.waitingForAnswer', 'Waiting for your answer')}
-                        className="shrink-0 inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[9px] font-semibold leading-none"
+                        className="shrink-0 inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-2xs font-semibold leading-none"
                         style={{
                           background: 'color-mix(in srgb, var(--color-warning) 24%, transparent)',
                           color: 'var(--color-warning)',
@@ -448,7 +448,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                       <span
                         title={t('threadList.forkedFrom', 'Forked from another thread')}
                         aria-label={t('threadList.forked', 'Forked thread')}
-                        className="shrink-0 text-[11px] leading-none text-text-muted"
+                        className="shrink-0 text-2xs leading-none text-text-muted"
                       >
                         ⑂
                       </span>
@@ -457,7 +457,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   </span>
                   <span className="flex items-center gap-1.5 mt-px">
                     {session.directory && (
-                      <span className="text-[9px] text-text-muted truncate">
+                      <span className="text-2xs text-text-muted truncate">
                         {session.directory.split('/').slice(-2).join('/')}
                       </span>
                     )}
@@ -466,7 +466,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                         title={session.changeSummary.synthetic
                           ? t('diff.estimatedFilesChanged', '{{count}} estimated file(s) changed from projection data', { count: String(session.changeSummary.files) })
                           : t('diff.filesChanged', '{{count}} file(s) changed', { count: String(session.changeSummary.files) })}
-                        className="shrink-0 inline-flex items-center gap-1 text-[9px] leading-none"
+                        className="shrink-0 inline-flex items-center gap-1 text-2xs leading-none"
                       >
                         {session.changeSummary.synthetic && <span className="text-text-muted">est</span>}
                         <span style={{ color: 'var(--color-green)' }}>+{session.changeSummary.additions}</span>
@@ -476,7 +476,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     {session.revertedMessageId && (
                       <span
                         title={t('threadList.revertedTitle', 'Session is reverted to an earlier message')}
-                        className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
+                        className="shrink-0 text-2xs uppercase tracking-[0.04em] px-1 py-px rounded"
                         style={{
                           color: 'var(--color-warning)',
                           background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',
@@ -508,16 +508,16 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
 
   const renderGroup = (group: ThreadGroup) => (
     <div key={`group:${group.id}`} className="thread-group-header px-2 pb-1 pt-2">
-      <div className="flex min-w-0 items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+      <div className="flex min-w-0 items-center justify-between gap-2 rounded-md px-1.5 py-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span aria-hidden="true" className="text-[11px] leading-none">{group.kind === 'sandbox' ? 'S' : 'P'}</span>
+          <span aria-hidden="true" className="text-2xs leading-none">{group.kind === 'sandbox' ? 'S' : 'P'}</span>
           <span className="truncate">{group.label}</span>
         </span>
-        <span className="shrink-0 rounded border border-border-subtle px-1 py-px text-[9px] normal-case tracking-normal text-text-muted">
+        <span className="shrink-0 rounded border border-border-subtle px-1 py-px text-2xs normal-case tracking-normal text-text-muted">
           {group.sessions.length}
         </span>
       </div>
-      <div className="truncate px-1.5 text-[9px] text-text-muted">{group.description}</div>
+      <div className="truncate px-1.5 text-2xs text-text-muted">{group.description}</div>
     </div>
   )
 
@@ -578,7 +578,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setMenuId(null)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.rename', 'Rename')}
           </button>
           <button type="button" onClick={async () => {
@@ -594,7 +594,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setMenuId(null)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.exportMarkdown', 'Export Markdown')}
           </button>
           <button type="button" onClick={async () => {
@@ -614,20 +614,20 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             }
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.shareLink', 'Share Link')}
           </button>
           <button type="button" onClick={() => {
             void openCopyToCloud(menuId)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.copyToCloud', 'Copy to Cloud...')}
           </button>
           {interactiveSessions.find(s => s.id === menuId)?.directory && (
             <button type="button" onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
               role="menuitem"
-              className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+              className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
               {t('thread.viewChanges', 'View Changes')}
             </button>
           )}
@@ -636,7 +636,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             void handleDelete(menuId)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
+            className="w-full text-start px-3 py-1.5 text-xs hover:bg-surface-hover cursor-pointer transition-colors"
             style={{ color: 'var(--color-red)' }}>
             {t('thread.delete', 'Delete')}
           </button>
@@ -663,19 +663,19 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             className="fixed top-[12%] left-1/2 z-50 w-[520px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl"
           >
             <div className="border-b border-border-subtle px-4 py-3">
-              <div className="text-[14px] font-semibold text-text">{t('thread.copyToCloud', 'Copy to Cloud...')}</div>
-              <div className="mt-1 text-[12px] text-text-muted">
+              <div className="text-md font-semibold text-text">{t('thread.copyToCloud', 'Copy to Cloud...')}</div>
+              <div className="mt-1 text-xs text-text-muted">
                 {t('thread.copyToCloudSubtitle', 'Creates a new cloud thread. The local thread stays unchanged.')}
               </div>
             </div>
             <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
-              <label className="block text-[11px] font-medium text-text-muted">
+              <label className="block text-2xs font-medium text-text-muted">
                 {t('thread.copyToCloudTarget', 'Cloud workspace')}
                 <select
                   value={copyDialog.targetWorkspaceId}
                   disabled={copyDialog.busy}
                   onChange={(event) => setCopyDialog({ ...copyDialog, targetWorkspaceId: event.target.value })}
-                  className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-2 py-2 text-[12px] text-text outline-none focus:border-border"
+                  className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-2 py-2 text-xs text-text outline-none focus:border-border"
                 >
                   {copyDialog.cloudWorkspaces.map((workspace) => (
                     <option key={workspace.id} value={workspace.id}>{workspace.label}</option>
@@ -683,7 +683,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 </select>
               </label>
 
-              <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-md border border-border-subtle px-3 py-2">
                   <div className="text-text-muted">{t('thread.copyMessages', 'Messages')}</div>
                   <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.messages}</div>
@@ -703,7 +703,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               </div>
 
               <div className="mt-4 space-y-2">
-                <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+                <label className="flex items-start gap-2 text-xs text-text-secondary">
                   <input
                     type="checkbox"
                     checked={copyDialog.selection.includeMessages !== false}
@@ -713,7 +713,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   />
                   <span>{t('thread.copyMessagesCheckbox', 'Copy redacted user and assistant message history')}</span>
                 </label>
-                <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+                <label className="flex items-start gap-2 text-xs text-text-secondary">
                   <input
                     type="checkbox"
                     checked={copyDialog.selection.includeAttachments === true}
@@ -723,7 +723,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   />
                   <span>{t('thread.copyAttachmentsCheckbox', 'Copy data attachments already present in the thread')}</span>
                 </label>
-                <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+                <label className="flex items-start gap-2 text-xs text-text-secondary">
                   <input
                     type="checkbox"
                     checked={copyDialog.selection.includeArtifacts === true}
@@ -733,7 +733,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   />
                   <span>{t('thread.copyArtifactsCheckbox', 'Upload selected Cowork artifacts to cloud object storage')}</span>
                 </label>
-                <label className="flex items-start gap-2 text-[12px] text-text-muted">
+                <label className="flex items-start gap-2 text-xs text-text-muted">
                   <input type="checkbox" checked={false} disabled className="mt-0.5" />
                   <span>{t('thread.copyProjectSourceDisabled', 'Local project source and host paths are excluded in v1')}</span>
                 </label>
@@ -742,10 +742,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               {(copyDialog.inventory.warnings.length > 0 || copyDialog.inventory.excluded.length > 0) && (
                 <div className="mt-4 rounded-md border border-border-subtle px-3 py-2">
                   {copyDialog.inventory.warnings.map((warning) => (
-                    <div key={warning.code} className="text-[11px] text-text-secondary">{warning.message}</div>
+                    <div key={warning.code} className="text-2xs text-text-secondary">{warning.message}</div>
                   ))}
                   {copyDialog.inventory.excluded.map((item) => (
-                    <div key={item.kind} className="mt-1 text-[11px] text-text-muted">{item.reason}</div>
+                    <div key={item.kind} className="mt-1 text-2xs text-text-muted">{item.reason}</div>
                   ))}
                 </div>
               )}
@@ -755,7 +755,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 type="button"
                 disabled={copyDialog.busy}
                 onClick={() => setCopyDialog(null)}
-                className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover disabled:opacity-60"
+                className="rounded-md border border-border-subtle px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-60"
               >
                 {t('common.cancel', 'Cancel')}
               </button>
@@ -763,7 +763,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 type="button"
                 disabled={copyDialog.busy || !copyDialog.targetWorkspaceId}
                 onClick={() => void confirmCopyToCloud()}
-                className="rounded-md px-3 py-2 text-[12px] font-medium disabled:cursor-wait disabled:opacity-60"
+                className="rounded-md px-3 py-2 text-xs font-medium disabled:cursor-wait disabled:opacity-60"
                 style={{
                   background: 'var(--color-accent)',
                   color: 'var(--color-accent-foreground)',

@@ -91,17 +91,17 @@ function SelectionCardShell({
               <TypeChip typeLabel={typeLabel} />
               {statusNode}
             </div>
-            <div className="text-[15px] font-semibold text-text truncate leading-tight">
+            <div className="text-lg font-semibold text-text truncate leading-tight">
               {label || name}
             </div>
-            <div className="text-[11px] text-text-muted mt-0.5 leading-relaxed line-clamp-2">
+            <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
               {description || t('agentCard.noDescription', 'No description')}
             </div>
           </div>
         </div>
 
         {/* Stat chips */}
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-text-muted">
+        <div className="flex flex-wrap items-center gap-1.5 text-2xs text-text-muted">
           <StatChip>{skillCount} skill{skillCount === 1 ? '' : 's'}</StatChip>
           <StatChip>{toolCount} tool{toolCount === 1 ? '' : 's'}</StatChip>
           <ScopeChip scope={scope} />
@@ -150,7 +150,7 @@ export function CustomSelectionCard({
       onOpen={onOpen}
       footer={
         <div
-          className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
+          className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
           style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
         >
           <span>@{agent.name}</span>
@@ -246,7 +246,7 @@ function TypeChip({ typeLabel }: { typeLabel: TypeLabel }) {
       : RuntimeIcon
   return (
     <span
-      className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
+      className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 12%, transparent)`,
@@ -291,7 +291,7 @@ function EnabledStatusPill({ enabled, valid }: { enabled: boolean; valid: boolea
   if (!valid) {
     return (
       <span
-        className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
+        className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
         style={{
           color: 'var(--color-amber)',
           background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
@@ -303,7 +303,7 @@ function EnabledStatusPill({ enabled, valid }: { enabled: boolean; valid: boolea
   }
   return (
     <span
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
+      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
       style={{
         color: enabled ? 'var(--color-green)' : 'var(--color-text-muted)',
         background: enabled
@@ -321,7 +321,7 @@ function ModeStatusPill({ mode, disabled, hidden }: { mode: 'primary' | 'subagen
   const label = mode === 'primary' ? 'Top-level' : hidden ? 'Internal' : 'Sub-agent'
   return (
     <span
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
+      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
       style={{
         color: 'var(--color-text-secondary)',
         background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
@@ -335,7 +335,7 @@ function ModeStatusPill({ mode, disabled, hidden }: { mode: 'primary' | 'subagen
 function DisabledPill() {
   return (
     <span
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
+      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
       style={{
         color: 'var(--color-text-muted)',
         background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
@@ -349,7 +349,7 @@ function DisabledPill() {
 function CardTestFooter({ name, onTest }: { name: string; onTest: () => void }) {
   return (
     <div
-      className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
+      className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
       style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
     >
       <span>@{name}</span>

@@ -36,8 +36,8 @@ type RuntimeModelState = {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
-      <div className="mt-1.5 text-[13px] font-medium text-text">{value}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="mt-1.5 text-sm font-medium text-text">{value}</div>
     </div>
   )
 }
@@ -89,7 +89,7 @@ function SummarizeControl({
 
   return (
     <div className="mt-3 flex items-center justify-between gap-3">
-      <div className="text-[11px] text-text-muted">
+      <div className="text-2xs text-text-muted">
         {nearLimit
           ? 'Context is close to the auto-compaction threshold — you can pre-empt it now.'
           : 'Trim history proactively using the compaction agent.'}
@@ -98,7 +98,7 @@ function SummarizeControl({
         type="button"
         onClick={onClick}
         disabled={!sessionId || isCompacting}
-        className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className="shrink-0 px-3 py-1.5 rounded-lg text-2xs font-medium border border-border-subtle text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         title={message || undefined}
       >
         {label}
@@ -123,19 +123,19 @@ function MessageList({ messages }: { messages: Message[] }) {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted shrink-0">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted shrink-0">
                     {message.role}
                   </span>
-                  <span className="text-[12px] text-text truncate">{message.id}</span>
+                  <span className="text-xs text-text truncate">{message.id}</span>
                 </div>
-                <div className="mt-1 text-[11px] text-text-muted">
+                <div className="mt-1 text-2xs text-text-muted">
                   {formatDateTime(message.timestamp || null)}
                 </div>
               </div>
-              <span className="text-[11px] text-text-muted shrink-0">{expanded ? 'Hide' : 'Show'}</span>
+              <span className="text-2xs text-text-muted shrink-0">{expanded ? 'Hide' : 'Show'}</span>
             </div>
             {expanded && (
-              <pre className="mt-3 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-text-secondary font-sans">
+              <pre className="mt-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary font-sans">
                 {message.content || '(empty)'}
               </pre>
             )}
@@ -303,7 +303,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             <button
               key={entry.id}
               onClick={() => setTab(entry.id)}
-              className="px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors"
+              className="px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-colors"
               style={{
                 background: tab === entry.id ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
                 color: tab === entry.id ? 'var(--color-text)' : 'var(--color-text-muted)',
@@ -314,7 +314,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             </button>
           ))}
         </div>
-        <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary transition-colors cursor-pointer">
+        <button onClick={onClose} className="text-2xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer">
           Hide
         </button>
       </div>
@@ -388,7 +388,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
           empty="No artifacts to review yet."
           className="mb-5"
         >
-          <p className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[12px] text-text-secondary">
+          <p className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary">
             Nothing ships until you approve.
           </p>
         </DiffView>
@@ -396,7 +396,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
         {tab === 'context' && (
           <div className="flex flex-col gap-5">
             <section>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.session', 'Session')}</div>
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.session', 'Session')}</div>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <Stat label="Provider" value={formatProviderLabel(providerId)} />
                 <Stat label="Model" value={formatModelLabel(modelId)} />
@@ -415,8 +415,8 @@ export function SessionInspector({ onClose }: InspectorProps) {
 
             <section>
               <div className="flex items-center justify-between gap-3">
-                <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Context Usage</div>
-                <div className="text-[12px] text-text-secondary">
+                <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Context Usage</div>
+                <div className="text-xs text-text-secondary">
                   {contextLimit ? `${contextUsage}% of ${formatTokens(contextLimit)}` : `${formatTokens(contextTokens)} tokens`}
                 </div>
               </div>
@@ -433,7 +433,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             </section>
 
             <section>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Context Breakdown</div>
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Context Breakdown</div>
               <div className="mt-3 h-2 rounded-full overflow-hidden flex" style={{ background: 'color-mix(in srgb, var(--color-border) 78%, transparent)' }}>
                 {breakdown.map((item) => (
                   <span
@@ -447,7 +447,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
               </div>
               <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
                 {breakdown.map((item) => (
-                  <div key={item.id} className="flex items-center gap-1.5 text-[11px] text-text-secondary">
+                  <div key={item.id} className="flex items-center gap-1.5 text-2xs text-text-secondary">
                     <span className="w-2 h-2 rounded-full" style={{ background: item.color }} />
                     <span>{item.label} {contextTokens > 0 ? `${Math.round((item.value / contextTokens) * 100)}%` : '0%'}</span>
                   </div>
@@ -456,7 +456,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             </section>
 
             <section>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Recent Raw Messages</div>
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Recent Raw Messages</div>
               <div className="mt-3">
                 <MessageList messages={rawMessages.slice(-5)} />
               </div>
@@ -466,7 +466,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
 
         {tab === 'messages' && (
           <div>
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Raw Messages</div>
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Raw Messages</div>
             <div className="mt-3">
               <MessageList messages={rawMessages} />
             </div>
@@ -479,7 +479,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
 
         {tab === 'artifacts' && currentSessionId && (
           <div>
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">
               {activeWorkspaceIsLocal ? 'Sandbox Artifacts' : 'Cloud Artifacts'}
             </div>
             <div className="mt-3">
@@ -516,7 +516,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
 
   if (nothing) {
     return (
-      <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
+      <div className="text-xs text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
         No todos yet. Coworkers populate this list via the <span className="font-mono">todowrite</span> tool.
       </div>
     )
@@ -527,8 +527,8 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
       {executionPlan.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('thinking.agentPlan', 'Agent plan')}</div>
-            <div className="text-[11px] text-text-muted">{t('sessionInspector.planFromTaskRuns', 'Derived from active task runs')}</div>
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('thinking.agentPlan', 'Agent plan')}</div>
+            <div className="text-2xs text-text-muted">{t('sessionInspector.planFromTaskRuns', 'Derived from active task runs')}</div>
           </div>
           <div className="mt-3">
             <TodoListView todos={executionPlan} showPriorityTag={false} />
@@ -539,8 +539,8 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
       {rootTodos.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('thinking.sessionTodos', 'Session todos')}</div>
-            <div className="text-[11px] text-text-muted">{summarizeTodoCounts(rootCounts)}</div>
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('thinking.sessionTodos', 'Session todos')}</div>
+            <div className="text-2xs text-text-muted">{summarizeTodoCounts(rootCounts)}</div>
           </div>
           <div className="mt-3">
             <TodoListView todos={rootTodos} />
@@ -550,7 +550,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
 
       {taskRunsWithTodos.length > 0 && (
         <section>
-          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-3">Specialist todos</div>
+          <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-3">Specialist todos</div>
           <div className="flex flex-col gap-4">
             {taskRunsWithTodos.map((task) => (
               <TaskTodos key={task.id} task={task} />
@@ -559,7 +559,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
         </section>
       )}
 
-      <div className="text-[11px] text-text-muted leading-relaxed rounded-xl border border-border-subtle bg-surface px-3 py-2">
+      <div className="text-2xs text-text-muted leading-relaxed rounded-xl border border-border-subtle bg-surface px-3 py-2">
         Todos are maintained by OpenCode via the <span className="font-mono">todowrite</span> tool. The app reads them live through the OpenCode SDK — direct edits are not exposed.
       </div>
     </div>
@@ -572,16 +572,16 @@ function TaskTodos({ task }: { task: TaskRun }) {
     <div className="rounded-xl border border-border-subtle bg-surface p-3">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-medium text-text truncate">
+          <div className="text-xs font-medium text-text truncate">
             {task.title || 'Specialist'}
           </div>
           {task.agent && (
-            <div className="text-[10px] text-text-muted truncate">
+            <div className="text-2xs text-text-muted truncate">
               via {task.agent}
             </div>
           )}
         </div>
-        <div className="text-[10px] text-text-muted shrink-0">
+        <div className="text-2xs text-text-muted shrink-0">
           {summarizeTodoCounts(counts)}
         </div>
       </div>

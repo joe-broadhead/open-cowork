@@ -37,12 +37,12 @@ export function ChatThreadHeader({
   return (
     <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <div data-testid="chat-thread-title" className="text-[13px] font-medium text-text truncate">
+        <div data-testid="chat-thread-title" className="text-sm font-medium text-text truncate">
           {currentSession?.title || `Chat ${currentSessionId.slice(0, 8)}`}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {currentSession?.directory && (
-            <span className="text-[11px] text-text-muted truncate">
+            <span className="text-2xs text-text-muted truncate">
               {currentSession.directory}
             </span>
           )}
@@ -53,7 +53,7 @@ export function ChatThreadHeader({
               title={parentSession
                 ? `Jump to parent: ${parentSession.title || parentSession.id}`
                 : 'Jump to parent chat'}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
               <span>⑂</span>
               <span>Forked from {parentSession?.title ? parentSession.title : 'chat'}</span>
@@ -62,7 +62,7 @@ export function ChatThreadHeader({
           {taskContext && (
             <span
               aria-label={`Project ${taskContext.projectTitle}, task ${taskContext.taskTitle}`}
-              className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border-subtle bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted"
+              className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border-subtle bg-elevated px-1.5 py-0.5 text-2xs text-text-muted"
             >
               <span className="shrink-0 text-text-muted">Project</span>
               <span className="max-w-[150px] truncate text-text-secondary">{taskContext.projectTitle}</span>
@@ -75,7 +75,7 @@ export function ChatThreadHeader({
             <button
               type="button"
               onClick={onOpenBoard}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Open board
             </button>
@@ -85,7 +85,7 @@ export function ChatThreadHeader({
               title={currentSession.changeSummary.synthetic
                 ? `${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed (estimated from projection data)`
                 : `${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed`}
-              className="inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle"
+              className="inline-flex items-center gap-1.5 text-2xs px-1.5 py-0.5 rounded-full border border-border-subtle"
             >
               <span style={{ color: 'var(--color-green)' }}>+{currentSession.changeSummary.additions}</span>
               <span style={{ color: 'var(--color-red)' }}>−{currentSession.changeSummary.deletions}</span>
@@ -101,7 +101,7 @@ export function ChatThreadHeader({
               disabled={unreverting}
               onClick={onUnrevert}
               title={t('chat.revertedSessionTitle', 'This session is reverted — click to restore the later messages')}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-wait"
+              className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-wait"
               style={{
                 color: 'var(--color-warning)',
                 background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',

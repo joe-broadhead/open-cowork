@@ -41,8 +41,8 @@ export function WorkflowSettingsPanel({
           return (
             <div key={toggle.key} className="flex items-center justify-between gap-4">
               <div>
-                <div className="text-[12px] font-semibold text-text">{toggle.title}</div>
-                <div className="text-[11px] text-text-muted mt-1">{toggle.description}</div>
+                <div className="text-xs font-semibold text-text">{toggle.title}</div>
+                <div className="text-2xs text-text-muted mt-1">{toggle.description}</div>
               </div>
               <Switch
                 checked={enabled}
@@ -56,7 +56,7 @@ export function WorkflowSettingsPanel({
 
       <span className={sectionLabelCls}>{t('settings.workflows.quietHoursHeader', 'Quiet hours')}</span>
       <div className={panelCardCls}>
-        <div className="text-[11px] text-text-muted">
+        <div className="text-2xs text-text-muted">
           {t('settings.workflows.quietHoursDescription', 'Desktop notifications are suppressed during this window. Scheduled and webhook runs can still start.')}
         </div>
         <div className="grid grid-cols-2 gap-4">

@@ -127,7 +127,7 @@ export function StatusBar() {
   return (
     <div className="relative">
       <div
-        className="statusbar-root flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-[10px] border-t border-border-subtle text-text-muted"
+        className="statusbar-root flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-2xs border-t border-border-subtle text-text-muted"
       >
         <div className="flex items-center gap-2.5">
           {isGenerating ? (
@@ -186,8 +186,8 @@ export function StatusBar() {
         <>
           <ModalBackdrop onDismiss={() => setShowDetail(false)} className="fixed inset-0 z-40" />
           <div className="tabular absolute bottom-8 end-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
-            <div className="text-[11px] font-semibold text-text mb-2">{t('statusbar.sessionUsage', 'Session Usage')}</div>
-            <div className="flex flex-col gap-1.5 text-[11px]">
+            <div className="text-2xs font-semibold text-text mb-2">{t('statusbar.sessionUsage', 'Session Usage')}</div>
+            <div className="flex flex-col gap-1.5 text-2xs">
               <div className="flex justify-between">
                 <span className="text-text-muted">{t('statusbar.inputTokens', 'Input tokens')}</span>
                 <span className="text-text font-mono">{formatTokens(sessionTokens.input)}</span>

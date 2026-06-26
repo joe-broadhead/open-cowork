@@ -459,7 +459,7 @@ function ListSection({
     <section className="mb-8">
       <div className="mb-3">
         <h2 className="font-display text-role-section-title font-bold text-text">{label}</h2>
-        <p className="text-[12px] text-text-muted mt-0.5">{sublabel}</p>
+        <p className="text-xs text-text-muted mt-0.5">{sublabel}</p>
       </div>
       {empty ? (
         <EmptyState

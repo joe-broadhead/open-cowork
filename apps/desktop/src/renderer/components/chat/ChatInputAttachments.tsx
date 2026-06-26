@@ -20,7 +20,7 @@ export function ChatInputAttachments({ attachments, onRemove }: ChatInputAttachm
               className="chat-attachment-preview h-20 rounded-xl object-cover border border-border"
             />
           ) : (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-elevated text-[11px]">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-elevated text-2xs">
               <Icon name="file" size={16} className="text-text-muted" />
               <span className="chat-attachment-name text-text-secondary truncate">
                 {attachment.filename}

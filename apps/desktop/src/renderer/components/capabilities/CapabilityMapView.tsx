@@ -63,8 +63,8 @@ export function CapabilityMapView({
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface px-4 py-3">
         <div className="min-w-0">
-          <div className="text-[12px] font-semibold text-text">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
-          <div className="text-[11px] text-text-muted mt-0.5">
+          <div className="text-xs font-semibold text-text">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
+          <div className="text-2xs text-text-muted mt-0.5">
             {t('capabilities.mapSubtitle', 'Tools are grouped with the skills that depend on them, so runtime access for coworkers and playbooks stays visible together.')}
           </div>
         </div>
@@ -72,14 +72,14 @@ export function CapabilityMapView({
           <button
             type="button"
             onClick={onAddTool}
-            className="px-3 py-1.5 rounded-lg border border-border-subtle text-[11px] font-medium text-accent hover:bg-surface-hover cursor-pointer"
+            className="px-3 py-1.5 rounded-lg border border-border-subtle text-2xs font-medium text-accent hover:bg-surface-hover cursor-pointer"
           >
             {t('capabilities.addTool', 'Add tool')}
           </button>
           <button
             type="button"
             onClick={onAddSkill}
-            className="px-3 py-1.5 rounded-lg border border-border-subtle text-[11px] font-medium text-accent hover:bg-surface-hover cursor-pointer"
+            className="px-3 py-1.5 rounded-lg border border-border-subtle text-2xs font-medium text-accent hover:bg-surface-hover cursor-pointer"
           >
             {t('capabilities.addSkillButton', 'Add skill')}
           </button>
@@ -96,10 +96,10 @@ export function CapabilityMapView({
             <section key={section.id} className="flex flex-col gap-2.5">
               <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
                 <div>
-                  <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-muted">{section.label}</h2>
-                  <p className="mt-0.5 text-[11px] text-text-muted">{section.description}</p>
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-text-muted">{section.label}</h2>
+                  <p className="mt-0.5 text-2xs text-text-muted">{section.description}</p>
                 </div>
-                <span className="text-[10px] text-text-muted">
+                <span className="text-2xs text-text-muted">
                   {section.groups.length} {section.groups.length === 1 ? 'group' : 'groups'}
                 </span>
               </div>
@@ -141,10 +141,10 @@ function CapabilityMetric({
       className="rounded-xl border border-border-subtle bg-surface px-3 py-3"
       style={{ boxShadow: `inset 0 1px 0 color-mix(in srgb, ${tone} 22%, transparent)` }}
     >
-      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="mt-1 flex items-end gap-2">
-        <div className="text-[20px] font-semibold leading-none" style={{ color: tone }}>{value}</div>
-        <div className="text-[10px] text-text-muted pb-0.5">{detail}</div>
+        <div className="text-xl font-semibold leading-none" style={{ color: tone }}>{value}</div>
+        <div className="text-2xs text-text-muted pb-0.5">{detail}</div>
       </div>
     </div>
   )
@@ -171,8 +171,8 @@ function CapabilityMapGroupCard({
     return (
       <section className="h-full rounded-lg border border-border-subtle bg-surface overflow-hidden flex flex-col">
         <div className="px-4 py-3 border-b border-border-subtle bg-elevated">
-          <div className="text-[13px] font-semibold text-text">{group.label}</div>
-          <div className="text-[11px] text-text-muted mt-0.5">{t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}</div>
+          <div className="text-sm font-semibold text-text">{group.label}</div>
+          <div className="text-2xs text-text-muted mt-0.5">{t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}</div>
         </div>
         <SkillRows
           group={group}
@@ -214,14 +214,14 @@ function CapabilityMapGroupCard({
             {tool.scope ? <MapPill tone="var(--color-text-muted)">{tool.scope === 'project' ? 'Project' : 'Machine'}</MapPill> : null}
           </div>
           <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-[14px] font-semibold text-text truncate">{tool.name}</h2>
+            <h2 className="text-md font-semibold text-text truncate">{tool.name}</h2>
             {group.skills.length > 0 ? (
-              <span className="shrink-0 text-[10px] text-text-muted">{group.skills.length} linked</span>
+              <span className="shrink-0 text-2xs text-text-muted">{group.skills.length} linked</span>
             ) : null}
           </div>
-          <div className="text-[11px] text-text-muted leading-relaxed line-clamp-2 mt-0.5">{tool.description}</div>
+          <div className="text-2xs text-text-muted leading-relaxed line-clamp-2 mt-0.5">{tool.description}</div>
         </div>
-        <div className="hidden sm:flex flex-col items-end gap-1 text-[10px] text-text-muted shrink-0">
+        <div className="hidden sm:flex flex-col items-end gap-1 text-2xs text-text-muted shrink-0">
           <span>{methodsCount} {methodsCount === 1 ? 'method' : 'methods'}</span>
           <span>{tool.agentNames.length} {tool.agentNames.length === 1 ? 'agent' : 'agents'}</span>
         </div>
@@ -236,7 +236,7 @@ function CapabilityMapGroupCard({
           onOpenSkill={onOpenSkill}
         />
       ) : (
-        <div className="mt-auto px-4 py-3 border-t border-border-subtle text-[11px] text-text-muted">
+        <div className="mt-auto px-4 py-3 border-t border-border-subtle text-2xs text-text-muted">
           {t('capabilities.noLinkedSkillsForTool', 'No linked skills yet. This tool can still be assigned directly to agents.')}
         </div>
       )}
@@ -285,20 +285,20 @@ function SkillRows({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[12px] font-medium text-text truncate">{skill.label}</span>
+                <span className="text-xs font-medium text-text truncate">{skill.label}</span>
                 <MapPill tone={skill.source === 'custom' ? 'var(--color-amber)' : 'var(--color-accent)'}>
                   {prettySkillKind(skill)}
                 </MapPill>
                 {multiTool ? <MapPill tone="var(--color-info)">Multi-tool</MapPill> : null}
                 {customSkillNames.has(skill.name) ? <MapPill tone="var(--color-amber)">Custom</MapPill> : null}
               </div>
-              <div className="text-[11px] text-text-muted leading-relaxed line-clamp-2 mt-0.5">{skill.description}</div>
+              <div className="text-2xs text-text-muted leading-relaxed line-clamp-2 mt-0.5">{skill.description}</div>
               {linkedTools.length > 0 ? (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {linkedTools.map((tool) => (
                     <span
                       key={`${skill.name}:${tool.id}`}
-                      className="text-[9px] px-1.5 py-0.5 rounded-full"
+                      className="text-2xs px-1.5 py-0.5 rounded-full"
                       style={{
                         color: tool.id === currentToolId ? 'var(--color-accent)' : 'var(--color-text-muted)',
                         background: tool.id === currentToolId
@@ -322,7 +322,7 @@ function SkillRows({
 function MapPill({ children, tone }: { children: string; tone: string }) {
   return (
     <span
-      className="inline-flex items-center text-[9px] uppercase tracking-[0.06em] px-1.5 py-0.5 rounded font-semibold"
+      className="inline-flex items-center text-2xs uppercase tracking-[0.06em] px-1.5 py-0.5 rounded font-semibold"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 11%, transparent)`,

@@ -28,7 +28,7 @@ export function TodoListView({ todos, variant = 'default', showPriorityTag = tru
         return (
           <li
             key={key}
-            className={`flex items-start gap-2 text-[11px] leading-snug ${rowPadY}`}
+            className={`flex items-start gap-2 text-2xs leading-snug ${rowPadY}`}
             style={{
               borderLeft: priority.accent
                 ? `2px solid ${priority.accent}`
@@ -56,7 +56,7 @@ export function TodoListView({ todos, variant = 'default', showPriorityTag = tru
             </span>
             {showPriorityTag && priority.accent && (
               <span
-                className="shrink-0 px-1.5 py-px rounded-full text-[9px] font-medium uppercase tracking-[0.04em]"
+                className="shrink-0 px-1.5 py-px rounded-full text-2xs font-medium uppercase tracking-[0.04em]"
                 title={`${priority.label} priority`}
                 style={{
                   color: priority.accent,

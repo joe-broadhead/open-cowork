@@ -85,16 +85,16 @@ function CapabilityCardShell({
                 <TypeChip key={chip.label} label={chip.label} tone={chip.tone} Icon={chip.Icon} />
               ))}
             </div>
-            <div className="text-[15px] font-semibold text-text truncate leading-tight">
+            <div className="text-lg font-semibold text-text truncate leading-tight">
               {title}
             </div>
-            <div className="text-[11px] text-text-muted mt-0.5 leading-relaxed line-clamp-2">
+            <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
               {description || 'No description'}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-text-muted">
+        <div className="flex flex-wrap items-center gap-1.5 text-2xs text-text-muted">
           {stats.map((stat) => (
             <StatChip key={stat.label} tone={stat.tone}>
               <span className="font-medium" style={stat.tone ? { color: stat.tone } : undefined}>{stat.value}</span>
@@ -121,7 +121,7 @@ function TypeChip({
 }) {
   return (
     <span
-      className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
+      className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 12%, transparent)`,
@@ -195,7 +195,7 @@ export function ToolSelectionCard({
       footer={
         isCustom && onRemove ? (
           <div
-            className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
+            className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
             style={{
               borderColor: 'var(--color-border-subtle)',
               background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)',
@@ -287,7 +287,7 @@ export function SkillSelectionCard({
       footer={
         isCustom && onRemove ? (
           <div
-            className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
+            className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
             style={{
               borderColor: 'var(--color-border-subtle)',
               background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)',
@@ -318,7 +318,7 @@ function LinkedSkillPills({ skills }: { skills: CapabilitySkill[] }) {
       {visible.map((skill) => (
         <span
           key={skill.name}
-          className="text-[9px] px-1.5 py-0.5 rounded-full"
+          className="text-2xs px-1.5 py-0.5 rounded-full"
           style={{
             color: 'var(--color-amber)',
             background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
@@ -328,7 +328,7 @@ function LinkedSkillPills({ skills }: { skills: CapabilitySkill[] }) {
         </span>
       ))}
       {skills.length > visible.length ? (
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full text-text-muted">
+        <span className="text-2xs px-1.5 py-0.5 rounded-full text-text-muted">
           +{skills.length - visible.length}
         </span>
       ) : null}
@@ -343,7 +343,7 @@ function LinkedToolPills({ tools }: { tools: CapabilityLinkedTool[] }) {
       {visible.map((tool) => (
         <span
           key={tool.id}
-          className="text-[9px] px-1.5 py-0.5 rounded-full"
+          className="text-2xs px-1.5 py-0.5 rounded-full"
           style={{
             color: 'var(--color-accent)',
             background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
@@ -353,7 +353,7 @@ function LinkedToolPills({ tools }: { tools: CapabilityLinkedTool[] }) {
         </span>
       ))}
       {tools.length > visible.length ? (
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full text-text-muted">
+        <span className="text-2xs px-1.5 py-0.5 rounded-full text-text-muted">
           +{tools.length - visible.length}
         </span>
       ) : null}

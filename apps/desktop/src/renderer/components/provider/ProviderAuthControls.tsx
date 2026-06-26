@@ -334,26 +334,26 @@ export function ProviderAuthControls({
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">
+      <span className="text-2xs font-semibold uppercase tracking-widest text-text-muted px-1">
         {copyMode === 'setup'
           ? t('providerAuth.headerSetup', 'Browser sign-in')
           : t('providerAuth.header', 'OpenCode login')}
       </span>
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3">
-        <div className="text-[11px] text-text-muted leading-relaxed">
+        <div className="text-2xs text-text-muted leading-relaxed">
           {copyMode === 'setup'
             ? t('providerAuth.descriptionSetup', 'Use provider sign-in for subscriptions or OAuth, or keep using the API key field.')
             : t('providerAuth.description', 'Use OpenCode-native provider auth for subscriptions/OAuth, or keep using the API key field above.')}
         </div>
         {connected === false ? (
-          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--color-surface)' }}>
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-2xs leading-relaxed" style={{ background: 'var(--color-surface)' }}>
             {copyMode === 'setup'
               ? t('providerAuth.notConnectedSetup', 'This provider is not signed in yet. Sign in below or enter an API key.')
               : t('providerAuth.notConnected', 'OpenCode does not currently report this provider as signed in. Sign in below or enter an API key above, then save before chatting.')}
           </div>
         ) : null}
         {connected === true ? (
-          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed flex items-center justify-between gap-3" style={{ color: 'var(--color-green)', background: 'var(--color-surface)' }}>
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-2xs leading-relaxed flex items-center justify-between gap-3" style={{ color: 'var(--color-green)', background: 'var(--color-surface)' }}>
             <span>
               {copyMode === 'setup'
                 ? t('providerAuth.connectedStatusSetup', 'This provider is signed in.')
@@ -363,14 +363,14 @@ export function ProviderAuthControls({
               type="button"
               onClick={forgetProviderLogin}
               disabled={authorizing !== null}
-              className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-[11px] font-semibold text-text hover:bg-surface-hover cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-2xs font-semibold text-text hover:bg-surface-hover cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             >
               {t('providerAuth.forgetLogin', 'Forget login')}
             </button>
           </div>
         ) : null}
         {!loading && entries.length === 0 ? (
-          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--color-surface)' }}>
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-2xs leading-relaxed" style={{ background: 'var(--color-surface)' }}>
             {noBrowserMethodMessage(providerId, providerName, copyMode)}
           </div>
         ) : null}
@@ -381,12 +381,12 @@ export function ProviderAuthControls({
             <div key={`${method.label}-${index}`} className="flex flex-col gap-2">
               {prompts.map((prompt) => (
                 <label key={prompt.key} className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-text-muted font-medium">{prompt.message}</span>
+                  <span className="text-2xs text-text-muted font-medium">{prompt.message}</span>
                   {prompt.type === 'select' ? (
                     <select
                       value={inputs[prompt.key] || ''}
                       onChange={(event) => setPromptInput(index, prompt.key, event.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text outline-none focus:border-accent/40 transition-colors"
+                      className="w-full px-3 py-2 rounded-lg text-xs bg-base border border-border-subtle text-text outline-none focus:border-accent/40 transition-colors"
                     >
                       <option value="">{t('common.select', 'Select')}</option>
                       {prompt.options.map((option) => (
@@ -401,7 +401,7 @@ export function ProviderAuthControls({
                       value={inputs[prompt.key] || ''}
                       onChange={(event) => setPromptInput(index, prompt.key, event.target.value)}
                       placeholder={prompt.placeholder}
-                      className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
+                      className="w-full px-3 py-2 rounded-lg text-xs bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
                     />
                   )}
                 </label>
@@ -410,7 +410,7 @@ export function ProviderAuthControls({
                 type="button"
                 onClick={() => startAuthorize(index >= 0 ? index : undefined)}
                 disabled={disabled || loading || authorizing !== null}
-                className="px-3 py-2 rounded-xl text-[12px] font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
+                className="px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
                 style={{
                   background: 'var(--color-accent)',
                   color: 'var(--color-accent-foreground)',
@@ -430,13 +430,13 @@ export function ProviderAuthControls({
               value={code}
               onChange={(event) => setCode(event.target.value)}
               placeholder={t('providerAuth.codePlaceholder', 'Authorization code')}
-              className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
+              className="w-full px-3 py-2 rounded-lg text-xs bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
             />
             <button
               type="button"
               onClick={completeCodeFlow}
               disabled={!code.trim() || authorizing !== null}
-              className="px-3 py-2 rounded-xl text-[12px] font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
+              className="px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
               style={{
                 background: 'var(--color-surface-hover)',
                 color: 'var(--color-text)',
@@ -451,18 +451,18 @@ export function ProviderAuthControls({
             {pendingBrowserAuth.instructions ? (
               <div className="rounded-xl border border-border-subtle p-3 flex flex-col gap-2" style={{ background: 'var(--color-surface)' }}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-semibold text-text">
+                  <span className="text-2xs font-semibold text-text">
                     {t('providerAuth.loginInstructions', 'Login instructions')}
                   </span>
                   <button
                     type="button"
                     onClick={() => void copyBrowserLoginInstructions()}
-                    className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-[11px] font-semibold text-text hover:bg-surface-hover cursor-pointer"
+                    className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-2xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
                   >
                     {t('providerAuth.copyInstructions', 'Copy')}
                   </button>
                 </div>
-                <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-text">
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text">
                   {pendingBrowserAuth.instructions}
                 </pre>
               </div>
@@ -471,7 +471,7 @@ export function ProviderAuthControls({
               type="button"
               onClick={finishBrowserLogin}
               disabled={authorizing !== null}
-              className="px-3 py-2 rounded-xl text-[12px] font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait border border-border-subtle text-text hover:bg-surface-hover"
+              className="px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait border border-border-subtle text-text hover:bg-surface-hover"
             >
               {authorizing === -1
                 ? t('providerAuth.finishing', 'Finishing...')
@@ -479,7 +479,7 @@ export function ProviderAuthControls({
             </button>
           </div>
         ) : null}
-        {status ? <div className="text-[11px] text-text-muted leading-relaxed">{status}</div> : null}
+        {status ? <div className="text-2xs text-text-muted leading-relaxed">{status}</div> : null}
       </div>
     </div>
   )

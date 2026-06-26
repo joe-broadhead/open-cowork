@@ -107,8 +107,8 @@ export function AvatarEditor({
         <div className="p-4 flex items-center gap-3">
           <AgentAvatar name={name} color={color} src={src} size="xl" />
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold text-text">{t('avatarEditor.avatar', 'Avatar')}</div>
-            <div className="text-[11px] text-text-muted leading-relaxed">
+            <div className="text-sm font-semibold text-text">{t('avatarEditor.avatar', 'Avatar')}</div>
+            <div className="text-2xs text-text-muted leading-relaxed">
               Upload an image or keep the gradient default.
             </div>
           </div>
@@ -119,7 +119,7 @@ export function AvatarEditor({
             type="button"
             onClick={() => void handleUpload()}
             disabled={busy}
-            className="w-full px-3 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+            className="w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             style={{
               background: 'var(--color-accent)',
               color: 'var(--color-accent-foreground)',
@@ -131,13 +131,13 @@ export function AvatarEditor({
             <button
               type="button"
               onClick={() => onAvatarChange(null)}
-              className="w-full px-3 py-2 rounded-lg text-[12px] font-medium border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              className="w-full px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Remove image
             </button>
           )}
           {error && (
-            <div className="text-[11px]" style={{ color: 'var(--color-red)' }}>{error}</div>
+            <div className="text-2xs" style={{ color: 'var(--color-red)' }}>{error}</div>
           )}
         </div>
 
@@ -145,7 +145,7 @@ export function AvatarEditor({
           className="border-t px-4 py-3"
           style={{ borderColor: 'var(--color-border-subtle)' }}
         >
-          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">{t('avatarEditor.color', 'Color')}</div>
+          <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-2">{t('avatarEditor.color', 'Color')}</div>
           <div className="flex items-center gap-2 flex-wrap">
             {COLOR_OPTIONS.map((option) => (
               <button

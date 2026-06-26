@@ -430,21 +430,21 @@ export function SettingsUpdatesPanel() {
   return (
     <div className={panelCardCls}>
       <div className="flex items-center justify-between gap-3">
-        <div className="text-[12px] font-semibold text-text">{t('settings.updates.installTitle', 'Install updates')}</div>
+        <div className="text-xs font-semibold text-text">{t('settings.updates.installTitle', 'Install updates')}</div>
         {state.currentVersion ? (
-          <div className="text-[10px] text-text-muted font-mono">v{state.currentVersion}</div>
+          <div className="text-2xs text-text-muted font-mono">v{state.currentVersion}</div>
         ) : null}
       </div>
-      <div className="text-[11px] text-text-muted leading-relaxed">
+      <div className="text-2xs text-text-muted leading-relaxed">
         {t('settings.updates.description', 'Check releases manually, then download and restart only when this signed build supports in-app installation.')}
       </div>
       <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">{t('settings.updates.releaseSource', 'Release source')}</div>
-        <div className="mt-1 text-[12px] font-semibold text-text">{releaseSourceLabel(state.capability)}</div>
-        <div className="mt-1 text-[11px] text-text-muted">{releaseSourceDetail(state.capability)}</div>
+        <div className="text-2xs uppercase tracking-[0.18em] text-text-muted">{t('settings.updates.releaseSource', 'Release source')}</div>
+        <div className="mt-1 text-xs font-semibold text-text">{releaseSourceLabel(state.capability)}</div>
+        <div className="mt-1 text-2xs text-text-muted">{releaseSourceDetail(state.capability)}</div>
       </div>
       {state.capability ? (
-        <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
+        <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5 text-2xs leading-relaxed text-text-muted">
           {describeInstallCapability(state.capability)}
         </div>
       ) : null}
@@ -452,11 +452,11 @@ export function SettingsUpdatesPanel() {
       <div className="rounded-2xl border border-border-subtle bg-base p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[12px] font-semibold text-text">{statusTitle(state)}</div>
-            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{statusDetail(state)}</div>
+            <div className="text-xs font-semibold text-text">{statusTitle(state)}</div>
+            <div className="text-2xs text-text-muted mt-1 leading-relaxed">{statusDetail(state)}</div>
           </div>
           {latest ? (
-            <div className="shrink-0 rounded-full border border-border-subtle px-2 py-1 text-[10px] font-mono text-text-muted">
+            <div className="shrink-0 rounded-full border border-border-subtle px-2 py-1 text-2xs font-mono text-text-muted">
               v{latest}
             </div>
           ) : null}
@@ -476,7 +476,7 @@ export function SettingsUpdatesPanel() {
                 style={{ width: `${Math.max(0, Math.min(100, progress.percent))}%` }}
               />
             </div>
-            <div className="mt-2 text-[11px] text-text-muted">{formatProgress(state.installStatus as Extract<UpdateInstallStatus, { status: 'downloading' }>)}</div>
+            <div className="mt-2 text-2xs text-text-muted">{formatProgress(state.installStatus as Extract<UpdateInstallStatus, { status: 'downloading' }>)}</div>
           </div>
         ) : null}
       </div>
@@ -487,10 +487,10 @@ export function SettingsUpdatesPanel() {
           disabled={state.action === 'checking' || state.action === 'downloading' || state.action === 'installing'}
           className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
         >
-          <div className="text-[12px] font-semibold text-text">
+          <div className="text-xs font-semibold text-text">
             {state.action === 'checking' ? t('settings.updates.checking', 'Checking…') : t('settings.updates.checkForUpdates', 'Check for updates')}
           </div>
-          <div className="text-[11px] text-text-muted mt-1">
+          <div className="text-2xs text-text-muted mt-1">
             {t('settings.updates.checkButtonHint', 'Looks for a newer release and checks whether this build can install it in app.')}
           </div>
         </button>
@@ -501,8 +501,8 @@ export function SettingsUpdatesPanel() {
             disabled={state.action !== 'idle'}
             className="w-full text-start rounded-2xl border border-accent/40 p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
           >
-            <div className="text-[12px] font-semibold text-accent">{t('settings.updates.downloadUpdate', 'Download update')}</div>
-            <div className="text-[11px] text-text-muted mt-1">
+            <div className="text-xs font-semibold text-accent">{t('settings.updates.downloadUpdate', 'Download update')}</div>
+            <div className="text-2xs text-text-muted mt-1">
               {t('settings.updates.downloadButtonHint', 'Downloads the signed update now. Installation waits for your restart confirmation.')}
             </div>
           </button>
@@ -514,8 +514,8 @@ export function SettingsUpdatesPanel() {
             disabled={state.action !== 'idle'}
             className="w-full text-start rounded-2xl border border-accent/40 p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
           >
-            <div className="text-[12px] font-semibold text-accent">{t('settings.updates.restartToInstall', 'Restart to install')}</div>
-            <div className="text-[11px] text-text-muted mt-1">
+            <div className="text-xs font-semibold text-accent">{t('settings.updates.restartToInstall', 'Restart to install')}</div>
+            <div className="text-2xs text-text-muted mt-1">
               {t('settings.updates.restartButtonHint', 'Closes Open Cowork and completes the signed update installation.')}
             </div>
           </button>
@@ -527,8 +527,8 @@ export function SettingsUpdatesPanel() {
             disabled={state.action === 'checking' || state.action === 'downloading' || state.action === 'installing'}
             className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
           >
-            <div className="text-[12px] font-semibold text-text">{t('settings.updates.signIn', 'Sign in with Google')}</div>
-            <div className="text-[11px] text-text-muted mt-1">
+            <div className="text-xs font-semibold text-text">{t('settings.updates.signIn', 'Sign in with Google')}</div>
+            <div className="text-2xs text-text-muted mt-1">
               {t('settings.updates.signInHint', 'Private release sources use the app sign-in in the main process; tokens are never exposed to the renderer.')}
             </div>
           </button>
@@ -538,7 +538,7 @@ export function SettingsUpdatesPanel() {
           <button
             type="button"
             onClick={() => openReleaseNotes(releaseUrl)}
-            className="w-full text-center rounded-2xl border border-border-subtle p-3 text-[12px] font-semibold text-text hover:bg-surface-hover cursor-pointer"
+            className="w-full text-center rounded-2xl border border-border-subtle p-3 text-xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
           >
             {state.manualStatus.kind === 'available'
               ? t('settings.updates.openReleaseNotes', 'Open release notes')

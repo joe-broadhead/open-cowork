@@ -231,7 +231,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
 
   if (error) {
     return (
-      <div className="px-3 py-2 text-[11px] rounded-lg" style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>
+      <div className="px-3 py-2 text-2xs rounded-lg" style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>
         Chart error: {error}
       </div>
     )
@@ -311,16 +311,16 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
         }}
       />
       {artifact ? (
-        <div className="mt-1 flex items-center justify-between gap-3 px-3 py-2 border-t border-border-subtle text-[11px]">
+        <div className="mt-1 flex items-center justify-between gap-3 px-3 py-2 border-t border-border-subtle text-2xs">
           <div className="min-w-0 flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{t('chart.savedAs', 'Saved as')}</span>
+            <span className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('chart.savedAs', 'Saved as')}</span>
             <span className="font-mono truncate text-text-secondary">{artifact.filename}</span>
           </div>
           <div className="shrink-0 flex items-center gap-1.5">
             <button
               onClick={() => void sendArtifactToThread('send')}
               disabled={composerAction !== null}
-              className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
+              className="px-2 py-0.5 rounded border border-border-subtle text-2xs text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
             >
               {composerAction === 'send' ? 'Sending…' : 'Send to thread'}
             </button>
@@ -328,21 +328,21 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
               <button
                 onClick={() => void sendArtifactToThread('rerender')}
                 disabled={composerAction !== null}
-                className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
+                className="px-2 py-0.5 rounded border border-border-subtle text-2xs text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
               >
                 {composerAction === 'rerender' ? 'Preparing…' : 'Rerender'}
               </button>
             ) : null}
             <button
               onClick={() => void onRevealArtifact()}
-              className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer"
+              className="px-2 py-0.5 rounded border border-border-subtle text-2xs text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer"
             >
               Reveal
             </button>
             <button
               onClick={() => void onExportArtifact()}
               disabled={exportingArtifact}
-              className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
+              className="px-2 py-0.5 rounded border border-border-subtle text-2xs text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
             >
               {exportingArtifact ? 'Saving…' : 'Save As…'}
             </button>

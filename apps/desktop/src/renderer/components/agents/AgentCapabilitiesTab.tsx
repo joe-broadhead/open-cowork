@@ -142,12 +142,12 @@ export function AgentCapabilitiesTab({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t('agentCapabilities.search', 'Search skills, tools, linked capabilities...')}
-          className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+          className="w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
         />
         {query.trim() && (
           <button
             onClick={() => setQuery('')}
-            className="px-2.5 py-2 rounded-lg text-[11px] text-text-muted border border-border-subtle hover:bg-surface-hover cursor-pointer"
+            className="px-2.5 py-2 rounded-lg text-2xs text-text-muted border border-border-subtle hover:bg-surface-hover cursor-pointer"
           >
             Clear
           </button>
@@ -244,7 +244,7 @@ function SkillGroupSection({
   return (
     <div className="rounded-xl border border-border-subtle overflow-hidden">
       <div
-        className="px-3 py-2 text-[11px] font-medium flex items-center justify-between"
+        className="px-3 py-2 text-2xs font-medium flex items-center justify-between"
         style={{
           background: group.tone === 'recommended'
             ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
@@ -253,7 +253,7 @@ function SkillGroupSection({
         }}
       >
         <span>{group.label}</span>
-        <span className="text-[10px] text-text-muted">{group.skills.length}</span>
+        <span className="text-2xs text-text-muted">{group.skills.length}</span>
       </div>
       <div className="divide-y divide-border-subtle">
         {group.skills.map((skill) => {
@@ -321,7 +321,7 @@ function SkillCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="text-[12px] font-medium text-text truncate">{skill.label}</span>
+            <span className="text-xs font-medium text-text truncate">{skill.label}</span>
             {skill.source === 'custom' && <CustomBadge />}
             {selected && missingToolIds.length > 0 && (
               <span
@@ -331,7 +331,7 @@ function SkillCard({
               />
             )}
           </div>
-          <div className="text-[11px] text-text-muted leading-relaxed line-clamp-2">
+          <div className="text-2xs text-text-muted leading-relaxed line-clamp-2">
             {skill.description}
           </div>
           {(skill.toolIds || []).length > 0 && (
@@ -350,7 +350,7 @@ function SkillCard({
       </button>
       {selected && missingToolIds.length > 0 && !readOnly && (
         <div
-          className="flex items-center justify-between gap-2 px-3 py-2 border-t text-[11px]"
+          className="flex items-center justify-between gap-2 px-3 py-2 border-t text-2xs"
           style={{
             borderColor: 'var(--color-border-subtle)',
             background: 'color-mix(in srgb, var(--color-amber) 8%, transparent)',
@@ -362,7 +362,7 @@ function SkillCard({
           </span>
           <button
             onClick={() => onAutoAttachTools(missingToolIds)}
-            className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer"
+            className="shrink-0 px-2 py-0.5 rounded-full text-2xs font-medium cursor-pointer"
             style={{
               color: 'var(--color-amber)',
               background: 'color-mix(in srgb, var(--color-amber) 16%, transparent)',
@@ -408,10 +408,10 @@ function ToolCard({
       <PluginIcon icon={tool.icon} size={28} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-medium text-text truncate">{tool.name}</span>
+          <span className="text-xs font-medium text-text truncate">{tool.name}</span>
           {tool.supportsWrite && (
             <span
-              className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
+              className="shrink-0 text-2xs uppercase tracking-[0.04em] px-1 py-px rounded"
               style={{
                 color: 'var(--color-amber)',
                 background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
@@ -422,7 +422,7 @@ function ToolCard({
             </span>
           )}
         </div>
-        <div className="text-[10px] text-text-muted leading-relaxed line-clamp-2 mt-0.5">
+        <div className="text-2xs text-text-muted leading-relaxed line-clamp-2 mt-0.5">
           {tool.description}
         </div>
         {linkedSkills.length > 0 && (
@@ -430,7 +430,7 @@ function ToolCard({
             {linkedSkills.slice(0, 4).map((skill) => (
               <span
                 key={skill.name}
-                className="text-[9px] px-1.5 py-0.5 rounded-full"
+                className="text-2xs px-1.5 py-0.5 rounded-full"
                 style={{
                   color: selectedSkills.has(skill.name) ? 'var(--color-accent)' : 'var(--color-text-muted)',
                   background: selectedSkills.has(skill.name)
@@ -442,7 +442,7 @@ function ToolCard({
               </span>
             ))}
             {linkedSkills.length > 4 && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full text-text-muted">
+              <span className="text-2xs px-1.5 py-0.5 rounded-full text-text-muted">
                 +{linkedSkills.length - 4}
               </span>
             )}
@@ -461,7 +461,7 @@ function ToolLinkChip({ label, selected, missing }: { label: string; selected: b
       : 'var(--color-text-muted)'
   return (
     <span
-      className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full"
+      className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 10%, transparent)`,
@@ -475,7 +475,7 @@ function ToolLinkChip({ label, selected, missing }: { label: string; selected: b
 function CustomBadge() {
   return (
     <span
-      className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
+      className="shrink-0 text-2xs uppercase tracking-[0.04em] px-1 py-px rounded"
       style={{
         color: 'var(--color-amber)',
         background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
@@ -489,15 +489,15 @@ function CustomBadge() {
 function SectionHeader({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="flex items-center justify-between mb-2">
-      <h3 className="text-[12px] font-semibold text-text">{title}</h3>
-      <span className="text-[10px] text-text-muted">{detail}</span>
+      <h3 className="text-xs font-semibold text-text">{title}</h3>
+      <span className="text-2xs text-text-muted">{detail}</span>
     </div>
   )
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="text-[12px] text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
+    <div className="text-xs text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
       {text}
     </div>
   )
