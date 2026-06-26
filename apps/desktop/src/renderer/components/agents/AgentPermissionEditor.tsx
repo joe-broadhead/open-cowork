@@ -5,6 +5,7 @@ import type {
   CustomAgentPermissionOverride,
   CustomAgentPermissionRule,
 } from '@open-cowork/shared'
+import { Badge, Button, Card, Input, SegmentedControl, Select } from '../ui'
 
 type Props = {
   value?: CustomAgentPermissionOverride[] | null
@@ -25,10 +26,10 @@ type PermissionEditorRow = Omit<CustomAgentPermissionOverride, 'action'> & {
   action?: CustomAgentPermissionAction
 }
 
-const ACTIONS: Array<{ value: CustomAgentPermissionAction; label: string; className: string }> = [
-  { value: 'allow', label: 'Allow', className: 'text-green' },
-  { value: 'ask', label: 'Ask', className: 'text-accent' },
-  { value: 'deny', label: 'Deny', className: 'text-red' },
+const ACTIONS: Array<{ value: CustomAgentPermissionAction; label: string }> = [
+  { value: 'allow', label: 'Allow' },
+  { value: 'ask', label: 'Ask' },
+  { value: 'deny', label: 'Deny' },
 ]
 
 const PERMISSION_ROWS: PermissionRowSpec[] = [
@@ -169,7 +170,7 @@ export function AgentPermissionEditor({ value, onChange, readOnly }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
+      <Card variant="flat" padding="md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs font-semibold text-text">Read files</div>
@@ -177,80 +178,69 @@ export function AgentPermissionEditor({ value, onChange, readOnly }: Props) {
               OpenCode requires project read access for context loading. This is fixed and cannot be loosened here.
             </div>
           </div>
-          <span className="rounded-full border border-border-subtle bg-surface px-2.5 py-1 text-2xs font-semibold text-green">
-            allow · read
-          </span>
+          <Badge tone="success">allow · read</Badge>
         </div>
-      </div>
+      </Card>
 
       {PERMISSION_ROWS.map((spec) => {
         const row = rows.find((entry) => entry.key === spec.key) || { key: spec.key }
         const explicit = explicitKeys.has(spec.key)
         return (
-          <div
+          <Card
             key={spec.key}
+            variant="flat"
+            padding="sm"
             role="group"
             aria-label={`${spec.label} permission`}
-            className="rounded-xl border border-border-subtle bg-elevated"
           >
-            <div className="flex flex-col gap-3 px-3 py-3 lg:flex-row lg:items-start">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-xs font-semibold text-text">{spec.label}</div>
                   <code className="rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 text-2xs text-text-muted">
                     {spec.code}
                   </code>
-                  <span className="rounded-full border border-border-subtle bg-surface px-2 py-0.5 text-2xs font-medium text-text-muted">
+                  <Badge tone={explicit ? 'accent' : 'muted'}>
                     {explicit ? 'Saved override' : 'Inherit'}
-                  </span>
+                  </Badge>
                 </div>
                 <div className="mt-1 text-2xs leading-relaxed text-text-muted">{spec.description}</div>
                 {explicit && !readOnly ? (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
                     onClick={() => removeOverride(spec.key)}
-                    className="mt-2 text-2xs font-medium text-accent hover:text-text"
                   >
                     Use inherited access
-                  </button>
+                  </Button>
                 ) : null}
               </div>
-              <div className="inline-flex shrink-0 overflow-hidden rounded-lg border border-border-subtle bg-surface">
-                {ACTIONS.map((action) => {
-                  const active = explicit && row.action === action.value
-                  return (
-                    <button
-                      key={action.value}
-                      type="button"
-                      disabled={readOnly}
-                      onClick={() => replaceRow(spec.key, { action: action.value })}
-                      className={`px-3 py-1.5 text-2xs font-semibold ${active ? action.className : 'text-text-muted'} disabled:cursor-default`}
-                      style={{
-                        background: active ? 'var(--color-surface-active)' : 'transparent',
-                      }}
-                    >
-                      {action.label}
-                    </button>
-                  )
-                })}
-              </div>
+              <SegmentedControl
+                className="shrink-0"
+                label={`${spec.label} permission`}
+                value={explicit && row.action ? row.action : ''}
+                onChange={(action) => replaceRow(spec.key, { action: action as CustomAgentPermissionAction })}
+                disabled={readOnly}
+                options={ACTIONS}
+              />
             </div>
 
-            <div className="border-t border-border-subtle px-3 py-3">
+            <div className="mt-3 border-t border-border-subtle pt-3">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div className="text-2xs font-medium text-text-secondary">
                   Specific rules
                   <span className="ms-2 text-text-muted">{row.rules?.length || 0}</span>
                 </div>
                 {spec.supportsRules === false ? null : (
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     disabled={readOnly}
                     onClick={() => addRule(spec.key)}
-                    className="rounded-lg border border-border-subtle px-2.5 py-1 text-2xs font-medium text-accent hover:bg-surface-hover disabled:cursor-default disabled:opacity-50"
                   >
                     Add rule
-                  </button>
+                  </Button>
                 )}
               </div>
               {spec.supportsRules === false ? (
@@ -261,32 +251,28 @@ export function AgentPermissionEditor({ value, onChange, readOnly }: Props) {
                 <div className="flex flex-col gap-2">
                   {row.rules.map((rule, index) => (
                     <div key={`${spec.key}-${index}`} className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-                      <input
+                      <Input
                         value={rule.pattern}
                         disabled={readOnly}
                         onChange={(event) => updateRule(spec.key, index, { pattern: event.target.value })}
                         placeholder={spec.patternHint}
-                        className="w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 font-mono text-2xs text-text outline-none placeholder:text-text-muted focus:border-border"
+                        className="font-mono"
                       />
-                      <select
+                      <Select
                         value={rule.action}
                         disabled={readOnly}
-                        onChange={(event) => updateRule(spec.key, index, { action: event.target.value as CustomAgentPermissionAction })}
-                        className="rounded-lg border border-border-subtle bg-surface px-3 py-2 text-2xs font-semibold text-text outline-none focus:border-border"
-                        aria-label={`${spec.label} rule action`}
-                      >
-                        {ACTIONS.map((action) => (
-                          <option key={action.value} value={action.value}>{action.value}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
+                        onChange={(nextAction) => updateRule(spec.key, index, { action: nextAction as CustomAgentPermissionAction })}
+                        label={`${spec.label} rule action`}
+                        options={ACTIONS.map((action) => ({ value: action.value, label: action.value }))}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         disabled={readOnly}
                         onClick={() => removeRule(spec.key, index)}
-                        className="rounded-lg border border-border-subtle px-3 py-2 text-2xs font-medium text-red hover:bg-surface-hover disabled:cursor-default disabled:opacity-50"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -298,7 +284,7 @@ export function AgentPermissionEditor({ value, onChange, readOnly }: Props) {
                 </div>
               )}
             </div>
-          </div>
+          </Card>
         )
       })}
     </div>

@@ -4,6 +4,7 @@ import { PluginIcon } from '../plugins/PluginIcon'
 import { McpRestrictionPanel } from './McpRestrictionPanel'
 import { resolveMissingSkillTools } from './agent-builder-utils'
 import { t } from '../../helpers/i18n'
+import { Button, Input } from '../ui'
 
 type Props = {
   catalog: AgentCatalog
@@ -137,20 +138,18 @@ export function AgentCapabilitiesTab({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('agentCapabilities.search', 'Search skills, tools, linked capabilities...')}
-          className="w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
-        />
+        <div className="flex-1">
+          <Input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('agentCapabilities.search', 'Search skills, tools, linked capabilities...')}
+          />
+        </div>
         {query.trim() && (
-          <button
-            onClick={() => setQuery('')}
-            className="px-2.5 py-2 rounded-lg text-2xs text-text-muted border border-border-subtle hover:bg-surface-hover cursor-pointer"
-          >
+          <Button variant="secondary" size="sm" onClick={() => setQuery('')}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
@@ -401,7 +400,7 @@ function ToolCard({
         background: selected
           ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
           : 'var(--color-surface)',
-        boxShadow: selected ? '0 0 0 1px var(--color-accent)' : 'none',
+        boxShadow: selected ? 'var(--ring-selected)' : 'none',
       }}
       title={tool.description}
     >

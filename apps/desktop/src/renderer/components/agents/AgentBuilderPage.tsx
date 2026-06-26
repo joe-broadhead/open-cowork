@@ -31,7 +31,7 @@ import {
   validateAgentDraft,
   type AgentTemplate,
 } from './agent-builder-utils'
-import { Badge, Button, Card, Icon } from '../ui'
+import { Badge, Button, Card, Icon, SegmentedControl } from '../ui'
 import { getStarterTemplates } from './starter-templates'
 
 type Props = {
@@ -717,8 +717,9 @@ function ModeSelector({
       detail: 'Available for other agents to delegate focused work to through OpenCode task routing.',
     },
   ]
+  const activeDetail = options.find((option) => option.value === value)?.detail
   return (
-    <div className="rounded-xl border border-border-subtle bg-elevated p-3">
+    <Card variant="flat" padding="md">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-xs font-semibold text-text">Can they lead?</div>
@@ -727,28 +728,16 @@ function ModeSelector({
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-        {options.map((option) => {
-          const active = value === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              aria-pressed={active}
-              className="rounded-xl border border-border-subtle bg-surface px-3 py-3 text-start transition-colors"
-              style={{
-                borderColor: active ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-                boxShadow: active ? '0 0 0 1px var(--color-accent)' : 'none',
-              }}
-            >
-              <span className="block text-xs font-semibold text-text">{option.label}</span>
-              <span className="mt-1 block text-2xs leading-relaxed text-text-muted">{option.detail}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
+      <SegmentedControl
+        label="Can they lead?"
+        value={value}
+        onChange={(mode) => onChange(mode as 'primary' | 'subagent')}
+        options={options.map((option) => ({ value: option.value, label: option.label }))}
+      />
+      {activeDetail ? (
+        <p className="mt-2 text-2xs leading-relaxed text-text-muted">{activeDetail}</p>
+      ) : null}
+    </Card>
   )
 }
 

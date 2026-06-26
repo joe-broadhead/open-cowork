@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AgentCatalog, CustomMcpConfig, CustomMcpTestResult } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { Button, Input } from '../ui'
 
 type Props = {
   catalog: AgentCatalog
@@ -220,27 +221,31 @@ function ManualRestrictionFallback({
         Common for MCPs behind OAuth. You can still block specific methods by id — type it below.
       </div>
       <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              submit()
-            }
-          }}
-          placeholder="e.g. delete_repo"
-          disabled={readOnly}
-          className="flex-1 px-2 py-1 rounded-md text-2xs font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
-        />
-        <button
+        <div className="flex-1">
+          <Input
+            type="text"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                submit()
+              }
+            }}
+            placeholder="e.g. delete_repo"
+            disabled={readOnly}
+            size="sm"
+            className="font-mono"
+          />
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={submit}
           disabled={readOnly || !input.trim()}
-          className="px-2.5 py-1 rounded-md text-2xs font-medium border border-border-subtle text-accent cursor-pointer disabled:opacity-40"
         >
           Block
-        </button>
+        </Button>
       </div>
       {deniedPatterns.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 pt-1">

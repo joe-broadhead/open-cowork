@@ -6,6 +6,21 @@ import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSu
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { AgentBuilderPage } from './AgentBuilderPage'
 
+// The canonical <Select> renders a custom listbox: a trigger <button> named
+// "<label>: <selectedLabel>" that opens a role="listbox" of role="option"
+// buttons. It does not respond to userEvent.selectOptions, so pick an option by
+// opening the trigger and clicking it. `scope` lets callers limit the trigger
+// lookup to a specific permission group.
+async function pickFromSelect(
+  user: ReturnType<typeof userEvent.setup>,
+  labelPrefix: string,
+  optionName: string | RegExp,
+  scope: { getByRole: typeof screen.getByRole } = screen,
+) {
+  await user.click(scope.getByRole('button', { name: new RegExp(`^${labelPrefix}:`) }))
+  await user.click(scope.getByRole('option', { name: optionName }))
+}
+
 const catalog: AgentCatalog = {
   reservedNames: ['build'],
   colors: ['accent', 'success', 'warning', 'info', 'primary', 'secondary'],
@@ -137,7 +152,7 @@ describe('AgentBuilderPage', () => {
       'Summarize market changes with concise evidence.',
     )
 
-    await user.click(screen.getByRole('button', { name: 'Project' }))
+    await user.click(screen.getByRole('tab', { name: 'Project' }))
     await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
@@ -285,7 +300,7 @@ describe('AgentBuilderPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Permissions' }))
     const taskGroup = screen.getByRole('group', { name: 'Delegate work permission' })
-    await user.click(within(taskGroup).getByRole('button', { name: 'Allow' }))
+    await user.click(within(taskGroup).getByRole('tab', { name: 'Allow' }))
     await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
@@ -365,7 +380,7 @@ describe('AgentBuilderPage', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(refreshProviderCatalog).toHaveBeenCalledWith('openrouter'))
 
-    await user.selectOptions(screen.getByLabelText('Model'), 'mercury/ultra')
+    await pickFromSelect(user, 'Model', /Mercury Ultra/)
 
     expect(screen.getByText('Mercury Ultra')).toBeInTheDocument()
     expect(screen.getAllByText('1M ctx').length).toBeGreaterThanOrEqual(1)
@@ -402,10 +417,10 @@ describe('AgentBuilderPage', () => {
     expect(within(webGroup).getByText(/URL and domain-specific web rules are not saved/)).toBeInTheDocument()
 
     const bashGroup = screen.getByRole('group', { name: 'Run commands permission' })
-    await user.click(within(bashGroup).getByRole('button', { name: 'Deny' }))
+    await user.click(within(bashGroup).getByRole('tab', { name: 'Deny' }))
     await user.click(within(bashGroup).getByRole('button', { name: 'Add rule' }))
     await user.type(within(bashGroup).getByPlaceholderText('git *, pnpm test, rm *'), 'pnpm test')
-    await user.selectOptions(within(bashGroup).getByLabelText('Run commands rule action'), 'allow')
+    await pickFromSelect(user, 'Run commands rule action', 'allow', within(bashGroup))
 
     await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
@@ -437,7 +452,7 @@ describe('AgentBuilderPage', () => {
     const bashGroup = screen.getByRole('group', { name: 'Run commands permission' })
     await user.click(within(bashGroup).getByRole('button', { name: 'Add rule' }))
     await user.type(within(bashGroup).getByPlaceholderText('git *, pnpm test, rm *'), 'pnpm test')
-    await user.selectOptions(within(bashGroup).getByLabelText('Run commands rule action'), 'allow')
+    await pickFromSelect(user, 'Run commands rule action', 'allow', within(bashGroup))
 
     await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))

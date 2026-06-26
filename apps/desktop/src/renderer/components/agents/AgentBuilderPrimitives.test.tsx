@@ -8,6 +8,23 @@ import {
   resolveAgentBuilderModelSelection,
 } from './AgentBuilderPrimitives'
 
+// The canonical <Select> renders a custom listbox: a trigger <button> whose
+// accessible name is "<label>: <selectedLabel>", and an opened role="listbox"
+// of role="option" buttons. It does not respond to fireEvent.change, so we open
+// the trigger and click the matching option to drive a selection.
+function selectTrigger(labelPrefix: string): HTMLElement {
+  return screen.getByRole('button', { name: new RegExp(`^${labelPrefix}:`) })
+}
+
+function openSelect(labelPrefix: string): void {
+  fireEvent.click(selectTrigger(labelPrefix))
+}
+
+function pickFromSelect(labelPrefix: string, optionName: string | RegExp): void {
+  openSelect(labelPrefix)
+  fireEvent.click(screen.getByRole('option', { name: optionName }))
+}
+
 const draft: CustomAgentConfig = {
   scope: 'machine',
   name: 'analyst',
@@ -84,7 +101,7 @@ describe('AgentBuilderPrimitives', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Project' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Project' }))
     expect(onScopeChange).toHaveBeenCalledWith('project')
 
     rerender(
@@ -111,12 +128,8 @@ describe('AgentBuilderPrimitives', () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText('Model'), {
-      target: { value: 'anthropic/claude-sonnet-4' },
-    })
-    fireEvent.change(screen.getByLabelText('Variant'), {
-      target: { value: '' },
-    })
+    pickFromSelect('Model', /Claude Sonnet 4/)
+    pickFromSelect('Variant', 'Provider default')
     fireEvent.click(screen.getByRole('button', { name: /Advanced model ID/ }))
     fireEvent.change(screen.getByLabelText('Advanced model ID'), {
       target: { value: 'openrouter/meta/llama-3' },
@@ -179,7 +192,7 @@ describe('AgentBuilderPrimitives', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Model')).toHaveValue('')
+    expect(selectTrigger('Model')).toHaveAccessibleName('Model: Inherit session default')
 
     rerender(
       <InferenceTab
@@ -207,7 +220,8 @@ describe('AgentBuilderPrimitives', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Model')).toHaveValue('meta/llama-3')
+    expect(selectTrigger('Model')).toHaveAccessibleName('Model: Uncataloged: meta/llama-3')
+    openSelect('Model')
     expect(screen.getByRole('option', { name: 'Uncataloged: meta/llama-3' })).toBeInTheDocument()
     expect(await screen.findByLabelText('Advanced model ID')).toHaveValue('openrouter/meta/llama-3')
   })
@@ -253,7 +267,8 @@ describe('AgentBuilderPrimitives', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
 
     await waitFor(() => expect(refreshProviderCatalog).toHaveBeenCalledWith('openrouter'))
-    expect(screen.getByLabelText('Model')).not.toBeDisabled()
+    expect(selectTrigger('Model')).not.toBeDisabled()
+    openSelect('Model')
     expect(screen.getByRole('option', { name: /Claude Sonnet 4/ })).toBeInTheDocument()
     expect(screen.queryByText(/No catalog models are loaded/)).not.toBeInTheDocument()
   })
@@ -278,6 +293,7 @@ describe('AgentBuilderPrimitives', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
 
     await waitFor(() => expect(refreshProviderCatalog).toHaveBeenCalledWith('openrouter'))
+    openSelect('Model')
     expect(screen.getByRole('option', { name: /Claude Sonnet 4/ })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Llama 3/ })).toBeInTheDocument()
   })

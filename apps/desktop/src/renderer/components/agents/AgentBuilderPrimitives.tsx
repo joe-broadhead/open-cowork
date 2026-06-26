@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CustomAgentConfig, ProviderDescriptor, ProviderModelDescriptor } from '@open-cowork/shared'
 
 import { t } from '../../helpers/i18n'
+import { Badge, Button, Card, Input, SegmentedControl, Select } from '../ui'
 
 export type WorkbenchTab = 'instructions' | 'capabilities' | 'inference' | 'preview'
 
@@ -62,10 +63,7 @@ export function ScopeRow({
   onChooseDirectory: () => void
 }) {
   return (
-    <div
-      className="rounded-2xl border bg-surface p-4 mb-5"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-    >
+    <Card variant="surface" padding="md" className="mb-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-text">{t('agentBuilder.saveThisAgentIn', 'Save this agent in')}</div>
@@ -76,42 +74,23 @@ export function ScopeRow({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div
-            className="flex rounded-lg border overflow-hidden"
-            style={{ borderColor: 'var(--color-border-subtle)' }}
-          >
-            <button
-              onClick={() => onScopeChange('machine')}
-              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
-              style={{
-                color: draft.scope === 'machine' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                background: draft.scope === 'machine' ? 'var(--color-surface-active)' : 'transparent',
-              }}
-            >
-              Machine
-            </button>
-            <button
-              onClick={() => onScopeChange('project')}
-              className="px-3 py-1.5 text-xs font-medium cursor-pointer"
-              style={{
-                color: draft.scope === 'project' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                background: draft.scope === 'project' ? 'var(--color-surface-active)' : 'transparent',
-              }}
-            >
-              Project
-            </button>
-          </div>
+          <SegmentedControl
+            label={t('agentBuilder.saveThisAgentIn', 'Save this agent in')}
+            value={draft.scope === 'project' ? 'project' : 'machine'}
+            onChange={(scope) => onScopeChange(scope as 'machine' | 'project')}
+            options={[
+              { value: 'machine', label: 'Machine' },
+              { value: 'project', label: 'Project' },
+            ]}
+          />
           {draft.scope === 'project' && (
-            <button
-              onClick={onChooseDirectory}
-              className="px-3 py-1.5 rounded-lg text-2xs font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
-            >
+            <Button variant="secondary" size="sm" onClick={onChooseDirectory}>
               {projectTargetDirectory ? 'Change' : 'Choose directory'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -158,10 +137,6 @@ export function InferenceTab({
   const variantInCatalog = draft.variant ? variants.includes(draft.variant) : true
   const showCatalogVariantSelect = variants.length > 0 && variantInCatalog
   const showAdvancedVariant = !showCatalogVariantSelect
-  const inputClass =
-    'w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
-  const selectClass =
-    'w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text outline-none focus:border-border'
   const providerConnected = selection.provider?.connected !== false
 
   useEffect(() => {
@@ -271,38 +246,36 @@ export function InferenceTab({
       {selection.provider && providerConnected && (
         <Field label="Model" hint="Context, reasoning, default, featured, and cost come from provider metadata.">
           <div className="flex items-center gap-2">
-            <select
+            <Select
+              className="flex-1"
               value={selection.modelId || ''}
               disabled={readOnly || (models.length === 0 && !uncatalogedModelId)}
-              onChange={(event) => chooseModel(event.target.value)}
-              className={selectClass}
-              aria-label={t('agentBuilder.modelSelect', 'Model')}
-            >
-              <option value="">Inherit session default</option>
-              {uncatalogedModelId ? (
-                <option value={uncatalogedModelId}>
-                  Uncataloged: {uncatalogedModelId}
-                </option>
-              ) : null}
-              {models.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name || entry.id}
-                  {selection.provider?.defaultModel === entry.id ? ' · Default' : ''}
-                  {entry.featured ? ' · Featured' : ''}
-                  {entry.reasoning ? ' · Reasoning' : ''}
-                  {formatContextLength(entry.limit?.context ?? entry.contextLength) ? ` · ${formatContextLength(entry.limit?.context ?? entry.contextLength)}` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => chooseModel(value)}
+              label={t('agentBuilder.modelSelect', 'Model')}
+              options={[
+                { value: '', label: 'Inherit session default' },
+                ...(uncatalogedModelId ? [{ value: uncatalogedModelId, label: `Uncataloged: ${uncatalogedModelId}` }] : []),
+                ...models.map((entry) => ({
+                  value: entry.id,
+                  label: `${entry.name || entry.id}`
+                    + (selection.provider?.defaultModel === entry.id ? ' · Default' : '')
+                    + (entry.featured ? ' · Featured' : '')
+                    + (entry.reasoning ? ' · Reasoning' : '')
+                    + (formatContextLength(entry.limit?.context ?? entry.contextLength) ? ` · ${formatContextLength(entry.limit?.context ?? entry.contextLength)}` : ''),
+                })),
+              ]}
+            />
             {onRefreshProviderCatalog && (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={readOnly || !selection.providerId || refreshingProviderId === selection.providerId}
+                loading={refreshingProviderId === selection.providerId}
                 onClick={() => void refreshCatalog()}
-                className="shrink-0 rounded-lg border border-border-subtle px-3 py-2 text-2xs font-medium text-text-secondary hover:bg-surface-hover disabled:cursor-default disabled:opacity-60"
+                className="shrink-0"
               >
                 {refreshingProviderId === selection.providerId ? 'Refreshing…' : 'Refresh'}
-              </button>
+              </Button>
             )}
           </div>
           {model ? (
@@ -325,18 +298,16 @@ export function InferenceTab({
 
       {showCatalogVariantSelect ? (
         <Field label="Variant" hint="Provider-specific reasoning or thinking mode.">
-          <select
+          <Select
             value={draft.variant ?? ''}
             disabled={readOnly}
-            onChange={(event) => onChange({ variant: event.target.value.trim() === '' ? null : event.target.value })}
-            className={selectClass}
-            aria-label={t('agentBuilder.variantSelect', 'Variant')}
-          >
-            <option value="">Provider default</option>
-            {variants.map((variant) => (
-              <option key={variant} value={variant}>{variant}</option>
-            ))}
-          </select>
+            onChange={(value) => onChange({ variant: value.trim() === '' ? null : value })}
+            label={t('agentBuilder.variantSelect', 'Variant')}
+            options={[
+              { value: '', label: 'Provider default' },
+              ...variants.map((variant) => ({ value: variant, label: variant })),
+            ]}
+          />
         </Field>
       ) : null}
 
@@ -352,28 +323,26 @@ export function InferenceTab({
         </button>
         {advancedOpen && (
           <div className="mt-2">
-            <input
+            <Input
               type="text"
               value={draft.model ?? ''}
               readOnly={readOnly}
               onChange={(event) => onChange({ model: event.target.value.trim() === '' ? null : event.target.value })}
               placeholder="openrouter/anthropic/claude-sonnet-4"
               aria-label={t('agentBuilder.advancedModelId', 'Advanced model ID')}
-              className={inputClass}
             />
             <span className="mt-1 block text-2xs text-text-muted">
               Use this for provider models not yet present in the catalog. The saved shape remains the existing provider/model string.
             </span>
             {showAdvancedVariant ? (
               <div className="mt-2">
-                <input
+                <Input
                   type="text"
                   value={draft.variant ?? ''}
                   readOnly={readOnly}
                   onChange={(event) => onChange({ variant: event.target.value.trim() === '' ? null : event.target.value })}
                   placeholder="reasoning"
                   aria-label={t('agentBuilder.advancedVariant', 'Advanced variant')}
-                  className={inputClass}
                 />
                 <span className="mt-1 block text-2xs text-text-muted">
                   Optional provider-specific mode for uncataloged models.
@@ -384,7 +353,7 @@ export function InferenceTab({
         )}
       </div>
       <Field label="Temperature" hint="Lower = deterministic, higher = creative. Leave blank to inherit.">
-        <input
+        <Input
           type="number"
           step="0.1"
           min="0"
@@ -397,11 +366,10 @@ export function InferenceTab({
           }}
           placeholder="0.0 - 2.0"
           aria-label={t('agentBuilder.temperature', 'Temperature')}
-          className={inputClass}
         />
       </Field>
       <Field label="Max steps" hint="Cap the agent's tool loop to prevent runaway iterations">
-        <input
+        <Input
           type="number"
           step="1"
           min="1"
@@ -413,7 +381,6 @@ export function InferenceTab({
           }}
           placeholder="20"
           aria-label={t('agentBuilder.maxSteps', 'Max steps')}
-          className={inputClass}
         />
       </Field>
     </div>
@@ -515,22 +482,7 @@ function formatModelCost(model: ProviderModelDescriptor): string | null {
 }
 
 function MetaPill({ tone, children }: { tone: 'neutral' | 'accent' | 'info'; children: ReactNode }) {
-  const color = tone === 'accent'
-    ? 'var(--color-accent)'
-    : tone === 'info'
-      ? 'var(--color-info)'
-      : 'var(--color-text-muted)'
-  return (
-    <span
-      className="rounded-full px-2 py-0.5 text-2xs font-medium"
-      style={{
-        color,
-        background: `color-mix(in srgb, ${color} 12%, transparent)`,
-      }}
-    >
-      {children}
-    </span>
-  )
+  return <Badge tone={tone}>{children}</Badge>
 }
 
 function Field({

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 import { MarkdownContent } from '../chat/MarkdownContent'
+import { Textarea } from '../ui'
 
 type Props = {
   value: string
@@ -119,7 +120,7 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
           )}
         </div>
       ) : (
-        <textarea
+        <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
           readOnly={readOnly}
@@ -127,7 +128,7 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
           placeholder={readOnly
             ? t('instructions.noInstructions', 'No instructions.')
             : t('instructions.placeholderExamples', 'Examples:\n- Summarize findings as 3 bullets plus evidence.\n- Prefer official docs over blogs.\n- Never send email; draft only.\n- Ask for approval before any external write.')}
-          className="w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
+          className="resize-y leading-relaxed"
           style={{ minHeight: 280 }}
         />
       )}
