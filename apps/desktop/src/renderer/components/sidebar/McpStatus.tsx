@@ -58,9 +58,9 @@ export function McpStatus() {
                   <Icon name={mcp.connected ? 'check' : 'circle-x'} size={16} className={mcp.connected ? 'text-green' : 'text-red'} />
                   {mcp.name}
                   {!mcp.connected && mcp.rawStatus && (
-                    <Badge tone={needsAuth ? 'warning' : 'neutral'}>
+                    <span className="text-[10px] font-medium uppercase tracking-[0.05em] text-text-muted">
                       {mcp.rawStatus.replace(/_/g, ' ')}
-                    </Badge>
+                    </span>
                   )}
                 </div>
                 {!mcp.connected && (
