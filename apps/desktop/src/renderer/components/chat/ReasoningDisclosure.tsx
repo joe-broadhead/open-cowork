@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { ReasoningSegment } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { MarkdownContent } from './MarkdownContent'
+import { Icon } from '../ui'
 
 function renderReasoningSegments(segments: ReasoningSegment[]) {
   return segments
@@ -42,20 +43,11 @@ export function ReasoningDisclosure({
         <span className="inline-flex items-center gap-2">
           <span className="font-medium">{label}</span>
         </span>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 14 14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
+        <Icon
+          name="chevron-down"
+          size={16}
           className={`shrink-0 opacity-70 transition-transform group-hover:opacity-100 ${open ? 'rotate-180' : ''}`}
-        >
-          <polyline points="3.5,5.25 7,8.75 10.5,5.25" />
-        </svg>
+        />
       </button>
       {open && (
         <div

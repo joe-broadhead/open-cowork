@@ -1,5 +1,6 @@
 import type { CompactionNotice } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { Badge, Card, Icon, type BadgeTone } from '../ui'
 
 // Describe why this compaction happened. Overflow = the context window was
 // full and the runtime had no choice. Voluntary = auto-compaction fired
@@ -24,50 +25,33 @@ function causeLabel(notice: CompactionNotice) {
 export function CompactionNoticeCard({ notice }: { notice: CompactionNotice }) {
   const isRunning = notice.status === 'compacting'
   const isOverflow = Boolean(notice.overflow)
-  const accent = isOverflow ? 'var(--color-red)' : 'var(--color-amber)'
+  // Overflow is the only forced compaction, so it earns the louder danger tone;
+  // proactive/manual compactions stay on the calmer warning tone.
+  const tone: BadgeTone = isOverflow ? 'danger' : 'warning'
+  const accentColor = isOverflow ? 'text-red' : 'text-amber'
 
   return (
-    <div
-      className="rounded-lg border px-3.5 py-2.5 flex items-start gap-2.5"
-      style={{
-        borderColor: `color-mix(in srgb, ${accent} 35%, var(--color-border))`,
-        background: `color-mix(in srgb, ${accent} 8%, transparent)`,
-      }}
-    >
-      <div className="shrink-0 pt-0.5">
-        {isRunning ? (
-          <span
-            className="inline-block w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin"
-            style={{ borderColor: accent, borderTopColor: 'transparent' }}
-          />
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={accent} strokeWidth="1.3" strokeLinecap="round">
-            <path d="M3 4.5C4.2 3.2 5.4 2.6 7 2.6c2.4 0 4.4 1.8 4.4 4.4 0 .7-.1 1.2-.4 1.8" />
-            <path d="M11 9.5C9.8 10.8 8.6 11.4 7 11.4c-2.4 0-4.4-1.8-4.4-4.4 0-.7.1-1.2.4-1.8" />
-            <polyline points="9.3,2.8 11.3,2.8 11.3,4.8" />
-            <polyline points="4.7,11.2 2.7,11.2 2.7,9.2" />
-          </svg>
-        )}
+    <Card variant="flat" padding="sm" className="flex items-start gap-2.5">
+      <div className={`shrink-0 pt-0.5 ${accentColor}`}>
+        <Icon
+          name={isRunning ? 'loader-circle' : 'rotate-ccw'}
+          size={16}
+          className={isRunning ? 'ui-spin' : undefined}
+        />
       </div>
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-2xs font-medium" style={{ color: accent }}>
+          <span className={`text-2xs font-[750] uppercase tracking-[0.06em] ${accentColor}`}>
             {notice.status === 'compacting' ? t('compaction.running', 'Compacting') : t('compaction.done', 'Compacted')}
           </span>
-          <span
-            className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full"
-            style={{
-              color: accent,
-              background: `color-mix(in srgb, ${accent} 14%, transparent)`,
-            }}
-          >
+          <Badge tone={tone} className="uppercase tracking-[0.06em]">
             {causeLabel(notice)}
-          </span>
+          </Badge>
         </div>
         <div className="text-xs text-text-secondary leading-relaxed">
           {noticeText(notice)}
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

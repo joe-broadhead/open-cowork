@@ -4,7 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
-import { IconButton } from '../ui'
+import { IconButton, Tooltip } from '../ui'
 import { DiffViewer } from './DiffViewer'
 
 // Live-placeholder messages have no server-side anchor yet; action
@@ -88,30 +88,36 @@ export function MessageActions({
             disabledReason={!message.content.trim() ? t('messageActions.noTextToCopy', 'No text to copy yet.') : null}
             size="sm"
           />
-          <IconButton
-            icon="git-fork"
-            onClick={handleFork}
-            disabled={busy !== null}
-            loading={busy === 'fork'}
-            label={t('messageActions.branchHere', 'Branch here')}
-            size="sm"
-          />
-          <IconButton
-            icon="rotate-ccw"
-            onClick={handleRevert}
-            disabled={busy !== null}
-            loading={busy === 'revert'}
-            label={t('messageActions.revertHere', 'Revert to here')}
-            size="sm"
-          />
-          {isAssistant && (
+          <Tooltip content={t('messageActions.branchHere', 'Branch here')}>
             <IconButton
-              icon="file-diff"
-              onClick={() => setDiffOpen(true)}
-              disabled={false}
-              label={t('messageActions.viewDiff', 'View diff')}
+              icon="git-fork"
+              onClick={handleFork}
+              disabled={busy !== null}
+              loading={busy === 'fork'}
+              label={t('messageActions.branchHere', 'Branch here')}
               size="sm"
             />
+          </Tooltip>
+          <Tooltip content={t('messageActions.revertHere', 'Revert to here')}>
+            <IconButton
+              icon="rotate-ccw"
+              onClick={handleRevert}
+              disabled={busy !== null}
+              loading={busy === 'revert'}
+              label={t('messageActions.revertHere', 'Revert to here')}
+              size="sm"
+            />
+          </Tooltip>
+          {isAssistant && (
+            <Tooltip content={t('messageActions.viewDiff', 'View diff')}>
+              <IconButton
+                icon="file-diff"
+                onClick={() => setDiffOpen(true)}
+                disabled={false}
+                label={t('messageActions.viewDiff', 'View diff')}
+                size="sm"
+              />
+            </Tooltip>
           )}
         </div>
       </div>
