@@ -7,13 +7,12 @@ import {
   RuntimeIcon,
 } from './agent-attribute-icons'
 import {
-  agentTone,
   computeAgentScope,
   scopeLabel,
-  scopeTone,
   type AgentScope,
 } from './agent-builder-utils'
 import type { AgentCatalog } from '@open-cowork/shared'
+import { Badge, Button, Card, type BadgeTone } from '../ui'
 
 // Roster card for the Agents page. It keeps the character-select
 // feeling through avatar, color, and compact stats, but leaves deep
@@ -52,46 +51,25 @@ function SelectionCardShell({
   onOpen,
   footer,
 }: CommonProps) {
-  const tone = agentTone(color)
   return (
-    <div
-      className="group card-hover relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
-      style={{
-        borderColor: 'var(--color-border-subtle)',
-        // `card-hover:hover` picks this up from CSS. Moving the glow
-        // off a JS onMouseEnter fixes an a11y-lint flag and drops the
-        // per-card JS work during pointer movement.
-        ['--card-hover-shadow' as string]: `0 0 0 1px ${tone}, 0 12px 28px color-mix(in srgb, ${tone} 14%, transparent)`,
-      }}
+    <Card
+      variant="surface"
+      padding="sm"
+      hover="lift"
+      className="group flex flex-col gap-0 overflow-hidden !p-0"
     >
-      {/* Top accent strip — tints the card with the agent's color. */}
-      <div
-        aria-hidden="true"
-        style={{
-          height: 3,
-          background: `linear-gradient(90deg, color-mix(in srgb, ${tone} 70%, transparent), color-mix(in srgb, ${tone} 20%, transparent))`,
-        }}
-      />
       <button
         onClick={onOpen}
         className="w-full text-start p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3">
-          {/* Avatar with halo backing */}
-          <div
-            className="relative shrink-0 rounded-2xl p-1"
-            style={{
-              background: `radial-gradient(circle at 30% 30%, color-mix(in srgb, ${tone} 24%, transparent), transparent 70%)`,
-            }}
-          >
-            <AgentAvatar name={label || name} color={color ?? undefined} src={avatar} size="lg" />
-          </div>
+          <AgentAvatar name={label || name} color={color ?? undefined} src={avatar} size="lg" className="shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <TypeChip typeLabel={typeLabel} />
               {statusNode}
             </div>
-            <div className="text-lg font-semibold text-text truncate leading-tight">
+            <div className="font-display text-role-card-title font-semibold text-text truncate leading-tight">
               {label || name}
             </div>
             <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
@@ -101,16 +79,16 @@ function SelectionCardShell({
         </div>
 
         {/* Stat chips */}
-        <div className="flex flex-wrap items-center gap-1.5 text-2xs text-text-muted">
-          <StatChip>{skillCount} skill{skillCount === 1 ? '' : 's'}</StatChip>
-          <StatChip>{toolCount} tool{toolCount === 1 ? '' : 's'}</StatChip>
-          <ScopeChip scope={scope} />
-          {modelLabel && <StatChip mono>{modelLabel}</StatChip>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone="neutral">{skillCount} skill{skillCount === 1 ? '' : 's'}</Badge>
+          <Badge tone="neutral">{toolCount} tool{toolCount === 1 ? '' : 's'}</Badge>
+          <Badge tone={scopeBadgeTone(scope)}>{scopeLabel(scope)}</Badge>
+          {modelLabel && <Badge tone="muted" className="font-mono">{modelLabel}</Badge>}
         </div>
       </button>
 
       {footer}
-    </div>
+    </Card>
   )
 }
 
@@ -149,23 +127,17 @@ export function CustomSelectionCard({
       statusNode={<EnabledStatusPill enabled={agent.enabled} valid={agent.valid} />}
       onOpen={onOpen}
       footer={
-        <div
-          className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
-          style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
-        >
-          <span>@{agent.name}</span>
-          <div className="flex items-center gap-2">
-            {onStartChat && agent.enabled && agent.valid && agent.mode === 'primary' && (
-              <button onClick={onStartChat} className="hover:text-accent cursor-pointer">{t('agentCard.startChat', 'Start chat')}</button>
-            )}
-            {onTest && agent.enabled && agent.valid && agent.mode !== 'primary' && (
-              <button onClick={onTest} className="hover:text-accent cursor-pointer">{t('agentCard.test', 'Test')}</button>
-            )}
-            <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">{t('agentCard.edit', 'Edit')}</button>
-            <button onClick={onExport} className="hover:text-text-secondary cursor-pointer" title={t('agentCard.exportTitle', 'Export this agent as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</button>
-            <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>{t('common.delete', 'Delete')}</button>
-          </div>
-        </div>
+        <CardFooter mention={agent.name}>
+          {onStartChat && agent.enabled && agent.valid && agent.mode === 'primary' && (
+            <Button variant="ghost" size="sm" onClick={onStartChat}>{t('agentCard.startChat', 'Start chat')}</Button>
+          )}
+          {onTest && agent.enabled && agent.valid && agent.mode !== 'primary' && (
+            <Button variant="ghost" size="sm" onClick={onTest}>{t('agentCard.test', 'Test')}</Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onOpen}>{t('agentCard.edit', 'Edit')}</Button>
+          <Button variant="ghost" size="sm" onClick={onExport} title={t('agentCard.exportTitle', 'Export this agent as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</Button>
+          <Button variant="ghost" size="sm" onClick={onDelete}>{t('common.delete', 'Delete')}</Button>
+        </CardFooter>
       }
     />
   )
@@ -233,127 +205,62 @@ export function RuntimeSelectionCard({
 
 // --- Sub-components ----------------------------------------------
 
+function typeChipTone(typeLabel: TypeLabel): BadgeTone {
+  return typeLabel === 'Custom' ? 'accent' : typeLabel === 'Built-in' ? 'neutral' : 'info'
+}
+
 function TypeChip({ typeLabel }: { typeLabel: TypeLabel }) {
-  const tone = typeLabel === 'Custom'
-    ? 'var(--color-accent)'
-    : typeLabel === 'Built-in'
-      ? 'var(--color-text-secondary)'
-      : 'var(--color-info)'
   const Icon = typeLabel === 'Custom'
     ? CustomIcon
     : typeLabel === 'Built-in'
       ? BuiltinIcon
       : RuntimeIcon
   return (
-    <span
-      className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        color: tone,
-        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
-      }}
-    >
+    <Badge tone={typeChipTone(typeLabel)} className="uppercase">
       <Icon size={10} />
       {typeLabel}
-    </span>
+    </Badge>
   )
 }
 
-function StatChip({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
-  return (
-    <span
-      className={`px-1.5 py-0.5 rounded-md ${mono ? 'font-mono' : ''}`}
-      style={{
-        background: 'color-mix(in srgb, var(--color-text-muted) 8%, transparent)',
-        border: '1px solid var(--color-border-subtle)',
-      }}
-    >
-      {children}
-    </span>
-  )
-}
-
-function ScopeChip({ scope }: { scope: AgentScope }) {
-  const tone = scopeTone(scope)
-  return (
-    <span
-      className="px-1.5 py-0.5 rounded-md font-medium"
-      style={{
-        color: tone,
-        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
-      }}
-    >
-      {scopeLabel(scope)}
-    </span>
-  )
+function scopeBadgeTone(scope: AgentScope): BadgeTone {
+  return scope === 'read-only' ? 'success' : scope === 'standard' ? 'info' : 'warning'
 }
 
 function EnabledStatusPill({ enabled, valid }: { enabled: boolean; valid: boolean }) {
   if (!valid) {
-    return (
-      <span
-        className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
-        style={{
-          color: 'var(--color-amber)',
-          background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
-        }}
-      >
-        Needs attention
-      </span>
-    )
+    return <Badge tone="warning" className="uppercase">Needs attention</Badge>
   }
   return (
-    <span
-      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        color: enabled ? 'var(--color-green)' : 'var(--color-text-muted)',
-        background: enabled
-          ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-          : 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-      }}
-    >
+    <Badge tone={enabled ? 'success' : 'muted'} className="uppercase">
       {enabled ? 'In chat' : 'Off'}
-    </span>
+    </Badge>
   )
 }
 
 function ModeStatusPill({ mode, disabled, hidden }: { mode: 'primary' | 'subagent'; disabled: boolean; hidden: boolean }) {
   if (disabled) return <DisabledPill />
   const label = mode === 'primary' ? 'Top-level' : hidden ? 'Internal' : 'Sub-agent'
-  return (
-    <span
-      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        color: 'var(--color-text-secondary)',
-        background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
-      }}
-    >
-      {label}
-    </span>
-  )
+  return <Badge tone="neutral" className="uppercase">{label}</Badge>
 }
 
 function DisabledPill() {
+  return <Badge tone="warning" className="uppercase">Disabled</Badge>
+}
+
+function CardFooter({ mention, children }: { mention: string; children: React.ReactNode }) {
   return (
-    <span
-      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        color: 'var(--color-text-muted)',
-        background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-      }}
-    >
-      Disabled
-    </span>
+    <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border-subtle bg-elevated/60">
+      <span className="text-2xs text-text-muted truncate">@{mention}</span>
+      <div className="flex items-center gap-1">{children}</div>
+    </div>
   )
 }
 
 function CardTestFooter({ name, onTest }: { name: string; onTest: () => void }) {
   return (
-    <div
-      className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
-      style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
-    >
-      <span>@{name}</span>
-      <button onClick={onTest} className="hover:text-accent cursor-pointer">{t('agentCard.test', 'Test')}</button>
-    </div>
+    <CardFooter mention={name}>
+      <Button variant="ghost" size="sm" onClick={onTest}>{t('agentCard.test', 'Test')}</Button>
+    </CardFooter>
   )
 }

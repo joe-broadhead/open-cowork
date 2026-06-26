@@ -10,7 +10,7 @@ import { t } from '../../helpers/i18n'
 import { AgentAvatar } from './AgentAvatar'
 import { AvatarEditor } from './AvatarEditor'
 import { PluginIcon } from '../plugins/PluginIcon'
-import { AgentCapabilityProfileView } from '../ui'
+import { AgentCapabilityProfileView, Badge, type BadgeTone } from '../ui'
 import { agentTone } from './agent-builder-utils'
 
 // Portrait card shown on the left of the builder. It stays focused on
@@ -118,13 +118,13 @@ export function AgentCard({
             )}
           </div>
           {readOnly ? (
-            <div className="text-lg font-semibold text-text truncate">{draft.name || 'New coworker'}</div>
+            <div className="font-display text-role-card-title font-semibold text-text truncate">{draft.name || 'New coworker'}</div>
           ) : (
             <input
               value={draft.name}
               onChange={(event) => onNameChange?.(event.target.value.toLowerCase())}
               placeholder={t('agentCard.idPlaceholder', 'agent-id')}
-              className="w-full text-lg font-semibold text-text bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
+              className="w-full font-display text-role-card-title font-semibold text-text bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
             />
           )}
           {readOnly ? (
@@ -292,22 +292,8 @@ function ReadinessChecklist({
 }
 
 function TypeBadge({ label }: { label: 'Custom' | 'Built-in' | 'Runtime' }) {
-  const tone = label === 'Custom'
-    ? 'var(--color-accent)'
-    : label === 'Built-in'
-      ? 'var(--color-text-secondary)'
-      : 'var(--color-info)'
-  return (
-    <span
-      className="text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
-      style={{
-        color: tone,
-        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
-      }}
-    >
-      {label}
-    </span>
-  )
+  const tone: BadgeTone = label === 'Custom' ? 'accent' : label === 'Built-in' ? 'neutral' : 'info'
+  return <Badge tone={tone} className="uppercase">{label}</Badge>
 }
 
 function EnableToggle({
