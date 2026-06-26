@@ -118,8 +118,19 @@ const icons: Record<string, (size: number) => ReactElement> = {
 export function PluginIcon({ icon, size = 40 }: { icon: string; size?: number }) {
   const renderer = icons[icon]
   if (renderer) {
+    // The branded logo stays untouched, but the tile picks up a subtle identity
+    // plate from the ancestor card's `--spine` hue (falling back to the accent
+    // when no spine is present) so branded tool cards carry their colour too.
     return (
-      <div className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
+      <div
+        className="rounded-xl flex items-center justify-center shrink-0"
+        style={{
+          width: size,
+          height: size,
+          background: 'color-mix(in srgb, var(--spine, var(--color-accent)) 14%, var(--color-elevated))',
+          border: '1px solid color-mix(in srgb, var(--spine, var(--color-accent)) 30%, var(--color-border))',
+        }}
+      >
         {renderer(size)}
       </div>
     )

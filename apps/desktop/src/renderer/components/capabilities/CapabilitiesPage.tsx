@@ -149,6 +149,13 @@ export function CapabilitiesPage({
     () => new Set(customSkills.map((entry) => entry.name)),
     [customSkills],
   )
+  const projectCount = useMemo(
+    () => [
+      ...tools.filter((tool) => tool.scope === 'project'),
+      ...skills.filter((skill) => skill.scope === 'project'),
+    ].length,
+    [skills, tools],
+  )
   const mapGroups = useMemo(
     () => buildCapabilityMapGroups(tools, skills, search),
     [search, skills, tools],
@@ -332,6 +339,15 @@ export function CapabilitiesPage({
           <Button variant="ghost" size="sm" onClick={onClose}>{t('agentsPage.backToChat', 'Back to chat')}</Button>
         </div>
 
+        <MetricRibbon
+          metrics={[
+            { label: t('capabilities.metricTools', 'Tools'), value: tools.length },
+            { label: t('capabilities.metricSkills', 'Skills'), value: skills.length },
+            { label: t('capabilities.metricCustom', 'Custom'), value: customToolIds.size + customSkillNames.size },
+            { label: t('capabilities.metricProject', 'Project'), value: projectCount },
+          ]}
+        />
+
         <div className="feature-toolbar mb-3">
           <div className="flex-1">
             <Input
@@ -373,7 +389,7 @@ export function CapabilitiesPage({
           </Button>
         </div>
         {relationshipEnabled ? null : (
-          <p className="mb-4 text-2xs text-text-muted">
+          <p className="-mt-1 mb-4 text-2xs text-text-muted">
             {t('capabilities.relationshipsDisabled', 'A relationship map of how coworkers use these tools and skills is coming soon.')}
           </p>
         )}
@@ -516,6 +532,25 @@ export function CapabilitiesPage({
           )
         )}
       </div>
+    </div>
+  )
+}
+
+// A single hairline metric ribbon: each cell is a tiny uppercase eyebrow over a
+// neutral tabular count, separated by hairline dividers. Shown on every tab so
+// the inventory totals stay visible without the old stat-card grid.
+function MetricRibbon({ metrics }: { metrics: Array<{ label: string; value: number }> }) {
+  return (
+    <div className="mb-3 flex items-stretch rounded-lg border border-border-subtle bg-elevated/40">
+      {metrics.map((metric, index) => (
+        <div
+          key={metric.label}
+          className={`flex flex-col gap-0.5 px-3.5 py-2 ${index > 0 ? 'border-l border-border-subtle' : ''}`}
+        >
+          <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-text-muted">{metric.label}</span>
+          <span className="text-md font-semibold leading-none text-text tabular-nums">{metric.value}</span>
+        </div>
+      ))}
     </div>
   )
 }

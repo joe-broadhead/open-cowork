@@ -408,9 +408,13 @@ describe('CapabilitiesPage', () => {
     const user = userEvent.setup()
     renderCapabilitiesPage()
 
-    expect(await screen.findByText('Tool and skill map')).toBeInTheDocument()
+    // The map renders as a gallery of tool cards, each with a "Depends on" rail
+    // of skill chips that surfaces the tool -> skill linkage.
+    expect((await screen.findAllByText('Depends on')).length).toBeGreaterThan(0)
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
-    expect(screen.getByText('1 linked')).toBeInTheDocument()
+    // The chart tool's one linked skill is surfaced as a rail chip whose tier
+    // section reports a single group.
+    expect(screen.getAllByText('1 group').length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: /Research Skill/ }))
     expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()

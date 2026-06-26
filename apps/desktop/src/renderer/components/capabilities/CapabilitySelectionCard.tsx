@@ -7,7 +7,7 @@ import {
   CustomIcon,
   RuntimeIcon,
 } from '../agents/agent-attribute-icons'
-import { Badge, Button, type BadgeTone } from '../ui'
+import { Badge, Button, Card, Icon, entityChroma, type BadgeTone } from '../ui'
 import type { CapabilityLinkedTool } from './capabilities-page-support.ts'
 
 // Maps the legacy `var(--color-*)` tone strings carried on chips to the
@@ -23,47 +23,53 @@ function badgeToneForCssTone(tone: string | undefined): BadgeTone {
   return 'neutral'
 }
 
-// Mirrors AgentSelectionCard's visual language so Tools and Skills feel
-// like siblings to the agent cards in the list grid: top accent strip,
-// tinted halo behind the glyph, type chip with a small icon, stat chip
-// row, and a hover ring + lift.
+// Structural TWIN of AgentSelectionCard's SelectionCardShell: a graphite
+// surface card with a hover-only 2px identity spine keyed by entityChroma,
+// a coordinated 120ms hover (border -> strong, bg -> surface-hover, no
+// translate/glow/scale), an instrument-readout meta line of tabular counts
+// separated by dots, and a reveal-on-intent footer.
+
+type MetaSegment =
+  | { kind: 'count'; value: number; label: string }
+  | { kind: 'scope'; label: string }
 
 type CardShellProps = {
+  spineSeed: string
   typeChips: Array<{ label: string; tone?: string; Icon?: (props: { size?: number }) => ReactElement }>
   glyph: ReactNode
   title: string
   description: string
-  stats: Array<{ label: string; value: string; tone?: string }>
+  meta: MetaSegment[]
   bodyExtra?: ReactNode
   footer?: ReactNode
   onOpen: () => void
 }
 
 function CapabilityCardShell({
+  spineSeed,
   typeChips,
   glyph,
   title,
   description,
-  stats,
+  meta,
   bodyExtra,
   footer,
   onOpen,
 }: CardShellProps) {
   return (
-    <div
-      className="group card-hover relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
-      style={{
-        borderColor: 'var(--color-border-subtle)',
-        // CSS-driven hover ring (see globals.css .card-hover:hover).
-        ['--card-hover-shadow' as string]: '0 0 0 1px var(--color-border)',
-      }}
+    <Card
+      variant="surface"
+      padding="sm"
+      hover="none"
+      style={{ '--spine': entityChroma(spineSeed) } as React.CSSProperties}
+      className="group relative flex flex-col gap-0 overflow-hidden !p-0 transition-colors duration-[120ms] hover:border-border-strong before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-[color-mix(in_srgb,var(--spine)_60%,transparent)] before:opacity-0 group-hover:before:opacity-100 before:transition-opacity before:duration-[120ms]"
     >
       <button
         onClick={onOpen}
-        className="w-full text-start p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
+        className="w-full text-start p-4 flex flex-col gap-3 group-hover:bg-surface-hover transition-colors duration-[120ms] cursor-pointer"
       >
         <div className="flex items-start gap-3">
-          <div className="relative shrink-0 rounded-2xl p-1">
+          <div className="relative shrink-0">
             {glyph}
           </div>
           <div className="flex-1 min-w-0">
@@ -72,7 +78,7 @@ function CapabilityCardShell({
                 <TypeChip key={chip.label} label={chip.label} tone={chip.tone} Icon={chip.Icon} />
               ))}
             </div>
-            <div className="text-lg font-semibold text-text truncate leading-tight">
+            <div className="font-display text-role-card-title font-semibold text-text truncate leading-tight">
               {title}
             </div>
             <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
@@ -81,18 +87,39 @@ function CapabilityCardShell({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 text-2xs text-text-muted">
-          {stats.map((stat) => (
-            <StatChip key={stat.label} tone={stat.tone}>
-              <span className="font-medium">{stat.value}</span>
-              <span className="ms-1">{stat.label}</span>
-            </StatChip>
-          ))}
-        </div>
+        <MetaLine meta={meta} spineSeed={spineSeed} />
         {bodyExtra}
       </button>
 
       {footer}
+    </Card>
+  )
+}
+
+// Instrument-readout meta line — tabular counts and a single scope dot, dot
+// separators, no pill chrome. Mirrors AgentSelectionCard's meta line.
+function MetaLine({ meta, spineSeed }: { meta: MetaSegment[]; spineSeed: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-2xs text-text-muted">
+      {meta.map((segment, index) => (
+        <span key={`${segment.kind}:${segment.label}:${index}`} className="inline-flex items-center gap-2">
+          {index > 0 ? <span className="text-text-muted/60" aria-hidden>·</span> : null}
+          {segment.kind === 'count' ? (
+            <span className="tabular">
+              <span className="text-text-secondary font-[560]">{segment.value}</span> {segment.label}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <span
+                className="w-[6px] h-[6px] rounded-full shrink-0"
+                style={{ background: entityChroma(spineSeed) }}
+                aria-hidden
+              />
+              {segment.label}
+            </span>
+          )}
+        </span>
+      ))}
     </div>
   )
 }
@@ -100,7 +127,7 @@ function CapabilityCardShell({
 function TypeChip({
   label,
   tone = 'var(--color-text-secondary)',
-  Icon,
+  Icon: ChipIcon,
 }: {
   label: string
   tone?: string
@@ -108,16 +135,8 @@ function TypeChip({
 }) {
   return (
     <Badge tone={badgeToneForCssTone(tone)} className="inline-flex items-center gap-1">
-      {Icon ? <Icon size={10} /> : null}
+      {ChipIcon ? <ChipIcon size={10} /> : null}
       {label}
-    </Badge>
-  )
-}
-
-function StatChip({ children, tone }: { children: ReactNode; tone?: string }) {
-  return (
-    <Badge tone={tone ? badgeToneForCssTone(tone) : 'muted'}>
-      {children}
     </Badge>
   )
 }
@@ -148,41 +167,28 @@ export function ToolSelectionCard({
       Icon: CustomIcon,
     })
   }
+  const meta: MetaSegment[] = [
+    { kind: 'count', value: methodsCount, label: methodsCount === 1 ? 'method' : 'methods' },
+    { kind: 'count', value: tool.agentNames.length, label: tool.agentNames.length === 1 ? 'coworker' : 'coworkers' },
+  ]
+  if (linkedSkills.length > 0) {
+    meta.push({ kind: 'count', value: linkedSkills.length, label: linkedSkills.length === 1 ? 'skill' : 'skills' })
+  }
+  if (tool.scope) {
+    meta.push({ kind: 'scope', label: tool.scope === 'project' ? 'Project' : 'Machine' })
+  }
   return (
     <CapabilityCardShell
+      spineSeed={tool.name || tool.id}
       typeChips={[originChip, ...extraChips]}
       glyph={<PluginIcon icon={tool.icon || tool.namespace || tool.id} size={44} />}
       title={tool.name}
       description={tool.description}
-      stats={[
-        { label: methodsCount === 1 ? 'method' : 'methods', value: String(methodsCount) },
-        { label: tool.agentNames.length === 1 ? 'coworker' : 'coworkers', value: String(tool.agentNames.length) },
-        ...(linkedSkills.length > 0 ? [{ label: linkedSkills.length === 1 ? 'skill' : 'skills', value: String(linkedSkills.length) }] : []),
-        ...(tool.scope ? [{ label: tool.scope === 'project' ? 'Project' : 'Machine', value: '' }] : []),
-      ].filter((entry) => entry.label !== '' || entry.value !== '')}
+      meta={meta}
       bodyExtra={linkedSkills.length > 0 ? <LinkedSkillPills skills={linkedSkills} /> : undefined}
       footer={
         isCustom && onRemove ? (
-          <div
-            className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
-            style={{
-              borderColor: 'var(--color-border-subtle)',
-              background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)',
-            }}
-          >
-            <span className="truncate">{tool.namespace || tool.id}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(event) => {
-                event.stopPropagation()
-                onRemove()
-              }}
-              className="shrink-0"
-            >
-              Remove
-            </Button>
-          </div>
+          <CardRemoveFooter mention={tool.namespace || tool.id} onRemove={onRemove} />
         ) : null
       }
       onOpen={onOpen}
@@ -224,57 +230,61 @@ export function SkillSelectionCard({
       ? { label: 'Custom', tone: 'var(--color-text-secondary)', Icon: CustomIcon }
       : { label: 'Built-in', tone: 'var(--color-text-secondary)', Icon: BreadthIcon },
   ]
-  if (skill.scope) {
-    chips.push({
-      label: skill.scope === 'project' ? 'Project' : 'Machine',
-      tone: 'var(--color-text-muted)',
-    })
-  }
   const toolCount = (skill.toolIds || []).length
+  const meta: MetaSegment[] = [
+    { kind: 'count', value: toolCount, label: toolCount === 1 ? 'tool' : 'tools' },
+    { kind: 'count', value: skill.agentNames.length, label: skill.agentNames.length === 1 ? 'coworker' : 'coworkers' },
+  ]
+  if (skill.scope) {
+    meta.push({ kind: 'scope', label: skill.scope === 'project' ? 'Project' : 'Machine' })
+  }
   return (
     <CapabilityCardShell
+      spineSeed={skill.label || skill.name}
       typeChips={chips}
       glyph={
         <div
-          className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0 text-text-secondary"
-          style={{ width: 44, height: 44 }}
+          className="entity-tile rounded-xl flex items-center justify-center shrink-0"
+          style={{ width: 44, height: 44, '--entity-chroma': entityChroma(skill.label || skill.name) } as React.CSSProperties}
+          aria-hidden="true"
         >
-          <BreadthIcon size={22} />
+          <Icon name="sparkles" size={20} />
         </div>
       }
       title={skill.label}
       description={skill.description}
-      stats={[
-        { label: toolCount === 1 ? 'tool' : 'tools', value: String(toolCount) },
-        { label: skill.agentNames.length === 1 ? 'coworker' : 'coworkers', value: String(skill.agentNames.length) },
-      ]}
+      meta={meta}
       bodyExtra={linkedTools.length > 0 ? <LinkedToolPills tools={linkedTools} /> : undefined}
       footer={
         isCustom && onRemove ? (
-          <div
-            className="flex items-center justify-between px-4 py-2 border-t text-2xs text-text-muted"
-            style={{
-              borderColor: 'var(--color-border-subtle)',
-              background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)',
-            }}
-          >
-            <span className="truncate">{skill.name}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(event) => {
-                event.stopPropagation()
-                onRemove()
-              }}
-              className="shrink-0"
-            >
-              Remove
-            </Button>
-          </div>
+          <CardRemoveFooter mention={skill.name} onRemove={onRemove} />
         ) : null
       }
       onOpen={onOpen}
     />
+  )
+}
+
+// Footer remove action reveals on intent — a calm resting card, the affordance
+// arrives when reached for. The identity mention stays always visible.
+function CardRemoveFooter({ mention, onRemove }: { mention: string; onRemove: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-4 py-1.5 border-t border-border-subtle bg-elevated/60">
+      <span className="text-2xs text-text-muted truncate">{mention}</span>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemove()
+          }}
+          className="shrink-0"
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
   )
 }
 
