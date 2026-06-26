@@ -125,19 +125,33 @@ function checkStatus(checkId: string, snapshot: HealthSnapshot): SetupHealthStat
   return 'unknown'
 }
 
+function statusDotClass(tone: BadgeTone): string {
+  return tone === 'success'
+    ? 'status-dot--ok'
+    : tone === 'warning'
+      ? 'status-dot--warn'
+      : tone === 'info'
+        ? 'status-dot--info'
+        : tone === 'danger'
+          ? 'status-dot--error'
+          : 'status-dot--idle'
+}
+
 function StatusPill({ status }: { status: SetupHealthStatus | WorkspaceInfo['status'] }) {
   return (
-    <Badge tone={statusBadgeTone(status)} className="shrink-0 capitalize">
+    <span className="inline-flex items-center gap-1.5 shrink-0 text-2xs text-text-secondary capitalize">
+      <span className={`status-dot ${statusDotClass(statusBadgeTone(status))}`} aria-hidden />
       {statusLabel(status)}
-    </Badge>
+    </span>
   )
 }
 
 function CapabilityPill({ status }: { status: RuntimeCapabilityStatus }) {
   return (
-    <Badge tone={capabilityBadgeTone(status)} className="shrink-0 capitalize">
+    <span className="inline-flex items-center gap-1.5 shrink-0 text-2xs text-text-secondary capitalize">
+      <span className={`status-dot ${statusDotClass(capabilityBadgeTone(status))}`} aria-hidden />
       {status.replace(/-/g, ' ')}
-    </Badge>
+    </span>
   )
 }
 

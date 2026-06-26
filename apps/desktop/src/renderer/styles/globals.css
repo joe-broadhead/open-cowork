@@ -2212,12 +2212,31 @@ body {
   width: 24px;
   height: 24px;
   border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  line-height: 1;
+}
+
+/* The motion/alert icon badge keeps the accent fill — it's an icon, not identity. */
+.home-motion-icon {
   background: linear-gradient(150deg, color-mix(in srgb, var(--color-accent) 72%, var(--color-elevated)), color-mix(in srgb, var(--color-accent-2) 56%, var(--color-elevated)));
   color: var(--color-accent-foreground);
-  font-size: var(--text-2xs);
-  font-weight: 850;
-  line-height: 1;
+  font-weight: 600;
   box-shadow: var(--specular);
+}
+
+/* Coworker identity tiles — same opaque graphite-darkened recipe as AgentAvatar
+   (accent default, since these chrome avatars carry no per-agent colour). */
+.home-assign-avatar,
+.home-team-avatar {
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--color-accent) 90%, var(--color-base)) 0%,
+    color-mix(in srgb, var(--color-accent) 62%, var(--color-base)) 100%);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  color: var(--color-text);
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  text-shadow: 0 1px 1px rgba(12, 13, 15, 0.45);
 }
 
 .home-assign-menu {
@@ -3006,6 +3025,34 @@ body {
 @keyframes mcp-heartbeat {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-green) 45%, transparent); }
   70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-green) 0%, transparent); }
+}
+
+/* Inline status dot — the general semantic indicator (health/run/workspace state)
+   that replaces filled status pills and colour-coded status glyphs everywhere.
+   A 7px dot with a soft ring; "live" breathes (reusing the heartbeat), the rest
+   are static. Pair with a neutral text label. */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}
+.status-dot--live {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  animation: mcp-heartbeat 2s var(--ease-out) infinite;
+}
+.status-dot--ok { background: var(--color-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent); }
+.status-dot--warn { background: var(--color-amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-amber) 18%, transparent); }
+.status-dot--error { background: var(--color-red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 18%, transparent); }
+.status-dot--info { background: var(--color-info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-info) 16%, transparent); }
+.status-dot--idle { background: var(--color-text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--live {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  }
 }
 
 /* Tabular settle — a changing count does a 1px flight-board flip so motion always

@@ -29,7 +29,7 @@ import {
   selectAgentRunVisibleTasks,
   writeAgentRunFilterState,
 } from './agent-run-filter-model'
-import { Badge, Button, Card, EmptyState, Select } from '../ui'
+import { Button, Card, EmptyState, Select } from '../ui'
 
 // Swim-lane block that renders delegated OpenCode tasks as a compact
 // timeline. Nested sub-agent delegations render as indented child lanes.
@@ -207,20 +207,14 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
         className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover transition-colors cursor-pointer text-start"
         aria-expanded={expanded}
       >
-        <Badge
-          tone={anyRunning ? 'accent' : allComplete ? 'success' : anyErrored ? 'danger' : 'neutral'}
-          className="shrink-0 uppercase tracking-[0.08em] font-semibold"
-        >
-          {headerLabel}
-        </Badge>
+        <span className="inline-flex items-center gap-2 shrink-0">
+          <span
+            className={`status-dot ${anyRunning ? 'status-dot--live' : allComplete ? 'status-dot--ok' : anyErrored ? 'status-dot--error' : 'status-dot--idle'}`}
+            aria-hidden
+          />
+          <span className="text-2xs uppercase tracking-[0.08em] font-[560] text-text-secondary">{headerLabel}</span>
+        </span>
         <span className="text-xs text-text-secondary flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-          {anyRunning ? (
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
-              style={{ background: 'var(--color-accent)', animation: 'ui-status-pulse 1.7s var(--ease-out) infinite' }}
-              aria-hidden="true"
-            />
-          ) : null}
           <span>{taskSummary}</span>
           {runningStatusNote && (
             <>
