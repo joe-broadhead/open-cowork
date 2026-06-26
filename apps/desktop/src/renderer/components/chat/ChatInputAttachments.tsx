@@ -20,12 +20,12 @@ export function ChatInputAttachments({ attachments, onRemove }: ChatInputAttachm
               className="chat-attachment-preview h-20 rounded-xl object-cover border border-border"
             />
           ) : (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-elevated text-2xs">
-              <Icon name="file" size={16} className="text-text-muted" />
+            <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-border-subtle bg-surface text-2xs">
+              <Icon name="file" size={16} className="text-text-muted shrink-0" />
               <span className="chat-attachment-name text-text-secondary truncate">
                 {attachment.filename}
               </span>
-              <span className="text-text-muted">{attachment.mime.split('/')[1]}</span>
+              <span className="text-text-muted shrink-0">{attachment.mime.split('/')[1]}</span>
             </div>
           )}
           <IconButton

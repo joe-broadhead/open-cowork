@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { compactDescription } from './chat-input-utils'
 import type { InlinePickerState, MentionableAgent } from './chat-input-types'
+import { Badge, Card } from '../ui'
 
 type ChatInputInlinePickerProps = {
   picker: InlinePickerState | null
@@ -34,7 +35,7 @@ export function ChatInputInlinePicker({
   return (
     <div
       ref={pickerRef}
-      className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden flex flex-col"
+      className="chat-menu-panel fixed z-50 flex flex-col"
       style={{
         width: inlineMenuWidth,
         maxHeight: Math.max(120, top - 24),
@@ -46,47 +47,31 @@ export function ChatInputInlinePicker({
           ),
         ),
         bottom: bottomOffset,
-        background: 'color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%)',
-        borderColor: 'var(--color-border)',
       }}
     >
-      <div
-        className="shrink-0 px-3 py-2 text-2xs font-semibold uppercase tracking-[0.08em] border-b"
-        style={{
-          color: 'var(--color-text-muted)',
-          borderColor: 'var(--color-border-subtle)',
-          background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-text) 12%)',
-        }}
-      >
+      <div className="chat-menu-header">
         Coworkers
       </div>
-      <div className="overflow-y-auto flex-1">
+      <div className="overflow-y-auto flex-1 py-1">
       {suggestions.map((item, index) => (
-        <button
+        <Card
+          interactive
+          padding="sm"
           key={`agent:${item.id}`}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(item)}
-          className="w-full px-3 py-2 text-start transition-colors cursor-pointer"
-          style={{
-            background: index === picker.selectedIndex ? 'var(--color-surface-hover)' : 'transparent',
-          }}
+          data-highlighted={index === picker.selectedIndex || undefined}
+          className="chat-menu-option flex-col items-stretch text-start"
         >
-          <div className="flex items-center gap-2">
-            <span
-              className="px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-[0.06em] border"
-              style={{
-                background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
-                color: 'var(--color-text-secondary)',
-                borderColor: 'var(--color-border)',
-              }}
-            >
+          <span className="flex items-center gap-2">
+            <Badge tone="muted" className="shrink-0 uppercase tracking-[0.06em]">
               Agent
-            </span>
-            <span className="text-2xs font-medium text-text-secondary">{item.label}</span>
-            <span className="text-2xs text-text-muted font-mono">@{item.id}</span>
-          </div>
-          <div className="mt-1 text-2xs text-text-muted">{compactDescription(item.description, 72)}</div>
-        </button>
+            </Badge>
+            <span className="text-2xs font-medium text-text-secondary truncate">{item.label}</span>
+            <span className="text-2xs text-text-muted font-mono shrink-0">@{item.id}</span>
+          </span>
+          <span className="mt-1 text-2xs text-text-muted">{compactDescription(item.description, 72)}</span>
+        </Card>
       ))}
       {suggestions.length === 0 ? (
         <div className="px-3 py-3 text-2xs text-text-muted">

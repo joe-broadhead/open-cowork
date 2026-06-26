@@ -121,13 +121,10 @@ export function ChatInputToolbar({
         ) : null}
 
         {currentDirectory ? (
-          <span
-            className="chat-current-directory px-2 py-1 rounded-lg text-2xs text-text-muted flex items-center gap-1 truncate"
-            title={currentDirectory}
-          >
+          <Badge tone="muted" className="chat-current-directory min-w-0" title={currentDirectory}>
             <Icon name="folder" size={16} className="shrink-0" />
-            {currentDirectory.split('/').pop()}
-          </span>
+            <span className="truncate">{currentDirectory.split('/').pop()}</span>
+          </Badge>
         ) : null}
 
         <Button
