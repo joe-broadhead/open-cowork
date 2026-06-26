@@ -1744,8 +1744,8 @@ body {
 }
 
 .ui-badge--warning {
-  background: color-mix(in srgb, var(--color-amber) 14%, transparent);
-  border-color: color-mix(in srgb, var(--color-amber) 34%, transparent);
+  background: color-mix(in srgb, var(--color-amber) 11%, transparent);
+  border-color: color-mix(in srgb, var(--color-amber) 26%, transparent);
   color: var(--color-amber);
 }
 
@@ -3011,7 +3011,7 @@ body {
 
 /* Remove default focus outlines — use custom focus styles where needed */
 *:focus { outline: none; }
-*:focus-visible { outline: 1px solid var(--color-accent); outline-offset: -1px; border-radius: 4px; }
+*:focus-visible { outline: 1px solid color-mix(in srgb, var(--color-accent) 58%, transparent); outline-offset: -1px; }
 /* Opt-out for surfaces that own their own focus affordance. The Home
    composer, for instance, is a decorated container whose wrapper is
    the visual target — the global accent outline on the inner textarea

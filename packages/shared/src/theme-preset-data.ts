@@ -245,7 +245,7 @@ const UI_THEME_PRESET_SEEDS = {
       accent: '#7c8cf8',
       accentHover: '#9aa6fb',
       green: '#7fcfa0',
-      amber: '#fcb07a',
+      amber: '#e6b677',
       red: '#fc92b4',
       info: '#82cadc',
       accentForeground: '#0f0f18',
