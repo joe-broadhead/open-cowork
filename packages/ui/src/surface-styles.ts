@@ -126,10 +126,8 @@ export function artifactsSurfaceCss(): string {
       height: var(--control-h-lg);
       align-items: center;
       justify-content: center;
-      border: var(--border-width-1) solid color-mix(in srgb, var(--color-accent) 32%, var(--color-border) 68%);
       border-radius: var(--radius-md);
-      background: color-mix(in srgb, var(--color-accent) 14%, var(--color-elevated) 86%);
-      color: var(--accent-text);
+      /* Paint comes from the co-applied .entity-tile (per-artifact identity chroma). */
     }
     .studio-artifact-card__title {
       min-width: 0;
@@ -444,14 +442,9 @@ export function wikiSurfaceCss(): string {
       text-transform: uppercase;
     }
     .studio-wiki-space h3 span {
-      display: inline-flex;
       width: var(--space-5);
       height: var(--space-5);
-      align-items: center;
-      justify-content: center;
       border-radius: var(--radius-sm);
-      background: var(--accent-action-fill);
-      color: var(--accent-action-foreground);
     }
     .studio-wiki-rail .studio-wiki-space__meta {
       flex-direction: row;
@@ -733,10 +726,8 @@ export function channelsSurfaceCss(): string {
   height: var(--control-h-md);
   align-items: center;
   justify-content: center;
-  border: var(--border-width-1) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: var(--accent-action-fill);
-  color: var(--accent-action-foreground);
+  /* Paint comes from the co-applied .entity-tile (per-provider identity chroma). */
 }
 
 .studio-channel-grid {
@@ -1819,6 +1810,37 @@ export function primitivesSurfaceCss(): string {
 .studio-status-dot--error { background: var(--color-red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 18%, transparent); }
 .studio-status-dot--info { background: var(--color-info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-info) 16%, transparent); }
 .studio-status-dot--idle { background: var(--color-text-muted); }
+
+/* Entity identity tile — the "gallery" treatment for non-agent entities (tools,
+   skills, channels, spaces, artifacts, playbooks). Same opaque graphite-darkened
+   chroma recipe as the agent avatars; the hue comes from --entity-chroma
+   (entityChroma(seed)), the glyph sits in light ink on the saturated tile. */
+.entity-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--color-text);
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 88%, var(--color-base)) 0%,
+    color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 58%, var(--color-base)) 100%);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 45%, transparent);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  transition: border-color var(--dur-1) var(--ease-out);
+}
+
+/* When the entity-tile recipe lands on an icon container that already carries its
+   own flat/tone tile (e.g. the object-card lead icon), re-assert the chroma tile
+   at higher specificity so the gallery hue wins regardless of stylesheet order. */
+.studio-object-card__icon.entity-tile {
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 88%, var(--color-base)) 0%,
+    color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 58%, var(--color-base)) 100%);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 45%, transparent);
+  color: var(--color-text);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+}
+
 .studio-status-dot--live {
   background: var(--color-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);

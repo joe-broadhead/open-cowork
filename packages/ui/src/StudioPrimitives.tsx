@@ -11,7 +11,7 @@ import { Button, type ButtonProps } from './Button.js'
 import { Card } from './Card.js'
 import { Icon, type IconName } from './Icon.js'
 import { knowledgeSpaceHue } from './knowledge-hues.js'
-import { cn } from './utils.js'
+import { cn, entityChroma } from './utils.js'
 
 export type StudioTone = 'lead' | 'strategist' | 'builder' | 'reviewer' | 'operator' | 'neutral'
 export type StudioStatusTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
@@ -1157,7 +1157,7 @@ export function WikiSpaceRail({ spaces, activePageId, reviewAction, viewToggle, 
         {spaces.map((space, spaceIndex) => (
           <section key={space.id} className="studio-wiki-space" aria-labelledby={`studio-wiki-space-${space.id}`}>
             <h3 id={`studio-wiki-space-${space.id}`}>
-              <span aria-hidden="true" style={{ background: knowledgeSpaceHue(spaceIndex) }}>{space.icon ? <Icon name={space.icon} size={16} /> : null}</span>
+              <span aria-hidden="true" className="entity-tile" style={{ '--entity-chroma': knowledgeSpaceHue(spaceIndex) } as CSSProperties}>{space.icon ? <Icon name={space.icon} size={16} /> : null}</span>
               {space.name}
             </h3>
             {space.visibility || space.role ? (
@@ -1256,7 +1256,7 @@ function StudioObjectCard({
 }: StudioObjectCardProps & { defaultIcon: IconName; footer?: ReactNode }) {
   return (
     <Card {...props} className={cn('studio-object-card', className)}>
-      <div className="studio-object-card__icon" aria-hidden="true">
+      <div className="studio-object-card__icon entity-tile" aria-hidden="true" style={{ '--entity-chroma': entityChroma(title) } as CSSProperties}>
         <Icon name={icon || defaultIcon} size={20} />
       </div>
       <div className="studio-object-card__copy">

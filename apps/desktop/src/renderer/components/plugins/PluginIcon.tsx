@@ -1,4 +1,5 @@
-import type { ReactElement } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
+import { entityChroma } from '../ui'
 
 const icons: Record<string, (size: number) => ReactElement> = {
   google: (s) => (
@@ -124,7 +125,10 @@ export function PluginIcon({ icon, size = 40 }: { icon: string; size?: number })
     )
   }
   return (
-    <div className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0 text-text-secondary" style={{ width: size, height: size, fontSize: size * 0.4 }}>
+    <div
+      className="entity-tile rounded-xl flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.4, '--entity-chroma': entityChroma(icon) } as CSSProperties}
+    >
       {icon.length <= 2 ? icon : icon[0]!.toUpperCase()}
     </div>
   )

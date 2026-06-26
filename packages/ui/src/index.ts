@@ -109,7 +109,7 @@ export {
 } from './StudioPrimitives.js'
 export { Tooltip, type TooltipProps } from './Tooltip.js'
 export { WorkbenchLayout, type WorkbenchLayoutProps } from './WorkbenchLayout.js'
-export { cn, nextEnabledIndex } from './utils.js'
+export { cn, entityChroma, nextEnabledIndex } from './utils.js'
 export {
   Toaster,
   toast,

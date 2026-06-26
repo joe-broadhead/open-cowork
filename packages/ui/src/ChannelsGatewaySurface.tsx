@@ -1,5 +1,6 @@
 import {
   type ComponentPropsWithoutRef,
+  type CSSProperties,
   type FormEvent,
   useMemo,
   useState,
@@ -27,7 +28,7 @@ import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Icon } from './Icon.js'
 import { CoworkerAvatar, StudioPageHeader, StudioStatusDot, type StudioStatusTone } from './StudioPrimitives.js'
-import { cn } from './utils.js'
+import { cn, entityChroma } from './utils.js'
 
 const DISPLAY_PROVIDER_ORDER: ChannelProviderKind[] = [
   'whatsapp',
@@ -292,7 +293,11 @@ function ConnectedChannels({
       {visible.map((binding) => (
         <article className="studio-channel-card" key={binding.bindingId}>
           <div className="studio-channel-card__head">
-            <span className="studio-channel-card__icon" aria-hidden="true">
+            <span
+              className="studio-channel-card__icon entity-tile"
+              style={{ '--entity-chroma': entityChroma(providerKind(binding.provider) || binding.provider) } as CSSProperties}
+              aria-hidden="true"
+            >
               <Icon name="radio" size={16} />
             </span>
             <div>
@@ -354,7 +359,11 @@ function ProviderGrid({
         return (
           <article className="studio-channel-card studio-channel-card--provider" key={provider.provider}>
             <div className="studio-channel-card__head">
-              <span className="studio-channel-card__icon" aria-hidden="true">
+              <span
+                className="studio-channel-card__icon entity-tile"
+                style={{ '--entity-chroma': entityChroma(provider.provider) } as CSSProperties}
+                aria-hidden="true"
+              >
                 <Icon name={connected ? 'badge-check' : setupInProgress ? 'loader-circle' : 'plus'} size={16} />
               </span>
               <div>

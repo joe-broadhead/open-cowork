@@ -3,7 +3,7 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { Badge, Button, Card, EmptyState, Skeleton, StudioPageHeader, type BadgeTone } from '../ui'
+import { Badge, Button, Card, EmptyState, Icon, Skeleton, StudioPageHeader, entityChroma, type BadgeTone } from '../ui'
 
 type Props = {
   onOpenThread: (sessionId: string) => void
@@ -282,7 +282,15 @@ export function WorkflowsPage({ onOpenThread }: Props) {
             {activeWorkflows.map((workflow) => (
               <Card key={workflow.id} variant="surface">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div
+                      className="entity-tile h-9 w-9 rounded-lg"
+                      style={{ '--entity-chroma': entityChroma(workflow.id || workflow.title) } as React.CSSProperties}
+                      aria-hidden="true"
+                    >
+                      <Icon name="workflow" size={20} />
+                    </div>
+                    <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="min-w-0 font-display text-role-card-title font-bold text-primary">{workflow.title}</h2>
                       <Badge tone={statusTone(workflow.status)} className="capitalize">
@@ -292,6 +300,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-secondary">{workflow.instructions}</p>
                     <div className="mt-3 text-xs font-medium text-muted">
                       {t('workflows.runsAs', 'Runs as')} {workflow.agentName || 'build'} <span aria-hidden="true">·</span> {t('workflows.lastRun', 'last run')} {workflowLastRunLabel(workflow)}
+                    </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">

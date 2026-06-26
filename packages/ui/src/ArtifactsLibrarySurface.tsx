@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type ComponentPropsWithoutRef } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type ComponentPropsWithoutRef, type CSSProperties } from 'react'
 import {
   type ArtifactIndexEntry,
   type ArtifactKind,
@@ -9,7 +9,7 @@ import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Icon, type IconName } from './Icon.js'
 import { Input } from './Input.js'
-import { cn } from './utils.js'
+import { cn, entityChroma } from './utils.js'
 
 type ArtifactFilter = 'all' | ArtifactKind | ArtifactStatus
 type ArtifactActionAvailability = boolean | ((artifact: ArtifactIndexEntry) => boolean)
@@ -217,7 +217,11 @@ function ArtifactLibraryCard({
   return (
     <article className="studio-artifact-card artifact-card" data-kind={kind} data-status={status} data-session-id={artifact.sessionId}>
       <div className="studio-artifact-card__head">
-        <span className="studio-artifact-card__icon" aria-hidden="true">
+        <span
+          className="studio-artifact-card__icon entity-tile"
+          style={{ '--entity-chroma': entityChroma(`${kind}:${artifact.filename}`) } as CSSProperties}
+          aria-hidden="true"
+        >
           <Icon name={KIND_ICONS[kind] || 'file'} size={20} />
         </span>
         <div className="studio-artifact-card__title">

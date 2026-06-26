@@ -22,6 +22,7 @@ export { Menu, Select, type MenuItem, type MenuProps, type SelectOption, type Se
 export { SegmentedControl, type SegmentedControlOption, type SegmentedControlProps } from '@open-cowork/ui'
 export { Skeleton, type SkeletonProps } from '@open-cowork/ui'
 export { Switch, type SwitchProps } from '@open-cowork/ui'
+export { entityChroma } from '@open-cowork/ui'
 export {
   ApprovalCard,
   ArtifactCard,
