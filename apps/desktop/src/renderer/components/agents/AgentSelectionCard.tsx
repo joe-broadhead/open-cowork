@@ -7,12 +7,14 @@ import {
   RuntimeIcon,
 } from './agent-attribute-icons'
 import {
+  agentChroma,
   computeAgentScope,
   scopeLabel,
+  scopeTone,
   type AgentScope,
 } from './agent-builder-utils'
 import type { AgentCatalog } from '@open-cowork/shared'
-import { Badge, Button, Card, type BadgeTone } from '../ui'
+import { Badge, Button, Card } from '../ui'
 
 // Roster card for the Agents page. It keeps the character-select
 // feeling through avatar, color, and compact stats, but leaves deep
@@ -55,12 +57,13 @@ function SelectionCardShell({
     <Card
       variant="surface"
       padding="sm"
-      hover="lift"
-      className="group flex flex-col gap-0 overflow-hidden !p-0"
+      hover="none"
+      style={{ '--spine': agentChroma(color) } as React.CSSProperties}
+      className="group relative flex flex-col gap-0 overflow-hidden !p-0 transition-colors duration-[120ms] hover:border-border-strong before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-[color-mix(in_srgb,var(--spine)_60%,transparent)] before:opacity-0 group-hover:before:opacity-100 before:transition-opacity before:duration-[120ms]"
     >
       <button
         onClick={onOpen}
-        className="w-full text-start p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
+        className="w-full text-start p-4 flex flex-col gap-3 group-hover:bg-surface-hover transition-colors duration-[120ms] cursor-pointer"
       >
         <div className="flex items-start gap-3">
           <AgentAvatar name={label || name} color={color ?? undefined} src={avatar} size="lg" className="shrink-0" />
@@ -78,12 +81,27 @@ function SelectionCardShell({
           </div>
         </div>
 
-        {/* Stat chips */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone="neutral">{skillCount} skill{skillCount === 1 ? '' : 's'}</Badge>
-          <Badge tone="neutral">{toolCount} tool{toolCount === 1 ? '' : 's'}</Badge>
-          <Badge tone={scopeBadgeTone(scope)}>{scopeLabel(scope)}</Badge>
-          {modelLabel && <Badge tone="muted" className="font-mono">{modelLabel}</Badge>}
+        {/* Instrument-readout meta line — tabular counts + a single scope dot, no
+            pill chrome. The one colour here is a 6px scope dot. */}
+        <div className="flex items-center gap-2 text-2xs text-text-muted">
+          <span className="tabular">
+            <span className="text-text-secondary font-[560]">{skillCount}</span> skill{skillCount === 1 ? '' : 's'}
+          </span>
+          <span className="text-text-muted/60" aria-hidden>·</span>
+          <span className="tabular">
+            <span className="text-text-secondary font-[560]">{toolCount}</span> tool{toolCount === 1 ? '' : 's'}
+          </span>
+          <span className="text-text-muted/60" aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: scopeTone(scope) }} aria-hidden />
+            {scopeLabel(scope)}
+          </span>
+          {modelLabel && (
+            <>
+              <span className="text-text-muted/60" aria-hidden>·</span>
+              <span className="font-mono truncate">{modelLabel}</span>
+            </>
+          )}
         </div>
       </button>
 
@@ -205,54 +223,70 @@ export function RuntimeSelectionCard({
 
 // --- Sub-components ----------------------------------------------
 
-function typeChipTone(typeLabel: TypeLabel): BadgeTone {
-  return typeLabel === 'Custom' ? 'accent' : typeLabel === 'Built-in' ? 'neutral' : 'info'
-}
-
+// Type is structural metadata, not colour — one mono-outline recipe, differentiated
+// only by its glyph.
 function TypeChip({ typeLabel }: { typeLabel: TypeLabel }) {
-  const Icon = typeLabel === 'Custom'
+  const ChipIcon = typeLabel === 'Custom'
     ? CustomIcon
     : typeLabel === 'Built-in'
       ? BuiltinIcon
       : RuntimeIcon
   return (
-    <Badge tone={typeChipTone(typeLabel)} className="uppercase">
-      <Icon size={10} />
+    <span className="inline-flex items-center gap-1 rounded-full border border-border px-1.5 py-px text-2xs uppercase tracking-[0.06em] text-text-muted">
+      <ChipIcon size={10} />
       {typeLabel}
-    </Badge>
+    </span>
   )
 }
 
-function scopeBadgeTone(scope: AgentScope): BadgeTone {
-  return scope === 'read-only' ? 'success' : scope === 'standard' ? 'info' : 'warning'
+// Dot + label — the mono replacement for filled status pills. Colour touches only
+// the 6px dot, never a fill.
+function StatusDotLabel({ color = 'var(--color-text-muted)', label }: { color?: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.06em] text-text-muted">
+      <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: color }} aria-hidden />
+      {label}
+    </span>
+  )
 }
 
 function EnabledStatusPill({ enabled, valid }: { enabled: boolean; valid: boolean }) {
+  // An alert that SHOULD catch the eye keeps its tonal chip.
   if (!valid) {
     return <Badge tone="warning" className="uppercase">Needs attention</Badge>
   }
-  return (
-    <Badge tone={enabled ? 'success' : 'muted'} className="uppercase">
-      {enabled ? 'In chat' : 'Off'}
-    </Badge>
-  )
+  // "In chat" is the ONE accent moment on the card: this coworker is live with you.
+  if (enabled) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full px-1.5 py-px text-2xs uppercase tracking-[0.06em] text-accent"
+        style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' }}
+      >
+        <span className="w-[5px] h-[5px] rounded-full shrink-0" style={{ background: 'var(--color-accent)' }} aria-hidden />
+        In chat
+      </span>
+    )
+  }
+  return <StatusDotLabel label="Off" />
 }
 
 function ModeStatusPill({ mode, disabled, hidden }: { mode: 'primary' | 'subagent'; disabled: boolean; hidden: boolean }) {
   if (disabled) return <DisabledPill />
   const label = mode === 'primary' ? 'Top-level' : hidden ? 'Internal' : 'Sub-agent'
-  return <Badge tone="neutral" className="uppercase">{label}</Badge>
+  return <StatusDotLabel label={label} />
 }
 
 function DisabledPill() {
-  return <Badge tone="warning" className="uppercase">Disabled</Badge>
+  return <StatusDotLabel color="var(--color-amber)" label="Disabled" />
 }
 
+// Footer actions reveal on intent — a calm resting card, affordances arrive when
+// you reach for them. The @mention stays always-visible (identity, not action).
 function CardFooter({ mention, children }: { mention: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border-subtle bg-elevated/60">
+    <div className="flex items-center justify-between gap-2 px-4 py-1.5 border-t border-border-subtle bg-elevated/60">
       <span className="text-2xs text-text-muted truncate">@{mention}</span>
-      <div className="flex items-center gap-1">{children}</div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">{children}</div>
     </div>
   )
 }

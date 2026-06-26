@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { summarizeMcpConnections } from '../../helpers/mcp-status-summary'
-import { Badge, Button, Icon } from '../ui'
+import { Button, Icon } from '../ui'
 
 export function McpStatus() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
@@ -41,11 +41,15 @@ export function McpStatus() {
         aria-label={`${up} ${down} ${total} connections`}
       >
         <span className="flex items-center gap-2">
-          <Badge tone="success">{up}</Badge>
-          {down > 0 && (
-            <Badge tone="danger">{down}</Badge>
-          )}
-          <span>{total} connections</span>
+          <span
+            className={`mcp-dot ${down > 0 ? (up === 0 ? 'mcp-dot--down' : 'mcp-dot--degraded') : 'mcp-dot--up'}`}
+            aria-hidden
+          />
+          <span className="tabular font-[560] text-text-secondary text-2xs">
+            <span key={up} className="mcp-count inline-block">{up}</span>
+            <span className="text-text-muted font-normal">/{total}</span>
+          </span>
+          <span className="text-2xs uppercase tracking-[0.06em] font-[560] text-text-muted">connections</span>
         </span>
       </Button>
       {expanded && (
@@ -53,12 +57,21 @@ export function McpStatus() {
           {mcpConnections.map((mcp) => {
             const needsAuth = isMcpAuthRequiredStatus(mcp.rawStatus)
             return (
-              <div key={mcp.name} className="flex items-center justify-between px-3 py-[3px] text-2xs text-text-muted group/mcp">
-                <div className="flex items-center gap-2">
-                  <Icon name={mcp.connected ? 'check' : 'circle-x'} size={16} className={mcp.connected ? 'text-text-muted' : 'text-red'} />
-                  {mcp.name}
+              <div key={mcp.name} className="relative flex items-center justify-between px-3 py-1.5 rounded-[7px] text-2xs text-text-secondary hover:bg-surface-hover transition-colors group/mcp">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="inline-flex w-4 justify-center shrink-0">
+                    {reconnecting === mcp.name ? (
+                      <Icon name="loader-circle" size={16} className="text-accent animate-[ui-spin_800ms_linear_infinite]" />
+                    ) : (
+                      <span
+                        className={`mcp-dot ${mcp.connected ? 'mcp-dot--up-static' : (needsAuth ? 'mcp-dot--degraded' : 'mcp-dot--down')}`}
+                        aria-hidden
+                      />
+                    )}
+                  </span>
+                  <span className="truncate">{mcp.name}</span>
                   {!mcp.connected && mcp.rawStatus && (
-                    <span className="text-2xs font-medium uppercase tracking-[0.05em] text-text-muted">
+                    <span className="text-2xs font-medium uppercase tracking-[0.05em] text-text-muted shrink-0">
                       {mcp.rawStatus.replace(/_/g, ' ')}
                     </span>
                   )}
@@ -70,6 +83,7 @@ export function McpStatus() {
                     size="sm"
                     variant="ghost"
                     loading={reconnecting === mcp.name}
+                    className={`shrink-0 group-hover/mcp:text-accent ${needsAuth ? 'opacity-0 group-hover/mcp:opacity-100 focus-within:opacity-100 transition-opacity duration-150' : ''}`}
                   >
                     {needsAuth ? 'Re-auth' : 'Retry'}
                   </Button>

@@ -50,6 +50,26 @@ export function agentTone(color?: AgentColor | string | null): string {
   }
 }
 
+// Identity hue for avatars. Unlike agentTone (which can map to neutral text
+// tokens), this ALWAYS returns a saturated colour, so every coworker has a
+// visible identity on the graphite field — 'primary'/'secondary' agents used to
+// render grey here, which was the root of the sterile/cheap feeling. Identity
+// colour is the one designed splash of colour on the monochrome page; it lives
+// only on the avatar tile (and the card's hover spine that echoes it).
+export function agentChroma(color?: AgentColor | string | null): string {
+  switch (color) {
+    case 'success': return 'var(--color-green)'
+    case 'warning': return 'var(--color-amber)'
+    case 'info': return 'var(--color-info)'
+    // No semantic "secondary identity" token exists; a violet tuned to sit
+    // beside the accent without competing keeps it from reading grey.
+    case 'secondary': return '#7c6fd6'
+    case 'primary':
+    case 'accent':
+    default: return 'var(--color-accent)'
+  }
+}
+
 // Three effective scopes derived from selected tools:
 //   read-only  — nothing the agent can do writes anywhere
 //   standard   — one or two write-capable permission families

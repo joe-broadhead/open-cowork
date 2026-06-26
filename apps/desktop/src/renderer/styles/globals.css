@@ -2963,6 +2963,63 @@ body {
   animation: ui-spin 820ms linear infinite;
 }
 
+/* Status dot vocabulary — the canonical health indicator (MCP connections, and
+   any binary up/down/health state). A 7px semantic dot with a soft ring. THE ONE
+   heartbeat: an all-up state breathes; the instant anything goes down it stops
+   and shows a static ring — a problem must not breathe. */
+.mcp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}
+.mcp-dot--up {
+  background: var(--color-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent);
+  animation: mcp-heartbeat 2s var(--ease-out) infinite;
+}
+.mcp-dot--up-static {
+  background: var(--color-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent);
+}
+.mcp-dot--degraded {
+  background: var(--color-amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-amber) 18%, transparent);
+}
+.mcp-dot--down {
+  background: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 18%, transparent);
+}
+@keyframes mcp-heartbeat {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-green) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-green) 0%, transparent); }
+}
+
+/* Tabular settle — a changing count does a 1px flight-board flip so motion always
+   means "a real value updated" (static labels never animate). */
+.mcp-count,
+.count-settle {
+  display: inline-block;
+  animation: mcp-settle var(--dur-2) var(--ease-out);
+}
+@keyframes mcp-settle {
+  from { transform: translateY(1px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* @media (prefers-reduced-motion) only zeroes transition durations elsewhere, not
+   @keyframes animations — so these hand-authored pulses need their own guard. */
+@media (prefers-reduced-motion: reduce) {
+  .mcp-dot--up {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent);
+  }
+  .mcp-count,
+  .count-settle {
+    animation: none;
+  }
+}
+
 .ui-progress-shimmer {
   background-image: linear-gradient(
     90deg,

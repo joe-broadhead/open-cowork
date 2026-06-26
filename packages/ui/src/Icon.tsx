@@ -138,14 +138,37 @@ export type IconProps = Omit<ComponentPropsWithoutRef<'svg'>, 'aria-hidden' | 'c
   'aria-hidden'?: boolean | 'true' | 'false'
 }
 
+/**
+ * Icon system conventions (the graphite operator console):
+ *
+ * SIZE -> ROLE (three rungs, no arbitrary px):
+ *   16 = inline / dense rows / chips / buttons
+ *   20 = standalone affordances (toolbar, IconButton default, nav rail)
+ *   24 = feature / empty-state / header focal icons only
+ *
+ * STROKE is size-aware by default so small glyphs hold up on the dark field and
+ * large glyphs don't read heavy: 16->1.75, 20->1.5, 24->1.25. Pass `strokeWidth`
+ * to override (e.g. an active nav glyph may bump to 1.75 for emphasis).
+ *
+ * COLOUR STATES (only four): default/decorative = text-text-muted; hover/active
+ * foreground = text-text (brightens on the SAME container's hover, never its own
+ * timeline); accent = text-accent, reserved for the ONE primary/active/live icon
+ * per view (the surgical-accent allow-list); a status-hue glyph is deprecated for
+ * status — use the 6px status DOT instead (green/amber/red), reserving coloured
+ * glyphs for inline prose alerts only.
+ *
+ * Prefer a bare glyph; use an icon-TILE (bg + radius) only for a section/category
+ * avatar, an empty-state focal icon, or the active nav item.
+ */
 export function Icon({
   name,
   size = 16,
-  strokeWidth = 1.5,
+  strokeWidth,
   'aria-hidden': ariaHidden = true,
   ...props
 }: IconProps) {
   const Component = ICONS[name]
+  const resolvedStroke = strokeWidth ?? (size >= 24 ? 1.25 : size <= 16 ? 1.75 : 1.5)
   return (
     <Component
       {...props}
@@ -153,7 +176,7 @@ export function Icon({
       color="currentColor"
       focusable="false"
       size={size}
-      strokeWidth={strokeWidth}
+      strokeWidth={resolvedStroke}
     />
   )
 }
