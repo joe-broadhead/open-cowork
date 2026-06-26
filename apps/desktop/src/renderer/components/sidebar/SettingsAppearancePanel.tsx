@@ -1,6 +1,6 @@
 import { DENSITY_OPTIONS, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
-import { Badge, SegmentedControl, Select } from '../ui'
+import { Badge, Card, SegmentedControl, Select } from '../ui'
 import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
 
 function colorSchemeLabel(scheme: ColorScheme) {
@@ -38,16 +38,13 @@ export function AppearancePreview({
           {Object.entries(UI_ACCENT_PRESETS).map(([accentId, accent]) => {
             const active = appearance.accent === accentId
             return (
-              <button
+              <Card
                 key={accentId}
-                type="button"
+                interactive
+                padding="sm"
                 aria-pressed={active}
                 onClick={() => onUpdate({ accent: accentId as UiAccentPresetId })}
-                className="settings-choice-card rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-start transition-colors hover:bg-surface-hover"
-                style={{
-                  borderColor: active ? 'var(--color-accent)' : undefined,
-                  boxShadow: active ? 'var(--ring-selected)' : undefined,
-                }}
+                className="settings-choice-card"
               >
                 <span className="flex items-center gap-2">
                   <span
@@ -56,7 +53,7 @@ export function AppearancePreview({
                   />
                   <span className="min-w-0 text-xs font-semibold text-text">{accent.label}</span>
                 </span>
-              </button>
+              </Card>
             )
           })}
         </div>
@@ -104,9 +101,9 @@ export function AppearancePreview({
         />
       </div>
 
-      <div className="rounded-2xl border border-border-subtle p-4 bg-base">
-        <div className="text-xs font-semibold text-text mb-3">{t('settings.appearance.preview', 'Preview')}</div>
-        <div className="rounded-xl border border-border-subtle bg-surface p-3 flex flex-col gap-3">
+      <Card className="flex flex-col gap-3">
+        <div className="text-xs font-semibold text-text">{t('settings.appearance.preview', 'Preview')}</div>
+        <Card variant="flat" padding="sm" className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold text-text">{t('settings.appearance.previewHealth', 'Workspace health')}</div>
@@ -116,12 +113,12 @@ export function AppearancePreview({
               {t('settings.appearance.previewActive', 'Active')}
             </Badge>
           </div>
-          <div className="rounded-lg border border-border-subtle p-3 bg-elevated">
+          <Card variant="flat" padding="sm">
             <div className="text-xs text-text mb-1">{t('settings.appearance.previewMessage', 'Theme changes apply immediately.')}</div>
             <div className="text-2xs text-text-muted">{t('settings.appearance.previewMessageSecondary', 'Provider and permission changes still use the save button below.')}</div>
-          </div>
-        </div>
-      </div>
+          </Card>
+        </Card>
+      </Card>
     </div>
   )
 }

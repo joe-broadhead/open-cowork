@@ -9,14 +9,14 @@ import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { Card } from '../ui'
 import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
-import { panelCardCls, sectionLabelCls } from './settings-panel-styles'
+import { sectionLabelCls } from './settings-panel-styles'
 
 function StorageStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3">
+    <Card variant="flat" padding="sm">
       <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="mt-1.5 text-sm font-medium text-text">{value}</div>
-    </div>
+    </Card>
   )
 }
 
@@ -108,15 +108,15 @@ export function StoragePanel({
 
   if (!stats) {
     return (
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="text-xs text-text-muted">{t('settings.storage.loading', 'Loading sandbox storage…')}</div>
-      </div>
+      </Card>
     )
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="text-xs font-semibold text-text">{t('settings.storage.supportDiagnostics', 'Support Diagnostics')}</div>
         <div className="text-2xs text-text-muted leading-relaxed">
           {t('settings.storage.supportDescription', "Copies a plaintext report (config, runtime inputs, recent log lines) to your clipboard. Credentials are masked / redacted so it's safe to paste into a bug report.")}
@@ -140,10 +140,10 @@ export function StoragePanel({
             {t('settings.storage.diagnosticsHint', 'Useful when filing an issue — include this bundle in your report.')}
           </div>
         </Card>
-      </div>
+      </Card>
 
       <span className={sectionLabelCls}>{t('settings.storage.sandboxStorage', 'Sandbox Storage')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3">
           <StorageStat label={t('settings.storage.totalSize', 'Total Size')} value={formatBytes(stats.totalBytes)} />
           <StorageStat label={t('settings.storage.workspaces', 'Workspaces')} value={String(stats.workspaceCount)} />
@@ -155,9 +155,9 @@ export function StoragePanel({
         <div className="text-2xs text-text-muted leading-relaxed">
           {t('settings.storage.sandboxNote', 'Sandbox threads write into a private Cowork workspace under {{root}}. Older unreferenced workspaces are pruned automatically, and you can run cleanup manually here.', { root: stats.root })}
         </div>
-      </div>
+      </Card>
 
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="text-xs font-semibold text-text">{t('settings.storage.cleanup', 'Cleanup')}</div>
         <div className="flex flex-col gap-3">
           <Card
@@ -190,20 +190,20 @@ export function StoragePanel({
         </div>
 
         {lastCleanup ? (
-          <div className="rounded-xl border border-border-subtle bg-base px-3 py-3 text-2xs text-text-muted">
+          <Card variant="flat" padding="sm" className="text-2xs text-text-muted">
             {t('settings.storage.lastCleanup', 'Last cleanup removed {{count}} workspace(s) and freed {{size}}.', {
               count: String(lastCleanup.removedWorkspaces),
               size: formatBytes(lastCleanup.removedBytes),
             })}
-          </div>
+          </Card>
         ) : null}
-      </div>
+      </Card>
 
       <span className={sectionLabelCls}>{t('settings.updates.header', 'Updates')}</span>
       <SettingsUpdatesPanel />
 
       <span className={sectionLabelCls}>{t('settings.reset.header', 'Reset')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="text-xs font-semibold text-red">{t('settings.reset.title', 'Reset all app data')}</div>
         <div className="text-2xs text-text-muted leading-relaxed">
           {t('settings.reset.description', 'Deletes every thread, credential, custom agent, skill, and MCP from this machine. The app relaunches into the first-run flow. Useful before uninstalling or for a clean-slate downstream demo; destructive and cannot be undone.')}
@@ -221,7 +221,7 @@ export function StoragePanel({
             {t('settings.reset.requiresConfirm', 'Requires explicit confirmation. The app will close and relaunch.')}
           </div>
         </Card>
-      </div>
+      </Card>
     </div>
   )
 }

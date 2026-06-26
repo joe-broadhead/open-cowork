@@ -6,7 +6,6 @@ import { credentialFieldIsSecret, isCredentialMask } from '../provider/credentia
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 import {
   fieldLabelCls,
-  panelCardCls,
   sectionLabelCls,
 } from './settings-panel-styles'
 
@@ -116,7 +115,7 @@ export function ModelsPanel({
   return (
     <div className="flex flex-col gap-5">
       {mode === 'advanced' && config.auth.enabled ? (
-        <div className={panelCardCls}>
+        <Card className="flex flex-col gap-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs font-semibold text-text">{t('settings.models.googleSignIn', 'Google sign-in')}</div>
@@ -137,7 +136,7 @@ export function ModelsPanel({
                 : t('settings.models.signOutGoogle', 'Sign out')}
             </Button>
           </div>
-        </div>
+        </Card>
       ) : null}
 
       {mode === 'model' ? (
@@ -201,7 +200,7 @@ export function ModelsPanel({
               />
 
               {provider.credentials.length ? (
-                <div className={panelCardCls}>
+                <Card className="flex flex-col gap-4">
                   {provider.credentials.map((credential) => {
                     const credentialIsSecret = credentialFieldIsSecret(credential)
                     return (
@@ -224,9 +223,9 @@ export function ModelsPanel({
                       </div>
                     )
                   })}
-                </div>
+                </Card>
               ) : null}
-              <div id="settings-model-test" className={`${panelCardCls} scroll-mt-4`}>
+              <Card id="settings-model-test" className="flex flex-col gap-4 scroll-mt-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs font-semibold text-text">{t('settings.models.testConnection', 'Test connection')}</div>
@@ -241,7 +240,7 @@ export function ModelsPanel({
                     {t('settings.models.testConnection', 'Test connection')}
                   </Button>
                 </div>
-              </div>
+              </Card>
             </div>
           ) : null}
 
@@ -372,7 +371,7 @@ export function ModelsPanel({
               {t('settings.models.smallModelDescription', 'OpenCode uses this for lightweight work such as thread titles. Leave it empty to use the provider default, or the selected chat model when no default is configured.')}
             </div>
           </div>
-          <div className={panelCardCls}>
+          <Card>
             <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-1.5">
                 <span className={fieldLabelCls}>{t('settings.models.smallModelId', 'Model ID')}</span>
@@ -412,7 +411,7 @@ export function ModelsPanel({
                 </Button>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       ) : null}
     </div>

@@ -5,7 +5,7 @@ import type {
   UpdateInstallStatus,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { panelCardCls } from './settings-panel-styles'
+import { Badge, Button, Card } from '../ui'
 
 type ManualUpdateStatus =
   | { kind: 'idle' }
@@ -428,7 +428,7 @@ export function SettingsUpdatesPanel() {
   const latest = latestVersion(state)
 
   return (
-    <div className={panelCardCls}>
+    <Card className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs font-semibold text-text">{t('settings.updates.installTitle', 'Install updates')}</div>
         {state.currentVersion ? (
@@ -438,27 +438,27 @@ export function SettingsUpdatesPanel() {
       <div className="text-2xs text-text-muted leading-relaxed">
         {t('settings.updates.description', 'Check releases manually, then download and restart only when this signed build supports in-app installation.')}
       </div>
-      <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5">
+      <Card variant="flat" padding="sm">
         <div className="text-2xs uppercase tracking-[0.18em] text-text-muted">{t('settings.updates.releaseSource', 'Release source')}</div>
         <div className="mt-1 text-xs font-semibold text-text">{releaseSourceLabel(state.capability)}</div>
         <div className="mt-1 text-2xs text-text-muted">{releaseSourceDetail(state.capability)}</div>
-      </div>
+      </Card>
       {state.capability ? (
-        <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5 text-2xs leading-relaxed text-text-muted">
+        <Card variant="flat" padding="sm" className="text-2xs leading-relaxed text-text-muted">
           {describeInstallCapability(state.capability)}
-        </div>
+        </Card>
       ) : null}
 
-      <div className="rounded-2xl border border-border-subtle bg-base p-3">
+      <Card variant="flat" padding="sm">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-xs font-semibold text-text">{statusTitle(state)}</div>
             <div className="text-2xs text-text-muted mt-1 leading-relaxed">{statusDetail(state)}</div>
           </div>
           {latest ? (
-            <div className="shrink-0 rounded-full border border-border-subtle px-2 py-1 text-2xs font-mono text-text-muted">
+            <Badge tone="neutral" className="shrink-0 font-mono">
               v{latest}
-            </div>
+            </Badge>
           ) : null}
         </div>
         {progress ? (
@@ -479,13 +479,14 @@ export function SettingsUpdatesPanel() {
             <div className="mt-2 text-2xs text-text-muted">{formatProgress(state.installStatus as Extract<UpdateInstallStatus, { status: 'downloading' }>)}</div>
           </div>
         ) : null}
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-2">
-        <button
+        <Card
+          interactive
           onClick={() => void checkForUpdates()}
           disabled={state.action === 'checking' || state.action === 'downloading' || state.action === 'installing'}
-          className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+          className="settings-action-card"
         >
           <div className="text-xs font-semibold text-text">
             {state.action === 'checking' ? t('settings.updates.checking', 'Checking…') : t('settings.updates.checkForUpdates', 'Check for updates')}
@@ -493,59 +494,63 @@ export function SettingsUpdatesPanel() {
           <div className="text-2xs text-text-muted mt-1">
             {t('settings.updates.checkButtonHint', 'Looks for a newer release and checks whether this build can install it in app.')}
           </div>
-        </button>
+        </Card>
 
         {canDownload ? (
-          <button
+          <Card
+            interactive
             onClick={() => void downloadUpdate()}
             disabled={state.action !== 'idle'}
-            className="w-full text-start rounded-2xl border border-accent/40 p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+            className="settings-action-card"
           >
             <div className="text-xs font-semibold text-accent">{t('settings.updates.downloadUpdate', 'Download update')}</div>
             <div className="text-2xs text-text-muted mt-1">
               {t('settings.updates.downloadButtonHint', 'Downloads the signed update now. Installation waits for your restart confirmation.')}
             </div>
-          </button>
+          </Card>
         ) : null}
 
         {canRestart ? (
-          <button
+          <Card
+            interactive
             onClick={() => void restartToInstall()}
             disabled={state.action !== 'idle'}
-            className="w-full text-start rounded-2xl border border-accent/40 p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+            className="settings-action-card"
           >
             <div className="text-xs font-semibold text-accent">{t('settings.updates.restartToInstall', 'Restart to install')}</div>
             <div className="text-2xs text-text-muted mt-1">
               {t('settings.updates.restartButtonHint', 'Closes Open Cowork and completes the signed update installation.')}
             </div>
-          </button>
+          </Card>
         ) : null}
 
         {canSignInForUpdates ? (
-          <button
+          <Card
+            interactive
             onClick={() => void signInForUpdates()}
             disabled={state.action === 'checking' || state.action === 'downloading' || state.action === 'installing'}
-            className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+            className="settings-action-card"
           >
             <div className="text-xs font-semibold text-text">{t('settings.updates.signIn', 'Sign in with Google')}</div>
             <div className="text-2xs text-text-muted mt-1">
               {t('settings.updates.signInHint', 'Private release sources use the app sign-in in the main process; tokens are never exposed to the renderer.')}
             </div>
-          </button>
+          </Card>
         ) : null}
 
         {releaseUrl ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            fullWidth
             onClick={() => openReleaseNotes(releaseUrl)}
-            className="w-full text-center rounded-2xl border border-border-subtle p-3 text-xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
           >
             {state.manualStatus.kind === 'available'
               ? t('settings.updates.openReleaseNotes', 'Open release notes')
               : t('settings.updates.openReleases', 'Open releases')}
-          </button>
+          </Button>
         ) : null}
       </div>
-    </div>
+    </Card>
   )
 }

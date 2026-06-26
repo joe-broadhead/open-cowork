@@ -1,10 +1,7 @@
 import type { EffectiveAppSettings, PublicAppConfig, RuntimePermissionPolicy } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import {
-  panelCardCls,
-  sectionLabelCls,
-} from './settings-panel-styles'
-import { SegmentedControl, Switch } from '../ui'
+import { sectionLabelCls } from './settings-panel-styles'
+import { Badge, Card, SegmentedControl, Switch } from '../ui'
 
 const PERMISSION_RANK: Record<RuntimePermissionPolicy, number> = {
   deny: 0,
@@ -63,7 +60,7 @@ export function RuntimeConfigPanel({
   return (
     <div className="flex flex-col gap-5">
       <span className={sectionLabelCls}>{t('settings.permissions.advancedHeader', 'Runtime config')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs font-semibold text-text">{t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')}</div>
@@ -96,7 +93,7 @@ export function RuntimeConfigPanel({
             aria-label={t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}
           />
         </div>
-      </div>
+      </Card>
     </div>
   )
 }
@@ -166,7 +163,7 @@ export function PermissionsPanel({
   return (
     <div className="flex flex-col gap-5">
       <span className={sectionLabelCls}>{t('settings.permissions.header', 'Runtime permissions')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         {permissionRows.map((row) => {
           const selected = settings[row.key]
           return (
@@ -231,27 +228,27 @@ export function PermissionsPanel({
               {t('settings.permissions.readDescription', 'Read-only project inspection stays allowed so coworkers can understand the workspace before asking to change it.')}
             </div>
           </div>
-          <div className="rounded-full border border-border-subtle bg-surface px-2.5 py-1 text-xs font-semibold text-text-muted">
+          <Badge tone="neutral" className="shrink-0">
             {t('settings.permissions.fixedAllow', 'Fixed allow')}
-          </div>
+          </Badge>
         </div>
-      </div>
+      </Card>
 
       <span className={sectionLabelCls}>{t('settings.permissions.reviewGateHeader', 'Review gates')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div id="settings-permissions-review-send" className="flex items-start justify-between gap-4 scroll-mt-4">
           <div className="min-w-0">
             <div className="text-xs font-semibold text-text">{t('settings.permissions.reviewSendTitle', 'Require approval before sending')}</div>
             <div className="text-xs text-text-muted mt-1 leading-relaxed">{t('settings.permissions.reviewSendDeferredDescription', 'External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')}</div>
           </div>
-          <div className="rounded-full border border-border-subtle bg-surface px-2.5 py-1 text-xs font-semibold text-text-muted">
+          <Badge tone="neutral" className="shrink-0">
             {t('settings.permissions.deferred', 'Deferred')}
-          </div>
+          </Badge>
         </div>
-        <div className="rounded-xl border border-border-subtle bg-surface px-3 py-3 text-xs leading-relaxed text-text-muted">
+        <Card variant="flat" padding="sm" className="text-xs leading-relaxed text-text-muted">
           {t('settings.permissions.knowledgeReviewDeferred', 'Knowledge review gates will appear here when the Knowledge/Wiki phase is enabled.')}
-        </div>
-      </div>
+        </Card>
+      </Card>
     </div>
   )
 }
