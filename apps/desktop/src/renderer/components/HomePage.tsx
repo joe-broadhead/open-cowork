@@ -915,11 +915,9 @@ function StatusStrip({ readyLabel }: { readyLabel: string }) {
 
   return (
     <div className="home-status-strip mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-xs text-text-muted">
-      <span className="inline-flex items-center gap-1.5">
-        <Badge tone={total > 0 && connected === total ? 'success' : 'warning'}>
-          {readyLabel}
-        </Badge>
-      </span>
+      <Badge tone={total > 0 && connected === total ? 'success' : 'warning'}>
+        {readyLabel}
+      </Badge>
       <span className="opacity-40">·</span>
       <span>{t('home.statusStrip.mcps', '{{connected}}/{{total}} MCPs', { connected, total })}</span>
     </div>
