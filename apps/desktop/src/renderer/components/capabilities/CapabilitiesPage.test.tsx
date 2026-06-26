@@ -17,6 +17,19 @@ import { useSessionStore } from '../../stores/session'
 import { CapabilitiesPage } from './CapabilitiesPage'
 import { CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY } from './capabilities-page-support'
 
+// The canonical <Select> renders a custom listbox: a trigger <button> named
+// "<label>: <selectedLabel>" that opens a role="listbox" of role="option"
+// buttons. It does not respond to userEvent.selectOptions, so pick an option by
+// opening the trigger and clicking the matching option.
+async function pickFromSelect(
+  user: ReturnType<typeof userEvent.setup>,
+  trigger: HTMLElement,
+  optionName: string | RegExp,
+) {
+  await user.click(trigger)
+  await user.click(await screen.findByRole('option', { name: optionName }))
+}
+
 const chartTool: CapabilityTool = {
   id: 'charts',
   name: 'Chart MCP',
@@ -562,12 +575,12 @@ describe('CapabilitiesPage', () => {
     await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
 
     const authMethod = await screen.findByLabelText(/Authentication method/)
-    expect(authMethod).toHaveValue('api_key')
+    expect(authMethod).toHaveAccessibleName('Authentication method: API key')
     expect(screen.getByText('Static API credentials')).toBeInTheDocument()
     expect(screen.getByLabelText(/Charts API key/)).toHaveValue('••••••••')
     expect(screen.queryByLabelText(/SSO email/)).not.toBeInTheDocument()
 
-    await user.selectOptions(authMethod, 'sso')
+    await pickFromSelect(user, authMethod, 'SSO')
 
     expect(screen.queryByLabelText(/Charts API key/)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/SSO email/)).toHaveValue('alice@example.com')

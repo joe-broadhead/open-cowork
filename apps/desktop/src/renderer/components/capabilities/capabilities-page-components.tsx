@@ -7,7 +7,7 @@ import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { credentialFieldIsSecret } from '../provider/credential-merge'
-import { EmptyState } from '../ui'
+import { Button, Card, EmptyState, Input, Select } from '../ui'
 
 function describeCapabilityError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -27,10 +27,10 @@ function reportCapabilityError(error: unknown, scope: string) {
 
 export function StatBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
+    <Card variant="flat" padding="sm">
       <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-1">{label}</div>
       <div className="text-xs text-text-secondary break-all">{value}</div>
-    </div>
+    </Card>
   )
 }
 
@@ -84,7 +84,7 @@ export function SkillBundleFileEntry({
   const isMarkdown = /\.(md|markdown)$/i.test(filePath)
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-elevated">
+    <Card variant="flat" style={{ padding: 0 }}>
       <button
         type="button"
         onClick={toggle}
@@ -125,7 +125,7 @@ export function SkillBundleFileEntry({
           )}
         </div>
       ) : null}
-    </div>
+    </Card>
   )
 }
 
@@ -256,9 +256,9 @@ export function ToolCredentialsCard({
   ))
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface p-4">
+    <Card>
       <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">
+        <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted">
           {t('capabilities.credentials', 'Credentials')}
         </div>
         {savedAt ? (
@@ -319,39 +319,39 @@ export function ToolCredentialsCard({
             }
 
             return (
-              <label key={credential.key} className="flex flex-col gap-1">
+              <div key={credential.key} className="flex flex-col gap-1">
                 <span className="text-2xs font-medium text-text-secondary">
                   {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
                 </span>
-                <select
+                <Select
+                  label={credential.label}
                   value={value}
-                  onChange={(event) => {
-                    setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
+                  onChange={(next) => {
+                    setDrafts((current) => ({ ...current, [credential.key]: next }))
                   }}
-                  className="px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text outline-none focus:border-border"
-                >
-                  <option value="">{credential.placeholder || t('capabilities.credentialsSelectPlaceholder', 'Select an option')}</option>
-                  {options.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: credential.placeholder || t('capabilities.credentialsSelectPlaceholder', 'Select an option') },
+                    ...options.map((option) => ({ value: option.value, label: option.label })),
+                  ]}
+                />
                 {selectedOption?.hint ? (
                   <span className="text-2xs text-text-muted leading-relaxed">{selectedOption.hint}</span>
                 ) : null}
                 {credential.description ? (
                   <span className="text-2xs text-text-muted leading-relaxed">{credential.description}</span>
                 ) : null}
-              </label>
+              </div>
             )
           }
 
           return (
-            <label key={credential.key} className="flex flex-col gap-1">
+            <div key={credential.key} className="flex flex-col gap-1">
               <span className="text-2xs font-medium text-text-secondary">
                 {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
               </span>
-              <input
+              <Input
                 type={credentialIsSecret ? 'password' : 'text'}
+                aria-label={credential.label}
                 value={value}
                 placeholder={credential.placeholder || ''}
                 onFocus={(event) => {
@@ -363,59 +363,58 @@ export function ToolCredentialsCard({
                 onChange={(event) => {
                   setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
                 }}
-                className="px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
                 autoComplete="off"
                 spellCheck={false}
               />
               {credential.description ? (
                 <span className="text-2xs text-text-muted leading-relaxed">{credential.description}</span>
               ) : null}
-            </label>
+            </div>
           )
         })}
       </div>
       <div className="flex justify-end gap-2 mt-4">
         {authMode === 'api_token' ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => { void runPreflight() }}
             disabled={dirty || saving || testing}
-            className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle text-text-secondary hover:bg-surface-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            loading={testing}
           >
             {testing ? t('capabilities.credentialsTesting', 'Testing…') : t('capabilities.credentialsTest', 'Test')}
-          </button>
+          </Button>
         ) : null}
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={handleSave}
           disabled={!dirty || saving || testing}
-          className="px-3 py-2 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
+          loading={saving}
         >
           {saving ? t('capabilities.credentialsSaving', 'Saving…') : t('capabilities.credentialsSave', 'Save')}
-        </button>
+        </Button>
       </div>
       {errorMessage ? (
-        <div className="mt-3 text-2xs" style={{ color: 'var(--color-red)' }}>
+        <div className="mt-3 text-2xs text-red">
           {errorMessage}
         </div>
       ) : null}
       {preflightMessage ? (
         <div
-          className="mt-3 text-2xs leading-relaxed"
-          style={{
-            color: preflightTone === 'success'
-              ? 'var(--color-green)'
+          className={`mt-3 text-2xs leading-relaxed ${
+            preflightTone === 'success'
+              ? 'text-green'
               : preflightTone === 'warning'
-                ? 'var(--color-warning)'
-                : 'var(--color-red)',
-          }}
+                ? 'text-amber'
+                : 'text-red'
+          }`}
           role={preflightTone === 'error' ? 'alert' : 'status'}
         >
           {preflightMessage}
         </div>
       ) : null}
-    </div>
+    </Card>
   )
 }
 
@@ -503,10 +502,10 @@ export function ToolIntegrationToggleCard({
       )
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface p-4">
+    <Card>
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1 min-w-0">
-          <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">
+          <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted">
             {t('capabilities.integrationStatus', 'Integration')}
           </div>
           <div className="text-xs text-text-primary">
@@ -516,29 +515,28 @@ export function ToolIntegrationToggleCard({
           </div>
           <div className="text-2xs text-text-muted leading-relaxed">{helpText}</div>
         </div>
-        <button
-          type="button"
+        <Button
           role="switch"
           aria-checked={effectiveOn}
+          variant={effectiveOn ? 'secondary' : 'primary'}
+          size="sm"
           disabled={pending}
+          loading={pending}
           onClick={() => { void setEnabled(!effectiveOn) }}
-          className="px-3 py-2 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          style={effectiveOn
-            ? { background: 'var(--color-surface-active)', color: 'var(--color-text-secondary)' }
-            : { background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
+          className="whitespace-nowrap shrink-0"
         >
           {effectiveOn
             ? t('capabilities.integrationDisableCta', 'Disable')
             : authMode === 'oauth'
               ? t('capabilities.integrationEnableOAuthCta', 'Enable & sign in')
               : t('capabilities.integrationEnableCta', 'Enable')}
-        </button>
+        </Button>
       </div>
       {errorMessage ? (
         <div className="mt-3 text-2xs text-red" role="alert">
           {t('capabilities.integrationToggleFailed', 'Couldn’t update this integration:')} {errorMessage}
         </div>
       ) : null}
-    </div>
+    </Card>
   )
 }

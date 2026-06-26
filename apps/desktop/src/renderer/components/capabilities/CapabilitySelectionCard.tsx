@@ -7,7 +7,21 @@ import {
   CustomIcon,
   RuntimeIcon,
 } from '../agents/agent-attribute-icons'
+import { Badge, Button, type BadgeTone } from '../ui'
 import type { CapabilityLinkedTool } from './capabilities-page-support.ts'
+
+// Maps the legacy `var(--color-*)` tone strings carried on chips to the
+// canonical Badge tones so every pill shares the shared pill material.
+function badgeToneForCssTone(tone: string | undefined): BadgeTone {
+  if (!tone) return 'neutral'
+  if (tone.includes('accent')) return 'accent'
+  if (tone.includes('amber')) return 'warning'
+  if (tone.includes('info')) return 'info'
+  if (tone.includes('green')) return 'success'
+  if (tone.includes('red')) return 'danger'
+  if (tone.includes('text-muted')) return 'muted'
+  return 'neutral'
+}
 
 // Mirrors AgentSelectionCard's visual language so Tools and Skills feel
 // like siblings to the agent cards in the list grid: top accent strip,
@@ -97,7 +111,7 @@ function CapabilityCardShell({
         <div className="flex flex-wrap items-center gap-1.5 text-2xs text-text-muted">
           {stats.map((stat) => (
             <StatChip key={stat.label} tone={stat.tone}>
-              <span className="font-medium" style={stat.tone ? { color: stat.tone } : undefined}>{stat.value}</span>
+              <span className="font-medium">{stat.value}</span>
               <span className="ms-1">{stat.label}</span>
             </StatChip>
           ))}
@@ -120,32 +134,18 @@ function TypeChip({
   Icon?: (props: { size?: number }) => ReactElement
 }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 text-2xs uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        color: tone,
-        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
-      }}
-    >
+    <Badge tone={badgeToneForCssTone(tone)} className="inline-flex items-center gap-1">
       {Icon ? <Icon size={10} /> : null}
       {label}
-    </span>
+    </Badge>
   )
 }
 
 function StatChip({ children, tone }: { children: ReactNode; tone?: string }) {
   return (
-    <span
-      className="px-1.5 py-0.5 rounded-md"
-      style={{
-        background: tone
-          ? `color-mix(in srgb, ${tone} 10%, transparent)`
-          : 'color-mix(in srgb, var(--color-text-muted) 8%, transparent)',
-        border: '1px solid var(--color-border-subtle)',
-      }}
-    >
+    <Badge tone={tone ? badgeToneForCssTone(tone) : 'muted'}>
       {children}
-    </span>
+    </Badge>
   )
 }
 
@@ -202,15 +202,17 @@ export function ToolSelectionCard({
             }}
           >
             <span className="truncate">{tool.namespace || tool.id}</span>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={(event) => {
                 event.stopPropagation()
                 onRemove()
               }}
-              className="hover:text-red cursor-pointer"
+              className="shrink-0"
             >
               Remove
-            </button>
+            </Button>
           </div>
         ) : null
       }
@@ -294,15 +296,17 @@ export function SkillSelectionCard({
             }}
           >
             <span className="truncate">{skill.name}</span>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={(event) => {
                 event.stopPropagation()
                 onRemove()
               }}
-              className="hover:text-red cursor-pointer"
+              className="shrink-0"
             >
               Remove
-            </button>
+            </Button>
           </div>
         ) : null
       }
@@ -316,21 +320,14 @@ function LinkedSkillPills({ skills }: { skills: CapabilitySkill[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {visible.map((skill) => (
-        <span
-          key={skill.name}
-          className="text-2xs px-1.5 py-0.5 rounded-full"
-          style={{
-            color: 'var(--color-amber)',
-            background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
-          }}
-        >
+        <Badge key={skill.name} tone="warning">
           {skill.label}
-        </span>
+        </Badge>
       ))}
       {skills.length > visible.length ? (
-        <span className="text-2xs px-1.5 py-0.5 rounded-full text-text-muted">
+        <Badge tone="muted">
           +{skills.length - visible.length}
-        </span>
+        </Badge>
       ) : null}
     </div>
   )
@@ -341,21 +338,14 @@ function LinkedToolPills({ tools }: { tools: CapabilityLinkedTool[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {visible.map((tool) => (
-        <span
-          key={tool.id}
-          className="text-2xs px-1.5 py-0.5 rounded-full"
-          style={{
-            color: 'var(--color-accent)',
-            background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-          }}
-        >
+        <Badge key={tool.id} tone="info">
           {tool.name}
-        </span>
+        </Badge>
       ))}
       {tools.length > visible.length ? (
-        <span className="text-2xs px-1.5 py-0.5 rounded-full text-text-muted">
+        <Badge tone="muted">
           +{tools.length - visible.length}
-        </span>
+        </Badge>
       ) : null}
     </div>
   )

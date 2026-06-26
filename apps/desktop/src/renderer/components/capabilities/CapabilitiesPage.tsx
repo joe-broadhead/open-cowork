@@ -13,7 +13,7 @@ import type {
 } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
-import { Button, Icon, Input, SegmentedControl, Skeleton, Tooltip } from '../ui'
+import { Button, Card, IconButton, Input, SegmentedControl, Skeleton, Tooltip } from '../ui'
 import { useSessionStore } from '../../stores/session'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
@@ -373,9 +373,9 @@ export function CapabilitiesPage({
           </Button>
         </div>
         {!relationshipEnabled ? (
-          <div className="mb-6 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-2xs text-text-muted">
+          <Card padding="sm" className="mb-6 text-2xs text-text-muted">
             {t('capabilities.relationshipsDisabled', 'The relationship view is available behind the Tools & Skills relationship feature flag. The main tools and skills lists remain available here.')}
-          </div>
+          </Card>
         ) : (
           <div className="mb-6" />
         )}
@@ -463,7 +463,7 @@ export function CapabilitiesPage({
                   <CapabilitySectionHeading section={section} count={section.groups.length} unit="group" />
                   <div className="flex flex-col gap-4">
                     {section.groups.map((group) => (
-                      <section key={group.id} className="rounded-2xl border border-border-subtle bg-surface p-3">
+                      <Card key={group.id} padding="sm">
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <div>
                             <div className="text-xs font-semibold text-text">{group.label}</div>
@@ -474,13 +474,13 @@ export function CapabilitiesPage({
                             </div>
                           </div>
                           {group.tool ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => setSelection({ type: 'tool', id: group.tool!.id })}
-                              className="px-2 py-1 rounded-md border border-border-subtle text-2xs text-text-muted hover:text-accent hover:bg-surface-hover cursor-pointer"
                             >
                               Open tool
-                            </button>
+                            </Button>
                           ) : null}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -511,7 +511,7 @@ export function CapabilitiesPage({
                             )
                           })}
                         </div>
-                      </section>
+                      </Card>
                     ))}
                   </div>
                 </section>
@@ -534,9 +534,7 @@ function GlossaryHelp() {
         </span>
       )}
     >
-      <button type="button" aria-label={t('capabilities.glossary', 'Glossary')} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text">
-        <Icon name="circle-help" size={16} />
-      </button>
+      <IconButton icon="circle-help" label={t('capabilities.glossary', 'Glossary')} size="sm" variant="ghost" />
     </Tooltip>
   )
 }

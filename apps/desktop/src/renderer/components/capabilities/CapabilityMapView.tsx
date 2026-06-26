@@ -10,6 +10,7 @@ import {
   type CapabilityMapGroup,
 } from './capabilities-page-support.ts'
 import { EmptyGrid } from './capabilities-page-components.tsx'
+import { Badge, Button, Card, type BadgeTone } from '../ui'
 
 type CapabilityMapViewProps = {
   groups: CapabilityMapGroup[]
@@ -55,13 +56,13 @@ export function CapabilityMapView({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <CapabilityMetric label={t('capabilities.metricTools', 'Tools')} value={tools.length} detail={t('capabilities.metricToolsDetail', 'Runtime actions')} tone="var(--color-accent)" />
-        <CapabilityMetric label={t('capabilities.metricSkills', 'Skills')} value={skills.length} detail={t('capabilities.metricSkillsDetail', 'Coworker and playbook access')} tone="var(--color-amber)" />
-        <CapabilityMetric label={t('capabilities.metricCustom', 'Custom')} value={customCount} detail={t('capabilities.metricCustomDetail', 'User additions')} tone="var(--color-green)" />
-        <CapabilityMetric label={t('capabilities.metricProject', 'Project')} value={projectCount} detail={t('capabilities.metricProjectDetail', 'Scoped here')} tone="var(--color-info)" />
+        <CapabilityMetric label={t('capabilities.metricTools', 'Tools')} value={tools.length} detail={t('capabilities.metricToolsDetail', 'Runtime actions')} emphasis />
+        <CapabilityMetric label={t('capabilities.metricSkills', 'Skills')} value={skills.length} detail={t('capabilities.metricSkillsDetail', 'Coworker and playbook access')} />
+        <CapabilityMetric label={t('capabilities.metricCustom', 'Custom')} value={customCount} detail={t('capabilities.metricCustomDetail', 'User additions')} />
+        <CapabilityMetric label={t('capabilities.metricProject', 'Project')} value={projectCount} detail={t('capabilities.metricProjectDetail', 'Scoped here')} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface px-4 py-3">
+      <Card padding="sm" className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs font-semibold text-text">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
           <div className="text-2xs text-text-muted mt-0.5">
@@ -69,22 +70,14 @@ export function CapabilityMapView({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onAddTool}
-            className="px-3 py-1.5 rounded-lg border border-border-subtle text-2xs font-medium text-accent hover:bg-surface-hover cursor-pointer"
-          >
+          <Button variant="secondary" size="sm" onClick={onAddTool}>
             {t('capabilities.addTool', 'Add tool')}
-          </button>
-          <button
-            type="button"
-            onClick={onAddSkill}
-            className="px-3 py-1.5 rounded-lg border border-border-subtle text-2xs font-medium text-accent hover:bg-surface-hover cursor-pointer"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onAddSkill}>
             {t('capabilities.addSkillButton', 'Add skill')}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {groups.length === 0 ? (
         <EmptyGrid message={search.trim()
@@ -96,7 +89,7 @@ export function CapabilityMapView({
             <section key={section.id} className="flex flex-col gap-2.5">
               <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
                 <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-text-muted">{section.label}</h2>
+                  <h2 className="font-display text-role-card-title font-bold text-text">{section.label}</h2>
                   <p className="mt-0.5 text-2xs text-text-muted">{section.description}</p>
                 </div>
                 <span className="text-2xs text-text-muted">
@@ -129,24 +122,21 @@ function CapabilityMetric({
   label,
   value,
   detail,
-  tone,
+  emphasis = false,
 }: {
   label: string
   value: number
   detail: string
-  tone: string
+  emphasis?: boolean
 }) {
   return (
-    <div
-      className="rounded-xl border border-border-subtle bg-surface px-3 py-3"
-      style={{ boxShadow: `inset 0 1px 0 color-mix(in srgb, ${tone} 22%, transparent)` }}
-    >
+    <Card padding="sm">
       <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="mt-1 flex items-end gap-2">
-        <div className="text-xl font-semibold leading-none" style={{ color: tone }}>{value}</div>
+        <div className={`text-xl font-semibold leading-none ${emphasis ? 'text-accent' : 'text-text'}`}>{value}</div>
         <div className="text-2xs text-text-muted pb-0.5">{detail}</div>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -169,7 +159,7 @@ function CapabilityMapGroupCard({
 }) {
   if (group.type === 'standalone') {
     return (
-      <section className="h-full rounded-lg border border-border-subtle bg-surface overflow-hidden flex flex-col">
+      <Card variant="flat" padding="sm" style={{ padding: 0 }} className="h-full overflow-hidden flex flex-col">
         <div className="px-4 py-3 border-b border-border-subtle bg-elevated">
           <div className="text-sm font-semibold text-text">{group.label}</div>
           <div className="text-2xs text-text-muted mt-0.5">{t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}</div>
@@ -180,25 +170,23 @@ function CapabilityMapGroupCard({
           customSkillNames={customSkillNames}
           onOpenSkill={onOpenSkill}
         />
-      </section>
+      </Card>
     )
   }
 
   const tool = group.tool
   if (!tool) return null
   const methodsCount = mergedRuntimeToolset(tool, runtimeTools).length
-  const tone = isCustomTool
-    ? 'var(--color-amber)'
-    : tool.kind === 'mcp'
-      ? 'var(--color-accent)'
-      : 'var(--color-text-secondary)'
+  const kindTone: BadgeTone = isCustomTool ? 'warning' : tool.kind === 'mcp' ? 'info' : 'neutral'
 
   return (
-    <section
-      className="h-full rounded-lg border bg-surface overflow-hidden flex flex-col"
-      style={{
-        borderColor: group.matchedTool ? 'color-mix(in srgb, var(--color-accent) 38%, var(--color-border-subtle))' : 'var(--color-border-subtle)',
-      }}
+    <Card
+      variant="flat"
+      padding="sm"
+      className="h-full overflow-hidden flex flex-col"
+      style={group.matchedTool
+        ? { padding: 0, borderColor: 'color-mix(in srgb, var(--color-accent) 38%, var(--color-border-subtle))' }
+        : { padding: 0 }}
     >
       <button
         type="button"
@@ -209,9 +197,9 @@ function CapabilityMapGroupCard({
         <PluginIcon icon={tool.icon || tool.namespace || tool.id} size={36} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 mb-1">
-            <MapPill tone={tone}>{prettyKind(tool)}</MapPill>
-            {isCustomTool ? <MapPill tone="var(--color-amber)">Custom</MapPill> : null}
-            {tool.scope ? <MapPill tone="var(--color-text-muted)">{tool.scope === 'project' ? 'Project' : 'Machine'}</MapPill> : null}
+            <Badge tone={kindTone}>{prettyKind(tool)}</Badge>
+            {isCustomTool ? <Badge tone="warning">Custom</Badge> : null}
+            {tool.scope ? <Badge tone="muted">{tool.scope === 'project' ? 'Project' : 'Machine'}</Badge> : null}
           </div>
           <div className="flex items-center gap-2 min-w-0">
             <h2 className="text-md font-semibold text-text truncate">{tool.name}</h2>
@@ -240,7 +228,7 @@ function CapabilityMapGroupCard({
           {t('capabilities.noLinkedSkillsForTool', 'No linked skills yet. This tool can still be assigned directly to agents.')}
         </div>
       )}
-    </section>
+    </Card>
   )
 }
 
@@ -286,28 +274,22 @@ function SkillRows({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-medium text-text truncate">{skill.label}</span>
-                <MapPill tone={skill.source === 'custom' ? 'var(--color-amber)' : 'var(--color-accent)'}>
+                <Badge tone={skill.source === 'custom' ? 'warning' : 'neutral'}>
                   {prettySkillKind(skill)}
-                </MapPill>
-                {multiTool ? <MapPill tone="var(--color-info)">Multi-tool</MapPill> : null}
-                {customSkillNames.has(skill.name) ? <MapPill tone="var(--color-amber)">Custom</MapPill> : null}
+                </Badge>
+                {multiTool ? <Badge tone="info">Multi-tool</Badge> : null}
+                {customSkillNames.has(skill.name) ? <Badge tone="warning">Custom</Badge> : null}
               </div>
               <div className="text-2xs text-text-muted leading-relaxed line-clamp-2 mt-0.5">{skill.description}</div>
               {linkedTools.length > 0 ? (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {linkedTools.map((tool) => (
-                    <span
+                    <Badge
                       key={`${skill.name}:${tool.id}`}
-                      className="text-2xs px-1.5 py-0.5 rounded-full"
-                      style={{
-                        color: tool.id === currentToolId ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                        background: tool.id === currentToolId
-                          ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-                          : 'color-mix(in srgb, var(--color-text-muted) 8%, transparent)',
-                      }}
+                      tone={tool.id === currentToolId ? 'accent' : 'muted'}
                     >
                       {tool.name}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               ) : null}
@@ -319,16 +301,3 @@ function SkillRows({
   )
 }
 
-function MapPill({ children, tone }: { children: string; tone: string }) {
-  return (
-    <span
-      className="inline-flex items-center text-2xs uppercase tracking-[0.06em] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        color: tone,
-        background: `color-mix(in srgb, ${tone} 11%, transparent)`,
-      }}
-    >
-      {children}
-    </span>
-  )
-}

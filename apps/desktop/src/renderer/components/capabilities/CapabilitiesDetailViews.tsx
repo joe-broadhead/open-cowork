@@ -23,7 +23,7 @@ import {
   ToolCredentialsCard,
   ToolIntegrationToggleCard,
 } from './capabilities-page-components.tsx'
-import { Badge, Button } from '../ui'
+import { Badge, Button, Card } from '../ui'
 
 type AvailableToolMethod = { id: string; description: string }
 
@@ -61,18 +61,18 @@ export function CapabilityToolDetailView({
       <div className="feature-page-shell">
         <CapabilitiesBackButton onBack={onBack} />
 
-        <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
+        <Card padding="lg" className="mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <Badge tone="accent">
                   {prettyKind(selectedTool)}
                 </Badge>
-                <Badge tone={selectedTool.source === 'custom' ? 'accent' : 'neutral'}>
+                <Badge tone={selectedTool.source === 'custom' ? 'info' : 'neutral'}>
                   {selectedTool.source === 'custom' ? 'Installed' : 'Built-in'}
                 </Badge>
               </div>
-              <h1 className="text-xl font-semibold text-text mb-1">{selectedTool.name}</h1>
+              <h1 className="font-display text-xl font-semibold text-text mb-1">{selectedTool.name}</h1>
               <p className="text-sm text-text-secondary leading-relaxed">{selectedTool.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -103,12 +103,12 @@ export function CapabilityToolDetailView({
               ) : null}
             </div>
           </div>
-        </div>
+        </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
           <div className="flex flex-col gap-5">
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
+            <Card>
+              <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <StatBox label="Identifier" value={selectedTool.id} />
                 <StatBox
@@ -122,11 +122,11 @@ export function CapabilityToolDetailView({
                 <StatBox label="Runtime namespace" value={selectedTool.namespace || selectedTool.id} />
                 <StatBox label="Used by coworkers" value={selectedTool.agentNames.length > 0 ? selectedTool.agentNames.join(', ') : 'No coworkers yet'} />
               </div>
-            </div>
+            </Card>
 
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
+            <Card>
               <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">
+                <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted">
                   {selectedTool.origin === 'opencode' ? 'Runtime metadata' : 'Available methods'}
                 </div>
                 <span className="text-2xs text-text-muted">
@@ -136,10 +136,10 @@ export function CapabilityToolDetailView({
               {availableTools.length > 0 ? (
                 <div className="flex flex-col gap-2">
                   {availableTools.map((entry) => (
-                    <div key={entry.id} className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
+                    <Card key={entry.id} variant="flat" padding="sm">
                       <div className="text-xs font-medium text-text">{entry.id}</div>
                       <div className="text-2xs text-text-muted mt-1 leading-relaxed">{entry.description}</div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
               ) : (
@@ -149,11 +149,11 @@ export function CapabilityToolDetailView({
                     : 'No MCP methods have been discovered for this tool yet.'}
                 </div>
               )}
-            </div>
+            </Card>
 
             {custom ? (
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.connection', 'Connection')}</div>
+              <Card>
+                <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.connection', 'Connection')}</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <StatBox label="Type" value={custom.type === 'stdio' ? 'Local stdio MCP' : 'Remote HTTP / SSE MCP'} />
                   {custom.type === 'stdio' ? (
@@ -162,7 +162,7 @@ export function CapabilityToolDetailView({
                     <StatBox label="Endpoint" value={custom.url || 'Not set'} />
                   )}
                 </div>
-              </div>
+              </Card>
             ) : null}
 
             {selectedTool.integrationId && selectedTool.authMode ? (
@@ -183,8 +183,8 @@ export function CapabilityToolDetailView({
           </div>
 
           <div className="flex flex-col gap-5">
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedSkills', 'Linked skills')}</div>
+            <Card>
+              <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.linkedSkills', 'Linked skills')}</div>
               {linkedSkills.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {linkedSkills.map((skill) => (
@@ -202,22 +202,22 @@ export function CapabilityToolDetailView({
               ) : (
                 <div className="text-xs text-text-muted">No skills are linked to this tool yet.</div>
               )}
-            </div>
+            </Card>
 
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedCoworkers', 'Linked coworkers')}</div>
+            <Card>
+              <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.linkedCoworkers', 'Linked coworkers')}</div>
               {selectedTool.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedTool.agentNames.map((agentName) => (
-                    <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-2xs text-text-secondary">
+                    <Badge key={agentName} tone="neutral">
                       {agentName}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               ) : (
                 <div className="text-xs text-text-muted">No built-in or custom coworkers use this tool yet.</div>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -253,7 +253,7 @@ export function CapabilitySkillDetailView({
       <div className="feature-page-shell">
         <CapabilitiesBackButton onBack={onBack} />
 
-        <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
+        <Card padding="lg" className="mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -261,7 +261,7 @@ export function CapabilitySkillDetailView({
                   {prettySkillKind(selectedSkill)}
                 </Badge>
               </div>
-              <h1 className="text-xl font-semibold text-text mb-1">{selectedSkill.label}</h1>
+              <h1 className="font-display text-xl font-semibold text-text mb-1">{selectedSkill.label}</h1>
               <p className="text-sm text-text-secondary leading-relaxed">{selectedSkill.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -292,11 +292,11 @@ export function CapabilitySkillDetailView({
               ) : null}
             </div>
           </div>
-        </div>
+        </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5 min-w-0">
-          <div className="rounded-xl border border-border-subtle bg-surface p-4 min-w-0">
-            <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
+          <Card className="min-w-0">
+            <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
             {bundle?.content ? (
               <div className="min-w-0 max-w-full overflow-x-auto">
                 <div className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
@@ -308,11 +308,11 @@ export function CapabilitySkillDetailView({
             ) : (
               <div className="text-xs text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>
             )}
-          </div>
+          </Card>
 
           <div className="flex flex-col gap-5">
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
+            <Card>
+              <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
               <div className="flex flex-col gap-3">
                 <StatBox label="Identifier" value={selectedSkill.name} />
                 <StatBox label="Source" value={prettySkillSource(selectedSkill)} />
@@ -320,10 +320,10 @@ export function CapabilitySkillDetailView({
                   <StatBox label="Location" value={selectedSkill.location} />
                 ) : null}
               </div>
-            </div>
+            </Card>
 
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
+            <Card>
+              <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
               {linkedTools.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {linkedTools.map((tool) => (
@@ -341,27 +341,27 @@ export function CapabilitySkillDetailView({
               ) : (
                 <div className="text-xs text-text-muted">{t('capabilities.skillNotTiedToTool', 'This skill is not tied to a specific tool.')}</div>
               )}
-            </div>
+            </Card>
 
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByCoworkers', 'Used by coworkers')}</div>
+            <Card>
+              <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.usedByCoworkers', 'Used by coworkers')}</div>
               {selectedSkill.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedSkill.agentNames.map((agentName) => (
-                    <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-2xs text-text-secondary">
+                    <Badge key={agentName} tone="neutral">
                       {agentName}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               ) : (
                 <div className="text-xs text-text-muted">No built-in or custom coworkers use this skill yet.</div>
               )}
-            </div>
+            </Card>
 
             {bundle?.files.length ? (
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
+              <Card>
                 <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted">{t('capabilities.bundleFiles', 'Bundle files')}</div>
+                  <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted">{t('capabilities.bundleFiles', 'Bundle files')}</div>
                   <span className="text-2xs text-text-muted">{bundle.files.length} files</span>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -374,7 +374,7 @@ export function CapabilitySkillDetailView({
                     />
                   ))}
                 </div>
-              </div>
+              </Card>
             ) : null}
           </div>
         </div>
