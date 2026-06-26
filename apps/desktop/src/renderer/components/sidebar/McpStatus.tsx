@@ -55,7 +55,7 @@ export function McpStatus() {
             return (
               <div key={mcp.name} className="flex items-center justify-between px-3 py-[3px] text-[11px] text-text-muted group/mcp">
                 <div className="flex items-center gap-2">
-                  <Icon name={mcp.connected ? 'check' : 'circle-x'} size={16} className={mcp.connected ? 'text-green' : 'text-red'} />
+                  <Icon name={mcp.connected ? 'check' : 'circle-x'} size={16} className={mcp.connected ? 'text-text-muted' : 'text-red'} />
                   {mcp.name}
                   {!mcp.connected && mcp.rawStatus && (
                     <span className="text-[10px] font-medium uppercase tracking-[0.05em] text-text-muted">

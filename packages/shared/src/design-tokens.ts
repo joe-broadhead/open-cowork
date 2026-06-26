@@ -790,8 +790,8 @@ export const DESIGN_TOKENS = {
     border: 'color-mix(in srgb, var(--color-accent) 24%, transparent)',
   },
   glow: {
-    accent: '0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 18px color-mix(in srgb, var(--color-accent) 32%, transparent)',
-    soft: '0 0 24px color-mix(in srgb, var(--color-accent) 22%, transparent)',
+    accent: '0 0 0 1px color-mix(in srgb, var(--color-accent) 38%, transparent), 0 0 12px color-mix(in srgb, var(--color-accent) 18%, transparent)',
+    soft: '0 0 14px color-mix(in srgb, var(--color-accent) 12%, transparent)',
   },
   ring: {
     focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 8px color-mix(in srgb, var(--color-accent) 14%, transparent)',
@@ -843,8 +843,8 @@ export const DESIGN_TOKENS = {
     lead: 'var(--color-accent)',
     strategist: 'var(--color-info)',
     builder: 'var(--color-green)',
-    reviewer: 'var(--color-amber)',
-    operator: 'var(--color-red)',
+    reviewer: 'color-mix(in srgb, var(--color-amber) 70%, var(--color-info))',
+    operator: 'color-mix(in srgb, var(--color-red) 80%, var(--color-info))',
     neutral: 'var(--color-text-secondary)',
   },
   lane: {

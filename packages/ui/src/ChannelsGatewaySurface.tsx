@@ -112,12 +112,9 @@ function roleLabel(role: ChannelIdentityRole | CoordinationWatchRecipientRole | 
 }
 
 function roleTone(role: ChannelIdentityRole | CoordinationWatchRecipientRole | null | undefined): BadgeTone {
-  // Five distinct role treatments (prototype .role-badge.owner/.admin/.member/.approver/.viewer):
-  // owner = accent, admin = blue (info), approver = green (success), member = neutral,
-  // viewer = muted.
+  // Roles are metadata, not status — keep them as quiet tags. Only the Owner carries
+  // the accent; everyone else is neutral/muted so the roster isn't a rainbow of chips.
   if (role === 'owner') return 'accent'
-  if (role === 'admin') return 'info'
-  if (role === 'approver') return 'success'
   if (role === 'viewer') return 'muted'
   return 'neutral'
 }
@@ -125,7 +122,8 @@ function roleTone(role: ChannelIdentityRole | CoordinationWatchRecipientRole | n
 function statusTone(status: string | null | undefined): BadgeTone {
   const value = String(status || '').toLowerCase()
   if (value === 'active' || value === 'connected' || value === 'sent') return 'success'
-  if (value === 'auth_required' || value === 'pending' || value === 'claimed' || value === 'paused') return 'warning'
+  // Only states that genuinely need the user are warning; benign transitional states stay neutral.
+  if (value === 'auth_required') return 'warning'
   if (value === 'failed' || value === 'dead' || value === 'error' || value === 'disabled') return 'danger'
   return 'neutral'
 }
@@ -775,7 +773,7 @@ export function ChannelsGatewaySurface({
         description="Connect channels, map people, and subscribe watches while OpenCode remains the execution runtime."
         meta={(
           <div className="studio-channel-header-meta">
-            <Badge tone={canManage ? 'success' : 'warning'}>{canManage ? 'Setup enabled' : 'Admin gated'}</Badge>
+            <Badge tone={canManage ? 'accent' : 'neutral'}>{canManage ? 'Setup enabled' : 'Admin gated'}</Badge>
             <span>{platformLabel}</span>
           </div>
         )}

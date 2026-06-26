@@ -82,8 +82,8 @@
   --glass-bg: color-mix(in srgb, var(--color-elevated) 72%, transparent);
   --glass-blur: blur(22px) saturate(1.5);
   --glass-border: color-mix(in srgb, var(--color-accent) 24%, transparent);
-  --glow-accent: 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 18px color-mix(in srgb, var(--color-accent) 32%, transparent);
-  --glow-soft: 0 0 24px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  --glow-accent: 0 0 0 1px color-mix(in srgb, var(--color-accent) 38%, transparent), 0 0 12px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --glow-soft: 0 0 14px color-mix(in srgb, var(--color-accent) 12%, transparent);
   --ring-focus: 0 0 0 2px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 8px color-mix(in srgb, var(--color-accent) 14%, transparent);
   --ring-selected: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
@@ -121,8 +121,8 @@
   --coworker-lead: var(--color-accent);
   --coworker-strategist: var(--color-info);
   --coworker-builder: var(--color-green);
-  --coworker-reviewer: var(--color-amber);
-  --coworker-operator: var(--color-red);
+  --coworker-reviewer: color-mix(in srgb, var(--color-amber) 70%, var(--color-info));
+  --coworker-operator: color-mix(in srgb, var(--color-red) 80%, var(--color-info));
   --coworker-neutral: var(--color-text-secondary);
   --lane-planning: var(--color-accent);
   --lane-delegated: var(--color-info);

@@ -13,9 +13,9 @@ type Props = {
 }
 
 const RISK_TONE: Record<CapabilityRiskLevel, string> = {
-  low: 'var(--color-green)',
-  medium: 'var(--color-amber)',
-  high: 'var(--color-red)',
+  low: 'var(--color-text-secondary)',
+  medium: 'var(--chip-warning)',
+  high: 'var(--chip-danger)',
 }
 
 type ConsumerMatrixCapability = {

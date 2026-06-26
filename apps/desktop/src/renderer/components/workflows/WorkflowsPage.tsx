@@ -285,7 +285,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="min-w-0 font-display text-role-card-title font-bold text-primary">{workflow.title}</h2>
-                      <Badge tone={statusTone(workflow.status)} className="uppercase">
+                      <Badge tone={statusTone(workflow.status)} className="capitalize">
                         {workflow.status}
                       </Badge>
                     </div>

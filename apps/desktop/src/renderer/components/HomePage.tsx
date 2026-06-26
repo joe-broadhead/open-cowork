@@ -486,8 +486,8 @@ function HomeComposer({
           WebkitBackdropFilter: 'blur(18px) saturate(1.12)',
           border: dragOver ? dropBorder : restBorder,
           boxShadow: dragOver
-            ? '0 24px 80px color-mix(in srgb, var(--color-accent) 24%, transparent)'
-            : '0 26px 70px rgba(0, 0, 0, 0.40), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 56px color-mix(in srgb, var(--accent) 12%, transparent), inset 0 1px rgba(255, 255, 255, 0.05)',
+            ? '0 18px 48px color-mix(in srgb, var(--color-accent) 16%, transparent)'
+            : '0 26px 70px rgba(0, 0, 0, 0.40), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px rgba(255, 255, 255, 0.05)',
         }}
       >
         <div className="home-composer-assign-row">

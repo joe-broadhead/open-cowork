@@ -191,8 +191,8 @@ function StatusDot({ color, pulse }: { color: string; pulse: boolean }) {
       style={{
         width: 6,
         height: 6,
-        background: color,
-        boxShadow: pulse ? `0 0 0 2px color-mix(in srgb, ${color} 30%, transparent)` : undefined,
+        background: `color-mix(in srgb, ${color} 78%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 34%, transparent)`,
         animation: pulse ? 'agent-run-pulse 1.4s ease-in-out infinite' : undefined,
       }}
       aria-hidden="true"

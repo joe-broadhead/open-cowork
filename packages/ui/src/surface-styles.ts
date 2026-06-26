@@ -1938,9 +1938,8 @@ export function sharedKeyframesCss(): string {
 }
 
 @keyframes ui-status-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 42%, transparent); }
-  70% { box-shadow: 0 0 0 var(--space-2) transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 @keyframes ui-progress-shimmer {
