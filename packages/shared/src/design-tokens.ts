@@ -5,8 +5,8 @@ export const DEFAULT_ACCENT_PRESET_ID = 'azure'
 export const DESIGN_ACCENT_PRESETS = {
   azure: {
     label: 'Azure',
-    accent: '#7c8cf8',
-    accent2: '#b06ff7',
+    accent: '#8290ff',
+    accent2: '#9aa8ff',
   },
   indigo: {
     label: 'Indigo',
@@ -738,7 +738,7 @@ export const DESIGN_TOKENS = {
     '2xs': '14px',
     xs: '16px',
     sm: '18px',
-    md: '21px',
+    md: '20px',
     lg: '24px',
     xl: '26px',
     '2xl': '30px',
@@ -761,19 +761,22 @@ export const DESIGN_TOKENS = {
   tracking: {
     tight: '-0.01em',
     display: '-0.02em',
+    eyebrow: '0.06em',
   },
   radius: {
-    xs: '6px',
-    sm: '8px',
-    md: '10px',
-    lg: '14px',
-    xl: '18px',
-    '2xl': '20px',
-    '3xl': '28px',
+    xs: '5px',
+    sm: '7px',
+    md: '9px',
+    lg: '12px',
+    xl: '16px',
+    '2xl': '16px',
+    '3xl': '22px',
     full: '9999px',
   },
   shadow: {
-    1: '0 1px 2px rgba(7,7,15,.5), 0 2px 5px rgba(7,7,15,.3)',
+    // Resting cards/rows are shadowless — depth comes from the raised hairline.
+    // shadow.card/elevated (floating layers only) come from the live theme.
+    1: 'none',
     card: DEFAULT_DARK_BRAND_THEME.shadowCard,
     elevated: DEFAULT_DARK_BRAND_THEME.shadowElevated,
   },
@@ -781,8 +784,8 @@ export const DESIGN_TOKENS = {
     popover: 'var(--shadow-3)',
   },
   specular: {
-    default: 'inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent)',
-    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent)',
+    default: 'inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent)',
+    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent)',
   },
   glass: {
     bg: 'color-mix(in srgb, var(--color-elevated) 86%, transparent)',
@@ -804,10 +807,10 @@ export const DESIGN_TOKENS = {
     spring: 'cubic-bezier(0.16, 1, 0.3, 1)',
   },
   duration: {
-    1: '120ms',
-    2: '180ms',
-    3: '240ms',
-    4: '420ms',
+    1: '100ms',
+    2: '140ms',
+    3: '200ms',
+    4: '320ms',
   },
   z: {
     sticky: '10',
@@ -833,9 +836,9 @@ export const DESIGN_TOKENS = {
     taskLaneW: '320px',
   },
   density: {
-    compactGap: '13px',
-    compactPad: '7px',
-    regularGap: '18px',
+    compactGap: '12px',
+    compactPad: '6px',
+    regularGap: '16px',
     regularPad: '10px',
     comfyGap: '24px',
     comfyPad: '14px',

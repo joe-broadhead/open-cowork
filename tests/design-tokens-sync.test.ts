@@ -91,8 +91,8 @@ test('shared design tokens generate the desktop root token CSS', () => {
 
 test('shared design tokens emit the canonical density selectors', () => {
   const css = emitRootTokensCss()
-  assert.ok(css.includes(':root[data-density="compact"] {\n  --row-pad: 7px;\n  --gap: 13px;\n}'))
-  assert.ok(css.includes(':root[data-density="regular"] {\n  --row-pad: 10px;\n  --gap: 18px;\n}'))
+  assert.ok(css.includes(':root[data-density="compact"] {\n  --row-pad: 6px;\n  --gap: 12px;\n}'))
+  assert.ok(css.includes(':root[data-density="regular"] {\n  --row-pad: 10px;\n  --gap: 16px;\n}'))
   assert.ok(css.includes(':root[data-density="comfy"] {\n  --row-pad: 14px;\n  --gap: 24px;\n}'))
 })
 

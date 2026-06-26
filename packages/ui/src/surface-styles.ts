@@ -61,7 +61,7 @@ export function artifactsSurfaceCss(): string {
       cursor: pointer;
       padding: 0 var(--space-3);
       font-size: var(--text-xs);
-      font-weight: 650;
+      font-weight: 560;
     }
     .studio-artifacts-filter:hover,
     .studio-artifacts-filter[data-active="true"] {
@@ -164,7 +164,7 @@ export function artifactsSurfaceCss(): string {
       overflow: hidden;
       color: var(--color-text-secondary);
       font-size: var(--text-sm);
-      font-weight: 650;
+      font-weight: 560;
       line-height: var(--lh-sm);
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -185,7 +185,7 @@ export function artifactsSurfaceCss(): string {
     .studio-artifact-card__facts dt {
       color: var(--color-text-muted);
       font-size: var(--text-2xs);
-      font-weight: 750;
+      font-weight: 600;
       line-height: var(--lh-2xs);
       text-transform: uppercase;
     }
@@ -439,7 +439,7 @@ export function wikiSurfaceCss(): string {
       margin: 0 0 var(--space-2);
       color: var(--color-text-secondary);
       font-size: var(--text-2xs);
-      font-weight: 750;
+      font-weight: 600;
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
@@ -580,7 +580,7 @@ export function wikiSurfaceCss(): string {
       margin: 0;
       color: var(--color-text-secondary);
       font-size: var(--text-2xs);
-      font-weight: 750;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
@@ -620,7 +620,7 @@ export function wikiSurfaceCss(): string {
     .studio-wiki-propose__field span {
       color: var(--color-text-secondary);
       font-size: var(--text-2xs);
-      font-weight: 750;
+      font-weight: 600;
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
@@ -797,7 +797,7 @@ export function channelsSurfaceCss(): string {
 
 .studio-channel-summary .row span {
   color: var(--color-text-secondary);
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .studio-channel-watch__copy {
@@ -814,7 +814,7 @@ export function channelsSurfaceCss(): string {
   color: var(--accent-text);
   padding: 0 var(--space-2);
   font-size: var(--text-2xs);
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .studio-channel-form {
@@ -948,7 +948,7 @@ export function projectsSurfaceCss(): string {
   flex: 1;
   color: var(--color-text-muted);
   font-size: var(--text-2xs);
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: 0.08em;
   line-height: var(--lh-2xs);
   text-transform: uppercase;
@@ -984,7 +984,7 @@ export function projectsSurfaceCss(): string {
   background: color-mix(in srgb, var(--color-elevated) 90%, var(--color-base) 10%);
   box-shadow: var(--shadow-1), var(--specular);
   padding: var(--space-3);
-  transition: transform var(--dur-2) var(--ease-spring), border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+  transition: transform var(--dur-2) var(--ease-out), border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 
 .studio-kanban-task-card:hover,
@@ -1249,7 +1249,7 @@ export function projectsSurfaceCss(): string {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-2xs);
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1359,7 +1359,7 @@ export function controlsSurfaceCss(): string {
     border-color var(--dur-1) var(--ease-out),
     color var(--dur-1) var(--ease-out),
     box-shadow var(--dur-1) var(--ease-out),
-    transform var(--dur-2) var(--ease-spring);
+    transform var(--dur-2) var(--ease-out);
 }
 
 .ui-button,
@@ -1371,7 +1371,7 @@ export function controlsSurfaceCss(): string {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  font-weight: 650;
+  font-weight: 560;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
@@ -1395,7 +1395,7 @@ export function controlsSurfaceCss(): string {
 .ui-select-trigger:active:not(:disabled),
 .ui-menu-trigger:active:not(:disabled),
 .ui-segmented-option:active:not(:disabled) {
-  transform: scale(0.96);
+  filter: brightness(0.92);
 }
 
 .ui-button:disabled,
@@ -1726,7 +1726,7 @@ export function controlsSurfaceCss(): string {
   transition:
     background var(--dur-1) var(--ease-out),
     color var(--dur-1) var(--ease-out),
-    transform var(--dur-2) var(--ease-spring);
+    transform var(--dur-2) var(--ease-out);
 }
 
 .ui-popover-item:hover:not(:disabled),
@@ -1825,7 +1825,7 @@ export function primitivesSurfaceCss(): string {
   color: var(--color-text);
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: var(--tracking-tight);
   line-height: var(--lh-lg);
 }

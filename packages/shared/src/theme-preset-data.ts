@@ -229,33 +229,37 @@ const UI_THEME_PRESET_SEEDS = {
   },
   mercury: {
     label: 'Mercury',
-    description: 'Studio default — deep indigo glass, periwinkle light, and a soft signature accent.',
-    swatches: ['#15151f', '#8da4f5', '#b8a3ff', '#82cadc'],
+    description: 'Studio default — graphite operator console with a single surgical periwinkle accent.',
+    swatches: ['#0d0e11', '#8290ff', '#bcc0cc', '#7fd0e6'],
     dark: {
       ...DEFAULT_DARK_BRAND_THEME,
-      base: '#14141e',
-      surface: 'rgba(149, 140, 250, 0.065)',
-      surfaceHover: 'rgba(149, 140, 250, 0.12)',
-      surfaceActive: 'rgba(149, 140, 250, 0.19)',
-      elevated: '#211f33',
-      border: 'rgba(149, 140, 250, 0.14)',
-      borderSubtle: 'rgba(149, 140, 250, 0.07)',
-      borderStrong: 'rgba(149, 140, 250, 0.24)',
-      text: '#eceef6',
-      textSecondary: '#b2b5cc',
-      textMuted: '#82859b',
-      accent: '#7c8cf8',
-      accentHover: '#9aa6fb',
-      green: '#7fcfa0',
-      amber: '#e6b677',
-      red: '#fc92b4',
-      info: '#82cadc',
-      accentForeground: '#0f0f18',
-      shadowCard: DARK_SHADOW_SOFT,
-      shadowElevated: DARK_SHADOW_SOFT_LG,
-      // Precise operator console: one faint cool wash from the top edge instead of
-      // a three-point aurora — flat base, no decorative bloom.
-      bgImage: 'radial-gradient(120% 80% at 50% -30%, rgba(124, 140, 248, 0.05), transparent 55%)',
+      // Codex-grade: a near-neutral graphite field. Surfaces/borders are a cool-WHITE
+      // luminance overlay (not periwinkle tint), so the shell reads monochrome and the
+      // one accent stays surgical. Depth comes from raised hairlines, not glass/shadow.
+      base: '#0d0e11',
+      surface: 'rgba(228, 232, 242, 0.055)',
+      surfaceHover: 'rgba(228, 232, 242, 0.10)',
+      surfaceActive: 'rgba(228, 232, 242, 0.17)',
+      elevated: '#1a1b20',
+      border: 'rgba(228, 232, 242, 0.16)',
+      borderSubtle: 'rgba(228, 232, 242, 0.08)',
+      borderStrong: 'rgba(228, 232, 242, 0.30)',
+      text: '#f4f6fb',
+      textSecondary: '#bcc0cc',
+      textMuted: '#888d99',
+      accent: '#8290ff',
+      accentHover: '#9fa8ff',
+      green: '#74e0a4',
+      amber: '#f0bd6e',
+      red: '#ff8aae',
+      info: '#7fd0e6',
+      accentForeground: '#0a0a12',
+      // Pure-black occlusion, reserved for floating layers (popover/menu/dialog).
+      // Resting cards/rows are shadowless (shadow-1 -> none); their edge is the hairline.
+      shadowCard: '0 1px 2px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.30)',
+      shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.50), 0 16px 40px rgba(0, 0, 0, 0.40)',
+      // Flat graphite field — no wash. Depth is structural (hairlines + luminance steps).
+      bgImage: 'none',
     },
     light: {
       ...DEFAULT_LIGHT_BRAND_THEME,
