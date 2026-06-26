@@ -1,4 +1,4 @@
-import { DENSITY_OPTIONS, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId } from '../../helpers/theme'
+import { DENSITY_OPTIONS, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId, type UiTheme, getUserFacingThemes, THEME_MATCHED_ACCENT } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
 import { Badge, Card, SegmentedControl, Select } from '../ui'
 import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
@@ -16,8 +16,37 @@ export function AppearancePreview({
   appearance: AppearancePreferences
   onUpdate: (patch: Partial<AppearancePreferences>) => void
 }) {
+  const themes = getUserFacingThemes()
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-3">
+        <span className={sectionLabelCls}>{t('settings.appearance.theme', 'Theme')}</span>
+        <div className="grid grid-cols-2 gap-2">
+          {themes.map((theme) => {
+            const active = appearance.uiTheme === theme.id
+            return (
+              <Card
+                key={theme.id}
+                interactive
+                padding="sm"
+                aria-pressed={active}
+                onClick={() => onUpdate({ uiTheme: theme.id as UiTheme })}
+                className="settings-choice-card"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 shrink-0 overflow-hidden rounded-full border border-border-subtle">
+                    {theme.swatches.slice(0, 4).map((color, index) => (
+                      <span key={index} className="flex-1" style={{ background: color }} />
+                    ))}
+                  </span>
+                  <span className="min-w-0 truncate text-xs font-semibold text-text">{theme.label}</span>
+                </span>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+
       <div className="flex flex-col gap-3">
         <span className={sectionLabelCls}>{t('settings.appearance.colorScheme', 'Color Scheme')}</span>
         <SegmentedControl
@@ -35,6 +64,21 @@ export function AppearancePreview({
       <div className="flex flex-col gap-3">
         <span className={sectionLabelCls}>{t('settings.appearance.accent', 'Accent')}</span>
         <div className="grid grid-cols-3 gap-2">
+          <Card
+            interactive
+            padding="sm"
+            aria-pressed={appearance.accent === THEME_MATCHED_ACCENT}
+            onClick={() => onUpdate({ accent: THEME_MATCHED_ACCENT })}
+            className="settings-choice-card"
+          >
+            <span className="flex items-center gap-2">
+              <span
+                className="h-5 w-5 shrink-0 rounded-full border border-border-subtle"
+                style={{ background: 'conic-gradient(from 210deg, var(--color-accent), var(--color-info), var(--color-green), var(--color-amber), var(--color-red), var(--color-accent))' }}
+              />
+              <span className="min-w-0 truncate text-xs font-semibold text-text">{t('settings.appearance.accentMatchTheme', 'Match theme')}</span>
+            </span>
+          </Card>
           {Object.entries(UI_ACCENT_PRESETS).map(([accentId, accent]) => {
             const active = appearance.accent === accentId
             return (

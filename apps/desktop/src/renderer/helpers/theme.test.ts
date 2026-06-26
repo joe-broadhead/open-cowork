@@ -2,29 +2,28 @@ import { describe, expect, it } from 'vitest'
 import { applyAppearancePreferences, getAppearancePreferences, saveAppearancePreferences, UI_FONT_OPTIONS } from './theme'
 import { isUserFacingTheme } from './theme-presets'
 
-describe('branded theme identity (Studio brief §2)', () => {
-  it('exposes only Mercury as a user-facing theme; the code-editor presets stay hidden', () => {
-    // Mercury (surfaced as the Mercury/Day color schemes) is the single shipped
-    // identity. The bundled code-editor presets remain as migration data but must
-    // never be user-facing — re-exposing one would fail this guard.
-    expect(isUserFacingTheme('mercury')).toBe(true)
-    for (const devToolPreset of ['tokyostorm', 'gruvbox', 'nord', 'dracula', 'synthwave', 'frappe', 'ayu', 'kanagawa']) {
-      expect(isUserFacingTheme(devToolPreset)).toBe(false)
+describe('appearance theme presets', () => {
+  it('exposes a curated set of elegant themes; unknown/hidden ids stay false', () => {
+    for (const themeId of ['mercury', 'nord', 'rosepine', 'dracula', 'kanagawa', 'everforest']) {
+      expect(isUserFacingTheme(themeId)).toBe(true)
     }
+    // Novelty presets stay as registry data but are not surfaced in the picker.
+    expect(isUserFacingTheme('matrix')).toBe(false)
+    expect(isUserFacingTheme('not-a-real-theme')).toBe(false)
     expect(isUserFacingTheme(null)).toBe(false)
     expect(isUserFacingTheme(undefined)).toBe(false)
   })
 })
 
 describe('appearance theme defaults', () => {
-  it('defaults first-run appearance to Mercury with the Azure accent', () => {
+  it('defaults first-run appearance to Mercury with the theme-matched accent', () => {
     expect(getAppearancePreferences().uiTheme).toBe('mercury')
-    expect(getAppearancePreferences().accent).toBe('azure')
+    expect(getAppearancePreferences().accent).toBe('theme')
 
     applyAppearancePreferences()
 
     expect(document.documentElement.dataset.uiTheme).toBe('mercury')
-    expect(document.documentElement.dataset.uiAccent).toBe('azure')
+    expect(document.documentElement.dataset.uiAccent).toBe('theme')
     expect(document.documentElement.style.getPropertyValue('--color-base')).toBe('#0d0e11')
     expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe('#8290ff')
     expect(document.documentElement.style.getPropertyValue('--accent-2')).toBe('#9aa8ff')

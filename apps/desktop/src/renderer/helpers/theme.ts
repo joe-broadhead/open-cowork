@@ -1,18 +1,23 @@
 import {
   getDefaultThemeId,
   getThemeTokens,
+  getUserFacingThemes,
   isUiTheme,
   isUserFacingTheme,
   isUiAccentPresetId,
   accentActionFillToken,
-  DEFAULT_UI_ACCENT_PRESET_ID,
   UI_ACCENT_PRESETS,
   type UiAccentPresetId,
   type UiTheme,
 } from './theme-presets'
 
-export { getThemeTokens, getDefaultThemeId, UI_ACCENT_PRESETS }
+export { getThemeTokens, getDefaultThemeId, getUserFacingThemes, isUserFacingTheme, UI_ACCENT_PRESETS }
 export type { UiTheme, UiAccentPresetId }
+
+// "Match theme" (the default) uses each theme's own accent; the named presets are
+// optional overrides.
+export const THEME_MATCHED_ACCENT = 'theme' as const
+export type UiAccentChoice = UiAccentPresetId | typeof THEME_MATCHED_ACCENT
 
 export type ColorScheme = 'system' | 'dark' | 'light'
 export type UiFont = 'mona' | 'system' | 'rounded' | 'serif'
@@ -22,7 +27,7 @@ export type Density = 'compact' | 'regular' | 'comfy'
 export type AppearancePreferences = {
   colorScheme: ColorScheme
   uiTheme: UiTheme
-  accent: UiAccentPresetId
+  accent: UiAccentChoice
   uiFont: UiFont
   monoFont: MonoFont
   density: Density
@@ -111,9 +116,11 @@ function readUiTheme(): UiTheme {
   return isUserFacingTheme(resolved) ? resolved : getDefaultThemeId()
 }
 
-function readAccent(): UiAccentPresetId {
+function readAccent(): UiAccentChoice {
   const stored = localStorage.getItem(STORAGE_KEYS.accent)
-  return isUiAccentPresetId(stored) ? stored : DEFAULT_UI_ACCENT_PRESET_ID
+  // Default to "Match theme" so each theme renders with its own accent; a named
+  // preset is only used when the user explicitly picks one.
+  return isUiAccentPresetId(stored) ? stored : THEME_MATCHED_ACCENT
 }
 
 function readUiFont(): UiFont {
@@ -147,9 +154,11 @@ function applyResolvedColorScheme(colorScheme: ColorScheme) {
   document.documentElement.setAttribute('data-color-scheme', resolveColorScheme(colorScheme))
 }
 
-function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme, accent: UiAccentPresetId) {
+function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme, accent: UiAccentChoice) {
   const root = document.documentElement
-  const tokens = getThemeTokens(theme, resolveColorScheme(colorScheme), accent)
+  // "Match theme" (null override) → the theme's own accent; a named preset overrides it.
+  const accentOverride = accent === THEME_MATCHED_ACCENT ? null : accent
+  const tokens = getThemeTokens(theme, resolveColorScheme(colorScheme), accentOverride)
 
   root.style.setProperty('--color-base', tokens.base)
   root.style.setProperty('--color-surface', tokens.surface)

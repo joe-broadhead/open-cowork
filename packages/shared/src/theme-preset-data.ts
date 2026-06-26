@@ -249,6 +249,9 @@ const UI_THEME_PRESET_SEEDS = {
       textMuted: '#888d99',
       accent: '#8290ff',
       accentHover: '#9fa8ff',
+      // Same-hue lighter accent2 so the primary-action gradient stays one
+      // periwinkle hue (monochrome-first), not a saturated two-tone blue.
+      accent2: '#9aa8ff',
       green: '#74e0a4',
       amber: '#f0bd6e',
       red: '#ff8aae',

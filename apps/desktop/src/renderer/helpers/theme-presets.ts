@@ -80,13 +80,43 @@ export function isUiTheme(value: string | null | undefined): value is UiTheme {
 }
 
 // Open Cowork ships a single branded identity — Mercury — surfaced as the
-// Mercury (dark) and Day (light) color schemes. The remaining presets stay in the
-// registry as data (and as a getThemeTokens fallback) but are never user-facing or
-// applied: the code-editor theme list belongs to a dev tool, not a branded People OS.
-const USER_FACING_THEME_IDS = new Set<string>(['mercury'])
+// The curated, ordered set of elegant themes shown in the appearance picker.
+// Mercury (the graphite default) leads; the rest are flat operator-console
+// palettes that share the same sharp structure and differ only in colour mood.
+// Order is intentional (calm/neutral first, bolder moods later).
+export const USER_FACING_THEME_ORDER: string[] = [
+  'mercury',
+  'studio',
+  'nord',
+  'kanagawa',
+  'rosepine',
+  'frappe',
+  'everforest',
+  'ayu',
+  'poimandres',
+  'moonfly',
+  'oxocarbon',
+  'tokyostorm',
+  'dracula',
+  'gruvbox',
+  'horizon',
+  'cyberdream',
+  'synthwave',
+]
+const USER_FACING_THEME_IDS = new Set<string>(USER_FACING_THEME_ORDER)
 
 export function isUserFacingTheme(value: string | null | undefined): value is UiTheme {
   return Boolean(value && USER_FACING_THEME_IDS.has(value) && themeRegistry.has(value))
+}
+
+// The user-facing themes in display order, with their label + swatches for the picker.
+export function getUserFacingThemes(): Array<{ id: string; label: string; swatches: string[] }> {
+  return USER_FACING_THEME_ORDER
+    .filter((id) => themeRegistry.has(id))
+    .map((id) => {
+      const preset = UI_THEME_PRESETS[id as keyof typeof UI_THEME_PRESETS]
+      return { id, label: preset?.label || id, swatches: preset?.swatches || [] }
+    })
 }
 
 export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme, accentId?: UiAccentPresetId | null): ThemeTokens {
