@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { t } from '../../helpers/i18n'
+import { Button, Icon } from '../ui'
 
 interface Props {
   error: string
@@ -34,37 +35,24 @@ export function RuntimeOfflineBanner({ error, onRestart }: Props) {
     <div
       role="status"
       aria-live="assertive"
-      className="flex items-center justify-between gap-3 px-4 py-2 text-xs"
-      style={{
-        background: 'color-mix(in srgb, var(--color-red) 12%, transparent)',
-        borderBottom: '1px solid color-mix(in srgb, var(--color-red) 30%, var(--color-border-subtle))',
-        color: 'var(--color-red)',
-      }}
+      className="flex items-center justify-between gap-3 border-b border-red/30 bg-red/12 px-4 py-2 text-xs text-red"
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" className="shrink-0">
-          <circle cx="7" cy="7" r="5.5" />
-          <line x1="7" y1="4.5" x2="7" y2="7.5" />
-          <circle cx="7" cy="9.5" r="0.4" fill="currentColor" />
-        </svg>
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon name="alert-circle" size={16} className="shrink-0" />
         <span className="truncate">
           {t('runtime.offlineLabel', 'Runtime unavailable:')}{' '}
           <span className="font-mono text-2xs">{error}</span>
         </span>
       </div>
-      <button
-        type="button"
+      <Button
+        variant="danger"
+        size="sm"
         onClick={() => void handleRestart()}
-        disabled={restarting}
-        className="shrink-0 px-3 py-1 rounded border text-2xs font-medium cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-        style={{
-          borderColor: 'color-mix(in srgb, var(--color-red) 50%, transparent)',
-          color: 'var(--color-red)',
-          background: 'color-mix(in srgb, var(--color-red) 6%, transparent)',
-        }}
+        loading={restarting}
+        className="shrink-0"
       >
         {restarting ? t('runtime.restarting', 'Restarting…') : t('runtime.tryAgain', 'Try again')}
-      </button>
+      </Button>
     </div>
   )
 }
