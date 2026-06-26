@@ -481,11 +481,13 @@ function HomeComposer({
         ref={inputChromeRef}
         className="w-full rounded-t-[28px] px-4 py-3 grid gap-3 transition-colors"
         style={{
-          background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 86%, var(--color-base) 14%), color-mix(in srgb, var(--color-elevated) 70%, var(--color-base) 30%))',
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 55%), color-mix(in srgb, var(--color-elevated) 58%, transparent)',
+          backdropFilter: 'blur(18px) saturate(1.12)',
+          WebkitBackdropFilter: 'blur(18px) saturate(1.12)',
           border: dragOver ? dropBorder : restBorder,
           boxShadow: dragOver
-            ? '0 24px 80px color-mix(in srgb, var(--color-accent) 18%, transparent)'
-            : '0 22px 80px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.035)',
+            ? '0 24px 80px color-mix(in srgb, var(--color-accent) 24%, transparent)'
+            : '0 26px 70px rgba(0, 0, 0, 0.40), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 56px color-mix(in srgb, var(--accent) 12%, transparent), inset 0 1px rgba(255, 255, 255, 0.05)',
         }}
       >
         <div className="home-composer-assign-row">
@@ -632,8 +634,10 @@ function HomeComposer({
       <div
         className="rounded-b-[28px] border-x border-b"
         style={{
-          background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 72%, var(--color-base) 28%), color-mix(in srgb, var(--color-elevated) 62%, var(--color-base) 38%))',
-          borderColor: dragOver ? 'var(--color-accent)' : 'rgba(148, 148, 172, 0.18)',
+          background: 'color-mix(in srgb, var(--color-elevated) 50%, transparent)',
+          backdropFilter: 'blur(18px) saturate(1.12)',
+          WebkitBackdropFilter: 'blur(18px) saturate(1.12)',
+          borderColor: dragOver ? 'var(--color-accent)' : 'color-mix(in srgb, var(--accent) 16%, transparent)',
           marginTop: '-1px',
         }}
       >
