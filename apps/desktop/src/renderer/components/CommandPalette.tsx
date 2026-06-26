@@ -7,6 +7,7 @@ import type {
 import { useSessionStore } from '../stores/session'
 import { t } from '../helpers/i18n'
 import type { PrimaryAgentMode } from '../stores/session'
+import { Badge, EmptyState, Input, Kbd } from './ui'
 import { ModalBackdrop } from './layout/ModalBackdrop'
 import {
   buildCommandPaletteItems,
@@ -181,19 +182,19 @@ export function CommandPalette({
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-50 bg-black/45" />
       <div className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-2xl theme-popover shadow-2xl">
-        <div className="border-b px-4 py-3" style={{ borderColor: 'var(--color-border-subtle)' }}>
-          <input
+        <div className="border-b border-border-subtle px-3 py-3">
+          <Input
             ref={inputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
             type="search"
             role="searchbox"
+            leftIcon="search"
             aria-label={t('commandPalette.searchLabel', 'Search command palette')}
             aria-controls={listboxId}
             aria-activedescendant={activeOptionId}
             placeholder={t('commandPalette.search', 'Search actions, agents, and commands...')}
-            className="w-full bg-transparent text-md text-text outline-none placeholder:text-text-muted"
           />
         </div>
 
@@ -204,8 +205,12 @@ export function CommandPalette({
           className="max-h-[520px] overflow-y-auto px-2 py-2"
         >
           {groupedItems.length === 0 && (
-            <div className="px-4 py-10 text-center text-xs text-text-muted">
-              {t('commandPalette.noMatches', 'No matching actions. Try a broader search.')}
+            <div className="px-4 py-8">
+              <EmptyState
+                icon="search"
+                title={t('commandPalette.noMatchesTitle', 'No matching actions')}
+                body={t('commandPalette.noMatches', 'No matching actions. Try a broader search.')}
+              />
             </div>
           )}
 
@@ -225,29 +230,19 @@ export function CommandPalette({
                       role="option"
                       aria-selected={isSelected}
                       onClick={() => void handleSelect(item)}
-                      className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-start transition-colors cursor-pointer ${isSelected ? 'bg-surface-hover' : 'hover:bg-surface-hover'}`}
+                      className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-start transition-colors cursor-pointer ${isSelected ? 'bg-accent/10 ring-1 ring-inset ring-accent/30' : 'hover:bg-surface-hover'}`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-text">{item.title}</span>
-                          <span
-                            className="rounded-md px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.14em]"
-                            style={{
-                              background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
-                              color: 'var(--color-accent)',
-                            }}
-                          >
-                            {item.badge}
-                          </span>
+                          <Badge tone={isSelected ? 'accent' : 'muted'}>{item.badge}</Badge>
                         </div>
                         <div className="mt-0.5 text-2xs leading-5 text-text-muted">
                           {item.subtitle}
                         </div>
                       </div>
                       {item.hint && (
-                        <div className="mt-0.5 shrink-0 text-2xs text-text-muted">
-                          {item.hint}
-                        </div>
+                        <Kbd className="mt-0.5 shrink-0">{item.hint}</Kbd>
                       )}
                     </button>
                   )
@@ -257,7 +252,7 @@ export function CommandPalette({
           ))}
         </div>
 
-        <div className="border-t px-4 py-2 text-2xs text-text-muted" style={{ borderColor: 'var(--color-border-subtle)' }}>
+        <div className="border-t border-border-subtle px-4 py-2 text-2xs text-text-muted">
           {t('commandPalette.hint', 'Enter to run. Esc to close.')}
         </div>
       </div>
