@@ -1704,6 +1704,12 @@ body {
 :root {
   --chip-warning: color-mix(in srgb, var(--color-amber) 70%, var(--color-info));
   --chip-danger: color-mix(in srgb, var(--color-red) 80%, var(--color-info));
+  /* Semantic status aliases consumed by components (ChatThreadHeader, ThreadList,
+     SessionQuestionDock, capabilities). These were referenced but never defined,
+     so the pills rendered transparent/broken; route them through the cooled
+     chip hues so they resolve and stay on the cool palette. */
+  --color-warning: var(--chip-warning);
+  --color-danger: var(--chip-danger);
 }
 
 .ui-badge {
