@@ -26,7 +26,6 @@ import {
 import { useChatRuntimeSelection, useMentionableAgents, useReasoningVariantSelection } from './chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
 import {
-  Badge,
   Card,
   EmptyState,
   Icon,
@@ -914,12 +913,14 @@ function StatusStrip({ readyLabel }: { readyLabel: string }) {
   const total = summary.total
 
   return (
-    <div className="home-status-strip mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-xs text-text-muted">
-      <Badge tone={total > 0 && connected === total ? 'success' : 'warning'}>
-        {readyLabel}
-      </Badge>
-      <span className="opacity-40">·</span>
-      <span>{t('home.statusStrip.mcps', '{{connected}}/{{total}} MCPs', { connected, total })}</span>
+    <div className="home-status-strip mt-10 inline-flex items-center gap-2.5 px-4 py-2 rounded-full border border-border-subtle text-xs text-text-muted">
+      <span
+        className={`mcp-dot ${total > 0 && connected === total ? 'mcp-dot--up' : 'mcp-dot--degraded'}`}
+        aria-hidden
+      />
+      <span className="text-text-secondary font-[560]">{readyLabel}</span>
+      <span className="opacity-40" aria-hidden>·</span>
+      <span className="tabular">{t('home.statusStrip.mcps', '{{connected}}/{{total}} MCPs', { connected, total })}</span>
     </div>
   )
 }

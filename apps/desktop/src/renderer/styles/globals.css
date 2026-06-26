@@ -604,7 +604,6 @@ body {
 }
 
 .studio-shell__mark,
-.studio-coworker-avatar,
 .studio-object-card__icon,
 .studio-decision-card__icon {
   display: inline-flex;
@@ -1014,7 +1013,21 @@ body {
 
 .studio-coworker-avatar {
   position: relative;
-  font-weight: 600;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* Identity tile — matches AgentAvatar: an opaque, graphite-darkened same-hue
+     chip with ink initials and a crafted top specular, not a pastel wash. */
+  color: var(--color-text);
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--studio-tone, var(--color-accent)) 90%, var(--color-base)) 0%,
+    color-mix(in srgb, var(--studio-tone, var(--color-accent)) 62%, var(--color-base)) 100%);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--studio-tone, var(--color-accent)) 45%, transparent);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  text-shadow: 0 1px 1px rgba(12, 13, 15, 0.45);
 }
 
 .studio-coworker-avatar--round {
@@ -1036,8 +1049,8 @@ body {
   background: var(--color-text-muted);
 }
 
-.studio-presence-dot--working { background: color-mix(in srgb, var(--color-accent) 72%, transparent); }
-.studio-presence-dot--available { background: color-mix(in srgb, var(--color-green) 72%, transparent); }
+.studio-presence-dot--working { background: var(--color-accent); }
+.studio-presence-dot--available { background: var(--color-green); }
 .studio-presence-dot--offline { background: var(--color-text-muted); }
 
 .studio-presence-dot--pulse,
