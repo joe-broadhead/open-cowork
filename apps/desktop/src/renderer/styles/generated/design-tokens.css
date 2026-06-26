@@ -84,7 +84,7 @@
   --glass-border: color-mix(in srgb, var(--color-accent) 24%, transparent);
   --glow-accent: 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 18px color-mix(in srgb, var(--color-accent) 32%, transparent);
   --glow-soft: 0 0 24px color-mix(in srgb, var(--color-accent) 22%, transparent);
-  --ring-focus: 0 0 0 2px color-mix(in srgb, var(--color-accent) 60%, transparent), 0 0 16px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --ring-focus: 0 0 0 2px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 8px color-mix(in srgb, var(--color-accent) 14%, transparent);
   --ring-selected: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);

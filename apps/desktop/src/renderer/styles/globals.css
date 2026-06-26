@@ -1705,10 +1705,12 @@ body {
   min-height: var(--control-h-sm);
   border: var(--border-width-1) solid transparent;
   border-radius: var(--radius-full);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-2);
   font-size: var(--text-xs);
-  font-weight: 650;
+  font-weight: 600;
   line-height: var(--lh-xs);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 
 .ui-badge--neutral {

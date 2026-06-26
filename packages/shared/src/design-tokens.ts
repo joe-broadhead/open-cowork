@@ -794,7 +794,7 @@ export const DESIGN_TOKENS = {
     soft: '0 0 24px color-mix(in srgb, var(--color-accent) 22%, transparent)',
   },
   ring: {
-    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 60%, transparent), 0 0 16px color-mix(in srgb, var(--color-accent) 30%, transparent)',
+    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 8px color-mix(in srgb, var(--color-accent) 14%, transparent)',
     selected: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent)',
   },
   ease: {
