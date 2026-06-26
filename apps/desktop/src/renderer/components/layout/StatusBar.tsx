@@ -130,21 +130,21 @@ export function StatusBar() {
         className="statusbar-root flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-2xs border-t border-border-subtle text-text-muted"
       >
         <div className="flex items-center gap-2.5">
-          {isGenerating ? (
-            <Badge tone="accent" className="statusbar-badge">
-              {formatStatusAgentLabel(activeAgent)}
-            </Badge>
-          ) : isAwaitingPermission ? (
-            <Badge tone="warning" className="statusbar-badge">
-              {t('chat.awaitingApproval', 'Awaiting approval')}
-            </Badge>
-          ) : isAwaitingQuestion ? (
-            <Badge tone="accent" className="statusbar-badge">
-              {t('chat.awaitingAnswer', 'Awaiting answer')}
-            </Badge>
-          ) : (
-            <Badge tone="neutral" className="statusbar-badge">{t('statusbar.ready', 'Ready')}</Badge>
-          )}
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className={`status-dot ${isGenerating || isAwaitingQuestion ? 'status-dot--live' : isAwaitingPermission ? 'status-dot--warn' : 'status-dot--idle'}`}
+              aria-hidden
+            />
+            <span className="text-text-secondary font-[560]">
+              {isGenerating
+                ? formatStatusAgentLabel(activeAgent)
+                : isAwaitingPermission
+                  ? t('chat.awaitingApproval', 'Awaiting approval')
+                  : isAwaitingQuestion
+                    ? t('chat.awaitingAnswer', 'Awaiting answer')
+                    : t('statusbar.ready', 'Ready')}
+            </span>
+          </span>
           <span className="text-border">|</span>
           <span className="capitalize">{modelName}</span>
         </div>

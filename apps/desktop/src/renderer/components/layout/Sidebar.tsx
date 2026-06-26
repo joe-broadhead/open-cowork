@@ -16,7 +16,7 @@ import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
-import { Badge, Button, Card, Icon, Input, type BadgeTone, type IconName } from '../ui'
+import { Button, Card, Icon, Input, type BadgeTone, type IconName } from '../ui'
 import { buildDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 
 interface Props {
@@ -292,6 +292,23 @@ function workspaceStatusTone(status: WorkspaceInfo['status']): BadgeTone {
   return 'danger'
 }
 
+function WorkspaceStatusDot({ status }: { status: WorkspaceInfo['status'] }) {
+  const tone = workspaceStatusTone(status)
+  const dot = tone === 'success'
+    ? 'status-dot--ok'
+    : tone === 'warning'
+      ? 'status-dot--warn'
+      : tone === 'info'
+        ? 'status-dot--info'
+        : 'status-dot--error'
+  return (
+    <span className="inline-flex items-center gap-1.5 max-w-[110px] shrink-0">
+      <span className={`status-dot ${dot}`} aria-hidden />
+      <span className="truncate text-2xs text-text-muted">{workspaceStatusLabel(status)}</span>
+    </span>
+  )
+}
+
 function workspaceSupportReason(support: WorkspaceApiSupport[] | undefined, ...apis: string[]) {
   for (const api of apis) {
     const reason = support?.find((entry) => entry.api === api)?.verdict?.reason
@@ -481,9 +498,7 @@ function WorkspaceSwitcher() {
       >
         <div className="flex min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 truncate font-medium">{activeWorkspace.label}</span>
-          <Badge tone={workspaceStatusTone(activeWorkspace.status)} className="max-w-[96px] shrink-0 truncate">
-            {workspaceStatusLabel(activeWorkspace.status)}
-          </Badge>
+          <WorkspaceStatusDot status={activeWorkspace.status} />
         </div>
         <div className="mt-0.5 truncate text-2xs text-text-muted">
           {workspaceDescription(activeWorkspace, supportByWorkspace[activeWorkspace.id])}
@@ -505,9 +520,7 @@ function WorkspaceSwitcher() {
             >
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate font-medium">{workspace.label}</span>
-                <Badge tone={workspaceStatusTone(workspace.status)} className="max-w-[96px] shrink-0 truncate">
-                  {workspaceStatusLabel(workspace.status)}
-                </Badge>
+                <WorkspaceStatusDot status={workspace.status} />
               </div>
               <div className="mt-0.5 truncate text-2xs text-text-muted">
                 {workspaceDescription(workspace, supportByWorkspace[workspace.id])}
