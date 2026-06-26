@@ -2801,7 +2801,11 @@ body {
   padding: var(--space-5);
 }
 
-.settings-switch {
+/* Canonical on/off toggle (the <Switch> primitive). Geometry is token-derived:
+   the thumb fills the track height minus a 1-step inset on each side, and the
+   "on" travel equals track width minus track height. */
+.ui-switch {
+  --ui-switch-inset: var(--space-1);
   position: relative;
   width: var(--space-10);
   height: var(--space-5);
@@ -2811,29 +2815,29 @@ body {
   transition: background var(--dur-1) var(--ease-out);
 }
 
-.settings-switch:disabled {
+.ui-switch:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.settings-switch--on {
+.ui-switch--on {
   background: var(--color-accent);
 }
 
-.settings-switch__thumb {
+.ui-switch__thumb {
   position: absolute;
-  inset-block-start: 3px;
-  inset-inline-start: 3px;
-  width: 14px;
-  height: 14px;
+  inset-block-start: var(--ui-switch-inset);
+  inset-inline-start: var(--ui-switch-inset);
+  width: calc(var(--space-5) - 2 * var(--ui-switch-inset));
+  height: calc(var(--space-5) - 2 * var(--ui-switch-inset));
   border: var(--border-width-1) solid var(--color-border-subtle);
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%);
   transition: transform var(--dur-1) var(--ease-out);
 }
 
-.settings-switch--on .settings-switch__thumb {
-  transform: translateX(20px);
+.ui-switch--on .ui-switch__thumb {
+  transform: translateX(calc(var(--space-10) - var(--space-5)));
 }
 
 @media (max-width: 860px) {

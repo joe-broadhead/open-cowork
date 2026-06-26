@@ -15,7 +15,7 @@ import { useSessionStore } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
-import { Badge, Button, Dialog, Input, Skeleton } from '../ui'
+import { Badge, Button, Dialog, Input, Skeleton, Switch } from '../ui'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
 import { LanguagePicker } from './SettingsLanguagePicker'
@@ -111,16 +111,7 @@ function SettingsToggleRow({
         <div className="text-xs font-semibold text-text">{title}</div>
         <div className="mt-1 text-xs leading-relaxed text-text-muted">{description}</div>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={title}
-        onClick={onToggle}
-        className={`settings-switch shrink-0 ${checked ? 'settings-switch--on' : ''}`}
-      >
-        <span className="settings-switch__thumb" />
-      </button>
+      <Switch checked={checked} onCheckedChange={onToggle} aria-label={title} />
     </div>
   )
 }

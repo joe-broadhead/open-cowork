@@ -37,6 +37,7 @@ export { ProjectsKanbanSurface, type ProjectsKanbanSurfaceProps } from './Projec
 export { Menu, Select, type MenuItem, type MenuProps, type SelectOption, type SelectProps } from './Select.js'
 export { SegmentedControl, type SegmentedControlOption, type SegmentedControlProps } from './SegmentedControl.js'
 export { Skeleton, type SkeletonProps } from './Skeleton.js'
+export { Switch, type SwitchProps } from './Switch.js'
 export {
   ApprovalCard,
   ArtifactCard,

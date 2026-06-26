@@ -4,7 +4,7 @@ import {
   panelCardCls,
   sectionLabelCls,
 } from './settings-panel-styles'
-import { SegmentedControl } from '../ui'
+import { SegmentedControl, Switch } from '../ui'
 
 const PERMISSION_RANK: Record<RuntimePermissionPolicy, number> = {
   deny: 0,
@@ -47,17 +47,7 @@ function SettingsSwitch({
   onChange: () => void
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      disabled={disabled}
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className={`settings-switch shrink-0 ${checked ? 'settings-switch--on' : ''}`}
-    >
-      <span className="settings-switch__thumb" />
-    </button>
+    <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} aria-label={label} />
   )
 }
 
@@ -99,17 +89,12 @@ export function RuntimeConfigPanel({
             <div className="text-xs text-text-muted mt-1">{t('settings.permissions.toolingBridgeDescription', 'In app-isolated mode, expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed runtime. OpenCode config, agents, and skills are never bridged by this setting.')}</div>
             <div className="mt-1 text-xs text-text-muted">{t('settings.permissions.toolingBridgeSingleSource', 'This is the same bridge setting shown during setup.')}</div>
           </div>
-          <button
-            type="button"
-            role="switch"
+          <Switch
+            checked={runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled}
+            onCheckedChange={() => update({ runtimeToolingBridgeEnabled: !settings.runtimeToolingBridgeEnabled })}
             disabled={runtimeConfigSource === 'machine'}
-            aria-checked={runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled}
             aria-label={t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}
-            onClick={() => update({ runtimeToolingBridgeEnabled: !settings.runtimeToolingBridgeEnabled })}
-            className={`settings-switch shrink-0 ${runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled ? 'settings-switch--on' : ''}`}
-          >
-            <span className="settings-switch__thumb" />
-          </button>
+          />
         </div>
       </div>
     </div>

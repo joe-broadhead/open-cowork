@@ -1,6 +1,6 @@
 import type { EffectiveAppSettings } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Input } from '../ui'
+import { Input, Switch } from '../ui'
 import {
   fieldLabelCls,
   panelCardCls,
@@ -44,16 +44,11 @@ export function WorkflowSettingsPanel({
                 <div className="text-[12px] font-semibold text-text">{toggle.title}</div>
                 <div className="text-[11px] text-text-muted mt-1">{toggle.description}</div>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
+              <Switch
+                checked={enabled}
+                onCheckedChange={() => update({ [toggle.key]: !enabled } as Partial<EffectiveAppSettings>)}
                 aria-label={toggle.title}
-                onClick={() => update({ [toggle.key]: !enabled } as Partial<EffectiveAppSettings>)}
-                className={`settings-switch shrink-0 ${enabled ? 'settings-switch--on' : ''}`}
-              >
-                <span className="settings-switch__thumb" />
-              </button>
+              />
             </div>
           )
         })}
