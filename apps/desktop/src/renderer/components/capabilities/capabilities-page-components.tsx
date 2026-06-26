@@ -7,7 +7,7 @@ import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { credentialFieldIsSecret } from '../provider/credential-merge'
-import { Button, Card, EmptyState, Input, Select } from '../ui'
+import { Button, Card, EmptyState, Icon, Input, Select } from '../ui'
 
 function describeCapabilityError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -28,7 +28,7 @@ function reportCapabilityError(error: unknown, scope: string) {
 export function StatBox({ label, value }: { label: string; value: string }) {
   return (
     <Card variant="flat" padding="sm">
-      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-1">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-text-muted mb-1">{label}</div>
       <div className="text-xs text-text-secondary break-all">{value}</div>
     </Card>
   )
@@ -90,20 +90,12 @@ export function SkillBundleFileEntry({
         onClick={toggle}
         className="w-full flex items-center gap-2 px-3 py-3 text-start cursor-pointer"
       >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <Icon
+          name="chevron-right"
+          size={16}
           className="text-text-muted shrink-0 transition-transform"
           style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
-        >
-          <polyline points="4,2 8,6 4,10" />
-        </svg>
+        />
         <span className="text-xs font-medium text-text flex-1 truncate">{filePath}</span>
       </button>
       {expanded ? (
@@ -508,7 +500,7 @@ export function ToolIntegrationToggleCard({
           <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted">
             {t('capabilities.integrationStatus', 'Integration')}
           </div>
-          <div className="text-xs text-text-primary">
+          <div className="text-xs text-text">
             {effectiveOn
               ? t('capabilities.integrationOn', 'Enabled')
               : t('capabilities.integrationOff', 'Disabled')}

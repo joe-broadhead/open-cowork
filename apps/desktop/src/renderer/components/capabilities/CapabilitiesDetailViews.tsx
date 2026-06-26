@@ -65,7 +65,7 @@ export function CapabilityToolDetailView({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <Badge tone="accent">
+                <Badge tone="neutral">
                   {prettyKind(selectedTool)}
                 </Badge>
                 <Badge tone={selectedTool.source === 'custom' ? 'info' : 'neutral'}>
@@ -257,7 +257,7 @@ export function CapabilitySkillDetailView({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <Badge tone={selectedSkill.source === 'custom' ? 'accent' : 'neutral'}>
+                <Badge tone={selectedSkill.source === 'custom' ? 'muted' : 'neutral'}>
                   {prettySkillKind(selectedSkill)}
                 </Badge>
               </div>

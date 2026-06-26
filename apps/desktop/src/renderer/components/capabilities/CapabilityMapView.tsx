@@ -10,7 +10,7 @@ import {
   type CapabilityMapGroup,
 } from './capabilities-page-support.ts'
 import { EmptyGrid } from './capabilities-page-components.tsx'
-import { Badge, Button, Card, type BadgeTone } from '../ui'
+import { Badge, Card, Icon, type BadgeTone } from '../ui'
 
 type CapabilityMapViewProps = {
   groups: CapabilityMapGroup[]
@@ -22,8 +22,6 @@ type CapabilityMapViewProps = {
   search: string
   onOpenTool: (toolId: string) => void
   onOpenSkill: (skillName: string) => void
-  onAddTool: () => void
-  onAddSkill: () => void
 }
 
 export function CapabilityMapView({
@@ -36,8 +34,6 @@ export function CapabilityMapView({
   search,
   onOpenTool,
   onOpenSkill,
-  onAddTool,
-  onAddSkill,
 }: CapabilityMapViewProps) {
   const customCount = customToolIds.size + customSkillNames.size
   const projectCount = [
@@ -56,26 +52,16 @@ export function CapabilityMapView({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <CapabilityMetric label={t('capabilities.metricTools', 'Tools')} value={tools.length} detail={t('capabilities.metricToolsDetail', 'Runtime actions')} emphasis />
+        <CapabilityMetric label={t('capabilities.metricTools', 'Tools')} value={tools.length} detail={t('capabilities.metricToolsDetail', 'Runtime actions')} />
         <CapabilityMetric label={t('capabilities.metricSkills', 'Skills')} value={skills.length} detail={t('capabilities.metricSkillsDetail', 'Coworker and playbook access')} />
         <CapabilityMetric label={t('capabilities.metricCustom', 'Custom')} value={customCount} detail={t('capabilities.metricCustomDetail', 'User additions')} />
         <CapabilityMetric label={t('capabilities.metricProject', 'Project')} value={projectCount} detail={t('capabilities.metricProjectDetail', 'Scoped here')} />
       </div>
 
-      <Card padding="sm" className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-xs font-semibold text-text">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
-          <div className="text-2xs text-text-muted mt-0.5">
-            {t('capabilities.mapSubtitle', 'Tools are grouped with the skills that depend on them, so runtime access for coworkers and playbooks stays visible together.')}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="secondary" size="sm" onClick={onAddTool}>
-            {t('capabilities.addTool', 'Add tool')}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onAddSkill}>
-            {t('capabilities.addSkillButton', 'Add skill')}
-          </Button>
+      <Card padding="sm" className="min-w-0">
+        <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-text-muted">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
+        <div className="text-2xs text-text-muted mt-0.5">
+          {t('capabilities.mapSubtitle', 'Tools are grouped with the skills that depend on them, so runtime access for coworkers and playbooks stays visible together.')}
         </div>
       </Card>
 
@@ -92,7 +78,7 @@ export function CapabilityMapView({
                   <h2 className="font-display text-role-card-title font-bold text-text">{section.label}</h2>
                   <p className="mt-0.5 text-2xs text-text-muted">{section.description}</p>
                 </div>
-                <span className="text-2xs text-text-muted">
+                <span className="text-2xs text-text-muted tabular-nums">
                   {section.groups.length} {section.groups.length === 1 ? 'group' : 'groups'}
                 </span>
               </div>
@@ -122,18 +108,16 @@ function CapabilityMetric({
   label,
   value,
   detail,
-  emphasis = false,
 }: {
   label: string
   value: number
   detail: string
-  emphasis?: boolean
 }) {
   return (
     <Card padding="sm">
-      <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-text-muted">{label}</div>
       <div className="mt-1 flex items-end gap-2">
-        <div className={`text-xl font-semibold leading-none ${emphasis ? 'text-accent' : 'text-text'}`}>{value}</div>
+        <div className="text-xl font-semibold leading-none text-text tabular-nums">{value}</div>
         <div className="text-2xs text-text-muted pb-0.5">{detail}</div>
       </div>
     </Card>
@@ -177,7 +161,7 @@ function CapabilityMapGroupCard({
   const tool = group.tool
   if (!tool) return null
   const methodsCount = mergedRuntimeToolset(tool, runtimeTools).length
-  const kindTone: BadgeTone = isCustomTool ? 'warning' : tool.kind === 'mcp' ? 'info' : 'neutral'
+  const kindTone: BadgeTone = isCustomTool ? 'muted' : tool.kind === 'mcp' ? 'info' : 'neutral'
 
   return (
     <Card
@@ -192,13 +176,13 @@ function CapabilityMapGroupCard({
         type="button"
         aria-label={`Open tool ${tool.name}`}
         onClick={() => onOpenTool(tool.id)}
-        className="w-full text-start px-4 py-3.5 flex items-start gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
+        className="w-full text-start px-4 py-3 flex items-start gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
       >
         <PluginIcon icon={tool.icon || tool.namespace || tool.id} size={36} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 mb-1">
             <Badge tone={kindTone}>{prettyKind(tool)}</Badge>
-            {isCustomTool ? <Badge tone="warning">Custom</Badge> : null}
+            {isCustomTool ? <Badge tone="muted">Custom</Badge> : null}
             {tool.scope ? <Badge tone="muted">{tool.scope === 'project' ? 'Project' : 'Machine'}</Badge> : null}
           </div>
           <div className="flex items-center gap-2 min-w-0">
@@ -257,28 +241,26 @@ function SkillRows({
             type="button"
             aria-label={`Open skill ${skill.label}`}
             onClick={() => onOpenSkill(skill.name)}
-            className="w-full text-start px-4 py-3 flex items-start gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
+            className="w-full text-start px-4 py-2.5 flex items-start gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
             style={{
               background: highlighted ? 'color-mix(in srgb, var(--color-accent) 7%, transparent)' : undefined,
             }}
           >
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: 'color-mix(in srgb, var(--color-amber) 14%, var(--color-elevated))' }}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${highlighted ? 'border-transparent text-accent' : 'bg-surface border-border-subtle text-text-secondary'}`}
+              style={highlighted ? { background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' } : undefined}
               aria-hidden="true"
             >
-              <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="var(--color-amber)" strokeWidth="1.3">
-                <path d="M6 1.5L7.5 4.5L10.5 5L8.25 7.25L8.75 10.5L6 9L3.25 10.5L3.75 7.25L1.5 5L4.5 4.5L6 1.5Z" />
-              </svg>
+              <Icon name="sparkles" size={16} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-medium text-text truncate">{skill.label}</span>
-                <Badge tone={skill.source === 'custom' ? 'warning' : 'neutral'}>
+                <Badge tone={skill.source === 'custom' ? 'muted' : 'neutral'}>
                   {prettySkillKind(skill)}
                 </Badge>
-                {multiTool ? <Badge tone="info">Multi-tool</Badge> : null}
-                {customSkillNames.has(skill.name) ? <Badge tone="warning">Custom</Badge> : null}
+                {multiTool ? <Badge tone="muted">Multi-tool</Badge> : null}
+                {customSkillNames.has(skill.name) ? <Badge tone="muted">Custom</Badge> : null}
               </div>
               <div className="text-2xs text-text-muted leading-relaxed line-clamp-2 mt-0.5">{skill.description}</div>
               {linkedTools.length > 0 ? (

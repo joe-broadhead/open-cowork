@@ -372,12 +372,10 @@ export function CapabilitiesPage({
             {addButtonLabel}
           </Button>
         </div>
-        {!relationshipEnabled ? (
-          <Card padding="sm" className="mb-6 text-2xs text-text-muted">
-            {t('capabilities.relationshipsDisabled', 'The relationship view is available behind the Tools & Skills relationship feature flag. The main tools and skills lists remain available here.')}
-          </Card>
-        ) : (
-          <div className="mb-6" />
+        {relationshipEnabled ? null : (
+          <p className="mb-4 text-2xs text-text-muted">
+            {t('capabilities.relationshipsDisabled', 'A relationship map of how coworkers use these tools and skills is coming soon.')}
+          </p>
         )}
 
         {loading && tools.length === 0 && skills.length === 0 ? (
@@ -404,8 +402,6 @@ export function CapabilitiesPage({
             search={search}
             onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
             onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
-            onAddTool={() => setMcpForm('new')}
-            onAddSkill={() => setSkillForm('new')}
           />
         ) : tab === 'tools' ? (
           filteredTools.length === 0 ? (
@@ -554,7 +550,7 @@ function CapabilitySectionHeading({
         <h2 className="font-display text-role-card-title font-bold text-text">{section.label}</h2>
         <p className="mt-0.5 text-2xs text-text-muted">{section.description}</p>
       </div>
-      <span className="text-2xs text-text-muted">
+      <span className="text-2xs text-text-muted tabular-nums">
         {count} {count === 1 ? unit : `${unit}s`}
       </span>
     </div>

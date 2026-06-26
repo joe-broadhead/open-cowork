@@ -124,7 +124,7 @@ export function PluginIcon({ icon, size = 40 }: { icon: string; size?: number })
     )
   }
   return (
-    <div className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0 text-text-muted" style={{ width: size, height: size, fontSize: size * 0.4 }}>
+    <div className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0 text-text-secondary" style={{ width: size, height: size, fontSize: size * 0.4 }}>
       {icon.length <= 2 ? icon : icon[0]!.toUpperCase()}
     </div>
   )

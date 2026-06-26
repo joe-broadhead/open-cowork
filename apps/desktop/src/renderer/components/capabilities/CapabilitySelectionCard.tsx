@@ -28,20 +28,7 @@ function badgeToneForCssTone(tone: string | undefined): BadgeTone {
 // tinted halo behind the glyph, type chip with a small icon, stat chip
 // row, and a hover ring + lift.
 
-type ToneKey = 'builtin' | 'mcp' | 'custom' | 'skill-builtin' | 'skill-custom'
-
-function toneForKey(key: ToneKey): string {
-  switch (key) {
-    case 'builtin': return 'var(--color-text-secondary)'
-    case 'mcp': return 'var(--color-accent)'
-    case 'custom': return 'var(--color-amber)'
-    case 'skill-builtin': return 'var(--color-accent)'
-    case 'skill-custom': return 'var(--color-amber)'
-  }
-}
-
 type CardShellProps = {
-  toneKey: ToneKey
   typeChips: Array<{ label: string; tone?: string; Icon?: (props: { size?: number }) => ReactElement }>
   glyph: ReactNode
   title: string
@@ -53,7 +40,6 @@ type CardShellProps = {
 }
 
 function CapabilityCardShell({
-  toneKey,
   typeChips,
   glyph,
   title,
@@ -63,34 +49,21 @@ function CapabilityCardShell({
   footer,
   onOpen,
 }: CardShellProps) {
-  const tone = toneForKey(toneKey)
   return (
     <div
       className="group card-hover relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
       style={{
         borderColor: 'var(--color-border-subtle)',
-        // CSS-driven hover glow (see globals.css .card-hover:hover).
-        ['--card-hover-shadow' as string]: `0 0 0 1px ${tone}, 0 12px 28px color-mix(in srgb, ${tone} 14%, transparent)`,
+        // CSS-driven hover ring (see globals.css .card-hover:hover).
+        ['--card-hover-shadow' as string]: '0 0 0 1px var(--color-border)',
       }}
     >
-      <div
-        aria-hidden="true"
-        style={{
-          height: 3,
-          background: `linear-gradient(90deg, color-mix(in srgb, ${tone} 70%, transparent), color-mix(in srgb, ${tone} 20%, transparent))`,
-        }}
-      />
       <button
         onClick={onOpen}
         className="w-full text-start p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3">
-          <div
-            className="relative shrink-0 rounded-2xl p-1"
-            style={{
-              background: `radial-gradient(circle at 30% 30%, color-mix(in srgb, ${tone} 24%, transparent), transparent 70%)`,
-            }}
-          >
+          <div className="relative shrink-0 rounded-2xl p-1">
             {glyph}
           </div>
           <div className="flex-1 min-w-0">
@@ -166,21 +139,17 @@ export function ToolSelectionCard({
   onOpen: () => void
   onRemove?: () => void
 }) {
-  const toneKey: ToneKey = isCustom
-    ? 'custom'
-    : tool.kind === 'mcp' ? 'mcp' : 'builtin'
   const originChip = buildToolOriginChip(tool)
   const extraChips: Array<{ label: string; tone?: string; Icon?: (props: { size?: number }) => ReactElement }> = []
   if (isCustom) {
     extraChips.push({
       label: 'Custom',
-      tone: 'var(--color-amber)',
+      tone: 'var(--color-text-secondary)',
       Icon: CustomIcon,
     })
   }
   return (
     <CapabilityCardShell
-      toneKey={toneKey}
       typeChips={[originChip, ...extraChips]}
       glyph={<PluginIcon icon={tool.icon || tool.namespace || tool.id} size={44} />}
       title={tool.name}
@@ -188,7 +157,7 @@ export function ToolSelectionCard({
       stats={[
         { label: methodsCount === 1 ? 'method' : 'methods', value: String(methodsCount) },
         { label: tool.agentNames.length === 1 ? 'coworker' : 'coworkers', value: String(tool.agentNames.length) },
-        ...(linkedSkills.length > 0 ? [{ label: linkedSkills.length === 1 ? 'skill' : 'skills', value: String(linkedSkills.length), tone: 'var(--color-amber)' }] : []),
+        ...(linkedSkills.length > 0 ? [{ label: linkedSkills.length === 1 ? 'skill' : 'skills', value: String(linkedSkills.length) }] : []),
         ...(tool.scope ? [{ label: tool.scope === 'project' ? 'Project' : 'Machine', value: '' }] : []),
       ].filter((entry) => entry.label !== '' || entry.value !== '')}
       bodyExtra={linkedSkills.length > 0 ? <LinkedSkillPills skills={linkedSkills} /> : undefined}
@@ -230,7 +199,7 @@ function buildToolOriginChip(tool: CapabilityTool): {
     return { label: 'OpenCode', tone: 'var(--color-info)', Icon: RuntimeIcon }
   }
   if (tool.kind === 'mcp') {
-    return { label: 'MCP', tone: 'var(--color-accent)', Icon: RuntimeIcon }
+    return { label: 'MCP', tone: 'var(--color-text-secondary)', Icon: RuntimeIcon }
   }
   return { label: 'Built-in', tone: 'var(--color-text-secondary)', Icon: BuiltinIcon }
 }
@@ -250,11 +219,10 @@ export function SkillSelectionCard({
   onOpen: () => void
   onRemove?: () => void
 }) {
-  const toneKey: ToneKey = isCustom ? 'skill-custom' : 'skill-builtin'
   const chips: Array<{ label: string; tone?: string; Icon?: (props: { size?: number }) => ReactElement }> = [
     isCustom
-      ? { label: 'Custom', tone: 'var(--color-amber)', Icon: CustomIcon }
-      : { label: 'Built-in', tone: 'var(--color-accent)', Icon: BreadthIcon },
+      ? { label: 'Custom', tone: 'var(--color-text-secondary)', Icon: CustomIcon }
+      : { label: 'Built-in', tone: 'var(--color-text-secondary)', Icon: BreadthIcon },
   ]
   if (skill.scope) {
     chips.push({
@@ -265,16 +233,11 @@ export function SkillSelectionCard({
   const toolCount = (skill.toolIds || []).length
   return (
     <CapabilityCardShell
-      toneKey={toneKey}
       typeChips={chips}
       glyph={
         <div
-          className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0"
-          style={{
-            width: 44,
-            height: 44,
-            color: toneForKey(toneKey),
-          }}
+          className="rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0 text-text-secondary"
+          style={{ width: 44, height: 44 }}
         >
           <BreadthIcon size={22} />
         </div>
@@ -320,7 +283,7 @@ function LinkedSkillPills({ skills }: { skills: CapabilitySkill[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {visible.map((skill) => (
-        <Badge key={skill.name} tone="warning">
+        <Badge key={skill.name} tone="muted">
           {skill.label}
         </Badge>
       ))}
@@ -338,7 +301,7 @@ function LinkedToolPills({ tools }: { tools: CapabilityLinkedTool[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {visible.map((tool) => (
-        <Badge key={tool.id} tone="info">
+        <Badge key={tool.id} tone="muted">
           {tool.name}
         </Badge>
       ))}
