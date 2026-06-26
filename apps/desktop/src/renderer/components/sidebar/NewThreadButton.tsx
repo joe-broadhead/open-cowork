@@ -197,7 +197,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
     <div className="relative">
       <Button
         onClick={() => setShowMenu(!showMenu)}
-        variant="secondary"
+        variant="primary"
         size="sm"
         fullWidth={!compact}
         leftIcon="plus"

@@ -497,8 +497,13 @@ body {
 .ui-card {
   border: var(--border-width-1) solid var(--color-border);
   border-radius: var(--radius-2xl);
-  background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
-  /* Elevation = shadow-card + 1px hairline + the top-inset specular highlight. */
+  /* Glass: a faint top specular wash over a translucent elevated tint, blurred so
+     the themed --bg-image aurora reads softly through every surface. */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #fff 4.5%, transparent), transparent 42%),
+    color-mix(in srgb, var(--color-elevated) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  backdrop-filter: blur(14px) saturate(1.06);
   box-shadow: var(--shadow-2), var(--specular);
   color: var(--color-text);
 }
@@ -2876,12 +2881,23 @@ body {
   background: var(--accent-action-fill);
   border-color: var(--accent-line);
   color: var(--accent-action-foreground);
-  box-shadow: var(--shadow-1), var(--specular);
+  /* Soft accent glow so the primary action reads as the lit element on the page. */
+  box-shadow: var(--shadow-1), var(--specular), 0 8px 22px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .new-thread-trigger:hover:not(:disabled) {
   background: var(--accent-action-fill);
-  box-shadow: var(--shadow-2), var(--specular-strong);
+  box-shadow: var(--shadow-2), var(--specular-strong), 0 12px 28px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+/* Hero accent: the time-of-day word in the greeting carries the aurora gradient
+   (periwinkle -> violet -> cyan) — the app's one signature "wow" gradient moment. */
+.studio-greeting-accent {
+  background-image: linear-gradient(112deg, var(--accent), var(--accent-2) 52%, var(--color-info));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .ui-card.new-thread-menu-option {

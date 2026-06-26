@@ -1132,12 +1132,12 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
 
   return (
-    // Flat surface on --color-base — no hero gradient / grid glow / atmosphere (brief §1).
+    // Sits on the themed --color-base + its --bg-image aurora wash (set per theme).
     <div className="flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <div className="measure-column px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
         <h1 className="font-display text-[44px] leading-[1.04] font-semibold tracking-[-0.03em] text-text text-center">
           {brandedGreeting ?? (
-            <>{timeGreeting.lead} <span className="text-accent">{timeGreeting.accent}</span>.</>
+            <>{timeGreeting.lead} <span className="studio-greeting-accent">{timeGreeting.accent}</span>.</>
           )}
         </h1>
         <p className="mt-3 text-[13px] text-text-muted text-center">

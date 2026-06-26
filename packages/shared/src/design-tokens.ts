@@ -5,8 +5,8 @@ export const DEFAULT_ACCENT_PRESET_ID = 'azure'
 export const DESIGN_ACCENT_PRESETS = {
   azure: {
     label: 'Azure',
-    accent: '#2f6bf0',
-    accent2: '#5a8cf5',
+    accent: '#8da4f5',
+    accent2: '#b08cf6',
   },
   indigo: {
     label: 'Indigo',
