@@ -375,6 +375,120 @@ describe('Sidebar', () => {
     })
   })
 
+  it('navigates the workspace switcher by keyboard and contains its own Escape', async () => {
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn(async () => [
+          {
+            id: 'local',
+            kind: 'local',
+            label: 'Local',
+            status: 'online',
+            active: true,
+            lastSyncedAt: null,
+          },
+          {
+            id: 'cloud:acme',
+            kind: 'cloud',
+            label: 'Acme Cloud',
+            status: 'online',
+            active: false,
+            baseUrl: 'https://cloud.acme.test',
+            lastSyncedAt: null,
+          },
+        ]),
+        support: vi.fn(async () => [{
+          api: 'sessions.list',
+          status: 'supported',
+          verdict: { allowed: true, reason: null },
+        }]),
+      },
+      session: {
+        list: vi.fn(async () => []),
+      },
+    })
+
+    // A window-level Escape listener that mirrors the app's global
+    // navigation shortcut — closing the switcher must not trip it.
+    const appEscape = vi.fn()
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') appEscape()
+    }
+    window.addEventListener('keydown', onWindowKeyDown)
+
+    try {
+      render(
+        <Sidebar
+          currentView="home"
+          onViewChange={vi.fn()}
+        />,
+      )
+
+      const trigger = await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i })
+      fireEvent.click(trigger)
+
+      const menu = await screen.findByRole('menu', { name: 'Switch workspace' })
+      const activeOption = await screen.findByRole('menuitem', { name: /Local.*Online/i })
+      const cloudOption = screen.getByRole('menuitem', { name: /Acme Cloud.*Online/i })
+
+      // Focus lands on the active workspace option when the menu opens.
+      await waitFor(() => expect(activeOption).toHaveFocus())
+
+      fireEvent.keyDown(menu, { key: 'ArrowDown' })
+      expect(cloudOption).toHaveFocus()
+
+      fireEvent.keyDown(menu, { key: 'ArrowUp' })
+      expect(activeOption).toHaveFocus()
+
+      // Escape closes the switcher, restores focus to the trigger, and is
+      // contained so the window-level Escape handler never fires.
+      fireEvent.keyDown(menu, { key: 'Escape' })
+      expect(screen.queryByRole('menu', { name: 'Switch workspace' })).not.toBeInTheDocument()
+      expect(trigger).toHaveFocus()
+      expect(appEscape).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', onWindowKeyDown)
+    }
+  })
+
+  it('closes the workspace switcher when clicking the dismiss backdrop', async () => {
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn(async () => [
+          {
+            id: 'local',
+            kind: 'local',
+            label: 'Local',
+            status: 'online',
+            active: true,
+            lastSyncedAt: null,
+          },
+        ]),
+        support: vi.fn(async () => []),
+      },
+      session: {
+        list: vi.fn(async () => []),
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    const trigger = await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i })
+    fireEvent.click(trigger)
+
+    const menu = await screen.findByRole('menu', { name: 'Switch workspace' })
+    const backdrop = menu.previousElementSibling
+    expect(backdrop).not.toBeNull()
+    fireEvent.click(backdrop as Element)
+
+    expect(screen.queryByRole('menu', { name: 'Switch workspace' })).not.toBeInTheDocument()
+  })
+
   it('starts login when selecting an auth-required cloud workspace', async () => {
     const sessionList = vi.fn(async () => [])
     installRendererTestCoworkApi({

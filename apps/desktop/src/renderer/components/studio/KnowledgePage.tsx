@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   KnowledgePage as KnowledgePageRecord,
   KnowledgePageBlock as KnowledgePageBlockRecord,
@@ -327,6 +327,17 @@ export function KnowledgePage() {
   const [newSpaceBusy, setNewSpaceBusy] = useState(false)
   const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
+  const reviewQueueRef = useRef<HTMLDivElement | null>(null)
+
+  // The review-queue panel only renders in the pages view, so the rail shortcut
+  // switches back to pages (if needed) and scrolls the panel into view instead
+  // of being a dead control.
+  const revealReviewQueue = useCallback(() => {
+    setView('pages')
+    requestAnimationFrame(() => {
+      reviewQueueRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
+  }, [])
 
   const loadSnapshot = useCallback(async () => {
     setLoading(true)
@@ -551,6 +562,8 @@ export function KnowledgePage() {
             reviewAction={(
               <button
                 type="button"
+                onClick={revealReviewQueue}
+                aria-label={t('knowledge.review.railLabel', 'Review queue')}
                 className="flex w-full items-center justify-between rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover hover:text-text"
               >
                 <span className="inline-flex items-center gap-2"><Icon name="circle-help" size={16} /> {t('knowledge.review.railLabel', 'Review queue')}</span>
@@ -610,12 +623,14 @@ export function KnowledgePage() {
 
           {view !== 'graph' && (
           <div className="space-y-4">
-            <ReviewQueue
-              snapshot={snapshot}
-              busyProposalId={busyProposalId}
-              onAccept={(proposal) => void acceptProposal(proposal)}
-              onDecline={(proposal) => void declineProposal(proposal)}
-            />
+            <div ref={reviewQueueRef}>
+              <ReviewQueue
+                snapshot={snapshot}
+                busyProposalId={busyProposalId}
+                onAccept={(proposal) => void acceptProposal(proposal)}
+                onDecline={(proposal) => void declineProposal(proposal)}
+              />
+            </div>
             <VersionHistory
               versions={versions}
               currentVersion={selectedPage?.version || 0}

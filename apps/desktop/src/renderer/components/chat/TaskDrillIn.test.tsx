@@ -163,7 +163,7 @@ describe('TaskDrillIn', () => {
 
     expect(screen.getByRole('dialog', { name: 'Code Reviewer drill-in' })).toBeInTheDocument()
     expect(screen.getByText('Review auth changes')).toBeInTheDocument()
-    expect(screen.getByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('running')).toBeInTheDocument()
     expect(screen.getByTestId('elapsed-clock')).toHaveTextContent('12s')
     expect(screen.getByText('Tokens')).toBeInTheDocument()
     expect(screen.getByText('Cost')).toBeInTheDocument()
@@ -270,7 +270,7 @@ describe('TaskDrillIn', () => {
     await user.click(screen.getByRole('button', { name: 'Open Nested Research' }))
 
     expect(screen.getByRole('dialog', { name: 'Researcher drill-in' })).toBeInTheDocument()
-    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.getByText('done')).toBeInTheDocument()
     expect(screen.getByTestId('markdown-content')).toHaveTextContent('Finished nested checks')
     expect(screen.queryByRole('button', { name: 'Abort this task' })).not.toBeInTheDocument()
 

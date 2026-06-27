@@ -141,6 +141,23 @@ export function CapabilitiesPage({
     window.coworkApi.capabilities.skillBundle(selection.name, contextOptions).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
   }, [selection, contextOptions])
 
+  // Escape closes whichever full-page sub-view is open, routing through the same
+  // cancel/back handlers as the on-screen buttons: editor forms reset to the
+  // inventory, detail inspectors clear the selection. On the inventory itself it
+  // falls through to onClose. Mirrors the close-on-Escape pattern in
+  // TaskDrillIn/DiffViewer.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (mcpForm) { setMcpForm(null); return }
+      if (skillForm) { setSkillForm(null); return }
+      if (selection) { setSelection(null); return }
+      onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [mcpForm, skillForm, selection, onClose])
+
   const customToolIds = useMemo(
     () => new Set(customMcps.map((entry) => entry.name)),
     [customMcps],

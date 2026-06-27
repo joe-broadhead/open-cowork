@@ -14,6 +14,8 @@ import { ProviderAuthControls } from './provider/ProviderAuthControls'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
 import { Badge, Button } from './ui'
+import { BrandMark } from './BrandMark'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface Props {
   brandName: string
@@ -148,6 +150,7 @@ export function SetupScreen({
     message: null,
   })
   const [error, setError] = useState<string | null>(null)
+  const [pendingProviderSwitch, setPendingProviderSwitch] = useState<string | null>(null)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
   const providerSelectionEdited = useRef(false)
@@ -291,6 +294,30 @@ export function SetupScreen({
     }))
   }
 
+  const providerHasUnsavedCredentials = (id: string | null) => {
+    if (!id) return false
+    const dirtyKeys = dirtyProviderCredentialKeys.current[id]
+    if (!dirtyKeys || dirtyKeys.size === 0) return false
+    const entered = providerCredentials[id] || {}
+    return Array.from(dirtyKeys).some((key) => (entered[key] || '').trim().length > 0)
+  }
+
+  const applyProviderSwitch = (id: string) => {
+    const provider = providers.find((entry) => entry.id === id)
+    providerSelectionEdited.current = true
+    setProviderId(id)
+    setModelId(provider?.defaultModel || provider?.models[0]?.id || '')
+  }
+
+  const requestProviderSwitch = (id: string) => {
+    if (id === providerId) return
+    if (providerHasUnsavedCredentials(providerId)) {
+      setPendingProviderSwitch(id)
+      return
+    }
+    applyProviderSwitch(id)
+  }
+
   const saveSetupSelection = async (modelOverride?: string, options: { allowMissingModel?: boolean } = {}) => {
     if (!providerId) return false
     const nextModelId = (modelOverride || modelId).trim()
@@ -390,9 +417,7 @@ export function SetupScreen({
     <div className="h-screen w-screen overflow-y-auto bg-base">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-8">
         <header className="flex flex-col items-center gap-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-surface">
-            <span className="text-lg font-bold text-accent">O</span>
-          </div>
+          <BrandMark size="sm" />
           <h1 className="text-lg font-semibold text-text">
             {email
               ? t('setup.welcomeUser', 'Welcome, {{name}}', { name: email.split('@')[0]! })
@@ -465,11 +490,7 @@ export function SetupScreen({
                 <button
                   key={provider.id}
                   type="button"
-                  onClick={() => {
-                    providerSelectionEdited.current = true
-                    setProviderId(provider.id)
-                    setModelId(provider.defaultModel || provider.models[0]?.id || '')
-                  }}
+                  onClick={() => requestProviderSwitch(provider.id)}
                   className={`rounded-2xl border px-4 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle bg-elevated hover:bg-surface-hover'}`}
                 >
                   <div className={`text-sm font-semibold ${active ? 'text-accent' : 'text-text'}`}>{provider.name}</div>
@@ -707,6 +728,22 @@ export function SetupScreen({
           </div>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={pendingProviderSwitch !== null}
+        title={t('setup.switchProviderTitle', 'Discard entered credentials?')}
+        body={t(
+          'setup.switchProviderBody',
+          'You have unsaved credentials for {{provider}}. Switching providers keeps them out of this setup. Switch anyway?',
+          { provider: selectedProvider?.name || t('setup.switchProviderFallback', 'this provider') },
+        )}
+        confirmLabel={t('setup.switchProviderConfirm', 'Switch provider')}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        onConfirm={() => {
+          if (pendingProviderSwitch) applyProviderSwitch(pendingProviderSwitch)
+          setPendingProviderSwitch(null)
+        }}
+        onCancel={() => setPendingProviderSwitch(null)}
+      />
     </div>
   )
 }

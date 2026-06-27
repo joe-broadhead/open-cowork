@@ -12,6 +12,7 @@ import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
+import { ModalBackdrop } from './ModalBackdrop'
 import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
@@ -363,6 +364,8 @@ function WorkspaceSwitcher() {
   const [gatewayToken, setGatewayToken] = useState('')
   const [gatewayLabel, setGatewayLabel] = useState('')
   const activationGenerationRef = useRef(0)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
 
@@ -487,9 +490,69 @@ function WorkspaceSwitcher() {
     }
   }
 
+  // Close the switcher and return focus to its trigger so keyboard users
+  // don't lose their place. Mirrors the ThreadList action menu's
+  // close-then-restore-focus behaviour.
+  const closeMenu = useCallback(() => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }, [])
+
+  // On open, land focus on the active workspace option (or the first one)
+  // so arrow keys have a starting point — same roving pattern the thread
+  // action menu uses.
+  useEffect(() => {
+    if (!open) return
+    const menu = menuRef.current
+    if (!menu) return
+    const options = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    const active = options.find((option) => option.dataset.workspaceActive === 'true')
+    ;(active || options[0])?.focus()
+  }, [open])
+
+  // Roving focus between workspace options. Up/Down move focus, Enter
+  // selects (native button activation), Home/End jump to the ends, and
+  // Escape closes without letting the app-level Escape handler also fire.
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      // Stop the native event so the window-level Escape handler (which
+      // navigates the app view) does not also fire when the user is only
+      // dismissing this popover.
+      event.nativeEvent.stopImmediatePropagation()
+      closeMenu()
+      return
+    }
+
+    if (event.key === 'Tab') {
+      setOpen(false)
+      return
+    }
+
+    const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    if (options.length === 0) return
+    const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement)
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const offset = event.key === 'ArrowDown' ? 1 : -1
+      const nextIndex = currentIndex >= 0
+        ? (currentIndex + offset + options.length) % options.length
+        : 0
+      options[nextIndex]?.focus()
+      return
+    }
+
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      options[event.key === 'Home' ? 0 : options.length - 1]?.focus()
+    }
+  }
+
   return (
     <div className="relative px-3 pb-2">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
@@ -506,15 +569,21 @@ function WorkspaceSwitcher() {
       </button>
 
       {open && (
-        <div
-          role="menu"
-          className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg theme-popover"
-        >
+        <>
+          <ModalBackdrop onDismiss={() => setOpen(false)} className="fixed inset-0 z-40" />
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={t('workspace.switcherLabel', 'Switch workspace')}
+            onKeyDown={handleMenuKeyDown}
+            className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg theme-popover"
+          >
           {workspaces.map((workspace) => (
             <button
               key={workspace.id}
               type="button"
               role="menuitem"
+              data-workspace-active={workspace.active ? 'true' : undefined}
               onClick={() => void activateWorkspace(workspace)}
               className={`w-full px-3 py-2 text-start text-xs transition-colors hover:bg-surface-hover ${workspace.active ? 'text-text' : 'text-text-secondary'}`}
             >
@@ -584,7 +653,8 @@ function WorkspaceSwitcher() {
               </Button>
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   )

@@ -24,6 +24,7 @@ import { buildTaskTimeline } from './task-timeline-utils'
 import { useLiveNow } from './useLiveNow'
 import { useTaskDrillInLayout } from './useTaskDrillInLayout'
 import { listArtifactsForTools } from './session-artifacts'
+import { statusLabel } from '../../helpers/status-label'
 import { Badge, Button, Card, IconButton, type BadgeTone } from '../ui'
 
 function statusBadgeTone(status: TaskRun['status']): BadgeTone {
@@ -53,13 +54,6 @@ interface Props {
   onOpenApproval?: (approval: PendingApproval) => void
   onOpenQuestion?: (question: PendingQuestion) => void
   onClose: () => void
-}
-
-function statusLabel(status: TaskRun['status']): string {
-  if (status === 'running') return 'Running'
-  if (status === 'complete') return 'Complete'
-  if (status === 'error') return 'Error'
-  return 'Queued'
 }
 
 function formatSessionId(id: string | null | undefined) {

@@ -32,6 +32,7 @@ import {
   type AgentTemplate,
 } from './agent-builder-utils'
 import { Badge, Button, Card, Icon, SegmentedControl } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { getStarterTemplates } from './starter-templates'
 
 type Props = {
@@ -95,6 +96,7 @@ export function AgentBuilderPage({
   const [draft, setDraft] = useState<CustomAgentConfig>(initialDraft)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
   const [tab, setTab] = useState<WorkbenchTab>('capabilities')
   const [step, setStep] = useState<BuilderStep>('role')
   const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory)
@@ -137,6 +139,35 @@ export function AgentBuilderPage({
     : draft.enabled === false
       ? t('agents.builder.enableBeforeTest', 'Enable this coworker before testing it in chat.')
       : null
+
+  // Editable flows track whether the draft has diverged from what we loaded so
+  // an Escape or Cancel can warn before discarding instead of silently dropping
+  // work. Read-only flows are never dirty.
+  const isDirty = !readOnly && !saving && draft !== initialDraft
+  const requestCancel = () => {
+    if (isDirty) {
+      setConfirmDiscardOpen(true)
+      return
+    }
+    onCancel()
+  }
+
+  // Escape routes through the same cancel guard as the Cancel/back buttons:
+  // discard immediately when there is nothing unsaved, otherwise warn first.
+  // Mirrors the close-on-Escape pattern in TaskDrillIn/DiffViewer.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (confirmDiscardOpen) return
+      if (isDirty) {
+        setConfirmDiscardOpen(true)
+        return
+      }
+      onCancel()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [confirmDiscardOpen, isDirty, onCancel])
 
   const toggleTool = (toolId: string) => {
     const linked = linkedSkillNamesForTool(effectiveCatalog, toolId)
@@ -257,7 +288,7 @@ export function AgentBuilderPage({
       <div className="feature-page-shell">
         <div className="flex items-center justify-between mb-5">
           <Button
-            onClick={onCancel}
+            onClick={requestCancel}
             variant="ghost"
             size="sm"
             leftIcon="chevron-left"
@@ -265,22 +296,16 @@ export function AgentBuilderPage({
             {t('agents.builder.backToTeam', 'Team')}
           </Button>
           {!readOnly && (
+            // The sole primary save lives in the sticky footer action bar below.
+            // Up here we only keep Cancel and the secondary Save & Test, which has
+            // no footer equivalent, so two primaries never fight for attention.
             <div className="flex items-center gap-2">
               <Button
-                onClick={onCancel}
+                onClick={requestCancel}
                 variant="ghost"
                 size="sm"
               >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => void handleSave()}
-                disabled={issues.length > 0}
-                loading={saving}
-                variant="primary"
-                size="md"
-              >
-                {target.kind === 'custom' ? t('agents.builder.saveChanges', 'Save changes') : t('agents.builder.hireCoworker', 'Hire coworker')}
+                {t('agents.builder.cancel', 'Cancel')}
               </Button>
               <Button
                 onClick={() => void handleSave({ testAfterSave: true })}
@@ -289,7 +314,7 @@ export function AgentBuilderPage({
                 size="md"
                 title={saveAndTestDisabledReason || t('agents.builder.saveAndMention', 'Save and insert an @mention into a new chat.')}
               >
-                Save & Test
+                {t('agents.builder.saveAndTest', 'Save & Test')}
               </Button>
             </div>
           )}
@@ -454,31 +479,50 @@ export function AgentBuilderPage({
               )}
             </div>
             {!readOnly && (
-              <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2 text-2xs text-text-muted">
-                <Button
-                  onClick={() => {
-                    const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
-                    const previous = BUILDER_STEPS[Math.max(0, currentIndex - 1)]
-                    if (previous) setStep(previous.id)
-                  }}
-                  disabled={step === 'role'}
-                  variant="ghost"
-                  size="sm"
-                  leftIcon="chevron-left"
-                >
-                  Back
-                </Button>
-                {step === 'abilities' ? (
+              // Sticky footer action bar: the single primary Save lives here and
+              // stays reachable on every step, so it never competes with a
+              // duplicate top-bar save. Step navigation sits to its left.
+              <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-border-subtle bg-surface px-4 py-2 text-2xs text-text-muted">
+                <div className="flex items-center gap-2">
                   <Button
-                    onClick={onOpenCapabilities}
+                    onClick={() => {
+                      const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
+                      const previous = BUILDER_STEPS[Math.max(0, currentIndex - 1)]
+                      if (previous) setStep(previous.id)
+                    }}
+                    disabled={step === 'role'}
                     variant="ghost"
                     size="sm"
-                    rightIcon="chevron-right"
+                    leftIcon="chevron-left"
                   >
-                    Open Tools & Skills
+                    {t('agents.builder.back', 'Back')}
                   </Button>
-                ) : <span>{t('agents.builder.stepHint', 'Each step maps directly to the saved OpenCode agent config.')}</span>}
-                {step === 'permissions' ? (
+                  {step === 'abilities' ? (
+                    <Button
+                      onClick={onOpenCapabilities}
+                      variant="ghost"
+                      size="sm"
+                      rightIcon="chevron-right"
+                    >
+                      {t('agents.builder.openToolsAndSkills', 'Open Tools & Skills')}
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  {step !== 'permissions' ? (
+                    <Button
+                      onClick={() => {
+                        const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
+                        const next = BUILDER_STEPS[Math.min(BUILDER_STEPS.length - 1, currentIndex + 1)]
+                        if (next) setStep(next.id)
+                      }}
+                      variant="secondary"
+                      size="sm"
+                      rightIcon="chevron-right"
+                    >
+                      {t('agents.builder.continue', 'Continue')}
+                    </Button>
+                  ) : null}
                   <Button
                     onClick={() => void handleSave()}
                     disabled={issues.length > 0}
@@ -488,26 +532,25 @@ export function AgentBuilderPage({
                   >
                     {target.kind === 'custom' ? t('agents.builder.saveChanges', 'Save changes') : t('agents.builder.hireCoworker', 'Hire coworker')}
                   </Button>
-                ) : (
-                  <Button
-                    onClick={() => {
-                      const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
-                      const next = BUILDER_STEPS[Math.min(BUILDER_STEPS.length - 1, currentIndex + 1)]
-                      if (next) setStep(next.id)
-                    }}
-                    variant="primary"
-                    size="sm"
-                    rightIcon="chevron-right"
-                  >
-                    Continue
-                  </Button>
-                )}
+                </div>
               </div>
             )}
           </div>
         </div>
 
       </div>
+      <ConfirmDialog
+        open={confirmDiscardOpen}
+        title={t('agents.builder.discardTitle', 'Discard unsaved changes?')}
+        body={t('agents.builder.discardBody', 'Your edits to this coworker have not been saved. Leaving now will discard them.')}
+        confirmLabel={t('agents.builder.discardConfirm', 'Discard changes')}
+        cancelLabel={t('agents.builder.discardCancel', 'Keep editing')}
+        onConfirm={() => {
+          setConfirmDiscardOpen(false)
+          onCancel()
+        }}
+        onCancel={() => setConfirmDiscardOpen(false)}
+      />
     </div>
   )
 }

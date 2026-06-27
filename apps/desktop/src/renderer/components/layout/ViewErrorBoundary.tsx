@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
+import { Button } from '../ui'
 
 interface ViewErrorBoundaryProps {
   children: ReactNode
@@ -57,13 +58,9 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
           <p className="text-sm text-text-secondary leading-relaxed mb-5">
             {this.props.body || t('error.viewErrorBody', '{{brandName}} recovered the rest of the app. Go back home and try again.', { brandName: getBrandName() })}
           </p>
-          <button
-            onClick={this.props.onBackHome}
-            className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors"
-            style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
-          >
+          <Button variant="primary" onClick={this.props.onBackHome}>
             {this.props.actionLabel || t('error.backToHome', 'Back to home')}
-          </button>
+          </Button>
         </div>
       </div>
     )

@@ -8,11 +8,10 @@ import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
-import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { cloudGitRepositoryLabel } from '@open-cowork/shared'
 import type { CloudProjectSourceSummary, SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
-import { Badge, Button, Card, Input, Select } from '../ui'
+import { Badge, Button, Card, Dialog, EmptyState, Input, Select } from '../ui'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -229,7 +228,15 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }, [activeWorkspaceIsLocal])
 
   if (interactiveSessions.length === 0) {
-    return <div className="px-2 py-3 text-2xs text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
+    return (
+      <div className="px-2 py-4">
+        <EmptyState
+          icon="message-square"
+          title={t('sidebar.noThreadsTitle', 'No conversations yet')}
+          body={t('sidebar.noThreadsBody', 'Start one from Home to see it tracked here.')}
+        />
+      </div>
+    )
   }
 
   if (searchQuery && filtered.length === 0) {
@@ -650,22 +657,37 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
         </ViewErrorBoundary>
       )}
       {copyDialog && (
-        <>
-          <ModalBackdrop onDismiss={() => { if (!copyDialog.busy) setCopyDialog(null) }} className="fixed inset-0 z-40 bg-black/45" />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('thread.copyToCloudDialog', 'Copy thread to cloud')}
-            className="fixed top-[12%] left-1/2 z-50 w-[520px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl"
-          >
-            <div className="border-b border-border-subtle px-4 py-3">
-              <div className="text-md font-semibold text-text">{t('thread.copyToCloud', 'Copy to Cloud...')}</div>
-              <div className="mt-1 text-xs text-text-muted">
+        <Dialog
+          title={t('thread.copyToCloud', 'Copy to Cloud...')}
+          size="md"
+          onClose={() => { if (!copyDialog.busy) setCopyDialog(null) }}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={copyDialog.busy}
+                onClick={() => setCopyDialog(null)}
+              >
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={copyDialog.busy || !copyDialog.targetWorkspaceId}
+                loading={copyDialog.busy}
+                onClick={() => void confirmCopyToCloud()}
+              >
+                {copyDialog.busy ? t('thread.copyingToCloud', 'Copying...') : t('thread.copyToCloudConfirm', 'Copy to Cloud')}
+              </Button>
+            </div>
+          }
+        >
+            <div>
+              <div className="text-xs text-text-muted">
                 {t('thread.copyToCloudSubtitle', 'Creates a new cloud thread. The local thread stays unchanged.')}
               </div>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
-              <div className="text-2xs font-medium text-text-muted">{t('thread.copyToCloudTarget', 'Cloud workspace')}</div>
+              <div className="mt-3 text-2xs font-medium text-text-muted">{t('thread.copyToCloudTarget', 'Cloud workspace')}</div>
               <Select
                 className="mt-1 w-full"
                 label={t('thread.copyToCloudTarget', 'Cloud workspace')}
@@ -742,27 +764,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 </Card>
               )}
             </div>
-            <div className="flex justify-end gap-2 border-t border-border-subtle px-4 py-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={copyDialog.busy}
-                onClick={() => setCopyDialog(null)}
-              >
-                {t('common.cancel', 'Cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={copyDialog.busy || !copyDialog.targetWorkspaceId}
-                loading={copyDialog.busy}
-                onClick={() => void confirmCopyToCloud()}
-              >
-                {copyDialog.busy ? t('thread.copyingToCloud', 'Copying...') : t('thread.copyToCloudConfirm', 'Copy to Cloud')}
-              </Button>
-            </div>
-          </div>
-        </>
+        </Dialog>
       )}
     </div>
   )

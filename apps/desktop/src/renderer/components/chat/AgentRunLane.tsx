@@ -14,6 +14,7 @@ import {
 } from './agent-run-utils'
 import type { TaskRunMetrics } from './agent-run-filter-model'
 import { latestTranscriptLine } from './task-timeline-utils'
+import { statusLabel } from '../../helpers/status-label'
 import { Badge } from '../ui'
 
 // A single horizontal swim lane showing one delegated sub-agent task.
@@ -43,15 +44,6 @@ function statusDotColor(status: TaskRun['status'], tone: string): string {
   if (status === 'complete') return 'var(--color-green)'
   if (status === 'running') return tone
   return 'var(--color-text-muted)'
-}
-
-function statusLabel(status: TaskRun['status']): string {
-  switch (status) {
-    case 'running': return t('taskStatus.running', 'running')
-    case 'complete': return t('taskStatus.done', 'done')
-    case 'error': return t('taskStatus.errored', 'errored')
-    case 'queued': return t('taskStatus.queued', 'queued')
-  }
 }
 
 export const AgentRunLane = memo(function AgentRunLaneComponent({

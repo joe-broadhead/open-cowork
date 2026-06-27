@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { t } from '../helpers/i18n'
+import { BrandMark } from './BrandMark'
+import { Button } from './ui'
 
 export function LoginScreen({
   brandName,
@@ -32,27 +34,20 @@ export function LoginScreen({
     <div className="flex flex-col items-center justify-center h-screen w-screen" style={{ background: 'var(--color-base)' }}>
       <div className="flex flex-col items-center gap-8 max-w-sm px-6">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center">
-            <span className="text-2xl font-bold text-accent">O</span>
-          </div>
-          <h1 className="text-xl font-semibold text-text">{brandName}</h1>
+          <BrandMark name={brandName} size="md" showName headingName />
           <p className="text-sm text-text-muted text-center">
             {t('login.welcome', 'Sign in to enable the configured authentication provider for this {{brandName}} build.', { brandName })}
           </p>
         </div>
 
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl text-md font-medium transition-colors cursor-pointer"
-          style={{
-            background: loading ? 'var(--color-surface-hover)' : 'var(--color-accent)',
-            color: loading ? 'var(--color-text-muted)' : 'var(--color-accent-foreground)',
-            border: `1px solid ${loading ? 'var(--color-border)' : 'var(--color-accent)'}`,
-          }}
+        <Button
+          variant="primary"
+          fullWidth
+          loading={loading}
+          onClick={() => void handleLogin()}
         >
           {loading ? t('common.loading', 'Waiting for browser...') : t('common.continue', 'Continue')}
-        </button>
+        </Button>
 
         {error ? <p className="text-xs text-red text-center">{error}</p> : null}
       </div>

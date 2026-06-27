@@ -71,6 +71,19 @@ beforeEach(() => {
 })
 
 describe('ThreadList', () => {
+  it('shows a guiding empty state when there are no conversations', () => {
+    useSessionStore.setState({
+      sessions: [],
+      sessionsByWorkspace: { local: [] },
+      currentSessionId: null,
+    })
+
+    render(<ThreadList />)
+
+    expect(screen.getByText('No conversations yet')).toBeInTheDocument()
+    expect(screen.getByText('Start one from Home to see it tracked here.')).toBeInTheDocument()
+  })
+
   it('groups chats by project and keeps sandbox chats separate', () => {
     const groupedSessions: SessionInfo[] = [
       {
@@ -286,7 +299,7 @@ describe('ThreadList', () => {
     fireEvent.keyDown(row, { key: 'ContextMenu' })
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy to Cloud...' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Copy thread to cloud' })
+    const dialog = await screen.findByRole('dialog', { name: 'Copy to Cloud...' })
     expect(dialog).toHaveTextContent('Creates a new cloud thread. The local thread stays unchanged.')
     expect(importInventory).toHaveBeenCalledWith('session-1')
     expect(workspaceList).toHaveBeenCalled()

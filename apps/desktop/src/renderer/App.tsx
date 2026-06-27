@@ -8,6 +8,7 @@ import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
 import { RuntimeOfflineBanner } from './components/layout/RuntimeOfflineBanner'
 import { Toaster } from './components/ui/Toaster'
+import { Button } from './components/ui'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
@@ -33,7 +34,7 @@ import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
 import { useRuntimeHealth } from './hooks/useRuntimeHealth'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 import { setBrandName, setDocsBaseUrl } from './helpers/brand'
-import { configureI18n, subscribeLocale } from './helpers/i18n'
+import { configureI18n, subscribeLocale, t } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
@@ -639,10 +640,6 @@ export function App() {
     background: 'color-mix(in srgb, var(--color-amber) 10%, var(--color-surface))',
     color: 'var(--color-text)',
   }
-  const previewNoticeButtonStyle = {
-    borderColor: 'color-mix(in srgb, var(--color-amber) 30%, var(--color-border-subtle))',
-    color: 'var(--color-text)',
-  }
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar view={view} />
@@ -652,17 +649,16 @@ export function App() {
           <span className="min-w-0 flex-1 text-text-muted">
             This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
           </span>
-          <button
-            type="button"
-            className="rounded border px-2 py-1 text-2xs hover:bg-surface-hover"
-            style={previewNoticeButtonStyle}
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               dismissPreview(metadata.version)
               setPreviewNoticeDismissed(true)
             }}
           >
-            Dismiss
-          </button>
+            {t('common.dismiss', 'Dismiss')}
+          </Button>
         </div>
       ) : null}
       {runtimeWasReady && runtimeError ? (
@@ -674,13 +670,14 @@ export function App() {
             <div className="font-semibold">App error</div>
             <div className="mt-0.5 text-red/85">{rendererErrorNotice}</div>
           </div>
-          <button
-            type="button"
-            className="no-drag rounded border border-red/25 px-2 py-1 text-2xs text-red hover:bg-red/10"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="no-drag"
             onClick={() => setRendererErrorNotice(null)}
           >
-            Dismiss
-          </button>
+            {t('common.dismiss', 'Dismiss')}
+          </Button>
         </div>
       ) : null}
       {resourceNavigationNotice ? (
@@ -694,13 +691,14 @@ export function App() {
             <div className="font-semibold">Resource unavailable</div>
             <div className="mt-0.5 text-amber/85">{resourceNavigationNotice.message}</div>
           </div>
-          <button
-            type="button"
-            className="no-drag rounded border border-amber/25 px-2 py-1 text-2xs text-amber hover:bg-amber/10"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="no-drag"
             onClick={() => setResourceNavigationNotice(null)}
           >
-            Dismiss
-          </button>
+            {t('common.dismiss', 'Dismiss')}
+          </Button>
         </div>
       ) : null}
       <div className="flex flex-1 min-h-0">

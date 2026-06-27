@@ -47,6 +47,7 @@ vi.mock('./helpers/brand', () => ({
 vi.mock('./helpers/i18n', () => ({
   configureI18n: mockConfigureI18n,
   subscribeLocale: mockSubscribeLocale,
+  t: (_key: string, fallback: string) => fallback,
   useI18n: () => ({ t: (_key: string, fallback: string) => fallback }),
 }))
 
