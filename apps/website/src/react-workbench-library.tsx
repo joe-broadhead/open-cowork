@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { WorkflowStep } from '@open-cowork/shared'
+import { Icon, entityChroma, type IconName } from '@open-cowork/ui'
 import {
   cloudWebCapabilityLabel,
   cloudWebCapabilityPolicyNote,
@@ -11,6 +12,14 @@ import {
 
 type StudioToneStyle = CSSProperties & {
   '--studio-tone'?: string
+}
+
+// The card paints an identity plate (`--entity-chroma`) and a hover spine
+// (`--spine`) from the same deterministic hue, mirroring the desktop capability
+// gallery so a tool/skill reads identically across surfaces.
+type CapabilityCardStyle = CSSProperties & {
+  '--entity-chroma'?: string
+  '--spine'?: string
 }
 
 export type Capability = {
@@ -202,24 +211,62 @@ export function CapabilityTabs({ tab, abilityCount, connectionCount, onTab }: { 
   )
 }
 
-export function CapabilityRows({ items, emptyText }: { items: Capability[], emptyText: string }) {
-  if (!items.length) return <p className="empty">{emptyText}</p>
+function capabilityIcon(item: Capability): IconName {
+  // Connections (tools / MCPs) read as a wrench plate; abilities (skills) as the
+  // sparkles plate, matching the desktop gallery's tool vs standalone-skill tiles.
+  return item.kind === 'mcp' || item.kind === 'tool' ? 'wrench' : 'sparkles'
+}
+
+function CapabilityCard({ item, index }: { item: Capability, index: number }) {
+  const label = cloudWebCapabilityLabel(item)
+  const chroma = entityChroma(item.name || item.id || label)
+  const cardStyle: CapabilityCardStyle = { '--entity-chroma': chroma, '--spine': chroma }
+  const coworkers = list<string>(item.agentNames)
+  const tools = list<string>(item.toolIds)
+  const meta = [item.kind || 'skill', item.source || item.origin || 'profile', item.scope].filter(Boolean) as string[]
   return (
-    <>
-      {items.map((item, index) => (
-        <div className="capability-card" key={item.id || item.name || index}>
-          <div className="surface-card-main">
+    <div className="capability-card capability-tile" style={cardStyle} key={item.id || item.name || index}>
+      <div className="surface-card-main">
+        <div className="capability-tile-head">
+          <span className="entity-tile capability-tile-icon" aria-hidden="true">
+            <Icon name={capabilityIcon(item)} size={16} />
+          </span>
+          <div className="capability-tile-headings">
             <div className="surface-card-header">
-              <strong>{cloudWebCapabilityLabel(item)}</strong>
+              <strong>{label}</strong>
               <span className="pill" data-kind={item.source === 'custom' ? 'warn' : 'ok'}>{item.source === 'custom' ? 'custom' : 'allowed'}</span>
             </div>
             <p className="empty">{item.description || cloudWebCapabilityPolicyNote(item)}</p>
-            <small>{[item.kind || 'skill', item.source || item.origin || 'profile', item.scope, list(item.agentNames).length ? `coworkers: ${list(item.agentNames).join(', ')}` : null, list(item.toolIds).length ? `tools: ${list(item.toolIds).join(', ')}` : null].filter(Boolean).join(' · ')}</small>
-            <small>{cloudWebCapabilityPolicyNote(item)}</small>
           </div>
         </div>
+        <div className="capability-tile-readout">
+          {meta.map((value, metaIndex) => (
+            <span className="capability-tile-readout-item" key={value}>
+              {metaIndex > 0 ? <span className="capability-tile-readout-sep" aria-hidden="true">·</span> : null}
+              {value}
+            </span>
+          ))}
+        </div>
+        {coworkers.length || tools.length ? (
+          <div className="capability-tile-rail">
+            {coworkers.length ? <small>coworkers: {coworkers.join(', ')}</small> : null}
+            {tools.length ? <small>tools: {tools.join(', ')}</small> : null}
+          </div>
+        ) : null}
+        <small>{cloudWebCapabilityPolicyNote(item)}</small>
+      </div>
+    </div>
+  )
+}
+
+export function CapabilityRows({ items, emptyText }: { items: Capability[], emptyText: string }) {
+  if (!items.length) return <p className="empty">{emptyText}</p>
+  return (
+    <div className="capability-gallery">
+      {items.map((item, index) => (
+        <CapabilityCard key={item.id || item.name || index} item={item} index={index} />
       ))}
-    </>
+    </div>
   )
 }
 

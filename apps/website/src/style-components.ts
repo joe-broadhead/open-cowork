@@ -1,3 +1,5 @@
+import { cloudWebsiteCapabilityGalleryStyles } from './style-capability-gallery.ts'
+
 export function cloudWebsiteComponentStyles() {
   return String.raw`    a {
       color: var(--accent-text);
@@ -238,6 +240,7 @@ export function cloudWebsiteComponentStyles() {
     .capability-card {
       grid-template-columns: 1fr;
     }
+${cloudWebsiteCapabilityGalleryStyles()}
     .surface-card-main {
       display: grid;
       gap: var(--space-2);
