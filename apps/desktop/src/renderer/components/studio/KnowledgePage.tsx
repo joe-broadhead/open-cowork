@@ -26,6 +26,7 @@ import {
   KnowledgeGraph,
   SegmentedControl,
   Select,
+  Skeleton,
   StudioPageHeader,
   WikiPage,
   WikiProposeEditDialog,
@@ -94,8 +95,95 @@ function firstReadablePage(snapshot: KnowledgeSnapshotPayload) {
   return snapshot.pages[0] || null
 }
 
-function canReviewAny(snapshot: KnowledgeSnapshotPayload) {
-  return snapshot.spaces.some((space) => knowledgeRoleCanReview(space.role))
+// A single capability pill. Lit (accent) when the viewer's Space role grants it,
+// dimmed when it doesn't — so "what can I do here" reads at a glance instead of
+// the old "Maintainer: read + propose + review" string concat.
+function AccessChip({ icon, label, granted }: { icon: IconName; label: string; granted: boolean }) {
+  return (
+    <Badge tone={granted ? 'accent' : 'muted'} className={granted ? undefined : 'opacity-60'}>
+      <span className="inline-flex items-center gap-1.5">
+        <Icon name={icon} size={16} aria-hidden />
+        {label}
+      </span>
+    </Badge>
+  )
+}
+
+function AccessPanel({ space, canPropose, canReview }: {
+  space: KnowledgeSpace | null
+  canPropose: boolean
+  canReview: boolean
+}) {
+  return (
+    <Card padding="md">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.access.title', 'Your access')}</h2>
+        {space ? <Badge tone="neutral">{space.role}</Badge> : null}
+      </div>
+      {space ? (
+        <>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <AccessChip icon="book-open" label={t('knowledge.access.read', 'Read')} granted />
+            <AccessChip icon="file-diff" label={t('knowledge.access.propose', 'Propose')} granted={canPropose} />
+            <AccessChip icon="shield-check" label={t('knowledge.access.review', 'Review')} granted={canReview} />
+          </div>
+          <p className="mt-3 text-2xs leading-relaxed text-text-muted">
+            {canReview
+              ? t('knowledge.access.reviewHint', 'You can propose edits and publish or decline proposals in this Space.')
+              : canPropose
+                ? t('knowledge.access.proposeHint', 'You can propose edits; a maintainer reviews and publishes them.')
+                : t('knowledge.access.readHint', 'You can read this Space. Ask a maintainer for propose access.')}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-2xs leading-relaxed text-text-muted">
+          {t('knowledge.access.noSelection', 'Open a page to see what you can do in its Space.')}
+        </p>
+      )}
+    </Card>
+  )
+}
+
+// First-run guidance: when a workspace has no Spaces yet, teach the
+// capture -> review -> publish model instead of showing an empty 3-column scaffold.
+function KnowledgeFirstRun({ onNewSpace }: { onNewSpace: () => void }) {
+  const steps: Array<{ icon: IconName; title: string; body: string }> = [
+    { icon: 'message-square', title: t('knowledge.firstRun.captureTitle', 'Capture'), body: t('knowledge.firstRun.captureBody', 'Coworkers turn useful chat outcomes into draft pages.') },
+    { icon: 'file-diff', title: t('knowledge.firstRun.reviewTitle', 'Review'), body: t('knowledge.firstRun.reviewBody', 'You accept or decline each proposed edit before it lands.') },
+    { icon: 'book-open', title: t('knowledge.firstRun.publishTitle', 'Publish'), body: t('knowledge.firstRun.publishBody', 'Accepted edits become versioned pages, grouped into Spaces.') },
+  ]
+  return (
+    <Card padding="lg" className="mx-auto w-full max-w-[640px]">
+      <div className="flex flex-col items-center text-center">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl border border-border-subtle bg-surface text-accent">
+          <Icon name="sparkles" size={24} aria-hidden />
+        </span>
+        <h2 className="mt-4 font-display text-role-card-title font-bold text-text">{t('knowledge.firstRun.title', 'Start your knowledge base')}</h2>
+        <p className="mt-2 max-w-[460px] text-xs leading-relaxed text-text-muted">
+          {t('knowledge.firstRun.body', 'Spaces hold pages your team can trust. Here is how knowledge gets in and stays current:')}
+        </p>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        {steps.map((step, index) => (
+          <div key={step.title} className="rounded-xl border border-border-subtle bg-elevated p-3">
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 place-items-center rounded-lg border border-border-subtle bg-surface text-text-secondary">
+                <Icon name={step.icon} size={16} aria-hidden />
+              </span>
+              <span className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('knowledge.firstRun.step', 'Step')} {index + 1}</span>
+            </div>
+            <h3 className="mt-2 text-sm font-semibold text-text">{step.title}</h3>
+            <p className="mt-1 text-2xs leading-relaxed text-text-muted">{step.body}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 flex justify-center">
+        <Button variant="primary" leftIcon="plus" onClick={onNewSpace}>
+          {t('knowledge.firstRun.action', 'Create your first Space')}
+        </Button>
+      </div>
+    </Card>
+  )
 }
 
 function KnowledgeGraphPanel({
@@ -201,7 +289,7 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
   return (
     <Card padding="md">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.history.title', 'Version history')}</h2>
+        <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.history.title', 'Page history')}</h2>
         <Badge tone="neutral">{versions.length}</Badge>
       </div>
       <div className="studio-version-timeline">
@@ -219,7 +307,10 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
                   <span className="text-text-muted">{formatDate(version.updatedAt)}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2 text-text-muted">
-                  <span className="truncate">{version.updatedBy}{version.proposalId ? ` - ${version.proposalId}` : ''}</span>
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">{version.updatedBy}</span>
+                    {version.proposalId ? <Badge tone="muted">{t('knowledge.history.fromProposal', 'from proposal')}</Badge> : null}
+                  </span>
                   {isCurrent ? (
                     <Badge tone="accent">{t('knowledge.history.current', 'Current')}</Badge>
                   ) : canRestore ? (
@@ -328,6 +419,7 @@ export function KnowledgePage() {
   const [newSpaceBusy, setNewSpaceBusy] = useState(false)
   const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
+  const [pageQuery, setPageQuery] = useState('')
   const reviewQueueRef = useRef<HTMLDivElement | null>(null)
   const [pendingReviewReveal, setPendingReviewReveal] = useState(false)
 
@@ -391,6 +483,14 @@ export function KnowledgePage() {
   )
   const selectedSpace = pageSpace(snapshot, selectedPage)
   const spacesForRail = useMemo(() => wikiSpaces(snapshot.spaces, snapshot.pages), [snapshot])
+  const totalPages = snapshot.pages.length
+  const filteredSpacesForRail = useMemo(() => {
+    const query = pageQuery.trim().toLowerCase()
+    if (!query) return spacesForRail
+    return spacesForRail
+      .map((space) => ({ ...space, pages: space.pages.filter((page) => page.title.toLowerCase().includes(query)) }))
+      .filter((space) => space.pages.length > 0)
+  }, [spacesForRail, pageQuery])
   const selectedPageId2 = selectedPage?.id
 
   const loadHistory = useCallback(async () => {
@@ -527,15 +627,16 @@ export function KnowledgePage() {
     <div className="flex-1 min-h-0 overflow-y-auto bg-base text-text">
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 px-6 py-6">
         <StudioPageHeader
-          eyebrow={t('knowledge.eyebrow', 'Company OS')}
+          eyebrow={t('knowledge.eyebrow', 'Shared wiki')}
           title={t('knowledge.title', 'Knowledge')}
-          description={t('knowledge.description', 'Versioned Spaces, reviewable proposals, backlinks, and graph context for accepted work.')}
+          description={t('knowledge.description', 'A shared wiki your coworkers help keep current. Pages live in Spaces; edits are proposed, reviewed, then published — and every version is saved.')}
           actions={[{
             id: 'reload',
             children: loading ? t('knowledge.loading', 'Loading') : t('knowledge.reload', 'Reload'),
             onClick: () => void loadSnapshot(),
             disabled: loading,
             leftIcon: 'rotate-ccw',
+            variant: 'ghost',
           }]}
         />
 
@@ -545,6 +646,17 @@ export function KnowledgePage() {
           </div>
         ) : null}
 
+        {loading && snapshot.spaces.length === 0 ? (
+          <div className="grid min-h-[480px] grid-cols-[260px_minmax(0,1fr)] gap-4">
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-9 w-full rounded-lg" />
+              <Skeleton className="h-44 w-full rounded-lg" />
+            </div>
+            <Skeleton className="h-[480px] w-full rounded-lg" />
+          </div>
+        ) : !error && snapshot.spaces.length === 0 ? (
+          <KnowledgeFirstRun onNewSpace={() => { setNewSpaceError(null); setNewSpaceOpen(true) }} />
+        ) : (
         <div className={`grid min-h-[720px] gap-4 ${view === 'graph' ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-[260px_minmax(0,1fr)_330px]'}`}>
           <div className="flex min-h-0 flex-col gap-3">
             <Button
@@ -556,8 +668,17 @@ export function KnowledgePage() {
             >
               {t('knowledge.newSpace.action', 'New Space')}
             </Button>
+            {totalPages > 6 ? (
+              <Input
+                leftIcon="search"
+                value={pageQuery}
+                placeholder={t('knowledge.search.placeholder', 'Find a page')}
+                aria-label={t('knowledge.search.label', 'Find a page')}
+                onChange={(event) => setPageQuery(event.target.value)}
+              />
+            ) : null}
             <WikiSpaceRail
-            spaces={spacesForRail}
+            spaces={filteredSpacesForRail}
             activePageId={selectedPage?.id}
             viewToggle={(
               <SegmentedControl
@@ -583,6 +704,9 @@ export function KnowledgePage() {
             )}
             onSelectPage={(_, page) => setSelectedPageId(page.id)}
             />
+            {pageQuery.trim() && filteredSpacesForRail.length === 0 ? (
+              <p className="px-1 text-2xs text-text-muted">{t('knowledge.search.noMatch', 'No pages match your search.')}</p>
+            ) : null}
           </div>
 
           <div className="min-w-0 space-y-4">
@@ -649,30 +773,11 @@ export function KnowledgePage() {
               busyVersionId={busyVersionId}
               onRestore={(version) => void restoreVersion(version)}
             />
-            <Card padding="md">
-              <div className="flex items-start gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-lg border border-border-subtle bg-surface text-text-secondary">
-                  <Icon name="shield-check" size={16} />
-                </span>
-                <div>
-                  <h2 className="font-display text-role-card-title font-bold text-text">{t('knowledge.permissions.title', 'Space permissions')}</h2>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {selectedSpace
-                      ? `${selectedSpace.role}: read ${knowledgeRoleCanPropose(selectedSpace.role) ? '+ propose' : ''} ${knowledgeRoleCanReview(selectedSpace.role) ? '+ review' : ''}`
-                      : t('knowledge.permissions.noSelection', 'Select a page to inspect Space role gates.')}
-                  </p>
-                  <p className="mt-2 text-2xs text-text-muted">
-                    {canReviewAny(snapshot)
-                      ? t('knowledge.permissions.canReview', 'Maintainers can accept or decline pending proposals.')
-                      : t('knowledge.permissions.noMaintainer', 'This workspace has no visible Maintainer Space.')}
-                    {canPropose ? t('knowledge.permissions.canPropose', ' You can capture conversation context into this Space.') : ''}
-                  </p>
-                </div>
-              </div>
-            </Card>
+            <AccessPanel space={selectedSpace} canPropose={canPropose} canReview={canReview} />
           </div>
           )}
         </div>
+        )}
       </div>
       {proposeOpen && selectedPage && selectedSpace ? (
         <WikiProposeEditDialog

@@ -132,3 +132,34 @@ describe('KnowledgePage review-queue reveal', () => {
     })
   })
 })
+
+describe('KnowledgePage clarity redesign', () => {
+  beforeEach(() => {
+    useSessionStore.setState({ activeWorkspaceId: LOCAL_WORKSPACE_ID })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('shows the viewer access capabilities for the selected Space', async () => {
+    installKnowledgeApi()
+    render(<KnowledgePage />)
+
+    await screen.findByRole('heading', { level: 1, name: 'Getting started' })
+    expect(screen.getByRole('heading', { name: 'Your access' })).toBeInTheDocument()
+    // A Maintainer can read, propose, and review — all three capability chips render.
+    expect(screen.getByText('Read')).toBeInTheDocument()
+    expect(screen.getByText('Propose')).toBeInTheDocument()
+    expect(screen.getByText('Review')).toBeInTheDocument()
+  })
+
+  it('shows first-run guidance instead of the empty 3-column scaffold when there are no Spaces', async () => {
+    installKnowledgeApi(snapshot({ spaces: [], pages: [], proposals: [], graph: { nodes: [], edges: [] } }))
+    render(<KnowledgePage />)
+
+    expect(await screen.findByRole('heading', { name: 'Start your knowledge base' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create your first Space' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Review queue' })).not.toBeInTheDocument()
+  })
+})
