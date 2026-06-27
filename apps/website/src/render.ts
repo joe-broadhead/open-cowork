@@ -602,6 +602,9 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           </div>
         </section>
       </div>
+      <footer class="statusbar-root" aria-label="Session status">
+        <span class="statusbar-slot" id="cloud-statusbar"></span>
+      </footer>
     </main>
   </div>`
   const shellHtml = renderToStaticMarkup(createElement(CloudReactSsrShell, { shellHtml: shellMarkup }))

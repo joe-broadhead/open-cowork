@@ -12,6 +12,7 @@ import { cloudWebsiteLayoutStyles } from './style-layout.ts'
 import { cloudWebsitePrimitiveStyles } from './style-primitives.ts'
 import { cloudWebsiteSharedUiStyles } from './style-shared-ui.ts'
 import { cloudWebsiteSidebarStyles } from './style-sidebar.ts'
+import { cloudWebsiteStatusBarStyles } from './style-statusbar.ts'
 import { cloudWebsiteSettingsStyles } from './style-settings.ts'
 import { cloudWebsiteStudioUiStyles } from './style-studio-ui.ts'
 import { cloudWebsiteStudioPrimitiveStyles } from './style-studio-primitives.ts'
@@ -140,6 +141,7 @@ export function cloudWebsiteStyles(branding: PublicBrandingConfig) {
 ${cloudWebsiteBaseStyles(branding)}
 ${sharedKeyframesCss()}
 ${cloudWebsiteLayoutStyles()}
+${cloudWebsiteStatusBarStyles()}
 ${cloudWebsiteSidebarStyles()}
 ${cloudWebsiteComponentStyles()}
 ${cloudWebsitePrimitiveStyles()}

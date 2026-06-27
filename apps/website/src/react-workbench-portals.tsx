@@ -11,6 +11,7 @@ import {
   CloudThreadList,
   type CloudRuntimeActionProps,
 } from './react-workbench.ts'
+import { CloudStatusBar } from './react-workbench-statusbar.ts'
 import { CloudConversationMeta } from './react-workbench-context.ts'
 import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
@@ -38,6 +39,7 @@ export type CloudWorkbenchPortalTargets = {
   sessionFormTarget: HTMLElement | null
   inspectorTarget: HTMLElement | null
   eventStatusTarget: HTMLElement | null
+  statusBarTarget: HTMLElement | null
   artifactDetailTarget: HTMLElement | null
   launchpadTarget: HTMLElement | null
   approvalsTarget: HTMLElement | null
@@ -71,6 +73,7 @@ export function useCloudWorkbenchPortalTargets(): CloudWorkbenchPortalTargets {
     sessionFormTarget: usePortalTarget('session-form', { clear: false }),
     inspectorTarget: usePortalTarget('chat-inspector-detail'),
     eventStatusTarget: usePortalTarget('chat-event-status'),
+    statusBarTarget: usePortalTarget('cloud-statusbar'),
     artifactDetailTarget: usePortalTarget('artifact-detail'),
     launchpadTarget: usePortalTarget('cloud-launchpad-home'),
     approvalsTarget: usePortalTarget('cloud-approvals-queue'),
@@ -197,6 +200,7 @@ export function CloudWorkbenchPortals({
     />
   ))
   pushPortal(targets.eventStatusTarget, <>{statusText}</>)
+  pushPortal(targets.statusBarTarget, <CloudStatusBar view={selectedView} />)
   pushPortal(targets.composerTarget, (
     <CloudComposerPortal
       bootstrap={bootstrap}

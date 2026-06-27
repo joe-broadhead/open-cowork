@@ -341,7 +341,7 @@ export function cloudWebsiteLayoutStyles() {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) auto;
     }
     .topbar {
       min-height: 52px;

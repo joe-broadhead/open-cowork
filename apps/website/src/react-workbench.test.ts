@@ -11,6 +11,7 @@ import {
   CloudSidebarThreadList,
   CloudThreadList,
 } from './react-workbench.ts'
+import { CloudStatusBar } from './react-workbench-statusbar.ts'
 import { CLOUD_DELIVERABLE_APPROVAL_COPY, CloudConversationMeta } from './react-workbench-context.ts'
 import { canManageCloudKnowledge, cloudKnowledgeAuthorityRole, knowledgeCaptureSpace } from './react-workbench-knowledge-state.ts'
 import { makeSession, makeSessionView } from './browser-test-fixtures.ts'
@@ -65,6 +66,51 @@ void test('React workbench components render cloud-safe thread, timeline, runtim
   assert.doesNotMatch(html, /signedUrl/)
   assert.doesNotMatch(html, /objectKey/)
   assert.doesNotMatch(html, /leaked-secret/)
+})
+
+void test('Cloud StatusBar renders the session status, token total, and cost the cloud genuinely exposes', () => {
+  const session = makeSession(1)
+  const view = makeSessionView(session, 10, 1)
+  // makeSessionView ships the real cloud projection fields: sessionCost 0.0123 and
+  // sessionTokens { input: 1000, output: 250 } -> 1.3K total tokens, $0.01.
+  const html = renderToStaticMarkup(createElement(CloudStatusBar, { view }))
+
+  // Status dot + Ready label (fixture has no isGenerating flag).
+  assert.match(html, /studio-status-dot/)
+  assert.match(html, /studio-status-dot--idle/)
+  assert.match(html, /Ready/)
+  // Token total + cost cluster (the real, non-fabricated meter the cloud has).
+  assert.match(html, /1\.3K tokens/)
+  assert.match(html, /\$0\.01/)
+  // Expandable session-usage breakdown over the genuine token fields.
+  assert.match(html, /Session Usage/)
+  assert.match(html, /Input tokens/)
+  assert.match(html, /Output tokens/)
+  assert.match(html, /Session cost/)
+  // The cloud has no model/context-limit, so the bar must not fake a context meter.
+  assert.doesNotMatch(html, /context/i)
+})
+
+void test('Cloud StatusBar reflects a live generating session and its accumulated usage', () => {
+  const session = makeSession(2)
+  const view = makeSessionView(session, 10, 1)
+  view.projection.view.isGenerating = true
+  view.projection.view.sessionCost = 0.0042
+  view.projection.view.sessionTokens = { input: 1_500_000, output: 250, reasoning: 64, cacheRead: 32, cacheWrite: 16 }
+  view.projection.view.lastInputTokens = 90_000
+
+  const html = renderToStaticMarkup(createElement(CloudStatusBar, { view }))
+
+  assert.match(html, /studio-status-dot--live/)
+  assert.match(html, /Working\.\.\./)
+  // 1,500,000 + 250 + 64 reasoning -> 1.5M total; sub-cent cost keeps 4 decimals.
+  assert.match(html, /1\.5M tokens/)
+  assert.match(html, /\$0\.0042/)
+  // Reasoning / cache / last-measured-input rows appear only when non-zero.
+  assert.match(html, /Reasoning/)
+  assert.match(html, /Cache read/)
+  assert.match(html, /Cache write/)
+  assert.match(html, /Last measured input/)
 })
 
 void test('React Cloud sidebar groups chats by project source', () => {
