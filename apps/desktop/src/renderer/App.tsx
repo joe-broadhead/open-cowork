@@ -14,6 +14,7 @@ import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-types'
+import { isDesktopRuntime } from './runtime-env'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const ProjectsBoardPage = lazy(() => import('./components/projects/ProjectsBoardPage').then((m) => ({ default: m.ProjectsBoardPage })))
@@ -522,7 +523,9 @@ export function App() {
         applyAppearancePreferences()
         setAuthenticated(authState.authenticated)
         setUserEmail(authState.email || '')
-        setNeedsSetup(!isSetupComplete(settings, appConfig))
+        // The desktop connect-a-model setup is desktop-only; the cloud manages
+        // providers/models server-side, so the browser build never gates on it.
+        setNeedsSetup(isDesktopRuntime() && !isSetupComplete(settings, appConfig))
       } catch (err) {
         const message = 'Could not finish loading the app shell. Restart the app and try again.'
         setBootstrapError(message)
@@ -596,8 +599,8 @@ export function App() {
             setAuthenticated(true)
             setUserEmail(email)
             window.coworkApi.settings.get().then((settings) => {
-              setNeedsSetup(!isSetupComplete(settings, config))
-              if (isSetupComplete(settings, config)) void refreshRuntimeState()
+              setNeedsSetup(isDesktopRuntime() && !isSetupComplete(settings, config))
+              if (!isDesktopRuntime() || isSetupComplete(settings, config)) void refreshRuntimeState()
             }).catch((err) => reportAppError('Could not load settings after sign-in. Try again.', err, 'login'))
           }}
         />
@@ -642,7 +645,7 @@ export function App() {
   }
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
-      <TitleBar view={view} />
+      {isDesktopRuntime() ? <TitleBar view={view} /> : null}
       {showPreviewNotice && metadata ? (
         <div className="flex items-center gap-3 border-b px-4 py-2 text-xs" style={previewNoticeStyle}>
           <span className="font-semibold">Public preview {metadata.version}</span>

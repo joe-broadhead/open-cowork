@@ -2,24 +2,25 @@ import type { AppAPI } from '@open-cowork/shared'
 import { createDesktopAppApi } from './app-api'
 
 // The single runtime-detection leaf. The same renderer is wrapped two ways: the
-// Electron shell injects `window.coworkApi` (the IPC bridge); a plain browser
-// build does not. Every desktop-vs-cloud difference branches on this — mirroring
-// OpenWork's `runtime-env.ts`, so the platform delta stays auditable in one grep.
+// Electron shell injects `window.coworkApi` (the IPC bridge); the browser build
+// installs a browser CoworkAPI shim as `window.coworkApi` AND sets
+// `__coworkBrowserRuntime`. Both have window.coworkApi, so desktop is "coworkApi
+// present AND not the browser shim". Every desktop-vs-cloud difference branches
+// on this — mirroring OpenWork's runtime-env, so the delta stays auditable.
 export function isDesktopRuntime(): boolean {
-  return typeof window !== 'undefined' && (window as { coworkApi?: unknown }).coworkApi != null
+  if (typeof window === 'undefined') return false
+  const w = window as { coworkApi?: unknown; __coworkBrowserRuntime?: boolean }
+  return w.coworkApi != null && w.__coworkBrowserRuntime !== true
 }
 
 let cachedAppApi: AppAPI | null = null
 
-// Resolve the AppAPI implementation for the current runtime. Today only the
-// desktop (Electron/IPC) adapter is wired; the cloud/browser branch
-// (`createCloudWebAppApi` against the HTTP backend) is added in a later phase,
-// selected here by `!isDesktopRuntime()`. Components only ever call `useAppApi()`.
+// Resolve the AppAPI for the AppApiProvider. The adapter wraps window.coworkApi,
+// which is present in BOTH runtimes — the Electron IPC bridge on desktop, the
+// browser CoworkAPI shim in the browser — so the same adapter works either way.
+// Platform branching in components uses isDesktopRuntime(), not api.platform.
 export function resolveAppApi(): AppAPI {
   if (cachedAppApi) return cachedAppApi
-  if (!isDesktopRuntime()) {
-    throw new Error('The cloud/browser AppAPI is not wired in this build yet.')
-  }
   cachedAppApi = createDesktopAppApi()
   return cachedAppApi
 }

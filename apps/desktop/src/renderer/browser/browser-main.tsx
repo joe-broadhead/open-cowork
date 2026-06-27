@@ -17,6 +17,10 @@ function readBootstrap(): Record<string, unknown> | undefined {
   }
 }
 
+// Mark the browser runtime BEFORE installing the shim, so isDesktopRuntime()
+// can tell the browser CoworkAPI shim apart from the real Electron IPC bridge
+// (both populate window.coworkApi).
+;(window as unknown as { __coworkBrowserRuntime: boolean }).__coworkBrowserRuntime = true
 ;(window as unknown as { coworkApi: CoworkAPI }).coworkApi = createBrowserCoworkApi(readBootstrap())
 
 // Dynamic import so the window.coworkApi assignment above runs before any
