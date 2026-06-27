@@ -16,7 +16,8 @@ import { cloudSettingsRouteMarkup } from './cloud-settings-markup.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { cloudKnowledgeRouteMarkup } from './cloud-knowledge-markup.ts'
-import { cloudLaunchpadStaticMarkup, cloudWorkflowScheduleFieldsMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { cloudLaunchpadStaticMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { cloudWorkbenchRouteSectionsMarkup } from './cloud-workbench-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
 import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
@@ -99,9 +100,9 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     </aside>
     <main class="main">
       <header class="topbar">
-        <div>
-          <h1 id="org-name">${escapeHtml(branding.productName)}</h1>
-          <div class="meta" id="org-meta">Loading workspace</div>
+        <div class="topbar-workspace" aria-label="Active workspace">
+          <span class="topbar-workspace__name" id="org-name">${escapeHtml(branding.productName)}</span>
+          <span class="meta" id="org-meta">Loading workspace</span>
         </div>
         <div class="topbar-actions">
           ${cloudThemePresetSelectMarkup(tenantBrandingLocked)}
@@ -247,184 +248,11 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
 
         ${cloudKnowledgeRouteMarkup()}
 
-        <section ${routePanelAttrs('approvals')}>
-          <div class="section-header">
-            <div>
-              <h2>Approvals</h2>
-              <div class="meta">Pending permission requests and questions across Cloud chats</div>
-            </div>
-            <button class="primary" type="button" data-new-thread-shortcut="true" data-chat-control="true">New chat</button>
-          </div>
-          <div class="approval-route-shell">
-            ${routeParityMarkup('approvals')}
-            <div id="cloud-approvals-queue" class="studio-approvals-surface">
-              <p class="empty">Approvals load after sign-in.</p>
-            </div>
-          </div>
-        </section>
-
-        <section ${routePanelAttrs('agents')}>
-          <div class="section-header">
-            <div>
-              <h2>Coworkers</h2>
-              <div class="meta">Profile-allowed collaborators for chat</div>
-            </div>
-            <button id="refresh-capabilities" type="button" data-capability-control="true">Refresh</button>
-          </div>
-          <div class="grid">
-            ${routeParityMarkup('agents')}
-            <div class="panel">
-              <h3>Available coworkers</h3>
-              <div class="list" id="workbench-agent-list">
-                <p class="empty">No coworkers loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Policy</h3>
-              <div class="list" id="agent-policy-list">
-                <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
-                <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section ${routePanelAttrs('capabilities')}>
-          <div class="section-header">
-            <div>
-              <h2>Tools & Skills</h2>
-              <div class="meta">Capability policy verdicts</div>
-            </div>
-            <label><span>Filter</span><input id="capability-filter" autocomplete="off" placeholder="tool, skill, coworker, source" data-capability-control="true"></label>
-          </div>
-          <div class="grid">
-            ${routeParityMarkup('capabilities')}
-            <div class="panel">
-              <h3>Capability library</h3>
-              <div id="capability-tabs"></div>
-              <div class="list" id="capability-active-list">
-                <p class="empty">No capabilities loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Policy notes</h3>
-              <div class="list" id="capability-policy-note">
-                <p class="empty">Cloud-safe capability metadata loads after sign-in.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section ${routePanelAttrs('workflows')}>
-          <div class="section-header">
-            <div>
-              <h2>Playbooks</h2>
-              <div class="meta">Saved repeatable work and run chats</div>
-            </div>
-            <div class="row-actions">
-              <label><span>Filter</span><input id="workflow-filter" autocomplete="off" placeholder="title, coworker, trigger, status" data-workflow-control="true"></label>
-              <button id="refresh-workflows" type="button" data-workflow-control="true">Refresh</button>
-              <span class="pill" data-kind="${policy.features.workflows ? 'ok' : 'warn'}">${policy.features.workflows ? 'enabled' : 'disabled'}</span>
-            </div>
-          </div>
-          <div class="workbench-split">
-            ${routeParityMarkup('workflows')}
-            <div class="panel">
-              <div class="table-shell" role="table" aria-label="Cloud playbooks">
-                <div class="table-row table-head" role="row">
-                  <span role="columnheader">Playbook</span>
-                  <span role="columnheader">Status</span>
-                  <span role="columnheader">Last run</span>
-                  <span role="columnheader">Next run</span>
-                </div>
-                <div id="workflow-list">
-                  <div class="table-row empty-row" role="row">
-                    <span role="cell">No playbooks loaded.</span>
-                    <span role="cell">-</span>
-                    <span role="cell">-</span>
-                    <span role="cell">-</span>
-                  </div>
-                </div>
-              </div>
-              <h3>Runs</h3>
-              <div class="list" id="workflow-run-list">
-                <p class="empty">No runs loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <form id="workflow-form">
-                <h3>Create playbook</h3>
-                <div class="form-grid">
-                  <label class="span"><span>Title</span><input name="title" autocomplete="off" placeholder="Daily review" data-workflow-control="true"></label>
-                  <label><span>Lead coworker</span><input name="agentName" autocomplete="off" placeholder="build" data-workflow-control="true"></label>
-                  <label><span>Trigger</span><select name="triggerType" data-workflow-control="true">
-                    <option value="manual">Manual</option>
-                    <option value="schedule">Schedule</option>
-                    <option value="webhook">Webhook</option>
-                  </select></label>
-                  ${cloudWorkflowScheduleFieldsMarkup()}
-                  <label><span>Tools</span><input name="toolIds" autocomplete="off" placeholder="comma-separated" data-workflow-control="true"></label>
-                  <label><span>Skills</span><input name="skillNames" autocomplete="off" placeholder="comma-separated" data-workflow-control="true"></label>
-                  <label class="span"><span>Instructions</span><textarea name="instructions" placeholder="What this playbook should do" data-workflow-control="true"></textarea></label>
-                  <button class="primary span" type="submit" data-workflow-control="true">Create playbook</button>
-                </div>
-              </form>
-              <h3>Selected playbook</h3>
-              <div class="list" id="workflow-detail">
-                <p class="empty">Select or create a playbook.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section ${routePanelAttrs('channels')}>
-          <div class="section-header">
-            <div>
-              <h2>Channels</h2>
-              <div class="meta">Provider reach, people, watches, and delivery status</div>
-            </div>
-            <div class="row-actions">
-              <label><span>Filter</span><input id="channel-filter" autocomplete="off" placeholder="provider, channel, status, coworker" data-channel-control="true"></label>
-              <button id="refresh-channels" type="button" data-channel-control="true">Refresh</button>
-            </div>
-          </div>
-          <div class="channel-route-shell">
-            ${routeParityMarkup('channels')}
-            <div id="channel-gateway-surface" class="studio-channels-surface">
-              <p class="empty">Channels load after sign-in.</p>
-            </div>
-          </div>
-        </section>
-
-        <section ${routePanelAttrs('artifacts')}>
-          <div class="section-header">
-            <div>
-              <h2>Artifacts</h2>
-              <div class="meta">Cross-project deliverables</div>
-            </div>
-          </div>
-          <div class="grid">
-            ${routeParityMarkup('artifacts')}
-            <div class="panel">
-              <h3>Artifact library</h3>
-              <div class="list" id="artifact-list">
-                <p class="empty">No artifacts loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Library scope</h3>
-              <div class="list" id="artifact-history">
-                <p class="empty">No indexed artifacts loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Inspector</h3>
-              <div class="list ui-diff-view cloud-artifact-review" id="artifact-detail" aria-label="Artifact metadata" data-diff-view="true">
-                <p class="empty">Choose Inspect on an artifact to load metadata.</p>
-              </div>
-            </div>
-          </div>
-        </section>
+        ${cloudWorkbenchRouteSectionsMarkup({
+          profileName: policy.profileName,
+          chatEnabled: policy.features.chat === true,
+          workflowsEnabled: policy.features.workflows === true,
+        })}
 
         ${cloudSettingsRouteMarkup({
             tenantBrandingLocked,

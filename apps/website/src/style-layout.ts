@@ -355,6 +355,25 @@ export function cloudWebsiteLayoutStyles() {
       box-shadow: var(--surface-highlight);
       z-index: var(--z-sticky);
     }
+    /* Workspace identity is global chrome (which workspace/account is active),
+       not a per-route title — the per-page .studio-page-header h1 is the single
+       title. So the topbar name is a compact label, not a heading, and won't
+       stack a second title row above the page header. */
+    .topbar-workspace {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      min-width: 0;
+    }
+    .topbar-workspace__name {
+      font-size: var(--text-sm);
+      font-weight: 650;
+      line-height: var(--lh-sm);
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .topbar-actions {
       display: flex;
       align-items: center;
@@ -436,6 +455,15 @@ export function cloudWebsiteLayoutStyles() {
       align-items: end;
       justify-content: space-between;
       gap: var(--space-3);
+      min-width: 0;
+    }
+    /* The Channels route hosts only the relocated filter above the portaled
+       ChannelsGatewaySurface (which owns the single StudioPageHeader + Refresh),
+       so the filter bar aligns the control to the trailing edge without a
+       competing title row. */
+    .channel-filter-bar {
+      display: flex;
+      justify-content: flex-end;
       min-width: 0;
     }
     .grid {

@@ -13,7 +13,7 @@ import type {
 } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
-import { Button, Card, IconButton, Input, SegmentedControl, Skeleton, Tooltip } from '../ui'
+import { Button, Card, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '../ui'
 import { useSessionStore } from '../../stores/session'
 import { useEscape } from '../../hooks/useEscape'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
@@ -339,18 +339,19 @@ export function CapabilitiesPage({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="feature-page-shell">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-display text-role-page-title font-bold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
-              <GlossaryHelp />
-            </div>
-            <p className="text-sm text-text-secondary mt-1">
-              {t('capabilities.subtitle', 'Inspect the OpenCode tools and skills available to coworkers and playbooks in the current workspace.')}
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>{t('agentsPage.backToChat', 'Back to chat')}</Button>
-        </div>
+        <StudioPageHeader
+          className="mb-6"
+          eyebrow={t('capabilities.eyebrow', 'Capabilities')}
+          title={t('capabilities.title', 'Tools & Skills')}
+          description={t('capabilities.subtitle', 'Inspect the OpenCode tools and skills available to coworkers and playbooks in the current workspace.')}
+          meta={<GlossaryHelp />}
+          actions={[{
+            id: 'back-to-chat',
+            children: t('agentsPage.backToChat', 'Back to chat'),
+            onClick: onClose,
+            variant: 'ghost',
+          }]}
+        />
 
         <MetricRibbon
           metrics={[

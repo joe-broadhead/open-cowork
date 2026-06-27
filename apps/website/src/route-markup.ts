@@ -72,6 +72,70 @@ export function routePanelAttrs(routeId: string, options: { signedIn?: boolean, 
   return `class="${classes.join(' ')}" id="${escapeHtml(routeId)}" data-route-panel="${escapeHtml(routeId)}" data-route-surface="${escapeHtml(route?.surface || 'workbench')}" data-requires-auth="${options.signedIn === false ? 'false' : 'true'}" data-requires-admin="${options.admin ? 'true' : 'false'}"${hidden}`
 }
 
+// A literal `.studio-page-header` matching what the shared `StudioPageHeader`
+// React primitive emits (StudioPrimitives.tsx): an accent eyebrow Badge, an
+// `h1` title with a one-line `p` description, an optional `__meta` row, and a
+// `.studio-actions` toolbar. The cloud markup layer is a string SSR template, so
+// we emit the same class structure here — the shared `.studio-page-header`,
+// `.ui-badge--accent`, `.ui-button*`, and `.studio-actions` CSS (single-sourced
+// in @open-cowork/ui and embedded on the website) styles it identically to
+// desktop. `actionsMarkup`/`metaMarkup` accept already-escaped markup so callers
+// can place existing controls (filters, refresh buttons) into the header slots
+// without re-escaping; `title`/`eyebrow`/`description` are escaped here.
+export function cloudStudioPageHeaderMarkup(options: {
+  eyebrow: string
+  title: string
+  description: string
+  metaMarkup?: string
+  actionsMarkup?: string
+}) {
+  const meta = options.metaMarkup
+    ? `<div class="studio-page-header__meta">${options.metaMarkup}</div>`
+    : ''
+  const actions = options.actionsMarkup
+    ? `<div class="studio-actions" role="toolbar" aria-label="Studio actions">${options.actionsMarkup}</div>`
+    : ''
+  return `<header class="studio-page-header">
+            <div class="studio-page-header__copy">
+              <span class="ui-badge ui-badge--accent">${escapeHtml(options.eyebrow)}</span>
+              <div>
+                <h1>${escapeHtml(options.title)}</h1>
+                <p>${escapeHtml(options.description)}</p>
+              </div>
+              ${meta}
+            </div>
+            ${actions}
+          </header>`
+}
+
+// A header action button matching the shared `Button` primitive markup
+// (Button.tsx wraps the label in a `<span>` so the `.ui-button` flex/gap rules
+// apply). Defaults to the secondary variant like `StudioActions`. `attrs` carries
+// the existing id / data-*-control wiring the React controllers bind to, so the
+// handlers and disabled-state plumbing are preserved untouched.
+export function cloudStudioHeaderButtonMarkup(options: {
+  label: string
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+  attrs?: string
+}) {
+  const variant = options.variant || 'secondary'
+  const attrs = options.attrs ? ` ${options.attrs}` : ''
+  return `<button type="button" class="ui-button ui-button--${variant} ui-button--sm"${attrs}><span>${escapeHtml(options.label)}</span></button>`
+}
+
+// A header-hosted filter field. The cloud filter controls are wired by element id
+// (e.g. `#channel-filter`), so the input keeps its id + data-*-control attrs while
+// the label adopts the studio header label class so it sits cleanly in the actions
+// row alongside the buttons.
+export function cloudStudioHeaderFilterMarkup(options: {
+  inputId: string
+  label: string
+  placeholder: string
+  controlAttr: string
+}) {
+  return `<label class="studio-page-header__filter"><span>${escapeHtml(options.label)}</span><input id="${escapeHtml(options.inputId)}" autocomplete="off" placeholder="${escapeHtml(options.placeholder)}" ${options.controlAttr}></label>`
+}
+
 const parityAvailabilityLabels: Record<CloudWebWorkbenchParityAvailability, { label: string, kind: string }> = {
   shared: { label: 'Shared with Desktop', kind: 'ok' },
   'cloud-only': { label: 'Cloud-only', kind: 'info' },

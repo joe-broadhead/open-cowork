@@ -1,17 +1,20 @@
-import { routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { cloudStudioHeaderButtonMarkup, cloudStudioPageHeaderMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 
 export function cloudKnowledgeRouteMarkup() {
   return `<section ${routePanelAttrs('knowledge')}>
-          <div class="section-header">
-            <div>
-              <h2>Knowledge</h2>
-              <div class="meta">Versioned Spaces, review queue, backlinks, and graph context</div>
-            </div>
-            <div class="row-actions">
-              <button id="refresh-knowledge" type="button" data-knowledge-control="true">Refresh</button>
-              <button class="primary" id="knowledge-capture-shortcut" type="button" data-knowledge-control="true">Capture to knowledge</button>
-            </div>
-          </div>
+          ${cloudStudioPageHeaderMarkup({
+            eyebrow: 'Shared wiki',
+            title: 'Knowledge',
+            description: 'A shared wiki your coworkers help keep current. Edits are proposed, reviewed, then published — and every version is saved.',
+            actionsMarkup: cloudStudioHeaderButtonMarkup({
+              label: 'Refresh',
+              attrs: 'id="refresh-knowledge" data-knowledge-control="true"',
+            }) + cloudStudioHeaderButtonMarkup({
+              label: 'Capture to knowledge',
+              variant: 'primary',
+              attrs: 'id="knowledge-capture-shortcut" data-knowledge-control="true"',
+            }),
+          })}
           <div class="knowledge-route-shell">
             ${routeParityMarkup('knowledge')}
             <div class="knowledge-layout">

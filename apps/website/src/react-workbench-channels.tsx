@@ -205,17 +205,11 @@ export function CloudChannelSurfacePortals({
     }
   }, [])
 
-  useEffect(() => {
-    const handler = (event: MouseEvent) => {
-      const clickTarget = event.target as HTMLElement | null
-      if (!clickTarget?.closest('#refresh-channels')) return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      void loadChannels()
-    }
-    document.addEventListener('click', handler, true)
-    return () => document.removeEventListener('click', handler, true)
-  }, [loadChannels])
+  // The Channels route no longer renders a cloud-static `#refresh-channels`
+  // control: the portaled ChannelsGatewaySurface owns the single StudioPageHeader
+  // (one title) and its own Refresh action (wired to `onReload={loadChannels}`),
+  // so there is one header and one refresh. Only the relocated `#channel-filter`
+  // input remains as the cloud-hosted control above the surface.
 
   const ensureChannelAgent = useCallback(async () => {
     const existing = snapshot.agents.find((agent) => agent.status === 'active')

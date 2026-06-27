@@ -1978,6 +1978,24 @@ export function primitivesSurfaceCss(): string {
   margin-top: var(--space-1);
 }
 
+/* A filter field hosted inside the page-header actions row (cloud relocates its
+   per-route filter here so the header is the single title/control band). The
+   label stacks a small muted caption over the input and sits inline next to the
+   header buttons. Web-only structure today, but single-sourced here so any future
+   desktop header filter matches. */
+.studio-page-header__filter {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.studio-page-header__filter input {
+  min-height: var(--control-h-sm);
+  min-width: 0;
+}
+
 /* Card padding — single-sourced here so a default Card and a studio object card
    share one flat spacing scale on both surfaces. Each app keeps its own .ui-card
    chrome (border/radius/background/shadow) but the size padding is canonical:
