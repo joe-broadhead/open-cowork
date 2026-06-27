@@ -46,6 +46,13 @@ export function writeHtml(res: ServerResponse, status: number, body: string, ori
       "font-src 'self'",
       "img-src 'self' data: https:",
       `style-src ${styleSrc}`,
+      // The design system themes per-entity surfaces with dynamic inline custom
+      // properties (--entity-chroma / --studio-tone / --spine on identity tiles,
+      // card spines, status dots). Inline style ATTRIBUTES can't carry a nonce,
+      // so without this they're blocked and every tinted tile renders flat grey.
+      // style-src-attr governs only attributes (not <style> elements, which stay
+      // nonce-locked above); 'unsafe-inline' here cannot execute script.
+      "style-src-attr 'unsafe-inline'",
       `script-src ${scriptSrc}`,
       "object-src 'none'",
       "base-uri 'none'",

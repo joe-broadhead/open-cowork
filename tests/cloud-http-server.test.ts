@@ -3529,7 +3529,14 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
     assert.match(csp, /script-src 'self' 'nonce-/)
     assert.match(csp, /font-src 'self'/)
     assert.match(csp, /object-src 'none'/)
-    assert.doesNotMatch(csp, /unsafe-inline/)
+    // Scripts stay locked to nonce'd <script> — no inline script execution.
+    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    // <style> elements stay nonce-locked; only inline style ATTRIBUTES are
+    // allowed (style-src-attr), which the design system needs for dynamic
+    // per-entity theming (--entity-chroma / --studio-tone / --spine). A style
+    // attribute cannot carry a nonce and cannot execute script.
+    assert.match(csp, /style-src 'self' 'nonce-/)
+    assert.match(csp, /style-src-attr 'unsafe-inline'/)
 
     const mismatched = await fetch(`${baseUrl}/api/config`, {
       headers: { origin: 'https://evil.example.test' },
