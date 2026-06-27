@@ -102,6 +102,14 @@ export function cloudSettingsSurfaceMarkup(input: CloudSettingsSurfaceInput) {
                   ${cloudDensityOptions().map((option) => `<button type="button" data-cloud-density-button="${escapeHtml(option.id)}">${escapeHtml(option.label)}</button>`).join('')}
                 </div>
               </div>
+              <div class="settings-row">
+                <div><strong>Interface &amp; monospace fonts</strong><span>Font choices follow Desktop. Cloud Web has no per-user font preference yet, so changing them here would not take effect.</span></div>
+                <span class="pill" data-kind="info">Desktop</span>
+              </div>
+              <div class="settings-row">
+                <div><strong>Language</strong><span>The interface language follows your browser and workspace policy. A per-user language picker is available in Desktop.</span></div>
+                <span class="pill" data-kind="info">Desktop</span>
+              </div>
             </div>
           </section>
 

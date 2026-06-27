@@ -46,11 +46,14 @@ export function cloudWebsiteSettingsStyles() {
       min-width: 0;
     }
     .settings-section {
-      border: var(--border-width-1) solid var(--color-border);
+      /* Resting Studio cards are flat: a hairline border carries the edge, with
+         no raised box-shadow / specular highlight (matches .ui-card--variant-flat
+         and the desktop Settings panels). */
+      border: var(--border-width-1) solid var(--color-border-subtle);
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       padding: calc(var(--row-pad) + var(--space-2));
-      box-shadow: var(--shadow-2), var(--specular);
+      box-shadow: none;
     }
     .settings-section h3 {
       margin: 0;
