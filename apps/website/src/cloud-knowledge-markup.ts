@@ -25,13 +25,16 @@ export function cloudKnowledgeRouteMarkup() {
                 <p class="empty">Select a Knowledge page.</p>
               </article>
               <aside class="knowledge-side">
-                <div class="panel" id="knowledge-review-queue">
+                <div class="knowledge-side-panel" id="knowledge-review-queue">
                   <p class="empty">No proposals loaded.</p>
                 </div>
-                <div class="panel" id="knowledge-version-history">
+                <div class="knowledge-side-panel" id="knowledge-version-history">
                   <p class="empty">No version history loaded.</p>
                 </div>
-                <div class="panel" id="knowledge-graph">
+                <div class="knowledge-side-panel" id="knowledge-access">
+                  <p class="empty">Your access appears with a selected page.</p>
+                </div>
+                <div class="knowledge-side-panel" id="knowledge-graph">
                   <p class="empty">Knowledge graph loads with pages.</p>
                 </div>
               </aside>

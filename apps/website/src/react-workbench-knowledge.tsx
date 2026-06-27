@@ -4,12 +4,11 @@ import { useAppApi } from '@open-cowork/ui/app-api'
 import {
   Badge,
   Button,
-  Dialog,
+  Card,
   EmptyState,
   Input,
   KnowledgeGraph,
   SegmentedControl,
-  Select,
   WikiPage,
   WikiProposeEditDialog,
   type WikiProposeEditSubmit,
@@ -31,11 +30,17 @@ import type {
 import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import {
-  KNOWLEDGE_DEFAULT_VISIBILITY,
-  KNOWLEDGE_VISIBILITY_OPTIONS,
   canManageCloudKnowledge,
   knowledgeCaptureSpace,
 } from './react-workbench-knowledge-state.ts'
+import {
+  KnowledgeAccessPanel,
+  KnowledgeFirstRun,
+  KnowledgeNewSpaceDialog,
+  KnowledgeReviewQueue,
+  KnowledgeVersionHistory,
+  formatKnowledgeDate,
+} from './react-workbench-knowledge-panels.tsx'
 import { asRecord } from './react-workbench-controller.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
 
@@ -43,6 +48,10 @@ import type { CloudWebThreadView } from './thread-workbench.ts'
 // body within the store's byte limits even for long chats).
 const KNOWLEDGE_CAPTURE_MESSAGE_LIMIT = 40
 const KNOWLEDGE_CAPTURE_MESSAGE_CHARS = 2000
+
+// Only show the rail "Find a page" filter once there are enough pages to make scanning
+// the rail tedious — matching the desktop KnowledgePage threshold.
+const KNOWLEDGE_PAGE_SEARCH_THRESHOLD = 6
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
   spaces: [],
@@ -61,14 +70,6 @@ function usePortalTarget(id: string) {
     setTarget(element)
   }, [id])
   return target
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return 'Unknown'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
 function errorMessage(error: unknown) {
@@ -118,121 +119,6 @@ function currentThreadId(selectedView: CloudWebThreadView | null) {
   return selectedView?.session?.sessionId || null
 }
 
-function KnowledgeNewSpaceDialog({
-  busy,
-  error,
-  onCreate,
-  onClose,
-}: {
-  busy: boolean
-  error: string | null
-  onCreate: (input: { name: string; visibility: KnowledgeSpaceVisibility }) => void
-  onClose: () => void
-}) {
-  const [name, setName] = useState('')
-  const [visibility, setVisibility] = useState<KnowledgeSpaceVisibility>(KNOWLEDGE_DEFAULT_VISIBILITY)
-  const trimmed = name.trim()
-  const canCreate = Boolean(trimmed) && !busy
-
-  return (
-    <Dialog
-      title="New Space"
-      size="sm"
-      onClose={onClose}
-      footer={(
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button
-            variant="primary"
-            leftIcon="plus"
-            disabled={!canCreate}
-            disabledReason={!trimmed ? 'Add a name' : undefined}
-            onClick={() => onCreate({ name: trimmed, visibility })}
-          >
-            {busy ? 'Creating' : 'Create'}
-          </Button>
-        </>
-      )}
-    >
-      <div className="studio-wiki-propose">
-        <p className="studio-wiki-propose__hint">
-          A Space groups related pages. You become its Maintainer and can publish the first page from a proposal.
-        </p>
-        <label className="studio-wiki-propose__field">
-          <span>Name</span>
-          <Input
-            value={name}
-            placeholder="e.g. Engineering, Onboarding"
-            disabled={busy}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label className="studio-wiki-propose__field">
-          <span>Visibility</span>
-          <Select
-            label="Space visibility"
-            value={visibility}
-            options={KNOWLEDGE_VISIBILITY_OPTIONS}
-            disabled={busy}
-            onChange={(next) => setVisibility(next as KnowledgeSpaceVisibility)}
-          />
-        </label>
-        {error ? <p role="alert" className="studio-wiki-propose__error">{error}</p> : null}
-      </div>
-    </Dialog>
-  )
-}
-
-function KnowledgeReviewQueue({
-  snapshot,
-  canReviewKnowledge,
-  busyProposalId,
-  onAccept,
-  onDecline,
-}: {
-  snapshot: KnowledgeSnapshotPayload
-  canReviewKnowledge: boolean
-  busyProposalId: string | null
-  onAccept: (proposal: KnowledgeProposal) => void
-  onDecline: (proposal: KnowledgeProposal) => void
-}) {
-  if (!snapshot.proposals.length) {
-    return (
-      <EmptyState
-        icon="check"
-        title="Nothing to review"
-        body="Captured Cloud chat context and coworker proposals appear here before they become published knowledge."
-      />
-    )
-  }
-
-  return (
-    <div className="knowledge-review-list">
-      <div className="knowledge-panel-heading"><strong>Review queue</strong><Badge tone="warning">{snapshot.proposals.length}</Badge></div>
-      {snapshot.proposals.map((proposal) => {
-        const space = snapshot.spaces.find((candidate) => candidate.id === proposal.spaceId)
-        const canReview = canReviewKnowledge && Boolean(space && knowledgeRoleCanReview(space.role))
-        const busy = busyProposalId === proposal.id
-        return (
-          <article key={proposal.id} className="knowledge-proposal-card">
-            <div className="knowledge-proposal-card__head">
-              <strong>{proposal.pageTitle}</strong>
-              <Badge tone="neutral">+{proposal.add} / -{proposal.del}</Badge>
-            </div>
-            <p>{proposal.summary}</p>
-            <small>{space?.name || 'Unknown space'} - {proposal.by} - {formatDate(proposal.when)}</small>
-            <div className="knowledge-proposal-card__actions">
-              <Button size="sm" variant="ghost" disabled={busy || !canReview} onClick={() => onDecline(proposal)}>Decline</Button>
-              <Button size="sm" variant="primary" disabled={busy || !canReview} onClick={() => onAccept(proposal)}>Accept</Button>
-            </div>
-          </article>
-        )
-      })}
-      {!canReviewKnowledge ? <p className="empty">Knowledge review requires an owner/admin Cloud role.</p> : null}
-    </div>
-  )
-}
-
 export function CloudKnowledgeSurfacePortals({
   selectedView,
   bootstrap,
@@ -256,11 +142,13 @@ export function CloudKnowledgeSurfacePortals({
   const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
   const [error, setError] = useState<string | null>(null)
+  const [pageQuery, setPageQuery] = useState('')
   const targets = {
     rail: usePortalTarget('knowledge-space-rail'),
     reader: usePortalTarget('knowledge-reader'),
     review: usePortalTarget('knowledge-review-queue'),
     history: usePortalTarget('knowledge-version-history'),
+    access: usePortalTarget('knowledge-access'),
     graph: usePortalTarget('knowledge-graph'),
   }
 
@@ -283,13 +171,43 @@ export function CloudKnowledgeSurfacePortals({
     void loadSnapshot()
   }, [loadSnapshot])
 
+  // Live updates. The cloud has no dedicated "knowledge updated" signal (desktop's
+  // window.coworkApi.on.knowledgeUpdated has no server-side equivalent — the knowledge
+  // routes don't publish to the workspace event stream). The closest analog is the
+  // workspace events SSE stream, which fires when a Cloud session does work — exactly
+  // when a coworker (agent) proposes a knowledge edit. Subscribe to it so freshly
+  // captured proposals appear without a manual Refresh; the snapshot reload is idempotent
+  // and cheap, and Refresh stays as the explicit fallback.
+  useEffect(() => {
+    try {
+      const stream = api.workspace.events({
+        message: () => { void loadSnapshot() },
+      })
+      return () => stream.close()
+    } catch {
+      return undefined
+    }
+  }, [api, loadSnapshot])
+
   const selectedPage = useMemo(
     () => snapshot.pages.find((page) => page.id === selectedPageId) || firstPage(snapshot),
     [snapshot, selectedPageId],
   )
   const selectedSpace = pageSpace(snapshot, selectedPage)
   const railSpaces = useMemo(() => toWikiSpaces(snapshot.spaces, snapshot.pages), [snapshot])
+  const totalPages = snapshot.pages.length
+  // "Find a page" filters Spaces/pages by title once the rail gets long enough to scan.
+  const filteredRailSpaces = useMemo(() => {
+    const query = pageQuery.trim().toLowerCase()
+    if (!query) return railSpaces
+    return railSpaces
+      .map((space) => ({ ...space, pages: space.pages.filter((page) => page.title.toLowerCase().includes(query)) }))
+      .filter((space) => space.pages.length > 0)
+  }, [railSpaces, pageQuery])
   const canReviewKnowledge = useMemo(() => canManageCloudKnowledge(bootstrap.role, workspace), [bootstrap.role, workspace])
+  // Review chip/gate for the selected Space: the cloud's owner/admin authority AND the
+  // Space's Maintainer role, matching the accept/restore gate the review queue enforces.
+  const canReviewSelectedSpace = canReviewKnowledge && Boolean(selectedSpace && knowledgeRoleCanReview(selectedSpace.role))
 
   const selectedHistoryPageId = selectedPage?.id
 
@@ -466,38 +384,59 @@ export function CloudKnowledgeSurfacePortals({
   return (
     <>
       {targets.rail ? createPortal((
-        <WikiSpaceRail
-          spaces={railSpaces}
-          activePageId={selectedPage?.id}
-          viewToggle={(
-            <SegmentedControl
-              label="Knowledge view"
-              value={view}
-              onChange={(next) => setView(next === 'graph' ? 'graph' : 'pages')}
-              options={[
-                { value: 'pages', label: 'Pages' },
-                { value: 'graph', label: 'Graph' },
-              ]}
-            />
-          )}
-          reviewAction={(
-            <div className="knowledge-rail-actions">
-              <Button
-                size="sm"
-                variant="secondary"
-                leftIcon="plus"
-                onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
-              >
-                New Space
-              </Button>
-              <Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length} pending</Badge>
+        <>
+          {totalPages > KNOWLEDGE_PAGE_SEARCH_THRESHOLD ? (
+            <div className="knowledge-rail-search">
+              <Input
+                leftIcon="search"
+                value={pageQuery}
+                placeholder="Find a page"
+                aria-label="Find a page"
+                onChange={(event) => setPageQuery(event.target.value)}
+              />
             </div>
-          )}
-          onSelectPage={(_, page) => setSelectedPageId(page.id)}
-        />
+          ) : null}
+          <WikiSpaceRail
+            spaces={filteredRailSpaces}
+            activePageId={selectedPage?.id}
+            viewToggle={(
+              <SegmentedControl
+                label="Knowledge view"
+                value={view}
+                onChange={(next) => setView(next === 'graph' ? 'graph' : 'pages')}
+                options={[
+                  { value: 'pages', label: 'Pages' },
+                  { value: 'graph', label: 'Graph' },
+                ]}
+              />
+            )}
+            reviewAction={(
+              <div className="knowledge-rail-actions">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon="plus"
+                  onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+                >
+                  New Space
+                </Button>
+                <Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length} pending</Badge>
+              </div>
+            )}
+            onSelectPage={(_, page) => setSelectedPageId(page.id)}
+          />
+          {pageQuery.trim() && filteredRailSpaces.length === 0 ? (
+            <p className="knowledge-rail-no-match">No pages match your search.</p>
+          ) : null}
+        </>
       ), targets.rail) : null}
 
-      {targets.reader ? createPortal(view === 'graph' ? (
+      {targets.reader ? createPortal(snapshot.spaces.length === 0 && !error ? (
+        <KnowledgeFirstRun
+          onNewSpace={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+          canCreate={canReviewKnowledge}
+        />
+      ) : view === 'graph' ? (
         <KnowledgeGraph
           graph={snapshot.graph}
           selectedPageId={selectedPage?.id || null}
@@ -510,7 +449,7 @@ export function CloudKnowledgeSurfacePortals({
           actions={canProposeEdit ? (
             <Button size="sm" variant="secondary" leftIcon="file-diff" onClick={() => { setProposeError(null); setProposeOpen(true) }}>Propose edit</Button>
           ) : undefined}
-          meta={<span>v{selectedPage.version} - {selectedPage.updatedBy} - {formatDate(selectedPage.updatedAt)}</span>}
+          meta={<span>v{selectedPage.version} - {selectedPage.updatedBy} - {formatKnowledgeDate(selectedPage.updatedAt)}</span>}
           blocks={selectedPage.body.map(toWikiBlock)}
           links={selectedPage.links.map((link, index) => ({
             id: `${link.kind}:${link.targetId || link.label}:${index}`,
@@ -533,42 +472,30 @@ export function CloudKnowledgeSurfacePortals({
       ), targets.review) : null}
 
       {targets.history ? createPortal((
-        <div className="knowledge-history-list">
-          <div className="knowledge-panel-heading"><strong>Version history</strong><Badge tone="neutral">{history.length}</Badge></div>
-          {history.map((version) => {
-            const isCurrent = version.version === (selectedPage?.version || 0)
-            return (
-              <div key={`${version.id}:${version.version}`} className="knowledge-history-row">
-                <strong>v{version.version}</strong>
-                <span>{version.updatedBy}</span>
-                <small>{formatDate(version.updatedAt)}</small>
-                {isCurrent ? (
-                  <Badge tone="neutral">Current</Badge>
-                ) : canReviewKnowledge ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    leftIcon="rotate-ccw"
-                    disabled={Boolean(busyVersionId)}
-                    onClick={() => void restoreVersion(version)}
-                  >
-                    {busyVersionId === version.versionId ? 'Restoring' : 'Restore'}
-                  </Button>
-                ) : null}
-              </div>
-            )
-          })}
-          {!history.length ? <p className="empty">No versions loaded.</p> : null}
-        </div>
+        <KnowledgeVersionHistory
+          versions={history}
+          currentVersion={selectedPage?.version || 0}
+          canRestore={canReviewKnowledge}
+          busyVersionId={busyVersionId}
+          onRestore={(version) => void restoreVersion(version)}
+        />
       ), targets.history) : null}
 
+      {targets.access ? createPortal((
+        <KnowledgeAccessPanel
+          space={selectedSpace}
+          canPropose={canProposeEdit}
+          canReview={canReviewSelectedSpace}
+        />
+      ), targets.access) : null}
+
       {targets.graph ? createPortal((
-        <div className="knowledge-graph-card">
+        <Card padding="md">
           <div className="knowledge-panel-heading"><strong>Graph</strong><Badge tone="accent">{snapshot.graph.nodes.length} nodes</Badge></div>
           {view === 'graph'
             ? <p className="empty">Graph is open in the main view.</p>
             : <KnowledgeGraph graph={snapshot.graph} selectedPageId={selectedPage?.id || null} onSelectPage={setSelectedPageId} />}
-        </div>
+        </Card>
       ), targets.graph) : null}
 
       {newSpaceOpen ? (
