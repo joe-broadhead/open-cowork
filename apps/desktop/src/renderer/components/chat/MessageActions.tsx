@@ -21,6 +21,7 @@ export function MessageActions({
   placement: 'left' | 'right'
 }) {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const sessions = useSessionStore((s) => s.sessions)
   const addSession = useSessionStore((s) => s.addSession)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const [busy, setBusy] = useState<'copy' | 'fork' | 'revert' | null>(null)
@@ -79,6 +80,12 @@ export function MessageActions({
   const isAssistant = message.role === 'assistant'
   const justify = placement === 'right' ? 'justify-end' : 'justify-start'
 
+  // Only offer "View diff" when the session has known file changes — mirrors
+  // ChatThreadHeader's diff-entry rule so clicking it never just opens a modal
+  // that reports "No file changes".
+  const currentSession = sessions.find((session) => session.id === currentSessionId) || null
+  const hasChanges = Boolean(currentSession?.changeSummary && currentSession.changeSummary.files > 0)
+
   return (
     <>
       <div
@@ -114,7 +121,7 @@ export function MessageActions({
               size="sm"
             />
           </Tooltip>
-          {isAssistant && (
+          {isAssistant && hasChanges && (
             <Tooltip content={t('messageActions.viewDiff', 'View diff')}>
               <IconButton
                 icon="file-diff"

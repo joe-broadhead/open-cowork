@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
@@ -18,6 +18,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
   const [customValues, setCustomValues] = useState<string[]>([])
   const [customEnabled, setCustomEnabled] = useState<boolean[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const firstOptionRef = useRef<HTMLButtonElement>(null)
 
   const scopedTool = useMemo(() => {
     const callId = request.tool?.callId
@@ -42,11 +43,15 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     setSubmitting(false)
   }, [request.id, request.questions])
 
+  // Hooks below must run on every render, so the !current early return lives
+  // after them (just above the JSX). current may briefly be undefined between a
+  // request swap and the reset effect; the helpers/JSX that read it are guarded.
   const current = request.questions[step]
-  if (!current) return null
-
   const total = request.questions.length
   const isLast = step >= total - 1
+  // The current required step is answered once it has at least one selected
+  // (or custom) value; mirror the per-step answers used to build the reply.
+  const currentAnswered = (answers[step]?.length ?? 0) > 0
 
   const setSingleAnswer = (label: string) => {
     setAnswers((prev) => prev.map((entry, index) => index === step ? [label] : entry))
@@ -82,15 +87,15 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
       if (index !== step) return entry
       const withoutPrevious = entry.filter((item) => item !== customValues[step]?.trim())
       if (!trimmed) return withoutPrevious
-      if (current.multiple) {
+      if (current?.multiple) {
         return withoutPrevious.includes(trimmed) ? withoutPrevious : [...withoutPrevious, trimmed]
       }
       return [trimmed]
     }))
   }
 
-  const goNext = async () => {
-    if (!currentSessionId || submitting) return
+  const goNext = useCallback(async () => {
+    if (!currentSessionId || submitting || !currentAnswered) return
     if (!isLast) {
       setStep((value) => Math.min(total - 1, value + 1))
       return
@@ -104,9 +109,9 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     } finally {
       setSubmitting(false)
     }
-  }
+  }, [currentSessionId, submitting, currentAnswered, isLast, total, answers, request.id, request.workspaceId, activeWorkspaceId])
 
-  const reject = async () => {
+  const reject = useCallback(async () => {
     if (!currentSessionId || submitting) return
     setSubmitting(true)
     try {
@@ -116,7 +121,36 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     } finally {
       setSubmitting(false)
     }
-  }
+  }, [currentSessionId, submitting, request.id, request.workspaceId, activeWorkspaceId])
+
+  // Focus the first option whenever a new request arrives so keyboard users
+  // land inside the dock without a mouse reach.
+  useEffect(() => {
+    firstOptionRef.current?.focus()
+  }, [request.id])
+
+  // Enter advances/submits the current step once it is answered; Escape
+  // dismisses the dock (mirrors TaskDrillIn / DiffViewer Escape handling).
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        void reject()
+        return
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        // Let the custom-answer textarea keep its own newline behaviour.
+        if (event.target instanceof HTMLTextAreaElement) return
+        if (!currentAnswered || submitting) return
+        event.preventDefault()
+        void goNext()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [currentAnswered, submitting, goNext, reject])
+
+  if (!current) return null
 
   return (
     <div className="px-6 pt-2">
@@ -164,11 +198,12 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
           </div>
 
           <div className="mt-4 flex flex-col gap-2">
-            {current.options.map((option) => {
+            {current.options.map((option, optionIndex) => {
               const selected = answers[step]?.includes(option.label) ?? false
               return (
                 <button
                   key={option.label}
+                  ref={optionIndex === 0 ? firstOptionRef : undefined}
                   type="button"
                   disabled={submitting}
                   onClick={() => {
@@ -214,6 +249,12 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
             )}
           </div>
 
+          {!currentAnswered && (
+            <div className="mt-3 text-2xs text-text-muted">
+              {t('questionDock.chooseToContinue', 'Choose an option to continue')}
+            </div>
+          )}
+
           <div className="mt-4 flex items-center justify-between gap-3">
             <Button
               type="button"
@@ -239,7 +280,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
               <Button
                 type="button"
                 onClick={goNext}
-                disabled={submitting}
+                disabled={submitting || !currentAnswered}
                 loading={submitting}
                 variant="primary"
                 size="sm"

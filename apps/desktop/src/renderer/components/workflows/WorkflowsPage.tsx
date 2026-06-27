@@ -3,7 +3,8 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { Badge, Button, Card, EmptyState, Icon, Skeleton, StudioPageHeader, entityChroma, type BadgeTone } from '../ui'
+import { Badge, Button, Card, EmptyState, Icon, Skeleton, StudioPageHeader, entityChroma, toast, type BadgeTone } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 type Props = {
   onOpenThread: (sessionId: string) => void
@@ -45,11 +46,11 @@ function statusTone(status: WorkflowSummary['status']): BadgeTone {
   return 'neutral'
 }
 
-function runStatusTone(status?: WorkflowRun['status'] | null) {
-  if (status === 'completed') return 'text-green'
-  if (status === 'running' || status === 'queued') return 'text-info'
-  if (status === 'failed') return 'text-red'
-  return 'text-muted'
+function runStatusTone(status?: WorkflowRun['status'] | null): BadgeTone {
+  if (status === 'completed') return 'success'
+  if (status === 'running' || status === 'queued') return 'info'
+  if (status === 'failed') return 'danger'
+  return 'muted'
 }
 
 function workflowLastRunLabel(workflow: WorkflowSummary) {
@@ -92,8 +93,8 @@ function webhookCurlCommand(workflow: WorkflowSummary) {
 export function WorkflowsPage({ onOpenThread }: Props) {
   const [payload, setPayload] = useState<WorkflowListPayload>(EMPTY_PAYLOAD)
   const [loading, setLoading] = useState(true)
-  const [feedback, setFeedback] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [archiveTarget, setArchiveTarget] = useState<WorkflowSummary | null>(null)
   const [runtimeConfigSource, setRuntimeConfigSource] = useState<EffectiveAppSettings['runtimeConfigSource']>('app')
   const refreshGenerationRef = useRef(0)
   const workspaceSupport = useActiveWorkspaceSupport()
@@ -164,21 +165,20 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
   const runAction = async (workflowId: string, action: () => Promise<unknown>, message: string) => {
     setBusyId(workflowId)
-    setFeedback(null)
     try {
       if (workflowActionBlocked) {
-        setFeedback(workflowActionReason || t('workflows.runsDisabledPolicy', 'Playbook runs are disabled by this workspace policy.'))
+        toast({ tone: 'warning', message: workflowActionReason || t('workflows.runsDisabledPolicy', 'Playbook runs are disabled by this workspace policy.') })
         return
       }
       const result = await action()
-      setFeedback(message)
+      toast({ tone: 'success', message })
       if (result && typeof result === 'object' && 'sessionId' in result) {
         const sessionId = (result as { sessionId?: unknown }).sessionId
         if (typeof sessionId === 'string' && sessionId) onOpenThread(sessionId)
       }
       await refresh()
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : String(error))
+      toast({ tone: 'error', message: error instanceof Error ? error.message : String(error) })
     } finally {
       setBusyId(null)
     }
@@ -186,24 +186,36 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
   const startDraft = async () => {
     if (!activeWorkspaceIsLocal) {
-      setFeedback(t('workflows.cloudCreationManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing cloud playbooks can be run when policy allows it.'))
+      toast({ tone: 'warning', message: t('workflows.cloudCreationManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing cloud playbooks can be run when policy allows it.') })
       return
     }
     if (workflowDraftBlocked) {
-      setFeedback(t('workflows.switchConfigInApp', 'Switch OpenCode config source to In app before adding playbooks. Setup still uses Cowork’s Workflow Designer agent and Workflows tool.'))
+      toast({ tone: 'warning', message: t('workflows.switchConfigInApp', 'Switch OpenCode config source to In app before adding playbooks. Setup still uses Cowork’s Workflow Designer agent and Workflows tool.') })
       return
     }
     setBusyId('new')
-    setFeedback(null)
     try {
       const session = await window.coworkApi.workflows.startDraft()
       onOpenThread(session.id)
       await refresh()
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : String(error))
+      toast({ tone: 'error', message: error instanceof Error ? error.message : String(error) })
     } finally {
       setBusyId(null)
     }
+  }
+
+  const archiveWorkflow = (workflow: WorkflowSummary) => runAction(workflow.id, () => (
+    activeWorkspaceIsLocal
+      ? window.coworkApi.workflows.archive(workflow.id)
+      : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
+  ), t('workflows.archived', 'Playbook archived.'))
+
+  const confirmArchive = async () => {
+    const target = archiveTarget
+    setArchiveTarget(null)
+    if (!target) return
+    await archiveWorkflow(target)
   }
 
   const copyWebhook = async (workflow: WorkflowSummary) => {
@@ -211,15 +223,15 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     if (!command) return
     try {
       await navigator.clipboard.writeText(command)
-      setFeedback(command === workflow.webhookUrl ? t('workflows.webhookUrlCopied', 'Webhook URL copied.') : t('workflows.webhookCurlCopied', 'Webhook curl copied.'))
+      toast({ tone: 'success', message: command === workflow.webhookUrl ? t('workflows.webhookUrlCopied', 'Webhook URL copied.') : t('workflows.webhookCurlCopied', 'Webhook curl copied.') })
     } catch {
-      setFeedback(command)
+      toast({ tone: 'error', message: t('workflows.webhookCopyFailed', 'Could not copy the webhook command. Copy it manually: {{command}}', { command }) })
     }
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-base text-primary">
-      <div className="border-b border-border px-6 py-5">
+    <div className="flex h-full min-h-0 flex-col bg-base text-text">
+      <div className="border-b border-border-subtle px-6 py-5">
         <StudioPageHeader
           eyebrow={t('workflows.eyebrow', 'Playbooks')}
           title={t('workflows.title', 'Playbooks')}
@@ -241,11 +253,6 @@ export function WorkflowsPage({ onOpenThread }: Props) {
             disabledReason: !activeWorkspaceIsLocal ? t('workflows.cloudCreationManagedShort', 'Cloud playbook creation is managed by this cloud workspace.') : workflowDraftBlocked ? t('workflows.setupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source.') : null,
           }]}
         />
-        {feedback ? (
-          <div className="mt-4 rounded-md border border-border bg-surface px-3 py-2 text-sm text-secondary shadow-card">
-            {feedback}
-          </div>
-        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
@@ -292,13 +299,13 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     </div>
                     <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 font-display text-role-card-title font-bold text-primary">{workflow.title}</h2>
+                      <h2 className="min-w-0 font-display text-role-card-title font-bold text-text">{workflow.title}</h2>
                       <Badge tone={statusTone(workflow.status)} className="capitalize">
                         {workflow.status}
                       </Badge>
                     </div>
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-secondary">{workflow.instructions}</p>
-                    <div className="mt-3 text-xs font-medium text-muted">
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-secondary">{workflow.instructions}</p>
+                    <div className="mt-3 text-xs font-medium text-text-muted">
                       {t('workflows.runsAs', 'Runs as')} {workflow.agentName || 'build'} <span aria-hidden="true">·</span> {t('workflows.lastRun', 'last run')} {workflowLastRunLabel(workflow)}
                     </div>
                     </div>
@@ -344,11 +351,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         {t('workflows.pauseButton', 'Pause')}
                       </Button>
                     )}
-                    <Button size="sm" variant="danger" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
-                      activeWorkspaceIsLocal
-                        ? window.coworkApi.workflows.archive(workflow.id)
-                        : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
-                    ), t('workflows.archived', 'Playbook archived.'))}>
+                    <Button size="sm" variant="danger" disabled={busyId === workflow.id} disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => setArchiveTarget(workflow)}>
                       {t('workflows.archiveButton', 'Archive')}
                     </Button>
                   </div>
@@ -356,28 +359,28 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
                 <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={t('workflows.stepsAriaLabel', '{{title}} steps', { title: workflow.title })}>
                   {workflowDisplaySteps(workflow).map((step, index) => (
-                    <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border bg-base/40 p-3">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-active text-xs font-bold text-text-secondary">
+                    <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border-subtle bg-elevated p-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-border-subtle bg-surface-active text-xs font-bold text-text-secondary">
                         {index + 1}
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-primary">{step.title}</span>
-                        {step.detail ? <span className="mt-1 block line-clamp-2 text-xs leading-5 text-muted">{step.detail}</span> : null}
+                        <span className="block text-sm font-semibold text-text">{step.title}</span>
+                        {step.detail ? <span className="mt-1 block line-clamp-2 text-xs leading-5 text-text-muted">{step.detail}</span> : null}
                       </span>
                     </li>
                   ))}
                 </ol>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.leadCoworker', 'Lead coworker')}</div>
-                    <div className="mt-1 text-sm text-primary">{workflow.agentName || 'build'}</div>
-                    <div className="mt-1 text-xs text-muted">
+                  <div className="rounded-md border border-border-subtle bg-elevated p-3">
+                    <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.leadCoworker', 'Lead coworker')}</div>
+                    <div className="mt-1 text-sm text-text">{workflow.agentName || 'build'}</div>
+                    <div className="mt-1 text-xs text-text-muted">
                       {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || t('workflows.usesSelectedTools', 'Uses selected tools and skills from the setup chat')}
                     </div>
                   </div>
-                  <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.triggers', 'Triggers')}</div>
+                  <div className="rounded-md border border-border-subtle bg-elevated p-3">
+                    <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.triggers', 'Triggers')}</div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {workflow.triggers.map((trigger) => (
                         <Badge key={trigger.id} tone="muted">
@@ -385,20 +388,22 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         </Badge>
                       ))}
                     </div>
-                    <div className="mt-2 text-xs text-muted">{t('workflows.next', 'Next:')} {formatWorkflowDate(workflow.nextRunAt)}</div>
+                    <div className="mt-2 text-xs text-text-muted">{t('workflows.next', 'Next:')} {formatWorkflowDate(workflow.nextRunAt)}</div>
                   </div>
-                  <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-2xs font-semibold uppercase tracking-wide text-muted">{t('workflows.latestRun', 'Latest run')}</div>
-                    <div className={`mt-1 text-sm ${runStatusTone(workflow.latestRunStatus)}`}>
-                      {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
+                  <div className="rounded-md border border-border-subtle bg-elevated p-3">
+                    <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.latestRun', 'Latest run')}</div>
+                    <div className="mt-1">
+                      <Badge tone={runStatusTone(workflow.latestRunStatus)} className="capitalize">
+                        {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
+                      </Badge>
                     </div>
-                    <div className="mt-1 line-clamp-2 text-xs text-muted">{workflow.latestRunSummary || t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}</div>
+                    <div className="mt-1 line-clamp-2 text-xs text-text-muted">{workflow.latestRunSummary || t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}</div>
                   </div>
                 </div>
 
                 {workflow.webhookUrl ? (
-                  <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border bg-base/40 p-3">
-                    <code className="min-w-0 flex-1 truncate text-xs text-secondary">{workflow.webhookUrl}</code>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-elevated p-3">
+                    <code className="min-w-0 flex-1 truncate text-xs text-text-secondary">{workflow.webhookUrl}</code>
                     <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
                       {t('workflows.copyCurl', 'Copy curl')}
                     </Button>
@@ -414,9 +419,21 @@ export function WorkflowsPage({ onOpenThread }: Props) {
           </div>
         )}
         {archivedCount > 0 ? (
-          <div className="mt-4 text-xs text-muted">{t('workflows.archivedHidden', '{{count}} archived playbook{{plural}} hidden.', { count: archivedCount, plural: archivedCount === 1 ? '' : 's' })}</div>
+          <div className="mt-4 text-xs text-text-muted">{t('workflows.archivedHidden', '{{count}} archived playbook{{plural}} hidden.', { count: archivedCount, plural: archivedCount === 1 ? '' : 's' })}</div>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={Boolean(archiveTarget)}
+        title={t('workflows.archiveConfirmTitle', 'Archive this playbook?')}
+        body={archiveTarget
+          ? t('workflows.archiveConfirmBody', 'Archiving “{{title}}” stops its schedules and webhook triggers and hides it from the active list. You can recover it later from the archive.', { title: archiveTarget.title })
+          : undefined}
+        confirmLabel={t('workflows.archiveButton', 'Archive')}
+        cancelLabel={t('workflows.archiveConfirmCancel', 'Cancel')}
+        tone="danger"
+        onConfirm={confirmArchive}
+        onCancel={() => setArchiveTarget(null)}
+      />
     </div>
   )
 }

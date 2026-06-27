@@ -61,6 +61,9 @@ function resetSessionStore() {
         directory: '/tmp/project',
         createdAt: '2026-05-07T00:00:00.000Z',
         updatedAt: '2026-05-07T00:00:00.000Z',
+        // Known file changes so the per-message "View diff" affordance shows;
+        // MessageActions gates it on this summary like ChatThreadHeader does.
+        changeSummary: { additions: 3, deletions: 1, files: 2 },
       },
     ],
     currentSessionId: 'session-1',
@@ -173,6 +176,32 @@ describe('MessageBubble', () => {
     expect(revertDialog).toHaveTextContent('Revert the session to this message? Later turns will be hidden until you un-revert.')
     await user.click(within(revertDialog).getByRole('button', { name: 'Revert to here' }))
     await waitFor(() => expect(api.session.revert).toHaveBeenCalledWith('session-1', 'assistant-message'))
+  })
+
+  it('hides the View diff action when the session has no known file changes', () => {
+    useSessionStore.setState({
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'Current thread',
+          directory: '/tmp/project',
+          createdAt: '2026-05-07T00:00:00.000Z',
+          updatedAt: '2026-05-07T00:00:00.000Z',
+          changeSummary: { additions: 0, deletions: 0, files: 0 },
+        },
+      ],
+    })
+
+    render(<MessageBubble message={{
+      id: 'assistant-message',
+      role: 'assistant',
+      content: 'No edits this turn',
+      order: 2,
+    }} />)
+
+    // Other assistant actions stay available; only the diff entry is gated.
+    expect(screen.getByRole('button', { name: 'Branch here' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View diff' })).not.toBeInTheDocument()
   })
 
   it('hides message actions when the visible bubble is only part of an SDK message', () => {

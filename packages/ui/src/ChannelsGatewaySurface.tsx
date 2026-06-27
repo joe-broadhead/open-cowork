@@ -486,7 +486,11 @@ function PeopleRoster({
             <Skeleton key={index} variant="row" className="studio-person-row" />
           ))
         ) : (
-          <p className="empty">No people loaded.</p>
+          <EmptyState
+            icon="users"
+            title="No people mapped yet"
+            body="Connect a channel to start mapping provider handles to coworkers and delivery roles."
+          />
         )}
       </div>
       <form className="studio-channel-form" onSubmit={submit}>
@@ -632,7 +636,11 @@ function WatchesPanel({
             <Skeleton key={index} variant="row" className="studio-channel-watch" />
           ))
         ) : (
-          <p className="empty">No watches loaded.</p>
+          <EmptyState
+            icon="bell"
+            title="No watches yet"
+            body="Add a watch to deliver project and conversation events to a connected channel."
+          />
         )}
       </div>
       <form className="studio-channel-form" onSubmit={submit}>
@@ -707,7 +715,13 @@ function DeliveryRows({
         </div>
       )
     }
-    return <p className="empty">No channel deliveries loaded.</p>
+    return (
+      <EmptyState
+        icon="send"
+        title="No deliveries yet"
+        body="Channel delivery attempts appear here once a watch or coworker sends an update."
+      />
+    )
   }
   return (
     <div className="studio-channel-list studio-channel-deliveries" id="channel-delivery-list">

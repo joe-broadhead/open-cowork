@@ -33,6 +33,7 @@ import {
   Icon,
   StudioPageHeader,
 } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 import {
   approvalQueueActionKey,
   buildDesktopApprovalQueueItems,
@@ -156,12 +157,17 @@ const EMPTY_CHANNEL_SNAPSHOT: ChannelSnapshot = {
   watches: [],
 }
 
+type ChannelConfirm =
+  | { kind: 'disconnect'; bindingId: string }
+  | { kind: 'deleteWatch'; watchId: string }
+
 export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => void }) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const workspaceSupport = useActiveWorkspaceSupport()
   const [snapshot, setSnapshot] = useState<ChannelSnapshot>(EMPTY_CHANNEL_SNAPSHOT)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pendingConfirm, setPendingConfirm] = useState<ChannelConfirm | null>(null)
 
   const loadChannels = useCallback(async () => {
     setLoading(true)
@@ -222,6 +228,64 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
     window.coworkApi.channels.createWatch({ ...input, workspaceId: activeWorkspaceId })
   ), [activeWorkspaceId])
 
+  // Disconnecting a live binding or deleting a coordination watch is irreversible
+  // and previously fired on a single click. Route both through a confirm dialog: the
+  // shared surface's success notice/reload still run, but only after the user confirms.
+  // The deferred lets us hand the surface a Promise that resolves with the real IPC
+  // result on confirm, or rejects on cancel so the surface aborts without a false success.
+  const confirmDeferredRef = useRef<{
+    resolve: (value: unknown) => void
+    reject: (error: unknown) => void
+  } | null>(null)
+
+  const settleConfirm = useCallback(() => {
+    confirmDeferredRef.current = null
+    setPendingConfirm(null)
+  }, [])
+
+  const requestConfirm = useCallback((confirm: ChannelConfirm) => (
+    new Promise<unknown>((resolve, reject) => {
+      confirmDeferredRef.current?.reject(new Error('superseded'))
+      confirmDeferredRef.current = { resolve, reject }
+      setPendingConfirm(confirm)
+    })
+  ), [])
+
+  const runConfirmedAction = useCallback(async () => {
+    const confirm = pendingConfirm
+    const deferred = confirmDeferredRef.current
+    if (!confirm || !deferred) return
+    try {
+      const result = confirm.kind === 'disconnect'
+        ? await window.coworkApi.channels.disconnectBinding(confirm.bindingId, { workspaceId: activeWorkspaceId })
+        : await window.coworkApi.channels.deleteWatch(confirm.watchId, { workspaceId: activeWorkspaceId })
+      deferred.resolve(result)
+    } catch (confirmError) {
+      deferred.reject(confirmError)
+    } finally {
+      settleConfirm()
+    }
+  }, [activeWorkspaceId, pendingConfirm, settleConfirm])
+
+  const cancelConfirmedAction = useCallback(() => {
+    confirmDeferredRef.current?.reject(new Error(t('studio.channels.confirmCancelled', 'Cancelled.')))
+    settleConfirm()
+  }, [settleConfirm])
+
+  const confirmCopy: Record<ChannelConfirm['kind'], { title: string; body: string; confirmLabel: string }> = {
+    disconnect: {
+      title: t('studio.channels.disconnectConfirmTitle', 'Disconnect this channel?'),
+      body: t('studio.channels.disconnectConfirmBody', 'This severs the live channel binding. People and watches routed through it stop receiving deliveries until it is reconnected.'),
+      confirmLabel: t('studio.channels.disconnectConfirm', 'Disconnect'),
+    },
+    deleteWatch: {
+      title: t('studio.channels.deleteWatchConfirmTitle', 'Delete this watch?'),
+      body: t('studio.channels.deleteWatchConfirmBody', 'This permanently removes the coordination watch. Its events will no longer be delivered to the channel, and it cannot be undone.'),
+      confirmLabel: t('studio.channels.deleteWatchConfirm', 'Delete'),
+    },
+  }
+  const activeConfirm = pendingConfirm ? confirmCopy[pendingConfirm.kind] : null
+
   return (
     <StudioPageShell>
       <ChannelsGatewaySurface
@@ -237,18 +301,28 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
         canManage
         onReload={loadChannels}
         onConnectProvider={connectProvider}
-        onDisconnectBinding={(bindingId) => window.coworkApi.channels.disconnectBinding(bindingId, { workspaceId: activeWorkspaceId })}
+        onDisconnectBinding={(bindingId) => requestConfirm({ kind: 'disconnect', bindingId })}
         onResolvePerson={(input) => window.coworkApi.channels.resolvePerson(input)}
         onCreateWatch={createWatch}
         onPauseWatch={(watchId) => window.coworkApi.channels.pauseWatch(watchId, { workspaceId: activeWorkspaceId })}
         onResumeWatch={(watchId) => window.coworkApi.channels.resumeWatch(watchId, { workspaceId: activeWorkspaceId })}
-        onDeleteWatch={(watchId) => window.coworkApi.channels.deleteWatch(watchId, { workspaceId: activeWorkspaceId })}
+        onDeleteWatch={(watchId) => requestConfirm({ kind: 'deleteWatch', watchId })}
       />
       <div className="flex justify-end">
         <Button variant="ghost" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
           {t('studio.channels.settings', 'Open settings')}
         </Button>
       </div>
+      <ConfirmDialog
+        open={Boolean(activeConfirm)}
+        title={activeConfirm?.title || ''}
+        body={activeConfirm?.body}
+        confirmLabel={activeConfirm?.confirmLabel}
+        cancelLabel={t('studio.channels.confirmCancel', 'Cancel')}
+        tone="danger"
+        onConfirm={runConfirmedAction}
+        onCancel={cancelConfirmedAction}
+      />
     </StudioPageShell>
   )
 }

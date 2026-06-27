@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import type {
   EffectiveAppSettings,
   PublicAppConfig,
@@ -15,6 +15,7 @@ import { useSessionStore } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { Badge, Button, Dialog, Input, Skeleton, Switch } from '../ui'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
@@ -54,6 +55,67 @@ function stripMaskedSettingsCredentials(settings: EffectiveAppSettings): Effecti
     providerCredentials: stripMaskedProviderCredentials(settings.providerCredentials),
     integrationCredentials: stripMaskedProviderCredentials(settings.integrationCredentials),
   }
+}
+
+// The exact Save-gated payload sent to settings.set, split by workspace kind.
+// Dirty tracking compares a JSON snapshot of this against the last-persisted
+// baseline so the snapshot and the persisted fields can never drift apart.
+// Immediately-applied appearance prefs are intentionally excluded — they save
+// themselves and never gate the Save button.
+function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean, workspaceId: string) {
+  return isLocal
+    ? {
+        selectedProviderId: settings.selectedProviderId,
+        selectedModelId: settings.selectedModelId,
+        selectedSmallModelId: settings.selectedSmallModelId ?? null,
+        providerCredentials: settings.providerCredentials,
+        integrationCredentials: settings.integrationCredentials,
+        bashPermission: settings.bashPermission,
+        fileWritePermission: settings.fileWritePermission,
+        webPermission: settings.webPermission,
+        webSearchEnabled: settings.webSearchEnabled,
+        taskPermission: settings.taskPermission,
+        externalDirectoryPermission: settings.externalDirectoryPermission,
+        mcpPermission: settings.mcpPermission,
+        notificationVoiceReplies: settings.notificationVoiceReplies,
+        notificationSmartSuggestions: settings.notificationSmartSuggestions,
+        notificationDailyDigest: settings.notificationDailyDigest,
+        notificationSounds: settings.notificationSounds,
+        privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
+        enableBash: settings.enableBash,
+        enableFileWrite: settings.enableFileWrite,
+        runtimeConfigSource: settings.runtimeConfigSource,
+        runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
+        workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
+        workflowRunInBackground: settings.workflowRunInBackground,
+        workflowDesktopNotifications: settings.workflowDesktopNotifications,
+        workflowQuietHoursStart: settings.workflowQuietHoursStart,
+        workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
+      }
+    : {
+        workspaceId,
+        selectedProviderId: settings.selectedProviderId,
+        selectedModelId: settings.selectedModelId,
+        selectedSmallModelId: settings.selectedSmallModelId ?? null,
+        workflowDesktopNotifications: settings.workflowDesktopNotifications,
+        workflowQuietHoursStart: settings.workflowQuietHoursStart,
+        workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
+        notificationVoiceReplies: settings.notificationVoiceReplies,
+        notificationSmartSuggestions: settings.notificationSmartSuggestions,
+        notificationDailyDigest: settings.notificationDailyDigest,
+        notificationSounds: settings.notificationSounds,
+        privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
+      }
+}
+
+// A stable fingerprint of the Save-gated payload, used as the dirty-comparison
+// baseline. buildSaveGatedSettings emits keys in a fixed literal order, so plain
+// JSON.stringify is already deterministic. The workspaceId field is dropped so
+// the fingerprint reflects only user-editable state.
+function fingerprintSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean, workspaceId: string): string {
+  const payload = buildSaveGatedSettings(settings, isLocal, workspaceId) as Record<string, unknown>
+  const { workspaceId: _ignored, ...comparable } = payload
+  return JSON.stringify(comparable)
 }
 
 function CloudModelsPolicyPanel({ settings }: { settings: EffectiveAppSettings }) {
@@ -214,7 +276,14 @@ export function SettingsPanel({
   const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
+  // Fingerprint of the last-persisted Save-gated payload. Compared against the
+  // current settings to derive `dirty`; refreshed on initial load and after
+  // every successful persist so a saved state returns to clean/idle.
+  const savedBaselineRef = useRef<string | null>(null)
+  const dirtyRef = useRef(false)
   const [tab, setTab] = useState<SettingsTab>('appearance')
   const [search, setSearch] = useState('')
   const [appearance, setAppearance] = useState<AppearancePreferences>(getAppearancePreferences())
@@ -254,7 +323,9 @@ export function SettingsPanel({
     ])
       .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
-        setSettings(stripMaskedSettingsCredentials(nextSettings))
+        const stripped = stripMaskedSettingsCredentials(nextSettings)
+        setSettings(stripped)
+        savedBaselineRef.current = fingerprintSaveGatedSettings(stripped, activeWorkspaceIsLocal, workspaceSupport.workspaceId)
         setConfig(nextConfig)
         setStorageStats(nextStorage)
       })
@@ -264,7 +335,7 @@ export function SettingsPanel({
         reportSettingsPanelError(err, 'Failed to load settings panel')
       })
     return () => { cancelled = true }
-  }, [activeWorkspaceIsLocal, addGlobalError, workspaceOptions])
+  }, [activeWorkspaceIsLocal, addGlobalError, workspaceOptions, workspaceSupport.workspaceId])
 
   useEffect(() => {
     if (!activeWorkspaceIsLocal) return
@@ -278,7 +349,7 @@ export function SettingsPanel({
       if (cancelled) return
       setSettings((current) => {
         if (!current || current.effectiveProviderId !== providerId) return current
-        return {
+        const next = {
           ...current,
           providerCredentials: {
             ...current.providerCredentials,
@@ -289,6 +360,13 @@ export function SettingsPanel({
             ),
           },
         }
+        // Disk credentials just merged in are the persisted truth, so re-anchor
+        // the clean baseline — unless the user already has pending edits for
+        // this provider, in which case the panel must stay dirty.
+        if (!dirtyProviderCredentialKeys.current[providerId]?.size) {
+          savedBaselineRef.current = fingerprintSaveGatedSettings(next, activeWorkspaceIsLocal, workspaceSupport.workspaceId)
+        }
+        return next
       })
     }).catch((err) => {
       if (cancelled) return
@@ -296,7 +374,7 @@ export function SettingsPanel({
       reportSettingsPanelError(err, `Failed to load provider credentials for ${providerId}`)
     })
     return () => { cancelled = true }
-  }, [activeWorkspaceIsLocal, addGlobalError, settings?.effectiveProviderId])
+  }, [activeWorkspaceIsLocal, addGlobalError, settings?.effectiveProviderId, workspaceSupport.workspaceId])
 
   useEffect(() => {
     return () => {
@@ -402,50 +480,11 @@ export function SettingsPanel({
     if (!settings) return false
     const { showSaved = true } = options
     setSaveError(null)
+    setSaving(true)
     try {
-      const savedSettings = await window.coworkApi.settings.set(activeWorkspaceIsLocal
-        ? {
-            selectedProviderId: settings.selectedProviderId,
-            selectedModelId: settings.selectedModelId,
-            selectedSmallModelId: settings.selectedSmallModelId ?? null,
-            providerCredentials: settings.providerCredentials,
-            integrationCredentials: settings.integrationCredentials,
-            bashPermission: settings.bashPermission,
-            fileWritePermission: settings.fileWritePermission,
-            webPermission: settings.webPermission,
-            webSearchEnabled: settings.webSearchEnabled,
-            taskPermission: settings.taskPermission,
-            externalDirectoryPermission: settings.externalDirectoryPermission,
-            mcpPermission: settings.mcpPermission,
-            notificationVoiceReplies: settings.notificationVoiceReplies,
-            notificationSmartSuggestions: settings.notificationSmartSuggestions,
-            notificationDailyDigest: settings.notificationDailyDigest,
-            notificationSounds: settings.notificationSounds,
-            privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
-            enableBash: settings.enableBash,
-            enableFileWrite: settings.enableFileWrite,
-            runtimeConfigSource: settings.runtimeConfigSource,
-            runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
-            workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
-            workflowRunInBackground: settings.workflowRunInBackground,
-            workflowDesktopNotifications: settings.workflowDesktopNotifications,
-            workflowQuietHoursStart: settings.workflowQuietHoursStart,
-            workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
-          }
-        : {
-            workspaceId: workspaceSupport.workspaceId,
-            selectedProviderId: settings.selectedProviderId,
-            selectedModelId: settings.selectedModelId,
-            selectedSmallModelId: settings.selectedSmallModelId ?? null,
-            workflowDesktopNotifications: settings.workflowDesktopNotifications,
-            workflowQuietHoursStart: settings.workflowQuietHoursStart,
-            workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
-            notificationVoiceReplies: settings.notificationVoiceReplies,
-            notificationSmartSuggestions: settings.notificationSmartSuggestions,
-            notificationDailyDigest: settings.notificationDailyDigest,
-            notificationSounds: settings.notificationSounds,
-            privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
-          })
+      const savedSettings = await window.coworkApi.settings.set(
+        buildSaveGatedSettings(settings, activeWorkspaceIsLocal, workspaceSupport.workspaceId),
+      )
       dirtyProviderCredentialKeys.current = {}
       let next = savedSettings
       if (activeWorkspaceIsLocal && savedSettings.effectiveProviderId) {
@@ -466,6 +505,9 @@ export function SettingsPanel({
         }
       }
       setSettings(next)
+      // Re-anchor the clean baseline to the just-persisted state so the Save
+      // button returns to its idle/disabled "No unsaved changes" affordance.
+      savedBaselineRef.current = fingerprintSaveGatedSettings(next, activeWorkspaceIsLocal, workspaceSupport.workspaceId)
       if (showSaved) {
         setSaved(true)
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
@@ -478,6 +520,8 @@ export function SettingsPanel({
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error))
       return false
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -523,9 +567,34 @@ export function SettingsPanel({
     })
   }
 
+  // Dirty = the current Save-gated state diverges from the last-persisted
+  // baseline. The baseline anchors on load/credential-fetch/save, so this only
+  // reflects genuine unsaved edits and is false while settings are loading.
+  const dirty = Boolean(
+    settings
+    && savedBaselineRef.current !== null
+    && fingerprintSaveGatedSettings(settings, activeWorkspaceIsLocal, workspaceSupport.workspaceId) !== savedBaselineRef.current,
+  )
+  // Mirror `dirty` into a ref so the close handler can stay referentially
+  // stable (below). Without this, passing a fresh closure to Dialog.onClose
+  // every render re-subscribes its focus trap, which steals focus from inputs
+  // mid-edit.
+  dirtyRef.current = dirty
+
+  // Every close path (Escape, backdrop, Cmd+W, the X button) funnels through the
+  // Dialog's onClose, so guarding it here guards them all: when there are
+  // unsaved edits, open the discard confirmation instead of closing.
+  const requestClose = useCallback(() => {
+    if (dirtyRef.current) {
+      setConfirmDiscardOpen(true)
+      return
+    }
+    onClose()
+  }, [onClose])
+
   if (!settings || !config) {
     return (
-      <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={onClose}>
+      <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={requestClose}>
         <div className="settings-dialog-loading" role="status" aria-live="polite" aria-label={t('settings.loading', 'Loading settings...')}>
           <Skeleton variant="text" className="w-40" />
           <Skeleton variant="block" className="h-10 w-full" />
@@ -552,9 +621,11 @@ export function SettingsPanel({
         ) : null}
       </div>
       <Button
-        variant={saved ? 'secondary' : 'primary'}
+        variant={saved || !dirty ? 'secondary' : 'primary'}
         onClick={() => void handleSave()}
         leftIcon={saved ? 'check' : undefined}
+        loading={saving}
+        disabledReason={!dirty && !saved && !saving ? t('settings.noUnsavedChanges', 'No unsaved changes') : undefined}
       >
         {saved ? t('settings.saved', 'Saved') : t('settings.saveChanges', 'Save Changes')}
       </Button>
@@ -562,7 +633,8 @@ export function SettingsPanel({
   )
 
   return (
-    <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={onClose} footer={footer}>
+    <>
+    <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={requestClose} footer={footer}>
       <div className="settings-dialog-shell">
         <div className="settings-dialog-intro">
           <div className="min-w-0">
@@ -716,5 +788,19 @@ export function SettingsPanel({
         </div>
       </div>
     </Dialog>
+    <ConfirmDialog
+      open={confirmDiscardOpen}
+      title={t('settings.discardChangesTitle', 'Discard unsaved changes?')}
+      body={t('settings.discardChangesBody', 'Your unsaved settings edits will be lost. This cannot be undone.')}
+      confirmLabel={t('settings.discardChangesConfirm', 'Discard')}
+      cancelLabel={t('settings.discardChangesCancel', 'Keep editing')}
+      tone="danger"
+      onConfirm={() => {
+        setConfirmDiscardOpen(false)
+        onClose()
+      }}
+      onCancel={() => setConfirmDiscardOpen(false)}
+    />
+    </>
   )
 }

@@ -7,6 +7,7 @@ import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { Card, toast } from '../ui'
 import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
 import { sectionLabelCls } from './settings-panel-styles'
@@ -56,6 +57,7 @@ export function StoragePanel({
 }) {
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
   const [resetting, setResetting] = useState(false)
+  const [pendingCleanup, setPendingCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
   const diagnosticsResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
 
@@ -115,6 +117,7 @@ export function StoragePanel({
   }
 
   return (
+    <>
     <div className="flex flex-col gap-5">
       <Card className="flex flex-col gap-4">
         <div className="text-xs font-semibold text-text">{t('settings.storage.supportDiagnostics', 'Support Diagnostics')}</div>
@@ -162,7 +165,7 @@ export function StoragePanel({
         <div className="flex flex-col gap-3">
           <Card
             interactive
-            onClick={() => void onCleanup('old-unreferenced')}
+            onClick={() => setPendingCleanup('old-unreferenced')}
             disabled={runningCleanup !== null}
             className="settings-action-card"
           >
@@ -176,7 +179,7 @@ export function StoragePanel({
 
           <Card
             interactive
-            onClick={() => void onCleanup('all-unreferenced')}
+            onClick={() => setPendingCleanup('all-unreferenced')}
             disabled={runningCleanup !== null}
             className="settings-action-card"
           >
@@ -223,5 +226,22 @@ export function StoragePanel({
         </Card>
       </Card>
     </div>
+    <ConfirmDialog
+      open={pendingCleanup !== null}
+      title={t('settings.storage.confirmClearTitle', 'Clear sandbox data?')}
+      body={pendingCleanup === 'old-unreferenced'
+        ? t('settings.storage.confirmClearOldBody', 'This permanently deletes unreferenced sandbox workspaces older than {{days}} days. Active thread workspaces are kept. This cannot be undone.', { days: String(stats.staleThresholdDays) })
+        : t('settings.storage.confirmClearAllBody', 'This permanently deletes every unreferenced sandbox workspace. Active thread workspaces are kept. This cannot be undone.')}
+      confirmLabel={t('settings.storage.confirmClearConfirm', 'Clear')}
+      cancelLabel={t('settings.storage.confirmClearCancel', 'Cancel')}
+      tone="danger"
+      onConfirm={async () => {
+        const mode = pendingCleanup
+        setPendingCleanup(null)
+        if (mode) await onCleanup(mode)
+      }}
+      onCancel={() => setPendingCleanup(null)}
+    />
+    </>
   )
 }

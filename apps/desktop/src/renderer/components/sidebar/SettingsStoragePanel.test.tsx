@@ -55,6 +55,36 @@ describe('StoragePanel', () => {
     expect(await screen.findByText('This build is not signed for in-app update installation, so updates stay manual.')).toBeInTheDocument()
   })
 
+  it('confirms before clearing sandbox artifacts and only cleans on confirm', async () => {
+    const user = userEvent.setup()
+    const onCleanup = vi.fn(async () => undefined)
+    installRendererTestCoworkApi({})
+
+    render(
+      <StoragePanel
+        stats={stats}
+        runningCleanup={null}
+        lastCleanup={null}
+        onCleanup={onCleanup}
+      />,
+    )
+
+    // Clicking a cleanup action opens a confirmation instead of wiping immediately.
+    await user.click(await screen.findByText('Clear all unused sandbox artifacts'))
+    expect(await screen.findByText('Clear sandbox data?')).toBeInTheDocument()
+    expect(onCleanup).not.toHaveBeenCalled()
+
+    // Cancel leaves everything untouched.
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCleanup).not.toHaveBeenCalled()
+
+    // Re-trigger and confirm: now the cleanup runs with the chosen mode.
+    await user.click(screen.getByText('Clear all unused sandbox artifacts'))
+    await user.click(await screen.findByRole('button', { name: 'Clear' }))
+    expect(onCleanup).toHaveBeenCalledTimes(1)
+    expect(onCleanup).toHaveBeenCalledWith('all-unreferenced')
+  })
+
   it('checks, downloads, and restarts signed updates from Settings', async () => {
     const user = userEvent.setup()
     let emitInstallEvent: ((event: UpdateInstallEvent) => void) | null = null

@@ -30,7 +30,46 @@ function describeAction(tool: string, input: Record<string, unknown>): { verb: s
   if (name.includes('calendar') && name.includes('create')) {
     return { verb: t('approval.createEvent', 'Create event'), detail: (input.summary as string) || '' }
   }
-  return { verb: t('approval.allowAction', 'Allow action'), detail: tool }
+  // Generic fallback (custom MCP + shell/file tools): show the raw tool id plus
+  // a concise summary of the input args so the action isn't described by id alone.
+  const argSummary = summarizeArgs(input)
+  return {
+    verb: t('approval.allowAction', 'Allow action'),
+    detail: argSummary ? `${tool} — ${argSummary}` : tool,
+  }
+}
+
+// Render a short, single-line preview of the tool input so a consequential
+// action isn't approved on the strength of its raw tool id alone. The full
+// JSON stays available behind the Inspect expander.
+function summarizeArgs(input: Record<string, unknown>): string {
+  const entries = Object.entries(input || {})
+  if (entries.length === 0) return ''
+  return entries
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${formatArgValue(value)}`)
+    .join(', ')
+}
+
+function formatArgValue(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 80 ? `${trimmed.slice(0, 80)}…` : trimmed
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return `[${value.length}]`
+  return '{…}'
+}
+
+// Pretty-print the tool input for the Inspect expander; never throw on a value
+// that can't be serialized (e.g. circular refs) so the approval card stays usable.
+function safeStringifyInput(input: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(input, null, 2)
+  } catch {
+    return String(input)
+  }
 }
 
 export function ApprovalCard({
@@ -62,6 +101,8 @@ export function ApprovalCard({
   }
 
   const { verb, detail } = describeAction(approval.tool, approval.input)
+  const hasInput = approval.input && Object.keys(approval.input).length > 0
+  const inputJson = hasInput ? safeStringifyInput(approval.input) : ''
 
   return (
     <Card className="chat-approval-card overflow-hidden" padding="md">
@@ -76,6 +117,17 @@ export function ApprovalCard({
               {queueCount > 1 ? <Badge tone="warning">{t('approval.queueCount', '{{count}} pending', { count: queueCount })}</Badge> : null}
             </div>
             {detail && <div className="text-2xs text-text-muted">{detail}</div>}
+            {hasInput && (
+              <details className="mt-1 group">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-2xs text-text-muted hover:text-text">
+                  <Icon name="chevron-right" size={16} className="transition-transform group-open:rotate-90" aria-hidden />
+                  {t('approval.inspectInput', 'Inspect')}
+                </summary>
+                <pre className="mt-1.5 max-h-48 overflow-auto rounded-md bg-surface-hover p-2 text-2xs leading-relaxed text-text-secondary whitespace-pre-wrap break-words">
+                  {inputJson}
+                </pre>
+              </details>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

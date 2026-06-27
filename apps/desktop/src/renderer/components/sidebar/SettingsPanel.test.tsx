@@ -202,6 +202,9 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await waitFor(() => expect(getProviderCredentials).toHaveBeenCalledTimes(1))
+    // Save only persists when there are unsaved edits, so make one first.
+    await user.click(screen.getByRole('button', { name: /Notifications/ }))
+    await user.click(screen.getByRole('switch', { name: 'Voice replies' }))
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -276,6 +279,66 @@ describe('SettingsPanel', () => {
       notificationDailyDigest: true,
       privacyShareAnonymizedUsage: true,
     })
+  })
+
+  it('keeps the Save button idle until there are unsaved edits and returns to idle after saving', async () => {
+    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+    const user = userEvent.setup()
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+
+    // Clean state: the Save button is disabled and explains why.
+    const cleanSave = screen.getByRole('button', { name: 'Save Changes' })
+    expect(cleanSave).toBeDisabled()
+    expect(screen.getByText('No unsaved changes')).toBeInTheDocument()
+
+    // An edit makes it dirty and enables Save.
+    await user.click(screen.getByRole('button', { name: /Notifications/ }))
+    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    const dirtySave = screen.getByRole('button', { name: 'Save Changes' })
+    expect(dirtySave).toBeEnabled()
+
+    await user.click(dirtySave)
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+
+    // After a successful save it flashes "Saved", then settles back to idle/disabled.
+    await screen.findByRole('button', { name: 'Saved' })
+    await waitFor(
+      () => expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled(),
+      { timeout: 3000 },
+    )
+  })
+
+  it('guards close with a discard confirmation when there are unsaved edits', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+
+    render(<SettingsPanel onClose={onClose} />)
+
+    await screen.findByText('Settings')
+
+    // No edits yet: closing goes straight through.
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    onClose.mockClear()
+
+    // Make an edit, then attempt to close: a discard confirmation intercepts.
+    await user.click(screen.getByRole('button', { name: /Notifications/ }))
+    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument()
+
+    // Keep editing dismisses the prompt without closing.
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(onClose).not.toHaveBeenCalled()
+
+    // Re-open the prompt and confirm the discard: now it actually closes.
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    await user.click(await screen.findByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('persists an explicit OpenCode small model choice', async () => {
@@ -403,6 +466,10 @@ describe('SettingsPanel', () => {
     expect(screen.queryByPlaceholderText('sk-or-...')).not.toBeInTheDocument()
     expect(getProviderCredentials).not.toHaveBeenCalled()
 
+    // Save only persists when there are unsaved edits, so toggle a portable
+    // preference first; the assertion below confirms only that change rides along.
+    await user.click(screen.getByRole('button', { name: /Notifications/ }))
+    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
     expect(settingsSet.mock.calls[0]?.[0]).toEqual({
@@ -415,7 +482,7 @@ describe('SettingsPanel', () => {
       workflowQuietHoursEnd: null,
       notificationVoiceReplies: true,
       notificationSmartSuggestions: true,
-      notificationDailyDigest: false,
+      notificationDailyDigest: true,
       notificationSounds: true,
       privacyShareAnonymizedUsage: false,
     })

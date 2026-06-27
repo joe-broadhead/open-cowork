@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { Badge, Button, Card, Input } from '../ui'
 import { credentialFieldIsSecret, isCredentialMask } from '../provider/credential-merge'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
@@ -44,6 +45,17 @@ export function ModelsPanel({
   const [modelQuery, setModelQuery] = useState('')
   const [refreshingProviderId, setRefreshingProviderId] = useState<string | null>(null)
   const [signingOutGoogle, setSigningOutGoogle] = useState(false)
+  // Tracks providers whose credential fields have unsaved edits in this session
+  // so switching away can confirm rather than silently discard them and reset
+  // the model selection. Kept here (not parent state) since it only gates the
+  // local switch affordance.
+  const editedCredentialProviders = useRef<Set<string>>(new Set())
+  const [pendingProviderSwitch, setPendingProviderSwitch] = useState<{ id: string; apply: () => void } | null>(null)
+
+  const trackedUpdateProviderCredential = (providerId: string, key: string, value: string) => {
+    editedCredentialProviders.current.add(providerId)
+    updateProviderCredential(providerId, key, value)
+  }
 
   useEffect(() => { setModelQuery('') }, [settings.effectiveProviderId])
 
@@ -113,6 +125,7 @@ export function ModelsPanel({
   }
 
   return (
+    <>
     <div className="flex flex-col gap-5">
       {mode === 'advanced' && config.auth.enabled ? (
         <Card className="flex flex-col gap-4">
@@ -149,6 +162,27 @@ export function ModelsPanel({
                 const nextModelId = entry.id === settings.effectiveProviderId
                   ? settings.selectedModelId || settings.effectiveModel || entry.defaultModel || entry.models[0]?.id || ''
                   : entry.defaultModel || entry.models[0]?.id || ''
+                const applyProviderSwitch = () => {
+                  editedCredentialProviders.current.delete(settings.effectiveProviderId || '')
+                  update({
+                    selectedProviderId: entry.id,
+                    selectedModelId: nextModelId,
+                    selectedSmallModelId: smallModelFollowsMainModel ? SMALL_MODEL_USE_MAIN : null,
+                    effectiveProviderId: entry.id,
+                    effectiveModel: nextModelId,
+                    effectiveSmallModel: smallModelFollowsMainModel ? nextModelId : entry.smallModel || nextModelId,
+                  })
+                }
+                const selectProvider = () => {
+                  if (active) return
+                  // Switching away from a provider with unsaved credential edits
+                  // would silently discard them and reset the model — confirm first.
+                  if (settings.effectiveProviderId && editedCredentialProviders.current.has(settings.effectiveProviderId)) {
+                    setPendingProviderSwitch({ id: entry.id, apply: applyProviderSwitch })
+                    return
+                  }
+                  applyProviderSwitch()
+                }
                 return (
                   <Card
                     key={entry.id}
@@ -156,14 +190,7 @@ export function ModelsPanel({
                     padding="sm"
                     aria-pressed={active}
                     className="settings-choice-card"
-                    onClick={() => update({
-                      selectedProviderId: entry.id,
-                      selectedModelId: nextModelId,
-                      selectedSmallModelId: smallModelFollowsMainModel ? SMALL_MODEL_USE_MAIN : null,
-                      effectiveProviderId: entry.id,
-                      effectiveModel: nextModelId,
-                      effectiveSmallModel: smallModelFollowsMainModel ? nextModelId : entry.smallModel || nextModelId,
-                    })}
+                    onClick={selectProvider}
                   >
                     <div className="text-xs font-semibold text-text">{entry.name}</div>
                     <div className="text-2xs text-text-muted mt-1 leading-relaxed">{entry.description}</div>
@@ -213,10 +240,10 @@ export function ModelsPanel({
                           value={providerCredentials[credential.key] || ''}
                           onFocus={() => {
                             if (credentialIsSecret && isCredentialMask(providerCredentials[credential.key])) {
-                              updateProviderCredential(provider.id, credential.key, '')
+                              trackedUpdateProviderCredential(provider.id, credential.key, '')
                             }
                           }}
-                          onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
+                          onChange={(event) => trackedUpdateProviderCredential(provider.id, credential.key, event.target.value)}
                           placeholder={credential.placeholder}
                         />
                         <span className="text-2xs text-text-muted">{credential.description}</span>
@@ -228,16 +255,16 @@ export function ModelsPanel({
               <Card id="settings-model-test" className="flex flex-col gap-4 scroll-mt-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-xs font-semibold text-text">{t('settings.models.testConnection', 'Test connection')}</div>
+                    <div className="text-xs font-semibold text-text">{t('settings.models.connectionCheck', 'Connection check')}</div>
                     <div className="mt-1 text-2xs leading-relaxed text-text-muted">
-                      {t('settings.models.testConnectionDescription', 'Validate the selected provider credentials before restarting the app runtime.')}
+                      {t('settings.models.connectionCheckDescription', 'Saving applies these credentials and restarts the runtime, which surfaces any connection problems. A one-tap credential check is coming soon.')}
                     </div>
                   </div>
                   <Button
                     size="sm"
-                    disabledReason={t('settings.models.testConnectionPending', 'Connection testing is wired in the onboarding validation work.')}
+                    disabledReason={t('settings.models.testConnectionPending', 'Coming soon — for now, Save Changes applies and exercises these credentials.')}
                   >
-                    {t('settings.models.testConnection', 'Test connection')}
+                    {t('settings.models.testConnectionComingSoon', 'Test connection (soon)')}
                   </Button>
                 </div>
               </Card>
@@ -415,5 +442,19 @@ export function ModelsPanel({
         </div>
       ) : null}
     </div>
+    <ConfirmDialog
+      open={pendingProviderSwitch !== null}
+      title={t('settings.models.switchProviderTitle', 'Switch provider?')}
+      body={t('settings.models.switchProviderBody', 'You have unsaved credential edits for the current provider. Switching discards them and resets the model selection. This cannot be undone.')}
+      confirmLabel={t('settings.models.switchProviderConfirm', 'Switch provider')}
+      cancelLabel={t('settings.models.switchProviderCancel', 'Keep editing')}
+      tone="danger"
+      onConfirm={() => {
+        pendingProviderSwitch?.apply()
+        setPendingProviderSwitch(null)
+      }}
+      onCancel={() => setPendingProviderSwitch(null)}
+    />
+    </>
   )
 }
