@@ -12,8 +12,12 @@ const clientDir = resolve(repoRoot, 'apps/website/dist/client')
 // chunks (esbuild); this guards against silent growth and surfaces the shipped
 // size in CI (gzip is what users download). Budgets sit just above the current
 // total; ratchet them DOWN (never up without intent) as the bundle shrinks.
-const RAW_BUDGET_BYTES = 500_000
-const GZIP_BUDGET_BYTES = 152_000
+// Raised deliberately for the desktop/cloud parity work (StatusBar, Knowledge
+// access/version/search panels, Home hero + Review Snapshot, the shared
+// ApprovalsQueueSurface on the per-chat pane): intentional, user-requested
+// feature growth, not dependency bloat. Ratchet back down as the bundle shrinks.
+const RAW_BUDGET_BYTES = 540_000
+const GZIP_BUDGET_BYTES = 160_000
 
 const chunks = (await readdir(clientDir)).filter((file) => file.endsWith('.js')).sort()
 let rawBytes = 0
