@@ -570,7 +570,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           role="menu"
           aria-label={t('thread.menuLabel', 'Thread actions')}
           onKeyDown={handleMenuKeyDown}
-          className="fixed z-50 w-40 py-1.5 rounded-xl theme-popover"
+          className="fixed z-50 w-40 rounded-lg p-1 theme-popover"
           style={{
             left: menuPos.x,
             top: menuPos.y,
@@ -582,7 +582,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setMenuId(null)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="ui-popover-item text-xs">
             {t('thread.rename', 'Rename')}
           </button>
           <button type="button" onClick={async () => {
@@ -598,7 +598,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setMenuId(null)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="ui-popover-item text-xs">
             {t('thread.exportMarkdown', 'Export Markdown')}
           </button>
           <button type="button" onClick={async () => {
@@ -618,29 +618,29 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             }
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="ui-popover-item text-xs">
             {t('thread.shareLink', 'Share Link')}
           </button>
           <button type="button" onClick={() => {
             void openCopyToCloud(menuId)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="ui-popover-item text-xs">
             {t('thread.copyToCloud', 'Copy to Cloud...')}
           </button>
           {interactiveSessions.find(s => s.id === menuId)?.directory && (
             <button type="button" onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
               role="menuitem"
-              className="w-full text-start px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+              className="ui-popover-item text-xs">
               {t('thread.viewChanges', 'View Changes')}
             </button>
           )}
-          <div className="my-1 border-t border-border-subtle" />
+          <div className="-mx-1 my-1 border-t border-border-subtle" />
           <button type="button" onClick={() => {
             void handleDelete(menuId)
           }}
             role="menuitem"
-            className="w-full text-start px-3 py-1.5 text-xs text-red hover:bg-surface-hover cursor-pointer transition-colors">
+            className="ui-popover-item ui-popover-item--danger text-xs">
             {t('thread.delete', 'Delete')}
           </button>
         </div>

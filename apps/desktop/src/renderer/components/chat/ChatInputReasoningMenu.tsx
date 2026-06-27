@@ -109,7 +109,7 @@ export function ChatInputReasoningMenu({
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         ref={menuRef}
-        className="chat-menu-panel fixed z-50"
+        className="theme-popover fixed z-50 overflow-hidden rounded-lg"
         role="listbox"
         tabIndex={-1}
         aria-label={t('chat.reasoningSelect', 'Select reasoning mode')}

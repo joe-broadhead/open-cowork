@@ -1738,15 +1738,38 @@ export function controlsSurfaceCss(): string {
     color var(--dur-1) var(--ease-out);
 }
 
+/* Two-line variant: a 40px row for menu items that carry a sublabel under the
+   primary label. Top-aligns the content so the label/sublabel pair reads as a
+   block, and adds vertical padding so the taller row keeps the same inset. */
+.ui-popover-item--two-line {
+  align-items: flex-start;
+  min-height: var(--control-h-lg);
+  padding: var(--space-2) var(--space-3);
+}
+
 .ui-popover-item:hover:not(:disabled),
 .ui-popover-item[data-active="true"] {
   background: var(--color-surface-hover);
   color: var(--color-text);
 }
 
-.ui-popover-item[aria-selected="true"] {
+/* Selected = the current choice. listbox/option menus express this with
+   aria-selected; menu/menuitem menus (where aria-selected is invalid) use
+   aria-current. Both drive the same inset accent ring so every popover menu
+   signals "selected" identically. */
+.ui-popover-item[aria-selected="true"],
+.ui-popover-item[aria-current="true"] {
   color: var(--color-text);
   box-shadow: var(--ring-selected);
+}
+
+/* Destructive action row (e.g. Delete). Keeps the red text through rest and
+   hover so the affordance reads as dangerous, while sharing the row geometry
+   and muted hover background of every other popover item. */
+.ui-popover-item--danger,
+.ui-popover-item--danger:hover:not(:disabled),
+.ui-popover-item--danger[data-active="true"] {
+  color: var(--color-red);
 }
 
 .ui-popover-item__content {

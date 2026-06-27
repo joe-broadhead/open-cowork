@@ -181,7 +181,7 @@ export function CommandPalette({
   return (
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-50 bg-black/45" />
-      <div className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-2xl theme-popover shadow-2xl">
+      <div className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl">
         <div className="border-b border-border-subtle px-3 py-3">
           <Input
             ref={inputRef}
@@ -216,7 +216,7 @@ export function CommandPalette({
 
           {groupedItems.map((group) => (
             <div key={group.section} role="group" aria-label={group.section} className="mb-2">
-              <div className="px-3 py-2 text-2xs font-semibold uppercase tracking-[0.18em] text-text-muted">
+              <div className="px-3 py-2 text-2xs font-semibold uppercase tracking-[0.06em] text-text-muted">
                 {group.section}
               </div>
               <div className="space-y-1">
@@ -230,19 +230,19 @@ export function CommandPalette({
                       role="option"
                       aria-selected={isSelected}
                       onClick={() => void handleSelect(item)}
-                      className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-start transition-colors cursor-pointer ${isSelected ? 'bg-accent/10 ring-1 ring-inset ring-accent/30' : 'hover:bg-surface-hover'}`}
+                      className="ui-popover-item ui-popover-item--two-line"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                      <span className="ui-popover-item__content">
+                        <span className="ui-popover-item__label">
                           <span className="text-sm font-medium text-text">{item.title}</span>
                           <Badge tone={isSelected ? 'accent' : 'muted'}>{item.badge}</Badge>
-                        </div>
-                        <div className="mt-0.5 text-2xs leading-5 text-text-muted">
+                        </span>
+                        <span className="text-2xs leading-5 text-text-muted">
                           {item.subtitle}
-                        </div>
-                      </div>
+                        </span>
+                      </span>
                       {item.hint && (
-                        <Kbd className="mt-0.5 shrink-0">{item.hint}</Kbd>
+                        <Kbd className="shrink-0">{item.hint}</Kbd>
                       )}
                     </button>
                   )

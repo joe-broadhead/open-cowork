@@ -575,7 +575,7 @@ function WorkspaceSwitcher() {
             role="menu"
             aria-label={t('workspace.switcherLabel', 'Switch workspace')}
             onKeyDown={handleMenuKeyDown}
-            className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg theme-popover"
+            className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg p-1 theme-popover"
           >
           {workspaces.map((workspace) => (
             <button
@@ -583,19 +583,22 @@ function WorkspaceSwitcher() {
               type="button"
               role="menuitem"
               data-workspace-active={workspace.active ? 'true' : undefined}
+              aria-current={workspace.active ? 'true' : undefined}
               onClick={() => void activateWorkspace(workspace)}
-              className={`w-full px-3 py-2 text-start text-xs transition-colors hover:bg-surface-hover ${workspace.active ? 'text-text' : 'text-text-secondary'}`}
+              className="ui-popover-item ui-popover-item--two-line text-xs"
             >
-              <div className="flex min-w-0 items-center justify-between gap-2">
-                <span className="truncate font-medium">{workspace.label}</span>
-                <WorkspaceStatusDot status={workspace.status} />
-              </div>
-              <div className="mt-0.5 truncate text-2xs text-text-muted">
-                {workspaceDescription(workspace, supportByWorkspace[workspace.id])}
-              </div>
+              <span className="ui-popover-item__content">
+                <span className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate font-medium">{workspace.label}</span>
+                  <WorkspaceStatusDot status={workspace.status} />
+                </span>
+                <span className="truncate text-2xs text-text-muted">
+                  {workspaceDescription(workspace, supportByWorkspace[workspace.id])}
+                </span>
+              </span>
             </button>
           ))}
-          <div className="border-t border-border-subtle p-2">
+          <div className="-mx-1 mt-1 border-t border-border-subtle p-2">
             {showGatewayForm ? (
               <div className="space-y-2">
                 <Input

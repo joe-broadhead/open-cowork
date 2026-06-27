@@ -125,7 +125,7 @@ export function ChatInputModelMenu({
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
-        className="chat-menu-panel fixed z-50 flex flex-col"
+        className="theme-popover fixed z-50 flex flex-col overflow-hidden rounded-lg"
         role="listbox"
         aria-label={t('chatModelMenu.selectModel', 'Select model')}
         onKeyDown={handleKeyDown}

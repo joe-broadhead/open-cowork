@@ -35,7 +35,7 @@ export function ChatInputInlinePicker({
   return (
     <div
       ref={pickerRef}
-      className="chat-menu-panel fixed z-50 flex flex-col"
+      className="theme-popover fixed z-50 flex flex-col overflow-hidden rounded-lg"
       style={{
         width: inlineMenuWidth,
         maxHeight: Math.max(120, top - 24),

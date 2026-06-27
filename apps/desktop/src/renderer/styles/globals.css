@@ -1694,13 +1694,10 @@ body {
   max-width: calc(var(--space-12) * 3 + var(--space-4));
 }
 
-.chat-menu-panel {
-  overflow: hidden;
-  border: var(--border-width-1) solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-base);
-  box-shadow: var(--shadow-elevated);
-}
+/* The chat menu surface is the shared glass `.theme-popover` (border + glass
+   bg + shadow + --radius-lg via `rounded-lg`), folded in so chat dropdowns
+   match the rest of the popover family. The inner header / search / option /
+   featured-boundary rules below own the menu's internal structure only. */
 
 .chat-menu-header {
   display: flex;
@@ -1742,8 +1739,11 @@ body {
   background: var(--color-surface-hover);
 }
 
+/* Selected = current choice. Standardised on the shared popover-item
+   selected recipe: an inset accent ring (no accent fill), so all popover
+   menus signal "selected" the same way. */
 .chat-menu-option[aria-selected="true"] {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  box-shadow: var(--ring-selected);
 }
 
 .chat-menu-featured-boundary {
