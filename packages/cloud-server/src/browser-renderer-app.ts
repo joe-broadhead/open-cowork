@@ -23,11 +23,10 @@ export const BROWSER_RENDERER_ASSET_PREFIX = '/app/assets/'
 // apps/desktop/dist-browser/ — three levels up (src -> cloud-server -> packages ->
 // repo root). Mirrors how web-client-assets.ts resolves the website dev build.
 //
-// TODO(prod-packaging): production bundles the cloud server (build-cloud) without
-// the repo tree, so the relative path above won't resolve. Packaging must copy
-// apps/desktop/dist-browser/ next to the cloud entry (e.g. ./browser-renderer/),
-// and the first candidate below should point there. Tracked as a follow-up to the
-// website deletion / cutover step — do not block the additive /app route on it.
+// PROD RUNTIME: scripts/build-cloud.mjs builds the browser renderer and copies it
+// to ./browser-renderer/ next to the bundled cloud entry, so the first candidate
+// below resolves in the production image (the cloud .mjs lives at
+// apps/desktop/dist/cloud/, and browser-renderer/ is copied alongside it).
 const BROWSER_RENDERER_DIRS = [
   new URL('./browser-renderer/', import.meta.url),
   new URL('../../../apps/desktop/dist-browser/', import.meta.url),

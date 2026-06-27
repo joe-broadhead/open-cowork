@@ -115,6 +115,21 @@ for (const chunk of clientChunks) {
   await copyFile(resolve(clientDir, chunk), resolve(cloudAssetsDir, chunk))
 }
 
+// -- Unified renderer (browser build) -----------------------------------------
+// The cloud image also serves the unified desktop renderer at /app — the
+// one-UI-codebase cutover, so the cloud runs the same renderer as the Electron
+// app. Build it and copy it next to the cloud entry under ./browser-renderer/,
+// the first location packages/cloud-server/src/browser-renderer-app.ts resolves.
+runPnpm(['--filter', '@open-cowork/desktop', 'build:browser'])
+const browserRendererSrc = resolve(repoRoot, 'apps/desktop/dist-browser')
+const browserRendererDest = resolve(repoRoot, 'apps/desktop/dist/cloud/browser-renderer')
+await mkdir(resolve(browserRendererDest, 'assets'), { recursive: true })
+await copyFile(resolve(browserRendererSrc, 'browser.html'), resolve(browserRendererDest, 'browser.html'))
+const browserRendererAssets = await readdir(resolve(browserRendererSrc, 'assets'))
+for (const asset of browserRendererAssets) {
+  await copyFile(resolve(browserRendererSrc, 'assets', asset), resolve(browserRendererDest, 'assets', asset))
+}
+
 // The managed-server supervisor now ships inside @open-cowork/runtime-host (built by
 // tsc, present in node_modules/@open-cowork/runtime-host/dist). The cloud's
 // runtime-node-managed-server resolves it as a sibling there, so no separate cloud
