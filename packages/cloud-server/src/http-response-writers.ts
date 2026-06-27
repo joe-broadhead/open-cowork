@@ -63,6 +63,49 @@ export function writeHtml(res: ServerResponse, status: number, body: string, ori
   res.end(body)
 }
 
+// CSP for the UNIFIED RENDERER SPA served at /app. It differs from the website's
+// nonce CSP (writeHtml) in exactly ONE axis: style-src allows 'unsafe-inline'.
+//
+// WHY style-src is relaxed: the renderer injects its shared surface stylesheet at
+// RUNTIME via a script-created <style> element (apps/desktop/src/renderer/index.tsx
+// injectStudioSurfaceStyles) rather than a server-rendered <style nonce>. A
+// runtime-created <style> carries no nonce, so a nonce-only style-src would block
+// it and the whole app would render unstyled. Hashing the stylesheet is not viable
+// (it is assembled from the design-system token modules at runtime). So style-src
+// gets 'unsafe-inline'. style-src-attr 'unsafe-inline' additionally allows the
+// per-entity inline `style` attributes the design system uses for theming
+// (--entity-chroma); an inline style attribute cannot carry a nonce or hash.
+//
+// WHY script-src stays STRICT: the document loads only external hashed module
+// scripts (no inline script, no eval), so script-src stays 'self' with NO
+// 'unsafe-inline'. Relaxing style does not weaken script execution — 'unsafe-inline'
+// in style-src cannot run JavaScript.
+export function writeBrowserRendererHtml(res: ServerResponse, status: number, body: string, origin?: string | null) {
+  writeCorsHeaders(res, origin)
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'content-security-policy': [
+      "default-src 'self'",
+      // External hashed module scripts only — no inline script. Stays strict.
+      "script-src 'self'",
+      // Runtime-injected <style> element (see block comment above).
+      "style-src 'self' 'unsafe-inline'",
+      // Per-entity inline style attributes (entity-chroma theming).
+      "style-src-attr 'unsafe-inline'",
+      // Same-origin HTTP (/api, /auth) + SSE (/events).
+      "connect-src 'self'",
+      "font-src 'self'",
+      "img-src 'self' data: https:",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+    ].join('; '),
+  })
+  res.end(body)
+}
+
 export function writeBinary(res: ServerResponse, body: Buffer, contentType: string, cacheControl: string, origin?: string | null) {
   writeCorsHeaders(res, origin)
   res.writeHead(200, {

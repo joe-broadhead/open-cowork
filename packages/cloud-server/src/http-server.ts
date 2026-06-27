@@ -3,9 +3,15 @@ import { InMemoryWorkflowWebhookSecurityStore, WebhookHttpError, type WorkflowWe
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { emptySessionImportItemCounts, createCloudProjectionFenceToken, isCloudSessionEventType, normalizeCloudProjectSource, type CloudProjectionFenceToken, type CloudSessionEventType, type CloudProjectSourceInput, type PublicBrandingConfig, type SessionImportRequest, type WorkflowDraft, type WorkflowStatus, type WorkflowTriggerType, type KnowledgeStore } from '@open-cowork/shared'
+import { CLOUD_SESSION_EVENT_TYPES, emptySessionImportItemCounts, createCloudProjectionFenceToken, isCloudSessionEventType, normalizeCloudProjectSource, type CloudProjectionFenceToken, type CloudSessionEventType, type CloudProjectSourceInput, type PublicBrandingConfig, type SessionImportRequest, type WorkflowDraft, type WorkflowStatus, type WorkflowTriggerType, type KnowledgeStore } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
+import {
+  BROWSER_RENDERER_ASSET_CACHE_CONTROL,
+  browserRendererHtml,
+  getBrowserRendererAsset,
+  isBrowserRendererAssetPath,
+} from './browser-renderer-app.ts'
 import {
   principalHasDesktopApiAccess,
   routeAllowsGatewayOnlyToken,
@@ -46,6 +52,7 @@ import {
 import {
   methodRequiresCsrf,
   writeBinary,
+  writeBrowserRendererHtml,
   writeCorsHeaders,
   writeError,
   writeHtml,
@@ -1656,6 +1663,34 @@ export class CloudHttpServer {
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
         const nonce = randomBytes(16).toString('base64url')
         writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), requestOptions.corsOrigin, nonce)
+        return
+      }
+
+      // ADDITIVE: serve the UNIFIED RENDERER browser build (apps/desktop/dist-browser)
+      // under /app so the cloud URL itself runs the desktop renderer. The website at
+      // GET / above is unchanged; /app is for verification + the eventual cutover.
+      // Served with a relaxed-but-script-strict CSP (writeBrowserRendererHtml) because
+      // the SPA injects its surface stylesheet via a runtime-created <style> element.
+      if ((url.pathname === '/app' || url.pathname === '/app/') && req.method === 'GET') {
+        // Minimal bootstrap: the shim derives the same-origin endpoint base from
+        // window.location and reads the CSRF token from /auth/me at runtime, so only
+        // the session event types are worth embedding (trivially available here).
+        const html = browserRendererHtml({ sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES] })
+        if (html === null) {
+          writeError(res, 404, 'Unified renderer browser build was not found.', requestOptions.corsOrigin)
+          return
+        }
+        writeBrowserRendererHtml(res, 200, html, requestOptions.corsOrigin)
+        return
+      }
+
+      if (req.method === 'GET' && isBrowserRendererAssetPath(url.pathname)) {
+        const asset = getBrowserRendererAsset(url.pathname)
+        if (asset) {
+          writeBinary(res, asset.body, asset.contentType, BROWSER_RENDERER_ASSET_CACHE_CONTROL, requestOptions.corsOrigin)
+          return
+        }
+        writeError(res, 404, 'Unified renderer asset was not found.', requestOptions.corsOrigin)
         return
       }
 

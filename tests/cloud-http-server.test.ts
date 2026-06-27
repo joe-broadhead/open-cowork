@@ -25,6 +25,7 @@ import {
   type CloudDesktopAuthConfig,
 } from '@open-cowork/cloud-server/http-server'
 import { createHttpSseCloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
+import { browserRendererBuildExists } from '@open-cowork/cloud-server/browser-renderer-app'
 import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { createInMemoryObjectStore } from '@open-cowork/cloud-server/object-store'
 import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
@@ -3586,6 +3587,57 @@ test('cloud HTTP server serves the allow-listed Cloud Web React client asset', a
 
     const unknown = await fetch(`${baseUrl}/assets/not-the-react-client.js`)
     assert.equal(unknown.status, 404)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// The unified renderer browser build (apps/desktop/dist-browser) is not produced in
+// every CI lane, so gate on its presence — but assert the full route wiring (the
+// /app SPA document with its relaxed-but-script-strict CSP, and a hashed /app/assets
+// JS file with the right content-type) when the build IS present.
+test('cloud HTTP server serves the unified renderer at /app with a script-strict, style-relaxed CSP', {
+  skip: browserRendererBuildExists() ? false : 'apps/desktop/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const app = await fetch(`${baseUrl}/app`)
+    assert.equal(app.status, 200)
+    assert.match(app.headers.get('content-type') || '', /text\/html/)
+    const body = await app.text()
+    // The served document is the dist-browser SPA: it references the renderer's
+    // hashed assets, rewritten under /app/assets so they load mounted at /app.
+    assert.match(body, /\/app\/assets\//)
+    assert.match(body, /id="cowork-bootstrap"/)
+
+    const csp = app.headers.get('content-security-policy') || ''
+    // RELAXED for the runtime-injected <style> element: style-src has 'unsafe-inline'.
+    assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+    assert.match(csp, /style-src-attr 'unsafe-inline'/)
+    // STRICT for scripts: external hashed modules only — script-src has NO inline.
+    assert.match(csp, /script-src 'self'/)
+    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    assert.match(csp, /connect-src 'self'/)
+    assert.match(csp, /object-src 'none'/)
+
+    // /app/ (trailing slash) serves the same document.
+    const appSlash = await fetch(`${baseUrl}/app/`)
+    assert.equal(appSlash.status, 200)
+
+    // A hashed asset referenced by the document serves with the JS content-type and
+    // immutable caching. Pull the first /app/assets/*.js path out of the document.
+    const assetMatch = body.match(/\/app\/assets\/[A-Za-z0-9_-]+\.js/)
+    assert.ok(assetMatch, 'served /app document references a hashed JS asset')
+    const asset = await fetch(`${baseUrl}${assetMatch![0]}`)
+    assert.equal(asset.status, 200)
+    assert.match(asset.headers.get('content-type') || '', /text\/javascript/)
+    assert.match(asset.headers.get('cache-control') || '', /immutable/)
+    assert.ok((await asset.arrayBuffer()).byteLength > 0)
+
+    // Path traversal / unknown assets 404 (no leaking files outside dist-browser).
+    const bad = await fetch(`${baseUrl}/app/assets/not-a-real-chunk.js`)
+    assert.equal(bad.status, 404)
   } finally {
     await fixture.server.close()
   }

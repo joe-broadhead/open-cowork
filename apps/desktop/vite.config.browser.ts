@@ -8,6 +8,10 @@ import { resolve } from 'path'
 // rewrite (browser uses normal URLs). Output is a plain SPA the cloud server can
 // serve. The Electron build stays in vite.config.ts.
 export default defineConfig({
+  // Served by the cloud server under /app, so every asset reference (HTML +
+  // the JS bundle's internal dynamic-import / CSS-preload paths) must be
+  // /app/assets/... — set the base so they're correct without server rewriting.
+  base: '/app/',
   build: {
     outDir: 'dist-browser',
     emptyOutDir: true,
