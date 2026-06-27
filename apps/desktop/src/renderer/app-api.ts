@@ -1,7 +1,26 @@
-import { cloudArtifactFilePath, type AppAPI, type CoworkAPI } from '@open-cowork/shared'
+import { cloudArtifactFilePath, type AppAPI, type AppApiEventHandlers, type AppApiEventStream, type CoworkAPI } from '@open-cowork/shared'
 
 function unsupported(name: string) {
   return () => Promise.reject(new Error(`${name} is not available through the desktop AppAPI adapter yet`))
+}
+
+// Bridge the desktop's per-channel `coworkApi.on.*` push subscriptions into the
+// shared `AppApiEventHandlers` `{ type, data, raw }` shape that the cloud SSE
+// stream emits, so UI can consume realtime updates through `api.*.events()`
+// identically on both platforms. Each subscription forwards one channel; close()
+// tears them all down.
+function forwardCoworkEvents(
+  subscribe: Array<(emit: (type: string, data: unknown) => void) => () => void>,
+  handlers?: AppApiEventHandlers,
+): AppApiEventStream {
+  const emit = (type: string, data: unknown) => handlers?.message?.({ type, data, raw: data })
+  const unsubscribers = subscribe.map((register) => register(emit))
+  handlers?.open?.(undefined)
+  return {
+    close: () => {
+      for (const unsubscribe of unsubscribers) unsubscribe()
+    },
+  }
 }
 
 function createChannelAppApi(coworkApi: CoworkAPI): AppAPI['channels'] {
@@ -43,13 +62,26 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
     },
     workspace: {
       current: () => coworkApi.workspace.list(),
-      events: () => ({ close: coworkApi.on.workspaceSessionsUpdated(() => {}) }),
+      events: (handlers) => forwardCoworkEvents([
+        (emit) => coworkApi.on.workspaceSessionsUpdated((data) => emit('workspaceSessionsUpdated', data)),
+        (emit) => coworkApi.on.coordinationUpdated(() => emit('coordinationUpdated', null)),
+        (emit) => coworkApi.on.workflowUpdated(() => emit('workflowUpdated', null)),
+        (emit) => coworkApi.on.knowledgeUpdated(() => emit('knowledgeUpdated', null)),
+        (emit) => coworkApi.on.mcpStatus((statuses) => emit('mcpStatus', statuses)),
+        (emit) => coworkApi.on.notification((event) => emit('notification', event)),
+      ], handlers),
     },
     sessions: {
       list: () => coworkApi.session.list(),
       create: (input) => coworkApi.session.create(undefined, input as Parameters<CoworkAPI['session']['create']>[1]),
       view: (sessionId) => coworkApi.session.activate(sessionId),
-      events: () => ({ close: coworkApi.on.sessionView(() => {}) }),
+      events: (sessionId, handlers) => forwardCoworkEvents([
+        (emit) => coworkApi.on.sessionView((data) => { if (data.sessionId === sessionId) emit('sessionView', data) }),
+        (emit) => coworkApi.on.sessionPatch((patch) => emit('sessionPatch', patch)),
+        (emit) => coworkApi.on.sessionUpdated((data) => emit('sessionUpdated', data)),
+        (emit) => coworkApi.on.permissionRequest((request) => emit('permissionRequest', request)),
+        (emit) => coworkApi.on.sessionDeleted((data) => { if (data.id === sessionId) emit('sessionDeleted', data) }),
+      ], handlers),
       prompt: (sessionId, input) => {
         const record = input && typeof input === 'object' ? input as { text?: string; agent?: string } : {}
         return coworkApi.session.prompt(sessionId, record.text || '', undefined, record.agent)

@@ -67,4 +67,45 @@ describe('createDesktopAppApi', () => {
     await expect(api.admin.channels.createBinding({ agentId: 'agent-1', provider: 'telegram', displayName: 'Telegram' })).resolves.toEqual({ binding })
     expect(channels.connectBinding).toHaveBeenCalledTimes(2)
   })
+
+  it('forwards coworkApi.on.* push channels into the shared {type,data,raw} event shape', () => {
+    const listeners: Record<string, Array<(data: unknown) => void>> = {}
+    const unsubscribed: string[] = []
+    const on = new Proxy({}, {
+      get: (_target, name: string) => (callback: (data: unknown) => void) => {
+        ;(listeners[name] ||= []).push(callback)
+        return () => unsubscribed.push(name)
+      },
+    })
+    const emit = (name: string, data: unknown) => (listeners[name] || []).forEach((cb) => cb(data))
+    const coworkApi = new Proxy({}, {
+      get: (_target, prop) => (prop === 'on' ? on : new Proxy({}, { get: () => vi.fn() })),
+    }) as CoworkAPI
+    const api = createDesktopAppApi(coworkApi)
+
+    // workspace.events forwards workspace-wide channels, normalizing arg-less
+    // channels to null data and tearing subscriptions down on close().
+    const workspaceMessages: Array<{ type: string; data: unknown }> = []
+    const workspaceStream = api.workspace.events({
+      message: (event) => workspaceMessages.push({ type: event.type, data: event.data }),
+    })
+    emit('knowledgeUpdated', undefined)
+    emit('workspaceSessionsUpdated', { workspaceId: 'local' })
+    expect(workspaceMessages).toEqual([
+      { type: 'knowledgeUpdated', data: null },
+      { type: 'workspaceSessionsUpdated', data: { workspaceId: 'local' } },
+    ])
+    workspaceStream.close()
+    expect(unsubscribed).toContain('knowledgeUpdated')
+
+    // sessions.events scopes id-bearing channels to the requested session.
+    const sessionTypes: string[] = []
+    api.sessions.events('s1', { message: (event) => sessionTypes.push(event.type) })
+    emit('sessionView', { sessionId: 's2', view: {} }) // other session — ignored
+    emit('sessionView', { sessionId: 's1', view: {} }) // forwarded
+    emit('sessionPatch', { ops: [] }) // global patch — forwarded
+    emit('sessionDeleted', { id: 's2' }) // other session — ignored
+    emit('sessionDeleted', { id: 's1' }) // forwarded
+    expect(sessionTypes).toEqual(['sessionView', 'sessionPatch', 'sessionDeleted'])
+  })
 })
