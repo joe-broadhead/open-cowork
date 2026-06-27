@@ -97,83 +97,8 @@ export function cloudWebsitePrimitiveStyles() {
       box-shadow: var(--shadow-3), var(--specular-strong);
       transform: translateY(calc(-1 * var(--border-width-1)));
     }
-    .ui-dialog-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: var(--z-modal);
-      background: color-mix(in srgb, var(--color-base) 66%, transparent);
-      backdrop-filter: blur(8px);
-      animation: ui-fade-in var(--dur-2) var(--ease-out) both;
-    }
-    .ui-dialog-backdrop--drawer {
-      display: flex;
-      justify-content: flex-end;
-    }
-    .ui-dialog {
-      position: fixed;
-      inset-block-start: 12vh;
-      inset-inline-start: 50%;
-      z-index: calc(var(--z-modal) + 1);
-      display: flex;
-      max-height: min(var(--primitive-dialog-max-h), calc(100vh - var(--space-12)));
-      max-width: calc(100vw - var(--space-8));
-      transform: translateX(-50%);
-      flex-direction: column;
-      overflow: hidden;
-      border: var(--border-width-1) solid var(--glass-border);
-      border-radius: var(--radius-lg);
-      background: var(--glass-bg);
-      backdrop-filter: var(--glass-blur);
-      box-shadow: var(--shadow-3), var(--specular-strong);
-      color: var(--color-text);
-      animation: ui-dialog-in var(--dur-3) var(--ease-spring) both;
-    }
-    .ui-dialog--sm { width: min(var(--primitive-dialog-w-sm), calc(100vw - var(--space-8))); }
-    .ui-dialog--md { width: min(var(--primitive-dialog-w-md), calc(100vw - var(--space-8))); }
-    .ui-dialog--lg { width: min(var(--primitive-dialog-w-lg), calc(100vw - var(--space-8))); }
-    .ui-dialog--drawer {
-      inset-block: 0;
-      inset-inline: auto 0;
-      width: min(440px, 92vw);
-      height: 100dvh;
-      max-height: 100dvh;
-      transform: none;
-      border-block: 0;
-      border-inline-end: 0;
-      border-radius: 0;
-      animation-name: ui-drawer-in;
-    }
-    .ui-dialog--drawer-left {
-      inset-inline: 0 auto;
-      border-inline-start: 0;
-      border-inline-end: var(--border-width-1) solid var(--glass-border);
-      animation-name: ui-drawer-left-in;
-    }
-    .ui-dialog__header,
-    .ui-dialog__footer {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-4);
-    }
-    .ui-dialog__header {
-      justify-content: space-between;
-      border-bottom: var(--border-width-1) solid var(--color-border-subtle);
-    }
-    .ui-dialog__footer {
-      justify-content: flex-end;
-      border-top: var(--border-width-1) solid var(--color-border-subtle);
-    }
-    .ui-dialog__title {
-      margin: 0;
-      color: var(--color-text);
-      font-family: var(--font-display);
-      font-size: var(--text-xl);
-      font-weight: 650;
-      line-height: var(--lh-xl);
-    }
-    .ui-dialog__body {
-      overflow: auto;
-      padding: var(--space-4);
-    }`
+    /* The Dialog surface (.ui-dialog + backdrop/drawer variants + __header,
+       __title, __body, __footer) is single-sourced in @open-cowork/ui
+       primitivesSurfaceCss(), embedded after this block in styles.ts, so the
+       website renders it identically to the desktop. */`
 }

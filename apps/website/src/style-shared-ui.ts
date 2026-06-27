@@ -87,43 +87,9 @@ export function cloudWebsiteSharedUiStyles() {
         -webkit-backdrop-filter: none;
       }
     }
-    .ui-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-1);
-      min-height: var(--control-h-sm);
-      border: var(--border-width-1) solid transparent;
-      border-radius: var(--radius-full);
-      padding: 0 var(--space-3);
-      font-size: var(--text-xs);
-      font-weight: 650;
-      line-height: var(--lh-xs);
-    }
-    .ui-badge--neutral {
-      background: var(--color-surface);
-      border-color: var(--color-border-subtle);
-      color: var(--color-text-secondary);
-    }
-    .ui-badge--accent {
-      background: color-mix(in srgb, var(--color-accent) 14%, transparent);
-      border-color: color-mix(in srgb, var(--color-accent) 34%, transparent);
-      color: var(--accent-text);
-    }
-    .ui-badge--success {
-      background: color-mix(in srgb, var(--color-green) 14%, transparent);
-      border-color: color-mix(in srgb, var(--color-green) 34%, transparent);
-      color: var(--color-green);
-    }
-    .ui-badge--warning {
-      background: color-mix(in srgb, var(--color-amber) 14%, transparent);
-      border-color: color-mix(in srgb, var(--color-amber) 34%, transparent);
-      color: var(--color-amber);
-    }
-    .ui-badge--danger {
-      background: color-mix(in srgb, var(--color-red) 14%, transparent);
-      border-color: color-mix(in srgb, var(--color-red) 34%, transparent);
-      color: var(--color-red);
-    }
+    /* The .ui-badge recipe (all 7 tones + the cooled --chip-* tokens) is
+       single-sourced in @open-cowork/ui primitivesSurfaceCss(), embedded after
+       this block in styles.ts, so the website matches the desktop. */
     .ui-diff-view {
       min-width: 0;
       display: flex;

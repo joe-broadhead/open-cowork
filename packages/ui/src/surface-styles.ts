@@ -1757,15 +1757,49 @@ export function controlsSurfaceCss(): string {
   opacity: 0.52;
 }
 
+/* Segmented control — pill track with a sliding active thumb. Track radius
+   --radius-sm (7px); the track wraps the --control-h-xs options to an outer
+   height that lines up with sibling md controls. */
+.ui-segmented-control {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-base) 64%, var(--color-elevated) 36%);
+  box-shadow: var(--specular);
+  padding: var(--space-1);
+}
+
+.ui-segmented-thumb {
+  position: absolute;
+  inset-block: var(--space-1);
+  inset-inline-start: var(--space-1);
+  width: calc((100% - (var(--space-1) * (var(--ui-segment-count) + 1))) / var(--ui-segment-count));
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-active);
+  box-shadow: var(--shadow-1), var(--specular);
+  transform: translateX(calc(var(--ui-segment-index) * (100% + var(--space-1))));
+  transition:
+    transform var(--dur-3) var(--ease-out),
+    width var(--dur-3) var(--ease-spring),
+    background var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+  pointer-events: none;
+}
+
 .ui-segmented-option {
   position: relative;
   z-index: 1;
-  min-height: var(--control-h-md);
+  min-height: var(--control-h-xs);
   background: transparent;
   color: var(--color-text-muted);
   padding: 0 var(--space-3);
-  font-size: var(--text-xs);
-  line-height: var(--lh-xs);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
 }
 
 /* Visible helper text for the active segmented option (on-screen guidance for
@@ -1787,6 +1821,45 @@ export function controlsSurfaceCss(): string {
   color: var(--color-text);
   box-shadow: none;
 }
+
+/* Canonical on/off toggle (the <Switch> primitive). Geometry is token-derived:
+   the thumb fills the track height minus a 1-step inset on each side, and the
+   "on" travel equals track width minus track height. */
+.ui-switch {
+  --ui-switch-inset: var(--space-1);
+  position: relative;
+  width: var(--space-10);
+  height: var(--space-5);
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out);
+}
+
+.ui-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ui-switch--on {
+  background: var(--color-accent);
+}
+
+.ui-switch__thumb {
+  position: absolute;
+  inset-block-start: var(--ui-switch-inset);
+  inset-inline-start: var(--ui-switch-inset);
+  width: calc(var(--space-5) - 2 * var(--ui-switch-inset));
+  height: calc(var(--space-5) - 2 * var(--ui-switch-inset));
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%);
+  transition: transform var(--dur-1) var(--ease-out);
+}
+
+.ui-switch--on .ui-switch__thumb {
+  transform: translateX(calc(var(--space-10) - var(--space-5)));
+}
 `
 }
 
@@ -1796,6 +1869,172 @@ export function controlsSurfaceCss(): string {
 // web. Single-sourced here so both apps render them identically.
 export function primitivesSurfaceCss(): string {
   return `
+/* Cooled warm semantics: the warning/danger hues lean toward the cool palette so
+   amber/pink chips stop screaming against the indigo surfaces. These chip tokens
+   (and the --color-warning/--color-danger aliases routed through them) back the
+   tonal badge recipe below and the semantic status pills consumed by components. */
+:root {
+  --chip-warning: color-mix(in srgb, var(--color-amber) 70%, var(--color-info));
+  --chip-danger: color-mix(in srgb, var(--color-red) 80%, var(--color-info));
+  --color-warning: var(--chip-warning);
+  --color-danger: var(--chip-danger);
+}
+
+/* Badge / chip — small inline status pill. Padding 0 var(--space-2), label
+   weight 560, desktop letter-spacing kept, full pill radius. All 7 tones share
+   one quiet tinted recipe; warning/danger route through the cooled chip tokens
+   (never raw amber/red). */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-h-sm);
+  border: var(--border-width-1) solid transparent;
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 560;
+  line-height: var(--lh-xs);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.ui-badge--neutral {
+  background: var(--color-surface);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+
+.ui-badge--muted {
+  background: var(--color-surface);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-muted);
+}
+
+.ui-badge--accent {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  color: color-mix(in srgb, var(--accent-text) 88%, var(--color-text-secondary));
+}
+
+.ui-badge--info {
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 22%, transparent);
+  color: color-mix(in srgb, var(--color-info) 84%, var(--color-text-secondary));
+}
+
+.ui-badge--success {
+  background: color-mix(in srgb, var(--color-green) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-green) 22%, transparent);
+  color: color-mix(in srgb, var(--color-green) 84%, var(--color-text-secondary));
+}
+
+.ui-badge--warning {
+  background: color-mix(in srgb, var(--chip-warning) 10%, transparent);
+  border-color: color-mix(in srgb, var(--chip-warning) 22%, transparent);
+  color: color-mix(in srgb, var(--chip-warning) 84%, var(--color-text-secondary));
+}
+
+.ui-badge--danger {
+  background: color-mix(in srgb, var(--chip-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--chip-danger) 24%, transparent);
+  color: color-mix(in srgb, var(--chip-danger) 86%, var(--color-text-secondary));
+}
+
+/* Dialog — modal/drawer surface. Card radius matches .ui-card (--radius-xl);
+   title weight 600 + tight tracking; header gap --space-3, footer gap --space-2
+   with centered footer items. */
+.ui-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: color-mix(in srgb, var(--color-base) 66%, transparent);
+  backdrop-filter: blur(8px);
+  animation: ui-fade-in var(--dur-2) var(--ease-out) both;
+}
+
+.ui-dialog-backdrop--drawer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ui-dialog {
+  position: fixed;
+  inset-block-start: 12vh;
+  inset-inline-start: 50%;
+  z-index: calc(var(--z-modal) + 1);
+  display: flex;
+  max-height: min(var(--primitive-dialog-max-h), calc(100vh - var(--space-12)));
+  max-width: calc(100vw - var(--space-8));
+  transform: translateX(-50%);
+  flex-direction: column;
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-3), var(--specular-strong);
+  color: var(--color-text);
+  animation: ui-dialog-in var(--dur-3) var(--ease-spring) both;
+}
+
+.ui-dialog--sm { width: min(var(--primitive-dialog-w-sm), calc(100vw - var(--space-8))); }
+.ui-dialog--md { width: min(var(--primitive-dialog-w-md), calc(100vw - var(--space-8))); }
+.ui-dialog--lg { width: min(var(--primitive-dialog-w-lg), calc(100vw - var(--space-8))); }
+
+.ui-dialog--drawer {
+  inset-block: 0;
+  inset-inline: auto 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  width: min(440px, 92vw);
+  transform: none;
+  border-block: 0;
+  border-inline-end: 0;
+  border-radius: 0;
+  animation-name: ui-drawer-in;
+}
+
+.ui-dialog--drawer-left {
+  inset-inline: 0 auto;
+  border-inline-start: 0;
+  border-inline-end: var(--border-width-1) solid var(--glass-border);
+  animation-name: ui-drawer-left-in;
+}
+
+.ui-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-4);
+}
+
+.ui-dialog__title {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-xl);
+}
+
+.ui-dialog__body {
+  overflow: auto;
+  padding: var(--space-4);
+}
+
+.ui-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  border-top: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-4);
+}
+
 /* Shared status-dot — the dot + label that replaces filled status pills across
    the studio surfaces (desktop + web). "live" breathes (reduced-motion guarded);
    the rest are static semantic dots. */

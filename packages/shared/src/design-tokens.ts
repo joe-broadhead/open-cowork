@@ -822,6 +822,7 @@ export const DESIGN_TOKENS = {
     tooltip: '90',
   },
   controlHeight: {
+    xs: '24px',
     sm: '28px',
     md: '32px',
     lg: '40px',
