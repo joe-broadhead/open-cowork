@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction, CSSProperties } from 'react'
+import { useEffect, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import {
   cloudWebCoworkerInitials,
@@ -24,6 +24,7 @@ type CloudComposerPortalProps = {
   selectedSessionId: string | null
   setComposerText: Dispatch<SetStateAction<string>>
   setComposerAgent: Dispatch<SetStateAction<string>>
+  onStopGenerating: () => void
 }
 
 export function CloudComposerPortal(props: CloudComposerPortalProps) {
@@ -39,6 +40,7 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
     selectedSessionId,
     setComposerText,
     setComposerAgent,
+    onStopGenerating,
   } = props
   const chatDisabled = bootstrap.features.chat === false
   const canSend = cloudWebPromptAssignment(composerText, allowedAgents, composerAgent).text.trim().length > 0
@@ -46,6 +48,23 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
   const avatarStyle: StudioToneStyle = {
     '--studio-tone': cloudWebCoworkerTone(activeCoworker || 'default'),
   }
+
+  // Mirror desktop's Esc-to-abort: while a turn is in flight, Escape stops it.
+  // Bound on the composer form (the textarea is disabled while sending, so a
+  // listener on it would never fire) and only active during the in-flight turn.
+  useEffect(() => {
+    if (!isSending) return undefined
+    const form = document.getElementById('prompt-form')
+    if (!form) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onStopGenerating()
+      }
+    }
+    form.addEventListener('keydown', onKeyDown)
+    return () => form.removeEventListener('keydown', onKeyDown)
+  }, [isSending, onStopGenerating])
 
   return (
     <>
@@ -107,10 +126,16 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
           </label>
         </div>
         <div className="composer-toolbar-group">
-          <span className="pill" data-kind={error ? 'warn' : 'ok'}>{error || (chatDisabled ? 'disabled' : 'ready')}</span>
-          <button className="composer-send" type="submit" disabled={isSending || !canSend || chatDisabled} aria-label="Send message">
-            <span className="sr-only">Send message</span>
-          </button>
+          <span className="pill" data-kind={error ? 'warn' : isSending ? 'warn' : 'ok'}>{error || (chatDisabled ? 'disabled' : isSending ? 'sending' : 'ready')}</span>
+          {isSending ? (
+            <button className="composer-stop" type="button" onClick={onStopGenerating} title="Stop generating (Esc)" aria-label="Stop generating">
+              <span className="sr-only">Stop generating</span>
+            </button>
+          ) : (
+            <button className="composer-send" type="submit" disabled={!canSend || chatDisabled} aria-label="Send message">
+              <span className="sr-only">Send message</span>
+            </button>
+          )}
         </div>
       </div>
     </>

@@ -112,6 +112,7 @@ type CloudWorkbenchPortalsProps = {
   onReloadSessions: () => Promise<void>
   onSetComposerText: Dispatch<SetStateAction<string>>
   onSetComposerAgent: Dispatch<SetStateAction<string>>
+  onStopGenerating: () => void
   onLaunchpadSuggestion: (prompt: string, agentName: string) => void
   onOpenLaunchpadArtifact: (item: LaunchpadFreshArtifactItem) => void
 }
@@ -151,6 +152,7 @@ export function CloudWorkbenchPortals({
   onReloadSessions,
   onSetComposerText,
   onSetComposerAgent,
+  onStopGenerating,
   onLaunchpadSuggestion,
   onOpenLaunchpadArtifact,
 }: CloudWorkbenchPortalsProps) {
@@ -210,6 +212,7 @@ export function CloudWorkbenchPortals({
       selectedSessionId={selectedSessionId}
       setComposerText={onSetComposerText}
       setComposerAgent={onSetComposerAgent}
+      onStopGenerating={onStopGenerating}
     />
   ))
   pushPortal(targets.launchpadTarget, (

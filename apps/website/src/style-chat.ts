@@ -305,6 +305,21 @@ export function cloudWebsiteChatStyles() {
       color: var(--accent-action-foreground);
       box-shadow: var(--specular);
     }
+    .composer-stop {
+      width: var(--control-h-sm);
+      min-width: var(--control-h-sm);
+      min-height: var(--control-h-sm);
+      padding: 0;
+      border-radius: var(--radius-sm);
+      border-color: var(--tone-danger-border);
+      background: var(--tone-danger-bg);
+      color: var(--color-danger);
+    }
+    .composer-stop::before {
+      content: "\25A0 ";
+      font-size: var(--text-md);
+      line-height: 1;
+    }
     .chat-inspector {
       min-width: 0;
       align-content: start;

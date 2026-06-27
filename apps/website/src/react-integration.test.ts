@@ -495,3 +495,59 @@ void test('React cloud composer hook creates a session before prompting when no 
     })
   })
 })
+
+void test('React workbench form hook aborts the in-flight turn for the selected chat (Stop/Esc)', async () => {
+  await withDom('<form id="prompt-form"></form><div id="react-root"></div>', async (window) => {
+    const calls: Array<{ type: string, sessionId?: string }> = []
+    const api = {
+      sessions: {
+        abort: async (sessionId: string) => { calls.push({ type: 'abort', sessionId }); return { ok: true } },
+        view: async (sessionId: string) => { calls.push({ type: 'view', sessionId }); return {} },
+      },
+    } as unknown as AppAPI
+    const promptForm = window.document.getElementById('prompt-form') as HTMLFormElement
+    const stops: Array<() => void> = []
+
+    function Harness({ selectedSessionId }: { selectedSessionId: string | null }) {
+      const [, setError] = useState<string | null>(null)
+      const { stopGenerating } = useCloudWorkbenchForms({
+        api,
+        bootstrap: bootstrap(),
+        workspace: { profileName: 'default' },
+        composerTarget: promptForm,
+        sessionFormTarget: null,
+        composerText: '',
+        composerAgent: '',
+        allowedAgents: ['build'],
+        isSending: true,
+        selectedSessionId,
+        setComposerText: () => {},
+        setIsSending: () => {},
+        setError,
+        setViews: (() => {}) as never,
+        setSelectedSessionId: () => {},
+        loadSessions: async () => { calls.push({ type: 'loadSessions' }) },
+        loadView: async (sessionId: string) => { calls.push({ type: 'loadView', sessionId }); return {} as never },
+      })
+      stops.push(stopGenerating)
+      return null
+    }
+
+    const root = createRoot(window.document.getElementById('react-root') as HTMLElement)
+    // No selected chat: Stop is a safe no-op (never calls abort).
+    await act(async () => { root.render(createElement(Harness, { selectedSessionId: null })) })
+    await act(async () => { stops.at(-1)?.() })
+    assert.deepEqual(calls, [])
+
+    // Selected chat: Stop aborts that session, then refreshes the view + list.
+    await act(async () => { root.render(createElement(Harness, { selectedSessionId: 'session-7' })) })
+    await act(async () => { await stops.at(-1)?.(); await delay(0) })
+    await waitFor(() => assert.deepEqual(calls.map((call) => call.type), ['abort', 'loadView', 'loadSessions']))
+    assert.equal(calls[0]?.sessionId, 'session-7')
+
+    await act(async () => {
+      root.unmount()
+      await delay(0)
+    })
+  })
+})

@@ -19,6 +19,12 @@ export function cloudWebsiteComponentStyles() {
       white-space: nowrap;
       border: 0;
     }
+    .cloud-confirm-body {
+      margin: 0;
+      font-size: var(--text-sm);
+      line-height: var(--lh-sm);
+      color: var(--color-text-secondary);
+    }
     button {
       min-height: var(--control-h-md);
       border: var(--border-width-1) solid var(--color-border);

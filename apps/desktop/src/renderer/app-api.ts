@@ -54,6 +54,7 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
         const record = input && typeof input === 'object' ? input as { text?: string; agent?: string } : {}
         return coworkApi.session.prompt(sessionId, record.text || '', undefined, record.agent)
       },
+      abort: (sessionId) => coworkApi.session.abort(sessionId),
       respondPermission: (sessionId, input) => {
         const record = input && typeof input === 'object' ? input as { permissionId?: string; response?: { allowed?: boolean } } : {}
         return coworkApi.permission.respond(record.permissionId || '', Boolean(record.response?.allowed), sessionId)

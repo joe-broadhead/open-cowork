@@ -17,6 +17,7 @@ import {
 } from '@open-cowork/shared'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
+import { useCloudConfirm } from './react-cloud-confirm.tsx'
 import { asRecord, errorMessage, setRouteHash } from './react-workbench-controller.ts'
 
 type ChannelSnapshot = Pick<
@@ -135,6 +136,7 @@ export function CloudChannelSurfacePortals({
   onSelectSession: (sessionId: string) => Promise<void>
 }) {
   const api = useAppApi()
+  const { confirm, dialog: confirmDialog } = useCloudConfirm()
   const [snapshot, setSnapshot] = useState<ChannelSnapshot>(EMPTY_CHANNEL_SNAPSHOT)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -236,6 +238,31 @@ export function CloudChannelSurfacePortals({
     })
   }, [api.channels, ensureChannelAgent])
 
+  // Gate the destructive channel actions behind a danger confirm (mirrors the
+  // desktop Studio channels page). Returning the API promise to the surface lets
+  // it show its own "Channel disconnected." / "Watch deleted." success notice;
+  // a cancel rejects with "Cancelled." so the surface reports a benign notice
+  // and the binding/watch is left untouched — the same UX as desktop.
+  const disconnectBinding = useCallback(async (bindingId: string) => {
+    const confirmed = await confirm({
+      title: 'Disconnect this channel?',
+      body: 'This severs the live channel binding. People and watches routed through it stop receiving deliveries until it is reconnected.',
+      confirmLabel: 'Disconnect',
+    })
+    if (!confirmed) throw new Error('Cancelled.')
+    return api.channels.disconnectBinding(bindingId)
+  }, [api.channels, confirm])
+
+  const deleteWatch = useCallback(async (watchId: string) => {
+    const confirmed = await confirm({
+      title: 'Delete this watch?',
+      body: 'This permanently removes the coordination watch. Its events will no longer be delivered to the channel, and it cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!confirmed) throw new Error('Cancelled.')
+    return api.channels.deleteWatch(watchId)
+  }, [api.channels, confirm])
+
   const openThread = useCallback((sessionId: string) => {
     setRouteHash('chat')
     void onSelectSession(sessionId)
@@ -252,25 +279,30 @@ export function CloudChannelSurfacePortals({
 
   if (!target) return null
 
-  return createPortal(
-    <ChannelsGatewaySurface
-      {...filteredSnapshot}
-      loading={loading}
-      error={error}
-      canManage={canManage}
-      manageDisabledReason={manageDisabledReason}
-      platformLabel={`Cloud Web - ${role}`}
-      allowProviderFallback={!filter.trim()}
-      onReload={loadChannels}
-      onConnectProvider={connectProvider}
-      onDisconnectBinding={(bindingId) => api.channels.disconnectBinding(bindingId)}
-      onResolvePerson={(input) => api.channels.resolvePerson(input)}
-      onCreateWatch={(input) => api.channels.createWatch(withWorkspace(input, workspace))}
-      onPauseWatch={(watchId) => api.channels.pauseWatch(watchId)}
-      onResumeWatch={(watchId) => api.channels.resumeWatch(watchId)}
-      onDeleteWatch={(watchId) => api.channels.deleteWatch(watchId)}
-      onOpenDeliverySession={openThread}
-    />,
-    target,
+  return (
+    <>
+      {createPortal(
+        <ChannelsGatewaySurface
+          {...filteredSnapshot}
+          loading={loading}
+          error={error}
+          canManage={canManage}
+          manageDisabledReason={manageDisabledReason}
+          platformLabel={`Cloud Web - ${role}`}
+          allowProviderFallback={!filter.trim()}
+          onReload={loadChannels}
+          onConnectProvider={connectProvider}
+          onDisconnectBinding={disconnectBinding}
+          onResolvePerson={(input) => api.channels.resolvePerson(input)}
+          onCreateWatch={(input) => api.channels.createWatch(withWorkspace(input, workspace))}
+          onPauseWatch={(watchId) => api.channels.pauseWatch(watchId)}
+          onResumeWatch={(watchId) => api.channels.resumeWatch(watchId)}
+          onDeleteWatch={deleteWatch}
+          onOpenDeliverySession={openThread}
+        />,
+        target,
+      )}
+      {confirmDialog}
+    </>
   )
 }

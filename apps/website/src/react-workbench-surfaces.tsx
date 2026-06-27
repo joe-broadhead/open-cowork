@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
+import { useCloudConfirm } from './react-cloud-confirm.tsx'
 import { CloudArtifactSurfacePortals } from './react-workbench-artifacts.tsx'
 import { CloudChannelSurfacePortals } from './react-workbench-channels.tsx'
 import { CloudKnowledgeSurfacePortals } from './react-workbench-knowledge.tsx'
@@ -137,6 +138,7 @@ function workspaceAllowedAgents(workspace: unknown) {
 
 export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedView, onStartAgentChat, onSelectSession, onReloadSessions, artifactActions }: SurfaceProps) {
   const api = useAppApi()
+  const { confirm, dialog: confirmDialog } = useCloudConfirm()
   const [tools, setTools] = useState<Capability[]>([])
   const [skills, setSkills] = useState<Capability[]>([])
   const [capabilityError, setCapabilityError] = useState<string | null>(null)
@@ -311,9 +313,13 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
   const updateWorkflow = useCallback((workflow: Workflow, action: 'pause' | 'resume' | 'archive') => {
     void (async () => {
       if (action === 'archive') {
-        const confirmation = window.prompt(`Type ${workflow.id} to archive this playbook.`)
-        if (confirmation !== workflow.id) {
-          setStatus('Confirmation did not match the playbook id.', 'warn')
+        const confirmed = await confirm({
+          title: 'Archive this playbook?',
+          body: `${workflow.title || workflow.id} stops running and moves to the archive. You can still review its past runs.`,
+          confirmLabel: 'Archive',
+        })
+        if (!confirmed) {
+          setStatus('Archive cancelled.', 'warn')
           return
         }
       }
@@ -327,7 +333,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
         setStatus(errorMessage(error), 'warn')
       }
     })()
-  }, [api, loadWorkflows])
+  }, [api, confirm, loadWorkflows])
 
   const portals = []
   if (targets.agents) {
@@ -413,6 +419,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
       <CloudArtifactSurfacePortals selectedView={selectedView} artifactActions={artifactActions} />
       <CloudChannelSurfacePortals bootstrap={bootstrap} workspace={workspace} onSelectSession={onSelectSession} />
       <CloudKnowledgeSurfacePortals selectedView={selectedView} bootstrap={bootstrap} workspace={workspace} />
+      {confirmDialog}
     </>
   )
 }

@@ -441,7 +441,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     return () => document.removeEventListener('click', handler, true)
   }, [loadMoreSessions, loadSessions, refreshApprovalQueueViews, startNewChatDraft])
 
-  useCloudWorkbenchForms({
+  const { stopGenerating } = useCloudWorkbenchForms({
     api,
     bootstrap,
     workspace,
@@ -589,6 +589,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       onReloadSessions={() => loadSessions({ keepSelection: true, preserveLoadedPages: true })}
       onSetComposerText={setComposerText}
       onSetComposerAgent={setComposerAgent}
+      onStopGenerating={stopGenerating}
       onLaunchpadSuggestion={startLaunchpadSuggestion}
       onOpenLaunchpadArtifact={openLaunchpadArtifact}
     />

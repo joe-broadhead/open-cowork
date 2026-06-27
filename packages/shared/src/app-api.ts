@@ -52,6 +52,7 @@ export type AppAPI = {
     view: (sessionId: string) => Promise<unknown>
     events: (sessionId: string, handlers?: AppApiEventHandlers, options?: AppApiSessionEventsOptions) => AppApiEventStream
     prompt: (sessionId: string, input: unknown) => Promise<unknown>
+    abort: (sessionId: string) => Promise<unknown>
     respondPermission: (sessionId: string, input: unknown) => Promise<unknown>
     replyQuestion: (sessionId: string, input: unknown) => Promise<unknown>
     rejectQuestion: (sessionId: string, input: unknown) => Promise<unknown>

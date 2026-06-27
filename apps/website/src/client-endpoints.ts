@@ -34,6 +34,7 @@ const CLOUD_WEB_ENDPOINT_DEFINITIONS = [
   { id: 'sessionView', method: 'GET', path: '/api/sessions/:sessionId/view', csrf: false },
   { id: 'sessionEvents', method: 'GET', path: '/api/sessions/:sessionId/events', csrf: false },
   { id: 'sessionPrompt', method: 'POST', path: '/api/sessions/:sessionId/prompt', csrf: true },
+  { id: 'sessionAbort', method: 'POST', path: '/api/sessions/:sessionId/abort', csrf: true },
   { id: 'sessionPermissionRespond', method: 'POST', path: '/api/sessions/:sessionId/permission-respond', csrf: true },
   { id: 'sessionQuestionReply', method: 'POST', path: '/api/sessions/:sessionId/question-reply', csrf: true },
   { id: 'sessionQuestionReject', method: 'POST', path: '/api/sessions/:sessionId/question-reject', csrf: true },

@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react'
 import type { AppAPI } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { assertCloudProjectSourceAllowed, cloudProjectSourceFromForm } from './react-project-source.ts'
@@ -144,4 +144,25 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
     sessionFormTarget.addEventListener('submit', handler, true)
     return () => sessionFormTarget.removeEventListener('submit', handler, true)
   }, [api, bootstrap.profileName, loadSessions, loadView, sessionFormTarget, setError, setIsSending, setSelectedSessionId, setViews, workspace])
+
+  // Abort the in-flight turn for the selected chat (mirrors desktop's Stop/Esc).
+  // Refreshes the view + list so the stopped turn is reflected immediately.
+  const stopGenerating = useCallback(() => {
+    if (!selectedSessionId) return
+    void (async () => {
+      setError(null)
+      try {
+        await api.sessions.abort(selectedSessionId)
+        await loadView(selectedSessionId)
+        await loadSessions({ keepSelection: true, preserveLoadedPages: true })
+        setCloudStatus('Stopped', 'ok')
+      } catch (nextError) {
+        const message = errorMessage(nextError)
+        setError(message)
+        setCloudStatus(message, 'warn')
+      }
+    })()
+  }, [api, loadSessions, loadView, selectedSessionId, setError])
+
+  return { stopGenerating }
 }

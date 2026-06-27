@@ -87,6 +87,45 @@ void test('cloud web browser gates admin controls for member workspaces', async 
   }
 })
 
+void test('cloud web browser gates the channel watch delete behind a danger confirm', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+    harness.clickText('[data-route-link]', 'Channels')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
+
+    // Deleting a watch opens a styled confirm (no native prompt) and must NOT call
+    // the delete API until the danger confirm button is clicked.
+    await waitFor(() => assert.ok([...harness.document.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Delete')))
+    harness.clickText('button', 'Delete')
+    await waitFor(() => assert.match(harness.document.querySelector('.ui-dialog__title')?.textContent || '', /Delete this watch/))
+    assert.equal(harness.lastRequest((request) => request.method === 'DELETE' && request.path === '/api/coordination/watches/watch-1'), undefined)
+    harness.clickText('.ui-dialog__footer .ui-button--danger', 'Delete')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'DELETE' && request.path === '/api/coordination/watches/watch-1')))
+  } finally {
+    harness.close()
+  }
+})
+
+void test('cloud web browser gates the channel disconnect behind a danger confirm', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+    harness.clickText('[data-route-link]', 'Channels')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
+
+    // Disconnect opens a styled confirm and must NOT mutate the binding until confirmed.
+    await waitFor(() => assert.ok([...harness.document.querySelectorAll('#channel-connected-grid button')].some((button) => button.textContent?.trim() === 'Disconnect')))
+    harness.clickText('#channel-connected-grid button', 'Disconnect')
+    await waitFor(() => assert.match(harness.document.querySelector('.ui-dialog__title')?.textContent || '', /Disconnect this channel/))
+    assert.equal(harness.lastRequest((request) => request.method === 'PATCH' && request.path === '/api/channels/bindings/binding-1'), undefined)
+    harness.clickText('.ui-dialog__footer .ui-button--danger', 'Disconnect')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'PATCH' && request.path === '/api/channels/bindings/binding-1')))
+  } finally {
+    harness.close()
+  }
+})
+
 void test('cloud web browser expands the collapsed rail before focusing chat search', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', sessionCount: 2, hydratedViewCount: 2 }).start()
   try {
@@ -1164,7 +1203,7 @@ void test('cloud web browser requires typed confirmation for destructive admin a
     await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Confirmation did not match the token id/))
     assert.equal(harness.lastRequest((request) => request.method === 'DELETE' && request.path === '/api/api-tokens/token-1'), undefined)
 
-    const prompts = ['anthropic', 'token-1', 'acct-2', 'workflow-1', 'delivery-1', 'Operator reviewed the stuck delivery.']
+    const prompts = ['anthropic', 'token-1', 'acct-2', 'delivery-1', 'Operator reviewed the stuck delivery.']
     Object.defineProperty(harness.window, 'prompt', {
       value: () => prompts.shift() || '',
       configurable: true,
@@ -1182,7 +1221,12 @@ void test('cloud web browser requires typed confirmation for destructive admin a
     ;(memberRow.querySelector('button.danger') as HTMLButtonElement).click()
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/admin/members/acct-2/update')))
 
+    // Archive routes through the styled confirm dialog (no native prompt). The
+    // archive request must NOT fire until the danger confirm button is clicked.
     harness.clickText('#workflow-detail button', 'Archive')
+    await waitFor(() => assert.match(harness.document.querySelector('.ui-dialog__title')?.textContent || '', /Archive this playbook/))
+    assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/workflows/workflow-1/archive'), undefined)
+    harness.clickText('.ui-dialog__footer .ui-button--danger', 'Archive')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/workflows/workflow-1/archive')))
 
     harness.clickText('#delivery-list button', 'Dead-letter')

@@ -167,6 +167,7 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
       view: (sessionId) => request(endpointPath('sessionView', { sessionId })),
       events: (sessionId, handlers, eventOptions) => stream(withQuery(endpointPath('sessionEvents', { sessionId }), afterSequenceQuery(eventOptions?.afterSequence)), handlers),
       prompt: (sessionId, input) => request(endpointPath('sessionPrompt', { sessionId }), { method: 'POST', body: input }),
+      abort: (sessionId) => request(endpointPath('sessionAbort', { sessionId }), { method: 'POST', body: {} }),
       respondPermission: (sessionId, input) => request(endpointPath('sessionPermissionRespond', { sessionId }), { method: 'POST', body: input }),
       replyQuestion: (sessionId, input) => request(endpointPath('sessionQuestionReply', { sessionId }), { method: 'POST', body: input }),
       rejectQuestion: (sessionId, input) => request(endpointPath('sessionQuestionReject', { sessionId }), { method: 'POST', body: input }),
