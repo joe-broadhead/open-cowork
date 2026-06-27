@@ -575,7 +575,7 @@ export function wikiSurfaceCss(): string {
       font-size: var(--text-2xs);
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
     }
     .studio-wiki-page__links-title small {
       font-weight: 400;
@@ -828,9 +828,11 @@ export function channelsSurfaceCss(): string {
   display: grid;
   gap: var(--space-1);
   min-width: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
+  color: var(--color-text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .studio-channel-form input,
@@ -842,7 +844,10 @@ export function channelsSurfaceCss(): string {
   color: var(--color-text);
   padding: var(--space-2) var(--space-3);
   font: inherit;
+  font-size: var(--text-xs);
   font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .studio-channel-checkboxes {
@@ -858,6 +863,11 @@ export function channelsSurfaceCss(): string {
 
 .studio-channel-checkboxes label {
   gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .studio-channel-checkboxes input {
@@ -1159,9 +1169,11 @@ export function projectsSurfaceCss(): string {
 .studio-hand-to {
   display: grid;
   gap: var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
+  color: var(--color-text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .studio-project-create input,
@@ -1177,7 +1189,10 @@ export function projectsSurfaceCss(): string {
   color: var(--color-text);
   padding: var(--space-2) var(--space-3);
   font: inherit;
+  font-size: var(--text-xs);
   font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .studio-project-create textarea,
@@ -1238,10 +1253,10 @@ export function projectsSurfaceCss(): string {
 
 .studio-task-drawer__section h3 {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -1409,14 +1424,14 @@ export function controlsSurfaceCss(): string {
 
 .ui-button--md {
   min-height: var(--control-h-md);
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-3);
   font-size: var(--text-sm);
   line-height: var(--lh-sm);
 }
 
 .ui-button--lg {
   min-height: var(--control-h-lg);
-  padding: 0 var(--space-5);
+  padding: 0 var(--space-4);
   font-size: var(--text-md);
   line-height: var(--lh-md);
 }
@@ -1538,6 +1553,11 @@ export function controlsSurfaceCss(): string {
 .ui-icon-button--md {
   width: var(--control-h-md);
   height: var(--control-h-md);
+}
+
+.ui-icon-button--lg {
+  width: var(--control-h-lg);
+  height: var(--control-h-lg);
 }
 
 .ui-icon-button__badge {
@@ -1676,7 +1696,6 @@ export function controlsSurfaceCss(): string {
 
 .ui-select-trigger:hover:not(:disabled),
 .ui-menu-trigger:hover:not(:disabled) {
-  background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
 }
 
@@ -1689,7 +1708,7 @@ export function controlsSurfaceCss(): string {
   max-height: min(var(--primitive-popover-max-h), calc(100vh - var(--space-12)));
   overflow: auto;
   border: var(--border-width-1) solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow-3), var(--specular-strong);
@@ -1716,15 +1735,13 @@ export function controlsSurfaceCss(): string {
   text-align: start;
   transition:
     background var(--dur-1) var(--ease-out),
-    color var(--dur-1) var(--ease-out),
-    transform var(--dur-2) var(--ease-out);
+    color var(--dur-1) var(--ease-out);
 }
 
 .ui-popover-item:hover:not(:disabled),
 .ui-popover-item[data-active="true"] {
   background: var(--color-surface-hover);
   color: var(--color-text);
-  transform: translateX(var(--space-1));
 }
 
 .ui-popover-item[aria-selected="true"] {
@@ -1940,6 +1957,34 @@ export function primitivesSurfaceCss(): string {
   border-color: color-mix(in srgb, var(--chip-danger) 24%, transparent);
   color: color-mix(in srgb, var(--chip-danger) 86%, var(--color-text-secondary));
 }
+
+/* Studio page-header polish — these rules are NOT in the per-app studio stylesheets
+   (apps own .studio-page-header / __copy / h1 / p), so they are single-sourced here
+   and picked up by both desktop (studioSurfaceStyles) and web (controls/primitives
+   embeds). __meta is rendered by StudioPrimitives but had no rule; the description
+   gets a small top gap so the title and copy aren't cramped. The description rule is
+   scoped through .studio-page-header__copy div (one extra element step) so it wins
+   over each app's grouped .studio-page-header p margin:0 rule regardless of the
+   order this shared sheet is embedded relative to the per-app studio CSS. */
+.studio-page-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-page-header__copy div p {
+  margin-top: var(--space-1);
+}
+
+/* Card padding — single-sourced here so a default Card and a studio object card
+   share one flat spacing scale on both surfaces. Each app keeps its own .ui-card
+   chrome (border/radius/background/shadow) but the size padding is canonical:
+   sm 12 / md 16 / lg 20, on the --space grid (was an odd --row-pad ladder). */
+.ui-card--sm { padding: var(--space-3); }
+.ui-card--md { padding: var(--space-4); }
+.ui-card--lg { padding: var(--space-5); }
 
 /* Dialog — modal/drawer surface. Card radius matches .ui-card (--radius-xl);
    title weight 600 + tight tracking; header gap --space-3, footer gap --space-2

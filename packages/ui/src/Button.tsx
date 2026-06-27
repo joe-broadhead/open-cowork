@@ -1,6 +1,6 @@
 import { forwardRef, useId, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { DisabledHint } from './DisabledHint.js'
-import { Icon, type IconName } from './Icon.js'
+import { Icon, type IconName, type IconSize } from './Icon.js'
 import { Tooltip } from './Tooltip.js'
 import { cn } from './utils.js'
 
@@ -35,6 +35,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const isDisabled = disabled || loading || Boolean(disabledReason)
   const disabledHintId = `${hintId}-disabled`
   const describedBy = [ariaDescribedBy, disabledReason ? disabledHintId : undefined].filter(Boolean).join(' ') || undefined
+  // Scale the icon with the button height (sm/md keep the 16px glyph; lg steps up
+  // to 20px) so the icon never looks lost in the larger control — mirrors how
+  // IconButton scales its glyph.
+  const iconSize: IconSize = size === 'lg' ? 20 : 16
   const button = (
     <button
       {...props}
@@ -51,9 +55,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-describedby={describedBy}
       type={props.type || 'button'}
     >
-      {loading ? <Icon name="loader-circle" size={16} className="ui-spin" /> : leftIcon ? <Icon name={leftIcon} size={16} /> : null}
+      {loading ? <Icon name="loader-circle" size={iconSize} className="ui-spin" /> : leftIcon ? <Icon name={leftIcon} size={iconSize} /> : null}
       <span>{children}</span>
-      {rightIcon ? <Icon name={rightIcon} size={16} /> : null}
+      {rightIcon ? <Icon name={rightIcon} size={iconSize} /> : null}
     </button>
   )
 
@@ -72,11 +76,17 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'> & {
   icon: IconName
   label: string
-  size?: Exclude<ButtonSize, 'lg'>
+  size?: ButtonSize
   variant?: ButtonVariant
   badge?: ReactNode
   loading?: boolean
   disabledReason?: string | null
+}
+
+function iconButtonGlyphSize(size: ButtonSize): IconSize {
+  if (size === 'lg') return 24
+  if (size === 'sm') return 16
+  return 20
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButtonPrimitive({
@@ -112,7 +122,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       aria-describedby={describedBy}
       disabled={isDisabled}
     >
-      {loading ? <Icon name="loader-circle" size={16} className="ui-spin" /> : <Icon name={icon} size={size === 'sm' ? 16 : 20} />}
+      {loading ? <Icon name="loader-circle" size={iconButtonGlyphSize(size)} className="ui-spin" /> : <Icon name={icon} size={iconButtonGlyphSize(size)} />}
       {badge ? <span className="ui-icon-button__badge">{badge}</span> : null}
     </button>
   )

@@ -51,9 +51,9 @@ export function cloudWebsitePrimitiveStyles() {
     .ui-card--specular {
       box-shadow: var(--shadow-2), var(--specular);
     }
-    .ui-card--sm { padding: calc(var(--row-pad) + var(--space-1)); }
-    .ui-card--md { padding: calc(var(--row-pad) + var(--space-2)); }
-    .ui-card--lg { padding: calc(var(--row-pad) + var(--space-4)); }
+    /* .ui-card--sm/md/lg padding is single-sourced in @open-cowork/ui
+       primitivesSurfaceCss() (embedded later in styles.ts) on the --space grid
+       (12 / 16 / 20), so both surfaces share one Card spacing scale. */
     .ui-card--variant-flat {
       background: var(--color-surface);
       box-shadow: none;
