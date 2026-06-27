@@ -11,6 +11,7 @@ import {
 } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
 import { AgentAvatar } from './AgentAvatar'
+import { useEscape } from '../../hooks/useEscape'
 import { t } from '../../helpers/i18n'
 import { AgentStaticPreview } from './AgentStaticPreview'
 import { AgentCapabilitiesTab } from './AgentCapabilitiesTab'
@@ -154,20 +155,16 @@ export function AgentBuilderPage({
 
   // Escape routes through the same cancel guard as the Cancel/back buttons:
   // discard immediately when there is nothing unsaved, otherwise warn first.
-  // Mirrors the close-on-Escape pattern in TaskDrillIn/DiffViewer.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (confirmDiscardOpen) return
-      if (isDirty) {
-        setConfirmDiscardOpen(true)
-        return
-      }
-      onCancel()
+  // Mirrors the close-on-Escape pattern in TaskDrillIn/DiffViewer. Stays
+  // inert while the discard dialog is already open so it can run its own
+  // dismissal. Uses the shared stacked Escape helper.
+  useEscape(() => {
+    if (isDirty) {
+      setConfirmDiscardOpen(true)
+      return
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [confirmDiscardOpen, isDirty, onCancel])
+    onCancel()
+  }, { enabled: !confirmDiscardOpen })
 
   const toggleTool = (toolId: string) => {
     const linked = linkedSkillNamesForTool(effectiveCatalog, toolId)

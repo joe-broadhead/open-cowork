@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
+import { useEscape } from '../../hooks/useEscape'
 import { t } from '../../helpers/i18n'
 import { Badge, Button, Card, Textarea } from '../ui'
 
@@ -129,15 +130,13 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     firstOptionRef.current?.focus()
   }, [request.id])
 
-  // Enter advances/submits the current step once it is answered; Escape
-  // dismisses the dock (mirrors TaskDrillIn / DiffViewer Escape handling).
+  // Escape dismisses the dock (mirrors TaskDrillIn / DiffViewer Escape
+  // handling) through the shared stacked Escape helper.
+  useEscape(() => { void reject() })
+
+  // Enter advances/submits the current step once it is answered.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        void reject()
-        return
-      }
       if (event.key === 'Enter' && !event.shiftKey) {
         // Let the custom-answer textarea keep its own newline behaviour.
         if (event.target instanceof HTMLTextAreaElement) return
@@ -148,7 +147,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [currentAnswered, submitting, goNext, reject])
+  }, [currentAnswered, submitting, goNext])
 
   if (!current) return null
 

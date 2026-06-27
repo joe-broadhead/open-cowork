@@ -19,6 +19,7 @@ import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { Button, Card, Icon, Input, type BadgeTone, type IconName } from '../ui'
 import { buildDesktopApprovalQueueItems } from '../studio/approval-queue-model'
+import { useEscape } from '../../hooks/useEscape'
 
 interface Props {
   currentView: AppView
@@ -498,6 +499,12 @@ function WorkspaceSwitcher() {
     triggerRef.current?.focus()
   }, [])
 
+  // Escape closes the switcher and restores trigger focus through the shared
+  // stacked Escape helper. Registered only while open so it never consumes
+  // Escape when the popover is closed, and the helper stops propagation
+  // centrally so the app-level navigation Escape never also fires.
+  useEscape(closeMenu, { enabled: open })
+
   // On open, land focus on the active workspace option (or the first one)
   // so arrow keys have a starting point — same roving pattern the thread
   // action menu uses.
@@ -511,19 +518,11 @@ function WorkspaceSwitcher() {
   }, [open])
 
   // Roving focus between workspace options. Up/Down move focus, Enter
-  // selects (native button activation), Home/End jump to the ends, and
-  // Escape closes without letting the app-level Escape handler also fire.
+  // selects (native button activation), and Home/End jump to the ends.
+  // Escape is handled by the shared stacked Escape helper above, which
+  // closes the switcher and contains the event so the app-level Escape
+  // handler never also fires.
   const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      // Stop the native event so the window-level Escape handler (which
-      // navigates the app view) does not also fire when the user is only
-      // dismissing this popover.
-      event.nativeEvent.stopImmediatePropagation()
-      closeMenu()
-      return
-    }
-
     if (event.key === 'Tab') {
       setOpen(false)
       return

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
+import { useEscape } from '../../hooks/useEscape'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
@@ -106,14 +107,8 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
     setFocusStack([rootTask.id])
   }, [rootTask.id])
 
-  // Close on Escape.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  // Close on Escape through the shared stacked Escape helper.
+  useEscape(onClose)
 
   const focusedId = focusStack[focusStack.length - 1]
   const focused = useMemo(

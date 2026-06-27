@@ -15,6 +15,7 @@ import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { Button, Card, IconButton, Input, SegmentedControl, Skeleton, Tooltip } from '../ui'
 import { useSessionStore } from '../../stores/session'
+import { useEscape } from '../../hooks/useEscape'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
 import { t } from '../../helpers/i18n'
@@ -145,18 +146,13 @@ export function CapabilitiesPage({
   // cancel/back handlers as the on-screen buttons: editor forms reset to the
   // inventory, detail inspectors clear the selection. On the inventory itself it
   // falls through to onClose. Mirrors the close-on-Escape pattern in
-  // TaskDrillIn/DiffViewer.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (mcpForm) { setMcpForm(null); return }
-      if (skillForm) { setSkillForm(null); return }
-      if (selection) { setSelection(null); return }
-      onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [mcpForm, skillForm, selection, onClose])
+  // TaskDrillIn/DiffViewer. Uses the shared stacked Escape helper.
+  useEscape(() => {
+    if (mcpForm) { setMcpForm(null); return }
+    if (skillForm) { setSkillForm(null); return }
+    if (selection) { setSelection(null); return }
+    onClose()
+  })
 
   const customToolIds = useMemo(
     () => new Set(customMcps.map((entry) => entry.name)),
