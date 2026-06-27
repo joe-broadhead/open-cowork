@@ -1,4 +1,5 @@
 import { cloudWebsiteCapabilityGalleryStyles } from './style-capability-gallery.ts'
+import { cloudWebsitePlaybookCardStyles } from './style-playbook-cards.ts'
 
 export function cloudWebsiteComponentStyles() {
   return String.raw`    a {
@@ -241,6 +242,7 @@ export function cloudWebsiteComponentStyles() {
       grid-template-columns: 1fr;
     }
 ${cloudWebsiteCapabilityGalleryStyles()}
+${cloudWebsitePlaybookCardStyles()}
     .surface-card-main {
       display: grid;
       gap: var(--space-2);

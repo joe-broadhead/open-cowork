@@ -22,6 +22,14 @@ type CapabilityCardStyle = CSSProperties & {
   '--spine'?: string
 }
 
+// The playbook card paints the same identity plate (`--entity-chroma`) and
+// selection/hover spine (`--spine`) as the capability gallery, so a playbook
+// reads identically to a tool/skill across surfaces and matches the desktop card.
+type PlaybookCardStyle = CSSProperties & {
+  '--entity-chroma'?: string
+  '--spine'?: string
+}
+
 export type Capability = {
   id?: string
   name?: string
@@ -79,6 +87,18 @@ export function workflowPillKind(status: unknown) {
   if (value === 'active' || value === 'completed' || value === 'running') return 'ok'
   if (value === 'paused' || value === 'pending') return 'warn'
   if (value === 'archived' || value === 'failed') return 'warn'
+  return ''
+}
+
+// Status -> pill kind for the playbook card badge, mirroring the desktop
+// statusTone (active->ok, running->accent, failed->danger, paused->warn). The
+// card wants the richer accent/danger split the shared workflowPillKind flattens.
+export function workflowStatusKind(status: unknown) {
+  const value = String(status || '').toLowerCase()
+  if (value === 'active' || value === 'completed') return 'ok'
+  if (value === 'running' || value === 'queued') return 'accent'
+  if (value === 'failed') return 'danger'
+  if (value === 'paused' || value === 'pending') return 'warn'
   return ''
 }
 
@@ -270,26 +290,73 @@ export function CapabilityRows({ items, emptyText }: { items: Capability[], empt
   )
 }
 
+// Trigger label for the card meta line — mirrors the desktop triggerLabel/
+// cloudWebWorkflowTriggerSummary (enabled trigger types, falling back to manual).
+function workflowTriggerLabel(workflow: Workflow) {
+  return cloudWebWorkflowTriggerSummary(workflow)
+}
+
+// Last-run label for the card meta line — mirrors the desktop
+// workflowLastRunLabel (formatted last-run date, else latest run status, else
+// "never").
+function workflowLastRunLabel(workflow: Workflow) {
+  if (workflow.lastRunAt) return formatDate(workflow.lastRunAt)
+  if (workflow.latestRunStatus) return workflow.latestRunStatus
+  return 'never'
+}
+
+function workflowNextRunLabel(workflow: Workflow) {
+  return workflow.nextRunAt ? formatDate(workflow.nextRunAt) : 'Not scheduled'
+}
+
+// One playbook card: an identity-tinted plate, a title + status badge, an
+// instrument-readout meta line (trigger · last run · next run), and the saved
+// step list — the cloud mirror of the desktop WorkflowsPage card.
+function WorkflowCard({ workflow, selected, onSelect }: { workflow: Workflow, selected: boolean, onSelect: (workflowId: string) => void }) {
+  const chroma = entityChroma(workflow.id || workflow.title || 'playbook')
+  const cardStyle: PlaybookCardStyle = { '--entity-chroma': chroma, '--spine': chroma }
+  const meta: Array<[string, string]> = [
+    ['trigger', workflowTriggerLabel(workflow)],
+    ['last run', workflowLastRunLabel(workflow)],
+    ['next run', workflowNextRunLabel(workflow)],
+  ]
+  return (
+    <div className="playbook-card" style={cardStyle} data-selected={selected ? 'true' : 'false'} role="row">
+      <div className="playbook-card-head">
+        <span className="entity-tile playbook-card-icon" aria-hidden="true">
+          <Icon name="workflow" size={16} />
+        </span>
+        <div className="playbook-card-headings">
+          <button type="button" className="playbook-card-title" aria-pressed={selected ? 'true' : 'false'} onClick={() => onSelect(workflow.id)}>
+            <strong>{workflow.title || workflow.id}</strong>
+            <span className="pill" data-kind={workflowStatusKind(workflow.status)}>{workflow.status || 'unknown'}</span>
+          </button>
+          <div className="playbook-card-meta">
+            <span className="playbook-card-meta-item">Runs as {workflow.agentName || 'build'}</span>
+            {meta.map(([label, value]) => (
+              <span className="playbook-card-meta-item" key={label}>
+                <span className="playbook-card-meta-sep" aria-hidden="true">·</span>
+                {label} {value}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <WorkflowSteps workflow={workflow} />
+    </div>
+  )
+}
+
 export function WorkflowTable({ workflows, selectedWorkflowId, onSelect }: { workflows: Workflow[], selectedWorkflowId: string | null, onSelect: (workflowId: string) => void }) {
   if (!workflows.length) {
     return <div className="table-row empty-row" role="row"><span role="cell">No playbooks loaded.</span><span role="cell">-</span><span role="cell">-</span><span role="cell">-</span></div>
   }
   return (
-    <>
+    <div className="playbook-grid">
       {workflows.map((workflow) => (
-        <div className="table-row thread-row" data-selected={selectedWorkflowId === workflow.id ? 'true' : 'false'} role="row" key={workflow.id}>
-          <span role="cell">
-            <button type="button" className="row-link" aria-pressed={selectedWorkflowId === workflow.id ? 'true' : 'false'} onClick={() => onSelect(workflow.id)}>
-              {workflow.title || workflow.id}
-              <small className="thread-row-meta">Runs as {workflow.agentName || 'build'} · last run {formatDate(workflow.lastRunAt)}</small>
-            </button>
-          </span>
-          <span role="cell"><span className="pill" data-kind={workflowPillKind(workflow.status)}>{workflow.status || 'unknown'}</span></span>
-          <span role="cell">{workflow.latestRunStatus || workflow.lastRunAt || 'never'}</span>
-          <span role="cell">{workflow.nextRunAt ? formatDate(workflow.nextRunAt) : cloudWebWorkflowTriggerSummary(workflow)}</span>
-        </div>
+        <WorkflowCard key={workflow.id} workflow={workflow} selected={selectedWorkflowId === workflow.id} onSelect={onSelect} />
       ))}
-    </>
+    </div>
   )
 }
 
