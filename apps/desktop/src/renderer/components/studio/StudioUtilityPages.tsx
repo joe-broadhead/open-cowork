@@ -28,8 +28,10 @@ import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-wo
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
 import {
+  Badge,
   Button,
   Card,
+  Dialog,
   Icon,
   StudioPageHeader,
 } from '../ui'
@@ -327,6 +329,34 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
   )
 }
 
+// The Inspect dialog mirrors the artifact card's safety contract: only redacted
+// provenance fields (filename, kind, status, coworker, source, session, size,
+// mime, timestamps). Local paths, object-store keys, signed URLs, and artifact
+// bodies stay behind the explicit Open / Export actions and are never shown here.
+function artifactByteLabel(value: unknown): string | null {
+  const size = Number(value)
+  if (!Number.isFinite(size) || size <= 0) return null
+  if (size < 1024) return `${Math.round(size)} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function buildArtifactInspectorRows(artifact: ArtifactIndexEntry): Array<{ label: string, value: string }> {
+  const rows: Array<{ label: string, value: string | null }> = [
+    { label: t('studio.artifacts.inspect.kind', 'Kind'), value: artifact.kind || null },
+    { label: t('studio.artifacts.inspect.status', 'Status'), value: artifact.status || null },
+    { label: t('studio.artifacts.inspect.coworker', 'Coworker'), value: artifact.authorAgentId || artifact.toolName || artifact.toolId || null },
+    { label: t('studio.artifacts.inspect.source', 'Source project'), value: artifact.projectId || null },
+    { label: t('studio.artifacts.inspect.session', 'Session'), value: artifact.sessionTitle || null },
+    { label: t('studio.artifacts.inspect.type', 'Type'), value: artifact.mime || null },
+    { label: t('studio.artifacts.inspect.size', 'Size'), value: artifactByteLabel(artifact.size) },
+    { label: t('studio.artifacts.inspect.updated', 'Updated'), value: artifact.updatedAt || artifact.createdAt || null },
+  ]
+  return rows
+    .filter((row): row is { label: string, value: string } => Boolean(row.value && row.value.trim()))
+    .map((row) => ({ label: row.label, value: row.value.trim() }))
+}
+
 export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
@@ -339,6 +369,7 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
   }>({ workspaceId: null, payload: EMPTY_ARTIFACT_INDEX })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [inspectedArtifact, setInspectedArtifact] = useState<ArtifactIndexEntry | null>(null)
   const loadSequenceRef = useRef(0)
   const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
   const canUseArtifactBodies = activeWorkspaceIsLocal || workspaceSupport.flags.canDownloadArtifact
@@ -383,6 +414,13 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
   const openArtifact = useCallback(async (artifact: ArtifactIndexEntry) => {
     await window.coworkApi.artifact.open(artifactRequest(artifact))
   }, [artifactRequest])
+
+  // Inspect surfaces the artifact's already-redacted provenance metadata in a
+  // shared Dialog. The index entry the surface holds is metadata-only, so no
+  // extra IPC and no body/path/key is read to populate it.
+  const inspectArtifact = useCallback((artifact: ArtifactIndexEntry) => {
+    setInspectedArtifact(artifact)
+  }, [])
 
   const exportArtifact = useCallback(async (artifact: ArtifactIndexEntry) => {
     await window.coworkApi.artifact.export(artifactRequest(artifact))
@@ -496,6 +534,7 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
         canExportArtifact={canUseArtifactBody}
         artifactActionDisabledReason={artifactBodyDisabledReason}
         onReload={loadArtifacts}
+        onInspectArtifact={inspectArtifact}
         onOpenArtifact={openArtifact}
         onExportArtifact={exportArtifact}
         onExportAll={exportVisibleArtifacts}
@@ -513,6 +552,35 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
           </div>
         </div>
       </Card>
+
+      {inspectedArtifact ? (
+        <Dialog
+          title={t('studio.artifacts.inspect.title', 'Inspect artifact')}
+          size="sm"
+          onClose={() => setInspectedArtifact(null)}
+        >
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text">{inspectedArtifact.filename || t('studio.artifacts.inspect.untitled', 'Untitled artifact')}</p>
+                <p className="text-xs text-text-muted">{t('studio.artifacts.inspect.subtitle', 'Redacted provenance metadata')}</p>
+              </div>
+              {inspectedArtifact.status ? <Badge tone="neutral">{inspectedArtifact.status}</Badge> : null}
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
+              {buildArtifactInspectorRows(inspectedArtifact).map((row) => (
+                <div key={row.label} className="contents">
+                  <dt className="text-text-muted">{row.label}</dt>
+                  <dd className="min-w-0 break-words text-right text-text">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="text-xs text-text-muted">
+              {t('studio.artifacts.inspect.note', 'Local paths, object-store keys, signed URLs, and artifact bodies stay behind the Open and Export actions.')}
+            </p>
+          </div>
+        </Dialog>
+      ) : null}
     </StudioPageShell>
   )
 }

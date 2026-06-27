@@ -16,8 +16,26 @@ function describeError(error: unknown) {
 
 export function ProjectsBoardPage({ onOpenThread }: ProjectsBoardPageProps) {
   const [board, setBoard] = useState<CoordinationBoardPayload | null>(null)
+  const [agents, setAgents] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Seed the Assignee / "Hand to" menus with the full coworker roster (matching
+  // cloud), not just names already on the board. The surface unions this with the
+  // board's own agents, so an empty roster is harmless. Race-safe: a later mount
+  // wins, and a failed lookup leaves the menus to fall back to on-board names.
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const roster = await window.coworkApi.agents.list()
+        if (active) setAgents(roster.map((agent) => agent.name))
+      } catch {
+        if (active) setAgents([])
+      }
+    })()
+    return () => { active = false }
+  }, [])
 
   const loadBoard = useCallback(async () => {
     setLoading(true)
@@ -84,6 +102,7 @@ export function ProjectsBoardPage({ onOpenThread }: ProjectsBoardPageProps) {
       board={board}
       loading={loading}
       error={error}
+      agents={agents}
       platformLabel="Desktop"
       onReload={loadBoard}
       onCreateProject={(input) => window.coworkApi.coordination.createProject(input)}

@@ -51,12 +51,18 @@ describe('ProjectsBoardPage', () => {
     const moveTask = vi.fn(async () => null)
     const assignTask = vi.fn(async () => null)
     const taskWorkTarget = vi.fn(async () => ({ id: 'session-work', title: 'Work session' }))
+    // Seed the assignee/hand-off menus with the full coworker roster, including a
+    // coworker (analyst-pro) absent from the board, mirroring the cloud app.
+    const listAgents = vi.fn(async () => [{ name: 'analyst-pro' }])
     installRendererTestCoworkApi({
       coordination: {
         board: vi.fn(async () => board),
         moveTask,
         assignTask,
         taskWorkTarget,
+      },
+      agents: {
+        list: listAgents,
       },
     })
 
@@ -74,7 +80,10 @@ describe('ProjectsBoardPage', () => {
     fireEvent.click(within(stageGroup).getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(moveTask).toHaveBeenCalledWith('task-1', { column: 'done' }))
 
+    await waitFor(() => expect(listAgents).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: 'Coworker' }))
+    // The roster coworker that is not on the board still appears in the menu.
+    expect(screen.getByRole('menuitem', { name: 'Analyst Pro' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Chief Of Staff' }))
     await waitFor(() => expect(assignTask).toHaveBeenCalledWith('task-1', { assigneeAgent: 'chief-of-staff' }))
 

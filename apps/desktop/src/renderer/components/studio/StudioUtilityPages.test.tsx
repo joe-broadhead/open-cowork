@@ -319,6 +319,19 @@ describe('StudioArtifactsPage', () => {
       workspaceId: undefined,
     }))
 
+    // Inspect opens a redacted-metadata dialog: provenance fields are shown, but
+    // no local path or object-store key leaks (the surface holds metadata only).
+    fireEvent.click(within(card).getByRole('button', { name: 'Inspect' }))
+    const inspectDialog = await screen.findByRole('dialog', { name: 'Inspect artifact' })
+    expect(within(inspectDialog).getByText('board-review.md')).toBeInTheDocument()
+    expect(within(inspectDialog).getByText('project-alpha')).toBeInTheDocument()
+    expect(within(inspectDialog).getByText('Cleo')).toBeInTheDocument()
+    const inspectText = inspectDialog.textContent || ''
+    expect(inspectText).not.toContain('/Users/joe/private')
+    expect(inspectText).not.toContain('objectKey')
+    fireEvent.click(within(inspectDialog).getByRole('button', { name: 'Close dialog' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Inspect artifact' })).toBeNull())
+
     // The final artifact is terminal (no advance control); the draft deck advances
     // to in-review through the shared lifecycle backed by the existing IPC.
     expect(within(revenueCard).queryByRole('button', { name: /Advance to/ })).toBeNull()
