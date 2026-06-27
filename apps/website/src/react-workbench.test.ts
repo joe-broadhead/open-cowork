@@ -49,6 +49,14 @@ void test('React workbench components render cloud-safe thread, timeline, runtim
   assert.match(html, /data-analyst/)
   assert.match(html, /Projected coworker work|Checked repository context/)
   assert.match(html, /Approval/)
+  // Per-chat approvals/questions reuse the shared ApprovalsQueueSurface so the
+  // pane matches the cross-chat route and desktop (no bespoke runtime cards).
+  assert.match(html, /studio-approvals-surface/)
+  assert.match(html, /data-kind="permission"/)
+  assert.match(html, /data-kind="question"/)
+  assert.match(html, /Run read-only tests/)
+  assert.match(html, /Continue with deployment smoke/)
+  assert.doesNotMatch(html, /runtime-card"[^>]*data-kind="approval"/)
   assert.match(html, /summary.txt/)
   assert.match(html, /library-report\.md/)
   assert.match(html, /data-session-id="session-library"/)

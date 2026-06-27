@@ -18,6 +18,7 @@ import { CloudSettingsAccessPortals } from './react-workbench-settings-access.ts
 import { CloudComposerPortal } from './react-workbench-composer.tsx'
 import { CloudLaunchpadPortal } from './react-workbench-launchpad.tsx'
 import { canManageCloudKnowledge } from './react-workbench-knowledge-state.ts'
+import { cloudApprovalsSurfaceHandlers } from './react-workbench-approvals.ts'
 import { CloudWorkbenchSurfacePortals } from './react-workbench-surfaces.tsx'
 import { sessionTitle, setRouteHash, type ArtifactPanelState } from './react-workbench-controller.ts'
 import type { CloudWebCoworkerOption } from './surface-workbench.ts'
@@ -190,12 +191,9 @@ export function CloudWorkbenchPortals({
       loading={isLoadingApprovalQueue}
       emptyTitle="No approvals waiting"
       emptyBody="Cloud permission requests and questions will appear here when any chat needs your input."
-      onOpenSession={(item) => { void onSelectSession(item.sessionId) }}
-      onAllowOnce={(item) => actionProps.onRespondPermission?.(item.id, true, { sessionId: item.sessionId })}
-      onAlwaysAllow={() => {}}
-      onDeny={(item) => actionProps.onRespondPermission?.(item.id, false, { sessionId: item.sessionId })}
-      onReplyQuestion={(item, answers) => actionProps.onReplyQuestion?.(item.id, answers, { sessionId: item.sessionId })}
-      onRejectQuestion={(item) => actionProps.onRejectQuestion?.(item.id, { sessionId: item.sessionId })}
+      // onAlwaysAllow is omitted: cloud has no remember-allow endpoint, so the
+      // surface hides that control instead of showing a dead button.
+      {...cloudApprovalsSurfaceHandlers(actionProps, (sessionId) => { void onSelectSession(sessionId) })}
     />
   ))
   pushPortal(targets.eventStatusTarget, <>{statusText}</>)

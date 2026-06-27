@@ -22,10 +22,6 @@ export function cloudWebsiteChatStyles() {
       box-shadow: var(--shadow-2), var(--specular);
       animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
     }
-    .runtime-card[data-kind="approval"], .runtime-card[data-kind="question"] {
-      border-color: var(--tone-warn-border);
-      background: var(--tone-warn-bg);
-    }
     .runtime-card-header {
       display: flex;
       gap: var(--space-2);
@@ -34,19 +30,6 @@ export function cloudWebsiteChatStyles() {
     }
     .runtime-card-header strong {
       overflow-wrap: anywhere;
-    }
-    .question-block {
-      display: grid;
-      gap: var(--space-2);
-    }
-    .question-block p {
-      margin: 0;
-      line-height: var(--lh-sm);
-    }
-    .choice-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-2);
     }
     .runtime-detail {
       border: var(--border-width-1) solid var(--color-border-subtle);

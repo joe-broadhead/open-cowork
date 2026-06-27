@@ -1,9 +1,10 @@
-import { createElement, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { createElement, type CSSProperties, type ReactNode } from 'react'
 import {
   buildTaskRunAgentBySourceSession,
   resolveTaskRunHandoffAgent,
   type TaskRunHandoffSource,
 } from '@open-cowork/shared'
+import { ApprovalsQueueSurface } from '@open-cowork/ui'
 import {
   CLOUD_WEB_THREAD_PAGE_SIZE,
   cloudWebThreadProjectLabel,
@@ -26,6 +27,10 @@ import {
   cloudWebCoworkerInitials,
   cloudWebCoworkerTone,
 } from './surface-workbench.ts'
+import {
+  buildCloudPerChatApprovalQueueItems,
+  cloudApprovalsSurfaceHandlers,
+} from './react-workbench-approvals.ts'
 
 const h = createElement
 
@@ -407,61 +412,9 @@ export function CloudChatTimeline({ view, ...props }: { view: CloudWebThreadView
       : h('p', { className: 'empty' }, view ? 'No messages yet.' : 'Start a conversation from the composer.'))
 }
 
-function approvalCard(approval: Record<string, unknown>, props: CloudRuntimeActionProps, index: number) {
-  const id = text(approval.id, `approval-${index}`)
-  const pending = props.pendingAction === `approval:${id}`
-  return h('article', { className: 'runtime-card', 'data-kind': 'approval', key: id },
-    h('div', { className: 'runtime-card-header' },
-      h('span', { className: 'pill', 'data-kind': 'warn' }, 'Approval'),
-      h('strong', null, text(approval.description || approval.tool, 'Permission requested'))),
-    h('small', null, [approval.tool, approval.taskRunId ? `coworker lane ${text(approval.taskRunId)}` : null].filter(Boolean).join(' - ')),
-    detailsNode('Permission input', approval.input || {}),
-    h('div', { className: 'row-actions' },
-      h('button', { className: 'primary', type: 'button', disabled: pending, onClick: () => props.onRespondPermission?.(id, true) }, 'Allow'),
-      h('button', { className: 'danger', type: 'button', disabled: pending, onClick: () => props.onRespondPermission?.(id, false) }, 'Deny')))
-}
-
 function questionPromptText(question: Record<string, unknown>) {
   const prompts = list<Record<string, unknown>>(question.questions)
   return text(prompts[0]?.question || question.prompt || question.description || question.id, 'Question requested')
-}
-
-function questionCard(question: Record<string, unknown>, props: CloudRuntimeActionProps, index: number) {
-  const id = text(question.id || question.requestId, `question-${index}`)
-  const pending = props.pendingAction === `question:${id}`
-  const prompts = list<Record<string, unknown>>(question.questions)
-  const sendAnswer = (form: HTMLFormElement | null) => {
-    const answer = String(new FormData(form || undefined).get('answer') || '').trim()
-    if (answer) props.onReplyQuestion?.(id, [answer])
-  }
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    sendAnswer(event.currentTarget)
-  }
-  return h('form', { className: 'runtime-card', 'data-kind': 'question', key: id, onSubmit: submit },
-    h('div', { className: 'runtime-card-header' },
-      h('span', { className: 'pill', 'data-kind': 'warn' }, 'Question'),
-      h('strong', null, questionPromptText(question))),
-    prompts.map((prompt, promptIndex) => h('div', { className: 'question-block', key: text(prompt.id, `prompt-${promptIndex}`) },
-      prompt.header ? h('strong', null, text(prompt.header)) : null,
-      h('p', null, text(prompt.question || prompt.description)),
-      list<Record<string, unknown>>(prompt.options).length
-        ? h('div', { className: 'choice-row' },
-          list<Record<string, unknown>>(prompt.options).map((option, optionIndex) => {
-            const label = text(option.label || option.description, 'Select')
-            return h('button', {
-              className: 'secondary',
-              type: 'button',
-              key: `${label}-${optionIndex}`,
-              disabled: pending,
-              onClick: () => props.onReplyQuestion?.(id, [label]),
-            }, label)
-          }))
-        : null)),
-    h('textarea', { name: 'answer', rows: 3, placeholder: 'Answer', disabled: pending, 'data-question-answer': 'true' }),
-    h('div', { className: 'row-actions' },
-      h('button', { className: 'primary', type: 'button', disabled: pending, onClick: (event) => sendAnswer((event.currentTarget as HTMLButtonElement).form) }, 'Send answer'),
-      h('button', { className: 'danger', type: 'button', disabled: pending, onClick: () => props.onRejectQuestion?.(id) }, 'Reject')))
 }
 
 function resolvedWaitsNode(projection: Record<string, unknown>) {
@@ -487,20 +440,22 @@ function resolvedWaitsNode(projection: Record<string, unknown>) {
 
 export function CloudApprovalsAndQuestions({ view, ...props }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
   const projection = runtimeProjection(view)
-  const pending = [
-    ...list<Record<string, unknown>>(projection.pendingApprovals).map((entry) => ({ type: 'approval', entry })),
-    ...list<Record<string, unknown>>(projection.pendingQuestions).map((entry) => ({ type: 'question', entry })),
-  ]
-  const resolved = resolvedWaitsNode(projection)
+  const items = buildCloudPerChatApprovalQueueItems(view, props.pendingAction)
+  // onAlwaysAllow is intentionally omitted (cloud has no remember-allow), so the
+  // shared surface hides that control rather than rendering a dead button.
+  const handlers = cloudApprovalsSurfaceHandlers(props)
   return h('div', { className: 'list react-approvals-questions', 'aria-label': 'Approvals and questions' },
-    pending.length
-      ? [
-        ...pending.map(({ type, entry }, index) => type === 'approval'
-          ? approvalCard(entry, props, index)
-          : questionCard(entry, props, index)),
-        resolved,
-      ]
-      : [h('p', { className: 'empty', key: 'empty' }, 'No approvals or questions pending.'), resolved])
+    h(ApprovalsQueueSurface, {
+      key: 'queue',
+      items,
+      emptyTitle: 'No approvals waiting',
+      emptyBody: 'OpenCode permission requests and questions appear here when this chat needs your input.',
+      onAllowOnce: handlers.onAllowOnce,
+      onDeny: handlers.onDeny,
+      onReplyQuestion: handlers.onReplyQuestion,
+      onRejectQuestion: handlers.onRejectQuestion,
+    }),
+    resolvedWaitsNode(projection))
 }
 
 function artifactCardNode(artifact: Record<string, unknown>, index: number, props: CloudRuntimeActionProps) {

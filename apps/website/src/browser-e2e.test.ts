@@ -281,8 +281,9 @@ void test('cloud web browser renders the standalone approvals queue across chats
     const queue = harness.document.querySelector('#cloud-approvals-queue') as HTMLElement
     assert.match(queue.textContent || '', /Continue with deployment smoke/)
     assert.match(queue.textContent || '', /via Cloud Web/)
-    assert.match(queue.textContent || '', /Always allow/)
-    assert.match(queue.textContent || '', /workspace policy/)
+    // Cloud has no remember-allow endpoint, so the surface hides the always-allow
+    // control (no dead button) rather than rendering it disabled.
+    assert.doesNotMatch(queue.textContent || '', /Always allow/)
 
     const firstSessionId = harness.sessions[0]!.sessionId
     const secondSessionId = harness.sessions[1]!.sessionId
@@ -312,9 +313,8 @@ void test('cloud web browser renders the standalone approvals queue across chats
     assert.equal(viewRefreshes.includes(`/api/sessions/${firstSessionId}/view`), false)
 
     const alwaysAllow = [...queue.querySelectorAll('button')]
-      .find((button) => button.textContent?.trim() === 'Always allow') as HTMLButtonElement | undefined
-    assert.ok(alwaysAllow)
-    assert.equal(alwaysAllow.disabled, true)
+      .find((button) => button.textContent?.trim() === 'Always allow')
+    assert.equal(alwaysAllow, undefined)
 
     const firstPermission = [...queue.querySelectorAll('[data-kind="permission"]')]
       .find((card) => card.textContent?.includes('Cloud thread 1') && card.textContent?.includes('Run read-only tests')) as HTMLElement | undefined
@@ -1002,15 +1002,33 @@ void test('cloud web browser handles approvals, questions, artifacts, and workfl
     assert.doesNotMatch(reviewText, /task-signed|objectKey|leaked-secret/)
     assert.equal(harness.lastRequest((request) => request.method === 'GET' && /\/api\/artifacts(?:\?|$)/.test(request.path)), undefined)
 
-    harness.clickText('.runtime-card[data-kind="approval"] button', 'Allow')
+    // The per-chat pane now renders the shared ApprovalsQueueSurface, so allow
+    // and reply drive the same permission/question endpoints through its cards.
+    const timeline = harness.document.querySelector('#chat-timeline') as HTMLElement
+    const clickIn = (root: HTMLElement, selector: string, label: string) => {
+      const target = [...root.querySelectorAll<HTMLButtonElement>(selector)]
+        .find((button) => button.textContent?.trim() === label)
+      assert.ok(target, `${selector} with text ${label} exists`)
+      target.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    }
+
+    clickIn(timeline, '[data-kind="permission"] button', 'Allow once')
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /approved/))
     assert.ok(harness.lastRequest((request) => request.method === 'POST' && /permission-respond$/.test(request.path)))
 
-    const answer = harness.document.querySelector('[data-question-answer]') as HTMLTextAreaElement
-    answer.value = 'Yes'
-    harness.clickText('.runtime-card[data-kind="question"] button', 'Send answer')
+    const questionCard = timeline.querySelector('[data-kind="question"]') as HTMLElement
+    assert.ok(questionCard)
+    // Reply stays gated until an answer is selected (shared surface intent).
+    const reply = [...questionCard.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Reply') as HTMLButtonElement
+    assert.equal(reply.disabled, true)
+    clickIn(questionCard, '.studio-question-option', 'Yes')
+    await waitFor(() => assert.equal(reply.disabled, false))
+    reply.click()
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /answered/))
-    assert.ok(harness.lastRequest((request) => request.method === 'POST' && /question-reply$/.test(request.path)))
+    const questionReply = harness.lastRequest((request) => request.method === 'POST' && /question-reply$/.test(request.path))
+    assert.ok(questionReply)
+    assert.deepEqual((questionReply?.body as Record<string, unknown>).answers, [['Yes']])
 
     harness.clickText('.artifact-card button', 'Inspect')
     await waitFor(() => {

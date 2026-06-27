@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { ApprovalsQueueItem, ApprovalsQueuePermissionItem, ApprovalsQueueQuestionItem } from '@open-cowork/ui'
+import type {
+  ApprovalsQueueItem,
+  ApprovalsQueuePermissionItem,
+  ApprovalsQueueQuestionItem,
+  ApprovalsQueueSurfaceProps,
+} from '@open-cowork/ui'
 import type { CloudWebThreadSession, CloudWebThreadView } from './thread-workbench.ts'
+import type { CloudRuntimeActionProps } from './react-workbench.ts'
 import { asRecord, errorMessage, sessionTitle, setCloudStatus } from './react-workbench-controller.ts'
 
 export const APPROVAL_QUEUE_VIEW_HYDRATION_LIMIT = 200
@@ -122,6 +128,68 @@ function queueSessionTitle(session: CloudWebThreadSession, view: CloudWebThreadV
   return view ? sessionTitle(view, session.sessionId) : valueText(asRecord(session).title, `Cloud chat ${session.sessionId}`)
 }
 
+// Builds the shared ApprovalsQueueSurface items for a single session's pending
+// approvals/questions. Reused by both the cross-chat Approvals route (one call
+// per session) and the per-chat review pane so both surfaces stay in lockstep.
+export function buildCloudSessionApprovalQueueItems(
+  sessionId: string,
+  sessionLabel: string,
+  view: CloudWebThreadView | null | undefined,
+  pendingAction?: string | null,
+): ApprovalsQueueItem[] {
+  const projection = cloudRuntimeProjection(view)
+  const items: ApprovalsQueueItem[] = []
+  for (const entry of valueList<Record<string, unknown>>(projection.pendingApprovals)) {
+    const id = valueText(entry.id)
+    if (!id) continue
+    const item: ApprovalsQueuePermissionItem = {
+      kind: 'permission',
+      id,
+      sessionId,
+      workspaceId: valueText(entry.workspaceId) || null,
+      sessionTitle: sessionLabel,
+      requesterName: valueText(entry.taskRunId) ? 'Specialist' : 'OpenCode',
+      requesterRole: valueText(entry.taskRunId) ? 'Coworker lane' : 'Runtime permission',
+      requesterTone: valueText(entry.taskRunId) ? 'builder' : 'reviewer',
+      viaLabel: requestOrigin(entry),
+      timeLabel: undefined,
+      taskLabel: valueText(entry.taskRunId) ? `Task ${valueText(entry.taskRunId)}` : undefined,
+      sortOrder: typeof entry.order === 'number' ? entry.order : 0,
+      pending: pendingAction === queueActionKey({ kind: 'permission', sessionId, id }),
+      tool: valueText(entry.tool, 'tool'),
+      description: valueText(entry.description, 'Permission requested'),
+      input: asRecord(entry.input),
+      // Cloud has no remember/always-allow endpoint — the runtime reduces every
+      // permission response to a single boolean — so the surface hides the
+      // control via an undefined onAlwaysAllow handler rather than showing one.
+      canAlwaysAllow: false,
+    }
+    items.push(item)
+  }
+  for (const entry of valueList<Record<string, unknown>>(projection.pendingQuestions)) {
+    const id = valueText(entry.id)
+    if (!id) continue
+    const item: ApprovalsQueueQuestionItem = {
+      kind: 'question',
+      id,
+      sessionId,
+      workspaceId: valueText(entry.workspaceId) || null,
+      sessionTitle: sessionLabel,
+      requesterName: valueText(entry.sourceSessionId) ? 'Specialist' : 'OpenCode',
+      requesterRole: valueText(entry.sourceSessionId) ? 'Coworker question' : 'Runtime question',
+      requesterTone: valueText(entry.sourceSessionId) ? 'operator' : 'reviewer',
+      viaLabel: requestOrigin(entry),
+      timeLabel: undefined,
+      taskLabel: valueText(entry.sourceSessionId) ? `Chat ${valueText(entry.sourceSessionId)}` : undefined,
+      sortOrder: typeof entry.order === 'number' ? entry.order : 0,
+      pending: pendingAction === queueActionKey({ kind: 'question', sessionId, id }),
+      questions: cloudQuestionPrompts(entry),
+    }
+    items.push(item)
+  }
+  return items
+}
+
 export function buildCloudApprovalQueueItems(
   sessions: CloudWebThreadSession[],
   views: Record<string, CloudWebThreadView | undefined>,
@@ -130,56 +198,47 @@ export function buildCloudApprovalQueueItems(
   const items: ApprovalsQueueItem[] = []
   for (const session of sessions) {
     const view = views[session.sessionId]
-    const projection = cloudRuntimeProjection(view)
-    const sessionLabel = queueSessionTitle(session, view)
-    for (const entry of valueList<Record<string, unknown>>(projection.pendingApprovals)) {
-      const id = valueText(entry.id)
-      if (!id) continue
-      const item: ApprovalsQueuePermissionItem = {
-        kind: 'permission',
-        id,
-        sessionId: session.sessionId,
-        workspaceId: valueText(entry.workspaceId) || null,
-        sessionTitle: sessionLabel,
-        requesterName: valueText(entry.taskRunId) ? 'Specialist' : 'OpenCode',
-        requesterRole: valueText(entry.taskRunId) ? 'Coworker lane' : 'Runtime permission',
-        requesterTone: valueText(entry.taskRunId) ? 'builder' : 'reviewer',
-        viaLabel: requestOrigin(entry),
-        timeLabel: undefined,
-        taskLabel: valueText(entry.taskRunId) ? `Task ${valueText(entry.taskRunId)}` : undefined,
-        sortOrder: typeof entry.order === 'number' ? entry.order : 0,
-        pending: pendingAction === queueActionKey({ kind: 'permission', sessionId: session.sessionId, id }),
-        tool: valueText(entry.tool, 'tool'),
-        description: valueText(entry.description, 'Permission requested'),
-        input: asRecord(entry.input),
-        canAlwaysAllow: false,
-        alwaysAllowDisabledReason: 'Always allow is managed by Cloud workspace policy.',
-      }
-      items.push(item)
-    }
-    for (const entry of valueList<Record<string, unknown>>(projection.pendingQuestions)) {
-      const id = valueText(entry.id)
-      if (!id) continue
-      const item: ApprovalsQueueQuestionItem = {
-        kind: 'question',
-        id,
-        sessionId: session.sessionId,
-        workspaceId: valueText(entry.workspaceId) || null,
-        sessionTitle: sessionLabel,
-        requesterName: valueText(entry.sourceSessionId) ? 'Specialist' : 'OpenCode',
-        requesterRole: valueText(entry.sourceSessionId) ? 'Coworker question' : 'Runtime question',
-        requesterTone: valueText(entry.sourceSessionId) ? 'operator' : 'reviewer',
-        viaLabel: requestOrigin(entry),
-        timeLabel: undefined,
-        taskLabel: valueText(entry.sourceSessionId) ? `Chat ${valueText(entry.sourceSessionId)}` : undefined,
-        sortOrder: typeof entry.order === 'number' ? entry.order : 0,
-        pending: pendingAction === queueActionKey({ kind: 'question', sessionId: session.sessionId, id }),
-        questions: cloudQuestionPrompts(entry),
-      }
-      items.push(item)
-    }
+    items.push(...buildCloudSessionApprovalQueueItems(
+      session.sessionId,
+      queueSessionTitle(session, view),
+      view,
+      pendingAction,
+    ))
   }
   return items
+}
+
+// Per-chat surface items built from the single selected view. The session label
+// falls back to the cloud session title helper when the projection has one.
+export function buildCloudPerChatApprovalQueueItems(
+  view: CloudWebThreadView | null | undefined,
+  pendingAction?: string | null,
+): ApprovalsQueueItem[] {
+  const session = view?.session
+  const sessionId = session?.sessionId || valueText(asRecord(cloudRuntimeProjection(view)).sessionId)
+  if (!sessionId) return []
+  const label = session ? queueSessionTitle(session, view) : `Cloud chat ${sessionId}`
+  return buildCloudSessionApprovalQueueItems(sessionId, label, view, pendingAction)
+}
+
+// The shared callbacks every cloud approvals surface (route + per-chat pane)
+// wires into ApprovalsQueueSurface. Allow/deny/reply/reject route to the same
+// session command endpoints; onAlwaysAllow is intentionally omitted because the
+// cloud runtime has no remember-allow, so the surface hides that control.
+export function cloudApprovalsSurfaceHandlers(
+  actions: CloudRuntimeActionProps,
+  onOpenSession?: (sessionId: string) => void,
+): Pick<
+  ApprovalsQueueSurfaceProps,
+  'onOpenSession' | 'onAllowOnce' | 'onDeny' | 'onReplyQuestion' | 'onRejectQuestion'
+> {
+  return {
+    onOpenSession: onOpenSession ? (item) => onOpenSession(item.sessionId) : undefined,
+    onAllowOnce: (item) => actions.onRespondPermission?.(item.id, true, { sessionId: item.sessionId }),
+    onDeny: (item) => actions.onRespondPermission?.(item.id, false, { sessionId: item.sessionId }),
+    onReplyQuestion: (item, answers) => actions.onReplyQuestion?.(item.id, answers, { sessionId: item.sessionId }),
+    onRejectQuestion: (item) => actions.onRejectQuestion?.(item.id, { sessionId: item.sessionId }),
+  }
 }
 
 export function normalizeQuestionAnswers(answers: string[] | string[][]) {
