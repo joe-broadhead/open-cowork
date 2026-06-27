@@ -5,14 +5,21 @@ import type {
   LaunchpadInProgressItem,
   LaunchpadWaitingItem,
 } from '@open-cowork/shared'
+import { Icon, type IconName } from '@open-cowork/ui'
 import { errorMessage, setCloudStatus } from './react-workbench-controller.ts'
 import type { CloudWebCoworkerOption } from './surface-workbench.ts'
+
+// The launchpad icon tones mirror desktop's HomePage starter cards: each suggestion
+// and motion column sits in a soft tone-tinted tile carrying the shared lucide glyph
+// (same icon choices as desktop's LaunchpadSuggestions / LaunchpadMotionGrid).
+type CloudLaunchpadTone = 'accent' | 'green' | 'amber' | 'info'
 
 type CloudLaunchpadSuggestion = {
   title: string
   prompt: string
   agent: string
-  icon: string
+  icon: IconName
+  tone: CloudLaunchpadTone
 }
 
 const SUGGESTIONS: CloudLaunchpadSuggestion[] = [
@@ -20,25 +27,29 @@ const SUGGESTIONS: CloudLaunchpadSuggestion[] = [
     title: 'Plan a release',
     prompt: 'Draft a release plan for the next milestone.',
     agent: 'plan',
-    icon: '->',
+    icon: 'kanban',
+    tone: 'accent',
   },
   {
     title: 'Review a change',
     prompt: 'Review the recent changes and call out production risks.',
     agent: 'build',
-    icon: '~',
+    icon: 'file-diff',
+    tone: 'green',
   },
   {
     title: 'Create a workflow',
     prompt: 'Help me turn a repeated task into a saved workflow.',
     agent: 'chief-of-staff',
-    icon: '*',
+    icon: 'workflow',
+    tone: 'amber',
   },
   {
     title: 'Investigate an issue',
     prompt: 'Trace this bug from symptoms to a concrete fix.',
     agent: 'build',
-    icon: '?',
+    icon: 'search',
+    tone: 'info',
   },
 ]
 
@@ -133,7 +144,8 @@ function suggestionAgent(agent: string, coworkerOptions: CloudWebCoworkerOption[
 
 type MotionColumnProps<TItem> = {
   title: string
-  icon: string
+  icon: IconName
+  tone: CloudLaunchpadTone
   total: number
   truncated: boolean
   accent?: boolean
@@ -146,6 +158,7 @@ type MotionColumnProps<TItem> = {
 function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingItem | LaunchpadFreshArtifactItem>({
   title,
   icon,
+  tone,
   total,
   truncated,
   accent,
@@ -157,13 +170,13 @@ function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingIt
   return (
     <div className="cloud-launchpad-motion-col">
       <div className="cloud-launchpad-motion-col__head">
-        <span><span aria-hidden="true">{icon}</span> {title}</span>
+        <span><span className="cloud-launchpad-motion-col__icon" data-tone={tone} aria-hidden="true"><Icon name={icon} size={16} /></span> {title}</span>
         <span className="pill" data-kind={accent && total > 0 ? 'accent' : undefined}>{truncated ? `${total}+` : total}</span>
       </div>
       <div className="cloud-launchpad-motion-list">
         {items.length ? items.map((item) => (
           <button key={item.id} className="cloud-launchpad-motion-row" type="button" onClick={() => onOpen(item)}>
-            <span className="cloud-launchpad-motion-row__icon" aria-hidden="true">{icon}</span>
+            <span className="cloud-launchpad-motion-row__icon" data-tone={tone} aria-hidden="true"><Icon name={icon} size={16} /></span>
             <span className="cloud-launchpad-motion-row__text">
               <span className="cloud-launchpad-motion-row__title">{item.title}</span>
               <span className="cloud-launchpad-motion-row__meta">{itemMeta(item)}</span>
@@ -215,7 +228,7 @@ export function CloudLaunchpadPortal({
                 if (!disabled) onSuggestion(suggestion.prompt, agent)
               }}
             >
-              <span className="cloud-launchpad-suggestion__icon" aria-hidden="true">{suggestion.icon}</span>
+              <span className="cloud-launchpad-suggestion__icon" data-tone={suggestion.tone} aria-hidden="true"><Icon name={suggestion.icon} size={20} /></span>
               <span className="cloud-launchpad-suggestion__text">
                 <strong>{suggestion.title}</strong>
                 <span>{suggestion.prompt}</span>
@@ -235,7 +248,8 @@ export function CloudLaunchpadPortal({
         <div className="cloud-launchpad-motion-grid">
           <MotionColumn
             title="In progress"
-            icon="P"
+            icon="kanban"
+            tone="accent"
             total={feed.totals.inProgress}
             truncated={feed.truncated.inProgress}
             items={feed.inProgress.slice(0, 3)}
@@ -245,7 +259,8 @@ export function CloudLaunchpadPortal({
           />
           <MotionColumn
             title="Waiting on you"
-            icon="!"
+            icon="bell"
+            tone="amber"
             total={feed.totals.waitingOnYou}
             truncated={feed.truncated.waitingOnYou}
             accent
@@ -256,7 +271,8 @@ export function CloudLaunchpadPortal({
           />
           <MotionColumn
             title="Fresh artifacts"
-            icon="A"
+            icon="file"
+            tone="info"
             total={feed.totals.freshArtifacts}
             truncated={feed.truncated.freshArtifacts}
             items={feed.freshArtifacts.slice(0, 3)}

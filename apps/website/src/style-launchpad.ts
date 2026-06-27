@@ -40,11 +40,17 @@ export function cloudWebsiteLaunchpadStyles() {
       width: var(--control-h-sm);
       height: var(--control-h-sm);
       border-radius: var(--radius-sm);
-      background: var(--color-surface-active);
-      color: var(--accent-text);
-      font-size: var(--text-sm);
-      font-weight: 800;
+      background: var(--color-accent);
+      color: var(--accent-action-foreground);
       box-shadow: var(--specular);
+    }
+    .cloud-launchpad-suggestion__icon[data-tone="green"] { background: var(--color-green); }
+    .cloud-launchpad-suggestion__icon[data-tone="amber"] { background: var(--color-amber); }
+    .cloud-launchpad-suggestion__icon[data-tone="info"] { background: var(--color-info); }
+    .cloud-launchpad-suggestion__icon svg,
+    .cloud-launchpad-motion-col__icon svg,
+    .cloud-launchpad-motion-row__icon svg {
+      display: block;
     }
     .cloud-launchpad-suggestion__text {
       display: grid;
@@ -115,6 +121,25 @@ export function cloudWebsiteLaunchpadStyles() {
       font-weight: 750;
       line-height: var(--lh-xs);
     }
+    .cloud-launchpad-motion-col__head > span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .cloud-launchpad-motion-col__icon {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: var(--control-h-xs);
+      height: var(--control-h-xs);
+      border-radius: var(--radius-xs);
+      background: var(--color-accent);
+      color: var(--accent-action-foreground);
+    }
+    .cloud-launchpad-motion-col__icon[data-tone="green"] { background: var(--color-green); }
+    .cloud-launchpad-motion-col__icon[data-tone="amber"] { background: var(--color-amber); }
+    .cloud-launchpad-motion-col__icon[data-tone="info"] { background: var(--color-info); }
     .cloud-launchpad-motion-list {
       display: grid;
       gap: var(--space-2);
@@ -143,11 +168,12 @@ export function cloudWebsiteLaunchpadStyles() {
       width: var(--control-h-xs);
       height: var(--control-h-xs);
       border-radius: var(--radius-xs);
-      background: var(--color-surface-active);
-      color: var(--accent-text);
-      font-size: var(--text-xs);
-      font-weight: 800;
+      background: var(--color-accent);
+      color: var(--accent-action-foreground);
     }
+    .cloud-launchpad-motion-row__icon[data-tone="green"] { background: var(--color-green); }
+    .cloud-launchpad-motion-row__icon[data-tone="amber"] { background: var(--color-amber); }
+    .cloud-launchpad-motion-row__icon[data-tone="info"] { background: var(--color-info); }
     .cloud-launchpad-motion-row__text {
       display: grid;
       gap: 2px;

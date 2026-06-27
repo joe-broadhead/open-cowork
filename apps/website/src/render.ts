@@ -16,7 +16,7 @@ import { cloudSettingsRouteMarkup } from './cloud-settings-markup.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { cloudKnowledgeRouteMarkup } from './cloud-knowledge-markup.ts'
-import { cloudLaunchpadStaticMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { cloudLaunchpadStaticMarkup, composerIconSvg, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 import { cloudWorkbenchRouteSectionsMarkup } from './cloud-workbench-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
 import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
@@ -214,12 +214,12 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
                 <div class="composer-agent-chips" id="composer-agent-chips" aria-label="Coworker shortcuts"></div>
                 <div class="composer-toolbar" aria-label="Chat controls">
                   <div class="composer-toolbar-group">
-                    <button class="icon-button ghost" type="button" data-composer-attach="true" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file"></button>
+                    <button class="icon-button ghost" type="button" data-composer-attach="true" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file">${composerIconSvg('paperclip')}</button>
                     <label class="composer-select-label"><span>Assign to</span><select id="composer-agent" name="agent" disabled><option value="">Default coworker</option></select></label>
                   </div>
                   <div class="composer-toolbar-group">
                     <span class="pill" id="chat-event-status" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'ready' : 'disabled'}</span>
-                    <button class="composer-send" type="submit" disabled aria-label="Send message"><span class="sr-only">Send message</span></button>
+                    <button class="composer-send" type="submit" disabled aria-label="Send message"><span class="sr-only">Send message</span>${composerIconSvg('send')}</button>
                   </div>
                 </div>
               </form>

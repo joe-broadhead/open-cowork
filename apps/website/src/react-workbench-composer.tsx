@@ -1,4 +1,5 @@
 import { useEffect, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
+import { Icon } from '@open-cowork/ui'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import {
   cloudWebCoworkerInitials,
@@ -116,7 +117,9 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
       </div>
       <div className="composer-toolbar" aria-label="Chat controls">
         <div className="composer-toolbar-group">
-          <button className="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file" />
+          <button className="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file">
+            <Icon name="paperclip" size={16} />
+          </button>
           <label className="composer-select-label">
             <span>Assign to</span>
             <select id="composer-agent" name="agent" value={composerAgent} disabled={isSending} onChange={(event) => setComposerAgent(event.currentTarget.value)}>
@@ -130,10 +133,12 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
           {isSending ? (
             <button className="composer-stop" type="button" onClick={onStopGenerating} title="Stop generating (Esc)" aria-label="Stop generating">
               <span className="sr-only">Stop generating</span>
+              <Icon name="square" size={16} />
             </button>
           ) : (
             <button className="composer-send" type="submit" disabled={!canSend || chatDisabled} aria-label="Send message">
               <span className="sr-only">Send message</span>
+              <Icon name="send" size={16} />
             </button>
           )}
         </div>

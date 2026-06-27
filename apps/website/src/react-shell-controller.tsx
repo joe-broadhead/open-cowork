@@ -5,6 +5,7 @@ import type { CloudWebClientBootstrap } from './client-contract.ts'
 import type { CloudWebRoute } from './app-shell.ts'
 import { useCloudWebState } from './react-state.ts'
 import { asRecord, errorMessage, setCloudStatus } from './react-workbench-controller.ts'
+import { composerIconElement } from './route-markup.ts'
 
 function canManage(role: unknown) {
   return role === 'owner' || role === 'admin'
@@ -53,13 +54,14 @@ function textNodeElement<K extends keyof HTMLElementTagNameMap>(tag: K, classNam
   return element
 }
 
-function fallbackButton(label: string, title: string, attributes: Record<string, string> = {}) {
+function fallbackButton(label: string, title: string, attributes: Record<string, string> = {}, icon?: 'paperclip' | 'send') {
   const button = document.createElement('button')
   button.type = 'button'
   button.disabled = true
   button.title = title
   button.textContent = label
   for (const [name, value] of Object.entries(attributes)) button.setAttribute(name, value)
+  if (icon) button.append(composerIconElement(icon))
   return button
 }
 
@@ -132,9 +134,7 @@ function restoreSignedOutChatFallback(profileName: string, chatEnabled: boolean)
     toolbar.setAttribute('aria-label', 'Chat controls')
     const leftGroup = document.createElement('div')
     leftGroup.className = 'composer-toolbar-group'
-    leftGroup.append(
-      fallbackButton('', 'Cloud file attachments use project snapshots from Projects', { class: 'icon-button ghost', 'data-composer-attach': 'true', 'data-managed-control': 'true', 'aria-label': 'Attach file' }),
-    )
+    leftGroup.append(fallbackButton('', 'Cloud file attachments use project snapshots from Projects', { class: 'icon-button ghost', 'data-composer-attach': 'true', 'data-managed-control': 'true', 'aria-label': 'Attach file' }, 'paperclip'))
     const selectLabel = document.createElement('label')
     selectLabel.className = 'composer-select-label'
     selectLabel.append(textNodeElement('span', 'sr-only', 'Coworker'))
@@ -161,7 +161,7 @@ function restoreSignedOutChatFallback(profileName: string, chatEnabled: boolean)
     send.type = 'submit'
     send.disabled = true
     send.setAttribute('aria-label', 'Send message')
-    send.append(textNodeElement('span', 'sr-only', 'Send message'))
+    send.append(textNodeElement('span', 'sr-only', 'Send message'), composerIconElement('send'))
     rightGroup.append(status, send)
     toolbar.append(leftGroup, rightGroup)
     form.replaceChildren(label, leadRow, inputChrome, chips, toolbar)

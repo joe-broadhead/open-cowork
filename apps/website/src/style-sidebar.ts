@@ -67,13 +67,10 @@ export function cloudWebsiteSidebarStyles() {
       place-items: center;
       background: color-mix(in srgb, var(--color-surface-hover) 64%, transparent);
       color: var(--color-text-muted);
-      font-family: var(--font-display);
-      font-size: var(--text-2xs);
-      font-weight: 800;
       line-height: 1;
     }
-    .nav-icon::before {
-      content: attr(data-icon);
+    .nav-icon svg {
+      display: block;
     }
     .nav-links a[data-active="true"] .nav-icon {
       background: var(--accent-action-fill);

@@ -537,7 +537,7 @@ void test('React workbench form hook aborts the in-flight turn for the selected 
     // No selected chat: Stop is a safe no-op (never calls abort).
     await act(async () => { root.render(createElement(Harness, { selectedSessionId: null })) })
     await act(async () => { stops.at(-1)?.() })
-    assert.deepEqual(calls, [])
+    assert.equal(calls.length, 0)
 
     // Selected chat: Stop aborts that session, then refreshes the view + list.
     await act(async () => { root.render(createElement(Harness, { selectedSessionId: 'session-7' })) })

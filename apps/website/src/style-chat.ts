@@ -283,21 +283,20 @@ export function cloudWebsiteChatStyles() {
       color: var(--color-text-muted);
     }
     .icon-button,
-    .composer-send {
+    .composer-send,
+    .composer-stop {
+      display: inline-grid;
+      place-items: center;
       width: var(--control-h-sm);
       min-width: var(--control-h-sm);
       min-height: var(--control-h-sm);
       padding: 0;
       border-radius: var(--radius-sm);
     }
-    .icon-button[data-composer-attach="true"]::before {
-      content: "\1F4CE ";
-      font-size: var(--text-sm);
-    }
-    .composer-send::before {
-      content: "\2191 ";
-      font-size: var(--text-lg);
-      line-height: 1;
+    .icon-button svg,
+    .composer-send svg,
+    .composer-stop svg {
+      display: block;
     }
     .composer-send:not(:disabled) {
       background: var(--accent-action-fill);
@@ -306,19 +305,9 @@ export function cloudWebsiteChatStyles() {
       box-shadow: var(--specular);
     }
     .composer-stop {
-      width: var(--control-h-sm);
-      min-width: var(--control-h-sm);
-      min-height: var(--control-h-sm);
-      padding: 0;
-      border-radius: var(--radius-sm);
       border-color: var(--tone-danger-border);
       background: var(--tone-danger-bg);
       color: var(--color-danger);
-    }
-    .composer-stop::before {
-      content: "\25A0 ";
-      font-size: var(--text-md);
-      line-height: 1;
     }
     .chat-inspector {
       min-width: 0;
