@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
 import { installRendererTestCoworkApi } from '../../test/setup'
@@ -440,6 +441,14 @@ describe('Sidebar', () => {
       fireEvent.keyDown(menu, { key: 'ArrowUp' })
       expect(activeOption).toHaveFocus()
 
+      // ArrowUp from the first option wraps to the last, and ArrowDown from the
+      // last wraps back to the first.
+      fireEvent.keyDown(menu, { key: 'ArrowUp' })
+      expect(cloudOption).toHaveFocus()
+
+      fireEvent.keyDown(menu, { key: 'ArrowDown' })
+      expect(activeOption).toHaveFocus()
+
       // Escape closes the switcher, restores focus to the trigger, and is
       // contained so the window-level Escape handler never fires.
       fireEvent.keyDown(menu, { key: 'Escape' })
@@ -449,6 +458,74 @@ describe('Sidebar', () => {
     } finally {
       window.removeEventListener('keydown', onWindowKeyDown)
     }
+  })
+
+  it('selects the focused workspace option when pressing Enter', async () => {
+    const user = userEvent.setup()
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn(async () => [
+          {
+            id: 'local',
+            kind: 'local',
+            label: 'Local',
+            status: 'online',
+            active: true,
+            lastSyncedAt: null,
+          },
+          {
+            id: 'cloud:acme',
+            kind: 'cloud',
+            label: 'Acme Cloud',
+            status: 'online',
+            active: false,
+            baseUrl: 'https://cloud.acme.test',
+            lastSyncedAt: null,
+          },
+        ]),
+        activate: vi.fn(async () => ({
+          id: 'cloud:acme',
+          kind: 'cloud',
+          label: 'Acme Cloud',
+          status: 'online',
+          active: true,
+          baseUrl: 'https://cloud.acme.test',
+          lastSyncedAt: null,
+        })),
+        support: vi.fn(async () => [{
+          api: 'sessions.list',
+          status: 'supported',
+          verdict: { allowed: true, reason: null },
+        }]),
+      },
+      session: {
+        list: vi.fn(async () => []),
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    const trigger = await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i })
+    fireEvent.click(trigger)
+
+    const menu = await screen.findByRole('menu', { name: 'Switch workspace' })
+    const activeOption = await screen.findByRole('menuitem', { name: /Local.*Online/i })
+    await waitFor(() => expect(activeOption).toHaveFocus())
+
+    // Move focus to the cloud option, then activate it with Enter (native button
+    // activation — the handler intentionally does not special-case Enter).
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(screen.getByRole('menuitem', { name: /Acme Cloud.*Online/i })).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => {
+      expect(window.coworkApi.workspace.activate).toHaveBeenCalledWith('cloud:acme')
+    })
   })
 
   it('closes the workspace switcher when clicking the dismiss backdrop', async () => {

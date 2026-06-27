@@ -328,16 +328,29 @@ export function KnowledgePage() {
   const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
   const reviewQueueRef = useRef<HTMLDivElement | null>(null)
+  const [pendingReviewReveal, setPendingReviewReveal] = useState(false)
 
   // The review-queue panel only renders in the pages view, so the rail shortcut
-  // switches back to pages (if needed) and scrolls the panel into view instead
-  // of being a dead control.
+  // switches back to pages (if needed) and arms a reveal. Coming from graph view
+  // the panel is unmounted, so scrolling from within the click handler would race
+  // the commit; instead we flag the reveal and let the effect below scroll once
+  // the pages view (and the ref) is mounted.
   const revealReviewQueue = useCallback(() => {
     setView('pages')
-    requestAnimationFrame(() => {
-      reviewQueueRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    })
+    setPendingReviewReveal(true)
   }, [])
+
+  // Scroll to the review queue only after the pages view has committed and the
+  // ref is attached. Keying on `view` re-runs this when switching back from graph
+  // so the first click reliably lands on the queue.
+  useEffect(() => {
+    if (!pendingReviewReveal) return
+    if (view !== 'pages') return
+    const node = reviewQueueRef.current
+    if (!node) return
+    node.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    setPendingReviewReveal(false)
+  }, [pendingReviewReveal, view])
 
   const loadSnapshot = useCallback(async () => {
     setLoading(true)

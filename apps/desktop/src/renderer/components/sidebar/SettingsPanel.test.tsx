@@ -331,9 +331,12 @@ describe('SettingsPanel', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument()
 
-    // Keep editing dismisses the prompt without closing.
+    // Keep editing dismisses the prompt without closing, and the edit survives —
+    // the panel is still dirty so Save stays enabled.
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     expect(onClose).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled()
 
     // Re-open the prompt and confirm the discard: now it actually closes.
     await user.click(screen.getByRole('button', { name: 'Close dialog' }))
