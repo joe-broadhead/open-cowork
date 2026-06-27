@@ -1029,7 +1029,21 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
     // -- app ---------------------------------------------------------------
     app: {
       metadata: async (): Promise<AppMetadata> => ({ version: '0.0.0', preview: false }),
-      config: () => request<PublicAppConfig>(endpoint('config')),
+      // The cloud /api/config returns a different shape than the renderer's
+      // PublicAppConfig; default every required field (the renderer hard-reads
+      // config.auth.enabled) and let the cloud response override what it provides.
+      config: async (): Promise<PublicAppConfig> => {
+        const raw = await request<Record<string, unknown>>(endpoint('config')).catch(() => ({} as Record<string, unknown>))
+        const merged: Record<string, unknown> = {
+          branding: { name: 'Open Cowork' },
+          providers: { available: [], defaultProvider: null, defaultModel: null },
+          permissions: { bash: 'ask', fileWrite: 'ask', task: 'ask', web: 'ask', webSearch: false },
+          agentStarterTemplates: [],
+          ...raw,
+          auth: (raw.auth as PublicAppConfig['auth'] | undefined) ?? { mode: 'none', enabled: false },
+        }
+        return merged as unknown as PublicAppConfig
+      },
       builtinAgents: async () => [],
       runtimeInputs: () => browserUnavailable('app.runtimeInputs'),
       refreshProviderCatalog: async () => [],

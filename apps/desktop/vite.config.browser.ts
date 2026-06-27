@@ -34,4 +34,16 @@ export default defineConfig({
       '@': resolve(__dirname, 'src/renderer'),
     },
   },
+  // Local verification only: serve the browser build same-origin and proxy the
+  // backend routes to a running `pnpm cloud:dev` (:8787), so the renderer boots
+  // against the real cloud HTTP+SSE API without cross-origin/CSP friction. The
+  // production path is cloud-server serving dist-browser directly.
+  preview: {
+    proxy: {
+      '/api': { target: 'http://localhost:8787', changeOrigin: true },
+      '/auth': { target: 'http://localhost:8787', changeOrigin: true },
+      '/events': { target: 'http://localhost:8787', changeOrigin: true },
+      '/webhooks': { target: 'http://localhost:8787', changeOrigin: true },
+    },
+  },
 })
