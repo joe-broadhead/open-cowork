@@ -32,6 +32,7 @@ import {
   cloudArtifactIdFromFilePath,
   cloudSessionViewToSessionView,
   emptySessionView,
+  WORKSPACE_SUPPORT_APIS,
   type AgentCatalog,
   type AppMetadata,
   type ArtifactIndexPayload,
@@ -76,6 +77,7 @@ import {
   type WorkflowDetail,
   type WorkflowListPayload,
   type WorkflowRun,
+  type WorkspaceApiSupport,
   type WorkspaceInfo,
   type WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
@@ -653,7 +655,16 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
           machineRuntimeConfig: 'disabled',
         }
       },
-      support: async () => [],
+      support: async (): Promise<WorkspaceApiSupport[]> => {
+        // The cloud control plane supports the data APIs; only the local-only
+        // surfaces (local files / stdio MCPs / machine runtime config) are
+        // unavailable in a hosted browser session.
+        const localOnly = new Set<string>(['localFiles', 'localStdioMcps', 'machineRuntimeConfig'])
+        return WORKSPACE_SUPPORT_APIS.map((api) => ({
+          api,
+          status: localOnly.has(api) ? 'not_supported' : 'supported',
+        }))
+      },
       sync: async () => ({ ok: true, syncedAt: new Date().toISOString() }),
     },
 
