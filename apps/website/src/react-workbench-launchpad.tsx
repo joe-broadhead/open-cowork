@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type {
   LaunchpadFeedPayload,
   LaunchpadFreshArtifactItem,
@@ -6,7 +6,9 @@ import type {
   LaunchpadWaitingItem,
 } from '@open-cowork/shared'
 import { Badge, Button, EmptyState, Icon, type IconName, ReviewPanel, TaskLane } from '@open-cowork/ui'
+import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { errorMessage, setCloudStatus } from './react-workbench-controller.ts'
+import { CloudLaunchpadComposer } from './react-workbench-launchpad-composer.tsx'
 import type { CloudWebCoworkerOption } from './surface-workbench.ts'
 
 // The launchpad refresh affordance and the feed hook live in this same module but
@@ -72,6 +74,18 @@ function timeOfDayGreeting(): { lead: string; accent: string } {
   const hour = new Date().getHours()
   const accent = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
   return { lead: 'Good', accent }
+}
+
+// Mirrors desktop's primaryAgentLeadLabel: each starter card is labelled with its
+// LEAD coworker ("Plan lead" / "Build lead" / "Cleo lead"), not "@plan can take
+// this". For non-primary specialists we fall back to the coworker's display name.
+function leadCoworkerLabel(agent: string, coworkerOptions: CloudWebCoworkerOption[]) {
+  if (agent === 'plan') return 'Plan lead'
+  if (agent === 'chief-of-staff') return 'Cleo lead'
+  if (agent === 'build') return 'Build lead'
+  if (!agent) return 'Profile default lead'
+  const option = coworkerOptions.find((candidate) => candidate.name === agent)
+  return `${option?.displayName || agent} lead`
 }
 
 export const EMPTY_CLOUD_LAUNCHPAD_FEED: LaunchpadFeedPayload = {
@@ -159,12 +173,6 @@ function itemMeta(item: LaunchpadInProgressItem | LaunchpadWaitingItem | Launchp
   ].filter(Boolean).join(' · ')
 }
 
-function coworkerName(agent: string, coworkerOptions: CloudWebCoworkerOption[]) {
-  if (!agent) return 'default coworker'
-  const option = coworkerOptions.find((candidate) => candidate.name === agent)
-  return option?.displayName || agent
-}
-
 function suggestionAgent(agent: string, coworkerOptions: CloudWebCoworkerOption[], hasExplicitAllowedAgents: boolean) {
   if (!hasExplicitAllowedAgents) return agent
   return coworkerOptions.some((candidate) => candidate.name === agent)
@@ -231,6 +239,16 @@ export function CloudLaunchpadPortal({
   coworkerOptions,
   policyKnown,
   hasExplicitAllowedAgents,
+  bootstrap,
+  allowedAgents,
+  activeCoworker,
+  composerText,
+  composerAgent,
+  composerError,
+  isSending,
+  onSetComposerText,
+  onSetComposerAgent,
+  onComposerSubmit,
   onSuggestion,
   onOpenRoute,
   onOpenSession,
@@ -242,6 +260,16 @@ export function CloudLaunchpadPortal({
   coworkerOptions: CloudWebCoworkerOption[]
   policyKnown: boolean
   hasExplicitAllowedAgents: boolean
+  bootstrap: CloudWebClientBootstrap
+  allowedAgents: string[]
+  activeCoworker: string
+  composerText: string
+  composerAgent: string
+  composerError: string | null
+  isSending: boolean
+  onSetComposerText: Dispatch<SetStateAction<string>>
+  onSetComposerAgent: Dispatch<SetStateAction<string>>
+  onComposerSubmit: (text: string, agent: string) => void | Promise<void>
   onSuggestion: (prompt: string, agent: string) => void
   onOpenRoute: (route: 'threads' | 'artifacts' | 'agents' | 'chat') => void
   onOpenSession: (sessionId: string) => void
@@ -270,6 +298,19 @@ export function CloudLaunchpadPortal({
           Choose a lead coworker, @mention specialists, and review the work in one place
         </p>
       </div>
+      <CloudLaunchpadComposer
+        bootstrap={bootstrap}
+        allowedAgents={allowedAgents}
+        coworkerOptions={coworkerOptions}
+        activeCoworker={activeCoworker}
+        composerText={composerText}
+        composerAgent={composerAgent}
+        error={composerError}
+        isSending={isSending}
+        onSetComposerText={onSetComposerText}
+        onSetComposerAgent={onSetComposerAgent}
+        onSubmit={onComposerSubmit}
+      />
       {firstRun ? (
         <EmptyState
           icon="sparkles"
@@ -295,7 +336,7 @@ export function CloudLaunchpadPortal({
               <span className="cloud-launchpad-suggestion__text">
                 <strong>{suggestion.title}</strong>
                 <span>{suggestion.prompt}</span>
-                <small>{policyKnown ? `@${coworkerName(agent, coworkerOptions)} can take this` : 'Checking profile policy'}</small>
+                <small>{policyKnown ? leadCoworkerLabel(agent, coworkerOptions) : 'Checking profile policy'}</small>
               </span>
             </button>
           )

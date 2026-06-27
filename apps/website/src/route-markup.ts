@@ -96,6 +96,8 @@ const COMPOSER_ICON_NODES = {
   paperclip: '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>',
   send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
   square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+  // sliders-horizontal (the launchpad composer's managed "Cloud model" pill)
+  sliders: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
 } as const
 
 // SSR composer icon (size 16, matching the React composer's `<Icon size={16}>`).
@@ -271,11 +273,29 @@ export function cloudLaunchpadStaticMarkup() {
                   <h1 class="cloud-launchpad-hero__title">Good <span class="cloud-launchpad-hero__accent">day</span>.</h1>
                   <p class="cloud-launchpad-hero__subtitle">Choose a lead coworker, @mention specialists, and review the work in one place</p>
                 </div>
+                <form class="cloud-launchpad-composer" aria-label="Home composer">
+                  <div class="cloud-launchpad-composer__assign-row">
+                    <span class="cloud-launchpad-composer__assign-label">Assign to</span>
+                    <label class="composer-select-label cloud-launchpad-composer__assign-pill" data-has-lead="false"><span class="studio-coworker-avatar studio-coworker-avatar--sm" aria-hidden="true">OC</span><span class="sr-only">Assign to coworker</span><select class="cloud-launchpad-composer__assign-select" aria-label="Assign to coworker" disabled><option value="">Default coworker</option></select></label>
+                  </div>
+                  <label class="sr-only" for="cloud-launchpad-composer-input">Ask anything, or @mention a coworker</label>
+                  <textarea id="cloud-launchpad-composer-input" class="cloud-launchpad-composer__textarea" name="text" rows="1" disabled placeholder="Ask anything, or @mention a coworker"></textarea>
+                  <div class="cloud-launchpad-composer__toolbar" aria-label="Composer controls">
+                    <div class="cloud-launchpad-composer__toolbar-group">
+                      <button class="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file">${composerIconSvg('paperclip')}</button>
+                      <button class="cloud-launchpad-composer__model" type="button" data-managed-control="true" disabled title="Model selection is managed by this cloud workspace">${composerIconSvg('sliders')}<span>Cloud model</span></button>
+                    </div>
+                    <div class="cloud-launchpad-composer__toolbar-group">
+                      <span class="pill" data-kind="ok">ready</span>
+                      <button class="composer-send" type="submit" disabled aria-label="Send message"><span class="sr-only">Send message</span>${composerIconSvg('send')}</button>
+                    </div>
+                  </div>
+                </form>
                 <div class="cloud-launchpad-suggestions" aria-label="Task suggestions">
-                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="accent" aria-hidden="true">${launchpadIconSvg('kanban', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Plan a release</strong><span>Draft a release plan for the next milestone.</span><small>@plan can take this</small></span></button>
-                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="green" aria-hidden="true">${launchpadIconSvg('file-diff', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Review a change</strong><span>Review the recent changes and call out production risks.</span><small>@build can take this</small></span></button>
-                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="amber" aria-hidden="true">${launchpadIconSvg('workflow', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Create a workflow</strong><span>Help me turn a repeated task into a saved workflow.</span><small>@chief-of-staff can take this</small></span></button>
-                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="info" aria-hidden="true">${launchpadIconSvg('search', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Investigate an issue</strong><span>Trace this bug from symptoms to a concrete fix.</span><small>@build can take this</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="accent" aria-hidden="true">${launchpadIconSvg('kanban', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Plan a release</strong><span>Draft a release plan for the next milestone.</span><small>Plan lead</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="green" aria-hidden="true">${launchpadIconSvg('file-diff', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Review a change</strong><span>Review the recent changes and call out production risks.</span><small>Build lead</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="amber" aria-hidden="true">${launchpadIconSvg('workflow', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Create a workflow</strong><span>Help me turn a repeated task into a saved workflow.</span><small>Cleo lead</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="info" aria-hidden="true">${launchpadIconSvg('search', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Investigate an issue</strong><span>Trace this bug from symptoms to a concrete fix.</span><small>Build lead</small></span></button>
                 </div>
                 <section class="cloud-launchpad-motion" aria-busy="true">
                   <div class="cloud-launchpad-motion__head"><span>In motion</span><span aria-hidden="true"></span><span class="pill">Loading</span></div>

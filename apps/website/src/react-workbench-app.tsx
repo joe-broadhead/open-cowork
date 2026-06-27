@@ -360,14 +360,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   }, [inspectArtifact])
 
   useEffect(() => {
-    const bridge = {
-      ownsChat: true,
-      ownsThreads: true,
-      selectSession,
-      startNewChatDraft,
-      loadSessions,
-      loadMoreSessions,
-    }
+    const bridge = { ownsChat: true, ownsThreads: true, selectSession, startNewChatDraft, loadSessions, loadMoreSessions }
     window.__openCoworkReactWorkbench = bridge
     return () => {
       if (window.__openCoworkReactWorkbench === bridge) delete window.__openCoworkReactWorkbench
@@ -441,7 +434,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     return () => document.removeEventListener('click', handler, true)
   }, [loadMoreSessions, loadSessions, refreshApprovalQueueViews, startNewChatDraft])
 
-  const { stopGenerating } = useCloudWorkbenchForms({
+  const { stopGenerating, submitComposerPrompt } = useCloudWorkbenchForms({
     api,
     bootstrap,
     workspace,
@@ -590,6 +583,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       onSetComposerText={setComposerText}
       onSetComposerAgent={setComposerAgent}
       onStopGenerating={stopGenerating}
+      onComposerSubmit={submitComposerPrompt}
       onLaunchpadSuggestion={startLaunchpadSuggestion}
       onOpenLaunchpadArtifact={openLaunchpadArtifact}
     />

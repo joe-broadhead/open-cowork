@@ -54,53 +54,61 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
     loadView,
   } = input
 
+  // The single cloud new-chat/submit path: create the session if needed, then
+  // prompt it. Shared verbatim between the chat `#prompt-form` submit handler and
+  // the launchpad Home composer so both flows hit the same api.sessions.create +
+  // api.sessions.prompt sequence (no duplicate/invented endpoint).
+  const submitComposerPrompt = useCallback(async (rawText: string, rawAgent: string) => {
+    const text = rawText.trim()
+    const agent = rawAgent.trim()
+    if (!text || isSending) return
+    const assignment = cloudWebPromptAssignment(text, allowedAgents, agent)
+    if (!assignment.text) {
+      setError('Add a message after the coworker mention.')
+      setCloudStatus('Add a message after the coworker mention.', 'warn')
+      return
+    }
+    setIsSending(true)
+    setError(null)
+    try {
+      let sessionId = selectedSessionId
+      if (!sessionId) {
+        const created = await api.sessions.create({ profileName: bootstrap.profileName, projectSource: null })
+        sessionId = sessionIdFromCreateResult(created)
+        if (!sessionId) throw new Error('Cloud session was not created')
+        setViews((current) => ({ ...current, [sessionId as string]: sessionViewFromCreateResult(created) }))
+        setSelectedSessionId(sessionId)
+      }
+      const prompted = asRecord(await api.sessions.prompt(sessionId, { text: assignment.text, agent: assignment.agent || undefined }))
+      if (prompted.view) setViews((current) => ({ ...current, [sessionId as string]: prompted.view as CloudWebThreadView }))
+      setComposerText('')
+      await loadSessions({ keepSelection: true, preserveLoadedPages: true })
+      await loadView(sessionId)
+      setRouteHash('chat')
+      setCloudStatus('Ready', 'ok')
+    } catch (nextError) {
+      const message = errorMessage(nextError)
+      setError(message)
+      setCloudStatus(message, 'warn')
+    } finally {
+      setIsSending(false)
+    }
+  }, [allowedAgents, api, bootstrap.profileName, isSending, loadSessions, loadView, selectedSessionId, setComposerText, setError, setIsSending, setSelectedSessionId, setViews])
+
   useEffect(() => {
     if (!composerTarget) return undefined
     composerTarget.dataset.reactOwned = 'chat'
     const handler = (event: SubmitEvent) => {
       event.preventDefault()
       event.stopImmediatePropagation()
-      void (async () => {
-        const formData = new FormData(composerTarget as HTMLFormElement)
-        const text = String(formData.get('text') || composerText).trim()
-        const agent = String(formData.get('agent') || composerAgent).trim()
-        if (!text || isSending) return
-        const assignment = cloudWebPromptAssignment(text, allowedAgents, agent)
-        if (!assignment.text) {
-          setError('Add a message after the coworker mention.')
-          setCloudStatus('Add a message after the coworker mention.', 'warn')
-          return
-        }
-        setIsSending(true)
-        setError(null)
-        try {
-          let sessionId = selectedSessionId
-          if (!sessionId) {
-            const created = await api.sessions.create({ profileName: bootstrap.profileName, projectSource: null })
-            sessionId = sessionIdFromCreateResult(created)
-            if (!sessionId) throw new Error('Cloud session was not created')
-            setViews((current) => ({ ...current, [sessionId as string]: sessionViewFromCreateResult(created) }))
-            setSelectedSessionId(sessionId)
-          }
-          const prompted = asRecord(await api.sessions.prompt(sessionId, { text: assignment.text, agent: assignment.agent || undefined }))
-          if (prompted.view) setViews((current) => ({ ...current, [sessionId as string]: prompted.view as CloudWebThreadView }))
-          setComposerText('')
-          await loadSessions({ keepSelection: true, preserveLoadedPages: true })
-          await loadView(sessionId)
-          setRouteHash('chat')
-          setCloudStatus('Ready', 'ok')
-        } catch (nextError) {
-          const message = errorMessage(nextError)
-          setError(message)
-          setCloudStatus(message, 'warn')
-        } finally {
-          setIsSending(false)
-        }
-      })()
+      const formData = new FormData(composerTarget as HTMLFormElement)
+      const text = String(formData.get('text') || composerText)
+      const agent = String(formData.get('agent') || composerAgent)
+      void submitComposerPrompt(text, agent)
     }
     composerTarget.addEventListener('submit', handler, true)
     return () => composerTarget.removeEventListener('submit', handler, true)
-  }, [allowedAgents, api, bootstrap.profileName, composerAgent, composerTarget, composerText, isSending, loadSessions, loadView, selectedSessionId, setComposerText, setError, setIsSending, setSelectedSessionId, setViews])
+  }, [composerAgent, composerTarget, composerText, submitComposerPrompt])
 
   useEffect(() => {
     if (!sessionFormTarget) return undefined
@@ -164,5 +172,5 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
     })()
   }, [api, loadSessions, loadView, selectedSessionId, setError])
 
-  return { stopGenerating }
+  return { stopGenerating, submitComposerPrompt }
 }

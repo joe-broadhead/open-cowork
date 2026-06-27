@@ -117,6 +117,7 @@ type CloudWorkbenchPortalsProps = {
   onSetComposerText: Dispatch<SetStateAction<string>>
   onSetComposerAgent: Dispatch<SetStateAction<string>>
   onStopGenerating: () => void
+  onComposerSubmit: (text: string, agent: string) => void | Promise<void>
   onLaunchpadSuggestion: (prompt: string, agentName: string) => void
   onOpenLaunchpadArtifact: (item: LaunchpadFreshArtifactItem) => void
 }
@@ -157,6 +158,7 @@ export function CloudWorkbenchPortals({
   onSetComposerText,
   onSetComposerAgent,
   onStopGenerating,
+  onComposerSubmit,
   onLaunchpadSuggestion,
   onOpenLaunchpadArtifact,
 }: CloudWorkbenchPortalsProps) {
@@ -225,6 +227,16 @@ export function CloudWorkbenchPortals({
       coworkerOptions={coworkerOptions}
       policyKnown={Boolean(workspace)}
       hasExplicitAllowedAgents={hasExplicitAllowedAgents}
+      bootstrap={bootstrap}
+      allowedAgents={allowedAgents}
+      activeCoworker={activeCoworker}
+      composerText={composerText}
+      composerAgent={composerAgent}
+      composerError={error}
+      isSending={isSending}
+      onSetComposerText={onSetComposerText}
+      onSetComposerAgent={onSetComposerAgent}
+      onComposerSubmit={onComposerSubmit}
       onSuggestion={onLaunchpadSuggestion}
       onOpenRoute={setRouteHash}
       onOpenSession={(sessionId) => { void onSelectSession(sessionId) }}

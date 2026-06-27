@@ -1,13 +1,144 @@
 export function cloudWebsiteLaunchpadStyles() {
   return String.raw`    .cloud-launchpad-home {
+      position: relative;
       width: min(100%, 900px);
       display: grid;
       gap: var(--space-5);
       margin: var(--space-3) auto var(--space-8);
       min-width: 0;
     }
+    /* Subtle radial-gradient depth behind the composer + cards, mirroring desktop
+       Home's aurora wash. Sits behind the content (z-index 0) and never intercepts
+       pointer events. */
+    .cloud-launchpad-home::before {
+      content: "";
+      position: absolute;
+      inset: calc(var(--space-6) * -1) calc(var(--space-5) * -1) auto;
+      height: 420px;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 14%, transparent), transparent 62%),
+        radial-gradient(circle at 16% 8%, color-mix(in srgb, var(--color-accent-2, var(--color-accent)) 9%, transparent), transparent 56%);
+    }
+    .cloud-launchpad-home > * {
+      position: relative;
+      z-index: 1;
+    }
     body[data-chat-state="thread"] .cloud-launchpad-home {
       display: none;
+    }
+    /* On the empty Home the launchpad's greeting hero is the single canonical
+       heading, and its own composer is the primary action — so suppress the
+       redundant chat-session-header hero ("What shall we cowork on today?") and
+       the standalone chat composer. Both remain for the active-thread state. */
+    body[data-chat-state="empty"] .chat-session-header,
+    body[data-chat-state="empty"] #prompt-form {
+      display: none;
+    }
+    .cloud-launchpad-composer {
+      position: relative;
+      display: grid;
+      gap: var(--space-3);
+      min-width: 0;
+      padding: var(--space-4);
+      border: var(--border-width-1) solid var(--color-border-strong);
+      border-radius: 18px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 84%, var(--color-base) 16%), color-mix(in srgb, var(--color-elevated) 64%, var(--color-base) 36%));
+      box-shadow: var(--shadow-3), var(--specular-strong);
+      transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
+    }
+    .cloud-launchpad-composer:focus-within {
+      border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border) 66%);
+      box-shadow: var(--shadow-3), var(--ring-focus), var(--specular-strong);
+    }
+    .cloud-launchpad-composer__assign-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      min-width: 0;
+    }
+    .cloud-launchpad-composer__assign-label {
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      line-height: var(--lh-xs);
+    }
+    .cloud-launchpad-composer__assign-pill {
+      min-height: var(--control-h-sm);
+      max-width: min(100%, 280px);
+      border: var(--border-width-1) solid var(--color-border-subtle);
+      border-radius: var(--radius-full);
+      background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+      padding: var(--space-1) var(--space-2);
+      box-shadow: var(--specular);
+    }
+    .cloud-launchpad-composer__assign-pill:hover {
+      border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border) 66%);
+      background: var(--color-surface-hover);
+    }
+    .cloud-launchpad-composer__assign-select {
+      width: auto;
+      min-height: var(--control-h-sm);
+      max-width: 200px;
+      border-color: transparent;
+      background: transparent;
+      color: var(--text);
+      font-size: var(--text-xs);
+      padding-right: var(--space-6);
+    }
+    .cloud-launchpad-composer__textarea {
+      min-height: 28px;
+      max-height: 220px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      padding: 0;
+      resize: none;
+      color: var(--text);
+      font-size: var(--text-md);
+      line-height: var(--lh-md);
+    }
+    .cloud-launchpad-composer__textarea:focus {
+      box-shadow: none;
+      outline: none;
+    }
+    .cloud-launchpad-composer__textarea::placeholder {
+      color: var(--color-text-muted);
+    }
+    .cloud-launchpad-composer__toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      min-width: 0;
+      border-top: var(--border-width-1) solid var(--color-border-subtle);
+      padding-top: var(--space-3);
+    }
+    .cloud-launchpad-composer__toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .cloud-launchpad-composer__model {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: var(--control-h-sm);
+      border: var(--border-width-1) solid var(--color-border-subtle);
+      border-radius: var(--radius-full);
+      background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+      color: var(--color-text-secondary);
+      font-size: var(--text-xs);
+      line-height: var(--lh-xs);
+      padding: 0 var(--space-3);
+    }
+    .cloud-launchpad-composer__model svg {
+      display: block;
     }
     .cloud-launchpad-hero {
       display: grid;

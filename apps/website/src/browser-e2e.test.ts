@@ -744,6 +744,45 @@ void test('cloud launchpad suggestions preserve requested agents for default clo
   }
 })
 
+void test('cloud launchpad Home composer creates a session and prompts on submit', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    // The launchpad Home composer is the primary action on the empty Home and must
+    // run the EXACT cloud new-chat flow: api.sessions.create then api.sessions.prompt.
+    await waitFor(() => assert.ok(harness.document.querySelector('.cloud-launchpad-composer #cloud-launchpad-composer-input')))
+    assert.equal(harness.document.body.dataset.chatState, 'empty')
+
+    // Pick the lead coworker through the launchpad composer's own assign select.
+    const agent = harness.document.querySelector('.cloud-launchpad-composer select') as HTMLSelectElement
+    await waitFor(() => assert.match(agent.textContent || '', /Build/))
+    const setSelectValue = Object.getOwnPropertyDescriptor(harness.window.HTMLSelectElement.prototype, 'value')?.set
+    setSelectValue?.call(agent, 'build')
+    agent.dispatchEvent(new harness.window.Event('change', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal(agent.value, 'build'))
+
+    // Send stays disabled until there's a prompt, then submitting fires the create
+    // + prompt sequence — no separate endpoint.
+    const message = harness.document.querySelector('#cloud-launchpad-composer-input') as HTMLTextAreaElement
+    assert.equal((harness.document.querySelector('.cloud-launchpad-composer .composer-send') as HTMLButtonElement).disabled, true)
+    const setTextareaValue = Object.getOwnPropertyDescriptor(harness.window.HTMLTextAreaElement.prototype, 'value')?.set
+    setTextareaValue?.call(message, 'Kick off the launch plan.')
+    message.dispatchEvent(new harness.window.Event('input', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal((harness.document.querySelector('.cloud-launchpad-composer .composer-send') as HTMLButtonElement).disabled, false))
+
+    harness.submit('.cloud-launchpad-composer')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions')))
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path))))
+    const promptRequest = harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path))
+    assert.ok(promptRequest)
+    assert.equal((promptRequest.body as Record<string, unknown>).agent, 'build')
+    assert.equal((promptRequest.body as Record<string, unknown>).text, 'Kick off the launch plan.')
+    // Submitting routes into the live thread (data-chat-state flips away from empty).
+    await waitFor(() => assert.equal(harness.document.body.dataset.chatState, 'thread'))
+  } finally {
+    harness.close()
+  }
+})
+
 void test('cloud web browser creates, prompts, streams, reloads, and continues a cloud thread', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
