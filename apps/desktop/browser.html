@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Cowork</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- The cloud server injects the runtime bootstrap (endpoint base, csrf,
+         workspace/policy) into this tag when it serves the unified renderer. -->
+    <script id="cowork-bootstrap" type="application/json">{}</script>
+    <script type="module" src="/src/renderer/browser/browser-main.tsx"></script>
+  </body>
+</html>

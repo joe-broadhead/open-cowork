@@ -14,6 +14,7 @@ const ignoredPaths = [
   'coverage/**',
   'docs/javascripts/vendor/**',
   '**/dist/**',
+  '**/dist-browser/**',
   '**/release/**',
   'node_modules/**',
   'site/**',

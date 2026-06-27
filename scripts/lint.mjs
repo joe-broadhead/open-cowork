@@ -27,6 +27,7 @@ const ignoredDirs = new Set([
   '.venv-docs',
   'coverage',
   'dist',
+  'dist-browser',
   'node_modules',
   'release',
   'site',
