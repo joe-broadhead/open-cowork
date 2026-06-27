@@ -241,9 +241,18 @@ export function cloudWebsiteChatStyles() {
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
+      min-height: var(--control-h-md);
+      border-radius: var(--radius-md);
+      padding: 0 var(--space-1) 0 var(--space-2);
       color: var(--color-text-muted);
       font-size: var(--text-xs);
       line-height: var(--lh-xs);
+      transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+    }
+    .composer-select-label[data-has-lead="true"] {
+      border: var(--border-width-1) solid color-mix(in srgb, var(--studio-tone, var(--color-accent)) 32%, var(--color-border) 68%);
+      background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+      color: var(--text);
     }
     .composer-select-label select {
       width: auto;

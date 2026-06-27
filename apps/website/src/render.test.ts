@@ -134,6 +134,7 @@ void test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /id="cloud-approvals-queue"/)
   assert.match(html, /id="approvals-alert-count"/)
   assert.match(html, /class="cloud-launchpad-home signed-in-only" id="cloud-launchpad-home"/)
+  assert.match(html, /class="cloud-launchpad-hero__title"/)
   assert.match(html, /class="cloud-launchpad-suggestion" type="button" disabled/)
   assert.match(html, /Plan a release/)
   assert.match(html, /In motion/)

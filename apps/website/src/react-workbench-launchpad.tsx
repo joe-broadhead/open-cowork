@@ -1,13 +1,25 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   LaunchpadFeedPayload,
   LaunchpadFreshArtifactItem,
   LaunchpadInProgressItem,
   LaunchpadWaitingItem,
 } from '@open-cowork/shared'
-import { Icon, type IconName } from '@open-cowork/ui'
+import { Badge, Button, EmptyState, Icon, type IconName, ReviewPanel, TaskLane } from '@open-cowork/ui'
 import { errorMessage, setCloudStatus } from './react-workbench-controller.ts'
 import type { CloudWebCoworkerOption } from './surface-workbench.ts'
+
+// The launchpad refresh affordance and the feed hook live in this same module but
+// are wired through separate React trees (the SSR shell mounts the portal, the app
+// owns the hook). A lightweight DOM event bridges them so the "Try again" button
+// can re-run the same feed fetch without threading a new prop through portals.tsx,
+// which other batches own. Both ends are defined here, so the contract stays local.
+const LAUNCHPAD_REFRESH_EVENT = 'cloud-launchpad:refresh'
+
+function requestLaunchpadRefresh() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(LAUNCHPAD_REFRESH_EVENT))
+}
 
 // The launchpad icon tones mirror desktop's HomePage starter cards: each suggestion
 // and motion column sits in a soft tone-tinted tile carrying the shared lucide glyph
@@ -52,6 +64,15 @@ const SUGGESTIONS: CloudLaunchpadSuggestion[] = [
     tone: 'info',
   },
 ]
+
+// Mirrors desktop HomePage.timeOfDayGreeting: a time-of-day-aware heading. The
+// cloud web client has no user-name source either, so the time-of-day word carries
+// the accent emphasis (same treatment as desktop).
+function timeOfDayGreeting(): { lead: string; accent: string } {
+  const hour = new Date().getHours()
+  const accent = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
+  return { lead: 'Good', accent }
+}
 
 export const EMPTY_CLOUD_LAUNCHPAD_FEED: LaunchpadFeedPayload = {
   generatedAt: '',
@@ -110,6 +131,15 @@ export function useCloudLaunchpad({
   const startSuggestion = useCallback((prompt: string, agentName: string) => {
     onDraft(prompt, agentName)
   }, [onDraft])
+
+  // Bridge the portal's "Try again" button (rendered in a separate tree) back to
+  // this hook so a failed feed fetch isn't a dead end — re-runs the same request.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleRefresh = () => { void loadFeed() }
+    window.addEventListener(LAUNCHPAD_REFRESH_EVENT, handleRefresh)
+    return () => window.removeEventListener(LAUNCHPAD_REFRESH_EVENT, handleRefresh)
+  }, [loadFeed])
 
   return { feed, loading, error, loadFeed, startSuggestion }
 }
@@ -171,7 +201,12 @@ function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingIt
     <div className="cloud-launchpad-motion-col">
       <div className="cloud-launchpad-motion-col__head">
         <span><span className="cloud-launchpad-motion-col__icon" data-tone={tone} aria-hidden="true"><Icon name={icon} size={16} /></span> {title}</span>
-        <span className="pill" data-kind={accent && total > 0 ? 'accent' : undefined}>{truncated ? `${total}+` : total}</span>
+        <Badge
+          tone={accent && total > 0 ? 'accent' : 'neutral'}
+          className={accent && total > 0 ? 'cloud-launchpad-motion-alert-badge' : undefined}
+        >
+          {truncated ? `${total}+` : total}
+        </Badge>
       </div>
       <div className="cloud-launchpad-motion-list">
         {items.length ? items.map((item) => (
@@ -212,8 +247,36 @@ export function CloudLaunchpadPortal({
   onOpenSession: (sessionId: string) => void
   onOpenArtifact: (item: LaunchpadFreshArtifactItem) => void
 }) {
+  // First run = the feed has no live activity at all (and isn't still loading it in).
+  // Mirrors desktop's "no interactive sessions yet" check, but driven by the cloud
+  // feed totals — the only activity signal the launchpad portal receives.
+  const hasActivity = feed.totals.inProgress > 0 || feed.totals.waitingOnYou > 0 || feed.totals.freshArtifacts > 0
+  const firstRun = !loading && !error && !hasActivity
+  const greeting = timeOfDayGreeting()
+  // Review snapshot data, mapped from the same feed: waiting items split by kind
+  // (permission vs question), plus the in-progress task count for coworker activity.
+  const pendingApprovals = feed.waitingOnYou.filter((item) => item.kind === 'permission').length
+  const pendingQuestions = feed.waitingOnYou.filter((item) => item.kind === 'question').length
+  const pendingInput = feed.totals.waitingOnYou
+  const taskCount = feed.totals.inProgress
+
   return (
     <>
+      <div className="cloud-launchpad-hero">
+        <h1 className="cloud-launchpad-hero__title">
+          {greeting.lead} <span className="cloud-launchpad-hero__accent">{greeting.accent}</span>.
+        </h1>
+        <p className="cloud-launchpad-hero__subtitle">
+          Choose a lead coworker, @mention specialists, and review the work in one place
+        </p>
+      </div>
+      {firstRun ? (
+        <EmptyState
+          icon="sparkles"
+          title="Start with a handoff"
+          body="Pick a starter task, choose the lead coworker, then adjust the prompt for your work."
+        />
+      ) : null}
       <div className="cloud-launchpad-suggestions" aria-label="Task suggestions">
         {SUGGESTIONS.map((suggestion) => {
           const agent = suggestionAgent(suggestion.agent, coworkerOptions, hasExplicitAllowedAgents)
@@ -242,8 +305,8 @@ export function CloudLaunchpadPortal({
         <div className="cloud-launchpad-motion__head">
           <span>In motion</span>
           <span aria-hidden="true" />
-          {loading ? <span className="pill">Loading</span> : null}
-          {error ? <span className="pill" data-kind="warn">Feed unavailable</span> : null}
+          {loading ? <Badge tone="neutral">Loading</Badge> : null}
+          {error ? <Badge tone="warning">Feed unavailable</Badge> : null}
         </div>
         <div className="cloud-launchpad-motion-grid">
           <MotionColumn
@@ -281,7 +344,62 @@ export function CloudLaunchpadPortal({
             onOpen={onOpenArtifact}
           />
         </div>
+        {error ? (
+          <div className="cloud-launchpad-motion__recovery">
+            <p>Showing the launchpad shell while live feed data reconnects.</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon="rotate-ccw"
+              loading={loading}
+              onClick={requestLaunchpadRefresh}
+            >
+              {loading ? 'Refreshing…' : 'Try again'}
+            </Button>
+          </div>
+        ) : null}
       </section>
+      {pendingInput > 0 || taskCount > 0 ? (
+        <ReviewPanel
+          className="cloud-launchpad-review"
+          title="Review Snapshot"
+          summary="Live review state from the active cloud session feed."
+          status={{ label: pendingInput > 0 ? 'Needs input' : 'Clear', tone: pendingInput > 0 ? 'warning' : 'success' }}
+        >
+          <div className="cloud-launchpad-review__lanes">
+            <TaskLane
+              title="Decisions"
+              tone="approval"
+              items={[
+                ...(pendingApprovals > 0 ? [{
+                  id: 'approvals',
+                  title: 'Permission approvals',
+                  meta: `${pendingApprovals} pending`,
+                  status: { label: 'Open', tone: 'warning' as const },
+                }] : []),
+                ...(pendingQuestions > 0 ? [{
+                  id: 'questions',
+                  title: 'Questions',
+                  meta: `${pendingQuestions} pending`,
+                  status: { label: 'Open', tone: 'warning' as const },
+                }] : []),
+              ]}
+              emptyLabel="No decisions waiting"
+            />
+            <TaskLane
+              title="Coworker Activity"
+              tone="delegated"
+              items={taskCount > 0 ? [{
+                id: 'task-runs',
+                title: 'In-progress tasks',
+                meta: `${taskCount} task runs`,
+                status: { label: 'Running', tone: 'accent' as const },
+              }] : []}
+              emptyLabel="No delegated runs active"
+            />
+          </div>
+        </ReviewPanel>
+      ) : null}
       <button className="cloud-launchpad-team-strip" type="button" onClick={() => onOpenRoute('agents')}>
         <span>Your team</span>
         <span className="cloud-launchpad-team-strip__avatars" aria-hidden="true">

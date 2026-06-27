@@ -9,9 +9,34 @@ export function cloudWebsiteLaunchpadStyles() {
     body[data-chat-state="thread"] .cloud-launchpad-home {
       display: none;
     }
+    .cloud-launchpad-hero {
+      display: grid;
+      gap: var(--space-2);
+      justify-items: center;
+      text-align: center;
+      min-width: 0;
+    }
+    .cloud-launchpad-hero__title {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: var(--text-4xl);
+      font-weight: 650;
+      line-height: var(--lh-2xl);
+      letter-spacing: var(--tracking-tight);
+      color: var(--text);
+    }
+    .cloud-launchpad-hero__accent {
+      color: var(--color-accent);
+    }
+    .cloud-launchpad-hero__subtitle {
+      margin: 0;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      line-height: var(--lh-sm);
+    }
     .cloud-launchpad-suggestions {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-3);
       min-width: 0;
     }
@@ -84,6 +109,7 @@ export function cloudWebsiteLaunchpadStyles() {
       align-items: center;
       gap: var(--space-3);
       color: var(--color-text-secondary);
+      font-family: var(--font-display);
       font-size: var(--text-xs);
       font-weight: 800;
       letter-spacing: var(--tracking-wide);
@@ -93,6 +119,22 @@ export function cloudWebsiteLaunchpadStyles() {
     .cloud-launchpad-motion__head > span[aria-hidden="true"] {
       height: 1px;
       background: linear-gradient(90deg, var(--color-border), transparent);
+    }
+    .cloud-launchpad-motion-alert-badge {
+      box-shadow: 0 0 0 var(--border-width-1) color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    .cloud-launchpad-motion__recovery {
+      display: grid;
+      justify-items: center;
+      gap: var(--space-2);
+      margin-top: var(--space-2);
+    }
+    .cloud-launchpad-motion__recovery p {
+      margin: 0;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      line-height: var(--lh-xs);
+      text-align: center;
     }
     .cloud-launchpad-motion-grid {
       display: grid;
@@ -217,6 +259,12 @@ export function cloudWebsiteLaunchpadStyles() {
       border-radius: var(--radius-sm);
       text-align: center;
     }
+    .cloud-launchpad-review__lanes {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+      min-width: 0;
+    }
     .cloud-launchpad-team-strip {
       display: flex;
       align-items: center;
@@ -261,9 +309,6 @@ export function cloudWebsiteLaunchpadStyles() {
       margin-left: 0;
     }
     @media (max-width: 920px) {
-      .cloud-launchpad-suggestions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
       .cloud-launchpad-motion-grid {
         grid-template-columns: 1fr;
       }
@@ -276,6 +321,9 @@ export function cloudWebsiteLaunchpadStyles() {
     }
     @media (max-width: 640px) {
       .cloud-launchpad-suggestions {
+        grid-template-columns: 1fr;
+      }
+      .cloud-launchpad-review__lanes {
         grid-template-columns: 1fr;
       }
     }`

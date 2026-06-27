@@ -267,6 +267,10 @@ export function routeAdminSurfaceMarkup(routeId: CloudWebRouteId) {
 
 export function cloudLaunchpadStaticMarkup() {
   return `<div class="cloud-launchpad-home signed-in-only" id="cloud-launchpad-home" aria-label="Home launchpad">
+                <div class="cloud-launchpad-hero">
+                  <h1 class="cloud-launchpad-hero__title">Good <span class="cloud-launchpad-hero__accent">day</span>.</h1>
+                  <p class="cloud-launchpad-hero__subtitle">Choose a lead coworker, @mention specialists, and review the work in one place</p>
+                </div>
                 <div class="cloud-launchpad-suggestions" aria-label="Task suggestions">
                   <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="accent" aria-hidden="true">${launchpadIconSvg('kanban', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Plan a release</strong><span>Draft a release plan for the next milestone.</span><small>@plan can take this</small></span></button>
                   <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" data-tone="green" aria-hidden="true">${launchpadIconSvg('file-diff', 20)}</span><span class="cloud-launchpad-suggestion__text"><strong>Review a change</strong><span>Review the recent changes and call out production risks.</span><small>@build can take this</small></span></button>

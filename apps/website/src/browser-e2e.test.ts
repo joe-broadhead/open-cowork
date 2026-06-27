@@ -646,6 +646,12 @@ void test('cloud web browser renders launchpad feed and routes launchpad actions
     assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /Run read-only tests/)
     assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /summary.txt/)
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/launchpad/feed?limit=3'))
+    // Greeting hero (time-of-day aware) leads the launchpad, mirroring desktop Home.
+    assert.match(harness.document.querySelector('.cloud-launchpad-hero__title')?.textContent || '', /^Good (morning|afternoon|evening)\.$/)
+    // Review Snapshot surfaces the pending approval and in-progress task from the feed.
+    assert.match(harness.document.querySelector('.cloud-launchpad-review')?.textContent || '', /Review Snapshot/)
+    assert.match(harness.document.querySelector('.cloud-launchpad-review')?.textContent || '', /Permission approvals/)
+    assert.match(harness.document.querySelector('.cloud-launchpad-review')?.textContent || '', /task runs/)
     const openChatRoute = () => {
       const chatLink = harness.document.querySelector('[data-route-link="chat"]') as HTMLElement | null
       assert.ok(chatLink, 'chat route link exists')
@@ -721,7 +727,12 @@ void test('cloud launchpad suggestions preserve requested agents for default clo
     clickContaining('.cloud-launchpad-suggestion', 'Create a workflow')
     await waitFor(() => {
       assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value, 'Help me turn a repeated task into a saved workflow.')
-      assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /chief-of-staff/)
+      // The single composer control reflects the active coworker (here derived
+      // from the prompt @mention) on its label — the consolidated home of what
+      // the old lead-row banner used to show.
+      const selectLabel = harness.document.querySelector('#prompt-form .composer-select-label')
+      assert.equal(selectLabel?.getAttribute('data-has-lead'), 'true')
+      assert.match(selectLabel?.getAttribute('title') || '', /chief-of-staff/)
     })
 
     harness.submit('#prompt-form')
@@ -749,12 +760,19 @@ void test('cloud web browser creates, prompts, streams, reloads, and continues a
     })
     const agent = harness.document.querySelector('#composer-agent') as HTMLSelectElement
     await waitFor(() => assert.match(agent.textContent || '', /Build/))
-    await waitFor(() => assert.match(harness.document.querySelector('#composer-agent-chips')?.textContent || '', /build/))
-    harness.clickText('#composer-agent-chips button', '@build')
-    assert.equal(agent.value, 'build')
-    await waitFor(() => assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /Assign to: Build/))
+    // The single composer assignment control is the `#composer-agent` select.
+    // Choosing a coworker through it sets the submitted agent (no duplicate
+    // banner/chip surfaces). Drive it the React-controlled way: native value
+    // setter + a change event so the controlled select updates state.
+    const setSelectValue = Object.getOwnPropertyDescriptor(harness.window.HTMLSelectElement.prototype, 'value')?.set
+    setSelectValue?.call(agent, 'build')
+    agent.dispatchEvent(new harness.window.Event('change', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal(agent.value, 'build'))
+    // The selected coworker is reflected on the single control (the lead-row
+    // banner + chips were consolidated into this select's label).
+    await waitFor(() => assert.equal(harness.document.querySelector('#prompt-form .composer-select-label')?.getAttribute('data-has-lead'), 'true'))
+    assert.match(harness.document.querySelector('#prompt-form .composer-select-label')?.getAttribute('title') || '', /Build/)
     const message = harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement
-    await waitFor(() => assert.match(message.value, /^@build/))
     assert.equal((harness.document.querySelector('#prompt-form .composer-send') as HTMLButtonElement).disabled, true)
     const setTextareaValue = Object.getOwnPropertyDescriptor(harness.window.HTMLTextAreaElement.prototype, 'value')?.set
     setTextareaValue?.call(message, 'Continue the work.')
