@@ -13,6 +13,7 @@ import { KNOWLEDGE_VISIBILITIES, knowledgeRoleCanPropose, knowledgeRoleCanReview
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
+import { RestrictedState } from '../RestrictedState'
 import {
   Badge,
   Button,
@@ -513,13 +514,10 @@ export function KnowledgePage() {
             title={t('knowledge.title', 'Knowledge')}
             description={t('knowledge.localOnlyDescription', 'Desktop Knowledge is stored in the Local workspace. Cloud workspaces expose Knowledge through Cloud Web.')}
           />
-          <Card padding="lg">
-            <EmptyState
-              icon="book-open"
-              title={t('knowledge.localOnlyTitle', 'Switch to Local for desktop Knowledge')}
-              body={t('knowledge.localOnlyBody', 'This desktop Knowledge surface writes to the local versioned Knowledge store. Open Cloud Web to review or capture Knowledge for a Cloud workspace.')}
-            />
-          </Card>
+          <RestrictedState
+            title={t('knowledge.localOnlyTitle', 'Switch to Local for desktop Knowledge')}
+            body={t('knowledge.localOnlyBody', 'This desktop Knowledge surface writes to the local versioned Knowledge store. Open Cloud Web to review or capture Knowledge for a Cloud workspace.')}
+          />
         </div>
       </div>
     )

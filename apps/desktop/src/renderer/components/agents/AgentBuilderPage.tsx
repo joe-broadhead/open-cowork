@@ -274,7 +274,7 @@ export function AgentBuilderPage({
           }
         : undefined)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not save agent')
+      setError(err instanceof Error ? err.message : 'Could not save coworker')
     } finally {
       setSaving(false)
     }
@@ -565,7 +565,7 @@ function StarterTemplatePanel({
   return (
     <section className="mb-5">
       <div className="mb-3">
-        <h2 className="font-display text-role-section-title font-bold text-text">{t('agentTemplate.title', 'Start a new agent')}</h2>
+        <h2 className="font-display text-role-section-title font-bold text-text">{t('agentTemplate.title', 'Start a new coworker')}</h2>
         <p className="mt-1 text-xs text-text-muted">
           {t('agentTemplate.inlineSubtitle', 'Pick a starter or keep the blank draft; everything remains editable below.')}
         </p>
@@ -579,7 +579,7 @@ function StarterTemplatePanel({
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-text">{t('agentTemplate.startBlank', 'Start from blank')}</div>
               <div className="mt-1 text-2xs leading-relaxed text-text-muted">
-                {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions - design the agent from scratch.')}
+                {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions - design the coworker from scratch.')}
               </div>
             </div>
           </div>

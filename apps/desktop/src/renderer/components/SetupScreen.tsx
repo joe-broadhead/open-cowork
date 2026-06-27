@@ -108,7 +108,7 @@ function runtimeProgressLabel(status: RuntimeLoadingStatus | null, fallback: str
   if (status?.phase === 'config') return t('setup.progressConfig', 'Applying setup choices...')
   if (status?.phase === 'managed-server') return t('setup.progressManagedServer', 'Preparing the local model service...')
   if (status?.phase === 'connecting-events') return t('setup.progressEvents', 'Connecting status updates...')
-  if (status?.phase === 'mcp') return t('setup.progressTools', 'Preparing agent tools...')
+  if (status?.phase === 'mcp') return t('setup.progressTools', 'Preparing coworker tools...')
   if (status?.phase === 'ready') return t('setup.progressReady', 'Model service is ready.')
   if (status?.phase === 'error') return t('setup.progressError', 'The model service could not start.')
   return fallback || t('setup.connectionIdle', 'Ready to test the connection.')
@@ -480,7 +480,7 @@ export function SetupScreen({
           <div>
             <h2 className="text-base font-semibold text-text">{t('setup.providerTitle', 'Model provider')}</h2>
             <p className="text-sm text-text-muted">
-              {t('setup.providerDescription', 'Choose the account that will power your agents.')}
+              {t('setup.providerDescription', 'Choose the account that will power your coworkers.')}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -563,7 +563,7 @@ export function SetupScreen({
           <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-elevated p-4" aria-label={t('setup.model', 'Model')}>
             <div>
               <h2 className="text-base font-semibold text-text">{t('setup.model', 'Model')}</h2>
-              <p className="text-sm text-text-muted">{t('setup.modelDescription', 'Pick the model agents will use by default.')}</p>
+              <p className="text-sm text-text-muted">{t('setup.modelDescription', 'Pick the model coworkers will use by default.')}</p>
             </div>
             {selectedProvider.models.length > 0 ? (
               <div className="grid gap-2">
@@ -675,7 +675,7 @@ export function SetupScreen({
                   <span className="text-xs leading-relaxed text-text-muted">
                     {t(
                       'setup.toolingBridgeDescription',
-                      'Allow agents to see standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for stricter isolation; you can change it later in Settings.',
+                      'Allow coworkers to see standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for stricter isolation; you can change it later in Settings.',
                     )}
                   </span>
                 </label>

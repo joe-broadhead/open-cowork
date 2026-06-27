@@ -415,7 +415,7 @@ function ToolCard({
                 color: 'var(--color-amber)',
                 background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
               }}
-              title={t('toolLibrary.writeTooltip', "This tool can write — adds to the agent's footprint")}
+              title={t('toolLibrary.writeTooltip', "This tool can write — adds to the coworker's footprint")}
             >
               W
             </span>

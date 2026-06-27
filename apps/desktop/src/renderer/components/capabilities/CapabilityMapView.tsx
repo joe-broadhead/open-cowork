@@ -197,7 +197,7 @@ function CapabilityMapGroupCard({
         />
       ) : (
         <div className="px-4 py-2.5 border-t border-border-subtle text-2xs text-text-muted">
-          {t('capabilities.noLinkedSkillsForTool', 'No linked skills yet. This tool can still be assigned directly to agents.')}
+          {t('capabilities.noLinkedSkillsForTool', 'No linked skills yet. This tool can still be assigned directly to coworkers.')}
         </div>
       )}
     </Card>

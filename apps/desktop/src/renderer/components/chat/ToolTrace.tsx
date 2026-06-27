@@ -217,7 +217,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
   const agentName = toolAgents[0] || activeAgent || null
 
   const agentLabel = agentName ? AGENT_LABELS[agentName] || agentName : null
-  const actorTypeLabel = agentName && SUB_AGENT_IDS.has(agentName) ? t('toolTrace.subAgent', 'Sub-Agent') : t('toolTrace.agent', 'Agent')
+  const actorTypeLabel = agentName && SUB_AGENT_IDS.has(agentName) ? t('toolTrace.subAgent', 'Sub-Agent') : t('toolTrace.agent', 'Coworker')
 
   const sendArtifactToThread = async (artifact: ReturnType<typeof listArtifactsForTools>[number]) => {
     if (!currentSessionId) return

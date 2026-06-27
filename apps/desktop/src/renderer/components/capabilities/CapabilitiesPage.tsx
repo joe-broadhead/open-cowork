@@ -479,7 +479,7 @@ export function CapabilitiesPage({
         ) : (
           filteredSkills.length === 0 ? (
             <EmptyGrid message={skills.length === 0
-              ? t('capabilities.noSkillsDiscovered', 'No skills discovered yet. Add a custom skill bundle to extend agents.')
+              ? t('capabilities.noSkillsDiscovered', 'No skills discovered yet. Add a custom skill bundle to extend coworkers.')
               : t('capabilities.noSkillsMatch', 'No skills matched your search.')} />
           ) : (
             <div className="flex flex-col gap-5">

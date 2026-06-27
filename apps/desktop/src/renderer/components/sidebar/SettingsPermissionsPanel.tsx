@@ -115,7 +115,7 @@ export function PermissionsPanel({
       code: 'bash',
       id: 'settings-permissions-shell',
       title: t('settings.permissions.bashTitle', 'Shell commands'),
-      description: t('settings.permissions.bashDescription', 'Choose whether agents can run terminal commands in the active workspace, and whether each command needs approval.'),
+      description: t('settings.permissions.bashDescription', 'Choose whether coworkers can run terminal commands in the active workspace, and whether each command needs approval.'),
     },
     {
       key: 'fileWritePermission' as const,
@@ -124,7 +124,7 @@ export function PermissionsPanel({
       code: 'edit/write/apply_patch',
       id: 'settings-permissions-files',
       title: t('settings.permissions.fileWriteTitle', 'File editing'),
-      description: t('settings.permissions.fileWriteDescription', 'Choose whether agents can create or modify local workspace files, and whether each edit needs approval.'),
+      description: t('settings.permissions.fileWriteDescription', 'Choose whether coworkers can create or modify local workspace files, and whether each edit needs approval.'),
     },
     {
       key: 'webPermission' as const,

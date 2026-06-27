@@ -85,7 +85,7 @@ export function AgentCard({
               ref={avatarButtonRef}
               type="button"
               onClick={() => setEditorOpen(true)}
-              aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
+              aria-label={t('agentCard.editAvatar', 'Edit coworker avatar')}
               className="relative cursor-pointer transition-transform hover:scale-[1.02] rounded-2xl"
             >
               <AgentAvatar name={draft.name || 'New coworker'} color={draft.color} src={draft.avatar} size="xl" />
@@ -135,7 +135,7 @@ export function AgentCard({
             <input
               value={draft.description}
               onChange={(event) => onDescriptionChange?.(event.target.value)}
-              placeholder={t('agentCard.descriptionPlaceholder', 'What is this agent specialised to do?')}
+              placeholder={t('agentCard.descriptionPlaceholder', 'What is this coworker specialised to do?')}
               className="w-full text-xs text-text-muted mt-0.5 bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
             />
           )}

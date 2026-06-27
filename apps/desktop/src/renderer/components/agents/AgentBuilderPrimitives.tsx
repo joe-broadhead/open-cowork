@@ -66,7 +66,7 @@ export function ScopeRow({
     <Card variant="surface" padding="md" className="mb-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-text">{t('agentBuilder.saveThisAgentIn', 'Save this agent in')}</div>
+          <div className="text-xs font-medium text-text">{t('agentBuilder.saveThisAgentIn', 'Save this coworker in')}</div>
           <div className="text-2xs text-text-muted mt-0.5">
             {draft.scope === 'project'
               ? projectTargetDirectory || 'Choose a project directory'
@@ -75,7 +75,7 @@ export function ScopeRow({
         </div>
         <div className="flex items-center gap-2">
           <SegmentedControl
-            label={t('agentBuilder.saveThisAgentIn', 'Save this agent in')}
+            label={t('agentBuilder.saveThisAgentIn', 'Save this coworker in')}
             value={draft.scope === 'project' ? 'project' : 'machine'}
             onChange={(scope) => onScopeChange(scope as 'machine' | 'project')}
             options={[
@@ -368,7 +368,7 @@ export function InferenceTab({
           aria-label={t('agentBuilder.temperature', 'Temperature')}
         />
       </Field>
-      <Field label="Max steps" hint="Cap the agent's tool loop to prevent runaway iterations">
+      <Field label="Max steps" hint="Cap the coworker's tool loop to prevent runaway iterations">
         <Input
           type="number"
           step="1"

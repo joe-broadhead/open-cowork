@@ -94,7 +94,7 @@ export function AvatarEditor({
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         role="dialog"
-        aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
+        aria-label={t('agentCard.editAvatar', 'Edit coworker avatar')}
         className="fixed z-50 rounded-2xl border shadow-2xl overflow-hidden"
         style={{
           width: WIDTH,

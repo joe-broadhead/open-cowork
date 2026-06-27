@@ -16,7 +16,7 @@ export function ToolApprovalsCard({
       <div className="mb-3">
         <div className="text-md font-semibold text-text">{t('mcpForm.toolApprovals', 'Tool approvals')}</div>
         <div className="text-2xs text-text-muted mt-1">
-          Choose how assigned agents should handle this MCP&apos;s tool calls.
+          Choose how assigned coworkers should handle this MCP&apos;s tool calls.
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -36,7 +36,7 @@ export function ToolApprovalsCard({
         >
           <span className="block text-xs font-medium text-text">{t('mcpForm.approvalAsk', 'Ask before tool calls')}</span>
           <span className="mt-1 block text-2xs leading-relaxed text-text-muted">
-            OpenCode asks for approval before an assigned agent uses this MCP.
+            OpenCode asks for approval before an assigned coworker uses this MCP.
           </span>
         </button>
         <button
@@ -55,7 +55,7 @@ export function ToolApprovalsCard({
         >
           <span className="block text-xs font-medium text-text">{t('mcpForm.approvalAllow', 'Trusted, auto-approve')}</span>
           <span className="mt-1 block text-2xs leading-relaxed text-text-muted">
-            Assigned agents can call this MCP without approval prompts. Use only for MCPs you control or trust.
+            Assigned coworkers can call this MCP without approval prompts. Use only for MCPs you control or trust.
           </span>
         </button>
       </div>

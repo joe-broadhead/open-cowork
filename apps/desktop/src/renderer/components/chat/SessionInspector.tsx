@@ -527,7 +527,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
       {executionPlan.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
-            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('thinking.agentPlan', 'Agent plan')}</div>
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('thinking.agentPlan', 'Coworker plan')}</div>
             <div className="text-2xs text-text-muted">{t('sessionInspector.planFromTaskRuns', 'Derived from active task runs')}</div>
           </div>
           <div className="mt-3">

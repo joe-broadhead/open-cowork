@@ -336,7 +336,7 @@ export function CustomMcpForm({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder={t('mcpForm.descriptionPlaceholder', 'What this MCP gives agents access to.')}
+                  placeholder={t('mcpForm.descriptionPlaceholder', 'What this MCP gives coworkers access to.')}
                   className="w-full px-3 py-2 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y"
                 />
               </label>

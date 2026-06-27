@@ -76,6 +76,6 @@ describe('ChatInputInlinePicker', () => {
 
     const menu = container.firstElementChild as HTMLElement
     expect(menu.style.left).toBe('752px')
-    expect(screen.getByText('No agents match “missing”.')).toBeInTheDocument()
+    expect(screen.getByText('No coworkers match “missing”.')).toBeInTheDocument()
   })
 })

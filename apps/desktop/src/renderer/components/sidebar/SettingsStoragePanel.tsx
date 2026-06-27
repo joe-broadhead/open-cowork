@@ -209,7 +209,7 @@ export function StoragePanel({
       <Card className="flex flex-col gap-4">
         <div className="text-xs font-semibold text-red">{t('settings.reset.title', 'Reset all app data')}</div>
         <div className="text-2xs text-text-muted leading-relaxed">
-          {t('settings.reset.description', 'Deletes every thread, credential, custom agent, skill, and MCP from this machine. The app relaunches into the first-run flow. Useful before uninstalling or for a clean-slate downstream demo; destructive and cannot be undone.')}
+          {t('settings.reset.description', 'Deletes every thread, credential, custom coworker, skill, and MCP from this machine. The app relaunches into the first-run flow. Useful before uninstalling or for a clean-slate downstream demo; destructive and cannot be undone.')}
         </div>
         <Card
           interactive

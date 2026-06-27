@@ -287,7 +287,7 @@ export function CustomSkillForm({
           <div className="text-2xs text-text-muted leading-relaxed">
             {t(
               'skillForm.trustWarningBody',
-              'Custom skills are loaded into the OpenCode runtime as instructions and may ask agents to use tools. Only save or import bundles you wrote or trust.',
+              'Custom skills are loaded into the OpenCode runtime as instructions and may ask coworkers to use tools. Only save or import bundles you wrote or trust.',
             )}
           </div>
         </div>

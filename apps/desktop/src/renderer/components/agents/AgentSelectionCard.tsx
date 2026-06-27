@@ -153,7 +153,7 @@ export function CustomSelectionCard({
             <Button variant="ghost" size="sm" onClick={onTest}>{t('agentCard.test', 'Test')}</Button>
           )}
           <Button variant="ghost" size="sm" onClick={onOpen}>{t('agentCard.edit', 'Edit')}</Button>
-          <Button variant="ghost" size="sm" onClick={onExport} title={t('agentCard.exportTitle', 'Export this agent as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</Button>
+          <Button variant="ghost" size="sm" onClick={onExport} title={t('agentCard.exportTitle', 'Export this coworker as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</Button>
           <Button variant="ghost" size="sm" onClick={onDelete}>{t('common.delete', 'Delete')}</Button>
         </CardFooter>
       }

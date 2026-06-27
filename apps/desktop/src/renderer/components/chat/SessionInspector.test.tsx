@@ -266,7 +266,7 @@ describe('SessionInspector', () => {
     render(<SessionInspector onClose={vi.fn()} />)
 
     await user.click(screen.getByRole('button', { name: 'Todos' }))
-    expect(screen.getByText('Agent plan')).toBeInTheDocument()
+    expect(screen.getByText('Coworker plan')).toBeInTheDocument()
     expect(screen.getByText('Session todos')).toBeInTheDocument()
     expect(screen.getByText('Specialist todos')).toBeInTheDocument()
     expect(screen.getByText('Draft release checklist')).toBeInTheDocument()

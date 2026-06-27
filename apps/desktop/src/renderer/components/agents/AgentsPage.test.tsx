@@ -210,7 +210,7 @@ describe('AgentsPage', () => {
 
     await screen.findByText('market-analyst')
     await user.click(screen.getByRole('button', { name: 'New coworker' }))
-    expect(screen.getByRole('heading', { name: 'Start a new agent' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Start a new coworker' })).toBeInTheDocument()
     expect(api.onClearDraft).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: /Start from blank/ }))

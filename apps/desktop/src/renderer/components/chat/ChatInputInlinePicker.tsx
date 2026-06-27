@@ -65,7 +65,7 @@ export function ChatInputInlinePicker({
         >
           <span className="flex items-center gap-2">
             <Badge tone="muted" className="shrink-0 uppercase tracking-[0.06em]">
-              Agent
+              Coworker
             </Badge>
             <span className="text-2xs font-medium text-text-secondary truncate">{item.label}</span>
             <span className="text-2xs text-text-muted font-mono shrink-0">@{item.id}</span>
@@ -75,7 +75,7 @@ export function ChatInputInlinePicker({
       ))}
       {suggestions.length === 0 ? (
         <div className="px-3 py-3 text-2xs text-text-muted">
-          No agents match “{picker.query}”.
+          No coworkers match “{picker.query}”.
         </div>
       ) : null}
       </div>

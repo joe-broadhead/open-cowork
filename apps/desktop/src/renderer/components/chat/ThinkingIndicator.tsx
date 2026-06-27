@@ -30,9 +30,9 @@ export function ThinkingIndicator() {
   const label = isAwaitingPermission
     ? t('thinking.awaitingApproval', 'Awaiting your approval')
     : runningTaskCount > 0 && isBuild
-    ? t('thinking.buildCoordinatingCount', 'Build is coordinating {{count}} agent(s)', { count: String(runningTaskCount) })
+    ? t('thinking.buildCoordinatingCount', 'Build is coordinating {{count}} coworker(s)', { count: String(runningTaskCount) })
     : isMergingResults
-      ? t('thinking.buildMerging', 'Build is merging agent results')
+      ? t('thinking.buildMerging', 'Build is merging coworker results')
       : activeAgent
         ? labels[activeAgent] || t('thinking.agentWorking', '{{agent}} is working', { agent: activeAgent })
         : t('thinking.thinking', 'Thinking')
@@ -53,7 +53,7 @@ export function ThinkingIndicator() {
           {hasPlan && (
             <div>
               <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-1">
-                {t('thinking.agentPlan', 'Agent plan')}
+                {t('thinking.agentPlan', 'Coworker plan')}
               </div>
               <TodoListView todos={executionPlan} variant="compact" showPriorityTag={false} />
             </div>

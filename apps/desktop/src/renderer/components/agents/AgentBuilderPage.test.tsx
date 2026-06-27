@@ -139,7 +139,7 @@ describe('AgentBuilderPage', () => {
 
     await user.type(screen.getByPlaceholderText('agent-id'), 'market-analyst')
     await user.type(
-      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      screen.getByPlaceholderText('What is this coworker specialised to do?'),
       'Prepares market analysis briefings.',
     )
     await user.click(screen.getByRole('button', { name: 'Abilities' }))
@@ -257,8 +257,8 @@ describe('AgentBuilderPage', () => {
       target: { kind: 'custom', agent },
     })
 
-    await user.clear(screen.getByPlaceholderText('What is this agent specialised to do?'))
-    await user.type(screen.getByPlaceholderText('What is this agent specialised to do?'), 'Updated description.')
+    await user.clear(screen.getByPlaceholderText('What is this coworker specialised to do?'))
+    await user.type(screen.getByPlaceholderText('What is this coworker specialised to do?'), 'Updated description.')
     await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
@@ -393,7 +393,7 @@ describe('AgentBuilderPage', () => {
     await user.click(screen.getByRole('button', { name: /Writer/ }))
     await user.type(screen.getByPlaceholderText('agent-id'), 'writer-lead')
     await user.type(
-      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      screen.getByPlaceholderText('What is this coworker specialised to do?'),
       'Drafts stakeholder updates.',
     )
     const saveAndTestButton = screen.getByRole('button', { name: 'Save & Test' })
@@ -444,7 +444,7 @@ describe('AgentBuilderPage', () => {
     await user.click(screen.getByRole('button', { name: /Writer/ }))
     await user.type(screen.getByPlaceholderText('agent-id'), 'rule-limited-writer')
     await user.type(
-      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      screen.getByPlaceholderText('What is this coworker specialised to do?'),
       'Runs only the approved command.',
     )
 
@@ -474,7 +474,7 @@ describe('AgentBuilderPage', () => {
     await user.click(screen.getByRole('button', { name: /Writer/ }))
     await user.type(screen.getByPlaceholderText('agent-id'), 'blank-rule-writer')
     await user.type(
-      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      screen.getByPlaceholderText('What is this coworker specialised to do?'),
       'Tests permission validation.',
     )
 
@@ -496,7 +496,7 @@ describe('AgentBuilderPage', () => {
     await user.click(screen.getByRole('button', { name: /Writer/ }))
     await user.type(screen.getByPlaceholderText('agent-id'), 'invalid-mcp-rule-writer')
     await user.type(
-      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      screen.getByPlaceholderText('What is this coworker specialised to do?'),
       'Tests MCP permission validation.',
     )
 

@@ -179,9 +179,9 @@ describe('ThinkingIndicator', () => {
 
     render(<ThinkingIndicator />)
 
-    expect(screen.getByText('Build is coordinating 2 agent(s)')).toBeInTheDocument()
+    expect(screen.getByText('Build is coordinating 2 coworker(s)')).toBeInTheDocument()
     expect(screen.getByText('Compacting conversation to preserve context...')).toBeInTheDocument()
-    expect(screen.getByText('Agent plan')).toBeInTheDocument()
+    expect(screen.getByText('Coworker plan')).toBeInTheDocument()
     expect(screen.getByText('Session todos')).toBeInTheDocument()
     expect(screen.getByText('Inspect requirements')).toBeInTheDocument()
     expect(screen.getByText('Follow up with reviewer')).toBeInTheDocument()
@@ -209,6 +209,6 @@ describe('ThinkingIndicator', () => {
 
     render(<ThinkingIndicator />)
 
-    expect(screen.getByText('Build is merging agent results')).toBeInTheDocument()
+    expect(screen.getByText('Build is merging coworker results')).toBeInTheDocument()
   })
 })

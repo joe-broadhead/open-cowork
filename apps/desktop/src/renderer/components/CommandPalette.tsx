@@ -194,7 +194,7 @@ export function CommandPalette({
             aria-label={t('commandPalette.searchLabel', 'Search command palette')}
             aria-controls={listboxId}
             aria-activedescendant={activeOptionId}
-            placeholder={t('commandPalette.search', 'Search actions, agents, and commands...')}
+            placeholder={t('commandPalette.search', 'Search actions, coworkers, and commands...')}
           />
         </div>
 
