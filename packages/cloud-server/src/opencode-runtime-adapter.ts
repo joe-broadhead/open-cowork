@@ -1,7 +1,7 @@
 import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
 import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtime-environment'
 import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionInfo, createManagedOpencodeServerAuth, type ManagedOpencodeServerAuth, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit } from '@open-cowork/runtime-host'
-import { deriveToolStatus, normalizePermissionEvent } from '@open-cowork/shared'
+import { asRecord, deriveToolStatus, normalizePermissionEvent, readRecordNestedRecord, readRecordString, readString } from '@open-cowork/shared'
 import {
   createOpencodeClient,
   type OpencodeClientConfig,
@@ -53,54 +53,36 @@ export type OpencodeRuntimeEventTranslation = {
   dropped: CloudRuntimeDroppedEvent | null
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-}
-
-function readString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : null
-}
-
-function readNestedString(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = readString(record[key])
-    if (value) return value
-  }
-  return null
-}
-
-function readNestedRecord(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const nested = asRecord(record[key])
-    if (Object.keys(nested).length > 0) return nested
-  }
-  return {}
-}
+// SDK-payload reader helpers (asRecord/readString/readRecordString/
+// readRecordNestedRecord) are consolidated in @open-cowork/shared so the
+// cloud projection and the desktop runtime share one definition. The prior
+// local `readString` copy trimmed whitespace while the shared one keys off
+// length; for the SDK event fields read here (ids, roles, tool names) the
+// two are equivalent — neither ever carries a whitespace-only value — so the
+// shared definition is the single source of truth.
 
 function readSessionId(properties: Record<string, unknown>) {
   const part = asRecord(properties.part)
   const info = asRecord(properties.info)
   const status = asRecord(properties.status)
-  return readNestedString(properties, ['sessionID', 'sessionId'])
-    || readNestedString(part, ['sessionID', 'sessionId'])
-    || readNestedString(info, ['sessionID', 'sessionId'])
-    || readNestedString(status, ['sessionID', 'sessionId'])
+  return readRecordString(properties, ['sessionID', 'sessionId'])
+    || readRecordString(part, ['sessionID', 'sessionId'])
+    || readRecordString(info, ['sessionID', 'sessionId'])
+    || readRecordString(status, ['sessionID', 'sessionId'])
 }
 
 function readMessageId(properties: Record<string, unknown>) {
   const part = asRecord(properties.part)
   const info = asRecord(properties.info)
-  return readNestedString(properties, ['messageID', 'messageId'])
-    || readNestedString(part, ['messageID', 'messageId'])
-    || readNestedString(info, ['id'])
+  return readRecordString(properties, ['messageID', 'messageId'])
+    || readRecordString(part, ['messageID', 'messageId'])
+    || readRecordString(info, ['id'])
 }
 
 function readErrorMessage(properties: Record<string, unknown>) {
   const error = asRecord(properties.error)
-  return readNestedString(properties, ['message', 'error'])
-    || readNestedString(error, ['message', 'error'])
+  return readRecordString(properties, ['message', 'error'])
+    || readRecordString(error, ['message', 'error'])
     || 'OpenCode runtime reported an error.'
 }
 
@@ -165,6 +147,30 @@ function eventFromMessagePartUpdated(properties: Record<string, unknown>): Cloud
   }]
 }
 
+// `message.part.delta` carries an incremental token chunk for a single
+// message part ({ sessionID, messageID, partID, field, delta }). Projecting
+// it as an append-mode assistant.message lets cloud SSE stream token-granular
+// like the desktop runtime instead of re-sending a full snapshot on every
+// `message.part.updated`. Only the streamed text field is surfaced as
+// assistant content; the delta string is read verbatim so word-boundary
+// whitespace is preserved.
+function eventFromMessagePartDelta(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  if (readString(properties.field) !== 'text') return []
+  const delta = typeof properties.delta === 'string' ? properties.delta : ''
+  if (!delta) return []
+  const sessionId = readSessionId(properties)
+  const messageId = readMessageId(properties)
+  return [{
+    type: 'assistant.message',
+    payload: {
+      ...(sessionId ? { sessionId } : {}),
+      ...(messageId ? { messageId } : {}),
+      content: delta,
+      mode: 'append',
+    },
+  }]
+}
+
 function eventsFromPermissionRequested(properties: Record<string, unknown>): CloudRuntimeEvent[] {
   const normalized = normalizePermissionEvent(properties)
   if (!normalized.id) return []
@@ -214,9 +220,9 @@ function normalizeQuestionPrompt(value: unknown) {
 }
 
 function eventsFromQuestionAsked(properties: Record<string, unknown>): CloudRuntimeEvent[] {
-  const requestId = readNestedString(properties, ['id', 'requestID', 'requestId'])
+  const requestId = readRecordString(properties, ['id', 'requestID', 'requestId'])
   if (!requestId) return []
-  const tool = readNestedRecord(properties, ['tool'])
+  const tool = readRecordNestedRecord(properties, ['tool'])
   return [{
     type: 'question.asked',
     payload: {
@@ -227,8 +233,8 @@ function eventsFromQuestionAsked(properties: Record<string, unknown>): CloudRunt
       ...(Object.keys(tool).length > 0
         ? {
             tool: {
-              messageId: readNestedString(tool, ['messageID', 'messageId']) || '',
-              callId: readNestedString(tool, ['callID', 'callId']) || '',
+              messageId: readRecordString(tool, ['messageID', 'messageId']) || '',
+              callId: readRecordString(tool, ['callID', 'callId']) || '',
             },
           }
         : {}),
@@ -237,7 +243,7 @@ function eventsFromQuestionAsked(properties: Record<string, unknown>): CloudRunt
 }
 
 function eventsFromQuestionResolved(properties: Record<string, unknown>): CloudRuntimeEvent[] {
-  const requestId = readNestedString(properties, ['requestID', 'requestId', 'id'])
+  const requestId = readRecordString(properties, ['requestID', 'requestId', 'id'])
   if (!requestId) return []
   return [{
     type: 'question.resolved',
@@ -301,13 +307,15 @@ function eventFromSessionStatus(properties: Record<string, unknown>): CloudRunti
     type: 'session.status',
     payload: {
       ...(sessionId ? { sessionId } : {}),
-      statusType: readNestedString(status, ['type']) || readNestedString(properties, ['statusType', 'type']) || 'unknown',
+      statusType: readRecordString(status, ['type']) || readRecordString(properties, ['statusType', 'type']) || 'unknown',
     },
   }]
 }
 
 function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string, unknown>): CloudRuntimeEvent[] | null {
   switch (eventType) {
+    case 'message.part.delta':
+      return eventFromMessagePartDelta(properties)
     case 'message.part.updated':
       return eventFromMessagePartUpdated(properties)
     case 'message.updated':
@@ -322,7 +330,6 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
     case 'session.status':
       return eventFromSessionStatus(properties)
     case 'session.error':
-    case 'session.failure':
       return [{
         type: 'runtime.error',
         payload: {
@@ -334,17 +341,13 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
     case 'permission.updated':
       return eventsFromPermissionRequested(properties)
     case 'permission.replied':
-    case 'permission.rejected':
-    case 'permission.resolved':
       return eventsFromPermissionResolved(properties)
     case 'question.asked':
       return eventsFromQuestionAsked(properties)
     case 'question.replied':
     case 'question.rejected':
-    case 'question.resolved':
       return eventsFromQuestionResolved(properties)
     case 'todo.updated':
-    case 'todos.updated':
       return eventsFromTodosUpdated(properties)
     default:
       return null

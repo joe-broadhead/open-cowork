@@ -19,6 +19,7 @@ import {
   resolveRootSession,
   trackParentSession,
 } from '../apps/desktop/src/main/event-task-state.ts'
+import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 function createDispatchCollector() {
   const events: unknown[] = []
   return {
@@ -259,6 +260,63 @@ test('permission.asked skips direct IPC sends when the window is destroyed', () 
   assert.equal(handled, true)
   assert.equal(collector.events.length, 1)
   assert.equal(sent.length, 0)
+})
+
+test('permission.replied clears the approval card for the resolved root session', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.replied',
+    properties: {
+      sessionID: 'child-session',
+      requestID: 'perm-1',
+      reply: 'once',
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  // Stop the idle-reconciliation timer the handler arms so the test does not
+  // leak a pending setTimeout into the runner.
+  stopSessionStatusReconciliation('root-session')
+
+  assert.equal(handled, true)
+  assert.equal(collector.events.length, 1)
+  assert.deepEqual(collector.events[0], {
+    type: 'approval_resolved',
+    sessionId: 'root-session',
+    data: {
+      type: 'approval_resolved',
+      id: 'perm-1',
+    },
+  })
+})
+
+test('permission.replied without a request id is ignored', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.replied',
+    properties: {
+      sessionID: 'root-session',
+      reply: 'once',
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+  stopSessionStatusReconciliation('root-session')
+
+  assert.equal(handled, true)
+  assert.equal(collector.events.length, 0)
 })
 
 test('session.status tracks child task runs through running and complete states', () => {
@@ -1253,7 +1311,7 @@ test('session.error resolves camelCase session ids and nested provider messages'
   }])
 })
 
-test('session.failure marks child task failed without dropping lineage', () => {
+test('session.error marks child task failed without dropping lineage', () => {
   const collector = createDispatchCollector()
   const { win, sent } = createWindowSendCollector()
 
@@ -1271,10 +1329,10 @@ test('session.failure marks child task failed without dropping lineage', () => {
 
   const handled = handleRuntimeSideEffectEvent({
     win,
-    type: 'session.failure',
+    type: 'session.error',
     properties: {
       sessionID: 'child-session',
-      failure: {
+      error: {
         message: 'Provider terminated the child session',
       },
     },

@@ -291,6 +291,46 @@ test('cloud OpenCode event translator preserves projection-critical runtime even
   }])
 })
 
+test('cloud OpenCode runtime adapter streams message.part.delta as append-mode assistant text', () => {
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'message.part.delta',
+      properties: {
+        sessionID: 'session-1',
+        messageID: 'msg-1',
+        partID: 'part-1',
+        field: 'text',
+        delta: 'Hello',
+      },
+    },
+  }), [{
+    type: 'assistant.message',
+    payload: {
+      sessionId: 'session-1',
+      messageId: 'msg-1',
+      content: 'Hello',
+      mode: 'append',
+    },
+  }])
+
+  // Non-text streaming fields (reasoning, tool input) are not surfaced as
+  // assistant message content.
+  const reasoning = translateOpencodeRuntimeEventWithDiagnostics({
+    payload: {
+      type: 'message.part.delta',
+      properties: {
+        sessionID: 'session-1',
+        messageID: 'msg-1',
+        partID: 'part-1',
+        field: 'reasoning',
+        delta: 'thinking',
+      },
+    },
+  })
+  assert.deepEqual(reasoning.events, [])
+  assert.equal(reasoning.dropped?.reason, 'no-projected-events')
+})
+
 test('cloud OpenCode runtime subscription translates stream events and reports failures', async () => {
   const delivered: unknown[] = []
   const errors: unknown[] = []

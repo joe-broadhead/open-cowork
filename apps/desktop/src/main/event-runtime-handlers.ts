@@ -234,6 +234,35 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
+    case 'permission.replied': {
+      // The authoritative resolution event for a permission. When a request is
+      // answered out-of-band (another client, an auto-approve rule, the SDK
+      // itself) this is the only signal that arrives — without it the desktop
+      // approval card goes stale. Mirror the `question.replied` handler:
+      // clear the pending approval and reconcile the session back to idle.
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
+      const rootSessionId = resolveRootSession(actualSessionId)
+      const requestId = readString(readRecordValue(properties, 'requestID'))
+      if (!rootSessionId || !requestId) return true
+
+      dispatchRuntimeEvent(win, {
+        type: 'approval_resolved',
+        sessionId: rootSessionId,
+        data: {
+          type: 'approval_resolved',
+          id: requestId,
+        },
+      })
+      startSessionStatusReconciliation(rootSessionId, {
+        getMainWindow,
+        onIdle: (reconciledWin: BrowserWindow | null, reconciledSessionId: string) => {
+          if (!reconciledWin || reconciledWin.isDestroyed()) return
+          dispatchSyntheticIdle(reconciledWin, reconciledSessionId, dispatchRuntimeEvent)
+        },
+      })
+      return true
+    }
+
     case 'question.asked': {
       const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
@@ -484,20 +513,17 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
-    case 'session.error':
-    case 'session.failure': {
+    case 'session.error': {
       const actualSessionId = readRuntimeSessionId(properties)
       const rootSessionId = resolveRootSession(actualSessionId)
-      const error = asRecord(readRecordValue(properties, 'error'))
-      const failure = asRecord(readRecordValue(properties, 'failure'))
-      const errorPayload = Object.keys(error).length > 0 ? error : failure
+      const errorPayload = asRecord(readRecordValue(properties, 'error'))
       if (!rootSessionId) return true
 
       forgetSubmittedPrompt(rootSessionId)
       touchSessionRecord(rootSessionId)
       stopSessionStatusReconciliation(rootSessionId)
       const message = extractRuntimeErrorMessage(properties, errorPayload)
-      log('error', `Session ${type === 'session.failure' ? 'failure' : 'error'}: ${message}`)
+      log('error', `Session error: ${message}`)
 
       const taskRunId = actualSessionId && actualSessionId !== rootSessionId
         ? (getTaskRunIdForChild(actualSessionId)

@@ -102,6 +102,7 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
 
     assert.equal(runtimeConfig.model, 'test-provider/fast')
     assert.equal(runtimeConfig.small_model, 'test-provider/small')
+    assert.deepEqual(runtimeConfig.enabled_providers, ['test-provider'])
     assert.equal(runtimeConfig.provider['test-provider'].options.baseUrl, 'https://runtime.example.test')
     assert.equal(runtimeConfig.mcp.warehouse.url, 'https://warehouse.example.test/mcp')
     assert.equal(runtimeConfig.mcp.analytics.url, 'https://analytics.example.test/mcp')

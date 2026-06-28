@@ -366,10 +366,18 @@ function buildRuntimeConfigWithCustomMcpsResult(
 
   const mcpConfig: NonNullable<Config['mcp']> = {}
   const compactionConfig = getAppConfig().compaction
+  // Enforce the configured provider allow-list at the runtime layer. Without
+  // `enabled_providers`, OpenCode's `provider.list()` returns the entire
+  // models.dev catalogue regardless of `providers.available`, so the UI filter
+  // was the only thing scoping providers. Passing the allow-list through makes
+  // the runtime itself reject providers outside it. Only set it when non-empty
+  // — an empty array would disable every provider at runtime.
+  const enabledProviders = Array.from(new Set(appConfig.providers.available))
   const config: Config = {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'manual',
+    ...(enabledProviders.length > 0 ? { enabled_providers: enabledProviders } : {}),
     model: modelStr,
     small_model: smallModelStr,
     compaction: {

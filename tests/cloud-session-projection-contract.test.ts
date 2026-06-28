@@ -550,6 +550,26 @@ test('cloud projection reducer covers durable runtime event state transitions', 
   assert.equal(view.updatedAt, '2026-05-28T10:15:00.000Z')
 })
 
+test('assistant.message append-mode deltas accumulate streamed text without dropping whitespace', () => {
+  const session = baseSession()
+  let view = createCloudSessionProjectionView(session)
+
+  // Token-granular deltas (projected from SDK message.part.delta). A lone
+  // whitespace delta must survive — a trim-based read would drop the space
+  // between words.
+  view = reduceCloudSessionProjectionEvent(session, view, event(1, 'assistant.message', { messageId: 'msg-1', content: 'Hello', mode: 'append' }))
+  view = reduceCloudSessionProjectionEvent(session, view, event(2, 'assistant.message', { messageId: 'msg-1', content: ' ', mode: 'append' }))
+  view = reduceCloudSessionProjectionEvent(session, view, event(3, 'assistant.message', { messageId: 'msg-1', content: 'world', mode: 'append' }))
+  assert.equal(view.messages.length, 1)
+  assert.equal(view.messages[0]?.content, 'Hello world')
+
+  // A trailing full snapshot (default replace mode) resyncs to the same text
+  // instead of doubling the streamed content.
+  view = reduceCloudSessionProjectionEvent(session, view, event(4, 'assistant.message', { messageId: 'msg-1', content: 'Hello world' }))
+  assert.equal(view.messages.length, 1)
+  assert.equal(view.messages[0]?.content, 'Hello world')
+})
+
 test('cloud projection normalization filters malformed cached fields', () => {
   const session = baseSession({
     status: 'running' as const,

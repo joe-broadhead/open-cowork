@@ -45,3 +45,12 @@ export function readRecordArray(record: unknown, key: string): unknown[] {
 export function readRecordValue(record: unknown, key: string): unknown {
   return asRecord(record)[key]
 }
+
+export function readRecordNestedRecord(record: unknown, keys: string[]): JsonRecord {
+  const source = asRecord(record)
+  for (const key of keys) {
+    const nested = asRecord(source[key])
+    if (Object.keys(nested).length > 0) return nested
+  }
+  return {}
+}
