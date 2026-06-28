@@ -159,7 +159,7 @@ The storage/versioning engine (`knowledge-store.ts`) is the strongest new backen
 
 | # | Gap | Evidence | Severity |
 |---|---|---|---|
-| C1 | **Desktop has no feature-flag mechanism at all** (cloud does). Nav/views are hardcoded const arrays. | `Sidebar.tsx:40-53,749-790`; no `features.*` read in `apps/desktop/src/renderer` | **Critical** |
+| C1 | **Desktop has no feature-flag mechanism at all** (cloud does). Nav/views are hardcoded const arrays. | `Sidebar.tsx:40-53,749-790`; no `features.*` read in `packages/app/src` | **Critical** |
 | C2 | **`cloud.billing.plans[].entitlements.features` is dead config** — schema advertises per-plan feature gating that nothing enforces. | schema `:663-667` vs `billing-adapter.ts:132-208` | **Critical** |
 | C3 | **`knowledge`, `channels`, `byok` are not feature-flaggable** and their routes are ungated (channels only *implicitly* via `features.agents`). | absent from `cloudFeatures` schema `:574-589`; `http-routes/{knowledge,channels,byok}.ts` | High |
 | C4 | **OS app icon / dock / installer icon not configurable** — hardcoded asset paths; full white-label requires forking binary assets. | `electron-builder.yml:82,101`; `main-window-controller.ts:213` | High |

@@ -138,6 +138,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.2",
+    "pg": "^8.21.0",
     "@open-cowork/cloud-server": "workspace:*",
     "@open-cowork/runtime-host": "workspace:*",
     "@open-cowork/shared": "workspace:*",

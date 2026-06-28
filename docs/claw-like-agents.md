@@ -121,8 +121,8 @@ Open Cowork already has the right foundation:
 
 - Durable workflows with schedules, runs, deliveries, retry policy, and review-first defaults. See `docs/workflows.md`, `docs/workflow-recipes.md`, and `packages/runtime-host/src/workflow/` (`workflow-store.ts`, `workflow-schedule.ts`, `workflow-tool-bridge.ts`).
 - Native OpenCode runtime composition through `@opencode-ai/sdk/v2`. See `packages/runtime-host/src/runtime-config-builder.ts` and `packages/runtime-host/src/agent-config.ts`.
-- Custom agents that compile into OpenCode-native agent config rather than a parallel execution mechanism. See `packages/runtime-host/src/custom-agents.ts` and `apps/desktop/src/renderer/components/agents/`.
-- Capability curation for tools, MCPs, and skills. See `packages/runtime-host/src/capability-catalog.ts`, `packages/runtime-host/src/effective-skills.ts`, and `apps/desktop/src/renderer/components/capabilities/`.
+- Custom agents that compile into OpenCode-native agent config rather than a parallel execution mechanism. See `packages/runtime-host/src/custom-agents.ts` and `packages/app/src/components/agents/`.
+- Capability curation for tools, MCPs, and skills. See `packages/runtime-host/src/capability-catalog.ts`, `packages/runtime-host/src/effective-skills.ts`, and `packages/app/src/components/capabilities/`.
 - A security posture for local credentials, MCP URL/stdio policy, custom MCP approvals, project directory grants, and a managed OpenCode runtime home. See `docs/security-model.md`.
 - Threads and Pulse as rebuildable, local operational views over session history, usage, agents, tools, and runtime health. See `docs/threads.md` and `docs/desktop-app.md`.
 
@@ -434,7 +434,7 @@ type EvalCase = {
  Implementation shape:
 
  - Extend `CustomAgentConfig` and `AgentBundle` in `packages/shared/src/custom-content.ts`.
-- Render a new Identity tab in `apps/desktop/src/renderer/components/agents/AgentBuilderPage.tsx`.
+- Render a new Identity tab in `packages/app/src/components/agents/AgentBuilderPage.tsx`.
 - Compile the profile into OpenCode agent prompts in `packages/runtime-host/src/agent-prompts.ts`.
 - Keep export/import as Open Cowork-owned `cowork-agent-v2` JSON. Do not adopt an external identity format until there is a real interoperability need.
 

@@ -1,19 +1,19 @@
 import { existsSync, readFileSync } from 'node:fs'
 
-// Serves the UNIFIED RENDERER browser build (packages/app/dist-browser) so the
-// cloud URL itself runs the desktop renderer — the production-serving step of
-// collapsing the website + desktop UIs into one codebase. This is additive: the
-// website served at GET / is untouched; the renderer is mounted under /app.
+// Serves the UNIFIED RENDERER browser build (packages/app/dist-browser) at the
+// cloud URL itself — the production-serving step of collapsing the desktop +
+// cloud UIs into one codebase. The cloud serves this same renderer at GET / (and
+// at /app); the bespoke website is gone.
 //
 // The renderer is a plain SPA. Its entry document (browser.html) loads hashed
-// module scripts from /assets/*, installs a browser CoworkAPI shim, and talks to
-// the same-origin cloud /api, /auth and /events (SSE) routes. The shim derives the
-// endpoint base from window.location and reads the CSRF token from /auth/me at
+// module scripts from /app/assets/*, installs a browser CoworkAPI shim, and talks
+// to the same-origin cloud /api, /auth and /events (SSE) routes. The shim derives
+// the endpoint base from window.location and reads the CSRF token from /auth/me at
 // runtime, so the embedded bootstrap blob can be minimal.
 
-// URL prefix the /app document loads hashed assets from. The built browser.html
-// references '/assets/<hash>.js'; we rewrite those to '/app/assets/...' (see
-// rewriteBrowserHtmlAssetPaths) and serve them from this prefix.
+// URL prefix the renderer's hashed assets are served from. The browser build is
+// produced with vite `base: '/app/'`, so the built browser.html already
+// references '/app/assets/<hash>.js' directly — no HTML rewrite is needed.
 export const BROWSER_RENDERER_ASSET_PREFIX = '/app/assets/'
 
 // Candidate locations for the dist-browser build.
@@ -98,22 +98,13 @@ export function getBrowserRendererAsset(pathname: string): BrowserRendererAsset 
   return body ? { body, contentType } : null
 }
 
-// The built browser.html points at '/assets/...'; under /app we serve assets from
-// '/app/assets/...'. Rewrite the asset references (and inject the bootstrap blob)
-// so the document loads correctly when mounted under /app. The rewrite targets
-// src="/assets/ and href="/assets/ only — same-origin absolute asset paths.
-function rewriteBrowserHtmlAssetPaths(html: string): string {
-  return html
-    .replace(/src="\/assets\//g, `src="${BROWSER_RENDERER_ASSET_PREFIX}`)
-    .replace(/href="\/assets\//g, `href="${BROWSER_RENDERER_ASSET_PREFIX}`)
-}
-
 let cachedBrowserHtml: string | null | undefined
 
 /**
- * The /app SPA document: the built browser.html with asset paths rewritten under
- * /app/assets and the bootstrap blob injected into <script id="cowork-bootstrap">.
- * Returns null when the dist-browser build is absent.
+ * The SPA document: the built browser.html (its hashed assets already reference
+ * /app/assets via vite's `base: '/app/'`, so no path rewrite is needed) with the
+ * bootstrap blob injected into <script id="cowork-bootstrap">. Returns null when
+ * the dist-browser build is absent.
  */
 export function browserRendererHtml(bootstrap: Record<string, unknown>): string | null {
   if (cachedBrowserHtml === undefined) {
@@ -121,13 +112,12 @@ export function browserRendererHtml(bootstrap: Record<string, unknown>): string 
     cachedBrowserHtml = candidate ? readFileSync(candidate, 'utf8') : null
   }
   if (cachedBrowserHtml === null) return null
-  const rewritten = rewriteBrowserHtmlAssetPaths(cachedBrowserHtml)
   // The shim reads JSON.parse(textContent) of this tag, so the payload must be
   // valid JSON and must not break out of the <script> element. JSON.stringify
   // cannot emit a literal '<', so a '</script>' sequence is not representable; the
   // '<' escape below is belt-and-suspenders for the same guarantee.
   const json = JSON.stringify(bootstrap).replace(/</g, '\\u003c')
-  return rewritten.replace(
+  return cachedBrowserHtml.replace(
     /(<script id="cowork-bootstrap" type="application\/json">)[\s\S]*?(<\/script>)/,
     `$1${json}$2`,
   )

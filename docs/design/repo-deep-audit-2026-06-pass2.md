@@ -140,12 +140,12 @@ Every session-events SSE connection registers its own `setInterval(pollMs=1000)`
 ## Dead code — safe-removal shortlist (verified zero non-defining references)
 | Symbol | path:line |
 |---|---|
-| `getUiThemeOptions` | `apps/desktop/src/renderer/helpers/theme-presets.ts:102` (+2 re-export lines) |
+| `getUiThemeOptions` | `packages/app/src/helpers/theme-presets.ts:102` (+2 re-export lines) |
 | `cloudWebRoutesForSurface` | `apps/website/src/app-shell.ts:233` |
 | `findCloudWebRouteApiMatrix` | `apps/website/src/route-api-matrix.ts:445` |
 | `useCloudSessions`/`useCloudSessionView`/`useCloudWorkspaceEvents` | `apps/website/src/react-workbench-hooks.ts:14,40,92` *(confirm with cloud-web owner — looks staged-but-unwired)* |
 | `OutgoingFile.path` (deprecated, 0 readers) | `packages/gateway-channel/src/provider.ts:215` |
-| unused re-exports in `@/components/ui` barrel | `apps/desktop/src/renderer/components/ui/index.ts` *(prune lines; do NOT delete the components — they live in `@open-cowork/ui`)* |
+| unused re-exports in `@/components/ui` barrel | `packages/app/src/components/ui/index.ts` *(prune lines; do NOT delete the components — they live in `@open-cowork/ui`)* |
 
 **knip false-positives (keep):** the entire cloud-client `domain-clients/*`+`domains/*` surface (reachable via a re-export ladder knip's per-module graph misses — each has a real call site; `CloudTransportError` is defined once in `errors.ts`, the "copies" are re-exports); desktop `main/*` exports (IPC-wired or test-only security guards); `chart-spec-safety` MAX_* / website `CLOUD_WEB_*` constants; devDeps invoked via scripts (`esbuild`×7, `electron-builder`, `tailwindcss`, root `zod`/`pglite`). **Verified strong on the "obvious" categories:** zero `if (false)`, zero `debugger`/`.only`/focused tests, zero genuine `TODO`/`FIXME`/`HACK`, no stray `console.*` in runtime paths, and **no `@ts-ignore`/`@ts-expect-error` in non-test code**; trust-boundary casts (tool HTTP bridges, signed-token verifiers, IPC preload) are all validate-then-use.
 

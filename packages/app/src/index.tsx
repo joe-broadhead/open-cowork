@@ -1,8 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { AppApiProvider, studioSurfaceStyles } from '@open-cowork/ui'
+import { studioSurfaceStyles } from '@open-cowork/ui'
 import { App } from './App'
-import { resolveAppApi } from './runtime-env'
 import { applyAppearancePreferences } from './helpers/theme'
 import './styles/globals.css'
 
@@ -73,13 +72,9 @@ try {
     throw new Error('Renderer root element was not found.')
   }
 
-  // Inject the AppAPI for this runtime so the renderer can migrate off direct
-  // window.coworkApi calls onto the shared useAppApi() seam (the unified-UI work).
   createRoot(rootElement).render(
     <StrictMode>
-      <AppApiProvider api={resolveAppApi()}>
-        <App />
-      </AppApiProvider>
+      <App />
     </StrictMode>,
   )
 } catch (error) {

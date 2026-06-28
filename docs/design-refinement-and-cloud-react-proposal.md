@@ -7,9 +7,9 @@
 > [`design/repo-deep-audit-2026-06.md`](design/repo-deep-audit-2026-06.md).
 >
 > The "Cloud Web → React" migration proposed below was also overtaken: Cloud Web is no
-> longer a separate `apps/website` app. The single desktop renderer (`apps/desktop/src/renderer`)
+> longer a separate `apps/website` app. The single unified renderer (`packages/app/src`)
 > now runs both Desktop (Electron, real IPC) and Cloud Web (the browser, over a typed `CoworkAPI`
-> shim at `apps/desktop/src/renderer/browser/cowork-api.ts`), and the cloud serves it at `GET /`.
+> shim at `packages/app/src/browser/cowork-api.ts`), and the cloud serves it at `GET /`.
 > The `apps/website` package was deleted. The "Current architecture (grounded)" table and the
 > `apps/website` references below describe the pre-unification state. See
 > [architecture](architecture.md) and [Cloud Web Studio](cloud-web-workbench.md).

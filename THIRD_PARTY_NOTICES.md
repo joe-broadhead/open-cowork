@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `3d4ddf1241ec5558927b59657e070e5124e1167ce45eda007f33c0b1f26bd736`
-- Production package entries: 511
-- Bundled license directories: 463 (48 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `7cce8866e6b38cbbaa7fad26144fa76db3d136ba32a8441ee61971b450f87a23`
+- Production package entries: 509
+- Bundled license directories: 463 (46 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -71,9 +71,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @open-cowork/runtime-host | link:../runtime-host | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/ui | link:../../packages/ui | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/ui | link:../ui | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/website | link:../../apps/website | UNKNOWN |  |  |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
 | @smithy/core | 3.24.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__core@3.24.4/ | https://github.com/smithy-lang/smithy-typescript.git |
 | @smithy/credential-provider-imds | 4.3.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__credential-provider-imds@4.3.4/ | https://github.com/smithy-lang/smithy-typescript.git |

@@ -7,7 +7,7 @@ Open Cowork uses a small, enforceable design system so UI work stays consistent 
 Canonical structural tokens live in
 `packages/shared/src/design-tokens.ts` and are documented in
 [Design Tokens](design-tokens.md). Desktop imports the generated CSS variables
-from `apps/desktop/src/renderer/styles/generated/design-tokens.css`; Cloud Web
+from `packages/app/src/styles/generated/design-tokens.css`; Cloud Web
 is the browser build of the same renderer, so it ships the same structural
 `:root` block (also produced by `emitRootTokensCss()` for the cloud shell).
 `pnpm design-tokens:build`
@@ -35,7 +35,7 @@ Avoid adding new Tailwind arbitrary font-size utilities such as `text-[13px]`. `
 
 Shared React primitives live in `packages/ui` and are exported as the private
 workspace package `@open-cowork/ui`. Desktop keeps compatibility re-export
-shims in `apps/desktop/src/renderer/components/ui/`, but new primitive work
+shims in `packages/app/src/components/ui/`, but new primitive work
 should happen in the package:
 
 - `Button` and `IconButton` for actions. `IconButton` requires a `label` prop; `pnpm lint` fails if a usage omits it.
@@ -81,18 +81,18 @@ Desktop and Cloud Web both expose the same workbench structure through
 `data-workbench-pane="threads"`, `data-workbench-pane="conversation"`,
 `data-workbench-pane="review"`, `data-action-cluster="true"`, and
 `data-diff-view="true"`. The renderer styles these classes once in
-`apps/desktop/src/renderer/styles/globals.css` for both Desktop and Cloud Web.
+`packages/app/src/styles/globals.css` for both Desktop and Cloud Web.
 Keep future chat, artifact, and review affordances on those shared hooks.
 
-Cloud Web is the browser build of the desktop renderer
-(`apps/desktop/src/renderer`), served by the cloud at `GET /`. In the browser
+Cloud Web is the browser build of the unified renderer
+(`packages/app/src`), served by the cloud at `GET /`. In the browser
 the renderer runs against a typed `CoworkAPI` shim
-(`apps/desktop/src/renderer/browser/cowork-api.ts`) backed by the cloud HTTP +
+(`packages/app/src/browser/cowork-api.ts`) backed by the cloud HTTP +
 SSE API; on Electron the same renderer runs against the preload IPC bridge.
 Auth bootstrap, routing, threads, chat, agents, capabilities, workflows,
 artifacts, admin/settings surfaces, and theme switching all live in the single
 renderer. New feature code should use the renderer's
-`apps/desktop/src/renderer/app-api.ts` contract instead of direct `fetch`,
+`packages/app/src/app-api.ts` contract instead of direct `fetch`,
 `EventSource`, or `window.coworkApi` access.
 
 The production visual QA contract for shared Studio surfaces is documented in

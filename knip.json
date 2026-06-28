@@ -19,12 +19,14 @@
         "eslint.a11y.config.mjs",
         "scripts/*.mjs",
         "scripts/**/*.ts",
-        ".github/scripts/*.mjs"
+        ".github/scripts/*.mjs",
+        "tests/**/*.{ts,mjs}"
       ],
       "project": [
         "scripts/**/*.{js,mjs,ts}",
         ".github/scripts/*.mjs",
-        "*.config.{js,mjs,ts}"
+        "*.config.{js,mjs,ts}",
+        "tests/**/*.{ts,mjs}"
       ]
     },
     "apps/desktop": {

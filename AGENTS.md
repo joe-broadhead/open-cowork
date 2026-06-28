@@ -74,7 +74,7 @@ Primary files:
 - `packages/runtime-host/src/workflow/workflow-tool-actions.ts`
 - `packages/shared/src/node/workflow-webhook-server.ts`
 - `mcps/workflows/src/index.ts`
-- `apps/desktop/src/renderer/components/workflows/`
+- `packages/app/src/components/workflows/`
 
 Rules:
 - Workflow setup is thread-based: the Workflow Designer agent clarifies the task, then creates the saved workflow through the Workflows MCP.
@@ -84,9 +84,9 @@ Rules:
 ### Renderer and navigation
 
 Primary files:
-- `apps/desktop/src/renderer/App.tsx`
-- `apps/desktop/src/renderer/components/`
-- `apps/desktop/src/renderer/stores/`
+- `packages/app/src/App.tsx`
+- `packages/app/src/components/`
+- `packages/app/src/stores/`
 
 Rules:
 - Keep navigation state app-owned, not trapped inside a leaf component.

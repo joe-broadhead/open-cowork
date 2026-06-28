@@ -23,8 +23,8 @@ type MermaidManifest = {
 }
 
 test('docs Mermaid vendor manifest matches the locked workspace dependency', () => {
-  const desktopPackage = readJson<PackageJson>('apps/desktop/package.json')
-  const mermaidPackage = readJson<PackageJson>('apps/desktop/node_modules/mermaid/package.json')
+  const rendererPackage = readJson<PackageJson>('packages/app/package.json')
+  const mermaidPackage = readJson<PackageJson>('packages/app/node_modules/mermaid/package.json')
   const esbuildPackage = readJson<PackageJson>('node_modules/esbuild/package.json')
   const manifest = readJson<MermaidManifest>('docs/javascripts/vendor/mermaid-manifest.json')
   const bundle = readFileSync(new URL('../docs/javascripts/vendor/mermaid.min.js', import.meta.url))
@@ -32,8 +32,8 @@ test('docs Mermaid vendor manifest matches the locked workspace dependency', () 
 
   assert.equal(manifest.package, 'mermaid')
   assert.equal(manifest.packageVersion, mermaidPackage.version)
-  assert.equal(manifest.packageDependency, desktopPackage.dependencies?.mermaid)
-  assert.equal(manifest.source, 'apps/desktop/node_modules/mermaid/dist/mermaid.esm.min.mjs')
+  assert.equal(manifest.packageDependency, rendererPackage.dependencies?.mermaid)
+  assert.equal(manifest.source, 'packages/app/node_modules/mermaid/dist/mermaid.esm.min.mjs')
   assert.equal(manifest.bundle, 'docs/javascripts/vendor/mermaid.min.js')
   assert.equal(manifest.generatedBy, 'node scripts/build-docs-mermaid-vendor.mjs')
   assert.equal(manifest.bundler, 'esbuild')

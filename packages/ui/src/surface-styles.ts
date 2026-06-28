@@ -1,21 +1,16 @@
 // Shared Studio surface stylesheet (CSS-in-TS).
 //
-// These rules style the shared @open-cowork/ui surfaces and are the SINGLE
-// source of truth for both the Electron desktop renderer and Cloud Web, so the
-// two surfaces stay pixel-identical. Before this module, each surface's CSS was
-// hand-maintained twice (desktop `globals.css` and the website `style-*.ts`
-// files), which is how subtle drift crept in.
+// These rules style the shared @open-cowork/ui surfaces. There is one renderer
+// (`packages/app`) running on both Electron (desktop) and the browser (cloud), so
+// styling the surfaces here — once, in @open-cowork/ui — means both platforms are
+// pixel-identical by construction.
 //
 // Rules here may use only design tokens emitted by @open-cowork/shared
-// (`emitRootTokensCss`), since those are the tokens present on BOTH apps. Do not
-// use app-local aliases (e.g. the website's `--muted`, `--tone-*`) — they are
-// not defined on the desktop and would silently fall back.
+// (`emitRootTokensCss`). Do not use app-local CSS aliases — only the shared
+// tokens are guaranteed present wherever the renderer runs.
 //
-// Consumed by:
-//   - Cloud Web: `apps/website/src/style-artifacts.ts` re-exports these and
-//     `apps/website/src/styles.ts` embeds them in the assembled stylesheet.
-//   - Desktop:   `packages/app/src/index.tsx` injects
-//     `studioSurfaceStyles()` into a <style> element at renderer startup.
+// Consumed by `packages/app/src/index.tsx`, which injects `studioSurfaceStyles()`
+// into a <style> element at renderer startup.
 //
 // Radius is assigned by surface ROLE, not by eye (pick the var, never a px):
 //   --radius-xs  inline code chips, kbd, tiny inset rectangles

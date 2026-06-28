@@ -249,7 +249,7 @@ projection, channel adapters, and deployment ergonomics.
 | Secret adapters | `packages/cloud-server/src/secret-adapter.ts`, BYOK secret store, config refs | Resolve or protect secrets behind refs. Raw provider keys, OAuth tokens, cookies, channel secrets, and signed URLs must never enter renderer state, cache, diagnostics, or public templates. |
 | Worker pool modes | `docs/managed-workers.md`, `managed-worker-types.ts`, `services/managed-worker-service.ts` | Add worker modes only after the trust model is documented. Customer-hosted workers remain deferred until a separate review covers updates, liability, networking, and data residency. |
 | Runtime profiles and policy packs | `cloud.profiles`, `cloud.runtime`, `cloud-config.ts`, `runtime-config-builder.ts` | Cloud profiles own feature flags and allowlists. Machine runtime config, arbitrary local stdio MCPs, and host project directories stay disabled unless explicitly reviewed and allowlisted. |
-| Cloud Web feature modules and admin panels | `apps/desktop/src/renderer`, `apps/desktop/src/renderer/browser/cowork-api.ts`, `docs/cloud-web-workbench.md` | Cloud Web is the unified renderer running in the browser over the cloud HTTP/SSE shim. It must not import server-only stores, runtime adapters, secret adapters, or provider-specific internals. |
+| Cloud Web feature modules and admin panels | `packages/app/src`, `packages/app/src/browser/cowork-api.ts`, `docs/cloud-web-workbench.md` | Cloud Web is the unified renderer running in the browser over the cloud HTTP/SSE shim. It must not import server-only stores, runtime adapters, secret adapters, or provider-specific internals. |
 | BYOK validation and injection hooks | `byok-secret-store.ts`, `runtime-config-builder.ts`, `opencode-runtime-adapter.ts`, `cloud-config.ts` | Provider keys enter OpenCode through runtime config provider options. They never enter process env, logs, renderer state, diagnostics, cache, or read APIs. |
 | Cloud event and projection contract | `packages/shared/src/cloud-session-projection.ts`, `opencode-runtime-adapter.ts`, `session-projection-service.ts`, gateway renderers | Runtime translation happens once at the worker/runtime boundary. Desktop, Web, and Gateway consume canonical Cloud events/projections rather than raw SDK events. |
 
@@ -504,7 +504,7 @@ without forking the codebase:
 Two things happen when this is set:
 
 1. **Date formatting** (`formatDate` from
-   `apps/desktop/src/renderer/helpers/i18n.ts`) switches to the
+   `packages/app/src/helpers/i18n.ts`) switches to the
    configured locale. Dates render as `31.12.2026` in `de-DE` and
    `12/31/2026` in `en-US`.
 

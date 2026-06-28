@@ -19,8 +19,8 @@
 //     method unwraps/rewraps to the shape `CoworkAPI` declares.
 //   * Events. The cloud exposes a workspace SSE stream + per-session SSE
 //     streams. We multiplex those into the per-channel `on.*` callbacks the
-//     renderer subscribes to (the inverse of the desktop AppAPI event
-//     forwarding in `packages/app/src/app-api.ts`).
+//     renderer subscribes to — the same `window.coworkApi.on.*` surface the
+//     Electron preload bridge supplies on desktop.
 //   * Electron-only methods (native dialogs, runtime restart, desktop pairing,
 //     updates, local OAuth, FS imports, app reset) have no cloud equivalent.
 //     They are implemented as signature-satisfying stubs that either use a
@@ -374,10 +374,9 @@ function parseSseEvent(event: MessageEvent, type: string): SseEvent {
 
 /**
  * Owns the cloud SSE streams (workspace + per-session) and fans each incoming
- * cloud session event out to the registered `on.*` callbacks. This is the
- * inverse of the desktop AppAPI's event-forwarding: there, per-channel push
- * subscriptions were flattened into one `{ type, data }` SSE shape; here, one
- * SSE shape is demultiplexed back into per-channel callbacks.
+ * cloud session event out to the registered `on.*` callbacks — demultiplexing
+ * the single `{ type, data }` SSE shape back into the per-channel callbacks the
+ * renderer registered, so it sees the same event surface as the Electron bridge.
  */
 class CloudEventHub {
   private workspaceSource: EventSource | null = null

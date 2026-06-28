@@ -8,7 +8,7 @@ The canonical typed token source is
 `emitRootTokensCss()`. The default dark theme is Mercury graphite with the
 Azure signature accent; Day is the matching warm light scheme.
 Desktop imports the generated CSS partial at
-`apps/desktop/src/renderer/styles/generated/design-tokens.css`, produced by
+`packages/app/src/styles/generated/design-tokens.css`, produced by
 `pnpm design-tokens:build`; Cloud Web emits the same structural variables from
 `emitRootTokensCss()` and layers public branding color tokens on top.
 `tests/design-tokens-sync.test.ts` drift-gates the generated Desktop partial
@@ -159,8 +159,8 @@ OpenCode and the existing Open Cowork projection layer.
 | --- | --- | --- |
 | Shared package | `packages/shared/src/design-tokens.ts` | Canonical typed token values, default dark brand theme, public branding bridge, and CSS emitter. |
 | Shared React UI | `packages/ui/src/` | Token-backed `WorkbenchLayout`, `ActionCluster`, `DiffView`, Studio shell/coworker/composer/lane/card primitives, production Studio cards/rows/boards/timelines/wizard/wiki primitives, and base primitive components consumed by Desktop and Cloud Web. |
-| Desktop | `apps/desktop/src/renderer/styles/generated/design-tokens.css` | Generated `:root` CSS variables imported by `globals.css`; do not hand-edit. |
-| Cloud Web | `apps/desktop/src/renderer/styles` (browser build served by `packages/cloud-server/src/browser-renderer-app.ts`) | Cloud Web is the browser build of the renderer, so it ships the same generated `:root` token CSS as Desktop (from `emitRootTokensCss()`), serves Mona Sans / Schibsted Grotesk from `/assets/fonts/*.woff2`, and overlays public branding variables from the cloud bootstrap. There is no separate Cloud Web stylesheet. |
+| Desktop | `packages/app/src/styles/generated/design-tokens.css` | Generated `:root` CSS variables imported by `globals.css`; do not hand-edit. |
+| Cloud Web | `packages/app/src/styles` (browser build served by `packages/cloud-server/src/browser-renderer-app.ts`) | Cloud Web is the browser build of the renderer, so it ships the same generated `:root` token CSS as Desktop (from `emitRootTokensCss()`), serves Mona Sans / Schibsted Grotesk from `/assets/fonts/*.woff2`, and overlays public branding variables from the cloud bootstrap. There is no separate Cloud Web stylesheet. |
 | Drift gate | `tests/design-tokens-sync.test.ts` | Fails when generated Desktop tokens, shared tokens, font package assumptions, or default public branding drift. |
 
 Run `pnpm design-tokens:build` after editing `DESIGN_TOKENS`. CI also runs

@@ -14,7 +14,7 @@ per patch, O(n²) for the full render. That falls over at ~2k tokens.
 
 Instead:
 
-- `apps/desktop/src/renderer/components/chat/MarkdownContent.tsx`
+- `packages/app/src/components/chat/MarkdownContent.tsx`
   caches the rendered HTML per message id in
   an LRU of size 200.
 - New patches render the **append** into the existing DOM via

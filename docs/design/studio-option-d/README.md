@@ -5,7 +5,7 @@ This is the **visual source of truth** for the Studio redesign tracked in the ro
 ## How coding agents should use this
 
 - The roadmap sub-issues reference files here by path, e.g. `option-d/styles.css`, `option-d/views-projects.jsx`, `option-d/data.js`, `option-d/app.jsx`. Open the referenced file to see exact layout, spacing, tokens, and component structure.
-- **Recreate the visual output** in the target stack: the single renderer `apps/desktop/src/renderer` (which serves both Desktop via Electron and Cloud Web via the browser shim) and shared `packages/ui`. Do **not** copy the prototype's internal structure (it's a standalone React-via-Babel demo) unless it happens to fit.
+- **Recreate the visual output** in the target stack: the single renderer `packages/app/src` (which serves both Desktop via Electron and Cloud Web via the browser shim) and shared `packages/ui`. Do **not** copy the prototype's internal structure (it's a standalone React-via-Babel demo) unless it happens to fit.
 - Read the HTML entry `Open Cowork - Studio (Option D).html` to see load order and which files compose each screen.
 
 ## Files

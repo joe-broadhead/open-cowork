@@ -2,9 +2,9 @@
 
 Cloud Web is the Open Cowork Studio running in the browser for cloud
 workspaces. It is not a separate UI. The single renderer at
-`apps/desktop/src/renderer` powers both Desktop (Electron, over the real
+`packages/app/src` powers both Desktop (Electron, over the real
 `window.coworkApi` IPC bridge) and Cloud Web (the browser, over a typed
-`CoworkAPI` shim at `apps/desktop/src/renderer/browser/cowork-api.ts`). The
+`CoworkAPI` shim at `packages/app/src/browser/cowork-api.ts`). The
 shim is backed by the cloud HTTP + SSE API, so the browser build of the
 renderer runs unchanged against the same tenant-scoped sessions, projections,
 workflows, artifacts, policy, and gateway records used by Desktop Cloud and
@@ -20,7 +20,7 @@ the browser surface.
 
 The browser surface and its cloud backing are documented below. The cloud HTTP
 API (`packages/cloud-server/src/http-routes`) and the browser `CoworkAPI` shim
-(`apps/desktop/src/renderer/browser/cowork-api.ts`) enforce required role,
+(`packages/app/src/browser/cowork-api.ts`) enforce required role,
 backing endpoint ids, loading/empty/error states, disabled-state behavior,
 pagination or cursor notes, and redaction requirements. Cloud HTTP server and
 renderer tests fail if a route omits its limit/cursor mode, raw-secret policy,
@@ -143,12 +143,12 @@ in Cloud because the browser shim reports them as unsupported through
 ## Unified Renderer
 
 Cloud Web is the browser build of the desktop renderer
-(`apps/desktop/src/renderer`). `pnpm cloud:build` runs
+(`packages/app/src`). `pnpm cloud:build` runs
 `pnpm --filter @open-cowork/desktop build:browser` to emit the renderer's
 browser bundle (`apps/desktop/dist-browser`), and the cloud server serves it at
 `GET /` through `packages/cloud-server/src/browser-renderer-app.ts`. The entry
 document loads hashed module/asset scripts and installs the browser
-`CoworkAPI` shim (`apps/desktop/src/renderer/browser/cowork-api.ts`), which
+`CoworkAPI` shim (`packages/app/src/browser/cowork-api.ts`), which
 derives the endpoint base from `window.location`, reads the CSRF token from
 `/auth/me`, and talks only to the same-origin cloud `/api`, `/auth`, and SSE
 event routes under the server's CSP nonce boundary.
@@ -161,7 +161,7 @@ dialogs, runtime restart, desktop pairing, local FS imports, app reset) have no
 cloud equivalent and the shim implements them as signature-satisfying stubs
 that no-op or reject with a clear "unavailable in the browser build" message.
 New feature work uses the shared `CoworkAPI`/AppAPI contract through
-`apps/desktop/src/renderer/app-api.ts` rather than direct `fetch`,
+`packages/app/src/app-api.ts` rather than direct `fetch`,
 `EventSource`, or `window.coworkApi` access.
 
 `/api/sessions` cursors are opaque, scoped to the authenticated tenant, user,
@@ -275,10 +275,10 @@ suite.
 |---|---|---|
 | `canonical-shared-tokens` | Shared design tokens are the only canonical Studio token source for Desktop and Cloud Web. | `packages/shared/src/design-tokens.ts`, `tests/design-tokens-sync.test.ts`, `docs/design-tokens.md` |
 | `shared-primitives-first` | Shared Studio primitives are preferred before app-local component duplication. | `packages/ui/src/`, `docs/design-system.md`, renderer vitest suite |
-| `shared-product-vocabulary` | Desktop and Cloud Web use the same user-facing vocabulary for shared concepts. | `docs/desktop-app.md`, `docs/cloud-web-workbench.md`, single renderer at `apps/desktop/src/renderer` |
-| `cloud-api-client-only` | Cloud Web remains a Cloud API client and does not own execution, projection semantics, or OpenCode runtime behavior. | `apps/desktop/src/renderer/browser/cowork-api.ts`, `tests/cloud-modularity-boundaries.test.ts`, `docs/architecture.md` |
-| `admin-not-default-path` | Admin/setup controls are explicit secondary surfaces and do not dominate the default user path. | `apps/desktop/src/renderer` admin/settings surfaces, `docs/cloud-web-workbench.md` |
-| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `packages/cloud-server/src/http-routes`, `apps/desktop/src/renderer/browser/cowork-api.ts`, `tests/cloud-http-server.test.ts` |
+| `shared-product-vocabulary` | Desktop and Cloud Web use the same user-facing vocabulary for shared concepts. | `docs/desktop-app.md`, `docs/cloud-web-workbench.md`, single renderer at `packages/app/src` |
+| `cloud-api-client-only` | Cloud Web remains a Cloud API client and does not own execution, projection semantics, or OpenCode runtime behavior. | `packages/app/src/browser/cowork-api.ts`, `tests/cloud-modularity-boundaries.test.ts`, `docs/architecture.md` |
+| `admin-not-default-path` | Admin/setup controls are explicit secondary surfaces and do not dominate the default user path. | `packages/app/src` admin/settings surfaces, `docs/cloud-web-workbench.md` |
+| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `packages/cloud-server/src/http-routes`, `packages/app/src/browser/cowork-api.ts`, `tests/cloud-http-server.test.ts` |
 | `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | renderer vitest suite, `tests/cloud-http-server.test.ts`, `docs/cloud-web-workbench.md` |
 | `docs-match-shipped-behavior` | Docs describe shipped behavior and explicit boundaries, not aspirational runtime behavior. | `docs/cloud-web-workbench.md`, `docs/release-checklist.md`, renderer + cloud HTTP suites |
 

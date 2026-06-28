@@ -210,9 +210,9 @@ The cloud web role serves the Cloud Web Workbench at `/`. The workbench is an
 API client for the same cloud control plane used by desktop sync and gateway
 clients; it does not access Postgres or secret storage directly.
 
-The browser app is the unified Open Cowork renderer (`apps/desktop/src/renderer`)
+The browser app is the unified Open Cowork renderer (`packages/app/src`)
 — the same UI that runs on Electron Desktop. In the browser it runs against a
-typed `CoworkAPI` shim (`apps/desktop/src/renderer/browser/cowork-api.ts`)
+typed `CoworkAPI` shim (`packages/app/src/browser/cowork-api.ts`)
 backed by the cloud HTTP + SSE API, and is served as a hashed-asset SPA under
 the server's CSP nonce and cookie-auth path. There is no separate Cloud Web
 codebase: the cloud serves the renderer's browser build

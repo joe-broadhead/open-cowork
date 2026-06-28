@@ -12,20 +12,22 @@ const requireFromDesktop = createRequire(new URL('apps/desktop/package.json', re
 const semver = requireFromDesktop('semver')
 const checkOnly = process.argv.includes('--check')
 
-const desktopPackagePath = new URL('apps/desktop/package.json', repoRootUrl)
-const mermaidPackagePath = new URL('apps/desktop/node_modules/mermaid/package.json', repoRootUrl)
+// mermaid is a dependency of the renderer package (packages/app); the docs vendor
+// bundle is pinned to that resolved version.
+const rendererPackagePath = new URL('packages/app/package.json', repoRootUrl)
+const mermaidPackagePath = new URL('packages/app/node_modules/mermaid/package.json', repoRootUrl)
 const esbuildPackagePath = new URL('node_modules/esbuild/package.json', repoRootUrl)
-const sourcePath = 'apps/desktop/node_modules/mermaid/dist/mermaid.esm.min.mjs'
+const sourcePath = 'packages/app/node_modules/mermaid/dist/mermaid.esm.min.mjs'
 const bundlePath = 'docs/javascripts/vendor/mermaid.min.js'
 const manifestPath = 'docs/javascripts/vendor/mermaid-manifest.json'
 
-const desktopPackage = readJson(desktopPackagePath)
+const rendererPackage = readJson(rendererPackagePath)
 const mermaidPackage = readJson(mermaidPackagePath)
 const esbuildPackage = readJson(esbuildPackagePath)
-const dependencyRange = desktopPackage.dependencies?.mermaid
+const dependencyRange = rendererPackage.dependencies?.mermaid
 
 if (typeof dependencyRange !== 'string' || !semver.satisfies(mermaidPackage.version, dependencyRange)) {
-  throw new Error(`apps/desktop/package.json mermaid dependency ${dependencyRange || '<missing>'} does not match resolved mermaid ${mermaidPackage.version}.`)
+  throw new Error(`packages/app/package.json mermaid dependency ${dependencyRange || '<missing>'} does not match resolved mermaid ${mermaidPackage.version}.`)
 }
 
 const bundle = await buildBundle()

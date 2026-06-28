@@ -141,8 +141,8 @@ workspace authorities:
 
 Cloud Web's browser contract is documented in
 [Cloud Web Studio](cloud-web-workbench.md). Cloud Web is the unified renderer
-(`apps/desktop/src/renderer`) running in the browser over a typed `CoworkAPI`
-shim (`apps/desktop/src/renderer/browser/cowork-api.ts`), so Desktop and Cloud
+(`packages/app/src`) running in the browser over a typed `CoworkAPI`
+shim (`packages/app/src/browser/cowork-api.ts`), so Desktop and Cloud
 Web share Studio vocabulary, design tokens, primitives, and visible state
 coverage by construction. The browser contract keeps OpenCode as the execution
 authority and the Cloud API as the browser boundary.
@@ -337,10 +337,10 @@ The renderer does not access the local filesystem or network directly. It
 goes through the preload bridge and IPC contract.
 
 Code:
-- `apps/desktop/src/renderer/App.tsx` — root component and routing.
-- `apps/desktop/src/renderer/components/` — UI trees for each main area.
-- `apps/desktop/src/renderer/stores/` — renderer-side state stores.
-- `apps/desktop/src/renderer/hooks/useOpenCodeEvents.ts` — the single event
+- `packages/app/src/App.tsx` — root component and routing.
+- `packages/app/src/components/` — UI trees for each main area.
+- `packages/app/src/stores/` — renderer-side state stores.
+- `packages/app/src/hooks/useOpenCodeEvents.ts` — the single event
   consumer on the renderer side.
 - `packages/shared/src/session-view-model.ts` — shared view-model builders
   used by the main-process session engine.
@@ -369,7 +369,7 @@ Code:
   Workflow Designer to preview and save workflows after user confirmation
 - `packages/shared/src/node/workflow-webhook-server.ts` — loopback webhook intake
   for saved workflows
-- `apps/desktop/src/renderer/components/workflows/` — saved workflow list,
+- `packages/app/src/components/workflows/` — saved workflow list,
   manual run controls, webhook invocation details, and setup/run thread links
 
 ## Sessions and thread model
