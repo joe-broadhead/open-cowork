@@ -281,6 +281,14 @@ function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
         csrfToken = null
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent(BROWSER_UNAVAILABLE_AUTH_EVENT, { detail: { path } }))
+          // Cloud auth is server-driven: a 401 means the session is missing or
+          // expired, so send the browser to the OIDC login, which redirects back
+          // authenticated. (The ephemeral auth=none cloud returns 200 on /auth/me,
+          // so this never fires there.) Skip when already on the auth path to
+          // avoid a redirect loop.
+          if (!window.location.pathname.startsWith('/auth/')) {
+            window.location.assign('/auth/login')
+          }
         }
       }
       throw error
