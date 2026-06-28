@@ -20,6 +20,34 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
     return true
   }
   if (!artifactId && req.method === 'POST') {
+    // Opt-in direct-to-store upload (begin phase). When the client asks (?transfer=presigned)
+    // AND the configured object store supports presigning, mint a time-limited PUT URL the
+    // client uploads bytes straight to object storage with, then calls the finalize endpoint
+    // below to record the row. When presigning is unavailable (non-S3 / no static creds) we
+    // reply transfer:'unsupported' so the client falls back to the buffered upload below — the
+    // default-safe path. The begin request carries only metadata (no bytes), so it stays small.
+    if (context.url.searchParams.get('transfer') === 'presigned') {
+      const beginBody = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const begun = await options.artifacts.presignSessionArtifactUpload(context.principal, sessionId, {
+        filename: tools.readString(beginBody.filename) || '',
+        contentType: tools.readString(beginBody.contentType),
+      })
+      if (begun) {
+        tools.writeJson(res, 200, {
+          upload: {
+            transfer: 'presigned',
+            artifactId: begun.artifactId,
+            uploadUrl: begun.presigned.url,
+            uploadMethod: begun.presigned.method,
+            uploadHeaders: begun.presigned.headers,
+            uploadExpiresAt: begun.presigned.expiresAt,
+          },
+        }, options.corsOrigin)
+        return true
+      }
+      tools.writeJson(res, 200, { upload: { transfer: 'unsupported' } }, options.corsOrigin)
+      return true
+    }
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
     const uploaded = await options.artifacts.uploadSessionArtifact(context.principal, sessionId, {
       filename: tools.readString(body.filename) || '',
@@ -38,6 +66,27 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
   }
 
   const artifactSubaction = context.segments[5]
+  if (artifactId && artifactSubaction === 'finalize' && req.method === 'POST') {
+    // Finalize phase of the direct-to-store upload: the bytes are already in object storage
+    // (the client PUT them to the presigned URL); record the metadata row, reusing the same
+    // write the buffered upload performs. Size/content-type are read authoritatively from the
+    // store via headObject in the service, so the request body carries only descriptive metadata.
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const finalized = await options.artifacts.finalizeSessionArtifactUpload(context.principal, sessionId, {
+      artifactId,
+      filename: tools.readString(body.filename) || '',
+      contentType: tools.readString(body.contentType),
+      kind: tools.readString(body.kind) as ArtifactKind | null,
+      status: tools.readString(body.status) as ArtifactStatus | null,
+      authorAgentId: tools.readString(body.authorAgentId),
+      projectId: tools.readString(body.projectId),
+      taskId: tools.readString(body.taskId),
+      statusUpdatedBy: tools.readString(body.statusUpdatedBy),
+      statusUpdatedAt: tools.readString(body.statusUpdatedAt),
+    })
+    tools.writeJson(res, 201, { artifact: options.artifacts.publicArtifact(finalized) }, options.corsOrigin)
+    return true
+  }
   if (artifactId && artifactSubaction === 'status' && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     const nextStatus = tools.readString(body.status)

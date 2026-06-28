@@ -129,6 +129,7 @@ const DEFAULT_ENDPOINTS: Record<string, string> = {
   sessionArtifacts: '/api/sessions/:sessionId/artifacts',
   sessionArtifact: '/api/sessions/:sessionId/artifacts/:artifactId',
   sessionArtifactStatus: '/api/sessions/:sessionId/artifacts/:artifactId/status',
+  sessionArtifactFinalize: '/api/sessions/:sessionId/artifacts/:artifactId/finalize',
   artifactsIndex: '/api/artifacts',
   launchpadFeed: '/api/launchpad/feed',
   knowledgeSnapshot: '/api/knowledge',
@@ -193,6 +194,28 @@ const BROWSER_UNAVAILABLE_AUTH_EVENT = 'open-cowork-cloud-auth-required'
 
 function browserUnavailable(name: string): never {
   throw new Error(`${name} is not available in the browser build.`)
+}
+
+// Decode the renderer's base64 artifact payload into raw bytes for a direct PUT to object
+// storage. The artifact upload API hands us base64 (or base64url); the object store wants the
+// bytes themselves. Used only by the presigned-upload fast path; the buffered path posts the
+// base64 string unchanged through the cloud API.
+function base64ToBytes(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const binary = atob(normalized)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
+// Shape of the cloud "begin presigned upload" response (POST /artifacts?transfer=presigned).
+type PresignedUploadBegin = {
+  transfer?: string
+  artifactId?: string
+  uploadUrl?: string
+  uploadMethod?: string
+  uploadHeaders?: Record<string, string>
+  uploadExpiresAt?: string
 }
 
 function readBootstrapFromWindow(): BrowserCoworkApiBootstrap | null {
@@ -964,8 +987,71 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
           'artifact',
           null as never,
         ),
-      upload: async (req): Promise<SessionArtifact> =>
-        unwrap(await request(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { method: 'POST', body: req }), 'artifact', null as never),
+      upload: async (req): Promise<SessionArtifact> => {
+        // Buffered upload: base64 the whole artifact through the cloud API. This is the
+        // default-safe path and the unchanged behaviour the renderer has always seen.
+        const bufferedUpload = async (): Promise<SessionArtifact> =>
+          unwrap(await request(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { method: 'POST', body: req }), 'artifact', null as never)
+
+        // Cloud/browser optimization: when the server advertises presigned upload support, push
+        // the bytes straight to object storage (begin -> direct PUT -> finalize) so they never
+        // base64-buffer through the web pod. The buffered path remains the fallback whenever the
+        // server says "unsupported" (non-S3 / no static creds), the begin call errors (e.g. an
+        // older server), or the direct PUT fails. (Electron implements `upload` over IPC and
+        // never reaches this code; the public method signature + return shape are unchanged.)
+        let begun: PresignedUploadBegin | null
+        try {
+          begun = unwrap<PresignedUploadBegin | null>(
+            await request(withQuery(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { transfer: 'presigned' }), {
+              method: 'POST',
+              body: { filename: req.filename, contentType: req.contentType ?? null },
+            }),
+            'upload',
+            null,
+          )
+        } catch {
+          return bufferedUpload()
+        }
+        if (!begun || begun.transfer !== 'presigned' || !begun.uploadUrl || !begun.artifactId) {
+          return bufferedUpload()
+        }
+
+        let putOk: boolean
+        try {
+          const putResponse = await fetch(begun.uploadUrl, {
+            method: begun.uploadMethod || 'PUT',
+            headers: begun.uploadHeaders || {},
+            // Uint8Array is a valid runtime BodyInit; the cast bridges the typed-array generics
+            // friction in the DOM lib's BufferSource definition.
+            body: base64ToBytes(req.dataBase64) as unknown as BodyInit,
+          })
+          putOk = putResponse.ok
+        } catch {
+          putOk = false
+        }
+        if (!putOk) return bufferedUpload()
+
+        // The bytes are in the store; record the metadata row. Finalize errors propagate (a
+        // buffered retry here would re-upload the bytes under a second artifact id).
+        return unwrap(
+          await request(endpoint('sessionArtifactFinalize', { sessionId: req.sessionId, artifactId: begun.artifactId }), {
+            method: 'POST',
+            body: {
+              filename: req.filename,
+              contentType: req.contentType ?? null,
+              kind: req.kind ?? null,
+              status: req.status ?? null,
+              authorAgentId: req.authorAgentId ?? null,
+              projectId: req.projectId ?? null,
+              taskId: req.taskId ?? null,
+              statusUpdatedBy: req.statusUpdatedBy ?? null,
+              statusUpdatedAt: req.statusUpdatedAt ?? null,
+            },
+          }),
+          'artifact',
+          null as never,
+        )
+      },
       open: async () => null,
       export: async () => null,
       reveal: async () => false,

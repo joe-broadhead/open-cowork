@@ -7740,6 +7740,119 @@ test('cloud HTTP artifact download falls back to buffered base64 when the store 
   }
 })
 
+test('cloud HTTP artifact upload issues a presigned PUT, then finalize records the row (F4)', async () => {
+  const inner = createInMemoryObjectStore()
+  let presignedPutKey: string | null = null
+  // A presign-capable store: presignPut hands back a direct PUT URL (modelling S3); real storage
+  // stays in-memory so the test can simulate the landed PUT and finalize's headObject finds it.
+  const presigningStore: ObjectStoreAdapter = {
+    ...inner,
+    async presignPut(input) {
+      presignedPutKey = input.key
+      return {
+        method: 'PUT',
+        url: `https://object-store.test/${input.key}?sig=put`,
+        headers: input.contentType ? { 'content-type': input.contentType } : {},
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      }
+    },
+  }
+  const fixture = createFixture({ objectStore: presigningStore, abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    // Begin: ask for a presigned upload. The store supports it, so we get a direct PUT URL.
+    const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).upload)
+    assert.equal(begin.transfer, 'presigned')
+    assert.match(String(begin.uploadUrl), /^https:\/\/object-store\.test\//)
+    assert.equal(begin.uploadMethod, 'PUT')
+    assert.equal(begin.uploadExpiresAt, '2099-01-01T00:00:00.000Z')
+    assert.deepEqual(begin.uploadHeaders, { 'content-type': 'text/plain' })
+    const artifactId = String(begin.artifactId)
+    assert.ok(artifactId)
+    assert.ok(presignedPutKey, 'expected the store to be asked to presign the upload key')
+
+    // Simulate the client PUTting bytes directly to the object store at the presigned key.
+    await inner.putObject({ key: presignedPutKey!, body: Buffer.from('direct upload body'), contentType: 'text/plain' })
+
+    // Finalize: record the metadata row. Size is read authoritatively from the store (headObject).
+    const finalized = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).artifact)
+    assert.equal(finalized.filename, 'report.txt')
+    assert.equal(finalized.contentType, 'text/plain')
+    assert.equal(finalized.size, 'direct upload body'.length)
+    assert.equal(String(finalized.cloudArtifactId || finalized.artifactId), artifactId)
+
+    // The finalized artifact now shows up in the session's artifact list, like a buffered upload.
+    const listed = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))).artifacts).map(asRecord)
+    assert.equal(listed.some((entry) => String(entry.cloudArtifactId || entry.artifactId) === artifactId), true)
+
+    // Finalize attributes the uploaded bytes for usage/billing, exactly like the buffered path.
+    const usageEvents = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/usage/events`))).events).map(asRecord)
+    assert.equal(usageEvents.find((event) => event.eventType === 'artifact.uploaded')?.quantity, 'direct upload body'.length)
+
+    // Finalize before the PUT lands is a 409 (object missing), so the client can retry/fall back.
+    const missing = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}-not-real/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    })
+    assert.equal(missing.status, 409)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact upload begin signals unsupported when the store cannot presign, so the client buffers (F4)', async () => {
+  // The default in-memory store has no presignPut capability, so a presigned-upload begin must
+  // reply transfer:'unsupported' and the buffered upload must still work unchanged.
+  const fixture = createFixture({ abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).upload)
+    assert.equal(begin.transfer, 'unsupported')
+    assert.equal('uploadUrl' in begin, false)
+
+    // The buffered upload (no transfer opt-in) is unchanged and still records the artifact.
+    const uploaded = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', dataBase64: Buffer.from('buffered body').toString('base64') }),
+    }))).artifact)
+    assert.equal(uploaded.size, 'buffered body'.length)
+    const download = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${String(uploaded.artifactId)}`,
+    ))).artifact)
+    assert.equal(Buffer.from(String(download.dataBase64), 'base64').toString('utf8'), 'buffered body')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud artifact index scans paged sessions until matching artifacts are found', async () => {
   const principal: CloudPrincipal = {
     tenantId: 'tenant-1',

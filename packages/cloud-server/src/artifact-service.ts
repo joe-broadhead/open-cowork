@@ -65,6 +65,40 @@ export type CloudArtifactUploadInput = {
   statusUpdatedAt?: string | null
 }
 
+// Metadata fields shared by the buffered upload and the presigned-upload finalize. The
+// presigned flow never carries the bytes themselves (those go straight to object storage),
+// so finalize describes the artifact with everything except the body.
+type CloudArtifactMetadataInput = {
+  filename: unknown
+  contentType?: unknown
+  kind?: unknown
+  status?: unknown
+  authorAgentId?: unknown
+  projectId?: unknown
+  taskId?: unknown
+  statusUpdatedBy?: unknown
+  statusUpdatedAt?: unknown
+}
+
+export type CloudArtifactPresignUploadInput = {
+  filename: string
+  contentType?: string | null
+  expiresSeconds?: number
+}
+
+export type CloudArtifactFinalizeUploadInput = {
+  artifactId: string
+  filename: string
+  contentType?: string | null
+  kind?: ArtifactKind | null
+  status?: ArtifactStatus | null
+  authorAgentId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  statusUpdatedBy?: string | null
+  statusUpdatedAt?: string | null
+}
+
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
 const ARTIFACT_INDEX_SESSION_PAGE_SIZE = 100
 const MAX_ARTIFACT_INDEX_SESSION_SCAN = 5_000
@@ -118,6 +152,34 @@ function boundedStatus(value: unknown, fallback: ArtifactStatus) {
   if (value === null || value === undefined || value === '') return fallback
   if (!isArtifactStatus(value)) throw new CloudServiceError(400, 'Artifact status is invalid.')
   return value
+}
+
+// The presigned-upload finalize echoes back the artifact id the begin endpoint issued. It is
+// interpolated into the object key, so it must be a tight, traversal-free token (server-issued
+// UUIDs satisfy this) — never trust a client-supplied id that could reshape the key path.
+function boundedArtifactId(value: unknown) {
+  if (typeof value !== 'string') throw new CloudServiceError(400, 'Artifact id is required.')
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > 128 || !/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+    throw new CloudServiceError(400, 'Artifact id is invalid.')
+  }
+  return trimmed
+}
+
+// Validate + normalize the artifact metadata both upload paths persist, so the buffered upload
+// and the presigned finalize agree on bounds and on the derived defaults (kind/status/statusUpdatedAt).
+function resolveArtifactMetadataFields(input: CloudArtifactMetadataInput, createdAt: string) {
+  const filename = boundedFilename(input.filename)
+  const contentType = boundedContentType(input.contentType)
+  const kind = boundedKind(input.kind, inferArtifactKind({ filename, mime: contentType }))
+  const status = boundedStatus(input.status, defaultArtifactStatusForKind(kind))
+  const authorAgentId = boundedNullableString(input.authorAgentId, 'Author agent id')
+  const projectId = boundedNullableString(input.projectId, 'Project id')
+  const taskId = boundedNullableString(input.taskId, 'Task id')
+  const statusUpdatedBy = boundedNullableString(input.statusUpdatedBy, 'Status updated by')
+  const explicitStatusUpdatedAt = boundedNullableIsoDate(input.statusUpdatedAt, 'Status updated at')
+  const statusUpdatedAt = explicitStatusUpdatedAt ?? ((input.status || input.statusUpdatedBy) ? createdAt : null)
+  return { filename, contentType, kind, status, authorAgentId, projectId, taskId, statusUpdatedBy, statusUpdatedAt }
 }
 
 function decodeBase64(value: unknown) {
@@ -283,56 +345,142 @@ export class CloudArtifactService {
   ): Promise<CloudArtifactRecord> {
     await this.sessionService.getSessionView(principal, sessionId)
     const artifactId = this.ids.randomUUID()
-    const filename = boundedFilename(input.filename)
-    const contentType = boundedContentType(input.contentType)
-    const body = decodeBase64(input.dataBase64)
-    const kind = boundedKind(input.kind, inferArtifactKind({ filename, mime: contentType }))
-    const status = boundedStatus(input.status, defaultArtifactStatusForKind(kind))
-    const authorAgentId = boundedNullableString(input.authorAgentId, 'Author agent id')
-    const projectId = boundedNullableString(input.projectId, 'Project id')
-    const taskId = boundedNullableString(input.taskId, 'Task id')
-    const statusUpdatedBy = boundedNullableString(input.statusUpdatedBy, 'Status updated by')
-    const explicitStatusUpdatedAt = boundedNullableIsoDate(input.statusUpdatedAt, 'Status updated at')
     const createdAt = new Date().toISOString()
+    const meta = resolveArtifactMetadataFields(input, createdAt)
+    const body = decodeBase64(input.dataBase64)
     await this.sessionService.assertArtifactUploadAllowed(principal, body.byteLength)
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
       sessionId,
       artifactId,
-      filename,
+      filename: meta.filename,
     })
     const stored = await this.objectStore.putObject({
       key,
       body,
-      contentType,
+      contentType: meta.contentType,
       metadata: {
         tenant: principal.tenantId,
         session: sessionId,
         artifact: artifactId,
       },
     })
-    const record: CloudArtifactRecord = {
+    return this.persistUploadedArtifact(principal, sessionId, {
+      ...meta,
       artifactId,
-      sessionId,
-      filename,
-      contentType,
       size: stored.size,
       key,
       createdAt,
-      updatedAt: createdAt,
-      kind,
-      status,
-      authorAgentId,
-      projectId,
-      taskId,
-      statusUpdatedBy,
-      statusUpdatedAt: explicitStatusUpdatedAt ?? (input.status || input.statusUpdatedBy ? createdAt : null),
+    })
+  }
+
+  // Begin a direct-to-store upload. When the configured object store can presign (S3 with static
+  // credentials), authorize the principal/session, mint the artifact id + object key, and return a
+  // time-limited PUT URL the client uploads bytes straight to — keeping them off the pod heap. The
+  // client then calls finalizeSessionArtifactUpload to record the metadata row. Returns null when
+  // presigning is unavailable (absent capability or no static credentials) so the route signals
+  // "unsupported" and the client falls back to the buffered uploadSessionArtifact path.
+  async presignSessionArtifactUpload(
+    principal: CloudPrincipal,
+    sessionId: string,
+    input: CloudArtifactPresignUploadInput,
+  ): Promise<{ artifactId: string, key: string, presigned: ObjectStorePresignedRequest } | null> {
+    if (!this.objectStore.presignPut) return null
+    await this.sessionService.getSessionView(principal, sessionId)
+    const filename = boundedFilename(input.filename)
+    const contentType = boundedContentType(input.contentType)
+    const artifactId = this.ids.randomUUID()
+    const key = artifactObjectKey({
+      tenantId: principal.tenantId,
+      sessionId,
+      artifactId,
+      filename,
+    })
+    const presigned = await this.objectStore.presignPut({ key, contentType, expiresSeconds: input.expiresSeconds })
+    if (!presigned) return null
+    return { artifactId, key, presigned }
+  }
+
+  // Record the artifact row after a presigned direct PUT has landed the bytes in object storage.
+  // The object key is re-derived server-side from the (validated) artifact id + filename — the
+  // client's reported key is never trusted. headObject confirms the PUT actually happened and
+  // yields the authoritative stored size/content-type, which drives quota + usage attribution
+  // exactly like the buffered path. A missing object throws 409 so the client can retry/fall back.
+  async finalizeSessionArtifactUpload(
+    principal: CloudPrincipal,
+    sessionId: string,
+    input: CloudArtifactFinalizeUploadInput,
+  ): Promise<CloudArtifactRecord> {
+    await this.sessionService.getSessionView(principal, sessionId)
+    const artifactId = boundedArtifactId(input.artifactId)
+    const createdAt = new Date().toISOString()
+    const meta = resolveArtifactMetadataFields(input, createdAt)
+    const key = artifactObjectKey({
+      tenantId: principal.tenantId,
+      sessionId,
+      artifactId,
+      filename: meta.filename,
+    })
+    const head = await this.objectStore.headObject(key)
+    if (!head) throw new CloudServiceError(409, 'Cloud artifact upload was not found in object storage.')
+    if (head.size > MAX_ARTIFACT_BYTES) {
+      await this.objectStore.deleteObject(key)
+      throw new CloudServiceError(413, 'Artifact is too large.')
+    }
+    await this.sessionService.assertArtifactUploadAllowed(principal, head.size)
+    return this.persistUploadedArtifact(principal, sessionId, {
+      ...meta,
+      contentType: meta.contentType ?? head.contentType ?? null,
+      artifactId,
+      size: head.size,
+      key,
+      createdAt,
+    })
+  }
+
+  // Shared tail of both upload paths: build the canonical record, append the artifact.created
+  // product event (the source of the session's artifact index), and attribute the uploaded bytes.
+  private async persistUploadedArtifact(
+    principal: CloudPrincipal,
+    sessionId: string,
+    fields: {
+      artifactId: string
+      filename: string
+      contentType: string | null
+      size: number
+      key: string
+      createdAt: string
+      kind: ArtifactKind
+      status: ArtifactStatus
+      authorAgentId: string | null
+      projectId: string | null
+      taskId: string | null
+      statusUpdatedBy: string | null
+      statusUpdatedAt: string | null
+    },
+  ): Promise<CloudArtifactRecord> {
+    const record: CloudArtifactRecord = {
+      artifactId: fields.artifactId,
+      sessionId,
+      filename: fields.filename,
+      contentType: fields.contentType,
+      size: fields.size,
+      key: fields.key,
+      createdAt: fields.createdAt,
+      updatedAt: fields.createdAt,
+      kind: fields.kind,
+      status: fields.status,
+      authorAgentId: fields.authorAgentId,
+      projectId: fields.projectId,
+      taskId: fields.taskId,
+      statusUpdatedBy: fields.statusUpdatedBy,
+      statusUpdatedAt: fields.statusUpdatedAt,
     }
     await this.sessionService.appendProductEvent(principal, sessionId, {
       type: 'artifact.created',
       payload: record,
     })
-    await this.sessionService.recordArtifactUploaded(principal, sessionId, artifactId, stored.size)
+    await this.sessionService.recordArtifactUploaded(principal, sessionId, fields.artifactId, fields.size)
     return record
   }
 
