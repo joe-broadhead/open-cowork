@@ -88,7 +88,9 @@ export function Tooltip({
 
   return (
     // The wrapper only observes hover/focus to position descriptive text.
-    // The child keeps the actual interactive semantics and keyboard behavior.
+    // The child keeps the actual interactive semantics and keyboard behavior, so the
+    // wrapper itself is intentionally non-interactive (no role/keyboard handlers).
+    // (no-static-element-interactions is suppressed for this file in eslint.a11y.config.mjs.)
     <span
       ref={anchorRef}
       className="ui-tooltip-anchor"

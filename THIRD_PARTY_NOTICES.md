@@ -4,8 +4,8 @@ Open Cowork includes third-party open source packages in its production dependen
 
 Generation provenance:
 - pnpm lockfile SHA-256: `62f3c65061fbd99cba0ef4934794aba970dbeff987b2935ccc2f5c1068c3cb9a`
-- Production package entries: 510
-- Bundled license directories: 463 (47 package entries have no standalone license file or are workspace links)
+- Production package entries: 491
+- Bundled license directories: 475 (16 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -54,25 +54,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
-| @open-cowork/app | link:../app | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/cloud-client | link:../../packages/cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/cloud-client | link:../cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-channel | link:../../packages/gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-channel | link:../gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-cli | link:../../packages/gateway-provider-cli | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-discord | link:../../packages/gateway-provider-discord | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-email | link:../../packages/gateway-provider-email | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-signal | link:../../packages/gateway-provider-signal | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-slack | link:../../packages/gateway-provider-slack | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-telegram | link:../../packages/gateway-provider-telegram | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-webhook | link:../../packages/gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-webhook | link:../gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-provider-whatsapp | link:../../packages/gateway-provider-whatsapp | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/gateway-testing | link:../../packages/gateway-testing | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/runtime-host | link:../runtime-host | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @open-cowork/ui | link:../ui | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
 | @smithy/core | 3.24.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__core@3.24.4/ | https://github.com/smithy-lang/smithy-typescript.git |
 | @smithy/credential-provider-imds | 4.3.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__credential-provider-imds@4.3.4/ | https://github.com/smithy-lang/smithy-typescript.git |
@@ -368,18 +349,18 @@ Each package remains licensed under its own license terms. The table below is pr
 | on-finished | 2.4.1 | MIT | THIRD_PARTY_LICENSES/on-finished@2.4.1/ | jshttp/on-finished |
 | once | 1.4.0 | ISC | THIRD_PARTY_LICENSES/once@1.4.0/ | git://github.com/isaacs/once |
 | opencode-ai | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.15.5/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.15.5.tgz |
-| opencode-darwin-arm64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.15.5.tgz |
-| opencode-darwin-x64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.15.5.tgz |
-| opencode-darwin-x64-baseline | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.15.5.tgz |
-| opencode-linux-arm64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.15.5.tgz |
-| opencode-linux-arm64-musl | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.15.5.tgz |
-| opencode-linux-x64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.15.5.tgz |
-| opencode-linux-x64-baseline | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.15.5.tgz |
-| opencode-linux-x64-baseline-musl | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.15.5.tgz |
-| opencode-linux-x64-musl | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.15.5.tgz |
-| opencode-windows-arm64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.15.5.tgz |
-| opencode-windows-x64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.15.5.tgz |
-| opencode-windows-x64-baseline | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.15.5.tgz |
+| opencode-darwin-arm64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-arm64@1.15.5/ | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.15.5.tgz |
+| opencode-darwin-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-x64@1.15.5/ | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.15.5.tgz |
+| opencode-darwin-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.15.5.tgz |
+| opencode-linux-arm64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-arm64@1.15.5/ | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.15.5.tgz |
+| opencode-linux-arm64-musl | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-arm64-musl@1.15.5/ | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.15.5.tgz |
+| opencode-linux-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.15.5.tgz |
+| opencode-linux-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.15.5.tgz |
+| opencode-linux-x64-baseline-musl | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-baseline-musl@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.15.5.tgz |
+| opencode-linux-x64-musl | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-musl@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.15.5.tgz |
+| opencode-windows-arm64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-arm64@1.15.5/ | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.15.5.tgz |
+| opencode-windows-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64@1.15.5/ | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.15.5.tgz |
+| opencode-windows-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.15.5.tgz |
 | package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parse-entities | 4.0.2 | MIT | THIRD_PARTY_LICENSES/parse-entities@4.0.2/ | wooorm/parse-entities |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |

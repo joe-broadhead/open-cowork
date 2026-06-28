@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { channelWebhookErrorCode } from "@open-cowork/gateway-channel";
 import { resolveHttpClientSource } from "@open-cowork/shared";
 
 import { renderStandaloneGatewayDashboard, renderStandaloneGatewayMetrics } from "./dashboard.js";
@@ -344,6 +345,10 @@ function isStandaloneHttpError(error: unknown): error is StandaloneHttpError {
 }
 
 function isWebhookAuthFailure(error: unknown): boolean {
+  // Prefer the provider's stable error code (audit G4); only fall back to the message-keyword
+  // heuristic when the throw site has not been migrated to a typed ChannelWebhookError.
+  const code = channelWebhookErrorCode(error);
+  if (code) return code === "auth";
   const message = error instanceof Error ? error.message : String(error);
   return /signature|secret|authorization|authorized|token|timestamp|replay/i.test(message);
 }

@@ -23,6 +23,12 @@ import { createGatewaySessionStreamManager, type GatewaySessionStreamManager } f
 
 const MAX_DELIVERY_ATTEMPTS = 5
 const PROVIDER_EVENT_CLAIM_TTL_MS = 5 * 60_000
+// Cloud-side claim TTL (ms) requested for each served delivery (audit G3). The claim is never
+// renewed in-flight, so a slow/multi-chunk send that outlasts the cloud's 30s default would be
+// re-served and delivered twice. Sized to comfortably exceed a worst-case single send (local queue
+// wait + chunked send), it preserves at-least-once while stopping the duplicate; the cloud still
+// re-serves after this window if the gateway actually dies mid-delivery.
+const DELIVERY_CLAIM_TTL_MS = 2 * 60_000
 
 export type DeliverySubscriber = { start(): void; close(): void }
 
@@ -275,6 +281,11 @@ export function createGatewayRuntime(
         const subscriber = createDeliverySubscriber({
           subscribe: (handlers) => cloud.subscribeDeliveries({
             claimedBy,
+            // Request a claim TTL that exceeds a worst-case single send (audit G3). The claim is
+            // not renewed in-flight, so the default 30s could lapse during a slow/multi-chunk send
+            // and the cloud would re-serve → duplicate delivery. A longer TTL stops the duplicate
+            // while keeping at-least-once: a gateway that actually dies still releases after this.
+            ttlMs: DELIVERY_CLAIM_TTL_MS,
             channelBindingIds,
             onDelivery: handlers.onDelivery,
             onError: handlers.onError,

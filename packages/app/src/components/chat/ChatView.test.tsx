@@ -368,7 +368,7 @@ describe('ChatView', () => {
     expect(screen.getByText('+14')).toBeInTheDocument()
     expect(screen.getByText('−3')).toBeInTheDocument()
     expect(screen.getByText(/2 files/)).toBeInTheDocument()
-    expect(screen.getByRole('log', { name: 'Chat transcript' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Chat transcript' })).toBeInTheDocument()
     expect(screen.getByTestId('message-message-user')).toHaveTextContent('user: Start the launch analysis')
     expect(screen.getByTestId('message-message-assistant')).toHaveTextContent('assistant: Working on it')
     expect(screen.getByTestId('tool-trace')).toHaveTextContent('shell.run')
@@ -749,7 +749,7 @@ describe('ChatView', () => {
 
     render(<ChatView />)
 
-    const transcript = screen.getByRole('log', { name: 'Chat transcript' })
+    const transcript = screen.getByRole('region', { name: 'Chat transcript' })
     Object.defineProperty(transcript, 'scrollHeight', { configurable: true, value: 1000 })
     Object.defineProperty(transcript, 'scrollTop', { configurable: true, value: 100 })
     Object.defineProperty(transcript, 'clientHeight', { configurable: true, value: 300 })
@@ -778,7 +778,7 @@ describe('ChatView', () => {
 
     render(<ChatView />)
 
-    const transcript = screen.getByRole('log', { name: 'Chat transcript' }) as HTMLDivElement
+    const transcript = screen.getByRole('region', { name: 'Chat transcript' }) as HTMLDivElement
     const scrollTo = vi.fn()
     Object.defineProperty(transcript, 'scrollHeight', { configurable: true, value: 1000 })
     Object.defineProperty(transcript, 'scrollTop', { configurable: true, value: 100 })

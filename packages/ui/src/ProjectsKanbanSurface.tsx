@@ -849,6 +849,10 @@ export function ProjectsKanbanSurface({
                 <div className="studio-project-board__main">
                   <section className="studio-kanban-board" aria-label={`${selectedProject.title} task board`}>
                     {boardColumns.map((column) => (
+                      // Drag-and-drop drop target: HTML has no native "drop zone"
+                      // element, so the column section observes dragover/drop. Task
+                      // cards carry the interactive/keyboard semantics.
+                      // (no-static-element-interactions is suppressed for this file in eslint.a11y.config.mjs.)
                       <section
                         key={column.id}
                         className="studio-kanban-column"

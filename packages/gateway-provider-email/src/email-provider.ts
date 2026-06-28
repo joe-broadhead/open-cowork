@@ -14,7 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError, WebhookPayloadError } from "@open-cowork/gateway-channel";
 
 export interface EmailProviderConfig {
   providerId?: ChannelProviderId;
@@ -206,7 +206,7 @@ export class EmailProvider implements ChannelProvider {
       || headerValue(auth.headers, "x-open-cowork-gateway-email-secret")
       || bearerToken(headerValue(auth.headers, "authorization"));
     if (!constantTimeStringEqual(providedSecret, expectedSecret)) {
-      throw new Error("Email webhook shared secret verification failed.");
+      throw new WebhookAuthError("Email webhook shared secret verification failed.");
     }
   }
 
@@ -214,7 +214,7 @@ export class EmailProvider implements ChannelProvider {
     this.purgeSeenMessageIds(nowMs);
     const existingExpiresAt = this.seenMessageIds.get(messageId);
     if (existingExpiresAt && existingExpiresAt > nowMs) {
-      throw new Error("Email webhook message replay rejected.");
+      throw new WebhookAuthError("Email webhook message replay rejected.");
     }
     this.seenMessageIds.set(messageId, nowMs + defaultEmailReplayWindowMs);
     if (this.seenMessageIds.size > maxSeenEmailMessages) {
@@ -236,14 +236,29 @@ export class SmtpEmailTransport implements EmailTransport {
   }
 
   async send(message: EmailMessage): Promise<{ messageId: string }> {
+    const host = this.config.host;
     const port = this.config.port || (this.config.secure ? 465 : 25);
     const timeoutMs = normalizeSmtpTimeoutMs(this.config.timeoutMs);
-    const socket = await connectSocket(this.config.host, port, this.config.secure === true, timeoutMs);
+    const localName = this.config.localName || "open-cowork-gateway";
+    const socket = await connectSocket(host, port, this.config.secure === true, timeoutMs);
     const client = new SmtpClient(socket, timeoutMs);
     try {
       await client.expect(220);
-      await client.command(`EHLO ${this.config.localName || "open-cowork-gateway"}`, 250);
+      let capabilities = await client.ehlo(localName);
+      // Opportunistic STARTTLS (audit G2): if the server advertises it and we are not already on an
+      // implicit-TLS (port 465) socket, upgrade the connection BEFORE any credentials cross it, then
+      // re-EHLO over the encrypted channel as RFC 3207 requires.
+      if (!client.isSecure && capabilities.has("STARTTLS")) {
+        await client.command("STARTTLS", 220);
+        await client.startTls(host);
+        capabilities = await client.ehlo(localName);
+      }
       if (this.config.username) {
+        // Fail closed: never put AUTH PLAIN credentials on a plaintext socket. If the server offered
+        // no STARTTLS and this is not an implicit-TLS connection, refuse rather than leak the secret.
+        if (!client.isSecure) {
+          throw new Error("Refusing to send SMTP AUTH credentials over a plaintext connection; enable TLS (smtp secure/port 465) or STARTTLS on the SMTP server.");
+        }
         const auth = Buffer.from(`\0${this.config.username}\0${this.config.password || ""}`, "utf8").toString("base64");
         await client.command(`AUTH PLAIN ${auth}`, 235);
       }
@@ -255,7 +270,7 @@ export class SmtpEmailTransport implements EmailTransport {
       await client.command("QUIT", 221);
       return { messageId: message.messageId };
     } finally {
-      socket.end();
+      client.close();
     }
   }
 }
@@ -266,7 +281,7 @@ function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number
   if (!from) return null;
   const messageId = cleanHeaderId(input.messageId || input.id);
   if (!messageId) {
-    throw new Error("Email webhook messageId or id is required for replay protection.");
+    throw new WebhookPayloadError("Email webhook messageId or id is required for replay protection.");
   }
   const text = stringField(input, "text") || stringField(input, "body") || "";
   const threadId = cleanHeaderId(input.threadId)
@@ -313,10 +328,10 @@ function emailAttachments(values: EmailIncomingPayload["attachments"], maxAttach
     const buffer = base64 ? Buffer.from(base64, "base64") : undefined;
     const sizeBytes = attachment.sizeBytes || attachment.size || buffer?.byteLength;
     if (sizeBytes !== undefined && maxAttachmentBytes !== undefined && sizeBytes > maxAttachmentBytes) {
-      throw new Error(`Email attachment exceeds maxFileBytes ${maxAttachmentBytes}.`);
+      throw new WebhookPayloadError(`Email attachment exceeds maxFileBytes ${maxAttachmentBytes}.`);
     }
     if (buffer && maxAttachmentBytes !== undefined && buffer.byteLength > maxAttachmentBytes) {
-      throw new Error(`Email attachment exceeds maxFileBytes ${maxAttachmentBytes}.`);
+      throw new WebhookPayloadError(`Email attachment exceeds maxFileBytes ${maxAttachmentBytes}.`);
     }
     return {
       filename: attachment.filename || attachment.name || "attachment",
@@ -543,24 +558,109 @@ function connectSocket(host: string, port: number, secure: boolean, timeoutMs: n
   });
 }
 
+// Upgrade an established plaintext SMTP socket to TLS in place (STARTTLS). `servername` is pinned to
+// the configured host so the certificate is validated against it (SNI + hostname check).
+function upgradeSocketToTls(socket: Socket, host: string, timeoutMs: number): Promise<Socket> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const tlsSocket = createTlsConnection({ socket, servername: host });
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      tlsSocket.destroy();
+      reject(new Error("SMTP STARTTLS upgrade timed out."));
+    }, timeoutMs);
+    const onError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    };
+    tlsSocket.once("secureConnect", () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      tlsSocket.removeListener("error", onError);
+      tlsSocket.setTimeout(timeoutMs, () => tlsSocket.destroy(new Error("SMTP socket timed out.")));
+      resolve(tlsSocket);
+    });
+    tlsSocket.once("error", onError);
+  });
+}
+
+function isTlsSocket(socket: Socket): boolean {
+  return (socket as { encrypted?: boolean }).encrypted === true;
+}
+
 class SmtpClient {
-  private buffer = "";
+  // Buffer-mode line reader (no socket.setEncoding): keeping the underlying socket in raw byte mode
+  // is what lets STARTTLS hand it cleanly to the TLS layer, and decoding each completed line as utf8
+  // avoids splitting any multibyte sequence at a chunk boundary.
+  private socket: Socket;
+  private secure: boolean;
+  private buffer: Buffer = Buffer.alloc(0);
   private waiters: Array<{
     resolve(line: string): void;
     reject(error: Error): void;
   }> = [];
+  private readonly onData = (chunk: Buffer | string): void => {
+    this.handleData(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  };
+  private readonly onError = (error: Error): void => {
+    for (const waiter of this.waiters.splice(0)) waiter.reject(error);
+  };
 
-  constructor(private readonly socket: Socket, private readonly timeoutMs: number) {
-    socket.setEncoding("utf8");
-    socket.on("data", (chunk) => this.onData(String(chunk)));
-    socket.on("error", (error) => {
-      for (const waiter of this.waiters.splice(0)) waiter.reject(error);
-    });
+  constructor(socket: Socket, private readonly timeoutMs: number) {
+    this.socket = socket;
+    this.secure = isTlsSocket(socket);
+    this.attach(socket);
+  }
+
+  get isSecure(): boolean {
+    return this.secure;
+  }
+
+  private attach(socket: Socket): void {
+    socket.on("data", this.onData);
+    socket.on("error", this.onError);
+  }
+
+  private detach(socket: Socket): void {
+    socket.removeListener("data", this.onData);
+    socket.removeListener("error", this.onError);
+  }
+
+  async startTls(host: string): Promise<void> {
+    // The server is silent until it receives our TLS ClientHello, so detaching here drops no inbound
+    // bytes. Rebind the reader to the secure socket and reset the buffer for the encrypted session.
+    const plain = this.socket;
+    this.detach(plain);
+    const secureSocket = await upgradeSocketToTls(plain, host, this.timeoutMs);
+    this.socket = secureSocket;
+    this.secure = true;
+    this.buffer = Buffer.alloc(0);
+    this.attach(secureSocket);
   }
 
   async command(line: string, expected: number | number[]): Promise<void> {
     this.socket.write(`${line}\r\n`);
     await this.expect(expected);
+  }
+
+  // Send EHLO and collect the advertised capability keywords (e.g. STARTTLS, AUTH) from the
+  // multi-line 250 response.
+  async ehlo(localName: string): Promise<Set<string>> {
+    this.socket.write(`EHLO ${localName}\r\n`);
+    const capabilities = new Set<string>();
+    while (true) {
+      const line = await this.readLine();
+      const code = Number(line.slice(0, 3));
+      const continued = line[3] === "-";
+      if (code !== 250) throw new Error(`SMTP command failed: ${line}`);
+      const keyword = line.slice(4).trim().split(/\s+/)[0];
+      if (keyword) capabilities.add(keyword.toUpperCase());
+      if (!continued) return capabilities;
+    }
   }
 
   async writeData(data: string): Promise<void> {
@@ -580,13 +680,14 @@ class SmtpClient {
     }
   }
 
+  close(): void {
+    this.detach(this.socket);
+    this.socket.end();
+  }
+
   private readLine(): Promise<string> {
-    const newline = this.buffer.indexOf("\n");
-    if (newline >= 0) {
-      const line = this.buffer.slice(0, newline).replace(/\r$/, "");
-      this.buffer = this.buffer.slice(newline + 1);
-      return Promise.resolve(line);
-    }
+    const ready = this.takeBufferedLine();
+    if (ready !== null) return Promise.resolve(ready);
     return new Promise((resolve, reject) => {
       let waiter!: { resolve(line: string): void; reject(error: Error): void };
       const timeout = setTimeout(() => {
@@ -608,15 +709,21 @@ class SmtpClient {
     });
   }
 
-  private onData(chunk: string): void {
-    this.buffer += chunk;
+  private handleData(chunk: Buffer): void {
+    this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
     while (this.waiters.length) {
-      const newline = this.buffer.indexOf("\n");
-      if (newline < 0) return;
-      const line = this.buffer.slice(0, newline).replace(/\r$/, "");
-      this.buffer = this.buffer.slice(newline + 1);
+      const line = this.takeBufferedLine();
+      if (line === null) return;
       this.waiters.shift()?.resolve(line);
     }
+  }
+
+  private takeBufferedLine(): string | null {
+    const newline = this.buffer.indexOf(0x0a);
+    if (newline < 0) return null;
+    const line = this.buffer.subarray(0, newline).toString("utf8").replace(/\r$/, "");
+    this.buffer = this.buffer.subarray(newline + 1);
+    return line;
   }
 }
 

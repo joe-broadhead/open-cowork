@@ -798,7 +798,10 @@ export const DESIGN_TOKENS = {
     soft: 'none',
   },
   ring: {
-    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent)',
+    // Solid, fully-opaque accent ring. A semi-transparent ring blended to ~2:1
+    // against the surface and failed WCAG 2.2 SC 1.4.11 (needs >=3:1); the solid
+    // accent measures ~3.4-4.7:1 against every surface background.
+    focus: '0 0 0 2px var(--color-accent)',
     selected: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent)',
   },
   ease: {

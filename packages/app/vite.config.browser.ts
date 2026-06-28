@@ -7,6 +7,13 @@ import { resolve } from 'path'
 // minus the electron/preload/main plugin and the chart-frame asset-protocol
 // rewrite (browser uses normal URLs). Output is a plain SPA the cloud server can
 // serve. The Electron build stays in vite.config.ts.
+//
+// Two HTML inputs, mirroring the desktop build's `main` + `chartFrame` entries:
+//   - browser.html: the SPA shell the cloud serves at / (and /app).
+//   - chart-frame.html: the sandboxed Vega iframe the SPA's VegaChart embeds. It
+//     pulls in vega-embed/vega-lite/vega, so without it the browser build ships no
+//     vega at all and interactive charts 404 in the cloud (BUNDLE-1). The cloud
+//     server serves the emitted chart-frame.html + its hashed /app/assets/* chunks.
 export default defineConfig({
   // Served by the cloud server under /app, so every asset reference (HTML +
   // the JS bundle's internal dynamic-import / CSS-preload paths) must be
@@ -19,12 +26,16 @@ export default defineConfig({
     rollupOptions: {
       input: {
         browser: resolve(__dirname, 'browser.html'),
+        chartFrame: resolve(__dirname, 'chart-frame.html'),
       },
       output: {
+        // Mirror the desktop vite.config.ts manualChunks so the chart-frame entry
+        // emits the same isolated vendor-vega-* chunks (kept off the SPA's startup
+        // path) plus the shared vendor-react chunk.
         manualChunks(id) {
           if (!id.includes('/node_modules/')) return undefined
-          if (id.includes('vega-embed')) return 'vendor-vega-embed'
-          if (id.includes('vega-lite')) return 'vendor-vega-lite'
+          if (id.includes('/node_modules/vega-embed/')) return 'vendor-vega-embed'
+          if (id.includes('/node_modules/vega-lite/')) return 'vendor-vega-lite'
           if (/\/node_modules\/vega\//.test(id)) return 'vendor-vega-core'
           if (/\/node_modules\/(react|react-dom|scheduler|zustand)\//.test(id)) return 'vendor-react'
           return undefined

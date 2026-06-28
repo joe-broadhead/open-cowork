@@ -106,10 +106,10 @@ type RequestOptions = {
   headers?: Record<string, string>
 }
 
-// Canonical endpoint paths. Single-sourced shape mirrors the cloud client
-// endpoint registry; the bootstrap (when present) overrides each path so the
-// server stays the source of truth. Kept inline so this file has no hard
-// dependency on `apps/website`.
+// Canonical endpoint paths. The cloud server stays the source of truth: the
+// bootstrap blob it injects (when present) overrides each path at runtime. These
+// inline defaults keep the browser shim self-contained so it has no build-time
+// dependency on the server package.
 const DEFAULT_ENDPOINTS: Record<string, string> = {
   authMe: '/auth/me',
   authLogout: '/auth/logout',
@@ -234,8 +234,9 @@ function readBootstrapFromWindow(): BrowserCoworkApiBootstrap | null {
 
 /**
  * Build the self-contained transport: a `request` (fetch + CSRF + 401) and a
- * `stream` (EventSource) bound to the resolved endpoint registry. Mirrors the
- * patterns in `apps/website/src/app-api.ts` so behaviour matches the website.
+ * `stream` (EventSource) bound to the resolved endpoint registry. This browser
+ * shim, talking to the cloud server's same-origin /api, /auth and /events routes,
+ * is the canonical web client — there is no separate website implementation.
  */
 // Exported for white-box transport tests (CSRF fetch/attach/retry). Not part of
 // the public CoworkAPI surface — callers use createBrowserCoworkApi.

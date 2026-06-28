@@ -15,8 +15,8 @@ import {
 
 export type { GatewayProductMode } from '@open-cowork/shared'
 
-export type GatewayMode = 'self-host' | 'managed'
-export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
+type GatewayMode = 'self-host' | 'managed'
+type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 export type GatewayProviderKind = ChannelProviderKind | 'fake'
 
 export type GatewayConfig = {

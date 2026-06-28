@@ -341,7 +341,7 @@ describe('CapabilitiesPage', () => {
     expect(api.listAgents).not.toHaveBeenCalled()
     expect(api.builtinAgents).not.toHaveBeenCalled()
     expect(api.listWorkflows).not.toHaveBeenCalled()
-    expect(screen.queryByRole('tab', { name: 'Relationships' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Relationships' })).not.toBeInTheDocument()
 
     const toolSearch = screen.getByPlaceholderText('Search tools, skills, linked capabilities, or coworkers...')
     await user.type(toolSearch, 'report')
@@ -349,7 +349,7 @@ describe('CapabilitiesPage', () => {
     expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
 
     await user.clear(toolSearch)
-    await user.click(screen.getByRole('tab', { name: 'Abilities' }))
+    await user.click(screen.getByRole('radio', { name: 'Abilities' }))
     expect(await screen.findByPlaceholderText('Search abilities, descriptions, or coworkers...')).toBeInTheDocument()
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
 
@@ -381,7 +381,7 @@ describe('CapabilitiesPage', () => {
       expect(api.listWorkflows).toHaveBeenCalledTimes(1)
     })
 
-    await user.click(screen.getByRole('tab', { name: 'Relationships' }))
+    await user.click(screen.getByRole('radio', { name: 'Relationships' }))
 
     const consumerMatrix = await screen.findByRole('table', { name: 'Consumer access matrix' })
     const capabilityMatrix = screen.getByRole('table', { name: 'Tool and skill access matrix' })
@@ -439,7 +439,7 @@ describe('CapabilitiesPage', () => {
     expect(screen.getByText('Shell tools')).toBeInTheDocument()
     expect(screen.queryByText('Research Skill')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: 'Abilities' }))
+    await user.click(screen.getByRole('radio', { name: 'Abilities' }))
     const skillSearch = await screen.findByPlaceholderText('Search abilities, descriptions, or coworkers...')
     await user.clear(skillSearch)
     await user.type(skillSearch, 'chart mcp')
@@ -829,7 +829,7 @@ describe('CapabilitiesPage', () => {
     const user = userEvent.setup()
     const api = renderCapabilitiesPage()
 
-    await user.click(await screen.findByRole('tab', { name: 'Abilities' }))
+    await user.click(await screen.findByRole('radio', { name: 'Abilities' }))
     await user.click(await screen.findByRole('button', { name: /Research Skill/ }))
 
     expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()

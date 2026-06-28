@@ -1387,7 +1387,11 @@ export function controlsSurfaceCss(): string {
 .ui-segmented-option:focus-visible,
 .ui-popover-item:focus-visible,
 .ui-dialog:focus-visible {
-  outline: none;
+  /* Solid, high-contrast focus ring (WCAG 2.2 SC 1.4.11, >=3:1). The transparent
+     outline is invisible in normal rendering but is swapped for a system colour in
+     forced-colors / Windows High Contrast mode, where box-shadows are dropped. */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   box-shadow: var(--ring-focus);
 }
 
@@ -1851,7 +1855,7 @@ export function controlsSurfaceCss(): string {
   color: var(--color-text-secondary);
 }
 
-.ui-segmented-option[aria-selected="true"] {
+.ui-segmented-option[aria-checked="true"] {
   background: transparent;
   color: var(--color-text);
   box-shadow: none;

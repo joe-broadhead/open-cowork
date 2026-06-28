@@ -625,7 +625,7 @@ describe('Studio primitives', () => {
 })
 
 describe('SegmentedControl', () => {
-  it('uses tab roles and keyboard selection', async () => {
+  it('uses radio roles and keyboard selection', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     render(
@@ -640,18 +640,20 @@ describe('SegmentedControl', () => {
       />,
     )
 
-    screen.getByRole('tab', { name: 'Plan' }).focus()
+    const plan = screen.getByRole('radio', { name: 'Plan' })
+    expect(plan).toHaveAttribute('aria-checked', 'true')
+    plan.focus()
     await user.keyboard('{ArrowRight}{Enter}')
 
-    expect(screen.getByRole('tablist', { name: 'Agent mode' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Agent mode' })).toBeInTheDocument()
     expect(onChange).toHaveBeenCalledWith('build')
   })
 
   it('renders an empty segmented control without invalid option state', () => {
     render(<SegmentedControl label="Empty segments" value="" onChange={vi.fn()} options={[]} />)
 
-    expect(screen.getByRole('tablist', { name: 'Empty segments' })).toBeInTheDocument()
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Empty segments' })).toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.getByText('No segments available.')).toBeInTheDocument()
   })
 })

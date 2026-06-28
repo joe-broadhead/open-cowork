@@ -1,7 +1,7 @@
 // Prometheus histogram bucket boundaries (ms) for delivery handling latency. Tuned
 // for channel sends that normally complete in tens-to-hundreds of ms but can stall
 // into the tens of seconds under provider rate limiting.
-export const GATEWAY_DELIVERY_LATENCY_BUCKETS_MS = [50, 100, 250, 500, 1000, 2500, 5000, 10_000, 30_000]
+const GATEWAY_DELIVERY_LATENCY_BUCKETS_MS = [50, 100, 250, 500, 1000, 2500, 5000, 10_000, 30_000]
 
 export type GatewayLatencyHistogram = {
   // Non-cumulative per-bucket counts; the final element is the +Inf overflow (values

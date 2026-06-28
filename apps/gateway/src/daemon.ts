@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { constantTimeStringEqual } from '@open-cowork/gateway-channel'
+import { channelWebhookErrorCode, constantTimeStringEqual } from '@open-cowork/gateway-channel'
 import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 
@@ -374,6 +374,13 @@ async function handleRequest(
 }
 
 function classifyGatewayWebhookError(error: unknown) {
+  // Classify on the provider's stable error code first (audit G4); the message-keyword heuristic
+  // below is a fallback for any throw site not yet migrated to a typed ChannelWebhookError.
+  const code = channelWebhookErrorCode(error)
+  if (code === 'not_found') return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
+  if (code === 'auth') return new GatewayHttpError(401, 'Gateway webhook authorization failed.')
+  if (code === 'payload') return new GatewayHttpError(400, 'Gateway webhook payload is invalid.')
+  if (code === 'upstream') return new GatewayHttpError(502, 'Gateway webhook provider failed.')
   const message = error instanceof Error ? error.message : String(error)
   if (/unknown gateway provider|does not expose a webhook endpoint/i.test(message)) {
     return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
@@ -579,12 +586,20 @@ function hasForwardedHeaders(req: IncomingMessage) {
 }
 
 async function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024) {
-  let raw = ''
+  // Accumulate raw Buffers and decode ONCE at the end (audit G1). Concatenating chunks as strings
+  // (`raw += chunk`) decodes each chunk independently, so a multibyte UTF-8 sequence straddling a
+  // chunk boundary is split and replaced with U+FFFD — corrupting the exact bytes the HMAC is
+  // computed over and silently breaking signature verification. Buffering the bytes and decoding the
+  // joined Buffer reproduces the request body faithfully, mirroring the standalone-gateway reader.
+  const chunks: Buffer[] = []
+  let totalBytes = 0
   for await (const chunk of req) {
-    raw += chunk
-    if (Buffer.byteLength(raw) > maxBytes) throw new GatewayHttpError(413, 'Gateway request body exceeds the configured limit.')
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += buffer.length
+    if (totalBytes > maxBytes) throw new GatewayHttpError(413, 'Gateway request body exceeds the configured limit.')
+    chunks.push(buffer)
   }
-  return { raw }
+  return { raw: Buffer.concat(chunks).toString('utf8') }
 }
 
 function parseRequestBody(raw: string, contentType: string | string[] | undefined) {

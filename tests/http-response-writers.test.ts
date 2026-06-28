@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import type { ServerResponse } from 'node:http'
 import {
   methodRequiresCsrf,
+  writeBrowserRendererChartFrameHtml,
+  writeBrowserRendererHtml,
   writeCorsHeaders,
   writeError,
   writeJson,
@@ -112,4 +114,48 @@ test('writeRedirect issues a 302 with location and optional set-cookie', () => {
 test('methodRequiresCsrf flags only mutating methods', () => {
   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.equal(methodRequiresCsrf(method), true)
   for (const method of ['GET', 'HEAD', 'OPTIONS', undefined]) assert.equal(methodRequiresCsrf(method), false)
+})
+
+test('writeBrowserRendererHtml keeps connect-src self when no object-store origin is configured', () => {
+  // SEC-2: buffered-only stores (no presign) → the renderer talks only same-origin.
+  const res = mockRes()
+  writeBrowserRendererHtml(res, 200, '<html></html>')
+  const csp = String(res.headers['content-security-policy'])
+  assert.match(csp, /connect-src 'self'(;|$)/)
+  // Script stays strict; style relaxed for the runtime-injected stylesheet.
+  assert.match(csp, /script-src 'self'/)
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+  assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+})
+
+test('writeBrowserRendererHtml allows the presigned object-store origin in connect-src', () => {
+  // SEC-2: when presigned transfer is enabled, the shim PUTs F4 uploads cross-origin to
+  // the object store, so its origin must be allowed in connect-src (else CSP blocks it).
+  const res = mockRes()
+  writeBrowserRendererHtml(res, 200, '<html></html>', null, 'https://objects.example.test')
+  const csp = String(res.headers['content-security-policy'])
+  assert.match(csp, /connect-src 'self' https:\/\/objects\.example\.test(;|$)/)
+})
+
+test('writeBrowserRendererHtml rejects a malformed object-store origin (no CSP breakout)', () => {
+  const res = mockRes()
+  writeBrowserRendererHtml(res, 200, '<html></html>', null, "https://evil.test'; script-src *")
+  const csp = String(res.headers['content-security-policy'])
+  // The malformed value is dropped — connect-src falls back to 'self' only.
+  assert.match(csp, /connect-src 'self'(;|$)/)
+  assert.doesNotMatch(csp, /evil\.test/)
+})
+
+test('writeBrowserRendererChartFrameHtml emits the embeddable, vega-capable chart-frame CSP', () => {
+  // BUNDLE-1: the sandboxed Vega iframe needs 'unsafe-eval' (vega compiles specs to
+  // functions) and must be framable by the same-origin SPA — so frame-ancestors 'self'
+  // and X-Frame-Options SAMEORIGIN (overriding the global DENY), while egress is denied.
+  const res = mockRes()
+  writeBrowserRendererChartFrameHtml(res, 200, '<html></html>')
+  const csp = String(res.headers['content-security-policy'])
+  assert.match(csp, /script-src 'self' 'unsafe-eval'/)
+  assert.match(csp, /frame-ancestors 'self'/)
+  assert.match(csp, /connect-src 'none'/)
+  assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+  assert.equal(res.headers['x-frame-options'], 'SAMEORIGIN')
 })

@@ -3655,6 +3655,184 @@ test('cloud HTTP server serves the unified renderer as the default route (/, /in
   }
 })
 
+// An object store that supports presigned transfer, used to exercise the cloud's
+// presigned-upload CSP + billing/quota gates. Wraps the in-memory store with presign
+// capability whose URLs target a fixed cross-origin object-store origin.
+const PRESIGN_OBJECT_STORE_ORIGIN = 'https://objects.example.test'
+function createPresignCapableObjectStore(): ObjectStoreAdapter {
+  const base = createInMemoryObjectStore()
+  return {
+    ...base,
+    async presignPut(input) {
+      return {
+        method: 'PUT',
+        url: `${PRESIGN_OBJECT_STORE_ORIGIN}/${input.key}`,
+        headers: input.contentType ? { 'content-type': input.contentType } : {},
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      }
+    },
+    async presignGet(key) {
+      return {
+        method: 'GET',
+        url: `${PRESIGN_OBJECT_STORE_ORIGIN}/${key}`,
+        headers: {},
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      }
+    },
+  }
+}
+
+// SEC-2: when the object store can presign, the browser shim PUTs F4 uploads directly to
+// that cross-origin store, so the served renderer's CSP connect-src must allow its origin
+// (else the PUT is silently blocked and direct transfer is dead in the browser). Gated on
+// the renderer build, which isn't produced in every CI lane.
+test('cloud HTTP server adds the presigned object-store origin to the renderer CSP connect-src', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture({ objectStore: createPresignCapableObjectStore() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    for (const path of ['/', '/app']) {
+      const res = await fetch(`${baseUrl}${path}`)
+      assert.equal(res.status, 200)
+      const csp = res.headers.get('content-security-policy') || ''
+      assert.match(
+        csp,
+        new RegExp(`connect-src 'self' ${PRESIGN_OBJECT_STORE_ORIGIN.replace(/[.]/g, '\\.')}`),
+        `${path} CSP allows the object-store origin for the presigned PUT`,
+      )
+    }
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// A buffered-only store (no presign) leaves connect-src 'self' — the shim uses the
+// same-origin buffered path. Gated on the renderer build.
+test('cloud HTTP server keeps renderer CSP connect-src self for buffered-only object stores', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const csp = (await fetch(`${baseUrl}/`)).headers.get('content-security-policy') || ''
+    assert.match(csp, /connect-src 'self'(;|$)/)
+    assert.doesNotMatch(csp, /objects\.example\.test/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// BUNDLE-1: interactive Vega charts render inside a sandboxed iframe whose document is
+// chart-frame.html. The cloud must serve it at /chart-frame.html and /app/chart-frame.html
+// with a vega-capable, embeddable CSP, and its hashed chunks under /app/assets. Gated on
+// the renderer build.
+test('cloud HTTP server serves the Vega chart frame with an embeddable, vega-capable CSP', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    for (const path of ['/chart-frame.html', '/app/chart-frame.html']) {
+      const frame = await fetch(`${baseUrl}${path}`)
+      assert.equal(frame.status, 200, `${path} serves the chart frame`)
+      assert.match(frame.headers.get('content-type') || '', /text\/html/)
+      const body = await frame.text()
+      // References the hashed chartFrame module chunk under /app/assets.
+      assert.match(body, /\/app\/assets\/chartFrame-[A-Za-z0-9_-]+\.js/)
+      const csp = frame.headers.get('content-security-policy') || ''
+      // vega compiles specs to functions at runtime → needs 'unsafe-eval'.
+      assert.match(csp, /script-src 'self' 'unsafe-eval'/)
+      // Embeddable by the same-origin SPA (overrides the global X-Frame-Options DENY).
+      assert.match(csp, /frame-ancestors 'self'/)
+      assert.equal(frame.headers.get('x-frame-options'), 'SAMEORIGIN')
+    }
+
+    // The chart frame's hashed module chunk serves through /app/assets with a wildcard
+    // ACAO so the sandboxed (opaque-origin) iframe can load it in CORS mode.
+    const frameBody = await (await fetch(`${baseUrl}/chart-frame.html`)).text()
+    const chunk = frameBody.match(/\/app\/assets\/chartFrame-[A-Za-z0-9_-]+\.js/)
+    assert.ok(chunk, 'chart frame references a hashed chartFrame chunk')
+    const asset = await fetch(`${baseUrl}${chunk![0]}`)
+    assert.equal(asset.status, 200)
+    assert.match(asset.headers.get('content-type') || '', /text\/javascript/)
+    assert.equal(asset.headers.get('access-control-allow-origin'), '*')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// SEC-1: the presigned-upload BEGIN endpoint mints a URL that writes bytes straight to the
+// object store, bypassing the pod — so it must run the SAME billing + quota gate the
+// buffered upload runs. A canceled subscription must reject the mint (402), not hand out a
+// bypass URL.
+test('cloud HTTP server gates presigned artifact upload BEGIN behind the billing/quota check', async () => {
+  const billing = testBillingConfig()
+  const fixture = createFixture({
+    billing,
+    billingAdapter: createStubBillingAdapter(billing),
+    objectStore: createPresignCapableObjectStore(),
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Activate billing (the stub checkout creates an active subscription) so the org can
+    // create sessions; we cancel it below to prove the presign gate rejects the mint.
+    const checkout = await fetch(`${baseUrl}/api/billing/checkout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ planKey: 'pro' }),
+    })
+    assert.equal(checkout.status, 200)
+
+    const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(createdResponse.status, 201)
+    const sessionId = String(asRecord((await readJson(createdResponse)).session).sessionId)
+
+    // With billing active, BEGIN mints a presigned URL.
+    const allowed = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'chart.png', contentType: 'image/png' }),
+    })
+    assert.equal(allowed.status, 200)
+    assert.equal(asRecord((await readJson(allowed)).upload).transfer, 'presigned')
+
+    // Cancel the subscription, then BEGIN must be rejected before minting any URL.
+    await fixture.store.upsertBillingSubscription({
+      orgId: 'tenant-1',
+      providerId: 'stub',
+      providerCustomerId: 'stub_customer_tenant-1',
+      providerSubscriptionId: 'stub_subscription_tenant-1',
+      planKey: 'pro',
+      status: 'canceled',
+    })
+
+    const blocked = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'chart.png', contentType: 'image/png' }),
+    })
+    assert.equal(blocked.status, 402)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'billing.subscription_inactive')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server authenticates bearer API tokens and rejects revoked tokens', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })

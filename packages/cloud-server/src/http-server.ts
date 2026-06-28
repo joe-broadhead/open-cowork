@@ -7,9 +7,11 @@ import { CLOUD_SESSION_EVENT_TYPES, emptySessionImportItemCounts, createCloudPro
 import type { CloudArtifactService } from './artifact-service.ts'
 import {
   BROWSER_RENDERER_ASSET_CACHE_CONTROL,
+  browserRendererChartFrameHtml,
   browserRendererHtml,
   getBrowserRendererAsset,
   isBrowserRendererAssetPath,
+  isBrowserRendererChartFramePath,
 } from './browser-renderer-app.ts'
 import {
   principalHasDesktopApiAccess,
@@ -51,6 +53,7 @@ import {
 import {
   methodRequiresCsrf,
   writeBinary,
+  writeBrowserRendererChartFrameHtml,
   writeBrowserRendererHtml,
   writeCorsHeaders,
   writeError,
@@ -1693,14 +1696,39 @@ export class CloudHttpServer {
           writeError(res, 404, 'Unified renderer browser build was not found.', requestOptions.corsOrigin)
           return
         }
-        writeBrowserRendererHtml(res, 200, html, requestOptions.corsOrigin)
+        // SEC-2: when the object store can presign, the browser shim PUTs F4 uploads
+        // directly to that cross-origin store, so allow its origin in the SPA CSP's
+        // connect-src (else the PUT is silently CSP-blocked and falls back to buffered).
+        const objectStoreOrigin = this.options.artifacts
+          ? await this.options.artifacts.presignedUploadOrigin()
+          : null
+        writeBrowserRendererHtml(res, 200, html, requestOptions.corsOrigin, objectStoreOrigin)
+        return
+      }
+
+      // The sandboxed Vega chart iframe document (embedded by the SPA's VegaChart).
+      // Served with a chart-frame-specific CSP (vega needs 'unsafe-eval') and
+      // X-Frame-Options SAMEORIGIN so the same-origin SPA can embed it.
+      if (req.method === 'GET' && isBrowserRendererChartFramePath(url.pathname)) {
+        const html = browserRendererChartFrameHtml()
+        if (html === null) {
+          writeError(res, 404, 'Unified renderer chart frame was not found.', requestOptions.corsOrigin)
+          return
+        }
+        writeBrowserRendererChartFrameHtml(res, 200, html, requestOptions.corsOrigin)
         return
       }
 
       if (req.method === 'GET' && isBrowserRendererAssetPath(url.pathname)) {
         const asset = getBrowserRendererAsset(url.pathname)
         if (asset) {
-          writeBinary(res, asset.body, asset.contentType, BROWSER_RENDERER_ASSET_CACHE_CONTROL, requestOptions.corsOrigin)
+          // The sandboxed chart iframe has an OPAQUE origin (sandbox without
+          // allow-same-origin), and ES module subresources are always fetched in CORS
+          // mode, so it loads its hashed /app/assets chunks with `Origin: null`. These
+          // are public, immutable, non-credentialed bundle files, so serve them with a
+          // wildcard ACAO; the main SPA loads the identical files same-origin.
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          writeBinary(res, asset.body, asset.contentType, BROWSER_RENDERER_ASSET_CACHE_CONTROL)
           return
         }
         writeError(res, 404, 'Unified renderer asset was not found.', requestOptions.corsOrigin)

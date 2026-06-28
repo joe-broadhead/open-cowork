@@ -84,6 +84,10 @@ export type CloudArtifactPresignUploadInput = {
   filename: string
   contentType?: string | null
   expiresSeconds?: number
+  // Client-declared expected upload size, in bytes. Used only to size the speculative
+  // billing/quota reservation at BEGIN (SEC-1); finalize settles the actual stored size.
+  // Absent ⇒ a minimal speculative reservation that still runs the billing/over-quota gate.
+  expectedSize?: number
 }
 
 export type CloudArtifactFinalizeUploadInput = {
@@ -140,6 +144,20 @@ function boundedNullableIsoDate(value: unknown, label: string) {
     throw new CloudServiceError(400, `${label} is invalid.`)
   }
   return trimmed
+}
+
+// Bound the client-declared expected upload size used to size the presign BEGIN
+// reservation (SEC-1). A declared size over the hard cap is rejected up front (mirrors
+// the buffered path's 413). An absent size reserves a minimal speculative byte so the
+// billing + over-quota gate still runs without materially double-counting against the
+// actual-size charge that finalize records.
+function boundedExpectedSize(value: unknown): number {
+  if (value === null || value === undefined) return 1
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw new CloudServiceError(400, 'Artifact expectedSize is invalid.')
+  }
+  if (value > MAX_ARTIFACT_BYTES) throw new CloudServiceError(413, 'Artifact is too large.')
+  return Math.max(1, value)
 }
 
 function boundedKind(value: unknown, fallback: ArtifactKind) {
@@ -327,6 +345,10 @@ export class CloudArtifactService {
   private readonly sessionService: CloudSessionService
   private readonly objectStore: ObjectStoreAdapter
   private readonly ids: { randomUUID: () => string }
+  // Cached serialized origin of the object store's presigned URLs (or null when the store
+  // cannot presign). The store config is fixed for the server's lifetime, so this is
+  // computed once. See presignedUploadOrigin (SEC-2).
+  private cachedPresignedUploadOrigin: string | null | undefined
 
   constructor(
     sessionService: CloudSessionService,
@@ -389,6 +411,14 @@ export class CloudArtifactService {
     await this.sessionService.getSessionView(principal, sessionId)
     const filename = boundedFilename(input.filename)
     const contentType = boundedContentType(input.contentType)
+    // SEC-1: the minted PUT URL writes bytes STRAIGHT to the object store, bypassing the
+    // pod, so this mint is the only enforcement point for the direct-transfer path. Run
+    // the SAME assertBillingAllowed + daily-artifact-bytes quota check the buffered upload
+    // runs (assertArtifactUploadAllowed) BEFORE handing out the URL — reserved speculatively
+    // against the client-declared expected size; finalizeSessionArtifactUpload settles the
+    // actual stored size, so steady-state accounting matches the buffered path. Without this
+    // a canceled/over-quota tenant could mint URLs and upload directly, bypassing billing.
+    await this.sessionService.assertArtifactUploadAllowed(principal, boundedExpectedSize(input.expectedSize))
     const artifactId = this.ids.randomUUID()
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
@@ -651,5 +681,26 @@ export class CloudArtifactService {
     return publicArtifactRecord(record, {
       order,
     })
+  }
+
+  // SEC-2: the serialized origin (scheme://host[:port]) the object store's presigned PUT/GET
+  // URLs target, so the served renderer's CSP connect-src can allow the browser shim's direct
+  // F4 transfer to that cross-origin store. Derived by signing a throwaway probe key and
+  // reading its URL origin (presigning is a local, side-effect-free computation; the probe
+  // URL is never used). Returns null when the store cannot presign (buffered-only / no static
+  // credentials) — the caller then leaves connect-src 'self'. Cached: the store config is fixed.
+  async presignedUploadOrigin(): Promise<string | null> {
+    if (this.cachedPresignedUploadOrigin !== undefined) return this.cachedPresignedUploadOrigin
+    let origin: string | null = null
+    if (this.objectStore.presignPut) {
+      try {
+        const probe = await this.objectStore.presignPut({ key: 'csp-origin-probe', contentType: null })
+        origin = probe ? new URL(probe.url).origin : null
+      } catch {
+        origin = null
+      }
+    }
+    this.cachedPresignedUploadOrigin = origin
+    return origin
   }
 }

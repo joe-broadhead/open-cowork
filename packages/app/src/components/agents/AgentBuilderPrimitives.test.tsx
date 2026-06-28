@@ -101,7 +101,7 @@ describe('AgentBuilderPrimitives', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Project' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Project' }))
     expect(onScopeChange).toHaveBeenCalledWith('project')
 
     rerender(

@@ -189,16 +189,16 @@ describe('AgentsPage', () => {
     expect(screen.queryByText('plugin-helper')).not.toBeInTheDocument()
 
     await user.clear(screen.getByPlaceholderText('Search coworkers, skills, tools, or instructions...'))
-    await user.click(screen.getByRole('tab', { name: 'Built-in' }))
+    await user.click(screen.getByRole('radio', { name: 'Built-in' }))
     expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
     expect(screen.queryByText('Build')).not.toBeInTheDocument()
     expect(screen.queryByText('market-analyst')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: 'OpenCode' }))
+    await user.click(screen.getByRole('radio', { name: 'OpenCode' }))
     expect(screen.getByText('Build')).toBeInTheDocument()
     expect(screen.queryByText('Workflow Designer')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: 'All' }))
+    await user.click(screen.getByRole('radio', { name: 'All' }))
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument()
     expect(screen.getByDisplayValue('market-analyst')).toBeInTheDocument()

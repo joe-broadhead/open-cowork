@@ -60,6 +60,9 @@ jobs:
       - name: Audit full dependency graph (high advisory)
         run: pnpm audit --audit-level high
 
+      - name: Check production license compatibility (copyleft gate)
+        run: pnpm license:check
+
       - name: Verify third-party notices
         run: |
           node scripts/generate-third-party-notices.mjs --skip-license-output

@@ -98,7 +98,7 @@ describe('KnowledgePage review-queue reveal', () => {
     // Wait for the snapshot to load, then switch into graph view so the review
     // queue panel (and its scroll target ref) is unmounted.
     await screen.findByRole('heading', { level: 1, name: 'Getting started' })
-    await user.click(screen.getByRole('tab', { name: 'Graph' }))
+    await user.click(screen.getByRole('radio', { name: 'Graph' }))
     await screen.findByText('Knowledge graph')
     expect(screen.queryByRole('heading', { name: 'Review queue' })).not.toBeInTheDocument()
     scrollIntoView.mockClear()

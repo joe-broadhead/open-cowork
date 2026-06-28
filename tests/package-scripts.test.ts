@@ -126,6 +126,16 @@ test('contributor setup docs and dependency update governance match enforced eng
   }
 })
 
+test('production license compatibility gate is wired as a script and CI step', () => {
+  assert.equal(requireScript('notices'), 'node scripts/generate-third-party-notices.mjs')
+  assert.equal(requireScript('license:check'), 'node scripts/check-license-compatibility.mjs')
+  assert.ok(
+    existsSync(new URL('../scripts/check-license-compatibility.mjs', import.meta.url)),
+    'the copyleft license gate script must exist',
+  )
+  assert.match(ciWorkflow, /pnpm license:check/, 'CI must run the copyleft license compatibility gate')
+})
+
 test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:validate'), 'node scripts/validate-deployment-configs.mjs')
   assert.equal(requireScript('deploy:smoke'), 'node scripts/smoke-deployment.mjs')
@@ -295,6 +305,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
+    'pnpm license:check',
   ]) {
     assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
   }

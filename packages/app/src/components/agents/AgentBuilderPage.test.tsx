@@ -152,7 +152,7 @@ describe('AgentBuilderPage', () => {
       'Summarize market changes with concise evidence.',
     )
 
-    await user.click(screen.getByRole('tab', { name: 'Project' }))
+    await user.click(screen.getByRole('radio', { name: 'Project' }))
     await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
@@ -300,7 +300,7 @@ describe('AgentBuilderPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Permissions' }))
     const taskGroup = screen.getByRole('group', { name: 'Delegate work permission' })
-    await user.click(within(taskGroup).getByRole('tab', { name: 'Allow' }))
+    await user.click(within(taskGroup).getByRole('radio', { name: 'Allow' }))
     await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
@@ -417,7 +417,7 @@ describe('AgentBuilderPage', () => {
     expect(within(webGroup).getByText(/URL and domain-specific web rules are not saved/)).toBeInTheDocument()
 
     const bashGroup = screen.getByRole('group', { name: 'Run commands permission' })
-    await user.click(within(bashGroup).getByRole('tab', { name: 'Deny' }))
+    await user.click(within(bashGroup).getByRole('radio', { name: 'Deny' }))
     await user.click(within(bashGroup).getByRole('button', { name: 'Add rule' }))
     await user.type(within(bashGroup).getByPlaceholderText('git *, pnpm test, rm *'), 'pnpm test')
     await pickFromSelect(user, 'Run commands rule action', 'allow', within(bashGroup))

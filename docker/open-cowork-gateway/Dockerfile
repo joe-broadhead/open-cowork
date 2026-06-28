@@ -11,6 +11,8 @@ COPY mcps ./mcps
 COPY scripts ./scripts
 COPY open-cowork.config.json open-cowork.config.schema.json ./
 COPY tsconfig.base.json ./
+COPY LICENSE THIRD_PARTY_NOTICES.md ./
+COPY THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @open-cowork/shared build
@@ -29,6 +31,10 @@ COPY --from=build /app/mcps ./mcps
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/open-cowork.config.json /app/open-cowork.config.schema.json ./
 COPY --from=build /app/tsconfig.base.json ./
+# Carry the MIT license + curated third-party attribution into the redistributed
+# image, matching what the desktop app bundles (LIC-03).
+COPY --from=build /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
+COPY --from=build /app/THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 
 RUN pnpm install --frozen-lockfile --prod
 

@@ -32,10 +32,10 @@ unless the caller clearly expects them, and produce actionable errors for
 CI logs.
 
 `pnpm cloud:dev` starts the TypeScript source entrypoint for local iteration. It
-serves the unified renderer at `GET /` from `apps/desktop/dist-browser`; build
-that first with `pnpm --filter @open-cowork/desktop build:browser`.
+serves the unified renderer at `GET /` from `packages/app/dist-browser`; build
+that first with `pnpm --filter @open-cowork/app build:browser`.
 `pnpm cloud:build` builds the unified renderer's browser bundle
-(`pnpm --filter @open-cowork/desktop build:browser` → `apps/desktop/dist-browser`),
+(`pnpm --filter @open-cowork/app build:browser` → `packages/app/dist-browser`),
 copies it next to the cloud entry under
 `apps/desktop/dist/cloud/browser-renderer/`, then emits the production cloud
 bundle. `pnpm cloud:start` starts

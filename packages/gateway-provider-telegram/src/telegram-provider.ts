@@ -11,7 +11,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 import { Bot, InlineKeyboard, InputFile, type Context } from "grammy";
 import type { Update } from "grammy/types";
 import { withTelegramRetry, type TelegramRateLimitEvent } from "./telegram-retry.js";
@@ -295,7 +295,7 @@ export class TelegramProvider implements ChannelProvider {
     const providedSecret =
       auth.secretToken ?? headerValue(auth.headers, "x-telegram-bot-api-secret-token");
     if (!constantTimeStringEqual(providedSecret, expectedSecret)) {
-      throw new Error("Telegram webhook secret verification failed");
+      throw new WebhookAuthError("Telegram webhook secret verification failed");
     }
   }
 

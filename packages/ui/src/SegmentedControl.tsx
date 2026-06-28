@@ -61,7 +61,7 @@ export function SegmentedControl({
   return (
     <span className={cn('ui-control-stack', className)}>
       <span
-        role="tablist"
+        role="radiogroup"
         aria-label={label}
         aria-describedby={describedBy}
         className="ui-segmented-control"
@@ -75,8 +75,8 @@ export function SegmentedControl({
               key={option.value}
               ref={(node) => { refs.current[index] = node }}
               type="button"
-              role="tab"
-              aria-selected={selected}
+              role="radio"
+              aria-checked={selected}
               tabIndex={selected ? 0 : -1}
               disabled={isDisabled || option.disabled}
               title={option.disabledReason}

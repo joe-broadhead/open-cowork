@@ -21,7 +21,7 @@ export const BROWSER_RENDERER_ASSET_PREFIX = '/app/assets/'
 // DEV RUNTIME: the cloud runs from source via scripts/open-cowork-cloud.ts, so
 // import.meta.url is this file under packages/cloud-server/src/. The build lives at
 // packages/app/dist-browser/ — three levels up (src -> cloud-server -> packages ->
-// repo root). Mirrors how web-client-assets.ts resolves the website dev build.
+// repo root), produced by `pnpm --filter @open-cowork/app build:browser`.
 //
 // PROD RUNTIME: scripts/build-cloud.mjs builds the browser renderer and copies it
 // to ./browser-renderer/ next to the bundled cloud entry, so the first candidate
@@ -46,7 +46,7 @@ const ASSET_CONTENT_TYPES: Record<string, string> = {
 }
 
 // Immutable: every asset name carries a content hash, so a cached copy is valid
-// forever; a new build emits a new name. Matches the website font cache policy.
+// forever; a new build emits a new name (the standard hashed-asset cache policy).
 export const BROWSER_RENDERER_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
 
 function resolveAssetExtension(fileName: string): string | null {
@@ -121,4 +121,31 @@ export function browserRendererHtml(bootstrap: Record<string, unknown>): string 
     /(<script id="cowork-bootstrap" type="application\/json">)[\s\S]*?(<\/script>)/,
     `$1${json}$2`,
   )
+}
+
+// The unified renderer's interactive Vega charts render inside a sandboxed iframe
+// whose document is chart-frame.html. The SPA embeds it via
+//   new URL('./chart-frame.html', window.location.href)
+// so it must be served at /chart-frame.html (SPA mounted at /) AND /app/chart-frame.html
+// (SPA mounted at /app/). The frame's hashed module chunks (chartFrame-*.js,
+// vendor-vega-*.js) already serve through the /app/assets/* route above — chart-frame.html
+// references them at /app/assets via vite's `base: '/app/'`. Without this route the iframe
+// 404s and interactive charts are dead in the cloud (BUNDLE-1 parity gap).
+export function isBrowserRendererChartFramePath(pathname: string): boolean {
+  return pathname === '/chart-frame.html' || pathname === '/app/chart-frame.html'
+}
+
+let cachedChartFrameHtml: string | null | undefined
+
+/**
+ * The built chart-frame.html (its script + modulepreloads already reference
+ * /app/assets via vite's `base: '/app/'`, so no rewrite is needed). Returns null
+ * when the dist-browser build is absent.
+ */
+export function browserRendererChartFrameHtml(): string | null {
+  if (cachedChartFrameHtml === undefined) {
+    const candidate = resolveInDir('chart-frame.html')
+    cachedChartFrameHtml = candidate ? readFileSync(candidate, 'utf8') : null
+  }
+  return cachedChartFrameHtml
 }

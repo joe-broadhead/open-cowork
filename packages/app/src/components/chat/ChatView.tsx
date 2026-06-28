@@ -66,6 +66,8 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [autoFollowPaused, setAutoFollowPaused] = useState(false)
+  const [transcriptAnnouncement, setTranscriptAnnouncement] = useState('')
+  const announcedAssistantRef = useRef<{ sessionId: string | null; messageId: string | null }>({ sessionId: null, messageId: null })
   const [coordinationBoard, setCoordinationBoard] = useState<CoordinationBoardPayload | null>(null)
   const agentRunFiltersEnabled = useMemo(() => isAgentRunFiltersEnabled(), [])
   const visibleApprovals = pendingApprovals
@@ -228,6 +230,26 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
     }
     return result
   }, [messages, toolCalls, taskRuns, compactions, visibleApprovals, visibleErrors])
+
+  // Announce only a genuinely new, settled assistant reply to screen readers
+  // through the dedicated polite live region. Opening an existing thread (or each
+  // streamed patch) must not replay history: we baseline on the latest message
+  // whenever the session changes, then emit once after a new assistant message has
+  // finished generating.
+  useEffect(() => {
+    const latestAssistant = [...messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && (message.content ?? '').trim().length > 0)
+    if (announcedAssistantRef.current.sessionId !== currentSessionId) {
+      announcedAssistantRef.current = { sessionId: currentSessionId, messageId: latestAssistant?.id ?? null }
+      setTranscriptAnnouncement('')
+      return
+    }
+    if (isGenerating || !latestAssistant) return
+    if (announcedAssistantRef.current.messageId === latestAssistant.id) return
+    announcedAssistantRef.current.messageId = latestAssistant.id
+    setTranscriptAnnouncement(latestAssistant.content.trim().slice(0, 300))
+  }, [messages, isGenerating, currentSessionId])
 
   // Track whether the user is pinned to the bottom of the transcript. When
   // they scroll up to re-read something, we stop slamming the view back to
@@ -535,12 +557,14 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
         />
 
         <div className="relative flex-1 min-h-0">
+          {/* Named scroll region — NOT a live region. Virtualization mounts/unmounts
+              rows as you scroll, which an aria-live container announced as spurious
+              "new content". New messages are announced via the dedicated polite
+              region below instead. */}
           <div
             ref={scrollRef}
             className="h-full overflow-y-auto"
-            role="log"
-            aria-live="polite"
-            aria-atomic="false"
+            role="region"
             aria-label={t('chat.transcriptAriaLabel', 'Chat transcript')}
           >
             {virtualize ? (
@@ -591,6 +615,11 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
               </Button>
             </div>
           ) : null}
+          {/* Dedicated polite live region: announces only a genuinely new, settled
+              assistant message once — never the whole transcript or scroll churn. */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="chat-transcript-announcer">
+            {transcriptAnnouncement}
+          </div>
         </div>
         {activePendingQuestion && (
           <SessionQuestionDock

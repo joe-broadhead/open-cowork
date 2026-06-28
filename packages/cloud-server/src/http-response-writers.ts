@@ -80,7 +80,27 @@ export function writeHtml(res: ServerResponse, status: number, body: string, ori
 // scripts (no inline script, no eval), so script-src stays 'self' with NO
 // 'unsafe-inline'. Relaxing style does not weaken script execution — 'unsafe-inline'
 // in style-src cannot run JavaScript.
-export function writeBrowserRendererHtml(res: ServerResponse, status: number, body: string, origin?: string | null) {
+//
+// objectStoreOrigin (SEC-2): when the configured object store can presign uploads,
+// the browser shim's F4 path PUTs the artifact bytes DIRECTLY to that cross-origin
+// object store (packages/app/src/browser/cowork-api.ts). A bare `connect-src 'self'`
+// silently blocks that PUT, so the shim falls back to the buffered path and direct
+// presigned transfer is dead in the browser. When an object-store origin is plumbed
+// in, allow it in connect-src so the direct PUT/GET is permitted. When none is
+// configured (buffered-only stores), connect-src stays 'self'.
+const SAFE_CSP_ORIGIN = /^https?:\/\/[^\s'";,]+$/
+
+export function writeBrowserRendererHtml(
+  res: ServerResponse,
+  status: number,
+  body: string,
+  origin?: string | null,
+  objectStoreOrigin?: string | null,
+) {
+  // Guard against a malformed configured origin breaking out of the directive.
+  const connectSrc = objectStoreOrigin && SAFE_CSP_ORIGIN.test(objectStoreOrigin)
+    ? `connect-src 'self' ${objectStoreOrigin}`
+    : "connect-src 'self'"
   writeCorsHeaders(res, origin)
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
@@ -93,13 +113,57 @@ export function writeBrowserRendererHtml(res: ServerResponse, status: number, bo
       "style-src 'self' 'unsafe-inline'",
       // Per-entity inline style attributes (entity-chroma theming).
       "style-src-attr 'unsafe-inline'",
-      // Same-origin HTTP (/api, /auth) + SSE (/events).
-      "connect-src 'self'",
+      // Same-origin HTTP (/api, /auth) + SSE (/events), plus the presigned
+      // object-store origin (when configured) for the F4 direct-transfer PUT/GET.
+      connectSrc,
       "font-src 'self'",
       "img-src 'self' data: https:",
       "object-src 'none'",
       "base-uri 'none'",
       "frame-ancestors 'none'",
+      "form-action 'self'",
+    ].join('; '),
+  })
+  res.end(body)
+}
+
+// CSP for the sandboxed VEGA CHART IFRAME (chart-frame.html), embedded by the SPA's
+// VegaChart component. It differs from the SPA CSP (writeBrowserRendererHtml) on three
+// axes, all required for the interactive chart to render in the browser:
+//
+//   1. script-src adds 'unsafe-eval': vega/vega-lite compile chart specs into functions
+//      at runtime (Function constructor), which a strict script-src blocks. This mirrors
+//      the desktop chart-frame CSP. It is safe here because the frame is sandboxed to an
+//      opaque origin (sandbox="allow-scripts", NO allow-same-origin), denies all egress
+//      (connect-src 'none'), and only renders bounded inline specs that
+//      validateInlineChartSpec has already stripped of external-resource/image keys.
+//   2. frame-ancestors 'self' (NOT 'none') + X-Frame-Options SAMEORIGIN: the SPA must be
+//      able to embed this document in its chart iframe. The global X-Frame-Options DENY
+//      (writeSecurityHeaders) is overridden to SAMEORIGIN so the embed is not blocked.
+//   3. connect-src 'none': the chart frame never needs the network (the vega loader denies
+//      every external fetch), so egress is denied outright as defense-in-depth.
+export function writeBrowserRendererChartFrameHtml(res: ServerResponse, status: number, body: string, origin?: string | null) {
+  writeCorsHeaders(res, origin)
+  // Override the global X-Frame-Options: DENY so the same-origin SPA can frame this.
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'content-security-policy': [
+      "default-src 'self'",
+      // vega compiles specs to functions at runtime — needs 'unsafe-eval'.
+      "script-src 'self' 'unsafe-eval'",
+      // The frame's inline <style> + vega's runtime-injected styles.
+      "style-src 'self' 'unsafe-inline'",
+      "style-src-attr 'unsafe-inline'",
+      "img-src 'self' data:",
+      "font-src 'self'",
+      // Deny all egress — the restricted vega loader blocks external resources anyway.
+      "connect-src 'none'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      // Only the same-origin SPA may embed the chart iframe.
+      "frame-ancestors 'self'",
       "form-action 'self'",
     ].join('; '),
   })
