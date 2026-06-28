@@ -304,8 +304,7 @@ Start here:
 ## Repository layout
 
 ```text
-apps/desktop                       Electron main process, preload bridge, renderer UI, runtime composition, cloud control plane, packaging
-apps/website                       Cloud Web browser workbench and route/API matrix
+apps/desktop                       Electron main process, preload bridge, the single renderer UI (Electron + cloud browser shim), runtime composition, cloud control plane, packaging
 apps/gateway                       Cloud Channel Gateway daemon
 apps/standalone-gateway            Standalone Team Gateway appliance
 packages/shared                    Shared types, IPC contracts, and cloud projection contracts

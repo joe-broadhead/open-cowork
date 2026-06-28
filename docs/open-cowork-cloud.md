@@ -210,13 +210,14 @@ The cloud web role serves the Cloud Web Workbench at `/`. The workbench is an
 API client for the same cloud control plane used by desktop sync and gateway
 clients; it does not access Postgres or secret storage directly.
 
-The browser app currently keeps a no-framework, server-rendered shell with an
-inline nonce-protected client script. That is intentional for the first cloud
-workbench build-out: it keeps the cloud image simple, preserves the existing
-CSP and cookie-auth path, and avoids introducing a separate asset build before
-the browser product surface needs richer interaction. The shell is still split
-around typed route metadata so the app can grow into a bundled browser client
-without changing the Cloud API contract.
+The browser app is the unified Open Cowork renderer (`apps/desktop/src/renderer`)
+— the same UI that runs on Electron Desktop. In the browser it runs against a
+typed `CoworkAPI` shim (`apps/desktop/src/renderer/browser/cowork-api.ts`)
+backed by the cloud HTTP + SSE API, and is served as a hashed-asset SPA under
+the server's CSP nonce and cookie-auth path. There is no separate Cloud Web
+codebase: the cloud serves the renderer's browser build
+(`apps/desktop/dist-browser`, produced by `pnpm cloud:build`), so Desktop and
+Cloud Web cannot drift.
 
 The information architecture is split into two surfaces:
 
@@ -301,25 +302,26 @@ same session list, projection, and SSE contracts.
 ### Cloud Web Workbench readiness gates
 
 The browser workbench has its own release gates because `/healthz` only proves
-the server is alive. Run these before provider rollout and keep them in CI:
+the server is alive. Cloud Web is the browser build of the desktop renderer, so
+its UI is covered by the renderer suite, while the cloud control-plane behavior
+is covered by the cloud HTTP and continuation suites. Run these before provider
+rollout and keep them in CI:
 
 ```bash
-pnpm --filter @open-cowork/website test:browser
-pnpm --filter @open-cowork/website test:a11y
-pnpm --filter @open-cowork/website perf:check
-pnpm test:cloud-web
+pnpm test:renderer
+pnpm test:cloud-continuation
+pnpm cloud:smoke
 ```
 
-The browser E2E gate hydrates the actual workbench client in a DOM harness and
-checks signed-out, member, admin, thread create/prompt/continue, SSE refresh,
-approval/question, artifact, workflow, BYOK, gateway, billing, diagnostics,
-policy-blocked, quota-blocked, and billing-blocked flows.
-
-The accessibility gate checks labelled controls, keyboard-reachable navigation,
-focus management, active route state, reduced-motion CSS, responsive layout
-rules, and contrast budgets. The performance and scale gate checks 10k-thread
-fixtures, hundreds of capabilities, bounded DOM row rendering, load-more
-behavior, client-side filtering budgets, and SSE reconnect handling.
+The renderer suite exercises the actual UI — signed-out, member, and admin
+states; thread create/prompt/continue, SSE refresh, approval/question, artifact,
+workflow, BYOK, gateway, billing, and diagnostics flows; policy/quota/billing
+blocked states — together with labelled controls, keyboard-reachable navigation,
+focus management, active route state, reduced-motion CSS, responsive layout, and
+contrast. The cloud suites verify large thread/capability fixtures, bounded
+pagination, cursor validation, and SSE reconnect against the real cloud API, and
+`pnpm cloud:smoke` builds the production cloud bundle (including the browser
+renderer) and runs an import smoke so the served `GET /` keeps shipping.
 
 Signed-in member users can open the workbench and read allowed org/policy/usage
 state. Admin-only panels are hidden for members and all admin mutations remain

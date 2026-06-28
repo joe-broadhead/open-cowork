@@ -17,7 +17,7 @@ OpenCode. It should not become a second OpenCode runtime.
 | Public name | Status | Owning code | Release artifact |
 | --- | --- | --- | --- |
 | Open Cowork Desktop | Supported | `apps/desktop` | macOS `.dmg`/`.zip`, Linux `.AppImage`/`.deb` |
-| Open Cowork Cloud | Supported for self-host beta and private hosted beta | cloud role code under `apps/desktop/src/main/cloud`, browser app under `apps/website` | `open-cowork-cloud` OCI image and Helm/Compose assets |
+| Open Cowork Cloud | Supported for self-host beta and private hosted beta | cloud role code under `apps/desktop/src/main/cloud`; the browser UI is the unified renderer (`apps/desktop/src/renderer`) served by the cloud at `GET /` | `open-cowork-cloud` OCI image and Helm/Compose assets |
 | Open Cowork Gateway | Supported as a cloud channel adapter | `apps/gateway`, `packages/gateway-*` | `open-cowork-gateway` OCI image and Helm/Compose assets |
 | Open Cowork Standalone Gateway | Supported as a Gateway-only execution appliance | `apps/standalone-gateway` | source package and `open-cowork-gateway-standalone` CLI; OCI image can be added after the release gate exists |
 | Open Cowork Mobile | Reserved | none yet | no artifact |

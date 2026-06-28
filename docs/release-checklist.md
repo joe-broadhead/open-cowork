@@ -27,7 +27,6 @@ and linked from the release Go/No-Go report.
 ### Repository quality
 
 - [ ] `pnpm test`
-- [ ] `pnpm test:cloud-web`
 - [ ] `pnpm test:cloud-continuation`
 - [ ] `pnpm test:renderer`
 - [ ] `pnpm typecheck`
@@ -206,7 +205,8 @@ and linked from the release Go/No-Go report.
 - [ ] Knowledge/OpenWiki integration verified: the Cloud Web Knowledge route,
       `Capture to knowledge` CTA, native Knowledge API contract, review queue,
       version history, graph, and no-local-OpenWiki-checkout boundary all match
-      `apps/website/src/studio-production-qa.ts`.
+      the renderer's Knowledge surface documented in
+      `docs/cloud-web-workbench.md`.
 
 ## Tagged release
 

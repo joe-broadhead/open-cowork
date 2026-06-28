@@ -133,7 +133,6 @@ Org admins should verify Cloud before inviting users:
 ```bash
 pnpm deploy:validate
 pnpm ops:validate
-pnpm test:cloud-web
 pnpm test:cloud-continuation
 ```
 

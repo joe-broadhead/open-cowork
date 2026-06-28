@@ -76,7 +76,6 @@ Add surface smokes based on the selected profile:
 
 ```bash
 pnpm test:e2e
-pnpm test:cloud-web
 pnpm test:cloud-continuation
 pnpm deploy:gateway:smoke
 pnpm deploy:standalone-gateway:smoke

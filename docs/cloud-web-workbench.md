@@ -1,10 +1,16 @@
 # Cloud Web Studio
 
-Cloud Web is the browser Studio for cloud workspaces. It is a Cloud API
-client over the same tenant-scoped sessions, projections, workflows, artifacts,
-policy, and gateway records used by Desktop Cloud and Gateway. It must not
-import server-only stores, secret adapters, runtime adapters, or OpenCode SDK
-surfaces.
+Cloud Web is the Open Cowork Studio running in the browser for cloud
+workspaces. It is not a separate UI. The single renderer at
+`apps/desktop/src/renderer` powers both Desktop (Electron, over the real
+`window.coworkApi` IPC bridge) and Cloud Web (the browser, over a typed
+`CoworkAPI` shim at `apps/desktop/src/renderer/browser/cowork-api.ts`). The
+shim is backed by the cloud HTTP + SSE API, so the browser build of the
+renderer runs unchanged against the same tenant-scoped sessions, projections,
+workflows, artifacts, policy, and gateway records used by Desktop Cloud and
+Gateway. The cloud server serves the renderer at `GET /` and must not expose
+server-only stores, secret adapters, runtime adapters, or OpenCode SDK
+surfaces to the browser.
 
 The canonical workspace and sync promises live in
 [Product Contract](product-contract.md). This page is the release contract for
@@ -12,13 +18,13 @@ the browser surface.
 
 ## Route/API Matrix
 
-The typed source of truth is
-`apps/website/src/route-api-matrix.ts`. Every route must have a matrix entry
-with required role, backing endpoint ids, loading/empty/error states,
-disabled-state behavior, pagination or cursor notes, redaction requirements,
-structured pagination/redaction contracts, and tests. The route matrix tests
-fail if a route omits its limit/cursor mode, raw-secret policy, or
-loading/empty/error state contract.
+The browser surface and its cloud backing are documented below. The cloud HTTP
+API (`packages/cloud-server/src/http-routes`) and the browser `CoworkAPI` shim
+(`apps/desktop/src/renderer/browser/cowork-api.ts`) enforce required role,
+backing endpoint ids, loading/empty/error states, disabled-state behavior,
+pagination or cursor notes, and redaction requirements. Cloud HTTP server and
+renderer tests fail if a route omits its limit/cursor mode, raw-secret policy,
+or loading/empty/error state contract.
 
 | Route id | Surface | Required role | Backing endpoint ids | Pagination / cursor | Redaction and disabled behavior |
 |---|---|---|---|---|---|
@@ -44,13 +50,14 @@ loading/empty/error state contract.
 
 ## Desktop/Cloud Studio Parity Matrix
 
-The typed source of truth is
-`apps/website/src/workbench-parity.ts`. Cloud Web route labels, summaries,
-browser bootstrap metadata, and rendered parity cards consume this matrix.
-This document mirrors the same rows, and render tests assert every documented
-row against the typed source so the product boundary cannot drift silently. The
-purpose is to make shared Desktop concepts feel like the same product while
-keeping Cloud Web honest about cloud-only and desktop-only boundaries.
+Because Desktop and Cloud Web run the same renderer, visual and behavioral
+parity is intrinsic — there is no second implementation to drift. The only
+differences are the capabilities the browser shim cannot provide (local
+filesystem, local stdio MCP processes, native dialogs, machine runtime config),
+which the renderer detects through `workspace.support()` and the shim's
+`WORKSPACE_SUPPORT_APIS`. The matrix below documents which shared Desktop
+concepts are available, cloud-only, or desktop-only so the product boundary
+stays explicit.
 
 | Concept | Availability | Cloud route(s) | Cloud Web affordance | Product boundary |
 |---|---|---|---|---|
@@ -74,11 +81,11 @@ keeping Cloud Web honest about cloud-only and desktop-only boundaries.
 
 ## Admin/Settings Surface Matrix
 
-The typed source of truth is
-`apps/website/src/admin-surface-matrix.ts`. Cloud Web admin route summaries,
-browser bootstrap metadata, rendered admin surface cards, and locked-control
-copy consume this matrix. This document mirrors the same rows, and render tests
-assert every documented row against the typed source.
+Cloud Web admin route summaries, rendered admin surface cards, and
+locked-control copy are owned by the renderer's admin/settings surfaces. The
+matrix below documents every admin surface, its desktop analog, and its
+sensitive boundary so the admin path stays a secondary surface and its
+authorization stays server-side.
 
 | Surface | Route | Desktop analog | Cloud Web affordance | Sensitive boundary |
 |---|---|---|---|---|
@@ -115,8 +122,9 @@ snapshots and events through the shared API contract.
 
 ## Shared IA Contract
 
-Cloud Web and Desktop share the same Studio IA vocabulary. The implementation
-still uses stable `data-workbench-*` hooks for tests and hydration:
+Cloud Web and Desktop share the same Studio IA because they are the same
+renderer. The shared layout primitives expose stable `data-workbench-*` hooks
+for tests:
 
 - `data-workbench-pane="threads"` marks the thread list/sidebar.
 - `data-workbench-pane="conversation"` marks the active chat surface.
@@ -124,35 +132,37 @@ still uses stable `data-workbench-*` hooks for tests and hydration:
 - `data-action-cluster="true"` marks the consolidated chat/action toolbar.
 - `data-diff-view="true"` marks review-first artifact and diff surfaces.
 
-Desktop uses `WorkbenchLayout`, `ActionCluster`, and `DiffView` directly in
-the renderer. Cloud Web uses the same `@open-cowork/ui` primitives in the
-hydrated React client and preserves matching SSR hooks before hydration. The
-Cloud review pane presents runtime status and sanitized artifacts; artifact
-metadata remains review-first and fetches bodies only after explicit view or
-download actions. Desktop-only actions, such as local runtime or git-native
-controls, stay absent or disabled in Cloud per the parity matrix.
+The renderer uses `WorkbenchLayout`, `ActionCluster`, and `DiffView` from
+`@open-cowork/ui` on both surfaces. The Cloud review pane presents runtime
+status and sanitized artifacts; artifact metadata remains review-first and
+fetches bodies only after explicit view or download actions. Desktop-only
+actions, such as local runtime or git-native controls, stay absent or disabled
+in Cloud because the browser shim reports them as unsupported through
+`workspace.support()`.
 
-## React Migration Scaffold
+## Unified Renderer
 
-Cloud Web renders the visible shell inside `#open-cowork-cloud-react-root`
-through a React SSR wrapper, then mounts a Vite-built React controller at
-`/assets/open-cowork-cloud-react.js`. The controller owns auth bootstrap,
-routing, Studio surfaces, admin/settings surfaces, and theme switching while
-portaling into stable SSR shell slots. The bootstrap contract stays unchanged:
-`#open-cowork-cloud-bootstrap` carries route, endpoint, parity, admin-surface,
-branding, role, and feature metadata, and the HTTP server keeps the same CSP
-nonce boundary.
+Cloud Web is the browser build of the desktop renderer
+(`apps/desktop/src/renderer`). `pnpm cloud:build` runs
+`pnpm --filter @open-cowork/desktop build:browser` to emit the renderer's
+browser bundle (`apps/desktop/dist-browser`), and the cloud server serves it at
+`GET /` through `packages/cloud-server/src/browser-renderer-app.ts`. The entry
+document loads hashed module/asset scripts and installs the browser
+`CoworkAPI` shim (`apps/desktop/src/renderer/browser/cowork-api.ts`), which
+derives the endpoint base from `window.location`, reads the CSRF token from
+`/auth/me`, and talks only to the same-origin cloud `/api`, `/auth`, and SSE
+event routes under the server's CSP nonce boundary.
 
-There are no remaining vanilla feature scripts under `apps/website/src/client`.
-Projects, chat, coworkers, capabilities, playbooks, channels, artifacts,
-Knowledge, admin/settings surfaces, and the browser theme switcher are
-React-owned in the browser bundle.
-New feature work must use the shared `AppAPI` contract from
-`packages/shared/src/app-api.ts`, `AppApiProvider` / `useAppApi()` from
-`@open-cowork/ui/app-api`, and the Cloud fetch/SSE adapter in
-`apps/website/src/app-api.ts`. The Cloud adapter may only request `/api/*` or
-`/auth/*` paths and may only open `/api/*` event streams. Desktop uses
-`apps/desktop/src/renderer/app-api.ts` as the IPC-backed adapter.
+The renderer is written entirely against the typed `CoworkAPI` surface (from
+`@open-cowork/shared`). On Electron the preload supplies that object over IPC;
+in the browser the shim supplies the identical object backed by cloud HTTP +
+SSE, so no feature code branches on environment. Electron-only methods (native
+dialogs, runtime restart, desktop pairing, local FS imports, app reset) have no
+cloud equivalent and the shim implements them as signature-satisfying stubs
+that no-op or reject with a clear "unavailable in the browser build" message.
+New feature work uses the shared `CoworkAPI`/AppAPI contract through
+`apps/desktop/src/renderer/app-api.ts` rather than direct `fetch`,
+`EventSource`, or `window.coworkApi` access.
 
 `/api/sessions` cursors are opaque, scoped to the authenticated tenant, user,
 and active filters, and invalid or mismatched cursors fail closed with `400`.
@@ -179,10 +189,12 @@ disabled controls are only ergonomic hints; authorization remains server-side.
 
 ## Browser Quality Gates
 
-Cloud Web changes should run:
+Because Cloud Web is the same renderer as Desktop, its UI is covered by the
+renderer suite and the cloud HTTP/continuation suites. Cloud Web changes should
+run:
 
 ```bash
-pnpm test:cloud-web
+pnpm test:renderer
 ```
 
 For release-sensitive changes also run:
@@ -192,15 +204,15 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:cloud-continuation
+pnpm cloud:smoke
 pnpm docs:build
 git diff --check
 ```
 
-The Cloud Web gates cover JSDOM workflow smoke, CI Chromium desktop/mobile
-smoke, accessibility/keyboard behavior, responsive layout expectations,
-performance budgets for large thread and admin lists, route/API matrix coverage,
-backend cursor validation, and package-boundary checks that keep the browser out
-of server-only modules.
+These gates cover renderer behavior and accessibility, the cloud HTTP route and
+redaction contract, backend cursor validation, package-boundary checks that keep
+the renderer out of server-only modules, and a production cloud-bundle build +
+import smoke so the browser renderer build keeps shipping in the cloud image.
 
 ## Visual QA Checklist
 
@@ -208,10 +220,10 @@ For visual or surface-organization changes, compare Cloud Web and Desktop
 side-by-side before merge. The expected match is product language and workflow
 parity, not pixel-perfect screenshots.
 
-The typed source of truth for release visual QA is
-`apps/website/src/studio-production-qa.ts`. The matrix below must cover every
-Cloud Web route at desktop, tablet, and mobile widths. Tests assert every row so
-the checklist cannot drift from the source contract.
+The matrix below must cover every Cloud Web route at desktop, tablet, and mobile
+widths. Because Desktop and Cloud Web are the same renderer, a desktop-verified
+surface only needs the browser to confirm the cloud shim's boundaries (no local
+filesystem, no stdio MCPs, server-side authorization) and responsive layout.
 
 ## Studio Production Visual QA Matrix
 
@@ -238,9 +250,8 @@ the checklist cannot drift from the source contract.
   Desktop/Cloud parity matrix.
 - Org, members, policy, BYOK, connections, gateway, billing, audit, usage, and
   diagnostics map to the admin/settings surface matrix.
-- `/assets/open-cowork-cloud-react.js` mounts the React controller for
-  `#open-cowork-cloud-react-root` and the root reports an explicit hydrated
-  status in browser smoke tests.
+- `GET /` returns the renderer entry document, which loads hashed `/assets/*`
+  module scripts under the server CSP nonce and boots against the cloud API.
 - Loading, empty, error, disabled, confirmation, and one-time reveal states stay
   visible and consistent without exposing secrets.
 - Desktop-only boundaries remain explicit: no local host paths, local stdio MCP
@@ -249,26 +260,27 @@ the checklist cannot drift from the source contract.
   controls, or unreachable keyboard focus targets.
 - `/assets/fonts/*.woff2` requests return `200 font/woff2` and computed fonts
   resolve to Mona Sans / Schibsted Grotesk in the real-browser smoke.
-- `/assets/open-cowork-cloud-react.js` returns the Vite-built React client
-  asset, and the real-browser smoke verifies that the nonce'd module route is
-  requested and can mount the controller for `#open-cowork-cloud-react-root`.
+- The renderer's hashed `/assets/*` module and stylesheet routes are served with
+  long-lived immutable cache headers, and the real-browser smoke verifies the
+  nonce'd entry document loads and mounts the renderer.
 
 ## Production Audit Checklist
 
-The typed source of truth is `apps/website/src/studio-production-qa.ts`. This
-checklist is the closeout audit for Studio parity work before the roadmap can
-be considered complete.
+This checklist is the closeout audit for Studio parity work before the roadmap
+can be considered complete. Since Desktop and Cloud Web are the same renderer,
+most rows are satisfied by the renderer suite plus the cloud HTTP/redaction
+suite.
 
 | Check id | Requirement | Evidence |
 |---|---|---|
 | `canonical-shared-tokens` | Shared design tokens are the only canonical Studio token source for Desktop and Cloud Web. | `packages/shared/src/design-tokens.ts`, `tests/design-tokens-sync.test.ts`, `docs/design-tokens.md` |
-| `shared-primitives-first` | Shared Studio primitives are preferred before app-local component duplication. | `packages/ui/src/`, `docs/design-system.md`, `apps/website/src/modularity.test.ts` |
-| `shared-product-vocabulary` | Desktop and Cloud Web use the same user-facing vocabulary for shared concepts. | `docs/desktop-app.md`, `docs/cloud-web-workbench.md`, `apps/website/src/workbench-parity.ts` |
-| `cloud-api-client-only` | Cloud Web remains a Cloud API client and does not own execution, projection semantics, or OpenCode runtime behavior. | `apps/website/src/app-api.ts`, `apps/website/src/modularity.test.ts`, `docs/architecture.md` |
-| `admin-not-default-path` | Admin/setup controls are explicit secondary surfaces and do not dominate the default user path. | `apps/website/src/app-shell.ts`, `apps/website/src/admin-surface-matrix.ts`, `docs/cloud-web-workbench.md` |
-| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `apps/website/src/route-api-matrix.ts`, `apps/website/src/render.test.ts`, `tests/cloud-http-server.test.ts` |
-| `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | `apps/website/src/performance.test.ts`, `apps/website/src/modularity.test.ts`, `docs/cloud-web-workbench.md` |
-| `docs-match-shipped-behavior` | Docs describe shipped behavior and explicit boundaries, not aspirational runtime behavior. | `docs/cloud-web-workbench.md`, `docs/release-checklist.md`, `apps/website/src/studio-production-qa.test.ts` |
+| `shared-primitives-first` | Shared Studio primitives are preferred before app-local component duplication. | `packages/ui/src/`, `docs/design-system.md`, renderer vitest suite |
+| `shared-product-vocabulary` | Desktop and Cloud Web use the same user-facing vocabulary for shared concepts. | `docs/desktop-app.md`, `docs/cloud-web-workbench.md`, single renderer at `apps/desktop/src/renderer` |
+| `cloud-api-client-only` | Cloud Web remains a Cloud API client and does not own execution, projection semantics, or OpenCode runtime behavior. | `apps/desktop/src/renderer/browser/cowork-api.ts`, `tests/cloud-modularity-boundaries.test.ts`, `docs/architecture.md` |
+| `admin-not-default-path` | Admin/setup controls are explicit secondary surfaces and do not dominate the default user path. | `apps/desktop/src/renderer` admin/settings surfaces, `docs/cloud-web-workbench.md` |
+| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `packages/cloud-server/src/http-routes`, `apps/desktop/src/renderer/browser/cowork-api.ts`, `tests/cloud-http-server.test.ts` |
+| `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | renderer vitest suite, `tests/cloud-http-server.test.ts`, `docs/cloud-web-workbench.md` |
+| `docs-match-shipped-behavior` | Docs describe shipped behavior and explicit boundaries, not aspirational runtime behavior. | `docs/cloud-web-workbench.md`, `docs/release-checklist.md`, renderer + cloud HTTP suites |
 
 ## Knowledge/OpenWiki Integration
 
