@@ -3643,6 +3643,31 @@ test('cloud HTTP server serves the unified renderer at /app with a script-strict
   }
 })
 
+test('cloud HTTP server serves the unified renderer at / when OPEN_COWORK_CLOUD_UNIFIED_UI is enabled (reversible cutover)', {
+  skip: browserRendererBuildExists() ? false : 'apps/desktop/dist-browser is not built',
+}, async () => {
+  const previous = process.env.OPEN_COWORK_CLOUD_UNIFIED_UI
+  process.env.OPEN_COWORK_CLOUD_UNIFIED_UI = 'true'
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const root = await fetch(`${baseUrl}/`)
+    assert.equal(root.status, 200)
+    const body = await root.text()
+    // Flag on: GET / serves the unified renderer SPA (references /app/assets + the
+    // bootstrap tag) with the relaxed-but-script-strict CSP, NOT the website SSR.
+    assert.match(body, /\/app\/assets\//)
+    assert.match(body, /id="cowork-bootstrap"/)
+    const csp = root.headers.get('content-security-policy') || ''
+    assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+  } finally {
+    await fixture.server.close()
+    if (previous === undefined) delete process.env.OPEN_COWORK_CLOUD_UNIFIED_UI
+    else process.env.OPEN_COWORK_CLOUD_UNIFIED_UI = previous
+  }
+})
+
 test('cloud HTTP server authenticates bearer API tokens and rejects revoked tokens', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })

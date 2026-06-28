@@ -8,6 +8,7 @@ import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
 import {
   BROWSER_RENDERER_ASSET_CACHE_CONTROL,
+  browserRendererBuildExists,
   browserRendererHtml,
   getBrowserRendererAsset,
   isBrowserRendererAssetPath,
@@ -1661,6 +1662,20 @@ export class CloudHttpServer {
       }
 
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
+        // Reversible cutover: when OPEN_COWORK_CLOUD_UNIFIED_UI is enabled, the
+        // default route serves the UNIFIED RENDERER (the one-UI-codebase build,
+        // same as /app) instead of the bespoke website. The website code is left
+        // intact — flip the flag off to revert. The permanent cutover (later)
+        // deletes the website and makes the unified renderer the only path.
+        const unifiedDefault = process.env.OPEN_COWORK_CLOUD_UNIFIED_UI === 'true'
+          || process.env.OPEN_COWORK_CLOUD_UNIFIED_UI === '1'
+        if (unifiedDefault && browserRendererBuildExists()) {
+          const html = browserRendererHtml({ sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES] })
+          if (html !== null) {
+            writeBrowserRendererHtml(res, 200, html, requestOptions.corsOrigin)
+            return
+          }
+        }
         const nonce = randomBytes(16).toString('base64url')
         writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), requestOptions.corsOrigin, nonce)
         return
