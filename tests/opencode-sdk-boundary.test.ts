@@ -19,7 +19,7 @@ const ignoredDirectories = new Set([
 const sourceRoots = [
   'apps/desktop/src/main',
   'apps/desktop/src/preload',
-  'apps/desktop/src/renderer',
+  'packages/app/src',
   'apps/gateway/src',
   'apps/standalone-gateway/src',
   'packages',

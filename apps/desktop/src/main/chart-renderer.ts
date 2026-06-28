@@ -1,5 +1,4 @@
-import { isFullVegaSpec, normalizeVegaSpecSchema } from '../lib/vega-spec.ts'
-import { validateInlineChartSpec } from '../lib/chart-spec-safety.ts'
+import { isFullVegaSpec, normalizeVegaSpecSchema, validateInlineChartSpec } from '@open-cowork/shared'
 
 const DEFAULT_CHART_RENDER_TIMEOUT_MS = 1_500
 const MIN_CHART_RENDER_TIMEOUT_MS = 250

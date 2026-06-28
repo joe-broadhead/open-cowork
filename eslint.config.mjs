@@ -21,7 +21,7 @@ const ignoredPaths = [
 ]
 
 const tsFiles = ['**/*.ts', '**/*.tsx']
-const browserTsFiles = ['apps/desktop/src/renderer/**/*.ts', 'apps/desktop/src/renderer/**/*.tsx']
+const browserTsFiles = ['packages/app/src/**/*.ts', 'packages/app/src/**/*.tsx']
 const desktopLibTsFiles = ['apps/desktop/src/lib/**/*.ts']
 const nodeTsFiles = [
   'apps/desktop/src/main/**/*.ts',
@@ -219,13 +219,13 @@ export default [
     files: [
       // Vite's root renderer entry writes only the React mount node that it
       // creates from static app code; no user/content input reaches this sink.
-      'apps/desktop/src/renderer/index.tsx',
+      'packages/app/src/index.tsx',
       // MarkdownContent sanitizes streamed markdown through DOMPurify before
       // assigning HTML. The exemption keeps the sanitizer boundary explicit.
-      'apps/desktop/src/renderer/components/chat/MarkdownContent.tsx',
+      'packages/app/src/components/chat/MarkdownContent.tsx',
       // MermaidChart renders syntax that Mermaid owns after chart spec
       // validation; it does not pass user HTML through directly.
-      'apps/desktop/src/renderer/components/chat/MermaidChart.tsx',
+      'packages/app/src/components/chat/MermaidChart.tsx',
     ],
     rules: {
       'no-unsanitized/method': 'off',
@@ -270,7 +270,7 @@ export default [
     // shared UI). rules-of-hooks catches hook-order bugs; exhaustive-deps keeps
     // effect/memo dependency arrays honest.
     files: [
-      'apps/desktop/src/renderer/**/*.tsx',
+      'packages/app/src/**/*.tsx',
       'packages/ui/src/**/*.tsx',
     ],
     plugins: {

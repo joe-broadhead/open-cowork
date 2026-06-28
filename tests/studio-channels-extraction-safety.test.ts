@@ -27,7 +27,7 @@ function tsxSources(dir: string): string[] {
 }
 
 const globalsCss = readFileSync(
-  fileURLToPath(new URL('../apps/desktop/src/renderer/styles/globals.css', import.meta.url)),
+  fileURLToPath(new URL('../packages/app/src/styles/globals.css', import.meta.url)),
   'utf8',
 )
 const coOccur = collectCoOccurringClasses(

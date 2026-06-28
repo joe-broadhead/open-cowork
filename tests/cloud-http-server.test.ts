@@ -3563,12 +3563,12 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
 // UI the cloud serves. Unknown static paths now fall through to the auth/API pipeline
 // (they 404/401 there), so there is no dedicated font/react-client serving test.
 
-// The unified renderer browser build (apps/desktop/dist-browser) is not produced in
+// The unified renderer browser build (packages/app/dist-browser) is not produced in
 // every CI lane, so gate on its presence — but assert the full route wiring (the
 // /app SPA document with its relaxed-but-script-strict CSP, and a hashed /app/assets
 // JS file with the right content-type) when the build IS present.
 test('cloud HTTP server serves the unified renderer at /app with a script-strict, style-relaxed CSP', {
-  skip: browserRendererBuildExists() ? false : 'apps/desktop/dist-browser is not built',
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
 }, async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -3619,7 +3619,7 @@ test('cloud HTTP server serves the unified renderer at /app with a script-strict
 // serves. (The old OPEN_COWORK_CLOUD_UNIFIED_UI reversible-cutover flag is gone; the
 // renderer is always on.) Gated on the renderer build, which isn't built in every lane.
 test('cloud HTTP server serves the unified renderer as the default route (/, /index.html) identically to /app', {
-  skip: browserRendererBuildExists() ? false : 'apps/desktop/dist-browser is not built',
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
 }, async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()

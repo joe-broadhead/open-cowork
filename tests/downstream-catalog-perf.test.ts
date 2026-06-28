@@ -2,7 +2,7 @@ import { buildCoworkRuntimePermissionConfig } from '@open-cowork/runtime-host/ru
 import { buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-config'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildCapabilityMapGroups } from '../apps/desktop/src/renderer/components/capabilities/capabilities-page-support.ts'
+import { buildCapabilityMapGroups } from '../packages/app/src/components/capabilities/capabilities-page-support.ts'
 import {
   createDownstreamCatalogFixture,
   DOWNSTREAM_AGENT_COUNT,

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { getBrandName, getDocsBaseUrl, setBrandName, setDocsBaseUrl } from '../apps/desktop/src/renderer/helpers/brand.ts'
+import { getBrandName, getDocsBaseUrl, setBrandName, setDocsBaseUrl } from '../packages/app/src/helpers/brand.ts'
 
 test('renderer brand singleton: docs base URL is configurable with a safe default + normalization', () => {
   // Default before any override is an absolute, slash-terminated base (the public app).

@@ -21,7 +21,7 @@
 //   * Events. The cloud exposes a workspace SSE stream + per-session SSE
 //     streams. We multiplex those into the per-channel `on.*` callbacks the
 //     renderer subscribes to (the inverse of the desktop AppAPI event
-//     forwarding in `apps/desktop/src/renderer/app-api.ts`).
+//     forwarding in `packages/app/src/app-api.ts`).
 //   * Electron-only methods (native dialogs, runtime restart, desktop pairing,
 //     updates, local OAuth, FS imports, app reset) have no cloud equivalent.
 //     They are implemented as signature-satisfying stubs that either use a

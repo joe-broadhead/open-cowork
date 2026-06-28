@@ -12,7 +12,7 @@ import {
   scopeLabel,
   validateAgentDraft,
   VALID_AGENT_NAME,
-} from '../apps/desktop/src/renderer/components/agents/agent-builder-utils.ts'
+} from '../packages/app/src/components/agents/agent-builder-utils.ts'
 
 // Minimal catalog shared across tests. Keeps tool ids + skill names
 // stable so assertions can hardcode them.

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { normalizeWorkspaceId, sessionWorkspaceKey } from '../stores/session-workspace-keys'
-import { shouldCommitStreamingTextImmediately } from '../../lib/session-streaming-flush.ts'
+import { shouldCommitStreamingTextImmediately } from '../lib/session-streaming-flush.ts'
 
 const STREAM_FLUSH_INTERVAL_MS = 32
 

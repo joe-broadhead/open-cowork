@@ -67,7 +67,7 @@ export function writeHtml(res: ServerResponse, status: number, body: string, ori
 // nonce CSP (writeHtml) in exactly ONE axis: style-src allows 'unsafe-inline'.
 //
 // WHY style-src is relaxed: the renderer injects its shared surface stylesheet at
-// RUNTIME via a script-created <style> element (apps/desktop/src/renderer/index.tsx
+// RUNTIME via a script-created <style> element (packages/app/src/index.tsx
 // injectStudioSurfaceStyles) rather than a server-rendered <style nonce>. A
 // runtime-created <style> carries no nonce, so a nonce-only style-src would block
 // it and the whole app would render unstyled. Hashing the stylesheet is not viable

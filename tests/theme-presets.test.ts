@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { UI_THEME_PRESETS } from '../apps/desktop/src/renderer/helpers/theme-preset-data.ts'
+import { UI_THEME_PRESETS } from '../packages/app/src/helpers/theme-preset-data.ts'
 
 test('built-in Matrix theme uses the OpenCode Matrix palette', () => {
   const matrix = UI_THEME_PRESETS.matrix

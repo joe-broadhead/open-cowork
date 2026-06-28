@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildAgentVisualMap } from '../apps/desktop/src/renderer/components/chat/agent-visuals.ts'
+import { buildAgentVisualMap } from '../packages/app/src/components/chat/agent-visuals.ts'
 
 test('buildAgentVisualMap preserves avatars and lets custom agents override runtime metadata', () => {
   const visuals = buildAgentVisualMap({

@@ -4,7 +4,7 @@ import { createBrowserCoworkApi } from './cowork-api'
 // Browser entry for the unified renderer. The Electron shell injects
 // window.coworkApi over IPC; here we install a browser implementation that talks
 // to the cloud HTTP+SSE backend, BEFORE the renderer boots, so the exact same
-// renderer (apps/desktop/src/renderer) runs unchanged in a plain browser.
+// renderer (packages/app/src) runs unchanged in a plain browser.
 
 function readBootstrap(): Record<string, unknown> | undefined {
   const element = document.getElementById('cowork-bootstrap')

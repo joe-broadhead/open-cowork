@@ -221,7 +221,7 @@ test('cloud route and service modules stay behind store and runtime boundaries',
 
 test('client surfaces do not import server-only cloud internals', () => {
   const checkedRoots = [
-    'apps/desktop/src/renderer',
+    'packages/app/src',
     'apps/gateway/src',
     'packages/cloud-client/src',
   ]

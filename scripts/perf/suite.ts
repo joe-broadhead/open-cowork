@@ -6,8 +6,8 @@ import { buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-conf
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildCapabilityMapGroups } from '../../apps/desktop/src/renderer/components/capabilities/capabilities-page-support.ts'
-import { compileAgentPreview } from '../../apps/desktop/src/renderer/components/agents/agent-builder-utils.ts'
+import { buildCapabilityMapGroups } from '../../packages/app/src/components/capabilities/capabilities-page-support.ts'
+import { compileAgentPreview } from '../../packages/app/src/components/agents/agent-builder-utils.ts'
 import {
   createDownstreamCatalogFixture,
   DOWNSTREAM_SKILL_COUNT,

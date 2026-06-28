@@ -1658,7 +1658,7 @@ export class CloudHttpServer {
       }
 
       // The DEFAULT route (and /app below) both serve the UNIFIED RENDERER browser
-      // build (apps/desktop/dist-browser) — the one-UI-codebase cutover, so the cloud
+      // build (packages/app/dist-browser) — the one-UI-codebase cutover, so the cloud
       // URL itself runs the same renderer as the Electron app. The bespoke website is
       // gone; the renderer is the only UI the cloud serves. Both routes use the
       // relaxed-but-script-strict CSP (writeBrowserRendererHtml) because the SPA injects

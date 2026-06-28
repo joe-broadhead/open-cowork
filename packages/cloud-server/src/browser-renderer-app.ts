@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 
-// Serves the UNIFIED RENDERER browser build (apps/desktop/dist-browser) so the
+// Serves the UNIFIED RENDERER browser build (packages/app/dist-browser) so the
 // cloud URL itself runs the desktop renderer — the production-serving step of
 // collapsing the website + desktop UIs into one codebase. This is additive: the
 // website served at GET / is untouched; the renderer is mounted under /app.
@@ -20,7 +20,7 @@ export const BROWSER_RENDERER_ASSET_PREFIX = '/app/assets/'
 //
 // DEV RUNTIME: the cloud runs from source via scripts/open-cowork-cloud.ts, so
 // import.meta.url is this file under packages/cloud-server/src/. The build lives at
-// apps/desktop/dist-browser/ — three levels up (src -> cloud-server -> packages ->
+// packages/app/dist-browser/ — three levels up (src -> cloud-server -> packages ->
 // repo root). Mirrors how web-client-assets.ts resolves the website dev build.
 //
 // PROD RUNTIME: scripts/build-cloud.mjs builds the browser renderer and copies it
@@ -29,7 +29,7 @@ export const BROWSER_RENDERER_ASSET_PREFIX = '/app/assets/'
 // apps/desktop/dist/cloud/, and browser-renderer/ is copied alongside it).
 const BROWSER_RENDERER_DIRS = [
   new URL('./browser-renderer/', import.meta.url),
-  new URL('../../../apps/desktop/dist-browser/', import.meta.url),
+  new URL('../../../packages/app/dist-browser/', import.meta.url),
 ]
 
 // The build emits hashed file names like `renderer-Dy7V1PNU.js` but also vendor

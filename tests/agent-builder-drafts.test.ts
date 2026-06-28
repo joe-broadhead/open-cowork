@@ -11,7 +11,7 @@ import {
   draftFromBuiltInAgent,
   draftFromCustomAgent,
   draftFromRuntimeAgent,
-} from '../apps/desktop/src/renderer/components/agents/agent-builder-drafts.ts'
+} from '../packages/app/src/components/agents/agent-builder-drafts.ts'
 
 function makeCustomAgent(overrides?: Partial<CustomAgentSummary>): CustomAgentSummary {
   return {

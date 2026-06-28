@@ -33,7 +33,7 @@ Object.defineProperty(globalThis, 'navigator', {
 
 // Import after globals are stubbed — the runtime reads them at first use.
 const { setLocale, getLocale, t, configureI18n, getBuiltInLocales } = await import(
-  '../apps/desktop/src/renderer/helpers/i18n.ts'
+  '../packages/app/src/helpers/i18n.ts'
 )
 
 describe('i18n runtime', () => {
@@ -129,7 +129,7 @@ describe('i18n runtime', () => {
     const {
       BUILT_IN_LOCALE_METADATA,
       loadBuiltInCatalog,
-    } = await import('../apps/desktop/src/renderer/helpers/i18n-catalogs/registry.ts')
+    } = await import('../packages/app/src/helpers/i18n-catalogs/registry.ts')
     // English is the source of truth via inline fallbacks, so its catalog
     // is intentionally empty. Every other locale should have the same key set.
     const nonEnglishKeys = await Promise.all(

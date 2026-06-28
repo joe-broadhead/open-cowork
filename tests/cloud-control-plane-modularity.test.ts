@@ -56,7 +56,7 @@ test('cloud route, service, client-domain, and gateway source modules stay bound
 test('client surfaces do not import server-only cloud control-plane internals', () => {
   const clientRoots = [
     'apps/desktop/src/preload',
-    'apps/desktop/src/renderer',
+    'packages/app/src',
     'apps/gateway/src',
     'packages/cloud-client/src',
   ]

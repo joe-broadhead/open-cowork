@@ -35,7 +35,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src/renderer'),
+      '@': resolve(__dirname, 'src'),
     },
   },
   // Local verification only: serve the browser build same-origin and proxy the

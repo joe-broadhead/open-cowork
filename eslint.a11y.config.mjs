@@ -24,7 +24,7 @@ export default [
     ],
   },
   {
-    files: ['apps/desktop/src/renderer/**/*.tsx'],
+    files: ['packages/app/src/**/*.tsx'],
     // The renderer carries `eslint-disable react-hooks/exhaustive-deps` directives for the MAIN
     // lint config; here that rule is off, so don't flag those directives as unused.
     linterOptions: {

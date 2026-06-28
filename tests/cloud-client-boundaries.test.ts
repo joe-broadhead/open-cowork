@@ -85,7 +85,7 @@ test('first-party client surfaces stay on public cloud-client/shared boundaries'
   const root = process.cwd()
   const clientRoots = [
     'apps/desktop/src/preload',
-    'apps/desktop/src/renderer',
+    'packages/app/src',
     'apps/gateway/src',
     'packages/cloud-client/src',
   ]

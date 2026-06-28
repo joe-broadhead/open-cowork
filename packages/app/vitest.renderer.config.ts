@@ -10,8 +10,8 @@ export default defineConfig({
         url: 'http://localhost/',
       },
     },
-    include: ['src/renderer/**/*.test.{ts,tsx}'],
-    setupFiles: ['./src/renderer/test/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['./src/test/setup.ts'],
     clearMocks: true,
     mockReset: false,
     restoreMocks: false,
@@ -20,11 +20,11 @@ export default defineConfig({
       reportsDirectory: '../../coverage/renderer',
       reporter: ['text', 'lcov'],
       all: true,
-      include: ['src/renderer/**/*.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx}'],
       exclude: [
-        'src/renderer/**/*.test.{ts,tsx}',
-        'src/renderer/test/**',
-        'src/renderer/index.tsx',
+        'src/**/*.test.{ts,tsx}',
+        'src/test/**',
+        'src/index.tsx',
       ],
       thresholds: {
         // Baseline ratchet for the current component-test suite.

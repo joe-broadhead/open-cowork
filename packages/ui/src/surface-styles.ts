@@ -14,7 +14,7 @@
 // Consumed by:
 //   - Cloud Web: `apps/website/src/style-artifacts.ts` re-exports these and
 //     `apps/website/src/styles.ts` embeds them in the assembled stylesheet.
-//   - Desktop:   `apps/desktop/src/renderer/index.tsx` injects
+//   - Desktop:   `packages/app/src/index.tsx` injects
 //     `studioSurfaceStyles()` into a <style> element at renderer startup.
 //
 // Radius is assigned by surface ROLE, not by eye (pick the var, never a px):

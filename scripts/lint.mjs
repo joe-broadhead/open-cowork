@@ -63,14 +63,14 @@ const legacyNamingAllowlist = new Set([
   'packages/shared/src/config-types.ts',
   'packages/runtime-host/src/custom-agent-store.ts',
   'packages/runtime-host/src/runtime-config-builder.ts',
-  'apps/desktop/src/renderer/helpers/i18n.ts',
-  'apps/desktop/src/renderer/components/chat/useTaskDrillInLayout.ts',
+  'packages/app/src/helpers/i18n.ts',
+  'packages/app/src/components/chat/useTaskDrillInLayout.ts',
 ])
 const legacyNamingAllowlistPatterns = [
   /^tests\//,
   /^apps\/desktop\/tests\//,
-  /^apps\/desktop\/src\/renderer\/.*\.test\.tsx$/,
-  /^apps\/desktop\/src\/renderer\/test\//,
+  /^packages\/app\/src\/.*\.test\.tsx$/,
+  /^packages\/app\/src\/test\//,
 ]
 const ignoredFiles = new Set([
   'docs/javascripts/vendor/mermaid.min.js',
@@ -154,7 +154,7 @@ function lintFile(fullPath) {
     }
   }
 
-  if (shouldLintStyle && relPath.startsWith('apps/desktop/src/renderer/')) {
+  if (shouldLintStyle && relPath.startsWith('packages/app/src/')) {
     rendererArbitraryFontSizeCount += content.match(arbitraryFontSizePattern)?.length || 0
     rendererRawPaletteCount += content.match(rawPaletteStatusPattern)?.length || 0
     if (/\bwindow\.(?:alert|confirm)\s*\(/.test(content)) {
@@ -239,14 +239,14 @@ function validateArchitectureSdkVersionPolicy() {
 function validateRendererDesignSystemGates() {
   if (rendererArbitraryFontSizeCount > rendererArbitraryFontSizeLimit) {
     errors.push(
-      `apps/desktop/src/renderer: ${rendererArbitraryFontSizeCount} arbitrary text-[Npx] utilities found; `
+      `packages/app/src: ${rendererArbitraryFontSizeCount} arbitrary text-[Npx] utilities found; `
       + `these are banned. Use a paired type-scale utility instead (text-2xs/xs/sm/md/lg/xl/2xl/3xl/hero) `
       + `or a .text-role-* class so size and line-height stay on the token scale.`,
     )
   }
   if (rendererRawPaletteCount > rendererRawPaletteLimit) {
     errors.push(
-      `apps/desktop/src/renderer: ${rendererRawPaletteCount} raw Tailwind palette status utilities found `
+      `packages/app/src: ${rendererRawPaletteCount} raw Tailwind palette status utilities found `
       + `(e.g. text-amber-200, bg-red-500, border-sky-400); these bypass the cool theme. Use the semantic `
       + `token utilities instead (text/bg/border-{green|amber|red|info|accent}) so the themed hues apply.`,
     )

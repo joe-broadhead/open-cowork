@@ -1385,10 +1385,10 @@ function validateHybridSecurityGates() {
 function validateSetupHealthCenter() {
   const setupContractPath = 'packages/shared/src/setup-health.ts'
   const setupDocsPath = 'docs/setup-and-health-center.md'
-  const setupScreenPath = 'apps/desktop/src/renderer/components/SetupScreen.tsx'
-  const healthCenterPath = 'apps/desktop/src/renderer/components/health/HealthCenterPage.tsx'
-  const sidebarPath = 'apps/desktop/src/renderer/components/layout/Sidebar.tsx'
-  const appTypesPath = 'apps/desktop/src/renderer/app-types.ts'
+  const setupScreenPath = 'packages/app/src/components/SetupScreen.tsx'
+  const healthCenterPath = 'packages/app/src/components/health/HealthCenterPage.tsx'
+  const sidebarPath = 'packages/app/src/components/layout/Sidebar.tsx'
+  const appTypesPath = 'packages/app/src/app-types.ts'
   const standaloneSetupPath = 'scripts/standalone-gateway-setup.mjs'
   const setupContract = read(setupContractPath)
   const setupDocs = read(setupDocsPath)

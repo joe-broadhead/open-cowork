@@ -17,6 +17,7 @@ type KnipJson = {
 const repoRoot = new URL('../', import.meta.url)
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
 const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
+const appPackageJson = JSON.parse(readFileSync(new URL('../packages/app/package.json', import.meta.url), 'utf8')) as PackageJson
 const knipJson = JSON.parse(readFileSync(new URL('../knip.json', import.meta.url), 'utf8')) as KnipJson
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', import.meta.url), 'utf8')
@@ -80,7 +81,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'node scripts/coverage-summary.mjs --check',
   ])
 
-  assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/desktop test:coverage:renderer')
+  assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/app test:coverage:renderer')
 })
 
 test('root lint script runs all release gate checks', () => {
@@ -195,14 +196,16 @@ test('desktop direct scripts prepare generated tokens and shared UI artifacts', 
   assert.equal(requireScript('predev', desktopPackageJson), 'pnpm deps:build')
   assert.equal(requireScript('prebuild', desktopPackageJson), 'pnpm deps:build')
   assert.equal(requireScript('pretypecheck', desktopPackageJson), 'pnpm deps:build')
-  assert.deepEqual(splitScriptSteps(requireScript('test:renderer', desktopPackageJson)), [
-    'pnpm deps:build',
-    'vitest run --config vitest.renderer.config.ts',
-  ])
-  assert.deepEqual(splitScriptSteps(requireScript('test:coverage:renderer', desktopPackageJson)), [
-    'pnpm deps:build',
-    'vitest run --config vitest.renderer.config.ts --coverage',
-  ])
+})
+
+test('shared renderer package owns the renderer test + browser build scripts', () => {
+  // The unified renderer now lives in @open-cowork/app, consumed by both the
+  // Electron build and the cloud browser build. Its vitest + browser-build
+  // scripts moved here from the desktop package.
+  assert.equal(requireScript('test:renderer', appPackageJson), 'vitest run --config vitest.renderer.config.ts')
+  assert.equal(requireScript('test:coverage:renderer', appPackageJson), 'vitest run --config vitest.renderer.config.ts --coverage')
+  assert.equal(requireScript('build:browser', appPackageJson), 'vite build --config vite.config.browser.ts')
+  assert.equal(requireScript('typecheck', appPackageJson), 'tsc --noEmit')
 })
 
 test('root typecheck script covers package, MCP, gateway, and desktop surfaces', () => {

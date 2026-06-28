@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
 const productionCopyRoots = [
-  'apps/desktop/src/renderer/components',
+  'packages/app/src/components',
 ]
 
 const productionDocs = [
@@ -19,7 +19,7 @@ const productionDocs = [
   'docs/glossary.md',
 ]
 
-const i18nCatalogRoot = 'apps/desktop/src/renderer/helpers/i18n-catalogs'
+const i18nCatalogRoot = 'packages/app/src/helpers/i18n-catalogs'
 
 const bannedProductionPhrases = [
   /Start MVP Run/i,
@@ -89,13 +89,13 @@ test('desktop guide documents focused product language and density standards', (
 
 test('workflow renderer surface uses workflow filenames and route key', () => {
   const stalePaths = [
-    'apps/desktop/src/renderer/components/automations',
+    'packages/app/src/components/automations',
     'apps/desktop/tests/automations-page.smoke.test.ts',
   ].filter((relativePath) => existsSync(join(repoRoot, relativePath)))
 
-  const workflowFiles = walkFiles('apps/desktop/src/renderer/components/workflows')
+  const workflowFiles = walkFiles('packages/app/src/components/workflows')
   const staleWorkflowNames = workflowFiles.filter((relativePath) => /^(Automation|Automations|automation)/.test(basename(relativePath)))
-  const appTypes = readFileSync(join(repoRoot, 'apps/desktop/src/renderer/app-types.ts'), 'utf8')
+  const appTypes = readFileSync(join(repoRoot, 'packages/app/src/app-types.ts'), 'utf8')
 
   assert.deepEqual(stalePaths, [])
   assert.deepEqual(staleWorkflowNames, [])
@@ -104,7 +104,7 @@ test('workflow renderer surface uses workflow filenames and route key', () => {
 })
 
 test('chat delegated-run surface uses agent-run vocabulary instead of mission-control vocabulary', () => {
-  const chatFiles = walkFiles('apps/desktop/src/renderer/components/chat')
+  const chatFiles = walkFiles('packages/app/src/components/chat')
   const staleChatNames = chatFiles.filter((relativePath) => /MissionControl|mission-control/.test(relativePath))
   const checkedContentFiles = [
     ...chatFiles,

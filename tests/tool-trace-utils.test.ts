@@ -5,7 +5,7 @@ import {
   buildCustomMcpToolTraceRules,
   summarizeTools,
   tryParseChartOutput,
-} from '../apps/desktop/src/renderer/components/chat/tool-trace-utils.ts'
+} from '../packages/app/src/components/chat/tool-trace-utils.ts'
 
 test('tryParseChartOutput parses stringified vega specs and mermaid diagrams', () => {
   const vega = tryParseChartOutput(JSON.stringify({

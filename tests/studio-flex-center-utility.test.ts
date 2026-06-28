@@ -20,7 +20,7 @@ const CARD_TEXT =
   'color: var(--color-text-muted); font-size: var(--text-xs); line-height: var(--lh-xs); margin: 0'
 
 const globalsCss = readFileSync(
-  fileURLToPath(new URL('../apps/desktop/src/renderer/styles/globals.css', import.meta.url)),
+  fileURLToPath(new URL('../packages/app/src/styles/globals.css', import.meta.url)),
   'utf8',
 )
 const primitivesTsx = readFileSync(

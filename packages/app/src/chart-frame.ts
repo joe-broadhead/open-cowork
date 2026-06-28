@@ -1,5 +1,5 @@
 import embed, { type Result as VegaEmbedResult } from 'vega-embed'
-import { validateInlineChartSpec } from '../lib/chart-spec-safety'
+import { validateInlineChartSpec } from '@open-cowork/shared'
 import { isOpaqueMessageOrigin, resolveParentTargetOrigin } from './chart-frame-message-origin.ts'
 
 type ChartRenderMessage = {

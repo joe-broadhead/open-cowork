@@ -36,7 +36,7 @@ import { trackParentSession } from '../event-task-state.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { isKnownChartArtifactToolCall } from '../chart-artifact-access.ts'
-import { validateInlineChartSpec } from '../../lib/chart-spec-safety.ts'
+import { validateInlineChartSpec } from '@open-cowork/shared'
 import { checkForUpdates } from '../update/update-check.ts'
 import {
   checkInstallableUpdate,

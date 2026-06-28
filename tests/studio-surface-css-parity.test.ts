@@ -60,7 +60,7 @@ const SINGLE_SOURCED_PREFIXES = [
 ]
 
 const sharedCss = readFileSync(join(root, 'packages/ui/src/surface-styles.ts'), 'utf8')
-const desktopCss = readFileSync(join(root, 'apps/desktop/src/renderer/styles/globals.css'), 'utf8')
+const desktopCss = readFileSync(join(root, 'packages/app/src/styles/globals.css'), 'utf8')
 
 for (const prefix of SINGLE_SOURCED_PREFIXES) {
   test(`shared @open-cowork/ui surface CSS is the single source for ${prefix}`, () => {

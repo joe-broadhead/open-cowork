@@ -23,8 +23,8 @@ function namedBlock(source: string, name: string) {
 }
 
 function desktopTokenDeclarations() {
-  const globals = readFileSync('apps/desktop/src/renderer/styles/globals.css', 'utf8')
-  const generated = readFileSync('apps/desktop/src/renderer/styles/generated/design-tokens.css', 'utf8')
+  const globals = readFileSync('packages/app/src/styles/globals.css', 'utf8')
+  const generated = readFileSync('packages/app/src/styles/generated/design-tokens.css', 'utf8')
   return {
     generated,
     globals,

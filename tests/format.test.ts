@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatCost, formatTokensCompact } from '../apps/desktop/src/renderer/helpers/format.ts'
+import { formatCost, formatTokensCompact } from '../packages/app/src/helpers/format.ts'
 
 describe('formatCost (default)', () => {
   it('always renders $X.XX including zero', () => {

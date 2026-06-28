@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { formatElapsedMs, parseIsoToMs } from '../apps/desktop/src/renderer/components/chat/elapsed-clock-utils.ts'
+import { formatElapsedMs, parseIsoToMs } from '../packages/app/src/components/chat/elapsed-clock-utils.ts'
 
 test('formatElapsedMs renders sub-minute runs as seconds only', () => {
   assert.equal(formatElapsedMs(0), '0s')

@@ -6,7 +6,15 @@ export const MAX_CHART_DEPTH = 32
 const BLOCKED_RESOURCE_KEYS = new Set(['url', 'href', 'src'])
 
 function encodedByteLength(value: string) {
-  return new TextEncoder().encode(value).byteLength
+  // Resolve the runtime TextEncoder via globalThis: this module is part of the
+  // browser-safe shared barrel (tsconfig lib ESNext / types []), so the DOM
+  // TextEncoder type is intentionally unavailable here. The constructor exists
+  // in every supported runtime (browser + Node), so the cast preserves the
+  // original behaviour while keeping shared platform-agnostic.
+  const TextEncoderCtor = (globalThis as {
+    TextEncoder: new () => { encode: (input: string) => { byteLength: number } }
+  }).TextEncoder
+  return new TextEncoderCtor().encode(value).byteLength
 }
 
 function blockedResourceError(detail: string) {

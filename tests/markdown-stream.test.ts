@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { streamMarkdown } from '../apps/desktop/src/renderer/components/chat/markdown-stream.ts'
+import { streamMarkdown } from '../packages/app/src/components/chat/markdown-stream.ts'
 
 test('normalizes nested fences inside a top-level code block', () => {
   const source = [

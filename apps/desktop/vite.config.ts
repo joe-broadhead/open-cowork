@@ -134,7 +134,19 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src/renderer'),
+      // The unified renderer now lives in the shared @open-cowork/app package.
+      // The Electron build keeps its root + vite-plugin-electron wiring here and
+      // consumes the renderer source through this alias so packaging and the
+      // main process's renderer load paths stay unchanged.
+      '@': resolve(__dirname, '../../packages/app/src'),
+    },
+  },
+  server: {
+    // Dev mode serves the renderer from packages/app, which is outside this
+    // config's root (apps/desktop). Allow Vite to read the workspace root so the
+    // HTML entries' ../../packages/app/src/* scripts resolve during `vite`.
+    fs: {
+      allow: [resolve(__dirname, '../..')],
     },
   },
 })

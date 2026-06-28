@@ -1,7 +1,7 @@
 import { buildMessages, buildSessionStateFromItems, buildSessionStateFromView, createEmptyTaskRun, createEmptySessionViewState, deriveVisibleSessionPatch, withMessageReasoning, withMessageText, withTaskReasoning, withTaskTranscript, type HistoryItem } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { useSessionStore } from '../apps/desktop/src/renderer/stores/session.ts'
+import { useSessionStore } from '../packages/app/src/stores/session.ts'
 
 test('history replay keeps the final authoritative text for a message part', () => {
   const items: HistoryItem[] = [

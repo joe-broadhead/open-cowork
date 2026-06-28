@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { emitRootTokensCss } from '../packages/shared/src/design-tokens.ts'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const outputPath = resolve(repoRoot, 'apps/desktop/src/renderer/styles/generated/design-tokens.css')
+const outputPath = resolve(repoRoot, 'packages/app/src/styles/generated/design-tokens.css')
 
 function generatedCss() {
   return [

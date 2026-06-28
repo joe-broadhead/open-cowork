@@ -102,8 +102,8 @@ await build({
 // one-UI-codebase cutover, so the cloud runs the same renderer as the Electron
 // app. Build it and copy it next to the cloud entry under ./browser-renderer/,
 // the first location packages/cloud-server/src/browser-renderer-app.ts resolves.
-runPnpm(['--filter', '@open-cowork/desktop', 'build:browser'])
-const browserRendererSrc = resolve(repoRoot, 'apps/desktop/dist-browser')
+runPnpm(['--filter', '@open-cowork/app', 'build:browser'])
+const browserRendererSrc = resolve(repoRoot, 'packages/app/dist-browser')
 const browserRendererDest = resolve(repoRoot, 'apps/desktop/dist/cloud/browser-renderer')
 await mkdir(resolve(browserRendererDest, 'assets'), { recursive: true })
 await copyFile(resolve(browserRendererSrc, 'browser.html'), resolve(browserRendererDest, 'browser.html'))

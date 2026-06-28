@@ -5,7 +5,7 @@ import {
   diffWordsInLinePair,
   inferStatus,
   parseUnifiedPatch,
-} from '../apps/desktop/src/renderer/components/chat/diff-patch-utils.ts'
+} from '../packages/app/src/components/chat/diff-patch-utils.ts'
 
 describe('parseUnifiedPatch', () => {
   it('returns empty for empty patch', () => {

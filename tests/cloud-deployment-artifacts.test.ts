@@ -726,10 +726,10 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
   assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
   // The cloud serves the UNIFIED RENDERER (the one-UI-codebase cutover): build-cloud
-  // builds the desktop browser renderer and copies it next to the cloud entry under
-  // ./browser-renderer/, the location packages/cloud-server/src/browser-renderer-app.ts
+  // builds the shared @open-cowork/app browser renderer and copies it next to the cloud
+  // entry under ./browser-renderer/, the location packages/cloud-server/src/browser-renderer-app.ts
   // resolves at runtime. The bespoke website is gone, so there is no website build step.
-  assert.match(buildScript, /--filter', '@open-cowork\/desktop', 'build:browser/)
+  assert.match(buildScript, /--filter', '@open-cowork\/app', 'build:browser/)
   assert.match(buildScript, /browser-renderer/)
   assert.doesNotMatch(buildScript, /@open-cowork\/website/)
 

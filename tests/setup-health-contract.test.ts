@@ -66,9 +66,9 @@ test('built shared package exports setup and health helpers', () => {
 })
 
 test('desktop setup and health surfaces consume the shared setup contract', () => {
-  const setupScreen = readFileSync('apps/desktop/src/renderer/components/SetupScreen.tsx', 'utf8')
-  const healthCenter = readFileSync('apps/desktop/src/renderer/components/health/HealthCenterPage.tsx', 'utf8')
-  const sidebar = readFileSync('apps/desktop/src/renderer/components/layout/Sidebar.tsx', 'utf8')
+  const setupScreen = readFileSync('packages/app/src/components/SetupScreen.tsx', 'utf8')
+  const healthCenter = readFileSync('packages/app/src/components/health/HealthCenterPage.tsx', 'utf8')
+  const sidebar = readFileSync('packages/app/src/components/layout/Sidebar.tsx', 'utf8')
   assert.match(setupScreen, /SETUP_INTENTS/)
   assert.match(healthCenter, /SETUP_INTENTS/)
   assert.match(healthCenter, /workspace\.support/)
