@@ -58,10 +58,11 @@ export default defineConfig({
     // modulepreload link generation keeps lazy feature chunks from becoming
     // startup dependencies when Rolldown shares preload bookkeeping.
     modulePreload: false,
-    // Mermaid is loaded only after a diagram is rendered. Keep the warning
-    // threshold above that isolated lazy chunk while still catching accidental
-    // multi-megabyte growth elsewhere.
-    chunkSizeWarningLimit: 3000,
+    // Mermaid/vega are loaded only after a diagram is rendered (lazy chunks).
+    // Keep the warning threshold low so accidental multi-hundred-KB growth on
+    // the eager startup path surfaces in the build log; the CI-enforced eager
+    // budget lives in scripts/check-bundle-size.mjs (browser build).
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),

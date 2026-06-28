@@ -117,7 +117,15 @@ export function writeBrowserRendererHtml(
       // object-store origin (when configured) for the F4 direct-transfer PUT/GET.
       connectSrc,
       "font-src 'self'",
-      "img-src 'self' data: https:",
+      // SEC img-src: the renderer only needs same-origin assets plus data: URLs.
+      // The browser shim encodes attachment/artifact images as data: URLs
+      // (packages/app/src/browser/cowork-api.ts) and branding logos are data:
+      // URLs (the open-cowork-asset:// logo protocol is desktop-only). Nothing
+      // in the served renderer loads images from arbitrary external hosts, so we
+      // drop the previous `https:` wildcard — that also closes an exfiltration
+      // vector where untrusted LLM/skill markdown could embed `![x](https://…)`
+      // to beacon out via image loads.
+      "img-src 'self' data:",
       "object-src 'none'",
       "base-uri 'none'",
       "frame-ancestors 'none'",

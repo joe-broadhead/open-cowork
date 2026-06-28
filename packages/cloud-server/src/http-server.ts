@@ -19,6 +19,7 @@ import {
   routeAllowsOperationalToken,
   routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
+import { SSE_MAX_BUFFERED_BYTES, SSE_REPLAY_BATCH, SSE_TCP_KEEPALIVE_MS } from './http-routes/sse-limits.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
@@ -274,22 +275,6 @@ function ssePollMs(options: CloudHttpServerOptions) {
   const value = options.ssePollMs ?? 1000
   return Number.isInteger(value) && value > 0 ? value : 1000
 }
-
-// Bounds each SSE replay-poll read so a topic never drags an unbounded event history
-// per poll; the replay hub paginates by advancing its cursor (and re-polls immediately
-// when a full batch is returned), so delivery stays complete.
-const SSE_REPLAY_BATCH = 1_000
-
-// Hard cap on per-connection outbound SSE bytes buffered in Node's writable queue. A
-// client that drains slower than events arrive would otherwise grow this without bound
-// (heap pressure); past the cap the connection is dropped (cleanup unsubscribes on close).
-export const SSE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024
-
-// TCP keep-alive probe interval applied to every SSE socket so the kernel detects a
-// half-open peer (gone without FIN/RST) instead of the gap only surfacing once the OS
-// send buffer fills. Independent of the app-level ': keep-alive' comments, which a dead
-// peer silently absorbs.
-const SSE_TCP_KEEPALIVE_MS = 30_000
 
 // Hard ceiling on a single SSE stream's lifetime. A wedged or half-open connection
 // cannot pin a server slot indefinitely; EventSource clients reconnect transparently

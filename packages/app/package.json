@@ -30,8 +30,6 @@
     "morphdom": "^2.7.8",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
     "remend": "^1.3.0",
     "vega": "^6.2.0",
     "vega-embed": "^7.1.0",

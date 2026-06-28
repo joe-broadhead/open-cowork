@@ -22,7 +22,15 @@ export default defineConfig({
   build: {
     outDir: 'dist-browser',
     emptyOutDir: true,
-    chunkSizeWarningLimit: 3000,
+    // Budget guard: warn well below the old 3 MB so accidental multi-hundred-KB
+    // growth on the eager startup path is visible in the build log. The hard,
+    // CI-enforced budget lives in scripts/check-bundle-size.mjs, which sums the
+    // gzipped eager entry graph from the manifest below (lazy mermaid/vega
+    // chunks are excluded).
+    chunkSizeWarningLimit: 700,
+    // Emit .vite/manifest.json so the bundle-size budget script can walk the
+    // browser entry's static-import (eager) graph + CSS precisely.
+    manifest: true,
     rollupOptions: {
       input: {
         browser: resolve(__dirname, 'browser.html'),

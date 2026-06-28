@@ -1,5 +1,3 @@
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import type {
   CapabilitySkill,
   CapabilitySkillBundle,
@@ -8,6 +6,7 @@ import type {
   CustomSkillConfig,
   RuntimeContextOptions,
 } from '@open-cowork/shared'
+import { Markdown } from '../chat/Markdown'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import {
@@ -299,11 +298,10 @@ export function CapabilitySkillDetailView({
             <div className="text-2xs font-[750] uppercase tracking-[0.06em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
             {bundle?.content ? (
               <div className="min-w-0 max-w-full overflow-x-auto">
-                <div className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {stripFrontmatter(bundle.content)}
-                  </ReactMarkdown>
-                </div>
+                <Markdown
+                  text={stripFrontmatter(bundle.content)}
+                  className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words"
+                />
               </div>
             ) : (
               <div className="text-xs text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>

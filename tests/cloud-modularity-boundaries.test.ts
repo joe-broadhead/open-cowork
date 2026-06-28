@@ -25,7 +25,7 @@ const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
   ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_600],
-  ['packages/cloud-server/src/session-service.ts', 3_950],
+  ['packages/cloud-server/src/session-service.ts', 3_522],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
@@ -202,6 +202,14 @@ test('session service delegates command payload parsing to command service modul
   const source = readFileSync(join(cloudRoot, 'session-service.ts'), 'utf8')
   assert.doesNotMatch(source, /function normalize(Prompt|QuestionReply|QuestionReject|Permission)Payload\(/)
   assert.match(source, /services\/session-command-service\.ts/)
+})
+
+test('session service delegates workflow-draft validation to the workflow-validation module', () => {
+  const source = readFileSync(join(cloudRoot, 'session-service.ts'), 'utf8')
+  // The draft normalizers/validators were carved out of the god class; they must not
+  // re-grow as private methods on CloudSessionService (ARCH god-class carve).
+  assert.doesNotMatch(source, /private (normalizeWorkflowDraft|normalizeWorkflowTriggers|assertWorkflowDraftAllowed)\(/)
+  assert.match(source, /session-workflow-validation\.ts/)
 })
 
 test('cloud route and service modules stay behind store and runtime boundaries', () => {

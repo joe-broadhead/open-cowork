@@ -126,6 +126,10 @@ test('writeBrowserRendererHtml keeps connect-src self when no object-store origi
   assert.match(csp, /script-src 'self'/)
   assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
   assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+  // SEC img-src: same-origin + data: only (attachment/branding images are data: URLs).
+  // No external-host wildcard, which closes a markdown-image beacon/exfil vector.
+  assert.match(csp, /img-src 'self' data:(;|$)/)
+  assert.doesNotMatch(csp, /img-src[^;]*https:/)
 })
 
 test('writeBrowserRendererHtml allows the presigned object-store origin in connect-src', () => {

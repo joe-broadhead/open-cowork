@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { credentialFieldIsVisible } from '@open-cowork/shared'
 import type { CapabilityTool, RuntimeContextOptions } from '@open-cowork/shared'
+import { Markdown } from '../chat/Markdown'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
@@ -106,9 +105,10 @@ export function SkillBundleFileEntry({
             <div className="text-2xs text-red">{error}</div>
           ) : isMarkdown ? (
             <div className="min-w-0 max-w-full overflow-x-auto">
-              <div className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || ''}</ReactMarkdown>
-              </div>
+              <Markdown
+                text={content || ''}
+                className="prose prose-invert max-w-none text-xs text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words"
+              />
             </div>
           ) : (
             <div className="min-w-0 max-w-full overflow-x-auto">

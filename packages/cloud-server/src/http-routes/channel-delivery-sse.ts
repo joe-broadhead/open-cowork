@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { principalHasGatewayAccess } from './access-policy.ts'
-import { SSE_MAX_BUFFERED_BYTES, type CloudHttpServerOptions } from '../http-server.ts'
+import { SSE_MAX_BUFFERED_BYTES } from './sse-limits.ts'
+import type { CloudHttpServerOptions } from '../http-server.ts'
 import { CloudServiceError, type CloudPrincipal } from '../session-service.ts'
 
 type RouteContext = {
