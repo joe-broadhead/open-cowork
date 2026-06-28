@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
@@ -153,8 +153,21 @@ function getUserDataRoot() {
   }
 }
 
+// A config candidate "exists" only if it is a readable regular file. Docker bind
+// mounts auto-create the host source as an empty directory when no config file is
+// present, so an env-pointed config path (e.g. OPEN_COWORK_CONFIG_PATH defaulted to
+// the in-container mount target) can resolve to a directory. Treat that as "no
+// config" rather than letting the reader throw on a non-regular file.
+function isRegularConfigFile(path: string): boolean {
+  try {
+    return statSync(path).isFile()
+  } catch {
+    return false
+  }
+}
+
 function readConfigFile(path: string, source: string): Partial<OpenCoworkConfig> {
-  if (!existsSync(path)) return {}
+  if (!isRegularConfigFile(path)) return {}
   try {
     const parsed = readJsoncFile<Partial<OpenCoworkConfig>>(path)
     const allowedEnvPlaceholders = new Set(

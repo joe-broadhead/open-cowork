@@ -681,15 +681,15 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_PG_POOL_MAX` | Max Postgres pool connections (default 10). The control plane saturates here first under load — size against your Postgres `max_connections` and replica count. |
 | `OPEN_COWORK_CLOUD_PG_STATEMENT_TIMEOUT_MS` | Per-statement timeout (default 30000); a non-zero default bounds an unbounded read from pinning a connection. DDL/migrations are exempt. |
 | `OPEN_COWORK_CLOUD_PG_IDLE_TX_TIMEOUT_MS` | `idle_in_transaction_session_timeout` (default 120000) so an abandoned transaction can't hold a connection forever. |
-| `OPEN_COWORK_CLOUD_PG_CONNECTION_TIMEOUT_MS` / `_PG_IDLE_TIMEOUT_MS` | Pool connect timeout and idle-connection eviction window. |
+| `OPEN_COWORK_CLOUD_PG_CONNECTION_TIMEOUT_MS` / `OPEN_COWORK_CLOUD_PG_IDLE_TIMEOUT_MS` | Pool connect timeout and idle-connection eviction window. |
 | `OPEN_COWORK_CLOUD_PG_APP_NAME` | `application_name` set on each connection for Postgres-side observability. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_KIND` | `filesystem`, `minio`, `s3`, `gcs`, `azure-blob`, or `digitalocean-spaces`. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET` | Bucket/container name for artifacts and snapshots. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT` | Custom endpoint URL (MinIO / S3-compatible / DigitalOcean Spaces). |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_REGION` | Region for the S3/Spaces backend. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_PREFIX` | Optional key prefix namespacing all objects. |
-| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_SESSION_TOKEN` | S3/MinIO/Spaces static credentials (session token optional for STS). |
-| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCOUNT_NAME` / `_SAS_TOKEN` | Azure Blob account name + SAS token. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID` / `OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY` / `OPEN_COWORK_CLOUD_OBJECT_STORE_SESSION_TOKEN` | S3/MinIO/Spaces static credentials (session token optional for STS). |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCOUNT_NAME` / `OPEN_COWORK_CLOUD_OBJECT_STORE_SAS_TOKEN` | Azure Blob account name + SAS token. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_BEARER_TOKEN` | GCS OAuth bearer token (when not using ambient ADC). |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
@@ -697,7 +697,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies; falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
-| `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. |
+| `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
 | `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
 | `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
 | `OPEN_COWORK_CLOUD_BRAND_LOGO_URL` | HTTPS logo URL for the browser dashboard. |
@@ -815,6 +815,45 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES` | Optional generic webhook attachment cap; defaults to `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress HMAC signatures and outbound bridge authentication. Inbound and outbound generic webhook requests include `x-open-cowork-gateway-webhook-timestamp` and `x-open-cowork-gateway-webhook-signature` over the raw body. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the generic webhook provider (default `webhook`). |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_ALLOWED_HOSTS` | Comma-separated host allowlist for outbound webhook/bridge delivery URLs. Constrains SSRF blast radius; leave empty to allow any public host. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_ALLOW_PRIVATE_DELIVERY` | Allows outbound webhook/bridge delivery to private/loopback addresses. Off by default (SSRF guard); enable only for trusted internal bridges. |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the Telegram provider (default `telegram`). |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_MODE` | `polling` (private VPS) or `webhook` (when `OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL` is reachable by Telegram). |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL` | Public HTTPS base URL Telegram calls in webhook mode; falls back to `OPEN_COWORK_GATEWAY_PUBLIC_URL`. |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_RESPOND_IN_GROUPS` | Whether the Telegram bot responds to non-mention group messages. |
+| `OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID` | Optional default Slack channel id for outbound posts. |
+| `OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL` | Optional Slack API base URL override (testing / Slack-compatible gateways). |
+| `OPEN_COWORK_GATEWAY_EMAIL_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the email provider (default `email`). |
+| `OPEN_COWORK_GATEWAY_EMAIL_DOMAIN` | Inbound email domain advertised in channel binding setup. |
+| `OPEN_COWORK_GATEWAY_LOG_LEVEL` | Gateway log level: `debug`, `info`, `warn`, `error`, or `silent` (default `info`). |
+| `OPEN_COWORK_GATEWAY_BRAND_LOGO_URL` | HTTPS logo URL returned in gateway health/readiness and setup metadata. |
+| `OPEN_COWORK_GATEWAY_MAX_DELIVERY_CONCURRENCY` | Maximum cloud→channel deliveries dispatched at once (default `8`, clamped `1`–`256`). Caps outbound fan-out so a backlog drain cannot storm providers into rate limits. |
+| `OPEN_COWORK_GATEWAY_MAX_DELIVERY_QUEUE_DEPTH` | Hard cap on locally queued deliveries (default `512`, clamped `16`–`100000`). Beyond it deliveries are shed back to the cloud to re-serve instead of growing the heap. |
+| `OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER` | Local/demo escape hatch that permits the fake provider on a public bind. Keep off; real public deployments must use a real provider. |
+| `OPEN_COWORK_GATEWAY_FAKE_CHANNEL_BINDING_ID` / `OPEN_COWORK_GATEWAY_FAKE_WORKSPACE_ID` | Channel binding id and external workspace id for the local/demo fake provider. |
+| `OPEN_COWORK_GATEWAY_CLI_ENABLED` | Enables the local CLI channel provider for development/testing. |
+| `OPEN_COWORK_GATEWAY_CLI_CHANNEL_BINDING_ID` / `OPEN_COWORK_GATEWAY_CLI_WORKSPACE_ID` | Channel binding id and external workspace id for the CLI provider. |
+
+### Bridge providers (discord / whatsapp / signal)
+
+Discord, WhatsApp, and Signal are outbound-bridge providers: Open Cowork signs
+and POSTs messages to an external bridge process that owns the platform
+connection, and the bridge POSTs inbound messages back through the signed
+generic-webhook ingress path. Each provider is configured from a parallel env
+family (substitute `DISCORD`, `WHATSAPP`, or `SIGNAL` for `<KIND>`). A provider
+is only created when its `_DELIVERY_URL` is set, and it then requires a
+`_SHARED_SECRET`.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_GATEWAY_DISCORD_DELIVERY_URL` / `OPEN_COWORK_GATEWAY_WHATSAPP_DELIVERY_URL` / `OPEN_COWORK_GATEWAY_SIGNAL_DELIVERY_URL` | Outbound URL of the external bridge for that platform. Setting it enables the provider. |
+| `OPEN_COWORK_GATEWAY_DISCORD_SHARED_SECRET` / `OPEN_COWORK_GATEWAY_WHATSAPP_SHARED_SECRET` / `OPEN_COWORK_GATEWAY_SIGNAL_SHARED_SECRET` | Required HMAC shared secret for that bridge's signed inbound ingress and outbound delivery. |
+| `OPEN_COWORK_GATEWAY_<KIND>_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the bridge provider (defaults to the kind). |
+| `OPEN_COWORK_GATEWAY_<KIND>_WORKSPACE_ID` | Optional external workspace id for the bridge binding. |
+| `OPEN_COWORK_GATEWAY_<KIND>_DELIVERY_ALLOWED_HOSTS` | Comma-separated host allowlist for outbound bridge delivery (SSRF guard). |
+| `OPEN_COWORK_GATEWAY_<KIND>_ALLOW_PRIVATE_DELIVERY` | Allows bridge delivery to private/loopback addresses. Off by default. |
+| `OPEN_COWORK_GATEWAY_<KIND>_MAX_ATTACHMENT_BYTES` | Optional attachment cap; defaults to `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`. |
 
 Gateway config JSON from `OPEN_COWORK_CONFIG_PATH`,
 `OPEN_COWORK_CONFIG_DIR`, `OPEN_COWORK_DOWNSTREAM_ROOT`,
@@ -872,6 +911,34 @@ Role-specific knobs:
 | `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` | `worker`, `scheduler`, `all-in-one` | Grace window used during process shutdown to let an active worker/scheduler loop finish after a drain or termination signal. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_ID` | `scheduler`, `all-in-one` | Stable scheduler identity for heartbeats. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS` | `scheduler`, `all-in-one` | Workflow scheduler polling interval. |
+
+### Cloud advanced / tuning
+
+Most deployments never set these; they carry safe defaults. They exist so an
+operator can tune storage location, connection caps, the runtime cache, and
+Postgres safety timeouts per deployment.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_ROOT` | Filesystem root for cloud runtime working data (logs, ephemeral workspaces, and the filesystem object-store adapter). Compose references set `/data/open-cowork-cloud`. |
+| `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER` | Deployment tier that gates production safety checks: `local` for demos, `public_production` for hosted deployments (rejects insecure auth, weak secrets, ephemeral storage, and other unsafe defaults). |
+| `OPEN_COWORK_CLOUD_CORS_ORIGIN` | Single allowed CORS origin for the cloud HTTP/SSE API. Leave unset for same-origin browser access; set it when a separate first-party origin must call the API. |
+| `OPEN_COWORK_CLOUD_RUN_MIGRATIONS` | Defaults to `true` so the web/worker boot path applies embedded schema migrations. Set `false` for change-managed rollouts that run `pnpm cloud:migrate` as a separate step. |
+| `OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE` | Explicit operator acknowledgement that non-durable control-plane/object storage is acceptable. Required to start a `public_production` tier on ephemeral storage; keep unset so accidental ephemeral storage fails closed. |
+| `OPEN_COWORK_CLOUD_LIVENESS_PORT` | Optional dedicated port for a minimal liveness server (separate from the main HTTP port). `0`/unset disables it; the main `/livez` route remains available. |
+| `OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES` | Maximum cached OpenCode runtimes a worker keeps warm (default `100`). Bounds worker memory under many concurrent sessions. |
+| `OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS` | Idle eviction window for cached worker runtimes (default `1800000`, 30 minutes). |
+| `OPEN_COWORK_CLOUD_PG_LOCK_TIMEOUT_MS` | Postgres `lock_timeout` per connection (default `0`, disabled). Set a non-zero value to bound how long a statement waits on a row/table lock before failing fast. |
+| `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` | Maximum simultaneous TCP connections accepted by the cloud HTTP server (default `10000`). A connection-exhaustion guard above the Node default of unbounded. |
+| `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams per org (default `200`). Excess subscriptions for one org are rejected so a single tenant cannot exhaust stream slots. |
+| `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
+
+`OPEN_COWORK_CLOUD_PUBLIC_URL` doubles as the HSTS switch: the server only emits
+`Strict-Transport-Security` when `OPEN_COWORK_CLOUD_PUBLIC_URL` is an HTTPS,
+non-loopback origin. Any HTTPS-fronted deployment — including self-host tiers
+behind a TLS-terminating reverse proxy or ingress — must set
+`OPEN_COWORK_CLOUD_PUBLIC_URL` to the canonical `https://` origin so HSTS is
+emitted (and so redirects/cookies never depend on untrusted forwarded headers).
 
 Profiles are enforced server-side and in generated OpenCode config. Cloud
 profiles default to app-managed runtime config and deny arbitrary host project

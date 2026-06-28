@@ -130,6 +130,11 @@ export type CloudHttpServerOptions = {
   strictTransportSecurity?: boolean
   maxBodyBytes?: number
   ssePollMs?: number
+  // Connection caps routed through the validated env resolver (CloudAppOptions /
+  // resolveCloudBootstrapOptionsFromEnv) like every other knob, instead of reading
+  // process.env directly here. Undefined ⇒ the documented defaults below.
+  maxSseConnectionsPerOrg?: number
+  maxConnections?: number
   sseReplayHub?: CloudSseReplayHub
   sseStreamRegistry?: CloudSseStreamRegistry
   trustProxyHeaders?: boolean
@@ -536,9 +541,14 @@ async function handleBillingWebhook(
   }
 }
 
-function sseMaxConnectionsPerOrg(): number {
-  const raw = Number(process.env.OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG)
-  return Number.isInteger(raw) && raw > 0 ? raw : 200
+// Default per-org SSE connection cap when the resolver did not supply one. The
+// env var (OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG) is parsed once in the
+// central resolver and passed through CloudHttpServerOptions.maxSseConnectionsPerOrg.
+const DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG = 200
+
+function sseMaxConnectionsPerOrg(options: CloudHttpServerOptions): number {
+  const value = options.maxSseConnectionsPerOrg
+  return Number.isInteger(value) && (value as number) > 0 ? (value as number) : DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG
 }
 
 function trackSseStream(
@@ -549,7 +559,7 @@ function trackSseStream(
   orgKey?: string | null,
 ) {
   if (options.sseStreamRegistry) {
-    return options.sseStreamRegistry.track(req, res, cleanup, { orgKey: orgKey || undefined, maxPerOrg: sseMaxConnectionsPerOrg() })
+    return options.sseStreamRegistry.track(req, res, cleanup, { orgKey: orgKey || undefined, maxPerOrg: sseMaxConnectionsPerOrg(options) })
   }
 
   let closed = false
@@ -1481,8 +1491,11 @@ export class CloudHttpServer {
     // is an LB-coordination concern (avoid 502 races), not part of this hardening.
     this.server.requestTimeout = 30_000
     this.server.headersTimeout = 20_000
-    const maxConnections = Number(process.env.OPEN_COWORK_CLOUD_MAX_CONNECTIONS)
-    this.server.maxConnections = Number.isInteger(maxConnections) && maxConnections > 0 ? maxConnections : 10_000
+    // Total connection cap. The env var (OPEN_COWORK_CLOUD_MAX_CONNECTIONS) is parsed
+    // once in the central resolver and threaded through options.maxConnections rather
+    // than read from process.env here, so it is injected/validated like every other knob.
+    const maxConnections = options.maxConnections
+    this.server.maxConnections = Number.isInteger(maxConnections) && (maxConnections as number) > 0 ? (maxConnections as number) : 10_000
   }
 
   async listen(port = 0, hostname = '127.0.0.1') {

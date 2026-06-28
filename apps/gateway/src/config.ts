@@ -83,7 +83,10 @@ type GatewayRawProvider = NonNullable<GatewayRawConfig['providers']>[number]
 export type GatewayEnv = Record<string, string | undefined>
 
 const defaultHost = '127.0.0.1'
-const defaultPort = 8787
+// Gateway listens on its own documented/EXPOSEd port (8790) by default, NOT the
+// cloud control-plane port (8787) — a bare `gateway` run must not collide with a
+// co-located cloud process. Operators override with OPEN_COWORK_GATEWAY_PORT.
+const defaultPort = 8790
 const defaultMaxRequestBodyBytes = 1024 * 1024
 const maxAllowedRequestBodyBytes = 64 * 1024 * 1024
 const defaultTimeouts = {

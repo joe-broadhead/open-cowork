@@ -340,6 +340,11 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     shutdownGraceMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS'), 30_000),
     runtimeCacheMaxEntries: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES'), 100),
     runtimeCacheIdleTtlMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS'), 30 * 60 * 1000),
+    // HTTP connection caps resolved/validated here (instead of read from process.env
+    // inside the HTTP server) so they travel through CloudHttpServerOptions like every
+    // other knob. Defaults preserve the previous in-server behaviour (200 / 10000).
+    maxSseConnectionsPerOrg: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG'), 200),
+    maxConnections: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONNECTIONS'), 10_000),
     corsOrigin: envValue(env, 'OPEN_COWORK_CLOUD_CORS_ORIGIN'),
     autoProcessCommands: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS'), true),
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
@@ -1493,6 +1498,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         autoProcessCommands: options.autoProcessCommands ?? (policy.role === 'all-in-one' && envOptions.autoProcessCommands),
         corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
         strictTransportSecurity: publicUrlEnablesStrictTransportSecurity(envOptions.publicUrl),
+        maxSseConnectionsPerOrg: envOptions.maxSseConnectionsPerOrg,
+        maxConnections: envOptions.maxConnections,
         trustProxyHeaders: envOptions.trustProxyHeaders,
         trustedProxyCidrs: envOptions.trustedProxyCidrs,
         knowledgeDataDir: paths.getAppDataDir(),
