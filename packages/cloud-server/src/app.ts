@@ -922,6 +922,110 @@ async function routeRuntimeEvent(
   await worker.appendRuntimeEvent(session.tenantId, session.sessionId, event)
 }
 
+// Token-granular `assistant.message` append deltas (projected from the SDK
+// `message.part.delta`) arrive one per token. Materializing each one rewrites the WHOLE
+// session projection (+ ~5 DB round-trips per event), so M streamed tokens cost O(M²)
+// write amplification. This coalescer buffers consecutive append deltas per session and
+// flushes them as ONE append on a short timer (a streaming window, not a debounce — so a
+// long stream still advances every ~flushDelayMs) or at the next non-append boundary
+// event, so a single materialize+persist covers many tokens.
+//
+// Correctness: the projection reducer appends each delta onto the same message, so
+// `existing + (d1 + d2 + … + dN)` is byte-identical to `((existing + d1) + d2) … + dN`.
+// Non-append events flush the session's pending delta FIRST so transcript order is
+// preserved (deltas land before the snapshot/tool/idle that follows them). Pending deltas
+// are flushed when the session goes idle (a boundary), and `flushAll` flushes any tail on
+// shutdown, so no token is lost. Sequence ordering is preserved: coalescing only reduces
+// the number of appended events; the survivors stay monotonic and in arrival order.
+export const DEFAULT_RUNTIME_DELTA_FLUSH_MS = 60
+
+type RuntimeDeltaPending = {
+  event: CloudRuntimeEvent
+  messageId: string
+  timer: ReturnType<typeof setTimeout> | null
+}
+
+export type RuntimeDeltaCoalescer = {
+  handle(event: CloudRuntimeEvent): void
+  flushAll(): Promise<void>
+}
+
+function isAppendDeltaEvent(event: CloudRuntimeEvent) {
+  return event.type === 'assistant.message'
+    && event.payload.mode === 'append'
+    && typeof event.payload.content === 'string'
+    && typeof event.payload.sessionId === 'string'
+}
+
+function runtimeEventMessageId(event: CloudRuntimeEvent) {
+  return typeof event.payload.messageId === 'string' ? event.payload.messageId : ''
+}
+
+export function createRuntimeDeltaCoalescer(options: {
+  route: (event: CloudRuntimeEvent) => Promise<void>
+  flushDelayMs?: number
+  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
+  clearTimer?: (handle: ReturnType<typeof setTimeout>) => void
+}): RuntimeDeltaCoalescer {
+  const flushDelayMs = options.flushDelayMs ?? DEFAULT_RUNTIME_DELTA_FLUSH_MS
+  const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
+  const clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle))
+  const pendingBySession = new Map<string, RuntimeDeltaPending>()
+
+  // Flush the buffered append for a session. Returns the route promise so shutdown can
+  // await it; timer/boundary flushes ignore the return (fire-and-forget, matching the
+  // existing per-event routing).
+  const flushSession = (sessionId: string): Promise<void> => {
+    const pending = pendingBySession.get(sessionId)
+    if (!pending) return Promise.resolve()
+    pendingBySession.delete(sessionId)
+    if (pending.timer) clearTimer(pending.timer)
+    return options.route(pending.event)
+  }
+
+  const handle = (event: CloudRuntimeEvent) => {
+    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
+
+    if (sessionId && isAppendDeltaEvent(event)) {
+      const messageId = runtimeEventMessageId(event)
+      const pending = pendingBySession.get(sessionId)
+      if (pending && pending.messageId === messageId) {
+        // Same streaming message: concatenate the delta onto the buffered append. The
+        // timer keeps running (window, not debounce) so the stream still flushes on cadence.
+        pending.event = {
+          ...pending.event,
+          payload: {
+            ...pending.event.payload,
+            content: String(pending.event.payload.content ?? '') + String(event.payload.content ?? ''),
+          },
+        }
+        return
+      }
+      // A delta for a different message (or none buffered): flush the old one first to keep
+      // order, then start a fresh window for this message.
+      if (pending) void flushSession(sessionId)
+      const timer = setTimer(() => { void flushSession(sessionId) }, flushDelayMs)
+      pendingBySession.set(sessionId, {
+        event: { ...event, payload: { ...event.payload } },
+        messageId,
+        timer,
+      })
+      return
+    }
+
+    // Boundary event: flush this session's pending deltas before routing it so the
+    // transcript order (deltas → snapshot/tool/idle) is preserved.
+    if (sessionId) void flushSession(sessionId)
+    void options.route(event)
+  }
+
+  const flushAll = async () => {
+    await Promise.all([...pendingBySession.keys()].map((sessionId) => flushSession(sessionId)))
+  }
+
+  return { handle, flushAll }
+}
+
 function loopErrorAttributes(error: unknown) {
   return {
     error_name: error instanceof Error ? error.name : 'Error',
@@ -1436,14 +1540,21 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability, retention, concurrencyReconcileMs)
     : null
 
-  const runtimeUnsubscribe = worker && runtime.subscribeEvents
-    ? await runtime.subscribeEvents((event) => {
-        void routeRuntimeEvent(store, worker, event).catch((error) => recordLoopError(
+  // Coalesce token-granular streaming deltas before materializing (PERF-1): one
+  // materialize+persist per ~flush window instead of one per token.
+  const runtimeDeltaCoalescer = worker && runtime.subscribeEvents
+    ? createRuntimeDeltaCoalescer({
+        route: (event) => routeRuntimeEvent(store, worker, event).catch((error) => recordLoopError(
           observability,
           'cloud.worker.runtime_event.error',
           error,
           { event_type: event.type },
-        ))
+        )),
+      })
+    : null
+  const runtimeUnsubscribe = runtimeDeltaCoalescer && runtime.subscribeEvents
+    ? await runtime.subscribeEvents((event) => {
+        runtimeDeltaCoalescer.handle(event)
       }, {
         onDroppedEvent(event) {
           void recordCloudMetric(observability, {
@@ -1590,6 +1701,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       ])
       await livenessServer?.close()
       runtimeUnsubscribe?.()
+      // Flush any buffered streaming deltas before teardown so no token is lost (PERF-1).
+      await runtimeDeltaCoalescer?.flushAll()
       // Stop waking before the server (which owns/closes the shared hub) shuts down.
       await ssePgNotifyListener?.close()
       await server?.close()

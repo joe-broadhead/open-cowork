@@ -22,26 +22,17 @@ const strings: Record<string, string> = {
   'common.cancel': 'Annuler',
   'common.close': 'Fermer',
   'common.delete': 'Supprimer',
-  'common.remove': 'Retirer',
-  'common.retry': 'Réessayer',
   'common.continue': 'Continuer',
-  'common.back': 'Retour',
   'common.loading': 'Chargement…',
-  'common.yes': 'Oui',
-  'common.no': 'Non',
-  'common.unknown': 'Inconnu',
-  'common.version': 'Version',
 
   // ────────────────────────────────────────────────────────────
   // Login / Setup / Loading
   // ────────────────────────────────────────────────────────────
   'login.welcome': 'Bienvenue sur {{brandName}}',
-  'login.signInGoogle': 'Se connecter avec Google',
   'login.failed': 'Échec de la connexion',
   'setup.welcomeUser': 'Bienvenue, {{name}}',
   'setup.welcomeGeneric': 'Bienvenue sur {{brandName}}',
   'setup.description': 'Choisissez le fournisseur et le modèle par défaut pour cette version de {{brandName}}.',
-  'setup.provider': 'Fournisseur',
   'setup.model': 'Modèle',
   'setup.continue': 'Continuer',
   'setup.saveFailed': 'Impossible d\u2019enregistrer les paramètres.',
@@ -60,21 +51,12 @@ const strings: Record<string, string> = {
   // Sidebar / navigation
   // ────────────────────────────────────────────────────────────
   'sidebar.home': 'Accueil',
-  'sidebar.agents': 'Agents',
-  'sidebar.capabilities': 'Capacités',
   'sidebar.settings': 'Paramètres',
-  'sidebar.threads': 'Conversations',
   'sidebar.search': 'Rechercher une conversation…',
   'sidebar.searchTitle': 'Rechercher une conversation (⌘K)',
-  'sidebar.noThreads': 'Aucune conversation pour le moment',
   'sidebar.noMatches': 'Aucun résultat',
   'sidebar.threadFallback': 'Conversation {{id}}',
-  'sidebar.newThread': 'Nouvelle conversation',
-  'sidebar.newThreadInProject': 'Nouvelle conversation dans un projet…',
-  'newThread.blank': 'Conversation vierge',
-  'newThread.blankHint': 'Démarrer avec Build et les agents, outils et compétences actuellement disponibles',
   'newThread.project': 'Ouvrir un projet',
-  'newThread.projectHint': 'Choisissez un dossier — l\u2019agent peut lire et modifier les fichiers',
   'sidebar.newChat': 'Nouveau chat',
   'newChat.blankUnavailableReason': 'La création de chat est indisponible dans cet espace de travail.',
   'newChat.unavailable': 'Indisponible',
@@ -89,8 +71,6 @@ const strings: Record<string, string> = {
   'newChat.blank': 'Chat vierge',
   'newChat.cloudProjectSubtitle': 'Démarrez un chat de projet cloud depuis Git ou un instantané téléversé explicitement.',
   'newChat.createCloudProject': 'Créer un chat de projet',
-  'sidebar.busy': 'En cours',
-  'sidebar.awaitingQuestion': 'En attente de votre réponse',
 
   // Context menu on thread row
   'thread.rename': 'Renommer',
@@ -99,26 +79,16 @@ const strings: Record<string, string> = {
   'thread.linkCopied': 'Lien copié !',
   'thread.viewChanges': 'Voir les modifications',
   'thread.delete': 'Supprimer',
-  'thread.deleteConfirm': 'Supprimer cette conversation ? Cette action est irréversible.',
-  'agent.deleteConfirm': 'Supprimer l\u2019agent « {{name}} » ? Cette action est irréversible.',
-  'mcp.deleteConfirm': 'Retirer le MCP « {{name}} » ? Cette action est irréversible.',
-  'skill.deleteConfirm': 'Retirer la compétence « {{name}} » ? Cette action est irréversible.',
 
   // ────────────────────────────────────────────────────────────
   // Status bar
   // ────────────────────────────────────────────────────────────
   'statusbar.ready': 'Prêt',
-  'statusbar.runtimeError': 'Erreur runtime',
   'statusbar.sessionUsage': 'Utilisation de la session',
   'statusbar.inputTokens': 'Tokens en entrée',
   'statusbar.outputTokens': 'Tokens en sortie',
-  'statusbar.reasoningTokens': 'Tokens de raisonnement',
-  'statusbar.cacheTokens': 'Tokens en cache',
-  'statusbar.totalTokens': 'Total',
-  'statusbar.totalCost': 'Coût total',
 
   // Runtime offline banner
-  'runtime.offline': 'Runtime indisponible : {{error}}',
   'runtime.offlineLabel': 'Runtime indisponible :',
   'runtime.tryAgain': 'Réessayer',
   'runtime.restarting': 'Redémarrage…',
@@ -128,153 +98,36 @@ const strings: Record<string, string> = {
   // ────────────────────────────────────────────────────────────
   'homepage.title': 'État de l\u2019espace de travail, capacités et santé de l\u2019exécution en une seule vue.',
   'homepage.subtitle': 'Utilisez l\u2019accueil comme une surface d\u2019observabilité, pas un écran d\u2019accueil. Vérifiez ce qui est chargé, ce qui est connecté, ce qu\u2019OpenCode utilise et où reprendre.',
-  'homepage.diagnostics': 'Diagnostics {{brandName}}',
-  'homepage.refresh': 'Actualiser',
-  'homepage.refreshing': 'Actualisation…',
-  'homepage.range.last7d': '7 derniers jours',
-  'homepage.range.last30d': '30 derniers jours',
-  'homepage.range.ytd': 'Année en cours',
-  'homepage.range.all': 'Depuis le début',
 
   // Status pills
-  'homepage.pill.runtime': 'Runtime',
-  'homepage.pill.runtimeReady': 'Prêt',
-  'homepage.pill.runtimeLoading': 'Chargement des diagnostics',
-  'homepage.pill.runtimeNotReady': 'Non prêt',
-  'homepage.pill.provider': 'Fournisseur',
-  'homepage.pill.providerNotConfigured': 'Non configuré',
-  'homepage.pill.context': 'Contexte',
-  'homepage.pill.contextTokens': '{{count}} tokens',
-  'homepage.pill.contextUnknown': 'Limite inconnue',
-  'homepage.pill.mcp': 'MCP',
-  'homepage.pill.mcpConnected': '{{connected}}/{{total}} connectés',
-  'homepage.pill.capabilities': 'Capacités',
-  'homepage.pill.capabilitiesSummary': '{{tools}} outils · {{skills}} compétences',
 
   // Metric cards
-  'homepage.card.toolsAndSkills': 'Outils et compétences',
-  'homepage.card.configuredTools': 'Outils configurés',
-  'homepage.card.activeSkills': 'Compétences actives',
-  'homepage.card.customSkills': 'Compétences personnalisées',
-  'homepage.card.customMcps': 'MCP personnalisés',
-  'homepage.card.connectedMcps': 'MCP connectés',
-  'homepage.card.agents': 'Agents intégrés et personnalisés',
-  'homepage.card.primaryModes': 'Modes primaires',
-  'homepage.card.builtinAgents': 'Agents intégrés',
-  'homepage.card.enabledCustomAgents': 'Agents personnalisés actifs',
-  'homepage.card.invalidAgents': 'Agents invalides',
-  'homepage.card.leadAgent': 'Agent principal',
-  'homepage.card.availableSubAgents': 'Sous-agents disponibles',
-  'homepage.card.usage': 'Conversations, tokens et coût',
-  'homepage.card.threads': 'Conversations',
-  'homepage.card.totalMessages': 'Messages totaux',
-  'homepage.card.trackedTokens': 'Tokens suivis',
-  'homepage.card.trackedCost': 'Coût suivi',
-  'homepage.card.userMessages': 'Messages utilisateur',
-  'homepage.card.assistantMessages': 'Messages assistant',
-  'homepage.card.toolCalls': 'Appels d\u2019outils',
-  'homepage.card.busySessions': 'Sessions actives',
-  'homepage.card.refreshedAt': 'Actualisé à {{time}}',
-  'homepage.card.agentUsage': 'Utilisation par sous-agent',
-  'homepage.card.agentUsageEmpty': 'Aucune délégation de sous-agent pour {{window}}.',
-  'homepage.card.perf': 'Performances d\u2019hydratation et de patch',
-  'homepage.card.noPerfTelemetry': 'Aucune télémétrie de performance capturée pour l\u2019instant.',
 
   // Sidebar widgets
-  'homepage.side.resumeThreads': 'Reprendre les conversations',
-  'homepage.side.resumeEmpty': 'Aucune conversation pour {{window}}.',
-  'homepage.side.recentWork': 'Activité récente',
-  'homepage.side.actions': 'Actions',
-  'homepage.side.openWorkingSurface': 'Ouvrir une surface de travail',
-  'homepage.side.newThread': 'Nouvelle conversation',
-  'homepage.side.newThreadHint': 'Ouvrir une conversation vierge liée à l\u2019espace de travail.',
-  'homepage.side.openDirectory': 'Ouvrir un dossier',
-  'homepage.side.openDirectoryHint': 'Ancrer la prochaine session dans une base de code ou un dossier réel.',
-  'homepage.side.currentInventory': 'Inventaire actuel',
-  'homepage.side.availableTools': 'Outils disponibles',
-  'homepage.side.skillBundles': 'Lots de compétences',
-  'homepage.side.runtimeInputs': 'Entrées du runtime',
-  'homepage.side.opencodeVersion': 'OpenCode',
-  'homepage.side.providerName': 'Fournisseur',
-  'homepage.side.providerSource': 'Source du fournisseur',
-  'homepage.side.model': 'Modèle',
-  'homepage.side.modelSource': 'Source du modèle',
-  'homepage.side.package': 'Package',
-  'homepage.side.packageFallback': 'Intégré/runtime',
-  'homepage.side.providerOptions': 'Options fournisseur',
-  'homepage.side.credentialOverrides': 'Remplacements d\u2019identifiants',
-  'homepage.side.noOptions': 'Aucune option non-secret exposée.',
-  'homepage.side.usingDefaults': 'Utilise les valeurs par défaut.',
 
   // Extra card rows
-  'homepage.card.bundledTools': 'Outils intégrés',
-  'homepage.card.customTools': 'Outils personnalisés',
-  'homepage.card.primaryMode': 'Mode principal',
-  'homepage.card.visibleBuiltins': 'Agents intégrés visibles',
-  'homepage.card.noToolsDiscovered': 'Aucun outil découvert pour l\u2019instant.',
-  'homepage.card.noBuiltinAgents': 'Aucun agent intégré disponible.',
-  'homepage.card.tokenMix': 'Répartition des tokens',
-  'homepage.card.window': 'Fenêtre',
-  'homepage.card.usageRefreshed': 'Usage actualisé',
-  'homepage.card.notLoaded': 'Non chargé',
-  'homepage.card.busyRightNow': 'Actives maintenant',
-  'homepage.card.currentModel': 'Modèle actuel',
-  'homepage.card.contextWindow': 'Fenêtre de contexte',
-  'homepage.card.notSet': 'Non défini',
-  'homepage.card.unknownLimit': 'Inconnue',
-  'homepage.card.historicalUsageNote': 'L\u2019usage historique est conservé par conversation et superposé à l\u2019état des sessions en direct ; les totaux ne dépendent plus de l\u2019ouverture préalable des conversations.',
-  'homepage.card.backfillCompleted': ' Actualisé {{count}} résumé(s) en arrière-plan.',
-  'homepage.card.unknownSubAgent': 'Sous-agent inconnu',
-  'homepage.card.tasks': 'tâche(s)',
-  'homepage.card.tokShort': 'tok',
-  'homepage.card.historyLoadP95': 'Chargement historique p95',
-  'homepage.card.coldSyncP95': 'Sync à froid p95',
-  'homepage.card.flushP95': 'Flush p95',
-  'homepage.card.slowEvents': 'Événements lents',
-  'homepage.card.flushWaitP95': 'Attente flush p95',
-  'homepage.card.patchPublishes': 'Patchs publiés',
-  'homepage.card.telemetrySamples': 'Échantillons télémétrie',
-  'homepage.card.perfLiveNote': 'Diagnostics en direct depuis le moteur du processus principal. Les chiffres proviennent des mêmes pipelines d\u2019hydratation et de patch que la vue de chat.',
-  'homepage.card.perfEmptyHint': 'Aucune télémétrie de perf capturée pour l\u2019instant. Ouvrez une conversation, diffusez une réponse, puis revenez ici pour inspecter les temps du runtime.',
 
   // Tokens / agent / runtime misc
-  'tokens.input': 'Entrée',
-  'tokens.output': 'Sortie',
   'tokens.reasoning': 'Raisonnement',
-  'tokens.cache': 'Cache',
-  'provider.none': 'Aucun fournisseur',
-  'agent.unknown': 'Inconnu',
-  'thread.sandbox': 'Conversation sandbox',
-  'runtime.source.settings': 'Remplacement paramètres',
-  'runtime.source.default': 'Valeur par défaut config',
-  'runtime.source.fallback': 'Valeur de repli',
 
   // Home warnings
-  'homepage.warning.backfillFailed': '{{count}} session(s) n\u2019ont pas pu être reconstruites — les totaux peuvent être sous-estimés.',
-  'homepage.warning.backfillPending': 'Chargement en arrière-plan de {{count}} ancienne(s) session(s). Les totaux seront actualisés automatiquement.',
 
   // ────────────────────────────────────────────────────────────
   // Settings panel
   // ────────────────────────────────────────────────────────────
   'settings.title': 'Paramètres',
   'settings.subtitle': 'Ajustez l\u2019interface, le runtime du modèle et les autorisations locales.',
-  'settings.done': 'Terminé',
-  'settings.save': 'Enregistrer',
   'settings.saved': '✓ Enregistré',
   'settings.saveChanges': 'Enregistrer les modifications',
   'settings.saveHint': 'Les changements d\u2019apparence s\u2019appliquent immédiatement. Les changements de fournisseur et d\u2019autorisations redémarrent le runtime si nécessaire.',
   'settings.tab.appearance': 'Apparence',
   'settings.tab.appearanceDescription': 'Thème, schéma de couleurs et polices',
-  'settings.tab.models': 'Modèles',
-  'settings.tab.modelsDescription': 'Fournisseur, modèle et identifiants',
   'settings.tab.permissions': 'Autorisations',
   'settings.tab.permissionsDescription': 'Accès aux outils locaux',
   'settings.tab.storage': 'Stockage',
   'settings.tab.storageDescription': 'Artéfacts sandbox et nettoyage',
-  'settings.tab.language': 'Langue',
   'settings.appearance.colorScheme': 'Schéma de couleurs',
   'settings.appearance.theme': 'Thème',
-  'settings.appearance.themeActive': 'Actif',
   'settings.appearance.uiFont': 'Police d\u2019interface',
   'settings.appearance.monoFont': 'Police monospace',
   'settings.appearance.preview': 'Aperçu',
@@ -292,7 +145,6 @@ const strings: Record<string, string> = {
   'settings.models.refreshTitle': 'Actualiser le catalogue dynamique de modèles',
   'settings.models.search': 'Rechercher parmi {{count}} modèles…',
   'settings.models.noMatches': 'Aucun modèle ne correspond à cette recherche.',
-  'settings.models.credentialsHeader': 'Identifiants',
   'settings.permissions.header': 'Outils développeur',
   'settings.permissions.bashTitle': 'Commandes shell',
   'settings.permissions.bashDescription': 'Permet aux agents d\u2019exécuter des commandes terminal dans l\u2019espace de travail actif.',
@@ -349,39 +201,21 @@ const strings: Record<string, string> = {
   'settings.reset.button': 'Réinitialiser les données',
   'settings.reset.resetting': 'Réinitialisation…',
   'settings.reset.requiresConfirm': 'Demande une confirmation explicite. L\u2019application va se fermer et redémarrer.',
-  'settings.reset.confirm': 'Réinitialiser toutes les données ?\n\nCette action supprime toutes les conversations, identifiants, agents personnalisés, compétences et MCP de cet appareil. L\u2019application redémarrera sur l\u2019écran de premier lancement. Irréversible.',
 
   // ────────────────────────────────────────────────────────────
   // Agent builder
   // ────────────────────────────────────────────────────────────
-  'agents.tab.skills': 'Compétences',
-  'agents.tab.tools': 'Outils',
-  'agents.tab.instructions': 'Instructions',
-  'agents.tab.inference': 'Inférence',
-  'agents.new': 'Nouvel agent',
-  'agents.save': 'Enregistrer les modifications',
   'agents.create': 'Créer l\u2019agent',
-  'agents.saving': 'Enregistrement…',
-  'agents.openCapabilities': 'Besoin de plus d\u2019outils ou de compétences ?',
-  'agents.openCapabilitiesLink': 'Ouvrir Outils et compétences',
 
   // ────────────────────────────────────────────────────────────
   // Tools & Skills page
   // ────────────────────────────────────────────────────────────
   'capabilities.tab.tools': 'Connexions',
   'capabilities.tab.skills': 'Capacités',
-  'capabilities.addMcp': 'Ajouter un MCP',
-  'capabilities.addSkill': 'Ajouter une compétence',
-  'capabilities.noTools': 'Aucun outil disponible pour le moment. Ajoutez un MCP depuis la page Capacités.',
-  'capabilities.noSkills': 'Aucune compétence disponible pour le moment. Ajoutez un lot de compétences depuis la page Capacités.',
 
   // ────────────────────────────────────────────────────────────
   // Chat
   // ────────────────────────────────────────────────────────────
-  'chat.placeholder': 'Envoyez un message à {{brandName}}…',
-  'chat.showContext': 'Afficher le contexte',
-  'chat.hideContext': 'Masquer le contexte',
-  'chat.thinking': 'Réflexion en cours…',
 
   // ────────────────────────────────────────────────────────────
   // ViewErrorBoundary
@@ -405,11 +239,8 @@ const strings: Record<string, string> = {
 
   // Chat — message actions
   'messageActions.branchHere': 'Brancher ici',
-  'messageActions.branchHereDescription': 'Créer une nouvelle conversation qui s\u2019arrête à ce message',
   'messageActions.revertHere': 'Revenir ici',
-  'messageActions.revertHereDescription': 'Revenir à l\u2019état juste avant ce message',
   'messageActions.viewDiff': 'Voir le diff',
-  'messageActions.viewDiffDescription': 'Afficher les modifications de fichiers introduites par ce message',
   'messageActions.branchFailed': 'Impossible de brancher depuis ce message. Réessayez.',
   'messageActions.revertConfirm': 'Revenir à ce message ? Les tours suivants seront masqués jusqu\u2019à annulation.',
   'messageActions.revertFailed': 'Impossible de revenir à ce message. Réessayez.',
@@ -418,8 +249,6 @@ const strings: Record<string, string> = {
   'chat.attachFile': 'Joindre un fichier',
   'chat.planMode': 'Plan',
   'chat.buildMode': 'Build',
-  'chat.planModeDescription': 'Mode Plan : analyse et audit en lecture seule',
-  'chat.buildModeDescription': 'Mode Build : accès complet et délégation',
   'chat.forkThread': 'Dupliquer la conversation',
   'chat.stopGenerating': 'Arrêter la génération (Échap)',
   'chat.awaitingApproval': 'En attente d\u2019approbation',
@@ -506,14 +335,8 @@ const strings: Record<string, string> = {
   'chatModelMenu.search': 'Rechercher un modèle…',
 
   // Agents — page
-  'agentsPage.title': 'Agents',
-  'agentsPage.subtitle': 'Composez des spécialistes à partir de compétences, d\u2019outils et d\u2019instructions. Cliquez sur une carte pour l\u2019ouvrir dans le constructeur.',
   'agentsPage.backToChat': 'Retour au chat',
-  'agentsPage.search': 'Rechercher des agents, compétences, outils ou instructions…',
-  'agentsPage.importTitle': 'Importer un agent personnalisé depuis un fichier .cowork-agent.json',
   'agentsPage.import': 'Importer',
-  'agentsPage.importFailed': 'Impossible d\u2019importer {{filename}} : {{error}}',
-  'agentsPage.importConflict': 'Un agent personnalisé nommé « {{name}} » existe déjà. Le remplacer par celui importé ?',
   'studioTeamPage.eyebrow': 'Équipe',
   'studioTeamPage.title': 'Coéquipiers',
   'studioTeamPage.subtitle': 'Composez des agents OpenCode en une liste de coéquipiers avec rôles, compétences, outils et affectations de chat clairs.',
@@ -571,11 +394,9 @@ const strings: Record<string, string> = {
   'capabilities.searchSkills': 'Rechercher parmi les capacités, descriptions ou coéquipiers…',
   'capabilities.details': 'Détails',
   'capabilities.connection': 'Connexion',
-  'capabilities.linkedAgents': 'Agents liés',
   'capabilities.linkedCoworkers': 'Coéquipiers liés',
   'capabilities.linkedTools': 'Outils liés',
   'capabilities.skillContent': 'Contenu de la compétence',
-  'capabilities.usedByAgents': 'Utilisé par les agents',
   'capabilities.usedByCoworkers': 'Utilisé par les coéquipiers',
   'capabilities.bundleFiles': 'Fichiers du bundle',
   'capabilities.noToolsDiscovered': 'Aucun outil découvert pour l\u2019instant. Ajoutez un MCP personnalisé pour étendre le runtime.',
@@ -655,12 +476,6 @@ const strings: Record<string, string> = {
   'chat.transcriptAriaLabel': 'Transcription du chat',
 
   // Homepage misc
-  'homepage.card.usageEyebrow': 'Usage',
-  'homepage.card.agentUsageEyebrow': 'Utilisation des agents',
-  'homepage.card.perfEyebrow': 'Performances',
-  'homepage.card.selectedWindow': 'la fenêtre sélectionnée',
-  'homepage.side.selectedPeriod': 'la période sélectionnée',
-  'homepage.side.noRecentThreads': 'Aucune conversation dans {{window}} pour l\u2019instant. Lancez-en une depuis les actions ci-dessous et la page d\u2019accueil devient votre file d\u2019attente.',
 
   // Setup
   'setup.modelIdPlaceholder': 'ID du modèle',
@@ -695,7 +510,6 @@ const strings: Record<string, string> = {
 
   // Agent builder extra
   'agentBuilder.saveThisAgentIn': 'Enregistrer cet agent dans',
-  'agentCard.scope': 'Portée',
 
   // Agent preview
   'agentPreview.title': 'Aperçu statique',
@@ -713,11 +527,8 @@ const strings: Record<string, string> = {
 
   // Agent template picker
   'agentTemplate.title': 'Créer un nouvel agent',
-  'agentTemplate.subtitle': 'Choisissez un modèle de départ pour éviter la page blanche — vous pourrez tout modifier ensuite.',
   'agentTemplate.startBlank': 'Partir de zéro',
   'agentTemplate.startBlankHint': 'Aucun outil ou instruction présélectionnés — concevez l\u2019agent de A à Z.',
-  'agentTemplate.temp': 'temp {{value}}',
-  'agentTemplate.steps': '{{count}} étapes',
   'agentTemplate.toolHints': '{{count}} suggestion(s) d\u2019outil',
 
   // Avatar editor
@@ -781,7 +592,6 @@ const strings: Record<string, string> = {
   'toolTrace.agent': 'Agent',
   'toolTrace.subAgent': 'Sous-agent',
   'toolTrace.reveal': 'Afficher',
-  'toolTrace.saving': 'Enregistrement…',
   'toolTrace.saveAs': 'Enregistrer sous…',
   'toolTrace.input': 'Entrée',
   'toolTrace.output': 'Sortie',
@@ -792,22 +602,13 @@ const strings: Record<string, string> = {
   // ────────────────────────────────────────────────────────────
   // Home (welcoming landing)
   // ────────────────────────────────────────────────────────────
-  'home.greeting.cowork': 'Sur quoi allons-nous co-travailler aujourd\u2019hui ?',
-  'home.subtitle': '{{brand}} · Posez une question ou @mentionnez un agent',
-  'home.composer.placeholder': 'Posez une question ou @mentionnez un agent',
-  'home.composer.send': 'Envoyer',
   'home.composer.dropZone': 'Composeur — déposez des fichiers pour les joindre',
   'studioHome.greeting': 'Que doit traiter votre équipe aujourd\u2019hui ?',
   'studioHome.subtitle': '{{brand}} · Choisissez un collègue responsable, @mentionnez des spécialistes et relisez le travail au même endroit',
   'studioHome.composer.placeholder': 'Posez une question ou @mentionnez un collègue',
   'studioHome.coachmark': 'Rédigez une demande, joignez du contexte ou @mentionnez un collègue — ⌘K pour les commandes.',
-  'studioHome.agentNudge': '@mentionnez un collègue',
-  'home.suggestions.title': 'Essayez',
-  'home.recent.title': 'Reprenez où vous en étiez',
-  'home.recent.untitled': 'Conversation sans titre',
   'home.statusStrip.ready': 'Prêt',
   'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
-  'home.statusStrip.viewMore': 'Pouls',
 }
 
 export const fr: LocaleCatalog = {

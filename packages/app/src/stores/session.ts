@@ -12,6 +12,7 @@ import type {
 } from '@open-cowork/shared'
 import {
   applySessionPatchToState,
+  deriveBatchedSessionView,
   orderSessionPatches,
   sessionViewTiming,
   sumSessionCosts,
@@ -383,23 +384,26 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
     set((state) => {
       let nextState = state
-      let combinedPatch: Partial<SessionStore> = {}
+      let touched = false
+      let currentSessionAffected = false
 
+      // Fold every patch into sessionStateById with the view-derive deferred, then derive
+      // the visible view + totalCost EXACTLY ONCE after the loop (PERF-3). Previously each
+      // patch re-derived the full visible view (O(K·M)) and only the last survived.
       for (const patch of orderSessionPatches(patches).filter((candidate) => (
         !candidate.workspaceId || normalizeWorkspaceId(candidate.workspaceId) === normalizeWorkspaceId(state.activeWorkspaceId)
       ))) {
-        const partial = applySessionPatchToState(nextState, patch)
-        combinedPatch = {
-          ...combinedPatch,
-          ...partial,
-        }
+        const partial = applySessionPatchToState(nextState, patch, { deferDerive: true })
         nextState = {
           ...nextState,
           ...partial,
         }
+        touched = true
+        if (patch.sessionId === state.currentSessionId) currentSessionAffected = true
       }
 
-      return combinedPatch
+      if (!touched) return {}
+      return deriveBatchedSessionView(nextState, currentSessionAffected)
     })
   },
   addPendingApproval: (approval) => set((state) => {

@@ -74,7 +74,7 @@ export function ChatThreadHeader({
           )}
           {taskContext && onOpenBoard && (
             <Button variant="ghost" size="sm" onClick={onOpenBoard}>
-              Open board
+              {t('chatThreadHeader.openBoard', 'Open board')}
             </Button>
           )}
           {currentSession?.changeSummary && currentSession.changeSummary.files > 0 && (

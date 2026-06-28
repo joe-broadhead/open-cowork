@@ -309,7 +309,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
                 size="sm"
                 className="uppercase tracking-[0.08em]"
               >
-                Source
+                {t('taskDrillIn.source', 'Source')}
               </Button>
             )}
             {previousTask && (
@@ -434,7 +434,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
 
           <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
             <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-3">
-              Transcript
+              {t('taskDrillIn.transcript', 'Transcript')}
             </div>
             {reasoning.length > 0 && (
               <div className="mb-3">

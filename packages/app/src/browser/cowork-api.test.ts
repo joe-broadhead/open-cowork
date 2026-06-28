@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createBrowserCoworkApi, createTransport } from './cowork-api.ts'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createBrowserCoworkApi, createCloudTranscriptProjector, createTransport } from './cowork-api.ts'
+import { useSessionStore } from '../stores/session.ts'
 
 // Regression coverage for the CSRF P0: the browser shim must fetch the
 // double-submit CSRF token from /auth/me and attach it as x-csrf-token on every
@@ -198,5 +199,93 @@ describe('browser shim presigned artifact upload', () => {
     expect(result.id).toBe('buffered-1')
     expect(calls.some((c) => c.url.endsWith('/artifacts/art-1/finalize'))).toBe(false)
     expect(calls.some((c) => c.url.endsWith('/artifacts') && c.method === 'POST')).toBe(true)
+  })
+})
+
+// Tranche H / PERF-2: cloud `assistant.message` SSE events route through the renderer's
+// batched sessionPatch path (the same incremental session-view-reducer the desktop uses)
+// so the transcript advances LIVE and folds many tokens into one reducer pass, rather than
+// a full-view rebuild per event. The projector accumulates the deltas by PLAIN concat —
+// identical to the cloud projection's append fold (reduceCloudSessionProjectionEvent) — and
+// emits full-text REPLACE patches, so the rendered transcript is byte-identical to the
+// canonical /view regardless of how deltas were chunked or coalesced upstream (PERF-1).
+
+// The full SSE data envelope the per-session stream delivers:
+// { sessionId, sequence, type, payload: { messageId, content, mode } }.
+function sseRecord(messageId: string, content: string, sequence: number, mode?: 'append') {
+  return {
+    sessionId: 'ses_1',
+    sequence,
+    type: 'assistant.message',
+    payload: { messageId, content, ...(mode ? { mode } : {}) },
+  }
+}
+
+describe('cloud assistant.message → sessionPatch projection', () => {
+  beforeEach(() => {
+    useSessionStore.setState(useSessionStore.getInitialState(), true)
+  })
+
+  it('projects an append delta to a full-text replace patch keyed by message id', () => {
+    const projector = createCloudTranscriptProjector()
+    expect(projector.patchFor(sseRecord('m1', 'Hi', 7, 'append'), 'ses_1', null)).toEqual({
+      type: 'message_text',
+      sessionId: 'ses_1',
+      workspaceId: null,
+      messageId: 'm1',
+      segmentId: 'm1',
+      content: 'Hi',
+      mode: 'replace',
+      role: 'assistant',
+      eventAt: 7,
+    })
+  })
+
+  it('accumulates consecutive deltas into the growing full message text', () => {
+    const projector = createCloudTranscriptProjector()
+    expect(projector.patchFor(sseRecord('m1', 'Hel', 1, 'append'), 'ses_1', null)?.content).toBe('Hel')
+    expect(projector.patchFor(sseRecord('m1', 'lo', 2, 'append'), 'ses_1', null)?.content).toBe('Hello')
+    // A snapshot (no mode) adopts the canonical text verbatim.
+    expect(projector.patchFor(sseRecord('m1', 'Hello world', 3), 'ses_1', null)?.content).toBe('Hello world')
+  })
+
+  it('drops no-op and unkeyed events', () => {
+    const projector = createCloudTranscriptProjector()
+    expect(projector.patchFor(sseRecord('m1', '', 9, 'append'), 'ses_1', null)).toBeNull()
+    expect(projector.patchFor({ sessionId: 'ses_1', sequence: 1, payload: { content: 'x', mode: 'append' } }, 'ses_1', null)).toBeNull()
+    expect(projector.patchFor(sseRecord('m1', 'x', 1, 'append'), '', null)).toBeNull()
+  })
+
+  it('streams append deltas into a byte-identical transcript via the renderer reducer', () => {
+    useSessionStore.getState().setCurrentSession('ses_1')
+    const projector = createCloudTranscriptProjector()
+    // Boundary-overlapping deltas ('Hel'+'lo' share an 'l') would be mangled by the
+    // desktop's overlap-merge append heuristic; the full-text replace projection avoids it.
+    const tokens = ['Hel', 'lo', ' ', 'wor', 'ld']
+    const patches = tokens
+      .map((content, index) => projector.patchFor(sseRecord('m1', content, index + 1, 'append'), 'ses_1', null))
+      .filter((patch): patch is NonNullable<typeof patch> => patch !== null)
+
+    useSessionStore.getState().applySessionPatches(patches)
+
+    const message = useSessionStore.getState().currentView.messages.at(-1)
+    expect(message?.content).toBe(tokens.join(''))
+    expect(message?.role).toBe('assistant')
+  })
+
+  it('is order-independent and resyncs to a full snapshot byte-identically', () => {
+    useSessionStore.getState().setCurrentSession('ses_1')
+    const projector = createCloudTranscriptProjector()
+    const patches = ['Hel', 'lo']
+      .map((content, index) => projector.patchFor(sseRecord('m1', content, index + 1, 'append'), 'ses_1', null))
+      .filter((patch): patch is NonNullable<typeof patch> => patch !== null)
+    // Apply the streamed replaces out of arrival order: the reducer orders by eventAt, so
+    // the most complete (highest-sequence) text still wins.
+    useSessionStore.getState().applySessionPatches([patches[1]!, patches[0]!])
+    expect(useSessionStore.getState().currentView.messages.at(-1)?.content).toBe('Hello')
+
+    const snapshot = projector.patchFor(sseRecord('m1', 'Hello world', 5), 'ses_1', null)
+    useSessionStore.getState().applySessionPatch(snapshot!)
+    expect(useSessionStore.getState().currentView.messages.at(-1)?.content).toBe('Hello world')
   })
 })

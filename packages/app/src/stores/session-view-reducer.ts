@@ -55,7 +55,7 @@ export function updateSessionState(
   state: SessionStore,
   sessionId: string,
   updater: (current: SessionViewState) => SessionViewState,
-  options?: { eventAt?: number },
+  options?: { eventAt?: number; deferDerive?: boolean },
 ) {
   const sessionStateById = { ...state.sessionStateById }
   const timing = sessionViewTiming()
@@ -71,10 +71,15 @@ export function updateSessionState(
   sessionStateById[sessionKey] = next
   const prunedSessionStateById = pruneSessionDetailCache(sessionStateById, currentSessionKey, state.busySessions)
 
-  const patch: Partial<SessionStore> = {
-    sessionStateById: prunedSessionStateById,
-    totalCost: sumSessionCosts(prunedSessionStateById),
-  }
+  // Batched callers (applySessionPatches) fold many patches in a loop where only the
+  // last derived view/cost survives, so re-deriving the full visible view per patch is
+  // wasted O(K·M) work. `deferDerive` lets the loop accumulate sessionStateById and
+  // derive currentView (+ totalCost) EXACTLY ONCE after the fold (PERF-3). The folded
+  // state is identical either way — only the redundant intermediate derives are skipped.
+  const patch: Partial<SessionStore> = { sessionStateById: prunedSessionStateById }
+  if (options?.deferDerive) return patch
+
+  patch.totalCost = sumSessionCosts(prunedSessionStateById)
   if (state.currentSessionId === sessionId) {
     const visibleState = prunedSessionStateById[sessionKey] || next
     patch.currentView = deriveVisibleSessionPatch(
@@ -88,7 +93,39 @@ export function updateSessionState(
   return patch
 }
 
-export function applySessionPatchToState(state: SessionStore, patch: SessionPatch) {
+// Derive the visible view + total cost for the active session from an already-folded
+// store snapshot. Used by applySessionPatches to materialize the view ONCE after a
+// batch of patches rather than once per patch (PERF-3).
+export function deriveBatchedSessionView(
+  state: SessionStore,
+  currentSessionAffected: boolean,
+): Partial<SessionStore> {
+  const patch: Partial<SessionStore> = {
+    sessionStateById: state.sessionStateById,
+    totalCost: sumSessionCosts(state.sessionStateById),
+  }
+  if (currentSessionAffected && state.currentSessionId) {
+    const timing = sessionViewTiming()
+    const sessionKey = activeSessionWorkspaceKey(state, state.currentSessionId)
+    const visibleState = state.sessionStateById[sessionKey]
+    if (visibleState) {
+      patch.currentView = deriveVisibleSessionPatch(
+        visibleState,
+        sessionKey,
+        state.busySessions,
+        state.awaitingPermissionSessions,
+        timing,
+      )
+    }
+  }
+  return patch
+}
+
+export function applySessionPatchToState(
+  state: SessionStore,
+  patch: SessionPatch,
+  options?: { deferDerive?: boolean },
+) {
   if (patch.type === 'task_text') {
     return updateSessionState(
       state,
@@ -103,7 +140,7 @@ export function applySessionPatchToState(state: SessionStore, patch: SessionPatc
         })),
         lastItemWasTool: true,
       }),
-      { eventAt: patch.eventAt },
+      { eventAt: patch.eventAt, deferDerive: options?.deferDerive },
     )
   }
 
@@ -120,7 +157,7 @@ export function applySessionPatchToState(state: SessionStore, patch: SessionPatc
         })),
         lastItemWasTool: true,
       }),
-      { eventAt: patch.eventAt },
+      { eventAt: patch.eventAt, deferDerive: options?.deferDerive },
     )
   }
 
@@ -138,7 +175,7 @@ export function applySessionPatchToState(state: SessionStore, patch: SessionPatc
         }, sessionViewTiming()),
         lastItemWasTool: false,
       }),
-      { eventAt: patch.eventAt },
+      { eventAt: patch.eventAt, deferDerive: options?.deferDerive },
     )
   }
 
@@ -165,7 +202,7 @@ export function applySessionPatchToState(state: SessionStore, patch: SessionPatc
         lastItemWasTool: false,
       }
     },
-    { eventAt: patch.eventAt },
+    { eventAt: patch.eventAt, deferDerive: options?.deferDerive },
   )
 }
 

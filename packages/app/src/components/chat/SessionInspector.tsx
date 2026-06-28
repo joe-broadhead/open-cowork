@@ -380,16 +380,16 @@ export function SessionInspector({ onClose }: InspectorProps) {
         </ReviewPanel>
 
         <DiffView
-          title="Review"
+          title={t('sessionInspector.reviewTitle', 'Review')}
           subtitle={reviewFiles.length
-            ? `${reviewFiles.length} artifact${reviewFiles.length === 1 ? '' : 's'} ready for inspection`
-            : 'Artifacts, file changes, and task outputs appear here first.'}
+            ? t('sessionInspector.reviewSubtitle', '{{count}} artifacts ready for inspection', { count: reviewFiles.length })
+            : t('sessionInspector.reviewEmptySubtitle', 'Artifacts, file changes, and task outputs appear here first.')}
           files={reviewFiles}
-          empty="No artifacts to review yet."
+          empty={t('sessionInspector.reviewEmpty', 'No artifacts to review yet.')}
           className="mb-5"
         >
           <p className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary">
-            Nothing ships until you approve.
+            {t('sessionInspector.nothingShips', 'Nothing ships until you approve.')}
           </p>
         </DiffView>
 
@@ -398,24 +398,24 @@ export function SessionInspector({ onClose }: InspectorProps) {
             <section>
               <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.session', 'Session')}</div>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
-                <Stat label="Provider" value={formatProviderLabel(providerId)} />
-                <Stat label="Model" value={formatModelLabel(modelId)} />
-                <Stat label="Messages" value={String(currentView.messages.length)} />
-                <Stat label="Total Tokens" value={formatInteger(totalTokens)} />
-                <Stat label="Input Tokens" value={formatInteger(currentView.sessionTokens.input)} />
-                <Stat label="Reasoning" value={formatInteger(currentView.sessionTokens.reasoning)} />
-                <Stat label="Cache (R/W)" value={`${formatInteger(currentView.sessionTokens.cacheRead)} / ${formatInteger(currentView.sessionTokens.cacheWrite)}`} />
-                <Stat label="Total Cost" value={formatCost(currentView.sessionCost)} />
-                <Stat label="User Messages" value={String(userMessageCount)} />
-                <Stat label="Assistant Messages" value={String(assistantMessageCount)} />
-                <Stat label="Created" value={formatDateTime(currentSession?.createdAt || null)} />
-                <Stat label="Last Activity" value={formatDateTime(currentSession?.updatedAt || null)} />
+                <Stat label={t('sessionInspector.statProvider', 'Provider')} value={formatProviderLabel(providerId)} />
+                <Stat label={t('sessionInspector.statModel', 'Model')} value={formatModelLabel(modelId)} />
+                <Stat label={t('sessionInspector.statMessages', 'Messages')} value={String(currentView.messages.length)} />
+                <Stat label={t('sessionInspector.statTotalTokens', 'Total Tokens')} value={formatInteger(totalTokens)} />
+                <Stat label={t('sessionInspector.statInputTokens', 'Input Tokens')} value={formatInteger(currentView.sessionTokens.input)} />
+                <Stat label={t('sessionInspector.statReasoning', 'Reasoning')} value={formatInteger(currentView.sessionTokens.reasoning)} />
+                <Stat label={t('sessionInspector.statCache', 'Cache (R/W)')} value={`${formatInteger(currentView.sessionTokens.cacheRead)} / ${formatInteger(currentView.sessionTokens.cacheWrite)}`} />
+                <Stat label={t('sessionInspector.statTotalCost', 'Total Cost')} value={formatCost(currentView.sessionCost)} />
+                <Stat label={t('sessionInspector.statUserMessages', 'User Messages')} value={String(userMessageCount)} />
+                <Stat label={t('sessionInspector.statAssistantMessages', 'Assistant Messages')} value={String(assistantMessageCount)} />
+                <Stat label={t('sessionInspector.statCreated', 'Created')} value={formatDateTime(currentSession?.createdAt || null)} />
+                <Stat label={t('sessionInspector.statLastActivity', 'Last Activity')} value={formatDateTime(currentSession?.updatedAt || null)} />
               </div>
             </section>
 
             <section>
               <div className="flex items-center justify-between gap-3">
-                <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Context Usage</div>
+                <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.contextUsage', 'Context Usage')}</div>
                 <div className="text-xs text-text-secondary">
                   {contextLimit ? `${contextUsage}% of ${formatTokens(contextLimit)}` : `${formatTokens(contextTokens)} tokens`}
                 </div>
@@ -433,7 +433,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             </section>
 
             <section>
-              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Context Breakdown</div>
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.contextBreakdown', 'Context Breakdown')}</div>
               <div className="mt-3 h-2 rounded-full overflow-hidden flex" style={{ background: 'color-mix(in srgb, var(--color-border) 78%, transparent)' }}>
                 {breakdown.map((item) => (
                   <span
@@ -456,7 +456,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             </section>
 
             <section>
-              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Recent Raw Messages</div>
+              <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.recentRawMessages', 'Recent Raw Messages')}</div>
               <div className="mt-3">
                 <MessageList messages={rawMessages.slice(-5)} />
               </div>
@@ -466,7 +466,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
 
         {tab === 'messages' && (
           <div>
-            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">Raw Messages</div>
+            <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.rawMessages', 'Raw Messages')}</div>
             <div className="mt-3">
               <MessageList messages={rawMessages} />
             </div>
@@ -480,7 +480,9 @@ export function SessionInspector({ onClose }: InspectorProps) {
         {tab === 'artifacts' && currentSessionId && (
           <div>
             <div className="text-2xs uppercase tracking-[0.08em] text-text-muted">
-              {activeWorkspaceIsLocal ? 'Sandbox Artifacts' : 'Cloud Artifacts'}
+              {activeWorkspaceIsLocal
+                ? t('sessionInspector.sandboxArtifacts', 'Sandbox Artifacts')
+                : t('sessionInspector.cloudArtifacts', 'Cloud Artifacts')}
             </div>
             <div className="mt-3">
               <SessionArtifactList
@@ -550,7 +552,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
 
       {taskRunsWithTodos.length > 0 && (
         <section>
-          <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-3">Specialist todos</div>
+          <div className="text-2xs uppercase tracking-[0.08em] text-text-muted mb-3">{t('sessionInspector.specialistTodos', 'Specialist todos')}</div>
           <div className="flex flex-col gap-4">
             {taskRunsWithTodos.map((task) => (
               <TaskTodos key={task.id} task={task} />

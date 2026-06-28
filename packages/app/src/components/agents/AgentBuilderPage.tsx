@@ -274,7 +274,7 @@ export function AgentBuilderPage({
           }
         : undefined)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not save coworker')
+      setError(err instanceof Error ? err.message : t('agentBuilder.saveFailed', 'Could not save coworker'))
     } finally {
       setSaving(false)
     }
@@ -349,7 +349,11 @@ export function AgentBuilderPage({
             <div className="text-xs font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
             <div className="flex flex-col gap-1 text-2xs text-text-muted">
               {issues.map((issue) => (
-                <div key={issue.code}>{issue.message}</div>
+                // Shared validation returns a stable machine-readable `code`
+                // plus an English `message`. Resolve the code to a translated
+                // string, falling back to the English message so the locale
+                // gap renders honest English rather than a raw key.
+                <div key={issue.code}>{t(`agentValidation.${issue.code}`, issue.message)}</div>
               ))}
             </div>
           </div>

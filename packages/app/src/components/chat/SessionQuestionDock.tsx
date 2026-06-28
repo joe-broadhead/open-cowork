@@ -234,7 +234,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                     onChange={toggleCustom}
                     disabled={submitting}
                   />
-                  Custom answer
+                  {t('questionDock.customAnswer', 'Custom answer')}
                 </label>
                 <Textarea
                   value={customValues[step] || ''}
@@ -262,7 +262,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
               variant="ghost"
               size="sm"
             >
-              Dismiss
+              {t('questionDock.dismiss', 'Dismiss')}
             </Button>
             <div className="flex items-center gap-2">
               {step > 0 && (

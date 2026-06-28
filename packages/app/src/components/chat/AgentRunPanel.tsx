@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { resolveTaskRunHandoffAgent, type PendingQuestion } from '@open-cowork/shared'
 import type { PendingApproval, TaskRun } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import { AgentRunLane } from './AgentRunLane'
@@ -352,30 +353,30 @@ function AgentRunFilterControls({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
-            Status
+            {t('agentRunPanel.filterStatus', 'Status')}
             <Select
-              label="Status"
+              label={t('agentRunPanel.filterStatus', 'Status')}
               value={state.statusFilter}
               onChange={(value) => update({ statusFilter: value as AgentRunStatusFilter })}
               options={statusOptions.map((option) => ({ value: option.id, label: option.label }))}
             />
           </span>
           <span className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
-            Coworker
+            {t('agentRunPanel.filterCoworker', 'Coworker')}
             <Select
-              label="Coworker"
+              label={t('agentRunPanel.filterCoworker', 'Coworker')}
               value={state.agentFilter}
               onChange={(value) => update({ agentFilter: value })}
               options={[
-                { value: 'all', label: 'All coworkers' },
+                { value: 'all', label: t('agentRunPanel.filterAllCoworkers', 'All coworkers') },
                 ...summary.agents.map((agent) => ({ value: agent.id, label: `${agent.label} (${agent.count})` })),
               ]}
             />
           </span>
           <span className="flex items-center gap-1.5 text-2xs uppercase tracking-[0.08em] text-text-muted">
-            Activity
+            {t('agentRunPanel.filterActivity', 'Activity')}
             <Select
-              label="Activity"
+              label={t('agentRunPanel.filterActivity', 'Activity')}
               value={state.activityFilter}
               onChange={(value) => update({ activityFilter: value as AgentRunActivityFilter })}
               options={activityOptions.map((option) => ({ value: option.id, label: option.label }))}
@@ -383,18 +384,18 @@ function AgentRunFilterControls({
           </span>
           {hasFilters ? (
             <Button type="button" size="sm" variant="ghost" onClick={onReset}>
-              Reset
+              {t('agentRunPanel.filterReset', 'Reset')}
             </Button>
           ) : null}
         </div>
       </div>
       <div className="mt-3 grid grid-cols-6 gap-2 max-[860px]:grid-cols-3 max-[560px]:grid-cols-2">
-        <ScaleMetric label="Showing" value={`${summary.filtered}/${summary.total}`} />
-        <ScaleMetric label="Duration" value={formatDuration(summary.metrics.durationMs)} />
-        <ScaleMetric label="Tools" value={String(summary.metrics.toolCount)} />
-        <ScaleMetric label="Approvals" value={String(summary.metrics.approvalCount)} />
-        <ScaleMetric label="Artifacts" value={String(summary.metrics.artifactCount)} />
-        <ScaleMetric label="Last event" value={formatLastEvent(summary.metrics.lastEventAt)} />
+        <ScaleMetric label={t('agentRunPanel.metricShowing', 'Showing')} value={`${summary.filtered}/${summary.total}`} />
+        <ScaleMetric label={t('agentRunPanel.metricDuration', 'Duration')} value={formatDuration(summary.metrics.durationMs)} />
+        <ScaleMetric label={t('agentRunPanel.metricTools', 'Tools')} value={String(summary.metrics.toolCount)} />
+        <ScaleMetric label={t('agentRunPanel.metricApprovals', 'Approvals')} value={String(summary.metrics.approvalCount)} />
+        <ScaleMetric label={t('agentRunPanel.metricArtifacts', 'Artifacts')} value={String(summary.metrics.artifactCount)} />
+        <ScaleMetric label={t('agentRunPanel.metricLastEvent', 'Last event')} value={formatLastEvent(summary.metrics.lastEventAt)} />
       </div>
     </Card>
   )

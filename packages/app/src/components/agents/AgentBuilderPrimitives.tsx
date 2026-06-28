@@ -280,9 +280,9 @@ export function InferenceTab({
           </div>
           {model ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {model.featured ? <MetaPill tone="accent">Featured</MetaPill> : null}
-              {selection.provider.defaultModel === model.id ? <MetaPill tone="neutral">Default</MetaPill> : null}
-              {model.reasoning ? <MetaPill tone="info">Reasoning</MetaPill> : null}
+              {model.featured ? <MetaPill tone="accent">{t('agentBuilder.modelFeatured', 'Featured')}</MetaPill> : null}
+              {selection.provider.defaultModel === model.id ? <MetaPill tone="neutral">{t('agentBuilder.modelDefault', 'Default')}</MetaPill> : null}
+              {model.reasoning ? <MetaPill tone="info">{t('agentBuilder.modelReasoning', 'Reasoning')}</MetaPill> : null}
               {formatContextLength(model.limit?.context ?? model.contextLength) ? <MetaPill tone="neutral">{formatContextLength(model.limit?.context ?? model.contextLength)}</MetaPill> : null}
               {formatModelCost(model) ? <MetaPill tone="neutral">{formatModelCost(model)}</MetaPill> : null}
             </div>

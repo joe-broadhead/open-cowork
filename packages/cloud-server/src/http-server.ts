@@ -633,9 +633,12 @@ async function handleSse(
   }
   // Drain the catch-up backlog in bounded keyset pages — the initial connect previously
   // loaded the session's entire event history (no retention) into memory in one read.
+  // The authz/getSessionView check ran ONCE above (line ~592); page the backlog with the
+  // guard-free steady-state read (the same path the live replay poll below uses) so each
+  // page doesn't re-run the full membership/session/projection authorization (PERF-4).
   let drainAfter = afterSequence
   for (;;) {
-    const batch = await options.service.listEvents(context.principal, sessionId, drainAfter, SSE_REPLAY_BATCH)
+    const batch = await options.service.listSessionEventsForStream(context.principal.tenantId, sessionId, drainAfter, SSE_REPLAY_BATCH)
     for (const event of batch) writeIfNew(event)
     if (cleaned || batch.length < SSE_REPLAY_BATCH) break
     drainAfter = batch[batch.length - 1]!.sequence
