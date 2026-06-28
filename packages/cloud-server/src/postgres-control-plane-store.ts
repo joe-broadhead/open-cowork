@@ -122,6 +122,7 @@ import type {
   ListChannelIdentitiesInput,
 } from './control-plane-store.ts'
 import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
+import { CLOUD_SSE_NOTIFY_CHANNEL, encodeSsePgNotifyPayload } from './sse-pg-notify.ts'
 import { cloudPostgresPoolPlan, type CloudPostgresPoolConfig } from './postgres-pool-options.ts'
 import { workspaceEventCursorFromRow } from './workspace-event-cursor.ts'
 import { normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
@@ -173,6 +174,10 @@ export type PostgresControlPlaneStoreOptions = {
   connectionString: string
   runMigrations?: boolean
   pool?: PgPool
+  // Opt-in (default off): emit a best-effort Postgres NOTIFY after each session/workspace
+  // event commit so web pods running the LISTEN/NOTIFY accelerator wake the matching SSE
+  // topic immediately instead of waiting for the next poll. Off ⇒ no NOTIFY is issued.
+  ssePgNotify?: boolean
 }
 
 const require = createRequire(import.meta.url)
@@ -197,6 +202,8 @@ export function loadPgPool(connectionString: string): PgPool {
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
   private readonly pool: PgPool
   private readonly ownsPool: boolean
+  // Set by connect() from PostgresControlPlaneStoreOptions.ssePgNotify (default off).
+  private ssePgNotifyEnabled = false
   private readonly identity: PostgresIdentityRepository
   private readonly apiTokens: PostgresApiTokensRepository
   private readonly rateLimits: PostgresRateLimitsRepository
@@ -303,8 +310,20 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   static async connect(options: PostgresControlPlaneStoreOptions) {
     const pool = options.pool || loadPgPool(options.connectionString)
     const store = new PostgresControlPlaneStore(pool, !options.pool)
+    store.ssePgNotifyEnabled = options.ssePgNotify === true
     if (options.runMigrations !== false) await store.runMigrations()
     return store
+  }
+
+  // Best-effort SSE accelerator NOTIFY: ids only (Postgres NOTIFY payloads cap ~8000
+  // bytes), parametrised via pg_notify so the payload is never string-interpolated, and
+  // fire-and-forget — a NOTIFY failure must never fail the already-committed write. No-op
+  // unless the opt-in flag is set.
+  private emitSseNotify(payload: Parameters<typeof encodeSsePgNotifyPayload>[0]) {
+    if (!this.ssePgNotifyEnabled) return
+    void Promise.resolve(
+      this.pool.query('SELECT pg_notify($1, $2)', [CLOUD_SSE_NOTIFY_CHANNEL, encodeSsePgNotifyPayload(payload)]),
+    ).catch(() => {})
   }
 
   async close() {
@@ -1396,7 +1415,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     leaseToken?: string | null
     createdAt?: Date
   }) {
-    return this.withTransaction(async (client) => {
+    const record = await this.withTransaction(async (client) => {
       await this.requireSession(input.tenantId, input.sessionId, client, true)
       await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
       const payload = input.payload || {}
@@ -1423,6 +1442,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       )
       return eventFromRow(inserted.rows[0]!)
     })
+    this.emitSseNotify({ kind: 'session', tenantId: record.tenantId, sessionId: record.sessionId })
+    return record
   }
 
   async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
@@ -1451,7 +1472,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
-    return this.withTransaction(async (client) => {
+    const record = await this.withTransaction(async (client) => {
       await this.requireTenantUser(input.tenantId, input.userId, client)
       if (input.sessionId) {
         const session = await this.requireSession(input.tenantId, input.sessionId, client, true)
@@ -1532,6 +1553,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       )
       return workspaceEventFromRow(inserted.rows[0]!)
     })
+    this.emitSseNotify({ kind: 'workspace', tenantId: record.tenantId, userId: record.userId })
+    return record
   }
 
   async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {

@@ -22,6 +22,9 @@ type SseReplayTopic = {
   // of waiting a full pollMs per page. 0 = unbounded loadEvents (no immediate re-poll).
   batchSize: number
   timer: ReturnType<typeof setInterval>
+  // Optional coarse key shared by every topic that a single Postgres NOTIFY should wake
+  // (see wake()). null ⇒ this topic is poll-only and not addressable by NOTIFY.
+  wakeKey: string | null
 }
 
 type ActiveSseStream = {
@@ -110,6 +113,11 @@ export class CloudSseStreamRegistry {
 
 export class CloudSseReplayHub {
   private readonly topics = new Map<string, SseReplayTopic>()
+  // wakeKey -> set of topic keys sharing it. A single Postgres NOTIFY targets a coarse
+  // wakeKey (tenant/session or tenant/user) and wakes every topic registered under it,
+  // which for sessions can be multiple per-subscriber topics. Pure index over the topics
+  // map; the topic's own key still owns delivery.
+  private readonly wakeIndex = new Map<string, Set<string>>()
   private closed = false
 
   subscribe(
@@ -121,6 +129,10 @@ export class CloudSseReplayHub {
       listener: (event: SequencedSseEvent) => void
       onError?: (error: unknown) => void
       batchSize?: number
+      // Coarse key for the Postgres LISTEN/NOTIFY accelerator (see wake()). When omitted
+      // the topic stays poll-only; NOTIFY cannot address it. Pure optimisation — the poll
+      // loop is unaffected either way.
+      wakeKey?: string
     },
   ) {
     if (this.closed) return () => {}
@@ -136,8 +148,17 @@ export class CloudSseReplayHub {
         timer: setInterval(() => {
           this.requestPoll(input.key)
         }, input.pollMs),
+        wakeKey: input.wakeKey ?? null,
       }
       this.topics.set(input.key, topic)
+      if (topic.wakeKey) {
+        let bucket = this.wakeIndex.get(topic.wakeKey)
+        if (!bucket) {
+          bucket = new Set()
+          this.wakeIndex.set(topic.wakeKey, bucket)
+        }
+        bucket.add(input.key)
+      }
     }
     const subscriber: SseReplaySubscriber = {
       lastSequence: input.afterSequence,
@@ -153,11 +174,32 @@ export class CloudSseReplayHub {
       if (current.subscribers.size > 0) return
       clearInterval(current.timer)
       this.topics.delete(input.key)
+      this.unindexWakeKey(current.wakeKey, input.key)
     }
   }
 
   get topicCount() {
     return this.topics.size
+  }
+
+  // Trigger an immediate read for every topic registered under wakeKey. This is the
+  // Postgres LISTEN/NOTIFY accelerator's only entry point: it just calls requestPoll(),
+  // i.e. an EARLIER run of the topic's existing loadEvents (*ForStream) read. It never
+  // delivers events itself and never bypasses the poll loop, so a missed wake is caught
+  // by the next poll and a duplicate wake is a harmless no-op. Safe to call at any time.
+  wake(wakeKey: string) {
+    if (this.closed) return
+    const keys = this.wakeIndex.get(wakeKey)
+    if (!keys) return
+    for (const key of keys) this.requestPoll(key)
+  }
+
+  private unindexWakeKey(wakeKey: string | null, topicKey: string) {
+    if (!wakeKey) return
+    const bucket = this.wakeIndex.get(wakeKey)
+    if (!bucket) return
+    bucket.delete(topicKey)
+    if (bucket.size === 0) this.wakeIndex.delete(wakeKey)
   }
 
   close() {
@@ -167,6 +209,7 @@ export class CloudSseReplayHub {
       topic.subscribers.clear()
     }
     this.topics.clear()
+    this.wakeIndex.clear()
   }
 
   private requestPoll(key: string) {

@@ -79,6 +79,7 @@ import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
+import { sessionSseWakeKey, workspaceSseWakeKey } from './sse-pg-notify.ts'
 import type {
   SessionEventRecord,
   SessionCommandRecord,
@@ -646,6 +647,9 @@ async function handleSse(
   })
   replayUnsubscribe = options.sseReplayHub?.subscribe({
     key: `session:${context.principal.tenantId}:${context.principal.userId}:${sessionId}`,
+    // Coarse wake key drops the per-subscriber userId so one session NOTIFY wakes every
+    // user watching the session. Inert when the LISTEN/NOTIFY accelerator is off.
+    wakeKey: sessionSseWakeKey(context.principal.tenantId, sessionId),
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
     loadEvents: (sequence) => options.service.listSessionEventsForStream(context.principal.tenantId, sessionId, sequence, SSE_REPLAY_BATCH),
@@ -752,6 +756,9 @@ async function handleWorkspaceSse(
   })
   replayUnsubscribe = options.sseReplayHub?.subscribe({
     key: `workspace:${context.principal.tenantId}:${context.principal.userId}`,
+    // Workspace topics are already per-user, so the wake key equals the topic key.
+    // Inert when the LISTEN/NOTIFY accelerator is off.
+    wakeKey: workspaceSseWakeKey(context.principal.tenantId, context.principal.userId),
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
     loadEvents: (sequence) => options.service.listWorkspaceEventsForStream(context.principal.tenantId, context.principal.userId, sequence, SSE_REPLAY_BATCH),

@@ -31,6 +31,8 @@ import {
   type CloudDesktopAuthConfig,
   type CloudHttpServer,
 } from './http-server.ts'
+import { CloudSseReplayHub } from './sse-replay.ts'
+import { CloudSsePgNotifyListener } from './sse-pg-notify.ts'
 import {
   createCloudObservabilityFromEnv,
   recordCloudLog,
@@ -87,6 +89,11 @@ export { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
 const ALLOW_EPHEMERAL_STORAGE_ENV = 'OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE'
 const RUN_MIGRATIONS_ENV = 'OPEN_COWORK_CLOUD_RUN_MIGRATIONS'
+// Opt-in Postgres LISTEN/NOTIFY accelerator for SSE delivery (audit F1b). Default OFF:
+// with it unset, no LISTEN connection is opened and no NOTIFY is issued — SSE delivery is
+// the unchanged poll loop. ON only wakes the matching SSE topic earlier; polling remains
+// the guaranteed backstop. Postgres-only (the in-memory store path ignores it).
+const SSE_PG_NOTIFY_ENV = 'OPEN_COWORK_CLOUD_SSE_PG_NOTIFY'
 const HEADER_AUTH_SIGNED_HEADERS = [
   'x-open-cowork-tenant-id',
   'x-open-cowork-tenant-name',
@@ -313,6 +320,8 @@ export async function createControlPlaneStoreForCloud(
     return createPostgresControlPlaneStore({
       connectionString: url,
       runMigrations: parseBoolean(envValue(input.env, RUN_MIGRATIONS_ENV), true),
+      // Opt-in NOTIFY-on-write for the SSE LISTEN/NOTIFY accelerator (default off).
+      ssePgNotify: parseBoolean(envValue(input.env, SSE_PG_NOTIFY_ENV), false),
     })
   }
   return new InMemoryControlPlaneStore()
@@ -351,6 +360,8 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     // life of each connection; operators trade delivery latency against control-plane query
     // load. Default 1000 preserves the previous in-server behaviour.
     ssePollIntervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS'), 1000),
+    // Opt-in Postgres LISTEN/NOTIFY accelerator (default OFF). See SSE_PG_NOTIFY_ENV.
+    ssePgNotifyEnabled: parseBoolean(envValue(env, SSE_PG_NOTIFY_ENV), false),
     corsOrigin: envValue(env, 'OPEN_COWORK_CLOUD_CORS_ORIGIN'),
     autoProcessCommands: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS'), true),
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
@@ -1483,8 +1494,19 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     : null
 
   const webhookSecurity = isWorkflowWebhookSecurityStore(store) ? store : undefined
+  // Opt-in Postgres LISTEN/NOTIFY accelerator (audit F1b). Default OFF ⇒ sseReplayHub
+  // stays null, the HTTP server makes its own hub exactly as before, and no LISTEN
+  // connection is opened — SSE delivery is byte-for-byte the unchanged poll loop. ON ⇒ a
+  // shared replay hub is threaded into the HTTP server so the dedicated LISTEN connection
+  // below can wake the matching topic early. Requires a Postgres control plane URL and the
+  // web role (NOTIFY is emitted by the worker write path; LISTEN/SSE live on web pods).
+  const ssePgNotifyEnabled = envOptions.ssePgNotifyEnabled
+    && shouldRunCloudWeb(policy.role)
+    && Boolean(knowledgeControlPlaneUrl)
+  const sseReplayHub = ssePgNotifyEnabled ? new CloudSseReplayHub() : null
   const server = shouldRunCloudWeb(policy.role)
       ? createCloudHttpServer({
+        sseReplayHub: sseReplayHub ?? undefined,
         service,
         artifacts,
         policy,
@@ -1538,6 +1560,15 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     ? await server.listen(options.port ?? envOptions.port, listenHostname)
     : null
 
+  // Dedicated LISTEN connection for the SSE accelerator. Only constructed when the flag is
+  // on (sseReplayHub != null) and the web server exists; it wakes the shared hub when a
+  // worker writes an event. Self-healing (reconnect with backoff) and error-isolated — any
+  // failure degrades to the still-running poll loop, never to broken delivery.
+  const ssePgNotifyListener = sseReplayHub && server && knowledgeControlPlaneUrl
+    ? new CloudSsePgNotifyListener({ connectionString: knowledgeControlPlaneUrl, hub: sseReplayHub })
+    : null
+  ssePgNotifyListener?.start()
+
   return {
     policy,
     store,
@@ -1559,6 +1590,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       ])
       await livenessServer?.close()
       runtimeUnsubscribe?.()
+      // Stop waking before the server (which owns/closes the shared hub) shuts down.
+      await ssePgNotifyListener?.close()
       await server?.close()
       try {
         await observability?.close?.()

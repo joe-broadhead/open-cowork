@@ -32,6 +32,7 @@
     "./workspace-checkpoint-store": "./src/workspace-checkpoint-store.ts",
     "./stub-billing-adapter": "./src/stub-billing-adapter.ts",
     "./sse-replay": "./src/sse-replay.ts",
+    "./sse-pg-notify": "./src/sse-pg-notify.ts",
     "./session-event-bus": "./src/session-event-bus.ts",
     "./services/usage-governance-service": "./src/services/usage-governance-service.ts",
     "./project-source-service": "./src/project-source-service.ts",
