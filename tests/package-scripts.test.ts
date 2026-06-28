@@ -212,6 +212,7 @@ test('root typecheck script covers package, MCP, gateway, and desktop surfaces',
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm build:packages',
     'pnpm design-tokens:build',
+    'pnpm typecheck:cloud-server',
     'pnpm typecheck:mcps',
     'pnpm typecheck:gateway',
     'pnpm typecheck:standalone-gateway',
@@ -219,6 +220,7 @@ test('root typecheck script covers package, MCP, gateway, and desktop surfaces',
     'pnpm --filter @open-cowork/desktop typecheck',
   ])
 
+  assert.equal(requireScript('typecheck:cloud-server'), 'pnpm --filter @open-cowork/cloud-server typecheck')
   assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
   assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
   assert.equal(requireScript('typecheck:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway typecheck')

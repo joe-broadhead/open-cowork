@@ -11,7 +11,9 @@ type SseReplaySubscriber = {
 
 type SseReplayTopic = {
   subscribers: Set<SseReplaySubscriber>
-  loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
+  // Loaders may resolve synchronously (in-memory store) or asynchronously
+  // (postgres store); the poll loop awaits the result, so both are accepted.
+  loadEvents: (afterSequence: number) => SequencedSseEvent[] | Promise<SequencedSseEvent[]>
   lastSequence: number
   polling: boolean
   pollRequested: boolean
@@ -115,7 +117,7 @@ export class CloudSseReplayHub {
       key: string
       afterSequence: number
       pollMs: number
-      loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
+      loadEvents: (afterSequence: number) => SequencedSseEvent[] | Promise<SequencedSseEvent[]>
       listener: (event: SequencedSseEvent) => void
       onError?: (error: unknown) => void
       batchSize?: number

@@ -103,6 +103,12 @@ importers:
         specifier: ^6.4.3
         version: 6.4.3(vega@6.2.0)
     devDependencies:
+      '@open-cowork/app':
+        specifier: workspace:*
+        version: link:../../packages/app
+      '@open-cowork/cloud-server':
+        specifier: workspace:*
+        version: link:../../packages/cloud-server
       '@open-cowork/runtime-host':
         specifier: workspace:*
         version: link:../../packages/runtime-host
@@ -471,6 +477,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1054.0
         version: 3.1054.0
+      '@open-cowork/app':
+        specifier: workspace:*
+        version: link:../app
       '@open-cowork/cloud-client':
         specifier: workspace:*
         version: link:../cloud-client
