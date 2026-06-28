@@ -376,16 +376,21 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(health.ok, true)
     assert.equal(health.role, 'all-in-one')
 
-    const htmlResponse = await fetch(`${baseUrl}/`)
-    assert.equal(htmlResponse.status, 200)
-    assert.match(htmlResponse.headers.get('content-type') || '', /text\/html/)
-    const html = await htmlResponse.text()
-    // GET / now serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
-    // bespoke website is gone), not a server-rendered website shell. Assert the
-    // renderer markers: hashed assets mounted under /app/assets and the bootstrap
-    // blob injected into <script id="cowork-bootstrap">.
-    assert.match(html, /\/app\/assets\//)
-    assert.match(html, /id="cowork-bootstrap"/)
+    // GET / serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
+    // bespoke website is gone), not a server-rendered website shell. This needs
+    // the browser renderer build present; CI builds it before the suite (the
+    // cloud-surface gate). When it's absent locally, GET / returns 404 — assert
+    // the markers only when the build exists, mirroring the /app test below.
+    if (browserRendererBuildExists()) {
+      const htmlResponse = await fetch(`${baseUrl}/`)
+      assert.equal(htmlResponse.status, 200)
+      assert.match(htmlResponse.headers.get('content-type') || '', /text\/html/)
+      const html = await htmlResponse.text()
+      // Renderer markers: hashed assets mounted under /app/assets and the
+      // bootstrap blob injected into <script id="cowork-bootstrap">.
+      assert.match(html, /\/app\/assets\//)
+      assert.match(html, /id="cowork-bootstrap"/)
+    }
 
     const config = await readJson(await fetch(`${baseUrl}/api/config`))
     assert.equal(config.profileName, 'full')

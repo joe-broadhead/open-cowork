@@ -11,10 +11,9 @@
 // module the Electron build loads — it speaks `fetch`/`EventSource`, not IPC.
 //
 // Design notes:
-//   * Self-contained transport. We deliberately re-implement the minimal
-//     fetch/CSRF/401 + SSE helpers (mirroring `apps/website/src/app-api.ts`)
-//     rather than import from `apps/website`, so `apps/desktop` never takes a
-//     hard build dependency on `apps/website`.
+//   * Self-contained transport. The minimal fetch/CSRF/401 + SSE helpers live
+//     here so the renderer's browser build depends only on the cloud HTTP API
+//     surface, never on a server-side package.
 //   * Envelope (un)wrapping. The cloud routes return data in their own
 //     envelopes (`{ providers }`, `{ session, projection, view }`, …); each
 //     method unwraps/rewraps to the shape `CoworkAPI` declares.
@@ -88,9 +87,10 @@ import {
 
 /**
  * The minimal shape of the server-embedded bootstrap blob this adapter reads.
- * The cloud server renders it into the page (the website reads the same blob
- * via `#open-cowork-cloud-bootstrap`). We only need the endpoint registry and
- * the per-session SSE event types; everything else is ignored here.
+ * The cloud server renders it into `<script id="cowork-bootstrap">` (see
+ * packages/cloud-server/src/browser-renderer-app.ts). We only need the optional
+ * endpoint registry, the per-session SSE event types, and an optional CSRF
+ * token; everything else is ignored here.
  */
 export type BrowserCoworkApiBootstrap = {
   api?: Array<{ id: string; path: string }>
@@ -197,7 +197,10 @@ function browserUnavailable(name: string): never {
 
 function readBootstrapFromWindow(): BrowserCoworkApiBootstrap | null {
   if (typeof document === 'undefined') return null
-  const node = document.getElementById('open-cowork-cloud-bootstrap')
+  // The cloud server injects the bootstrap blob into <script id="cowork-bootstrap">
+  // (see packages/cloud-server/src/browser-renderer-app.ts). browser-main.tsx
+  // normally reads it and passes it in; this is the no-arg fallback.
+  const node = document.getElementById('cowork-bootstrap')
   if (!node?.textContent) return null
   try {
     return JSON.parse(node.textContent) as BrowserCoworkApiBootstrap
@@ -206,19 +209,20 @@ function readBootstrapFromWindow(): BrowserCoworkApiBootstrap | null {
   }
 }
 
-function readCsrfFromWindow(): string | null {
-  if (typeof window === 'undefined') return null
-  const candidate = (window as unknown as { __OPEN_COWORK_CSRF_TOKEN__?: unknown }).__OPEN_COWORK_CSRF_TOKEN__
-  return typeof candidate === 'string' && candidate ? candidate : null
-}
-
 /**
  * Build the self-contained transport: a `request` (fetch + CSRF + 401) and a
  * `stream` (EventSource) bound to the resolved endpoint registry. Mirrors the
  * patterns in `apps/website/src/app-api.ts` so behaviour matches the website.
  */
-function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
-  let csrfToken: string | null = bootstrap.csrfToken ?? readCsrfFromWindow()
+// Exported for white-box transport tests (CSRF fetch/attach/retry). Not part of
+// the public CoworkAPI surface — callers use createBrowserCoworkApi.
+export function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
+  // CSRF: the cloud uses double-submit CSRF. The token is NOT carried in the
+  // bootstrap; we fetch it from /auth/me at runtime (the server's intended
+  // design) and send it as x-csrf-token on every mutation. Without this, an
+  // authenticated cookie/OIDC deployment rejects every mutating request 403.
+  let csrfToken: string | null = bootstrap.csrfToken ?? null
+  let csrfPromise: Promise<void> | null = null
 
   const registry = new Map<string, string>()
   for (const [id, path] of Object.entries(DEFAULT_ENDPOINTS)) registry.set(id, path)
@@ -252,7 +256,7 @@ function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
     return text ? `${path}?${text}` : path
   }
 
-  const request = async <T = unknown>(path: string, options: RequestOptions = {}): Promise<T> => {
+  const rawRequest = async <T = unknown>(path: string, options: RequestOptions = {}): Promise<T> => {
     const hasBody = options.body !== undefined
     const response = await fetch(path, {
       method: options.method || (hasBody ? 'POST' : 'GET'),
@@ -299,14 +303,49 @@ function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
     return JSON.parse(text) as T
   }
 
+  // Fetch the double-submit CSRF token from /auth/me (a GET, so it carries no
+  // token itself). Memoized so concurrent first mutations share one fetch; the
+  // memo is reset to force a refetch after a 403. The ephemeral auth=none cloud
+  // returns csrfToken:null and does not enforce CSRF, so a null token is fine.
+  const fetchCsrf = async () => {
+    try {
+      const me = await rawRequest<{ csrfToken?: string | null }>(endpoint('authMe'), { method: 'GET' })
+      csrfToken = typeof me?.csrfToken === 'string' && me.csrfToken ? me.csrfToken : null
+    } catch {
+      // Leave csrfToken null; a subsequent mutation 403 triggers a retry.
+    }
+  }
+  const ensureCsrf = () => {
+    if (!csrfPromise) csrfPromise = fetchCsrf()
+    return csrfPromise
+  }
+
+  const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+  const request = async <T = unknown>(path: string, options: RequestOptions = {}): Promise<T> => {
+    const method = options.method || (options.body !== undefined ? 'POST' : 'GET')
+    if (MUTATING_METHODS.has(method) && csrfToken === null) await ensureCsrf()
+    try {
+      return await rawRequest<T>(path, { ...options, method })
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status
+      // A 403 on a mutation usually means a stale/absent CSRF token — refetch it
+      // once and retry. (401 is handled in rawRequest: redirect to login.)
+      if (status === 403 && MUTATING_METHODS.has(method)) {
+        csrfPromise = null
+        csrfToken = null
+        await ensureCsrf()
+        return await rawRequest<T>(path, { ...options, method })
+      }
+      throw error
+    }
+  }
+
   return {
     request,
     endpoint,
     withQuery,
     sessionEventTypes,
-    setCsrfToken: (token: string | null) => {
-      csrfToken = token || null
-    },
   }
 }
 

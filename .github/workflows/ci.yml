@@ -78,6 +78,13 @@ jobs:
       - name: Lint (a11y)
         run: pnpm lint:a11y --max-warnings=0
 
+      # Build the unified renderer's browser bundle before the test suite so the
+      # cloud-surface gate runs: the cloud-serving tests assert GET / serves the
+      # SPA (needs packages/app/dist-browser), and this is the only place the
+      # served renderer + its CSRF/auth transport are exercised in CI.
+      - name: Build unified renderer (browser) for cloud-surface tests
+        run: pnpm build:shared && pnpm --filter @open-cowork/ui build && pnpm --filter @open-cowork/app build:browser
+
       - name: Test
         run: pnpm test
 
