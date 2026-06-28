@@ -380,10 +380,12 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(htmlResponse.status, 200)
     assert.match(htmlResponse.headers.get('content-type') || '', /text\/html/)
     const html = await htmlResponse.text()
-    assert.match(html, /Open Cowork Cloud/)
-    assert.match(html, /\/api\/workspace/)
-    assert.match(html, /\/api\/byok/)
-    assert.match(html, /\/api\/api-tokens/)
+    // GET / now serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
+    // bespoke website is gone), not a server-rendered website shell. Assert the
+    // renderer markers: hashed assets mounted under /app/assets and the bootstrap
+    // blob injected into <script id="cowork-bootstrap">.
+    assert.match(html, /\/app\/assets\//)
+    assert.match(html, /id="cowork-bootstrap"/)
 
     const config = await readJson(await fetch(`${baseUrl}/api/config`))
     assert.equal(config.profileName, 'full')
@@ -3520,24 +3522,30 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
     const html = await fetch(`${baseUrl}/`, {
       headers: { origin: 'https://app.example.test' },
     })
+    // Build-independent security/CORS headers apply to every response (including the
+    // 404 when the renderer build is absent in this lane).
     assert.equal(html.headers.get('access-control-allow-origin'), 'https://app.example.test')
     assert.equal(html.headers.get('access-control-allow-credentials'), null)
     assert.equal(html.headers.get('vary'), 'Origin')
     assert.equal(html.headers.get('x-content-type-options'), 'nosniff')
     assert.equal(html.headers.get('referrer-policy'), 'no-referrer')
     assert.equal(html.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains')
-    const csp = html.headers.get('content-security-policy') || ''
-    assert.match(csp, /script-src 'self' 'nonce-/)
-    assert.match(csp, /font-src 'self'/)
-    assert.match(csp, /object-src 'none'/)
-    // Scripts stay locked to nonce'd <script> — no inline script execution.
-    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
-    // <style> elements stay nonce-locked; only inline style ATTRIBUTES are
-    // allowed (style-src-attr), which the design system needs for dynamic
-    // per-entity theming (--entity-chroma / --studio-tone / --spine). A style
-    // attribute cannot carry a nonce and cannot execute script.
-    assert.match(csp, /style-src 'self' 'nonce-/)
-    assert.match(csp, /style-src-attr 'unsafe-inline'/)
+    // GET / now serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
+    // bespoke website is gone), identical to /app. Its CSP is relaxed for the
+    // runtime-injected <style> element but stays script-strict. Gate the CSP body
+    // assertions on the renderer build, which isn't produced in every CI lane.
+    if (browserRendererBuildExists()) {
+      assert.equal(html.status, 200)
+      const csp = html.headers.get('content-security-policy') || ''
+      // RELAXED for the runtime-injected <style> element: style-src has 'unsafe-inline'.
+      assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+      assert.match(csp, /style-src-attr 'unsafe-inline'/)
+      assert.match(csp, /font-src 'self'/)
+      assert.match(csp, /object-src 'none'/)
+      // Scripts stay strict — external hashed modules only, NO inline script execution.
+      assert.match(csp, /script-src 'self'/)
+      assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    }
 
     const mismatched = await fetch(`${baseUrl}/api/config`, {
       headers: { origin: 'https://evil.example.test' },
@@ -3549,48 +3557,11 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
   }
 })
 
-test('cloud HTTP server serves only allow-listed Cloud Web font assets', async () => {
-  const fixture = createFixture()
-  const baseUrl = await fixture.server.listen()
-  try {
-    for (const fontName of [
-      'mona-sans-latin-wght-normal.woff2',
-      'schibsted-grotesk-latin-wght-normal.woff2',
-    ]) {
-      const font = await fetch(`${baseUrl}/assets/fonts/${fontName}`)
-      assert.equal(font.status, 200)
-      assert.equal(font.headers.get('content-type'), 'font/woff2')
-      assert.equal(font.headers.get('cache-control'), 'public, max-age=86400')
-      assert.ok((await font.arrayBuffer()).byteLength > 1024, `${fontName} response has woff2 bytes`)
-    }
-
-    const unknown = await fetch(`${baseUrl}/assets/fonts/not-a-font.woff2`)
-    assert.equal(unknown.status, 404)
-    assert.match(JSON.stringify(await readJson(unknown)), /not found/i)
-
-    const traversal = await fetch(`${baseUrl}/assets/fonts/..%2Fpackage.json`)
-    assert.equal(traversal.status, 404)
-  } finally {
-    await fixture.server.close()
-  }
-})
-
-test('cloud HTTP server serves the allow-listed Cloud Web React client asset', async () => {
-  const fixture = createFixture()
-  const baseUrl = await fixture.server.listen()
-  try {
-    const asset = await fetch(`${baseUrl}/assets/open-cowork-cloud-react.js`)
-    assert.equal(asset.status, 200)
-    assert.equal(asset.headers.get('content-type'), 'application/javascript; charset=utf-8')
-    assert.equal(asset.headers.get('cache-control'), 'no-store')
-    assert.match(await asset.text(), /open-cowork-cloud-react-root|cloud-react-probe|reactStatus/)
-
-    const unknown = await fetch(`${baseUrl}/assets/not-the-react-client.js`)
-    assert.equal(unknown.status, 404)
-  } finally {
-    await fixture.server.close()
-  }
-})
+// The unified renderer ships its OWN fonts as hashed /app/assets/*.woff2 files (served
+// by browser-renderer-app.ts). The bespoke website's /assets/fonts/* route and its
+// react-client /assets/*.js route are gone with the website — the renderer is the only
+// UI the cloud serves. Unknown static paths now fall through to the auth/API pipeline
+// (they 404/401 there), so there is no dedicated font/react-client serving test.
 
 // The unified renderer browser build (apps/desktop/dist-browser) is not produced in
 // every CI lane, so gate on its presence — but assert the full route wiring (the
@@ -3643,28 +3614,38 @@ test('cloud HTTP server serves the unified renderer at /app with a script-strict
   }
 })
 
-test('cloud HTTP server serves the unified renderer at / when OPEN_COWORK_CLOUD_UNIFIED_UI is enabled (reversible cutover)', {
+// Permanent cutover: GET / (and /index.html) is now the UNIFIED RENDERER, identical
+// to /app — the bespoke website is deleted and the renderer is the only UI the cloud
+// serves. (The old OPEN_COWORK_CLOUD_UNIFIED_UI reversible-cutover flag is gone; the
+// renderer is always on.) Gated on the renderer build, which isn't built in every lane.
+test('cloud HTTP server serves the unified renderer as the default route (/, /index.html) identically to /app', {
   skip: browserRendererBuildExists() ? false : 'apps/desktop/dist-browser is not built',
 }, async () => {
-  const previous = process.env.OPEN_COWORK_CLOUD_UNIFIED_UI
-  process.env.OPEN_COWORK_CLOUD_UNIFIED_UI = 'true'
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
   try {
-    const root = await fetch(`${baseUrl}/`)
-    assert.equal(root.status, 200)
-    const body = await root.text()
-    // Flag on: GET / serves the unified renderer SPA (references /app/assets + the
-    // bootstrap tag) with the relaxed-but-script-strict CSP, NOT the website SSR.
-    assert.match(body, /\/app\/assets\//)
-    assert.match(body, /id="cowork-bootstrap"/)
-    const csp = root.headers.get('content-security-policy') || ''
-    assert.match(csp, /style-src 'self' 'unsafe-inline'/)
-    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    for (const path of ['/', '/index.html']) {
+      const root = await fetch(`${baseUrl}${path}`)
+      assert.equal(root.status, 200, `${path} serves the renderer SPA`)
+      assert.match(root.headers.get('content-type') || '', /text\/html/)
+      const body = await root.text()
+      // The renderer SPA references its hashed assets under /app/assets and carries
+      // the bootstrap tag the browser shim reads at runtime.
+      assert.match(body, /\/app\/assets\//)
+      assert.match(body, /id="cowork-bootstrap"/)
+      const csp = root.headers.get('content-security-policy') || ''
+      // Relaxed-but-script-strict CSP, same as /app (NOT a nonce'd website SSR shell).
+      assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+      assert.match(csp, /script-src 'self'/)
+      assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    }
+
+    // / and /app serve byte-identical documents (same browserRendererHtml output).
+    const rootBody = await (await fetch(`${baseUrl}/`)).text()
+    const appBody = await (await fetch(`${baseUrl}/app`)).text()
+    assert.equal(rootBody, appBody, '/ and /app serve the same renderer document')
   } finally {
     await fixture.server.close()
-    if (previous === undefined) delete process.env.OPEN_COWORK_CLOUD_UNIFIED_UI
-    else process.env.OPEN_COWORK_CLOUD_UNIFIED_UI = previous
   }
 })
 

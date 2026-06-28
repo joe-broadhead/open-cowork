@@ -17,7 +17,6 @@ type KnipJson = {
 const repoRoot = new URL('../', import.meta.url)
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
 const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
-const websitePackageJson = JSON.parse(readFileSync(new URL('../apps/website/package.json', import.meta.url), 'utf8')) as PackageJson
 const knipJson = JSON.parse(readFileSync(new URL('../knip.json', import.meta.url), 'utf8')) as KnipJson
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', import.meta.url), 'utf8')
@@ -52,7 +51,6 @@ test('root node test scripts prepare generated shared artifacts before tests run
   assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
     'pnpm build:shared',
     'pnpm design-tokens:build',
-    'pnpm build:website',
     'node scripts/ensure-electron-binary.mjs',
   ])
 
@@ -62,7 +60,6 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
-    'pnpm --filter @open-cowork/website test',
     'node scripts/run-node-tests.mjs',
   ])
 
@@ -72,7 +69,6 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
-    'pnpm --filter @open-cowork/website test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/run-workspace-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
@@ -85,32 +81,6 @@ test('root node test scripts prepare generated shared artifacts before tests run
   ])
 
   assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/desktop test:coverage:renderer')
-
-  assert.deepEqual(splitScriptSteps(requireScript('test:cloud-web')), [
-    'pnpm --filter @open-cowork/website build',
-    'pnpm --filter @open-cowork/website test:browser:run',
-    'pnpm --filter @open-cowork/website test:a11y:run',
-    'pnpm --filter @open-cowork/website perf:check:run',
-  ])
-  assert.deepEqual(splitScriptSteps(requireScript('test:browser', websitePackageJson)), [
-    'pnpm run build',
-    'pnpm run test:browser:run',
-  ])
-  assert.deepEqual(splitScriptSteps(requireScript('test:a11y', websitePackageJson)), [
-    'pnpm --filter @open-cowork/shared build',
-    'pnpm --filter @open-cowork/ui build',
-    'pnpm run test:a11y:run',
-  ])
-  assert.deepEqual(splitScriptSteps(requireScript('perf:check', websitePackageJson)), [
-    'pnpm --filter @open-cowork/shared build',
-    'pnpm --filter @open-cowork/ui build',
-    'pnpm run perf:check:run',
-  ])
-  assert.equal(requireScript('test:browser:dom', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts')
-  assert.equal(requireScript('test:browser:real', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-real-e2e.spec.ts')
-  assert.equal(requireScript('test:browser:run', websitePackageJson), 'pnpm run test:browser:dom && pnpm run test:browser:real')
-  assert.equal(requireScript('test:a11y:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/accessibility.test.ts')
-  assert.equal(requireScript('perf:check:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/performance.test.ts')
 })
 
 test('root lint script runs all release gate checks', () => {
@@ -200,7 +170,6 @@ test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:packages'), 'pnpm --workspace-concurrency=1 --filter=./packages/* build')
   assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
   assert.equal(requireScript('build:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway build')
-  assert.equal(requireScript('build:website'), 'pnpm --filter @open-cowork/website build')
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm build:packages',
@@ -208,7 +177,6 @@ test('root build and dist scripts preserve release build prerequisites', () => {
     'pnpm build:mcps',
     'pnpm build:gateway',
     'pnpm build:standalone-gateway',
-    'pnpm build:website',
     'pnpm --filter @open-cowork/desktop build',
   ])
 
@@ -237,14 +205,13 @@ test('desktop direct scripts prepare generated tokens and shared UI artifacts', 
   ])
 })
 
-test('root typecheck script covers package, MCP, gateway, website, and desktop surfaces', () => {
+test('root typecheck script covers package, MCP, gateway, and desktop surfaces', () => {
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm build:packages',
     'pnpm design-tokens:build',
     'pnpm typecheck:mcps',
     'pnpm typecheck:gateway',
     'pnpm typecheck:standalone-gateway',
-    'pnpm typecheck:website',
     'pnpm --filter @open-cowork/desktop build:electron',
     'pnpm --filter @open-cowork/desktop typecheck',
   ])
@@ -252,7 +219,6 @@ test('root typecheck script covers package, MCP, gateway, website, and desktop s
   assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
   assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
   assert.equal(requireScript('typecheck:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway typecheck')
-  assert.equal(requireScript('typecheck:website'), 'pnpm --filter @open-cowork/website typecheck')
 })
 
 test('packaged e2e script fails before smoke discovery without a packaged executable', () => {
@@ -306,7 +272,6 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm lint',
     'pnpm test',
     'pnpm test:live-scenarios',
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
     'pnpm typecheck',
@@ -342,7 +307,6 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm typecheck',
     'pnpm test',
     'pnpm test:live-scenarios',
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
     'pnpm perf:check',

@@ -84,9 +84,6 @@ jobs:
       - name: Live scenario evidence
         run: pnpm test:live-scenarios
 
-      - name: Cloud Web Workbench browser readiness gates
-        run: pnpm test:cloud-web
-
       - name: Renderer component tests
         run: pnpm test:renderer
 
@@ -96,7 +93,7 @@ jobs:
       - name: Performance gate
         run: pnpm perf:check
 
-      - name: Build all (packages, MCPs, gateway, website, desktop)
+      - name: Build all (packages, MCPs, gateway, desktop)
         run: pnpm build
 
       - name: Cloud bundle build

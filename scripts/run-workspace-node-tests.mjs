@@ -9,7 +9,6 @@ const explicitTestFiles = inputArgs.filter((entry) => entry !== '--coverage')
 const testRoots = [
   'apps/gateway/src',
   'apps/standalone-gateway/src',
-  'apps/website/src',
   'mcps/agents/tests',
   'mcps/charts/tests',
   'mcps/clock/tests',

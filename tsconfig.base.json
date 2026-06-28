@@ -32,8 +32,6 @@
       "@open-cowork/runtime-host/*": ["./packages/runtime-host/src/*"],
       "@open-cowork/cloud-server": ["./packages/cloud-server/src/index.ts"],
       "@open-cowork/cloud-server/*": ["./packages/cloud-server/src/*"],
-      "@open-cowork/website": ["./apps/website/src/render.ts"],
-      "@open-cowork/website/*": ["./apps/website/src/*"],
       "@open-cowork/ui": ["./packages/ui/src/index.ts"],
       "@open-cowork/ui/app-api": ["./packages/ui/src/AppApiProvider.tsx"],
       "@open-cowork/ui/badge": ["./packages/ui/src/Badge.tsx"],

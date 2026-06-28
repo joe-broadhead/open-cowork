@@ -24,9 +24,6 @@ const WORKSPACE_SOURCE_INVENTORY = {
     // Keep library modules in the ratchet; exclude the executable entrypoint
     // and type-only output that cannot be meaningfully imported in Node tests.
     { path: 'apps/standalone-gateway/dist', extensions: ['.js', '.mjs'], excludeFileNames: ['main.js', 'types.js'] },
-    // Workspace Node uses Node's strip-types runner, which cannot load TSX.
-    // Cloud Web TSX is covered by the browser/Vite gates instead.
-    { path: 'apps/website/src', extensions: ['.ts'] },
     { path: 'mcps/agents/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/charts/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/clock/dist', extensions: ['.js', '.mjs'] },
@@ -64,7 +61,6 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
   includePathPrefixes: [
     'apps/gateway/dist/',
     'apps/standalone-gateway/dist/',
-    'apps/website/src/',
     'mcps/agents/dist/',
     'mcps/charts/dist/',
     'mcps/clock/dist/',

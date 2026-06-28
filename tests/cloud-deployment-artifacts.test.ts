@@ -131,7 +131,6 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /GET \/api\/metrics/)
   assert.match(docs, /web app at `\/`/)
   assert.match(docs, /Cloud Web Workbench readiness gates/)
-  assert.match(docs, /pnpm test:cloud-web/)
   assert.match(docs, /createHttpSseCloudTransportAdapter/)
   assert.match(docs, /Generic Docker: Cloud \+ Gateway/)
   assert.match(docs, /docker-compose\.cloud-gateway\.yml/)
@@ -722,19 +721,17 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
   const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')
   const buildScript = readRepoFile('scripts/build-cloud.mjs')
-  const browserApp = readRepoFile('packages/cloud-server/src/browser-app.ts')
-  const websitePackage = readRepoFile('apps/website/package.json')
 
   assert.match(buildScript, /cloudElectronShimPlugin/)
   assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
   assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
-  // The desktop/cloud host consumes the website SSR renderer through the declared
-  // @open-cowork/website package boundary (resolved to source, bundled by the cloud
-  // esbuild build) rather than a relative cross-app reach into apps/website/src.
-  assert.match(browserApp, /@open-cowork\/website/)
-  assert.match(websitePackage, /"test:browser"/)
-  assert.match(websitePackage, /"test:a11y"/)
-  assert.match(websitePackage, /"perf:check"/)
+  // The cloud serves the UNIFIED RENDERER (the one-UI-codebase cutover): build-cloud
+  // builds the desktop browser renderer and copies it next to the cloud entry under
+  // ./browser-renderer/, the location packages/cloud-server/src/browser-renderer-app.ts
+  // resolves at runtime. The bespoke website is gone, so there is no website build step.
+  assert.match(buildScript, /--filter', '@open-cowork\/desktop', 'build:browser/)
+  assert.match(buildScript, /browser-renderer/)
+  assert.doesNotMatch(buildScript, /@open-cowork\/website/)
 
   assert.match(dockerfile, /pnpm install --frozen-lockfile/)
   assert.match(dockerfile, /pnpm install --frozen-lockfile --prod/)
@@ -1108,7 +1105,6 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(workflow, /helm lint helm\/open-cowork-gateway/)
   assert.match(workflow, /helm template open-cowork-gateway helm\/open-cowork-gateway/)
   assert.match(workflow, /pnpm deploy:validate -- --require-tools/)
-  assert.match(workflow, /pnpm test:cloud-web/)
 
   const smoke = readRepoFile('scripts/ci-cloud-compose-smoke.sh')
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" up --build -d/)

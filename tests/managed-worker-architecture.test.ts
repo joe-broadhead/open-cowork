@@ -198,7 +198,6 @@ test('managed worker client and route boundaries do not import OpenCode SDK', ()
     'packages/cloud-server/src/http-routes',
     'packages/cloud-server/src/control-plane-domains',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const sdkImportPattern = /@opencode-ai\/sdk|opencode-ai/

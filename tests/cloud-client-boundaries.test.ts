@@ -87,7 +87,6 @@ test('first-party client surfaces stay on public cloud-client/shared boundaries'
     'apps/desktop/src/preload',
     'apps/desktop/src/renderer',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [

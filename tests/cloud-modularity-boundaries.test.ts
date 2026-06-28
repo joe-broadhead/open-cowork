@@ -223,7 +223,6 @@ test('client surfaces do not import server-only cloud internals', () => {
   const checkedRoots = [
     'apps/desktop/src/renderer',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [

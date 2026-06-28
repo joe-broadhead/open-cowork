@@ -22,7 +22,6 @@ const sourceRoots = [
   'apps/desktop/src/renderer',
   'apps/gateway/src',
   'apps/standalone-gateway/src',
-  'apps/website/src',
   'packages',
 ] as const
 

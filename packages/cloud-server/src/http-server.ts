@@ -1,14 +1,12 @@
 import { createSqliteKnowledgeStore } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import { InMemoryWorkflowWebhookSecurityStore, WebhookHttpError, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { CLOUD_SESSION_EVENT_TYPES, emptySessionImportItemCounts, createCloudProjectionFenceToken, isCloudSessionEventType, normalizeCloudProjectSource, type CloudProjectionFenceToken, type CloudSessionEventType, type CloudProjectSourceInput, type PublicBrandingConfig, type SessionImportRequest, type WorkflowDraft, type WorkflowStatus, type WorkflowTriggerType, type KnowledgeStore } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
-import { cloudBrowserAppHtml } from './browser-app.ts'
 import {
   BROWSER_RENDERER_ASSET_CACHE_CONTROL,
-  browserRendererBuildExists,
   browserRendererHtml,
   getBrowserRendererAsset,
   isBrowserRendererAssetPath,
@@ -56,7 +54,6 @@ import {
   writeBrowserRendererHtml,
   writeCorsHeaders,
   writeError,
-  writeHtml,
   writeJson,
   writePolicyError,
   writeRedirect,
@@ -82,7 +79,6 @@ import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
-import { resolveCloudWebStaticAsset } from './web-static-assets.ts'
 import type {
   SessionEventRecord,
   SessionCommandRecord,
@@ -1661,32 +1657,13 @@ export class CloudHttpServer {
         return
       }
 
-      if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
-        // Reversible cutover: when OPEN_COWORK_CLOUD_UNIFIED_UI is enabled, the
-        // default route serves the UNIFIED RENDERER (the one-UI-codebase build,
-        // same as /app) instead of the bespoke website. The website code is left
-        // intact — flip the flag off to revert. The permanent cutover (later)
-        // deletes the website and makes the unified renderer the only path.
-        const unifiedDefault = process.env.OPEN_COWORK_CLOUD_UNIFIED_UI === 'true'
-          || process.env.OPEN_COWORK_CLOUD_UNIFIED_UI === '1'
-        if (unifiedDefault && browserRendererBuildExists()) {
-          const html = browserRendererHtml({ sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES] })
-          if (html !== null) {
-            writeBrowserRendererHtml(res, 200, html, requestOptions.corsOrigin)
-            return
-          }
-        }
-        const nonce = randomBytes(16).toString('base64url')
-        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), requestOptions.corsOrigin, nonce)
-        return
-      }
-
-      // ADDITIVE: serve the UNIFIED RENDERER browser build (apps/desktop/dist-browser)
-      // under /app so the cloud URL itself runs the desktop renderer. The website at
-      // GET / above is unchanged; /app is for verification + the eventual cutover.
-      // Served with a relaxed-but-script-strict CSP (writeBrowserRendererHtml) because
-      // the SPA injects its surface stylesheet via a runtime-created <style> element.
-      if ((url.pathname === '/app' || url.pathname === '/app/') && req.method === 'GET') {
+      // The DEFAULT route (and /app below) both serve the UNIFIED RENDERER browser
+      // build (apps/desktop/dist-browser) — the one-UI-codebase cutover, so the cloud
+      // URL itself runs the same renderer as the Electron app. The bespoke website is
+      // gone; the renderer is the only UI the cloud serves. Both routes use the
+      // relaxed-but-script-strict CSP (writeBrowserRendererHtml) because the SPA injects
+      // its surface stylesheet via a runtime-created <style> element.
+      if ((url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/app' || url.pathname === '/app/') && req.method === 'GET') {
         // Minimal bootstrap: the shim derives the same-origin endpoint base from
         // window.location and reads the CSRF token from /auth/me at runtime, so only
         // the session event types are worth embedding (trivially available here).
@@ -1707,18 +1684,6 @@ export class CloudHttpServer {
         }
         writeError(res, 404, 'Unified renderer asset was not found.', requestOptions.corsOrigin)
         return
-      }
-
-      if (req.method === 'GET') {
-        const asset = resolveCloudWebStaticAsset(url.pathname)
-        if (asset?.status === 'ok') {
-          writeBinary(res, asset.body, asset.contentType, asset.cacheControl, requestOptions.corsOrigin)
-          return
-        }
-        if (asset) {
-          writeError(res, 404, asset.message, requestOptions.corsOrigin)
-          return
-        }
       }
 
       if (url.pathname === '/livez' || url.pathname === '/healthz') {

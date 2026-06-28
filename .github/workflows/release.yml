@@ -117,9 +117,6 @@ jobs:
       - name: Live scenario evidence
         run: pnpm test:live-scenarios
 
-      - name: Cloud Web Workbench browser readiness gates
-        run: pnpm test:cloud-web
-
       - name: Desktop Web Gateway continuation gates
         run: pnpm test:cloud-continuation
 

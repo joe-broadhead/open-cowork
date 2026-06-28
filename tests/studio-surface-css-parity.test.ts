@@ -61,16 +61,6 @@ const SINGLE_SOURCED_PREFIXES = [
 
 const sharedCss = readFileSync(join(root, 'packages/ui/src/surface-styles.ts'), 'utf8')
 const desktopCss = readFileSync(join(root, 'apps/desktop/src/renderer/styles/globals.css'), 'utf8')
-const websiteStyleCss = [
-  'styles.ts',
-  'style-studio-ui.ts',
-  'style-studio-primitives.ts',
-  'style-primitives.ts',
-  'style-artifacts.ts',
-  'style-components.ts',
-  'style-chat.ts',
-  'style-layout.ts',
-].map((file) => readFileSync(join(root, 'apps/website/src', file), 'utf8')).join('\n')
 
 for (const prefix of SINGLE_SOURCED_PREFIXES) {
   test(`shared @open-cowork/ui surface CSS is the single source for ${prefix}`, () => {
@@ -81,10 +71,6 @@ for (const prefix of SINGLE_SOURCED_PREFIXES) {
     assert.ok(
       !desktopCss.includes(prefix),
       `${prefix} is consolidated — it must not be re-defined in apps/desktop globals.css`,
-    )
-    assert.ok(
-      !websiteStyleCss.includes(prefix),
-      `${prefix} is consolidated — it must not be re-defined in the website style-*.ts files`,
     )
   })
 }

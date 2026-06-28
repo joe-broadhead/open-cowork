@@ -10,8 +10,6 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs')
 const migrateOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs')
 const knowledgeMcpOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/mcp-knowledge.mjs')
-const cloudAssetsDir = resolve(repoRoot, 'apps/desktop/dist/cloud/assets')
-const cloudReactClientAsset = 'open-cowork-cloud-react.js'
 const builtins = new Set([
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
@@ -51,10 +49,7 @@ function runPnpm(args) {
   }
 }
 
-runPnpm(['--filter', '@open-cowork/website', 'build'])
-
 await mkdir(dirname(outfile), { recursive: true })
-await mkdir(cloudAssetsDir, { recursive: true })
 
 await build({
   entryPoints: [resolve(repoRoot, 'scripts/open-cowork-cloud.ts')],
@@ -101,19 +96,6 @@ await build({
   external: [...builtins],
   logLevel: 'info',
 })
-
-// Copy EVERY built client chunk (the vendor-split entry + its sibling vendor /
-// runtime chunks) so the split client fully loads from the cloud image. The SSR
-// shell references only the entry `<script>`; the entry imports the sibling
-// chunks by their fixed names, so all of them must ship alongside it.
-const clientDir = resolve(repoRoot, 'apps/website/dist/client')
-const clientChunks = (await readdir(clientDir)).filter((file) => file.endsWith('.js'))
-if (!clientChunks.includes(cloudReactClientAsset)) {
-  throw new Error(`Cloud React client entry ${cloudReactClientAsset} is missing from the website build output.`)
-}
-for (const chunk of clientChunks) {
-  await copyFile(resolve(clientDir, chunk), resolve(cloudAssetsDir, chunk))
-}
 
 // -- Unified renderer (browser build) -----------------------------------------
 // The cloud image also serves the unified desktop renderer at /app — the

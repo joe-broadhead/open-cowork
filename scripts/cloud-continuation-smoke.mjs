@@ -165,7 +165,7 @@ async function checkCloudWebSurface(baseUrl, webToken) {
   if (!root.response.ok) throw new Error(`Cloud Web root returned ${root.status}: ${root.text.slice(0, 240)}`)
   const contentType = root.response.headers.get('content-type') || ''
   const csp = root.response.headers.get('content-security-policy') || ''
-  for (const marker of ['text/html', 'open-cowork-cloud-bootstrap', 'data-route-panel="threads"', 'data-route-panel="chat"']) {
+  for (const marker of ['text/html', 'id="cowork-bootstrap"', '/app/assets/']) {
     const target = marker === 'text/html' ? contentType : root.text
     if (!target.includes(marker)) throw new Error(`Cloud Web root missing marker: ${marker}`)
   }

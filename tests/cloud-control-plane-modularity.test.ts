@@ -58,7 +58,6 @@ test('client surfaces do not import server-only cloud control-plane internals', 
     'apps/desktop/src/preload',
     'apps/desktop/src/renderer',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [

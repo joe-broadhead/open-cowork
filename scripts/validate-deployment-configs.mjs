@@ -1156,7 +1156,7 @@ function validateTopologyProfiles() {
   const expectedCommands = {
     'desktop-only': ['pnpm test:e2e'],
     'gateway-only': ['pnpm deploy:standalone-gateway:validate', 'pnpm deploy:standalone-gateway:smoke'],
-    'cloud-only': ['pnpm deploy:validate', 'pnpm ops:validate', 'pnpm test:cloud-web'],
+    'cloud-only': ['pnpm deploy:validate', 'pnpm ops:validate'],
     'cloud-channel-gateway': ['pnpm deploy:validate', 'pnpm deploy:gateway:smoke', 'pnpm deploy:continuation:smoke'],
     'desktop-gateway': ['pnpm test:e2e'],
     'cloud-gateway-edge': ['pnpm deploy:validate', 'pnpm deploy:gateway:smoke'],
@@ -2380,7 +2380,6 @@ function validateReleaseSupplyChain() {
   }
 
   for (const phrase of [
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
@@ -2432,7 +2431,6 @@ function validateReleaseSupplyChain() {
   }
 
   for (const phrase of [
-    'Cloud Web Workbench browser readiness gates',
     'Desktop Web Gateway continuation gates',
     'Deployment and launch readiness gates',
     'Generate cloud image SBOM',
@@ -2457,7 +2455,6 @@ function validateReleaseSupplyChain() {
   }
 
   for (const phrase of [
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:smoke:strict',

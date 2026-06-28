@@ -317,7 +317,6 @@ function assertCiContract() {
   for (const command of [
     'pnpm lint',
     'pnpm test',
-    'pnpm test:cloud-web',
     'pnpm test:renderer',
     'pnpm typecheck',
     'pnpm perf:check',
@@ -348,7 +347,6 @@ function assertCiContract() {
 
 function assertReleaseWorkflowContract() {
   for (const command of [
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
     'pnpm perf:check',

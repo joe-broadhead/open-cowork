@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { extractCssRules } from './helpers/css-rules.ts'
-import { cloudWebsiteStudioPrimitiveStyles } from '../apps/website/src/style-studio-primitives.ts'
 
 // Phase 1 — utility-class decoupling. The Channels/Projects surfaces previously
 // got `display:flex; align-items:center` by being grouped, *by surface selector*,
@@ -24,7 +23,6 @@ const globalsCss = readFileSync(
   fileURLToPath(new URL('../apps/desktop/src/renderer/styles/globals.css', import.meta.url)),
   'utf8',
 )
-const websiteCss = cloudWebsiteStudioPrimitiveStyles()
 const primitivesTsx = readFileSync(
   fileURLToPath(new URL('../packages/ui/src/StudioPrimitives.tsx', import.meta.url)),
   'utf8',
@@ -36,7 +34,6 @@ const kanbanTsx = readFileSync(
 
 for (const [label, css] of [
   ['desktop globals.css', globalsCss],
-  ['website studio-primitives', websiteCss],
 ] as const) {
   test(`${label}: .studio-u-flex-center defines the shared flex-center declarations`, () => {
     assert.equal(extractCssRules(css).get('.studio-u-flex-center'), FLEX_CENTER)
@@ -68,11 +65,9 @@ for (const [label, css] of [
 }
 
 // Direct-class channel-row groups (copy/icon/row-surface), decoupled via the
-// group-member-swap trick — the utility joins the exact same rule, so the swap is
-// provably cascade-identical. These three have identical declarations on both
-// apps, so they are genuine cross-app shared utilities (a real parity guarantee).
+// group-member-swap trick — the utility joins the exact same rule. These are
+// genuine shared utilities applied through the shared @open-cowork/ui markup.
 const desktopRules = extractCssRules(globalsCss)
-const websiteRules = extractCssRules(websiteCss)
 
 for (const util of [
   '.studio-u-fill-min',
@@ -81,15 +76,14 @@ for (const util of [
   '.studio-u-progress-track',
   '.studio-u-progress-fill',
 ]) {
-  test(`${util} is a true shared utility — identical declarations on desktop and website`, () => {
+  test(`${util} is a shared utility with declarations on desktop`, () => {
     const desktop = desktopRules.get(util)
     assert.ok(desktop && desktop.length > 0, `${util} missing on desktop`)
-    assert.equal(desktop, websiteRules.get(util))
   })
 }
 
 test('channel-row + project-progress inner selectors are decoupled from their cross-surface groups', () => {
-  for (const rules of [desktopRules, websiteRules]) {
+  for (const rules of [desktopRules]) {
     assert.equal(rules.has('.studio-channel-row__copy'), false)
     assert.equal(rules.has('.studio-channel-row__icon'), false)
     // project-progress's track/fill no longer ride the working-style-bars group.

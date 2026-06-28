@@ -27,7 +27,6 @@ const nodeTsFiles = [
   'apps/desktop/src/main/**/*.ts',
   'apps/desktop/src/preload/**/*.ts',
   'apps/desktop/src/lib/**/*.ts',
-  'apps/website/src/**/*.ts',
   'packages/**/*.ts',
   'mcps/**/*.ts',
   'scripts/**/*.ts',
@@ -240,7 +239,6 @@ export default [
     // service can resolve each file.
     files: [
       'apps/desktop/src/**/*.ts', 'apps/desktop/src/**/*.tsx',
-      'apps/website/src/**/*.ts', 'apps/website/src/**/*.tsx',
       'apps/gateway/src/**/*.ts', 'apps/standalone-gateway/src/**/*.ts',
       'packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx',
       'mcps/*/src/**/*.ts',
@@ -268,12 +266,11 @@ export default [
     },
   },
   {
-    // React hooks correctness for every renderer surface (desktop, website SSR
-    // portals, shared UI). rules-of-hooks catches hook-order bugs; exhaustive-deps
-    // keeps effect/memo dependency arrays honest.
+    // React hooks correctness for every renderer surface (desktop renderer +
+    // shared UI). rules-of-hooks catches hook-order bugs; exhaustive-deps keeps
+    // effect/memo dependency arrays honest.
     files: [
       'apps/desktop/src/renderer/**/*.tsx',
-      'apps/website/src/**/*.tsx',
       'packages/ui/src/**/*.tsx',
     ],
     plugins: {

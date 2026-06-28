@@ -53,7 +53,7 @@
       "requiredDurability": ["Postgres", "object storage", "secret adapter/KMS or secret-manager refs", "worker checkpoints", "backup and restore evidence"],
       "failClosedChecks": ["public_production requires Postgres", "public_production requires provider-backed object storage", "auth cannot be none on public hosts", "worker scale-out requires checkpoints"],
       "validationCommands": ["pnpm deploy:validate", "pnpm deploy:launch:validate", "pnpm ops:validate"],
-      "smokeCommands": ["pnpm deploy:smoke", "pnpm test:cloud-web"],
+      "smokeCommands": ["pnpm deploy:smoke"],
       "notes": ["Gateway and Desktop are optional clients; Cloud Web and workers must work on their own."]
     },
     {

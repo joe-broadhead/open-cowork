@@ -54,16 +54,6 @@
         "@fontsource-variable/schibsted-grotesk"
       ]
     },
-    "apps/website": {
-      "entry": [
-        "src/render.ts",
-        "src/react-client.tsx",
-        "src/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.{ts,tsx}"
-      ]
-    },
     "apps/gateway": {
       "entry": [
         "src/index.ts",
