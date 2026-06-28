@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `7cce8866e6b38cbbaa7fad26144fa76db3d136ba32a8441ee61971b450f87a23`
-- Production package entries: 509
-- Bundled license directories: 463 (46 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `62f3c65061fbd99cba0ef4934794aba970dbeff987b2935ccc2f5c1068c3cb9a`
+- Production package entries: 510
+- Bundled license directories: 463 (47 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -54,6 +54,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
+| @open-cowork/app | link:../app | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/cloud-client | link:../../packages/cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/cloud-client | link:../cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../../packages/gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |

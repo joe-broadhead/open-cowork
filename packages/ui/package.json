@@ -18,10 +18,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./app-api": {
-      "types": "./dist/AppApiProvider.d.ts",
-      "import": "./dist/AppApiProvider.js"
-    },
     "./badge": {
       "types": "./dist/Badge.d.ts",
       "import": "./dist/Badge.js"
