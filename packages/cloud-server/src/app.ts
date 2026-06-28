@@ -163,6 +163,8 @@ export type CloudAppOptions = {
   port?: number
   workerPollMs?: number
   schedulerPollMs?: number
+  // SSE read-poll cadence (ms). Omitted ⇒ OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS (default 1000).
+  ssePollMs?: number
   shutdownGraceMs?: number
   runtimeCacheMaxEntries?: number
   runtimeCacheIdleTtlMs?: number
@@ -345,6 +347,10 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     // other knob. Defaults preserve the previous in-server behaviour (200 / 10000).
     maxSseConnectionsPerOrg: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG'), 200),
     maxConnections: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONNECTIONS'), 10_000),
+    // SSE read-poll cadence (ms). The replay loop polls Postgres at this interval for the
+    // life of each connection; operators trade delivery latency against control-plane query
+    // load. Default 1000 preserves the previous in-server behaviour.
+    ssePollIntervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS'), 1000),
     corsOrigin: envValue(env, 'OPEN_COWORK_CLOUD_CORS_ORIGIN'),
     autoProcessCommands: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS'), true),
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
@@ -1500,6 +1506,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         strictTransportSecurity: publicUrlEnablesStrictTransportSecurity(envOptions.publicUrl),
         maxSseConnectionsPerOrg: envOptions.maxSseConnectionsPerOrg,
         maxConnections: envOptions.maxConnections,
+        ssePollMs: options.ssePollMs ?? envOptions.ssePollIntervalMs,
         trustProxyHeaders: envOptions.trustProxyHeaders,
         trustedProxyCidrs: envOptions.trustedProxyCidrs,
         knowledgeDataDir: paths.getAppDataDir(),

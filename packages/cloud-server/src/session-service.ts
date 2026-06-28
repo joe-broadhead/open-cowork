@@ -1078,11 +1078,11 @@ export class CloudSessionService {
   // the full membership/session/projection authorization on every poll was the dominant
   // idle-connection cost (~6 queries/poll). These read directly, tenant-scoped by the query.
   listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
-    return this.store.listSessionEvents(tenantId, sessionId, afterSequence, limit)
+    return this.store.listSessionEventsForStream(tenantId, sessionId, afterSequence, limit)
   }
 
   listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    return this.store.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
+    return this.store.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
   }
 
   async getSessionProjectionStatus(principal: CloudPrincipal, sessionId: string) {

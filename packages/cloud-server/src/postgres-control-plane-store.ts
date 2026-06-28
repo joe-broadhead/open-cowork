@@ -1427,9 +1427,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
     await this.requireSession(tenantId, sessionId)
-    // `limit` bounds the read for the SSE replay hot path (it paginates by advancing its
-    // cursor across polls). Callers that need the full stream (projection rebuild) omit
-    // it and get every event.
+    return this.listSessionEventsForStream(tenantId, sessionId, afterSequence, limit)
+  }
+  async listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
     const bounded = Number.isInteger(limit) && (limit as number) > 0
     const result = await this.pool.query(
       `SELECT * FROM cloud_session_events
@@ -1536,6 +1536,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
     await this.requireTenantUser(tenantId, userId)
+    return this.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
+  }
+
+  async listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
     const bounded = Number.isInteger(limit) && (limit as number) > 0
     const result = await this.pool.query(
       `SELECT * FROM cloud_workspace_events

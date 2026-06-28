@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
@@ -47,12 +47,30 @@ export type ObjectStoreHeadResult = {
   metadata: Record<string, string>
 }
 
+// A time-limited URL the client can use to transfer an object directly to/from the backing
+// store, bypassing the pod heap. Returned by the optional presign* capability below.
+export type ObjectStorePresignedRequest = {
+  method: 'GET' | 'PUT'
+  url: string
+  // Headers the client MUST send with the request (e.g. content-type on a PUT). May be empty.
+  headers: Record<string, string>
+  expiresAt: string
+}
+
 export type ObjectStoreAdapter = {
   kind: ObjectStoreKind
   putObject(input: ObjectStorePutInput): Promise<ObjectStoreHeadResult>
   getObject(key: string): Promise<ObjectStoreReadResult | null>
   headObject(key: string): Promise<ObjectStoreHeadResult | null>
   deleteObject(key: string): Promise<void>
+  // OPTIONAL direct-to-store transfer. When the method is implemented AND the store can presign
+  // (S3-compatible with static credentials configured), it returns a presigned URL so the
+  // client transfers bytes straight to/from object storage instead of base64-buffering them
+  // through the web pod. An ABSENT method or a NULL result means the caller MUST fall back to
+  // the buffered putObject/getObject path. Only S3-compatible stores implement these; the
+  // filesystem/in-memory/gcs/azure adapters intentionally omit them (buffered path only).
+  presignGet?(key: string, options?: { expiresSeconds?: number }): Promise<ObjectStorePresignedRequest | null>
+  presignPut?(input: { key: string, contentType?: string | null, expiresSeconds?: number }): Promise<ObjectStorePresignedRequest | null>
   close?: () => Promise<void> | void
 }
 
@@ -94,6 +112,10 @@ export function instrumentObjectStore(
     getObject: (key) => instrument('get', () => adapter.getObject(key)),
     headObject: (key) => instrument('head', () => adapter.headObject(key)),
     deleteObject: (key) => instrument('delete', () => adapter.deleteObject(key)),
+    // Presigning is a local URL-signing computation (no I/O round-trip), so it is passed through
+    // transparently rather than wrapped in I/O telemetry. Only present when the inner adapter supports it.
+    ...(adapter.presignGet ? { presignGet: (key, options) => adapter.presignGet!(key, options) } : {}),
+    ...(adapter.presignPut ? { presignPut: (input) => adapter.presignPut!(input) } : {}),
     ...(adapter.close ? { close: () => adapter.close!() } : {}),
   }
 }
@@ -436,6 +458,115 @@ export function createUnavailableObjectStore(reason = 'Cloud object storage is n
   }
 }
 
+// AWS SigV4 query-string ("presigned URL") signing, implemented with node:crypto only so the
+// presign capability needs no extra dependency. Validatable locally against AWS's published
+// presigned-GET test vector (see cloud-object-store.test.ts); the actual S3 round-trip is only
+// validatable against real S3 (staging). Encodes per RFC3986 with AWS's stricter rule set.
+function awsUriEncode(value: string, encodeSlash = true) {
+  let out = ''
+  for (const byte of Buffer.from(value, 'utf8')) {
+    const char = String.fromCharCode(byte)
+    if (
+      (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a) || (byte >= 0x30 && byte <= 0x39)
+      || char === '-' || char === '_' || char === '.' || char === '~'
+    ) {
+      out += char
+    } else if (char === '/') {
+      out += encodeSlash ? '%2F' : '/'
+    } else {
+      out += `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
+    }
+  }
+  return out
+}
+
+function hmacSha256(key: Buffer | string, data: string) {
+  return createHmac('sha256', key).update(data, 'utf8').digest()
+}
+
+export type S3PresignInput = {
+  method: 'GET' | 'PUT'
+  protocol: 'http:' | 'https:'
+  host: string
+  // Already AWS-URI-encoded request path, with a leading '/'.
+  canonicalUri: string
+  region: string
+  accessKeyId: string
+  secretAccessKey: string
+  sessionToken?: string | null
+  expiresSeconds: number
+  now: Date
+}
+
+// Exported for the AWS-vector unit test; not part of the public adapter surface.
+export function signS3PresignedUrl(input: S3PresignInput): ObjectStorePresignedRequest {
+  const service = 's3'
+  const amzDate = `${input.now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`
+  const dateStamp = amzDate.slice(0, 8)
+  const credentialScope = `${dateStamp}/${input.region}/${service}/aws4_request`
+  const expires = Math.max(1, Math.min(604_800, Math.floor(input.expiresSeconds)))
+  const queryParams: Array<[string, string]> = [
+    ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential', `${input.accessKeyId}/${credentialScope}`],
+    ['X-Amz-Date', amzDate],
+    ['X-Amz-Expires', String(expires)],
+    ['X-Amz-SignedHeaders', 'host'],
+  ]
+  if (input.sessionToken) queryParams.push(['X-Amz-Security-Token', input.sessionToken])
+  const canonicalQuery = queryParams
+    .map(([rawKey, rawValue]) => [awsUriEncode(rawKey), awsUriEncode(rawValue)] as const)
+    .sort((left, right) => (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0))
+    .map(([encodedKey, encodedValue]) => `${encodedKey}=${encodedValue}`)
+    .join('&')
+  const canonicalRequest = [
+    input.method,
+    input.canonicalUri,
+    canonicalQuery,
+    `host:${input.host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD',
+  ].join('\n')
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    createHash('sha256').update(canonicalRequest, 'utf8').digest('hex'),
+  ].join('\n')
+  const signingKey = hmacSha256(
+    hmacSha256(hmacSha256(hmacSha256(`AWS4${input.secretAccessKey}`, dateStamp), input.region), service),
+    'aws4_request',
+  )
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex')
+  return {
+    method: input.method,
+    url: `${input.protocol}//${input.host}${input.canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`,
+    headers: {},
+    expiresAt: new Date(input.now.getTime() + expires * 1000).toISOString(),
+  }
+}
+
+// Derive the signed host + canonical path for an object, mirroring how the S3 client builds the
+// request URL (virtual-hosted by default; path-style when forced or a custom endpoint is set).
+function s3PresignTarget(options: S3CompatibleObjectStoreOptions, key: string) {
+  const fullKey = prefixedKey(options.prefix, key)
+  const encodedKey = fullKey.split('/').map((segment) => awsUriEncode(segment, false)).join('/')
+  const forcePathStyle = options.forcePathStyle ?? Boolean(options.endpoint)
+  if (options.endpoint) {
+    const endpoint = new URL(options.endpoint)
+    const protocol = (endpoint.protocol === 'http:' ? 'http:' : 'https:') as 'http:' | 'https:'
+    const basePath = endpoint.pathname.replace(/\/+$/, '')
+    return forcePathStyle
+      ? { protocol, host: endpoint.host, canonicalUri: `${basePath}/${options.bucket}/${encodedKey}` }
+      : { protocol, host: `${options.bucket}.${endpoint.host}`, canonicalUri: `/${encodedKey}` }
+  }
+  const region = options.region || 'us-east-1'
+  return forcePathStyle
+    ? { protocol: 'https:' as const, host: `s3.${region}.amazonaws.com`, canonicalUri: `/${options.bucket}/${encodedKey}` }
+    : { protocol: 'https:' as const, host: `${options.bucket}.s3.${region}.amazonaws.com`, canonicalUri: `/${encodedKey}` }
+}
+
+const DEFAULT_PRESIGN_EXPIRES_SECONDS = 900
+
 export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOptions): ObjectStoreAdapter {
   const client = options.client || new S3Client({
     region: options.region || 'us-east-1',
@@ -504,9 +635,46 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
         Key: prefixedKey(options.prefix, key),
       }))
     },
+    async presignGet(key, presignOptions) {
+      const signed = presignS3Object('GET', key, undefined, presignOptions?.expiresSeconds)
+      return signed
+    },
+    async presignPut(input) {
+      const signed = presignS3Object('PUT', input.key, input.contentType, input.expiresSeconds)
+      // The client must send this content-type on the upload so the stored object is typed
+      // correctly (content-type is intentionally NOT in SignedHeaders, so S3 won't reject a
+      // mismatch — it just records whatever the client sends).
+      return signed && input.contentType ? { ...signed, headers: { 'content-type': input.contentType } } : signed
+    },
     close() {
       client.destroy?.()
     },
+  }
+
+  // Presign only when STATIC credentials are configured. With the default AWS credential chain
+  // (e.g. IRSA/instance role) the keys are resolved asynchronously by the SDK and are not
+  // available here, so we return null and the caller falls back to the buffered path.
+  function presignS3Object(
+    method: 'GET' | 'PUT',
+    key: string,
+    _contentType: string | null | undefined,
+    expiresSeconds: number | undefined,
+  ): ObjectStorePresignedRequest | null {
+    const credentials = options.credentials
+    if (!credentials?.accessKeyId || !credentials?.secretAccessKey) return null
+    const target = s3PresignTarget(options, key)
+    return signS3PresignedUrl({
+      method,
+      protocol: target.protocol,
+      host: target.host,
+      canonicalUri: target.canonicalUri,
+      region: options.region || 'us-east-1',
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+      sessionToken: credentials.sessionToken,
+      expiresSeconds: expiresSeconds && expiresSeconds > 0 ? expiresSeconds : DEFAULT_PRESIGN_EXPIRES_SECONDS,
+      now: new Date(),
+    })
   }
 }
 

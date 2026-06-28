@@ -1,4 +1,4 @@
-import { clone, nowIso, optionalTrimmedText, stableJson, workspaceOperationFromType } from './store-helpers.ts'
+import { clone, nowIso, optionalTrimmedText, sliceEventsAfter, stableJson, workspaceOperationFromType } from './store-helpers.ts'
 import { workspaceEventCursor, type WorkspaceEventCursorRecord } from '../workspace-event-cursor.ts'
 import type { AppendWorkspaceEventInput, WorkspaceEventRecord } from '../control-plane-store.ts'
 
@@ -77,11 +77,14 @@ export class InMemoryWorkspaceEventsDomain {
 
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
     this.host.requireTenantUser(tenantId, userId)
-    const workspaceKey = `${tenantId}:${userId}`
-    const matching = (this.workspaceEvents.get(workspaceKey)?.events || [])
-      .filter((event) => event.sequence > afterSequence)
-      .map((event) => clone(event))
-    return Number.isInteger(limit) && (limit as number) > 0 ? matching.slice(0, limit) : matching
+    return sliceEventsAfter(this.workspaceEvents.get(`${tenantId}:${userId}`)?.events || [], afterSequence, limit)
+  }
+
+  // SSE replay hot path: skip the requireTenantUser existence check. A missing/unauthorized
+  // (tenantId, userId) returns [] rather than throwing, mirroring the tenant-scoped postgres
+  // query. See ControlPlaneStore.listWorkspaceEventsForStream.
+  listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
+    return sliceEventsAfter(this.workspaceEvents.get(`${tenantId}:${userId}`)?.events || [], afterSequence, limit)
   }
   getWorkspaceEventCursor(tenantId: string, userId: string): WorkspaceEventCursorRecord {
     this.host.requireTenantUser(tenantId, userId)

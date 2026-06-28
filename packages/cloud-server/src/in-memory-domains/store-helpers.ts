@@ -66,6 +66,21 @@ export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+// Shared event-replay slice for the in-memory store: events after `afterSequence`,
+// deep-cloned, optionally capped at `limit`. Mirrors the postgres
+// `WHERE sequence > $n ORDER BY sequence LIMIT $m` read used by the session/workspace
+// event replay (and its *ForStream variants).
+export function sliceEventsAfter<T extends { sequence: number }>(
+  events: readonly T[],
+  afterSequence: number,
+  limit?: number,
+): T[] {
+  const matching = events
+    .filter((event) => event.sequence > afterSequence)
+    .map((event) => clone(event))
+  return Number.isInteger(limit) && (limit as number) > 0 ? matching.slice(0, limit) : matching
+}
+
 export function normalizeText(value: unknown, maxLength: number, label: string) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
   const normalized = value.trim()

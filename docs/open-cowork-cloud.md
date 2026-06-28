@@ -931,6 +931,7 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_PG_LOCK_TIMEOUT_MS` | Postgres `lock_timeout` per connection (default `0`, disabled). Set a non-zero value to bound how long a statement waits on a row/table lock before failing fast. |
 | `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` | Maximum simultaneous TCP connections accepted by the cloud HTTP server (default `10000`). A connection-exhaustion guard above the Node default of unbounded. |
 | `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams per org (default `200`). Excess subscriptions for one org are rejected so a single tenant cannot exhaust stream slots. |
+| `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS` | SSE read-poll cadence in milliseconds (default `1000`). Each open stream polls the control plane at this interval for new events; lower it to cut delivery latency at the cost of more control-plane queries, raise it to shed query load at the cost of latency. |
 | `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
 
 `OPEN_COWORK_CLOUD_PUBLIC_URL` doubles as the HSTS switch: the server only emits

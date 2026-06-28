@@ -18,6 +18,10 @@ export type ChannelDeliverySseTools = {
     cleanup: () => void,
     orgKey?: string | null,
   ): boolean
+  // Enables TCP keep-alive (so the kernel reaps half-open peers) and arms a max-lifetime
+  // timer on the socket, returning that timer so the caller clears it on cleanup. Mirrors
+  // the session/workspace SSE routes.
+  armSseSocketLifetime(req: IncomingMessage, res: ServerResponse): ReturnType<typeof setTimeout>
   ssePollMs(options: CloudHttpServerOptions): number
 }
 
@@ -64,12 +68,17 @@ export async function handleChannelDeliveriesSse(
   let closed = false
   let pollActive = false
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let lifetimeTimer: ReturnType<typeof setTimeout> | null = null
   const cleanup = () => {
     if (closed) return
     closed = true
     if (pollTimer) clearInterval(pollTimer)
+    if (lifetimeTimer) clearTimeout(lifetimeTimer)
   }
   if (!tools.trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
+  // Arm the same TCP keep-alive + max-lifetime guards the session/workspace SSE routes use,
+  // so a half-open delivery consumer cannot pin a gateway slot indefinitely.
+  lifetimeTimer = tools.armSseSocketLifetime(req, res)
   const poll = async () => {
     if (pollActive || closed || res.destroyed) return
     pollActive = true

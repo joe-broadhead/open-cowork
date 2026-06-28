@@ -50,6 +50,7 @@ import {
   normalizeNullableText,
   normalizeText,
   nowIso,
+  sliceEventsAfter,
   stableJson,
 } from './in-memory-domains/store-helpers.ts'
 import {
@@ -1177,11 +1178,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number): SessionEventRecord[] {
-    const session = this.requireSession(tenantId, sessionId)
-    const matching = session.events
-      .filter((event) => event.sequence > afterSequence)
-      .map((event) => clone(event))
-    return Number.isInteger(limit) && (limit as number) > 0 ? matching.slice(0, limit) : matching
+    return sliceEventsAfter(this.requireSession(tenantId, sessionId).events, afterSequence, limit)
+  }
+
+  // SSE replay hot path: skip the requireSession existence check. Missing/unauthorized
+  // (tenantId, sessionId) returns [] instead of throwing, mirroring the tenant-scoped
+  // postgres query. See ControlPlaneStore.listSessionEventsForStream.
+  listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence = 0, limit?: number): SessionEventRecord[] {
+    const session = this.sessions.get(key(tenantId, sessionId))
+    if (!session) return []
+    return sliceEventsAfter(session.events, afterSequence, limit)
   }
 
   getSessionEventStats(tenantId: string, sessionId: string): { count: number; latestSequence: number } {
@@ -1199,6 +1205,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
     return this.workspaceEventsDomain.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
+  }
+
+  // SSE replay hot path: skip the requireTenantUser check (returns [] for a bad pair).
+  listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
+    return this.workspaceEventsDomain.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
   }
 
   getWorkspaceEventCursor(tenantId: string, userId: string): WorkspaceEventCursorRecord {

@@ -1034,6 +1034,7 @@ async function handleApiRequest(
         writeError,
         writeCorsHeaders,
         trackSseStream,
+        armSseSocketLifetime,
         ssePollMs,
         processSessionCommandIfConfigured,
         writeSessionCommandMutationResponse,

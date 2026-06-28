@@ -27,7 +27,7 @@ import {
 import { createHttpSseCloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
 import { browserRendererBuildExists } from '@open-cowork/cloud-server/browser-renderer-app'
 import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
-import { createInMemoryObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createInMemoryObjectStore, type ObjectStoreAdapter } from '@open-cowork/cloud-server/object-store'
 import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
 import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import { createCloudSessionCookieManager } from '@open-cowork/cloud-server/session-cookie-auth'
@@ -123,10 +123,11 @@ function createFixture(options: {
   inviteSigningSecret?: string | null
   emailSender?: CloudEmailSender | null
   knowledgeAgentTokenSecret?: string | null
+  objectStore?: ObjectStoreAdapter
 } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
-  const objectStore = createInMemoryObjectStore()
+  const objectStore = options.objectStore || createInMemoryObjectStore()
   const policy = options.policy || resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('cloud-http-test-byok-key'), {
@@ -7650,6 +7651,90 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
       role: 'owner' as const,
       authSource: 'user' as const,
     }, sessionId, String(uploaded.artifactId)), /Cloud session was not found|Unknown session|Unknown tenant/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact download hands back a presigned URL when the store supports it, else buffers (F4)', async () => {
+  const inner = createInMemoryObjectStore()
+  let presignedKey: string | null = null
+  // A presign-capable store: real storage stays in-memory (so the buffered fallback still
+  // works), but presignGet returns a direct URL — modelling the S3 adapter's behaviour.
+  const presigningStore: ObjectStoreAdapter = {
+    ...inner,
+    async presignGet(key) {
+      presignedKey = key
+      return { method: 'GET', url: `https://object-store.test/${key}?sig=test`, headers: {}, expiresAt: '2099-01-01T00:00:00.000Z' }
+    },
+  }
+  const fixture = createFixture({ objectStore: presigningStore, abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const uploaded = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', dataBase64: Buffer.from('direct transfer').toString('base64') }),
+    }))).artifact)
+    const artifactId = String(uploaded.artifactId)
+
+    // Opt-in presigned transfer ⇒ a direct download URL, no base64 buffered through the pod.
+    const presigned = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}?transfer=presigned`,
+    ))).artifact)
+    assert.equal(presigned.transfer, 'presigned')
+    assert.match(String(presigned.downloadUrl), /^https:\/\/object-store\.test\//)
+    assert.equal(presigned.downloadExpiresAt, '2099-01-01T00:00:00.000Z')
+    assert.equal('dataBase64' in presigned, false)
+    assert.equal('key' in presigned, false)
+    assert.ok(presignedKey, 'expected the store to be asked to presign the artifact key')
+
+    // Presign download still records usage (attributed by the recorded size).
+    const usageEvents = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/usage/events`))).events).map(asRecord)
+    assert.equal(usageEvents.find((event) => event.eventType === 'artifact.downloaded')?.quantity, 'direct transfer'.length)
+
+    // Default (no opt-in) ⇒ buffered base64 response is unchanged.
+    const buffered = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}`,
+    ))).artifact)
+    assert.equal(Buffer.from(String(buffered.dataBase64), 'base64').toString('utf8'), 'direct transfer')
+    assert.equal('downloadUrl' in buffered, false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact download falls back to buffered base64 when the store cannot presign (F4)', async () => {
+  // The default in-memory store has no presign capability, so ?transfer=presigned must
+  // transparently fall back to the buffered base64 response.
+  const fixture = createFixture({ abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const uploaded = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', dataBase64: Buffer.from('buffered body').toString('base64') }),
+    }))).artifact)
+    const artifactId = String(uploaded.artifactId)
+
+    const download = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}?transfer=presigned`,
+    ))).artifact)
+    assert.equal(Buffer.from(String(download.dataBase64), 'base64').toString('utf8'), 'buffered body')
+    assert.equal('downloadUrl' in download, false)
+    assert.equal('transfer' in download, false)
   } finally {
     await fixture.server.close()
   }

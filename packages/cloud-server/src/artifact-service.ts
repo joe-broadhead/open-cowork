@@ -13,7 +13,7 @@ import {
   type ArtifactStatus,
   type ArtifactStatusUpdateRequest,
 } from '@open-cowork/shared'
-import type { ObjectStoreAdapter } from './object-store.ts'
+import type { ObjectStoreAdapter, ObjectStorePresignedRequest } from './object-store.ts'
 import { artifactObjectKey } from './object-store.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 
@@ -475,6 +475,28 @@ export class CloudArtifactService {
       contentType: object.contentType || artifact.contentType,
       dataBase64: object.body.toString('base64'),
     }
+  }
+
+  // Guarded direct-to-store download. When the configured object store can presign (S3 with
+  // static credentials), authorize the principal/artifact and return a time-limited URL the
+  // client fetches directly — keeping the artifact bytes off the pod heap. Returns null when
+  // presigning is unavailable (absent capability or no static credentials) so the caller falls
+  // back to the buffered readSessionArtifact path. A missing artifact still throws 404, matching
+  // the buffered path's behaviour. Usage is attributed at presign time using the recorded size.
+  async presignSessionArtifactDownload(
+    principal: CloudPrincipal,
+    sessionId: string,
+    artifactId: string,
+    options?: { expiresSeconds?: number },
+  ): Promise<{ artifact: CloudArtifactRecord, presigned: ObjectStorePresignedRequest } | null> {
+    if (!this.objectStore.presignGet) return null
+    const artifact = (await this.listSessionArtifacts(principal, sessionId))
+      .find((entry) => entry.artifactId === artifactId)
+    if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
+    const presigned = await this.objectStore.presignGet(artifact.key, options)
+    if (!presigned) return null
+    await this.sessionService.recordArtifactDownloaded(principal, sessionId, artifactId, artifact.size)
+    return { artifact, presigned }
   }
 
   publicArtifact(record: CloudArtifactRecord, order = 0) {

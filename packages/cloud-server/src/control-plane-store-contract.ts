@@ -323,12 +323,22 @@ export type ControlPlaneStore = {
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
   listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
+  // SSE replay hot-path read. Identical scoped query/ordering to listSessionEvents but skips
+  // the requireSession existence pre-check: the WHERE clause is already scoped by
+  // tenant_id/session_id, so an unknown/unauthorized pair simply yields an empty result.
+  // The SSE connection authorized the principal+session once at connect; re-running that
+  // pre-check on every 1s poll was redundant per-connection DB load. Non-stream callers keep
+  // listSessionEvents (which still validates existence).
+  listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
   // Aggregate count + max sequence for projection-status, so it never loads the whole
   // event log just to compute lag (index-served on the postgres backend).
   getSessionEventStats(tenantId: string, sessionId: string): MaybePromise<{ count: number; latestSequence: number }>
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
   getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>
+  // SSE replay hot-path read (see listSessionEventsForStream). Skips the requireTenantUser
+  // pre-check; the WHERE clause is scoped by tenant_id/user_id so a bad pair yields empty.
+  listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>
   writeSessionProjection(input: WriteProjectionInput): MaybePromise<SessionProjectionRecord>
   getSessionProjection(tenantId: string, sessionId: string): MaybePromise<SessionProjectionRecord | null>
   // Max durable-event-to-projection gap across sessions (P1-F), emitted as the

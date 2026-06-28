@@ -57,6 +57,25 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
     return true
   }
   if (artifactId && !artifactSubaction && req.method === 'GET') {
+    // Opt-in direct-to-store download. When the client asks (?transfer=presigned) AND the
+    // configured object store supports presigning, hand back a time-limited URL the client
+    // fetches straight from object storage instead of base64-buffering the bytes through the
+    // pod. Any other case (no opt-in, or no presign support) falls through to the buffered
+    // base64 response below, which stays the default-safe path.
+    if (context.url.searchParams.get('transfer') === 'presigned') {
+      const presigned = await options.artifacts.presignSessionArtifactDownload(context.principal, sessionId, artifactId)
+      if (presigned) {
+        tools.writeJson(res, 200, {
+          artifact: {
+            ...options.artifacts.publicArtifact(presigned.artifact),
+            transfer: 'presigned',
+            downloadUrl: presigned.presigned.url,
+            downloadExpiresAt: presigned.presigned.expiresAt,
+          },
+        }, options.corsOrigin)
+        return true
+      }
+    }
     const artifact = await options.artifacts.readSessionArtifact(context.principal, sessionId, artifactId)
     tools.writeJson(res, 200, {
       artifact: {
