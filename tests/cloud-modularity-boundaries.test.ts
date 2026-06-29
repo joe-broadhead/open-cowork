@@ -25,7 +25,7 @@ const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
   ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_600],
-  ['packages/cloud-server/src/session-service.ts', 3_522],
+  ['packages/cloud-server/src/session-service.ts', 3_358],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {

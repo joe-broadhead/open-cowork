@@ -74,10 +74,8 @@ import type {
 import { CloudServiceError } from './cloud-service-error.ts'
 import { ControlPlaneQuotaExceededError } from './control-plane-errors.ts'
 import {
-  BillingAdapterError,
   evaluateBillingEntitlement,
   isBillingConfigured,
-  resolvedBillingEntitlements,
   type BillingAdapter,
   type BillingAction,
   type BillingCheckoutResult,
@@ -156,9 +154,10 @@ import {
 } from './services/managed-worker-service.ts'
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
 import { CloudChannelDomainService } from './services/channel-domain-service.ts'
+import { CloudThreadOrganizationService } from './session-thread-organization.ts'
+import { CloudBillingOperationsService } from './session-billing-operations.ts'
 import {
   principalCanManageApiTokens,
-  principalCanManageBilling,
   principalCanManageOrg,
   principalCanViewDiagnostics,
   principalCanViewOperations,
@@ -434,6 +433,8 @@ export class CloudSessionService {
   private readonly coordinationService: CloudCoordinationService
   private readonly capabilityService: CloudCapabilityService
   private readonly settingMetadataService: CloudSettingMetadataService
+  private readonly threadOrganization: CloudThreadOrganizationService
+  private readonly billingOperations: CloudBillingOperationsService
   private readonly inviteSigningSecret: string | Buffer | null
   private readonly emailSender: CloudEmailSender | null
   // Per-(tenant,account) "already bootstrapped" markers. The org-active and
@@ -541,6 +542,20 @@ export class CloudSessionService {
       store,
       policy,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+    })
+    this.threadOrganization = new CloudThreadOrganizationService({
+      store,
+      policy,
+      ids,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+    })
+    this.billingOperations = new CloudBillingOperationsService({
+      store,
+      policy,
+      billingConfig,
+      billingAdapter,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
     })
   }
 
@@ -1539,23 +1554,14 @@ export class CloudSessionService {
   }
 
   async listThreadTags(principal: CloudPrincipal): Promise<ThreadTagRecord[]> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.listThreadTags(principal.tenantId)
+    return this.threadOrganization.listThreadTags(principal)
   }
 
   async createThreadTag(
     principal: CloudPrincipal,
     input: { name: string, color?: string | null },
   ): Promise<ThreadTagRecord> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.createThreadTag({
-      tenantId: principal.tenantId,
-      tagId: this.ids.randomUUID(),
-      name: input.name,
-      color: input.color,
-    })
+    return this.threadOrganization.createThreadTag(principal, input)
   }
 
   async updateThreadTag(
@@ -1563,73 +1569,34 @@ export class CloudSessionService {
     tagId: string,
     input: { name?: string, color?: string | null },
   ): Promise<ThreadTagRecord | null> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.updateThreadTag({
-      tenantId: principal.tenantId,
-      tagId,
-      name: input.name,
-      color: input.color,
-    })
+    return this.threadOrganization.updateThreadTag(principal, tagId, input)
   }
 
   async deleteThreadTag(principal: CloudPrincipal, tagId: string): Promise<boolean> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.deleteThreadTag(principal.tenantId, tagId)
+    return this.threadOrganization.deleteThreadTag(principal, tagId)
   }
 
   async applyThreadTag(principal: CloudPrincipal, tagId: string, sessionIds: string[]): Promise<void> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    await this.requireOwnedSessions(principal, sessionIds)
-    await this.store.applyThreadTags({
-      tenantId: principal.tenantId,
-      sessionIds,
-      tagIds: [tagId],
-    })
+    return this.threadOrganization.applyThreadTag(principal, tagId, sessionIds)
   }
 
   async removeThreadTag(principal: CloudPrincipal, tagId: string, sessionIds: string[]): Promise<void> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    await this.requireOwnedSessions(principal, sessionIds)
-    await this.store.removeThreadTags({
-      tenantId: principal.tenantId,
-      sessionIds,
-      tagIds: [tagId],
-    })
+    return this.threadOrganization.removeThreadTag(principal, tagId, sessionIds)
   }
 
   async listThreadMetadata(principal: CloudPrincipal, input: { tagIds?: string[], limit?: number } = {}) {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.listThreadMetadata({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      tagIds: input.tagIds,
-      limit: input.limit,
-    })
+    return this.threadOrganization.listThreadMetadata(principal, input)
   }
 
   async listThreadSmartFilters(principal: CloudPrincipal): Promise<ThreadSmartFilterRecord[]> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.listThreadSmartFilters(principal.tenantId)
+    return this.threadOrganization.listThreadSmartFilters(principal)
   }
 
   async createThreadSmartFilter(
     principal: CloudPrincipal,
     input: { name: string, query: Record<string, unknown> },
   ): Promise<ThreadSmartFilterRecord> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.createThreadSmartFilter({
-      tenantId: principal.tenantId,
-      filterId: this.ids.randomUUID(),
-      name: input.name,
-      query: input.query,
-    })
+    return this.threadOrganization.createThreadSmartFilter(principal, input)
   }
 
   async updateThreadSmartFilter(
@@ -1637,20 +1604,11 @@ export class CloudSessionService {
     filterId: string,
     input: { name?: string, query?: Record<string, unknown> },
   ): Promise<ThreadSmartFilterRecord | null> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.updateThreadSmartFilter({
-      tenantId: principal.tenantId,
-      filterId,
-      name: input.name,
-      query: input.query,
-    })
+    return this.threadOrganization.updateThreadSmartFilter(principal, filterId, input)
   }
 
   async deleteThreadSmartFilter(principal: CloudPrincipal, filterId: string): Promise<boolean> {
-    await this.ensurePrincipal(principal)
-    this.assertThreadIndexEnabled()
-    return this.store.deleteThreadSmartFilter(principal.tenantId, filterId)
+    return this.threadOrganization.deleteThreadSmartFilter(principal, filterId)
   }
 
   async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<WorkflowListPayload> {
@@ -2174,89 +2132,21 @@ export class CloudSessionService {
   }
 
   async getBillingSubscription(principal: CloudPrincipal) {
-    await this.ensurePrincipal(principal)
-    const subscription = await this.store.getBillingSubscription(this.principalOrgId(principal))
-    const billingEnabled = Boolean(this.billingConfig && isBillingConfigured(this.billingConfig))
-    const providerId = this.billingAdapter?.providerId || this.billingConfig?.provider || 'none'
-    const mode: 'self-host' | 'managed' = billingEnabled && providerId !== 'stub' ? 'managed' : 'self-host'
-    return {
-      enabled: billingEnabled,
-      mode,
-      providerId,
-      subscription,
-      entitlements: this.billingConfig ? resolvedBillingEntitlements(this.billingConfig, subscription) : {},
-      active: this.billingConfig ? evaluateBillingEntitlement({
-        config: this.billingConfig,
-        subscription,
-        action: 'session.create',
-        profileName: this.policy.profileName,
-      }).allowed : true,
-      plans: Object.entries(this.billingConfig?.plans || {}).map(([planKey, plan]) => ({
-        planKey,
-        label: plan.label || planKey,
-        default: planKey === this.billingConfig?.defaultPlanKey,
-        entitlements: plan.entitlements || {},
-      })),
-    }
+    return this.billingOperations.getBillingSubscription(principal)
   }
 
   async createBillingCheckout(
     principal: CloudPrincipal,
     input: { planKey?: string | null, successUrl?: string | null, cancelUrl?: string | null },
   ): Promise<BillingCheckoutResult> {
-    await this.ensurePrincipal(principal)
-    this.assertBillingAdmin(principal)
-    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
-      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
-    }
-    const planKey = input.planKey || this.billingConfig.defaultPlanKey
-    if (!this.billingConfig.plans[planKey]) throw new CloudServiceError(400, `Unknown billing plan "${planKey}".`)
-    try {
-      const result = await this.billingAdapter.createCheckoutSession({
-        orgId: this.principalOrgId(principal),
-        accountId: principal.accountId || principal.userId,
-        email: principal.email,
-        planKey,
-        successUrl: input.successUrl,
-        cancelUrl: input.cancelUrl,
-      })
-      if (result.subscription) await this.store.upsertBillingSubscription(result.subscription)
-      await this.store.recordAuditEvent({
-        orgId: this.principalOrgId(principal),
-        accountId: principal.accountId || principal.userId,
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        eventType: 'billing.checkout.created',
-        targetType: 'billing_subscription',
-        targetId: result.providerSessionId || planKey,
-        metadata: { providerId: result.providerId, planKey },
-      })
-      return result
-    } catch (error) {
-      this.translateBillingAdapterError(error)
-    }
+    return this.billingOperations.createBillingCheckout(principal, input)
   }
 
   async createBillingPortal(
     principal: CloudPrincipal,
     input: { returnUrl?: string | null },
   ): Promise<BillingPortalResult> {
-    await this.ensurePrincipal(principal)
-    this.assertBillingAdmin(principal)
-    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
-      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
-    }
-    try {
-      const subscription = await this.store.getBillingSubscription(this.principalOrgId(principal))
-      return await this.billingAdapter.createPortalSession({
-        orgId: this.principalOrgId(principal),
-        email: principal.email,
-        subscription,
-        returnUrl: input.returnUrl,
-      })
-    } catch (error) {
-      this.translateBillingAdapterError(error)
-    }
+    return this.billingOperations.createBillingPortal(principal, input)
   }
 
   async verifyBillingWebhook(input: {
@@ -2264,40 +2154,11 @@ export class CloudSessionService {
     rawBody: string
     body: Record<string, unknown>
   }): Promise<BillingWebhookResult> {
-    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
-      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
-    }
-    try {
-      return this.billingAdapter.handleWebhook(input)
-    } catch (error) {
-      this.translateBillingAdapterError(error)
-    }
+    return this.billingOperations.verifyBillingWebhook(input)
   }
 
   async applyBillingWebhookResult(result: BillingWebhookResult): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
-    let subscriptionRecord: BillingSubscriptionRecord | null = null
-    if (result.subscription) {
-      subscriptionRecord = await this.store.upsertBillingSubscription(result.subscription)
-      await this.store.recordAuditEvent({
-        eventId: `billing_${result.providerId}_${result.eventId}`,
-        orgId: result.subscription.orgId,
-        actorType: 'system',
-        actorId: `billing.${result.providerId}`,
-        eventType: 'billing.webhook.processed',
-        targetType: 'billing_subscription',
-        targetId: result.subscription.providerSubscriptionId || result.subscription.orgId,
-        metadata: {
-          providerId: result.providerId,
-          eventType: result.eventType,
-          planKey: result.subscription.planKey,
-          status: result.subscription.status,
-        },
-      })
-    }
-    return {
-      ...result,
-      subscriptionRecord,
-    }
+    return this.billingOperations.applyBillingWebhookResult(result)
   }
 
   async handleBillingWebhook(input: {
@@ -2305,7 +2166,7 @@ export class CloudSessionService {
     rawBody: string
     body: Record<string, unknown>
   }): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
-    return this.applyBillingWebhookResult(await this.verifyBillingWebhook(input))
+    return this.billingOperations.handleBillingWebhook(input)
   }
 
   async claimHttpRateLimit(input: {
@@ -3381,12 +3242,6 @@ export class CloudSessionService {
     return binding.bindingId
   }
 
-  private assertBillingAdmin(principal: CloudPrincipal) {
-    if (!principalCanManageBilling(principal)) {
-      throw new CloudServiceError(403, 'Billing administration requires an org admin or admin-scoped API token.')
-    }
-  }
-
   private assertApiTokenAdmin(principal: CloudPrincipal) {
     if (!principalCanManageApiTokens(principal)) {
       throw new CloudServiceError(403, 'API token administration requires an org admin or admin-scoped API token.')
@@ -3397,13 +3252,6 @@ export class CloudSessionService {
     if (!principalCanManageOrg(principal)) {
       throw new CloudServiceError(403, 'Org administration requires an org admin or admin-scoped API token.')
     }
-  }
-
-  private translateBillingAdapterError(error: unknown): never {
-    if (error instanceof BillingAdapterError) {
-      throw new CloudServiceError(error.status, error.publicMessage)
-    }
-    throw error
   }
 
   private async assertBillingAllowed(input: {
@@ -3506,16 +3354,4 @@ export class CloudSessionService {
     }
   }
 
-  private assertThreadIndexEnabled() {
-    if (!this.policy.features.threadIndex) {
-      throw new Error('Thread index is disabled for this cloud profile.')
-    }
-  }
-
-  private async requireOwnedSessions(principal: CloudPrincipal, sessionIds: string[]) {
-    for (const sessionId of sessionIds) {
-      const session = await this.store.getSession(principal.tenantId, principal.userId, sessionId)
-      if (!session) throw new Error(`Unknown session ${sessionId}.`)
-    }
-  }
 }
