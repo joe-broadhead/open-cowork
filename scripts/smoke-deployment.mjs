@@ -145,12 +145,12 @@ async function checkHtml(url, options = {}) {
   const contentType = response.headers.get('content-type') || ''
   const cacheControl = response.headers.get('cache-control') || ''
   const csp = response.headers.get('content-security-policy') || ''
+  // The unified renderer SPA shell: bootstrap blob + hashed /app/assets/* modules
+  // (matches the cloud-continuation smoke). The old SSR data-route-panel markup is gone.
   for (const expected of [
     'text/html',
-    'open-cowork-cloud-bootstrap',
-    'data-route-panel="threads"',
-    'data-route-panel="chat"',
-    'data-route-panel="byok"',
+    'id="cowork-bootstrap"',
+    '/app/assets/',
   ]) {
     const target = expected === 'text/html' ? contentType : text
     if (!target.includes(expected)) {
@@ -163,10 +163,9 @@ async function checkHtml(url, options = {}) {
   if (!csp.includes("default-src 'self'") || !csp.includes("connect-src 'self'") || !csp.includes("frame-ancestors 'none'")) {
     throw new Error(`${url} must send the Cloud Web Workbench CSP`)
   }
-  const nonceMatch = csp.match(/'nonce-([^']+)'/)
-  if (!nonceMatch || !text.includes(`nonce="${nonceMatch[1]}"`)) {
-    throw new Error(`${url} must use matching CSP nonces for inline Cloud Web scripts`)
-  }
+  // The SPA shell loads hashed module scripts from /app/assets and carries no inline
+  // <script> needing a nonce, so script-src is 'self' (no per-request nonce). The CSP
+  // assertion above already covers the security contract.
   return {
     status: response.status,
     contentType,
