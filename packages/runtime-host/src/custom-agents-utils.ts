@@ -235,11 +235,41 @@ const NON_MCP_PERMISSION_KEYS = new Set([
   'list',
 ])
 
+const isAliasAlnum = (code: number) =>
+  (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+const isAliasPrefixChar = (code: number) => isAliasAlnum(code) || code === 95 /* _ */ || code === 45 /* - */
+const isAliasSuffixChar = (code: number) =>
+  isAliasAlnum(code) || code === 95 /* _ */ || code === 42 /* * */ || code === 45 /* - */
+
+// Linear (no-backtracking) equivalent of /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.
+// That regex's two overlapping quantifiers around the '_' separator, anchored by $, are
+// polynomial-ReDoS. Accepts: alnum start, a '_' separator, then a suffix that is exactly
+// '*' or alnum-then-[a-z0-9_*-]. A bool result needs only that SOME valid separator exists.
+function isLegacyAliasShape(key: string): boolean {
+  const n = key.length
+  if (n === 0 || !isAliasAlnum(key.charCodeAt(0))) return false
+  let prefixEnd = 0
+  while (prefixEnd < n && isAliasPrefixChar(key.charCodeAt(prefixEnd))) prefixEnd += 1
+  for (let s = 1; s < prefixEnd; s += 1) {
+    if (key.charCodeAt(s) !== 95 /* _ */) continue
+    const start = s + 1
+    if (start >= n) continue
+    if (n - start === 1 && key.charCodeAt(start) === 42 /* * */) return true
+    if (!isAliasAlnum(key.charCodeAt(start))) continue
+    let suffixOk = true
+    for (let i = start + 1; i < n; i += 1) {
+      if (!isAliasSuffixChar(key.charCodeAt(i))) { suffixOk = false; break }
+    }
+    if (suffixOk) return true
+  }
+  return false
+}
+
 function isLegacyMcpAliasPermissionKey(key: string) {
   if (NON_MCP_PERMISSION_KEYS.has(key)) return false
   if (key.startsWith('repo_')) return false
   if (key.startsWith('mcp__')) return false
-  return /^[a-z0-9][a-z0-9-]*(?:_+[a-z0-9-]+)*_+(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(key)
+  return isLegacyAliasShape(key)
 }
 
 function isMcpPermissionRulePattern(pattern: string) {

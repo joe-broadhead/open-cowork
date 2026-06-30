@@ -128,23 +128,52 @@ function isPackaged(input: Pick<RuntimeComponentManifestBuildInput, 'isPackaged'
   return input.isPackaged ?? Boolean(getAppPathHost()?.isPackaged)
 }
 
-const SEMVER_PATTERN = /\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._-]+)?/y
-
-// Extract the leftmost `major.minor.patch[-+prerelease]` substring.
-// An unanchored `String.match` with this pattern re-scans digit runs at every
-// offset and degrades to quadratic time on adversarial input (polynomial
-// ReDoS). Using a sticky match attempted only at the start of each digit run —
-// where the leftmost match must begin — keeps the scan linear while returning
-// the exact same substring an unanchored match would.
+// Extract the leftmost `major.minor.patch[-+prerelease]` substring. Implemented as a
+// deterministic single-pass char scan (no regex) so it is provably linear — the
+// equivalent regex /\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._-]+)?/ is flagged polynomial-ReDoS
+// when exec'd over attacker-influenced input.
+const isDigit = (code: number) => code >= 48 && code <= 57
+// [-+] prerelease/build tail char class: A-Za-z0-9._-
+function isSemverTailChar(code: number) {
+  return isDigit(code)
+    || (code >= 65 && code <= 90) // A-Z
+    || (code >= 97 && code <= 122) // a-z
+    || code === 46 // .
+    || code === 95 // _
+    || code === 45 // -
+}
+// Match major.minor.patch[-+tail] starting exactly at `start`; return the end index, or -1.
+function matchSemverAt(value: string, start: number): number {
+  const n = value.length
+  let i = start
+  for (let part = 0; part < 3; part += 1) {
+    const runStart = i
+    while (i < n && isDigit(value.charCodeAt(i))) i += 1
+    if (i === runStart) return -1 // each of major/minor/patch needs >=1 digit
+    if (part < 2) {
+      if (i >= n || value.charCodeAt(i) !== 46 /* . */) return -1
+      i += 1 // consume the '.'
+    }
+  }
+  // optional (?:[-+][A-Za-z0-9._-]+) — only extend when a non-empty tail follows the sign
+  if (i < n) {
+    const sign = value.charCodeAt(i)
+    if (sign === 45 /* - */ || sign === 43 /* + */) {
+      let j = i + 1
+      while (j < n && isSemverTailChar(value.charCodeAt(j))) j += 1
+      if (j > i + 1) i = j
+    }
+  }
+  return i
+}
 function extractSemver(value: string): string | undefined {
   for (let i = 0; i < value.length; i += 1) {
     const code = value.charCodeAt(i)
-    if (code < 48 || code > 57) continue
+    if (!isDigit(code)) continue
     const prev = i > 0 ? value.charCodeAt(i - 1) : 0
-    if (prev >= 48 && prev <= 57) continue
-    SEMVER_PATTERN.lastIndex = i
-    const match = SEMVER_PATTERN.exec(value)
-    if (match) return match[0]
+    if (isDigit(prev)) continue // start of a digit run only (leftmost match begins here)
+    const end = matchSemverAt(value, i)
+    if (end > i) return value.slice(i, end)
   }
   return undefined
 }
