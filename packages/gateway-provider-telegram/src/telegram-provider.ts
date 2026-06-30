@@ -612,4 +612,3 @@ function headerValue(
   }
   return undefined;
 }
-

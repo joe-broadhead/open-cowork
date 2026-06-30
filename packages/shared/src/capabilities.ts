@@ -339,4 +339,3 @@ export interface CapabilityBundleRuntimeSupportReport {
   warnings: CapabilityBundleIssue[]
   bundles: CapabilityBundleRuntimeBundleCheck[]
 }
-

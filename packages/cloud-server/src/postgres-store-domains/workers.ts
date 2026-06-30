@@ -675,4 +675,3 @@ function normalizeIdList(values: readonly unknown[], label: string, maxLength: n
   if (values.length > maxLength) throw new Error(`${label} exceeds ${maxLength} entries.`)
   return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
 }
-

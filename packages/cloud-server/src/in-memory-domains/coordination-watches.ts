@@ -60,4 +60,3 @@ export class InMemoryCoordinationWatchesDomain {
     return this.watches.delete(key(workspaceId, watchId))
   }
 }
-

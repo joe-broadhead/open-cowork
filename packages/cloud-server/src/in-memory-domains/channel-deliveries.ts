@@ -185,4 +185,3 @@ function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METAD
   }
   return record
 }
-

@@ -500,5 +500,3 @@ function normalizeRecord(value: unknown, label: string, maxBytes: number): Recor
   }
   return record
 }
-
-

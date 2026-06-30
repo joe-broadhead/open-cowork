@@ -128,4 +128,3 @@ export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme, acce
   const tokens = scheme === 'light' ? entry.light || entry.dark : entry.dark
   return accentId ? applyThemeAccent(tokens, accentId) : tokens
 }
-

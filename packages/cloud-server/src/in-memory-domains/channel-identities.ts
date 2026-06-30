@@ -126,4 +126,3 @@ function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METAD
 function stableId(prefix: string, ...parts: string[]) {
   return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
 }
-

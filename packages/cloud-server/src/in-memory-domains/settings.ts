@@ -57,4 +57,3 @@ export class InMemorySettingsDomain {
       .map((setting) => clone(setting))
   }
 }
-
