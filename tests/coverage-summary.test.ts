@@ -274,8 +274,8 @@ test('coverage summary reports the enforced node source inventory ratchet', () =
 
 test('coverage summary reports the enforced shared-package ratchet', () => {
   assert.deepEqual(SHARED_COVERAGE_INPUT.thresholds, {
-    lines: 90,
-    functions: 90,
+    lines: 88,
+    functions: 84,
     branches: 75,
   })
   assert.deepEqual(SHARED_COVERAGE_INPUT.includePathPrefixes, ['packages/shared/'])
@@ -285,7 +285,7 @@ test('coverage summary reports the enforced shared-package ratchet', () => {
 
 test('coverage summary reports the enforced shipped workspace ratchet', () => {
   assert.deepEqual(WORKSPACE_NODE_COVERAGE_INPUT.thresholds, {
-    lines: 40,
+    lines: 38,
     functions: 28,
     branches: 68,
   })

@@ -746,7 +746,9 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   // degraded backing service marks the container unhealthy instead of accepting traffic.
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/readyz/)
   assert.doesNotMatch(dockerfile, /HEALTHCHECK[\s\S]*\/healthz/)
-  assert.match(dockerfile, /CMD \["node", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
+  // --experimental-sqlite is required for the all-in-one node:sqlite store on the
+  // pinned Node 22.x (stable/flag-free only on 23.4+).
+  assert.match(dockerfile, /CMD \["node", "--experimental-sqlite", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
 
   assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/gateway build/)
   assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/shared build/)
