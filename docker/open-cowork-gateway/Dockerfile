@@ -25,7 +25,8 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+# .npmrc (public-hoist-pattern) must reach the runtime --prod install too.
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=build /app/apps ./apps
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/mcps ./mcps
