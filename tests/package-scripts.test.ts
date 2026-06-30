@@ -51,6 +51,7 @@ function sourceWorkspacePackageDirs(): string[] {
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
   assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
     'pnpm build:shared',
+    'pnpm --filter @open-cowork/runtime-host build',
     'pnpm design-tokens:build',
     'node scripts/ensure-electron-binary.mjs',
   ])

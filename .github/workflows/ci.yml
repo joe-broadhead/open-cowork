@@ -147,6 +147,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The portability/sandbox proofs (and the postgres test) import
+      # @open-cowork/runtime-host from its built dist (which is also the cloud's
+      # runtime supervisor artifact), so build it before they run.
+      - name: Build runtime-host for proofs
+        run: pnpm build:shared && pnpm --filter @open-cowork/runtime-host build
+
       - name: Run OpenCode portability proof
         run: pnpm proof:cloud:opencode-portability --json
 
