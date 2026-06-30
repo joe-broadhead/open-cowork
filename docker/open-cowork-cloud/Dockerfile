@@ -4,7 +4,9 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc carries public-hoist-pattern[]=ajv — without it the frozen install leaves
+# ajv nested in the .pnpm store and the externalized cloud bundle can't resolve it.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps ./apps
 COPY packages ./packages
 COPY mcps ./mcps

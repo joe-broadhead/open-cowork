@@ -4,7 +4,8 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc carries the public-hoist-pattern needed for externalized-bundle deps (ajv).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps ./apps
 COPY packages ./packages
 COPY mcps ./mcps
