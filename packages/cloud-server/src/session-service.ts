@@ -1,5 +1,4 @@
-import { computeNextWorkflowRunAt } from '@open-cowork/runtime-host/workflow/workflow-schedule'
-import { verifyWorkflowWebhookAuth, WebhookHttpError, type WorkflowWebhookAuth, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
+import { type WorkflowWebhookAuth, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { createHash, randomUUID } from 'crypto'
 import type {
   CapabilitySkill,
@@ -37,7 +36,6 @@ import {
 import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
   ApiTokenScope,
-  ApiTokenRecord,
   BillingSubscriptionRecord,
   ChannelBindingRecord,
   ChannelDeliveryRecord,
@@ -50,9 +48,6 @@ import type {
   ChannelProviderEventType,
   ChannelProviderId,
   ChannelSessionBindingRecord,
-  ClaimedWorkflowRunRecord,
-  CloudWorkflowRecord,
-  CloudWorkflowRunRecord,
   ControlPlaneMembershipStatus,
   ControlPlaneRole,
   ControlPlaneStore,
@@ -72,7 +67,6 @@ import type {
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
 import { CloudServiceError } from './cloud-service-error.ts'
-import { ControlPlaneQuotaExceededError } from './control-plane-errors.ts'
 import {
   evaluateBillingEntitlement,
   isBillingConfigured,
@@ -136,10 +130,6 @@ import {
   type RemoteInteractionPolicyInput,
 } from './services/remote-approval-policy.ts'
 import {
-  enforceApiTokenScopePolicy,
-  normalizeApiTokenExpiresAt,
-  normalizeApiTokenScopes,
-  publicApiToken,
   resolvedSignupMode,
   type CloudIdentityPolicy,
   type PublicApiTokenRecord,
@@ -156,33 +146,23 @@ import { CloudUsageGovernanceService } from './services/usage-governance-service
 import { CloudChannelDomainService } from './services/channel-domain-service.ts'
 import { CloudThreadOrganizationService } from './session-thread-organization.ts'
 import { CloudBillingOperationsService } from './session-billing-operations.ts'
+import { CloudDiagnosticsOperationsService } from './session-diagnostics-operations.ts'
+import { CloudApiTokenOperationsService } from './session-api-token-operations.ts'
+import { CloudUsageOperationsService } from './session-usage-operations.ts'
+import { CloudWorkflowOperationsService } from './session-workflow-operations.ts'
 import {
-  principalCanManageApiTokens,
   principalCanManageOrg,
-  principalCanViewDiagnostics,
   principalCanViewOperations,
   principalEmailDomain,
 } from './session-principal-access.ts'
-import {
-  toWorkflowRun,
-  toWorkflowSummary,
-  workflowRunTerminal,
-  workflowWebhookReplayKey,
-} from './session-workflow-mappers.ts'
 import { runOnAbort, throwIfAborted } from './cloud-abort-helpers.ts'
 import { boundedImportText, normalizeImportCounts } from './session-import-validation.ts'
 import {
   asRecord,
   includesAllowed,
-  normalizedCloudListLimit,
   readString,
   stableCloudId,
 } from './session-input-validation.ts'
-import {
-  assertWorkflowDraftAllowed,
-  normalizeWorkflowDraft,
-  WORKFLOW_VALID_TRIGGER_TYPES,
-} from './session-workflow-validation.ts'
 import { normalizeChannelProviderId } from './channel-provider-utils.ts'
 import { log } from '@open-cowork/shared/node'
 import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
@@ -362,13 +342,7 @@ type ChannelInteractionResolutionInput = ChannelActorInput & {
 }
 
 const SESSION_IMPORT_MAX_MESSAGES = 2_000
-// Workflow-draft size/trigger limits + the draft validators now live in
-// session-workflow-validation.ts; WORKFLOW_VALID_TRIGGER_TYPES is imported back
-// for the runWorkflow trigger-type guard.
-const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
-const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
 const HOUR_MS = 60 * 60 * 1000
-const DAY_MS = 24 * HOUR_MS
 
 const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   enabled: false,
@@ -435,6 +409,10 @@ export class CloudSessionService {
   private readonly settingMetadataService: CloudSettingMetadataService
   private readonly threadOrganization: CloudThreadOrganizationService
   private readonly billingOperations: CloudBillingOperationsService
+  private readonly diagnosticsOperations: CloudDiagnosticsOperationsService
+  private readonly apiTokenOperations: CloudApiTokenOperationsService
+  private readonly usageOperations: CloudUsageOperationsService
+  private readonly workflowOperations: CloudWorkflowOperationsService
   private readonly inviteSigningSecret: string | Buffer | null
   private readonly emailSender: CloudEmailSender | null
   // Per-(tenant,account) "already bootstrapped" markers. The org-active and
@@ -556,6 +534,41 @@ export class CloudSessionService {
       billingAdapter,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
+    })
+    this.diagnosticsOperations = new CloudDiagnosticsOperationsService({
+      store,
+      policy,
+      byokService: this.byokService,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      getBillingSubscription: (principal) => this.getBillingSubscription(principal),
+      getUsageSummary: (principal, limit) => this.getUsageSummary(principal, limit),
+    })
+    this.apiTokenOperations = new CloudApiTokenOperationsService({
+      store,
+      identityPolicy,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+    })
+    this.usageOperations = new CloudUsageOperationsService({
+      store,
+      policy,
+      abuse,
+      usageGovernance: this.usageGovernance,
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      assertBillingAllowed: (input) => this.assertBillingAllowed(input),
+      getSessionView: (principal, sessionId) => this.getSessionView(principal, sessionId),
+      appendProjectedEvent: (input) => this.appendProjectedEvent(input),
+    })
+    this.workflowOperations = new CloudWorkflowOperationsService({
+      store,
+      policy,
+      ids,
+      usageGovernance: this.usageGovernance,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      assertBillingAllowed: (input) => this.assertBillingAllowed(input),
+      createCloudSessionRecord: (input) => this.createCloudSessionRecord(input),
     })
   }
 
@@ -1612,49 +1625,15 @@ export class CloudSessionService {
   }
 
   async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<WorkflowListPayload> {
-    await this.ensurePrincipal(principal)
-    this.assertWorkflowsEnabled()
-    const workflows = (await this.store.listWorkflows(principal.tenantId, principal.userId))
-      .slice(0, normalizedCloudListLimit(input.limit))
-    const runs = (await Promise.all(workflows.map((workflow) => (
-      this.store.listWorkflowRuns(principal.tenantId, workflow.id, 25)
-    )))).flat()
-    return {
-      workflows: workflows.map(toWorkflowSummary),
-      runs: runs
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, 100)
-        .map(toWorkflowRun),
-    }
+    return this.workflowOperations.listWorkflows(principal, input)
   }
 
   async getWorkflow(principal: CloudPrincipal, workflowId: string): Promise<WorkflowDetail | null> {
-    await this.ensurePrincipal(principal)
-    this.assertWorkflowsEnabled()
-    const workflow = await this.store.getWorkflow(principal.tenantId, principal.userId, workflowId)
-    return workflow ? this.workflowDetail(workflow) : null
+    return this.workflowOperations.getWorkflow(principal, workflowId)
   }
 
   async createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowDetail> {
-    await this.ensurePrincipal(principal)
-    this.assertWorkflowsEnabled()
-    const now = new Date()
-    let normalized: WorkflowDraft
-    try {
-      normalized = normalizeWorkflowDraft(draft, this.ids, now)
-    } catch (error) {
-      throw new CloudServiceError(400, error instanceof Error ? error.message : 'Workflow draft is invalid.')
-    }
-    assertWorkflowDraftAllowed(normalized, this.policy)
-    const workflow = await this.store.createWorkflow({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      workflowId: this.ids.randomUUID(),
-      draft: normalized,
-      nextRunAt: computeNextWorkflowRunAt(normalized.triggers, now),
-      createdAt: now,
-    })
-    return this.workflowDetail(workflow)
+    return this.workflowOperations.createWorkflow(principal, draft)
   }
 
   async updateWorkflowStatus(
@@ -1662,39 +1641,7 @@ export class CloudSessionService {
     workflowId: string,
     status: WorkflowStatus,
   ): Promise<WorkflowDetail | null> {
-    await this.ensurePrincipal(principal)
-    this.assertWorkflowsEnabled()
-    if (status !== 'active' && status !== 'paused' && status !== 'archived') {
-      throw new Error('Cloud workflow status updates must be active, paused, or archived.')
-    }
-    const current = await this.store.getWorkflow(principal.tenantId, principal.userId, workflowId)
-    if (!current) return null
-    const now = new Date()
-    const updated = await this.store.updateWorkflowStatus({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      workflowId,
-      status,
-      nextRunAt: status === 'active' ? computeNextWorkflowRunAt(current.triggers, now) : null,
-      updatedAt: now,
-    })
-    return updated ? this.workflowDetail(updated) : null
-  }
-
-  private async assertWorkflowExecutionStartAllowed(tenantId: string, orgId: string) {
-    await this.assertBillingAllowed({
-      orgId,
-      action: 'worker.execute',
-      profileName: this.policy.profileName,
-    })
-    try {
-      await this.store.assertSessionCommandQueueQuota({
-        tenantId,
-        quota: await this.usageGovernance.commandQueueQuotaForOrg(orgId),
-      })
-    } catch (error) {
-      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
-    }
+    return this.workflowOperations.updateWorkflowStatus(principal, workflowId, status)
   }
 
   async runWorkflow(
@@ -1705,48 +1652,11 @@ export class CloudSessionService {
       triggerPayload?: Record<string, unknown> | null
     } = {},
   ): Promise<CloudWorkflowStartResult> {
-    await this.ensurePrincipal(principal)
-    this.assertWorkflowsEnabled()
-    const workflow = await this.store.getWorkflow(principal.tenantId, principal.userId, workflowId)
-    if (!workflow) throw new Error(`Unknown workflow ${workflowId}.`)
-    const triggerType = input.triggerType || 'manual'
-    if (!WORKFLOW_VALID_TRIGGER_TYPES.has(triggerType)) throw new Error('Workflow trigger type is invalid.')
-    const orgId = this.principalOrgId(principal)
-    await this.assertWorkflowExecutionStartAllowed(principal.tenantId, orgId)
-    let run: CloudWorkflowRunRecord
-    try {
-      run = await this.store.createWorkflowRun({
-        tenantId: principal.tenantId,
-        userId: principal.userId,
-        workflowId,
-        runId: this.ids.randomUUID(),
-        triggerType,
-        triggerPayload: input.triggerPayload || null,
-        claimedBy: `workflow-api:${principal.userId}`,
-        quota: await this.usageGovernance.workflowRunQuotaForOrg(orgId),
-      })
-    } catch (error) {
-      this.usageGovernance.translateQuotaError(error, 'Cloud workflow run quota exceeded.', 'quota.workflow_runs_per_hour_exceeded')
-    }
-    return this.startWorkflowRun(workflow, run)
+    return this.workflowOperations.runWorkflow(principal, workflowId, input)
   }
 
   async claimAndStartDueWorkflow(now = new Date(), claimedBy?: string | null): Promise<CloudWorkflowStartResult | null> {
-    this.assertWorkflowsEnabled()
-    let claimed: ClaimedWorkflowRunRecord | null
-    try {
-      claimed = await this.store.claimDueWorkflowRun({
-        runId: this.ids.randomUUID(),
-        claimedBy,
-        now,
-        quota: this.usageGovernance.workflowRunDefaultQuota(),
-      })
-    } catch (error) {
-      if (error instanceof ControlPlaneQuotaExceededError) return null
-      throw error
-    }
-    if (!claimed) return null
-    return this.startClaimedWorkflowRun(claimed)
+    return this.workflowOperations.claimAndStartDueWorkflow(now, claimedBy)
   }
 
   async runWorkflowWebhook(input: {
@@ -1756,55 +1666,7 @@ export class CloudSessionService {
     securityStore: WorkflowWebhookSecurityStore
     now?: Date
   }): Promise<CloudWorkflowStartResult> {
-    this.assertWorkflowsEnabled()
-    if (!this.policy.features.webhooks) {
-      throw new WebhookHttpError(404, 'Workflow webhook was not found.')
-    }
-    if (input.auth.kind !== 'signature') {
-      throw new WebhookHttpError(401, 'Workflow webhook signature authorization is required.')
-    }
-    const workflow = await this.store.findWorkflow(input.workflowId)
-    const webhook = workflow?.triggers.find((trigger) => (
-      trigger.enabled
-      && trigger.type === 'webhook'
-      && typeof trigger.webhookSecret === 'string'
-      && verifyWorkflowWebhookAuth(input.auth, trigger.webhookSecret, input.now || new Date())
-    ))
-    if (!workflow || !webhook) {
-      throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
-    }
-    const replayClaim = await input.securityStore.claimSignature({
-      key: workflowWebhookReplayKey(workflow.id, input.auth),
-      nowMs: (input.now || new Date()).getTime(),
-      windowMs: WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS,
-      cacheLimit: WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT,
-    })
-    if (!replayClaim) throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
-    try {
-      const org = await this.store.ensureOrgForTenant({ tenantId: workflow.tenantId, name: workflow.tenantId })
-      await this.assertWorkflowExecutionStartAllowed(workflow.tenantId, org.orgId)
-      let run: CloudWorkflowRunRecord
-      try {
-        run = await this.store.createWorkflowRun({
-          tenantId: workflow.tenantId,
-          userId: workflow.userId,
-          workflowId: workflow.id,
-          runId: this.ids.randomUUID(),
-          triggerType: 'webhook',
-          triggerPayload: input.payload,
-          claimedBy: `workflow-webhook:${workflow.id}`,
-          quota: await this.usageGovernance.workflowRunQuotaForOrg(org.orgId),
-        })
-      } catch (error) {
-        this.usageGovernance.translateQuotaError(error, 'Cloud workflow run quota exceeded.', 'quota.workflow_runs_per_hour_exceeded')
-      }
-      const started = await this.startWorkflowRun(workflow, run)
-      await replayClaim.accept()
-      return started
-    } catch (error) {
-      await replayClaim.release()
-      throw error
-    }
+    return this.workflowOperations.runWorkflowWebhook(input)
   }
 
   async appendProductEvent(
@@ -1816,54 +1678,19 @@ export class CloudSessionService {
       createdAt?: Date
     },
   ) {
-    await this.getSessionView(principal, sessionId)
-    return this.appendProjectedEvent({
-      tenantId: principal.tenantId,
-      sessionId,
-      type: input.type,
-      payload: input.payload || {},
-      createdAt: input.createdAt,
-    })
+    return this.usageOperations.appendProductEvent(principal, sessionId, input)
   }
 
   async assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number) {
-    await this.assertBillingAllowed({
-      orgId: this.principalOrgId(principal),
-      action: 'artifact.upload',
-      profileName: this.policy.profileName,
-    })
-    await this.usageGovernance.consumeQuota({
-      orgId: this.principalOrgId(principal),
-      quotaKey: 'artifact_bytes:day',
-      limit: this.abuse.maxArtifactBytesPerDay,
-      entitlementLimitKey: 'maxArtifactBytesPerDay',
-      quantity: bytes,
-      windowMs: DAY_MS,
-      policyCode: 'quota.artifact_bytes_per_day_exceeded',
-      message: 'Cloud artifact upload quota exceeded.',
-    })
+    return this.usageOperations.assertArtifactUploadAllowed(principal, bytes)
   }
 
   async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
-    await this.usageGovernance.recordUsage({
-      orgId: this.principalOrgId(principal),
-      accountId: principal.accountId || principal.userId,
-      eventType: 'artifact.uploaded',
-      quantity: bytes,
-      unit: 'byte',
-      metadata: { tenantId: principal.tenantId, sessionId, artifactId },
-    })
+    return this.usageOperations.recordArtifactUploaded(principal, sessionId, artifactId, bytes)
   }
 
   async recordArtifactDownloaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
-    await this.usageGovernance.recordUsage({
-      orgId: this.principalOrgId(principal),
-      accountId: principal.accountId || principal.userId,
-      eventType: 'artifact.downloaded',
-      quantity: bytes,
-      unit: 'byte',
-      metadata: { tenantId: principal.tenantId, sessionId, artifactId },
-    })
+    return this.usageOperations.recordArtifactDownloaded(principal, sessionId, artifactId, bytes)
   }
 
   async recordWorkerMinutes(input: {
@@ -1873,50 +1700,7 @@ export class CloudSessionService {
     elapsedMs: number
     reservedMinutes?: number
   }) {
-    if (!this.abuse.enabled) return null
-    const org = await this.store.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId })
-    const minutes = Math.max(1, Math.ceil(input.elapsedMs / 60_000))
-    const unreservedMinutes = Math.max(0, minutes - Math.max(0, Math.floor(input.reservedMinutes || 0)))
-    const workerMinuteLimit = this.usageGovernance.quotaLimit(await this.usageGovernance.effectiveQuotaLimit(
-      org.orgId,
-      this.abuse.maxWorkerMinutesPerHour,
-      'maxWorkerMinutesPerHour',
-    ))
-    if (workerMinuteLimit && unreservedMinutes > 0) {
-      const now = new Date()
-      const quota = await this.store.consumeUsageQuota({
-        orgId: org.orgId,
-        quotaKey: 'worker_minutes:hour',
-        limit: workerMinuteLimit,
-        quantity: unreservedMinutes,
-        windowMs: HOUR_MS,
-        now,
-        policyCode: 'quota.worker_minutes_per_hour_exceeded',
-      })
-      if (!quota.allowed && quota.remaining > 0) {
-        await this.store.consumeUsageQuota({
-          orgId: org.orgId,
-          quotaKey: 'worker_minutes:hour',
-          limit: workerMinuteLimit,
-          quantity: quota.remaining,
-          windowMs: HOUR_MS,
-          now,
-          policyCode: 'quota.worker_minutes_per_hour_exceeded',
-        })
-      }
-    }
-    return this.store.recordUsageEvent({
-      orgId: org.orgId,
-      eventType: 'worker.minute',
-      quantity: minutes,
-      unit: 'minute',
-      metadata: {
-        tenantId: input.tenantId,
-        sessionId: input.sessionId,
-        workerId: input.workerId,
-        elapsedMs: Math.max(0, Math.round(input.elapsedMs)),
-      },
-    })
+    return this.usageOperations.recordWorkerMinutes(input)
   }
 
   async recordManagedWorkClaimed(input: {
@@ -1952,95 +1736,11 @@ export class CloudSessionService {
   }
 
   async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
-    await this.ensurePrincipal(principal)
-    if (!principalCanViewDiagnostics(principal)) {
-      throw new CloudServiceError(403, 'Cloud diagnostics require operator privileges.')
-    }
-    const orgId = this.principalOrgId(principal)
-    const deliverySampleLimit = 200
-    const [billing, usage, byok, heartbeats, agents, deliveries] = await Promise.all([
-      this.getBillingSubscription(principal),
-      this.getUsageSummary(principal, 200),
-      this.byokService.listSecretMetadataForOrg(orgId),
-      this.store.listWorkerHeartbeats(),
-      this.store.listHeadlessAgents(orgId),
-      this.store.listChannelDeliveries({ orgId, limit: deliverySampleLimit }),
-    ])
-    const bindings = (await Promise.all(agents.map((agent) => this.store.listChannelBindings(orgId, agent.agentId)))).flat()
-    const deliveryCounts: Record<string, number> = {
-      pending: 0,
-      claimed: 0,
-      sent: 0,
-      failed: 0,
-      dead: 0,
-    }
-    for (const delivery of deliveries) {
-      deliveryCounts[delivery.status] = (deliveryCounts[delivery.status] || 0) + 1
-    }
-    const bindingsByProvider: Record<string, number> = {}
-    for (const binding of bindings) {
-      bindingsByProvider[binding.provider] = (bindingsByProvider[binding.provider] || 0) + 1
-    }
-    const now = Date.now()
-    const runtimeHeartbeats = heartbeats.map((heartbeat) => {
-      const ageMs = Math.max(0, now - Date.parse(heartbeat.lastSeenAt))
-      return {
-        workerId: heartbeat.workerId,
-        role: heartbeat.role,
-        activeSessionCount: heartbeat.activeSessionIds.length,
-        lastSeenAt: heartbeat.lastSeenAt,
-        ageMs,
-        stale: ageMs > 60_000,
-      }
-    })
-    return {
-      generatedAt: new Date().toISOString(),
-      redaction: 'secrets-redacted',
-      org: {
-        orgId,
-        tenantId: principal.tenantId,
-        role: principal.role || principal.authSource || 'unknown',
-        profileName: this.policy.profileName,
-      },
-      runtime: {
-        role: this.policy.role,
-        profileName: this.policy.profileName,
-        canExecute: this.policy.role === 'all-in-one' || this.policy.role === 'worker',
-        commandProcessing: this.policy.role === 'all-in-one' ? 'inline' : this.policy.role === 'worker' ? 'durable' : 'delegated',
-        checkpoints: this.policy.role === 'all-in-one' || this.policy.role === 'worker',
-        heartbeatCount: heartbeats.length,
-        heartbeats: runtimeHeartbeats,
-      },
-      billing,
-      byok: {
-        configuredProviders: byok.length,
-        providers: byok,
-      },
-      usage,
-      gateway: {
-        agents: {
-          total: agents.length,
-          active: agents.filter((agent) => agent.status === 'active').length,
-          disabled: agents.filter((agent) => agent.status === 'disabled').length,
-        },
-        bindingsByProvider,
-        deliveriesByStatus: deliveryCounts,
-        deliveriesByStatusScope: 'recent_deliveries',
-        deliverySampleLimit,
-      },
-      links: {
-        deploymentDocs: '/docs/open-cowork-cloud',
-        managedByokRunbook: '/runbooks/managed-byok-saas',
-      },
-    }
+    return this.diagnosticsOperations.getDiagnosticsBundle(principal)
   }
 
   async listApiTokens(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<PublicApiTokenRecord[]> {
-    await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
-    const tokens = (await this.store.listApiTokens(this.principalOrgId(principal)))
-      .slice(0, normalizedCloudListLimit(input.limit))
-    return Promise.all(tokens.map((token) => this.publicApiTokenWithChannelBindings(token)))
+    return this.apiTokenOperations.listApiTokens(principal, input)
   }
 
   async issueApiToken(
@@ -2052,53 +1752,11 @@ export class CloudSessionService {
       channelBindingIds?: readonly string[] | null
     },
   ): Promise<IssuedPublicApiTokenRecord> {
-    await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
-    const scopes = enforceApiTokenScopePolicy(normalizeApiTokenScopes(input.scopes), this.identityPolicy)
-    const channelBindingIds = await this.normalizeApiTokenChannelBindingIds(principal, input.channelBindingIds, scopes)
-    const issued = await this.store.issueApiToken({
-      orgId: this.principalOrgId(principal),
-      accountId: principal.accountId || principal.userId,
-      name: input.name,
-      scopes,
-      expiresAt: normalizeApiTokenExpiresAt(input.expiresAt, this.identityPolicy),
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: principal.accountId || principal.userId,
-      },
-    })
-    for (const channelBindingId of channelBindingIds) {
-      await this.store.grantApiTokenChannelBinding({
-        orgId: this.principalOrgId(principal),
-        tokenId: issued.token.tokenId,
-        channelBindingId,
-        actor: {
-          actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-          actorId: principal.tokenId || principal.userId,
-          accountId: principal.accountId || principal.userId,
-        },
-      })
-    }
-    return {
-      token: publicApiToken(issued.token, channelBindingIds),
-      plaintext: issued.plaintext,
-    }
+    return this.apiTokenOperations.issueApiToken(principal, input)
   }
 
   async revokeApiToken(principal: CloudPrincipal, tokenId: string): Promise<PublicApiTokenRecord | null> {
-    await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
-    const revoked = await this.store.revokeApiToken({
-      tokenId,
-      orgId: this.principalOrgId(principal),
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: principal.accountId || principal.userId,
-      },
-    })
-    return revoked ? this.publicApiTokenWithChannelBindings(revoked) : null
+    return this.apiTokenOperations.revokeApiToken(principal, tokenId)
   }
 
   async grantApiTokenChannelBinding(
@@ -2106,29 +1764,7 @@ export class CloudSessionService {
     tokenId: string,
     input: { channelBindingId: string },
   ): Promise<{ grant: { orgId: string, tokenId: string, channelBindingId: string, createdAt: string }, token: PublicApiTokenRecord }> {
-    await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
-    const orgId = this.principalOrgId(principal)
-    const token = (await this.store.listApiTokens(orgId)).find((candidate) => candidate.tokenId === tokenId)
-    if (!token) throw new CloudServiceError(404, 'API token was not found.')
-    if (!token.scopes.includes('gateway')) {
-      throw new CloudServiceError(400, 'Channel binding grants require a gateway-scoped API token.')
-    }
-    const channelBindingId = await this.normalizeSingleApiTokenChannelBindingId(principal, input.channelBindingId)
-    const grant = await this.store.grantApiTokenChannelBinding({
-      orgId,
-      tokenId,
-      channelBindingId,
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: principal.accountId || principal.userId,
-      },
-    })
-    return {
-      grant,
-      token: await this.publicApiTokenWithChannelBindings(token),
-    }
+    return this.apiTokenOperations.grantApiTokenChannelBinding(principal, tokenId, input)
   }
 
   async getBillingSubscription(principal: CloudPrincipal) {
@@ -2397,7 +2033,7 @@ export class CloudSessionService {
         payload: { commandId: command.commandId, message },
         leaseToken: lease.leaseToken,
       })
-      await this.failWorkflowRunForSession(command.tenantId, command.sessionId, message, lease.leaseToken)
+      await this.workflowOperations.failWorkflowRunForSession(command.tenantId, command.sessionId, message, lease.leaseToken)
       await this.store.failSessionCommand(lease, command.commandId, message)
       throw error
     }
@@ -2498,10 +2134,10 @@ export class CloudSessionService {
     for (const event of result?.events || []) {
       await this.applyRuntimeEvent(lease, command.sessionId, event)
     }
-    await this.completeWorkflowRunForSession(
+    await this.workflowOperations.completeWorkflowRunForSession(
       command.tenantId,
       command.sessionId,
-      this.workflowSummaryFromRuntimeEvents(result?.events || []),
+      this.workflowOperations.workflowSummaryFromRuntimeEvents(result?.events || []),
       lease.leaseToken,
     )
   }
@@ -2953,236 +2589,6 @@ export class CloudSessionService {
     return runtimeSession.id
   }
 
-  private async workflowDetail(workflow: CloudWorkflowRecord): Promise<WorkflowDetail> {
-    return {
-      ...toWorkflowSummary(workflow),
-      runs: (await this.store.listWorkflowRuns(workflow.tenantId, workflow.id, 25)).map(toWorkflowRun),
-    }
-  }
-
-  private async startClaimedWorkflowRun(claimed: ClaimedWorkflowRunRecord): Promise<CloudWorkflowStartResult | null> {
-    try {
-      return await this.startWorkflowRun(claimed.workflow, claimed.run)
-    } catch (error) {
-      if (error instanceof CloudServiceError && (error.status === 402 || error.status === 429)) {
-        const now = new Date()
-        const nextStatus = this.nextWorkflowStatusAfterRun(claimed.workflow)
-        await this.store.failWorkflowRun({
-          tenantId: claimed.workflow.tenantId,
-          workflowId: claimed.workflow.id,
-          runId: claimed.run.id,
-          error: error.message,
-          nextStatus,
-          nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(claimed.workflow.triggers, now) : null,
-          finishedAt: now,
-        })
-        return null
-      }
-      throw error
-    }
-  }
-
-  private async startWorkflowRun(
-    workflow: CloudWorkflowRecord,
-    run: CloudWorkflowRunRecord,
-  ): Promise<CloudWorkflowStartResult> {
-    const org = await this.store.ensureOrgForTenant({ tenantId: workflow.tenantId, name: workflow.tenantId })
-    await this.assertWorkflowExecutionStartAllowed(workflow.tenantId, org.orgId)
-    const session = await this.createCloudSessionRecord({
-      tenantId: workflow.tenantId,
-      userId: workflow.userId,
-      sessionId: run.sessionId || undefined,
-      profileName: this.policy.profileName,
-      title: `Run ${workflow.title}`,
-    })
-    const attached = await this.store.attachWorkflowRunSession({
-      tenantId: workflow.tenantId,
-      workflowId: workflow.id,
-      runId: run.id,
-      sessionId: session.sessionId,
-      claimToken: run.claimToken,
-    })
-    let command: SessionCommandRecord
-    try {
-      command = await this.store.enqueueSessionCommand({
-        commandId: this.workflowPromptCommandId(workflow, run),
-        tenantId: workflow.tenantId,
-        userId: workflow.userId,
-        sessionId: session.sessionId,
-        kind: 'prompt',
-        payload: {
-          text: workflow.instructions,
-          agent: workflow.agentName,
-        },
-        quota: await this.usageGovernance.commandQueueQuotaForOrg(org.orgId),
-      })
-    } catch (error) {
-      if (error instanceof ControlPlaneQuotaExceededError) {
-        const now = new Date()
-        const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
-        await this.store.failWorkflowRun({
-          tenantId: workflow.tenantId,
-          workflowId: workflow.id,
-          runId: run.id,
-          error: error.publicMessage || 'Cloud command queue is full.',
-          nextStatus,
-          nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
-          finishedAt: now,
-        })
-      }
-      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
-    }
-    await this.usageGovernance.recordUsage({
-      orgId: org.orgId,
-      accountId: workflow.userId,
-      eventType: 'work.queued',
-      unit: 'count',
-      metadata: {
-        tenantId: workflow.tenantId,
-        sessionId: session.sessionId,
-        workflowId: workflow.id,
-        runId: run.id,
-        commandId: command.commandId,
-        commandKind: command.kind,
-        source: `workflow:${run.triggerType}`,
-      },
-    })
-    const updatedWorkflow = await this.store.getWorkflowForTenant(workflow.tenantId, workflow.id)
-    return {
-      tenantId: workflow.tenantId,
-      workflow: updatedWorkflow ? await this.workflowDetail(updatedWorkflow) : {
-        ...toWorkflowSummary(workflow),
-        runs: [toWorkflowRun(attached || run)],
-      },
-      run: toWorkflowRun(attached || run),
-      sessionId: session.sessionId,
-      command,
-    }
-  }
-
-  private workflowPromptCommandId(workflow: CloudWorkflowRecord, run: CloudWorkflowRunRecord) {
-    return `workflow:${workflow.tenantId}:${workflow.id}:${run.id}:prompt`
-  }
-
-  private workflowSummaryFromRuntimeEvents(events: CloudRuntimeEvent[]) {
-    const assistant = events
-      .slice()
-      .reverse()
-      .find((event) => event.type === 'assistant.message')
-    const content = assistant ? readString(asRecord(assistant.payload).content) : ''
-    return content ? content.slice(0, 500) : null
-  }
-
-  private async completeWorkflowRunForSession(
-    tenantId: string,
-    sessionId: string,
-    summary: string | null,
-    leaseToken?: string | null,
-  ) {
-    const run = await this.store.getWorkflowRunBySession(tenantId, sessionId)
-    if (!run || workflowRunTerminal(run.status)) return
-    const workflow = await this.store.getWorkflowForTenant(tenantId, run.workflowId)
-    if (!workflow) return
-    const now = new Date()
-    const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
-    await this.store.completeWorkflowRun({
-      tenantId,
-      workflowId: workflow.id,
-      runId: run.id,
-      summary,
-      nextStatus,
-      nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
-      leaseToken,
-      finishedAt: now,
-    })
-    await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
-      eventType: 'workflow.completed',
-      workflowId: workflow.id,
-      runId: run.id,
-      status: 'completed',
-      summary,
-      finishedAt: now.toISOString(),
-    })
-  }
-
-  private async failWorkflowRunForSession(
-    tenantId: string,
-    sessionId: string,
-    error: string,
-    leaseToken?: string | null,
-  ) {
-    const run = await this.store.getWorkflowRunBySession(tenantId, sessionId)
-    if (!run || workflowRunTerminal(run.status)) return
-    const workflow = await this.store.getWorkflowForTenant(tenantId, run.workflowId)
-    if (!workflow) return
-    const now = new Date()
-    const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
-    await this.store.failWorkflowRun({
-      tenantId,
-      workflowId: workflow.id,
-      runId: run.id,
-      error,
-      nextStatus,
-      nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
-      leaseToken,
-      finishedAt: now,
-    })
-    await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
-      eventType: 'workflow.failed',
-      workflowId: workflow.id,
-      runId: run.id,
-      status: 'failed',
-      error,
-      finishedAt: now.toISOString(),
-    })
-  }
-
-  private nextWorkflowStatusAfterRun(workflow: CloudWorkflowRecord): WorkflowStatus {
-    return workflow.status === 'paused' || workflow.status === 'archived'
-      ? workflow.status
-      : 'active'
-  }
-
-  private async enqueueWorkflowChannelDeliveries(
-    tenantId: string,
-    sessionId: string,
-    input: {
-      eventType: string
-      workflowId: string
-      runId: string
-      status: string
-      summary?: string | null
-      error?: string | null
-      finishedAt: string
-    },
-  ) {
-    const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
-    const bindings = await this.store.listChannelSessionBindingsForSession(org.orgId, sessionId)
-    await Promise.all(bindings.map((binding) => this.store.createChannelDelivery({
-      deliveryId: stableCloudId('channel_delivery', org.orgId, input.eventType, input.runId, binding.bindingId),
-      orgId: org.orgId,
-      agentId: binding.agentId,
-      channelBindingId: binding.channelBindingId,
-      sessionBindingId: binding.bindingId,
-      provider: binding.provider,
-      target: {
-        externalChatId: binding.externalChatId,
-        externalThreadId: binding.externalThreadId,
-        lastChatMessageId: binding.lastChatMessageId,
-      },
-      eventType: input.eventType,
-      payload: {
-        workflowId: input.workflowId,
-        runId: input.runId,
-        sessionId,
-        status: input.status,
-        summary: input.summary || null,
-        error: input.error || null,
-        finishedAt: input.finishedAt,
-      },
-    })))
-  }
-
   private principalOrgId(principal: CloudPrincipal) {
     return principal.orgId || principal.tenantId
   }
@@ -3207,45 +2613,6 @@ export class CloudSessionService {
       input,
       resolveActorWorkspaceMember: () => this.principalIsActiveWorkspaceMember(principal),
     })
-  }
-
-  private async publicApiTokenWithChannelBindings(token: ApiTokenRecord): Promise<PublicApiTokenRecord> {
-    const grants = await this.store.listApiTokenChannelBindingGrants({
-      orgId: token.orgId,
-      tokenId: token.tokenId,
-    })
-    return publicApiToken(token, grants.map((grant) => grant.channelBindingId))
-  }
-
-  private async normalizeApiTokenChannelBindingIds(
-    principal: CloudPrincipal,
-    input: readonly string[] | null | undefined,
-    scopes: ApiTokenScope[],
-  ): Promise<string[]> {
-    const ids = [...new Set((input || []).map((value) => value.trim()).filter(Boolean))]
-    if (ids.length === 0) return []
-    if (!scopes.includes('gateway')) {
-      throw new CloudServiceError(400, 'Channel binding grants require a gateway-scoped API token.')
-    }
-    const normalized: string[] = []
-    for (const channelBindingId of ids) {
-      normalized.push(await this.normalizeSingleApiTokenChannelBindingId(principal, channelBindingId))
-    }
-    return normalized
-  }
-
-  private async normalizeSingleApiTokenChannelBindingId(principal: CloudPrincipal, input: string): Promise<string> {
-    const channelBindingId = input.trim()
-    if (!channelBindingId) throw new CloudServiceError(400, 'Channel binding id is required.')
-    const binding = await this.store.getChannelBinding(this.principalOrgId(principal), channelBindingId)
-    if (!binding) throw new CloudServiceError(404, 'Channel binding was not found.')
-    return binding.bindingId
-  }
-
-  private assertApiTokenAdmin(principal: CloudPrincipal) {
-    if (!principalCanManageApiTokens(principal)) {
-      throw new CloudServiceError(403, 'API token administration requires an org admin or admin-scoped API token.')
-    }
   }
 
   private assertOrgAdmin(principal: CloudPrincipal) {
@@ -3345,12 +2712,6 @@ export class CloudSessionService {
     return {
       session: this.withProjectionProjectSource(session, projection),
       projection,
-    }
-  }
-
-  private assertWorkflowsEnabled() {
-    if (!this.policy.features.workflows) {
-      throw new Error('Workflows are disabled for this cloud profile.')
     }
   }
 
