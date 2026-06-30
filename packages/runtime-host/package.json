@@ -406,7 +406,8 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsc"
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*",
