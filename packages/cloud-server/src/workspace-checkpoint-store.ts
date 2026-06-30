@@ -107,7 +107,14 @@ function sha256(buffer: Buffer | string) {
 }
 
 function safeSegment(value: string, fallback: string) {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '')
+  const collapsed = value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-')
+  // Linear-time trim of leading/trailing '-' (equivalent to .replace(/^-+|-+$/g, '')
+  // without the super-linear backtracking that pattern incurs on long dash runs).
+  let start = 0
+  let end = collapsed.length
+  while (start < end && collapsed.charCodeAt(start) === 45) start += 1
+  while (end > start && collapsed.charCodeAt(end - 1) === 45) end -= 1
+  const normalized = collapsed.slice(start, end)
   return normalized.slice(0, 96) || fallback
 }
 

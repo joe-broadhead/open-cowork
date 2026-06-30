@@ -97,7 +97,16 @@ export function createCloudPathProvider(root: string): PathProvider {
 }
 
 function safeScopeSegment(value: string, fallback: string) {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '')
+  const collapsed = value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-')
+  // Trim leading/trailing dashes with a linear manual scan instead of the
+  // /^-+|-+$/g regex, whose `-+$` branch backtracks super-linearly on long
+  // dash runs (js/polynomial-redos). Behavior is identical: only the leading
+  // and trailing dash runs are removed, internal dashes are preserved.
+  let start = 0
+  let end = collapsed.length
+  while (start < end && collapsed[start] === '-') start++
+  while (end > start && collapsed[end - 1] === '-') end--
+  const normalized = collapsed.slice(start, end)
   const hash = createHash('sha256').update(value).digest('hex').slice(0, 12)
   return `${normalized.slice(0, 72) || fallback}-${hash}`
 }

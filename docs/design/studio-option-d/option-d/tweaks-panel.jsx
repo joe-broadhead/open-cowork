@@ -228,6 +228,11 @@ function TweaksPanel({ title = 'Tweaks', children }) {
 
   React.useEffect(() => {
     const onMsg = (e) => {
+      // Origin guard: control messages only come from the embedding host,
+      // which is this prototype's parent frame. Reject anything from another
+      // window/frame before trusting the message. (Origin-agnostic on purpose:
+      // the host may embed us cross-origin and posts with '*'.)
+      if (e.source !== window.parent) return;
       const t = e?.data?.type;
       if (t === '__activate_edit_mode') setOpen(true);
       else if (t === '__deactivate_edit_mode') setOpen(false);

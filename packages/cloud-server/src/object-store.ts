@@ -245,9 +245,24 @@ async function readMetadata(objectPath: string): Promise<MetadataFile> {
   }
 }
 
+const SLASH_CHAR_CODE = 47 // '/'
+
+function stripTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === SLASH_CHAR_CODE) end--
+  return value.slice(0, end)
+}
+
+function stripEdgeSlashes(value: string): string {
+  let start = 0
+  const end = value.length
+  while (start < end && value.charCodeAt(start) === SLASH_CHAR_CODE) start++
+  return stripTrailingSlashes(value.slice(start))
+}
+
 function prefixedKey(prefix: string | null | undefined, key: string) {
   const safeKey = assertSafeObjectKey(key)
-  const cleanPrefix = prefix?.trim().replace(/^\/+|\/+$/g, '')
+  const cleanPrefix = prefix == null ? undefined : stripEdgeSlashes(prefix.trim())
   return cleanPrefix ? `${assertSafeObjectKey(cleanPrefix)}/${safeKey}` : safeKey
 }
 
@@ -681,7 +696,7 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
 export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStoreAdapter {
   const httpFetch = options.fetch || defaultHttpFetch()
   const tokenProvider = options.tokenProvider || createGcsAccessTokenProvider()
-  const endpoint = (options.endpoint || 'https://storage.googleapis.com').replace(/\/+$/, '')
+  const endpoint = stripTrailingSlashes(options.endpoint || 'https://storage.googleapis.com')
   const objectUrl = (key: string) => `${endpoint}/${encodeURIComponent(options.bucket)}/${encodeObjectPath(prefixedKey(options.prefix, key))}`
   const metadataHeaders = (metadata: Record<string, string> | undefined) => {
     const headers: Record<string, string> = {}

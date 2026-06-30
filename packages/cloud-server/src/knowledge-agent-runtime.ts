@@ -56,8 +56,15 @@ export type KnowledgeAgentRuntimeAugmentation = {
 }
 
 function knowledgeAgentToolUrl(publicUrl: string) {
-  // Trim a trailing slash so `${base}/propose` (the MCP's contract) is clean.
-  return `${publicUrl.replace(/\/+$/, '')}${KNOWLEDGE_AGENT_ROUTE_BASE_PATH}`
+  // Trim trailing slashes so `${base}/propose` (the MCP's contract) is clean.
+  // A manual scan (instead of /\/+$/) avoids the quadratic backtracking CodeQL
+  // flags for an anchored, quantified character class while producing identical
+  // output: strip every trailing '/' (char code 47), nothing else.
+  let end = publicUrl.length
+  while (end > 0 && publicUrl.charCodeAt(end - 1) === 47) {
+    end -= 1
+  }
+  return `${publicUrl.slice(0, end)}${KNOWLEDGE_AGENT_ROUTE_BASE_PATH}`
 }
 
 export function buildKnowledgeAgentRuntimeAugmentation(

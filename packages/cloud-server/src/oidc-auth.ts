@@ -90,7 +90,10 @@ function unauthorized(message = 'Cloud authentication failed.'): never {
 }
 
 function trimTrailingSlash(value: string) {
-  return value.trim().replace(/\/+$/, '')
+  const trimmed = value.trim()
+  let end = trimmed.length
+  while (end > 0 && trimmed[end - 1] === '/') end -= 1
+  return trimmed.slice(0, end)
 }
 
 function base64UrlDecode(value: string) {

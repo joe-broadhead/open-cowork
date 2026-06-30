@@ -356,13 +356,43 @@ export function getConfiguredToolById(toolId: string) {
   return getConfiguredToolsFromConfig().find((tool) => tool.id === toolId) || null
 }
 
+// Linear-time equivalent of /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.
+// The original regex had super-linear backtracking (polynomial ReDoS) because
+// the greedy namespace class [a-z0-9_-] overlaps with the literal "__"
+// separator that follows it. This helper reproduces the exact greedy match and
+// capture semantics in O(n):
+//   - namespace  = capture group 1 ([a-z0-9][a-z0-9_-]*), as long as possible
+//   - toolPattern = capture group 2 ([^/]+), the remainder; non-empty, slash-free
+// The "__" separator must lie inside the maximal [a-z0-9_-] run that begins
+// right after the "mcp__" prefix, and group 2 always runs to the end of the
+// string, so any "/" after the prefix makes every candidate split fail.
+function matchMcpPermissionPattern(pattern: string): { namespace: string; toolPattern: string } | null {
+  if (!/^mcp__/i.test(pattern)) return null
+  const start = 5 // "mcp__".length
+  // The namespace must begin with an alphanumeric character.
+  if (!/[a-z0-9]/i.test(pattern.charAt(start))) return null
+  // group 2 is [^/]+ to the end, so a "/" anywhere after the prefix can never match.
+  if (pattern.indexOf('/', start) !== -1) return null
+  // End of the maximal [a-z0-9_-] run that holds the namespace and separator.
+  let runEnd = start
+  while (runEnd < pattern.length && /[a-z0-9_-]/i.test(pattern.charAt(runEnd))) runEnd++
+  // Greedy => rightmost "__" leaving a non-empty namespace before and a
+  // non-empty toolPattern after it.
+  for (let i = runEnd - 2; i >= start + 1; i--) {
+    if (pattern.charAt(i) === '_' && pattern.charAt(i + 1) === '_' && i + 2 < pattern.length) {
+      return { namespace: pattern.slice(start, i), toolPattern: pattern.slice(i + 2) }
+    }
+  }
+  return null
+}
+
 export function expandMcpToolPermissionPatterns(patterns: string[]) {
   const expanded = new Set<string>()
   for (const pattern of patterns) {
     expanded.add(pattern)
-    const match = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i)
+    const match = matchMcpPermissionPattern(pattern)
     if (!match) continue
-    const [, namespace, toolPattern] = match
+    const { namespace, toolPattern } = match
     if (!namespace || !toolPattern) continue
     expanded.add(`${namespace}_${toolPattern}`)
   }

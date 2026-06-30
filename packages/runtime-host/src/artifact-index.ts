@@ -247,7 +247,7 @@ function findLifecycleForArtifact(workspace: string, sessionId: string, artifact
 
 function upsertLifecycle(record: ArtifactLifecycleRecord) {
   withTransaction((db) => {
-    db.prepare(`
+    return db.prepare(`
       insert into artifact_lifecycle (
         workspace_id,
         session_id,

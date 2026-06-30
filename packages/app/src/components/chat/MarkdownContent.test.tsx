@@ -42,8 +42,12 @@ describe('MarkdownContent', () => {
     const anchors = Array.from(container.querySelectorAll('a'))
     expect(anchors.length).toBeGreaterThan(0)
     expect(anchors.every((a) => a.getAttribute('rel') === 'noopener noreferrer')).toBe(true)
-    // No anchor retains a javascript: href (blocked by the explicit protocol allowlist).
-    expect(anchors.some((a) => (a.getAttribute('href') || '').toLowerCase().startsWith('javascript:'))).toBe(false)
+    // No anchor retains a dangerous URL scheme (blocked by the explicit protocol allowlist).
+    // Mirror the sanitizer contract: case-insensitive, tolerant of leading whitespace/control chars
+    // that browsers ignore, and covering every executable scheme (javascript:/data:/vbscript:).
+    // eslint-disable-next-line no-control-regex -- matching leading control chars before a scheme is intentional
+    const dangerousScheme = /^[\u0000-\u0020]*(?:javascript|data|vbscript):/i
+    expect(anchors.some((a) => dangerousScheme.test(a.getAttribute('href') || ''))).toBe(false)
   })
 
   it('falls back to the browser clipboard when the app clipboard bridge returns false', async () => {

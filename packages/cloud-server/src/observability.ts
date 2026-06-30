@@ -219,7 +219,13 @@ function spanId() {
 }
 
 function normalizeEndpoint(endpoint: string, suffix: string) {
-  const base = endpoint.trim().replace(/\/+$/, '')
+  const trimmed = endpoint.trim()
+  // Strip the maximal run of trailing slashes via a manual, linear-time scan.
+  // Equivalent to `.replace(/\/+$/, '')` but without the super-linear backtracking
+  // that regex exhibits on adversarial inputs like "////…/x".
+  let end = trimmed.length
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47 /* '/' */) end -= 1
+  const base = trimmed.slice(0, end)
   if (base.endsWith(suffix)) return base
   return `${base}${suffix}`
 }

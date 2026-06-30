@@ -64,8 +64,16 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {}
 }
 
+function trimHyphens(value: string) {
+  let start = 0
+  let end = value.length
+  while (start < end && value.charCodeAt(start) === 0x2d) start += 1
+  while (end > start && value.charCodeAt(end - 1) === 0x2d) end -= 1
+  return value.slice(start, end)
+}
+
 function safeObjectSegment(value: string, fallback: string) {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '')
+  const normalized = trimHyphens(value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-'))
   const hash = createHash('sha256').update(value).digest('hex').slice(0, 12)
   return `${normalized.slice(0, 72) || fallback}-${hash}`
 }

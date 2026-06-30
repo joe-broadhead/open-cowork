@@ -257,13 +257,22 @@ function writeToolIdsIntoFrontmatter(content: string, toolIds: string[]): string
       skippingBlock = false
     }
     if (/^\s*toolIds\s*:/.test(line)) {
-      skippingBlock = !/\[.*\]/.test(line)
+      // Linear-time equivalent of `/\[.*\]/.test(line)`: an inline array
+      // exists iff some `[` is followed by a later `]` on the same line.
+      const inlineOpen = line.indexOf('[')
+      skippingBlock = inlineOpen === -1 || line.indexOf(']', inlineOpen + 1) === -1
       continue
     }
     stripped.push(line)
   }
 
-  const cleaned = stripped.join('\n').replace(/\n+$/, '')
+  // Linear-time equivalent of `.replace(/\n+$/, '')`: strip trailing
+  // newlines without the super-linear backtracking that `\n+$` exhibits
+  // on inputs with many interior newlines.
+  const joined = stripped.join('\n')
+  let cleanedEnd = joined.length
+  while (cleanedEnd > 0 && joined.charCodeAt(cleanedEnd - 1) === 10) cleanedEnd--
+  const cleaned = joined.slice(0, cleanedEnd)
   const next = toolIds.length > 0 ? `${cleaned}\n${serialized}` : cleaned
   return `---\n${next}\n---${rest.startsWith('\n') || rest.startsWith('\r') ? '' : '\n'}${rest}`
 }

@@ -34,12 +34,18 @@ export function parsePsOutput(output: string): RuntimeProcessInfo[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/)
+      // Match the two leading numeric columns and their trailing whitespace
+      // with a non-backtracking regex (the adjacent \d/\s classes are disjoint)
+      // and take the remainder of the line as the command. This is behaviorally
+      // identical to /^(\d+)\s+(\d+)\s+(.*)$/ for ps output (single line, no
+      // embedded line terminators) while avoiding the super-linear backtracking
+      // caused by the overlapping \s+ and .* quantifiers.
+      const match = line.match(/^(\d+)\s+(\d+)\s+/)
       if (!match) return null
-      const [, pidRaw, ppidRaw, command] = match
+      const [, pidRaw, ppidRaw] = match
       const pid = parseProcessId(pidRaw!, false)
       const ppid = parseProcessId(ppidRaw!, true)
-      const normalizedCommand = command!.trim()
+      const normalizedCommand = line.slice(match[0].length).trim()
       if (pid === null || ppid === null || !normalizedCommand || normalizedCommand === 'COMMAND' || normalizedCommand === 'ARGS') return null
       return {
         pid,

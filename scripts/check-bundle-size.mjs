@@ -16,7 +16,7 @@
 //
 // Set BUDGET_BYTES just above the current eager size; ratchet it DOWN as the
 // startup graph shrinks, never silently up.
-import { readFileSync, existsSync, statSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { spawnSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
@@ -87,8 +87,16 @@ function main() {
   let total = 0
   for (const file of files) {
     const absolute = join(distDir, file)
-    if (!existsSync(absolute) || !statSync(absolute).isFile()) continue
-    const gz = gzipSync(readFileSync(absolute), { level: 9 }).length
+    // Read directly and skip on error rather than existsSync()/statSync()-then-read,
+    // which is a TOCTOU race: a missing path throws ENOENT and a directory throws
+    // EISDIR, both caught here — matching the old "skip non-regular/absent file".
+    let content
+    try {
+      content = readFileSync(absolute)
+    } catch {
+      continue
+    }
+    const gz = gzipSync(content, { level: 9 }).length
     total += gz
     rows.push({ file, gz })
   }

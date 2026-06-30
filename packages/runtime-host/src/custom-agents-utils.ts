@@ -239,12 +239,12 @@ function isLegacyMcpAliasPermissionKey(key: string) {
   if (NON_MCP_PERMISSION_KEYS.has(key)) return false
   if (key.startsWith('repo_')) return false
   if (key.startsWith('mcp__')) return false
-  return /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(key)
+  return /^[a-z0-9][a-z0-9-]*(?:_+[a-z0-9-]+)*_+(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(key)
 }
 
 function isMcpPermissionRulePattern(pattern: string) {
   if (pattern.startsWith('mcp__')) {
-    return /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.test(pattern)
+    return /^mcp__[a-z0-9][a-z0-9-]*(?:_[a-z0-9-]+)*__[^/]+$/i.test(pattern)
   }
   return isLegacyMcpAliasPermissionKey(pattern)
 }
@@ -305,16 +305,57 @@ function humanize(value: string) {
     .join(' ')
 }
 
+// JavaScript line terminators: `.` never matches these and `^`/`$` (with the `m` flag) break on
+// them. The frontmatter locators below use a literal `\n`, so a value ends at the first of these.
+const FRONTMATTER_LINE_TERMINATOR = /[\n\r\u2028\u2029]/
+
+// Linear-time replacement for the value half of the old frontmatter regex
+// (`\s*["']?(.+?)["']?\s*(?:\n|$)` followed by `.trim()`), which had super-linear backtracking
+// because the lazy `(.+?)` capture overlapped the trailing `\s*`. `tail` is everything after the
+// `key:` literal; this returns the same trimmed value, or null when the old regex would not match.
+function parseFrontmatterValue(tail: string): string | null {
+  const isHorizontalWhitespace = (ch: string) => /\s/.test(ch) && !FRONTMATTER_LINE_TERMINATOR.test(ch)
+  const isQuote = (ch: string) => ch === '"' || ch === "'"
+  // Leading `\s*` skips all whitespace (newlines included) to the first non-whitespace char.
+  let valueStart = -1
+  for (let i = 0; i < tail.length; i++) {
+    if (!/\s/.test(tail.charAt(i))) { valueStart = i; break }
+  }
+  if (valueStart === -1) {
+    // Only whitespace remains: the old regex still matched (capturing a single whitespace char that
+    // trims to '') as long as `.` had a non-line-terminator char to consume; otherwise no match.
+    for (let i = 0; i < tail.length; i++) {
+      if (!FRONTMATTER_LINE_TERMINATOR.test(tail.charAt(i))) return ''
+    }
+    return null
+  }
+  // The value lives on the line of that first non-whitespace char (`.` cannot cross a terminator).
+  let lineEnd = tail.length
+  for (let i = valueStart; i < tail.length; i++) {
+    if (FRONTMATTER_LINE_TERMINATOR.test(tail.charAt(i))) { lineEnd = i; break }
+  }
+  const line = tail.slice(valueStart, lineEnd)
+  // Optional single surrounding quote (matching the leading/trailing `["']?`), then trim.
+  const start = line.length >= 2 && isQuote(line.charAt(0)) ? 1 : 0
+  let trailing = line.length
+  while (trailing > start && isHorizontalWhitespace(line.charAt(trailing - 1))) trailing--
+  let end: number
+  if (trailing <= start) end = start + 1
+  else if (isQuote(line.charAt(trailing - 1)) && trailing - 1 >= start + 1) end = trailing - 1
+  else end = trailing
+  return line.slice(start, end).trim()
+}
+
 function extractFrontmatterDescription(content: string) {
-  const match = content.match(/^---\n[\s\S]*?\ndescription:\s*["']?(.+?)["']?\s*(?:\n|$)/m)
-  if (!match?.[1]) return null
-  return match[1].trim()
+  const match = content.match(/^---\n[\s\S]*?\ndescription:([\s\S]*)/m)
+  if (!match) return null
+  return parseFrontmatterValue(match[1] ?? '')
 }
 
 function extractFrontmatterName(content: string) {
-  const match = content.match(/^---\n[\s\S]*?\n(?:title|name):\s*["']?(.+?)["']?\s*(?:\n|$)/m)
-  if (!match?.[1]) return null
-  return match[1].trim()
+  const match = content.match(/^---\n[\s\S]*?\n(?:title|name):([\s\S]*)/m)
+  if (!match) return null
+  return parseFrontmatterValue(match[1] ?? '')
 }
 
 export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAgent {

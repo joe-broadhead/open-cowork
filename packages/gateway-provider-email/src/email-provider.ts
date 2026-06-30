@@ -244,14 +244,17 @@ export class SmtpEmailTransport implements EmailTransport {
     const client = new SmtpClient(socket, timeoutMs);
     try {
       await client.expect(220);
-      let capabilities = await client.ehlo(localName);
+      const capabilities = await client.ehlo(localName);
       // Opportunistic STARTTLS (audit G2): if the server advertises it and we are not already on an
       // implicit-TLS (port 465) socket, upgrade the connection BEFORE any credentials cross it, then
       // re-EHLO over the encrypted channel as RFC 3207 requires.
       if (!client.isSecure && capabilities.has("STARTTLS")) {
         await client.command("STARTTLS", 220);
         await client.startTls(host);
-        capabilities = await client.ehlo(localName);
+        // RFC 3207 requires re-EHLO over the encrypted channel; the refreshed
+        // capabilities are not consulted afterward, so we issue the command
+        // without retaining its return value.
+        await client.ehlo(localName);
       }
       if (this.config.username) {
         // Fail closed: never put AUTH PLAIN credentials on a plaintext socket. If the server offered

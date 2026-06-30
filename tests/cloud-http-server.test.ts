@@ -3698,7 +3698,7 @@ test('cloud HTTP server adds the presigned object-store origin to the renderer C
       const csp = res.headers.get('content-security-policy') || ''
       assert.match(
         csp,
-        new RegExp(`connect-src 'self' ${PRESIGN_OBJECT_STORE_ORIGIN.replace(/[.]/g, '\\.')}`),
+        new RegExp(`connect-src 'self' ${PRESIGN_OBJECT_STORE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
         `${path} CSP allows the object-store origin for the presigned PUT`,
       )
     }

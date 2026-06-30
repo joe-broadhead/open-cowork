@@ -243,11 +243,18 @@ function validSandboxRuntimeId(runtimeId: string) {
 
 function normalizeSandboxRuntimeId(input: SandboxRuntimeLaunchInput) {
   const raw = (input.runtimeId?.trim() || `open-cowork-${input.imageComponentId}`).toLowerCase()
-  return raw
+  const collapsed = raw
     .replace(/[^a-z0-9_.-]+/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^[_.-]+|[_.-]+$/g, '')
-    .slice(0, SANDBOX_RUNTIME_ID_MAX_LENGTH)
+  // Linear-time trim of leading/trailing `[_.-]` runs. A regex such as
+  // /^[_.-]+|[_.-]+$/g exhibits super-linear (quadratic) backtracking on long
+  // delimiter runs because the trailing-anchored branch is retried from every
+  // start offset; the explicit two-pointer scan is O(n) and behaves identically.
+  let start = 0
+  let end = collapsed.length
+  while (start < end && '_.-'.includes(collapsed[start])) start++
+  while (end > start && '_.-'.includes(collapsed[end - 1])) end--
+  return collapsed.slice(start, end).slice(0, SANDBOX_RUNTIME_ID_MAX_LENGTH)
 }
 
 function imageReferenceFromComponent(component: SandboxComponentManifestEntry | undefined) {

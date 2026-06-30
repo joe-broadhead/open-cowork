@@ -128,11 +128,32 @@ function isPackaged(input: Pick<RuntimeComponentManifestBuildInput, 'isPackaged'
   return input.isPackaged ?? Boolean(getAppPathHost()?.isPackaged)
 }
 
+const SEMVER_PATTERN = /\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._-]+)?/y
+
+// Extract the leftmost `major.minor.patch[-+prerelease]` substring.
+// An unanchored `String.match` with this pattern re-scans digit runs at every
+// offset and degrades to quadratic time on adversarial input (polynomial
+// ReDoS). Using a sticky match attempted only at the start of each digit run —
+// where the leftmost match must begin — keeps the scan linear while returning
+// the exact same substring an unanchored match would.
+function extractSemver(value: string): string | undefined {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i)
+    if (code < 48 || code > 57) continue
+    const prev = i > 0 ? value.charCodeAt(i - 1) : 0
+    if (prev >= 48 && prev <= 57) continue
+    SEMVER_PATTERN.lastIndex = i
+    const match = SEMVER_PATTERN.exec(value)
+    if (match) return match[0]
+  }
+  return undefined
+}
+
 function normalizeComponentVersion(value: string | null | undefined) {
   const trimmed = value?.trim()
   if (!trimmed) return 'unknown'
-  const semver = trimmed.match(/\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._-]+)?/)
-  const normalized = semver?.[0] || trimmed.replace(/\s+/g, '-').replace(/[^A-Za-z0-9._:+/-]/g, '_')
+  const semver = extractSemver(trimmed)
+  const normalized = semver || trimmed.replace(/\s+/g, '-').replace(/[^A-Za-z0-9._:+/-]/g, '_')
   return normalized.slice(0, 128) || 'unknown'
 }
 

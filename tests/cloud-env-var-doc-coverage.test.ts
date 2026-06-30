@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -101,8 +101,15 @@ function collectOperatorEnvVars(): Set<string> {
 }
 
 test('every operator-facing cloud/gateway OPEN_COWORK_* env var is documented in docs/open-cowork-cloud.md', () => {
-  assert.ok(statSync(docPath).isFile(), `${docPath} must exist`)
-  const docText = readFileSync(docPath, 'utf8')
+  // Read directly and handle the error instead of stat()-then-read (avoids a
+  // check-then-use TOCTOU). ENOENT covers "missing" and EISDIR covers
+  // "exists but is not a regular file", matching the prior statSync().isFile() check.
+  let docText: string
+  try {
+    docText = readFileSync(docPath, 'utf8')
+  } catch (err) {
+    assert.fail(`${docPath} must exist and be a readable file: ${(err as Error).message}`)
+  }
   const operatorVars = [...collectOperatorEnvVars()].sort()
   assert.ok(operatorVars.length > 0, 'expected to discover operator env vars to check')
 
