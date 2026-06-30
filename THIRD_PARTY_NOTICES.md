@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `62f3c65061fbd99cba0ef4934794aba970dbeff987b2935ccc2f5c1068c3cb9a`
-- Production package entries: 491
-- Bundled license directories: 475 (16 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `a95423afbf66157ef9e1ee9f31f123af722ee62a9d770c65e27b33a896034df4`
+- Production package entries: 395
+- Bundled license directories: 379 (16 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -97,18 +97,10 @@ Each package remains licensed under its own license terms. The table below is pr
 | @types/d3-timer | 3.0.2 | MIT | THIRD_PARTY_LICENSES/@types__d3-timer@3.0.2/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/d3-transition | 3.0.9 | MIT | THIRD_PARTY_LICENSES/@types__d3-transition@3.0.9/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/d3-zoom | 3.0.8 | MIT | THIRD_PARTY_LICENSES/@types__d3-zoom@3.0.8/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/debug | 4.1.13 | MIT | THIRD_PARTY_LICENSES/@types__debug@4.1.13/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/estree | 1.0.9 | MIT | THIRD_PARTY_LICENSES/@types__estree@1.0.9/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/estree-jsx | 1.0.5 | MIT | THIRD_PARTY_LICENSES/@types__estree-jsx@1.0.5/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/geojson | 7946.0.16 | MIT | THIRD_PARTY_LICENSES/@types__geojson@7946.0.16/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/hast | 3.0.4 | MIT | THIRD_PARTY_LICENSES/@types__hast@3.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/mdast | 4.0.4 | MIT | THIRD_PARTY_LICENSES/@types__mdast@4.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/ms | 2.1.0 | MIT | THIRD_PARTY_LICENSES/@types__ms@2.1.0/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/react | 19.2.14 | MIT | THIRD_PARTY_LICENSES/@types__react@19.2.14/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/trusted-types | 2.0.7 | MIT | THIRD_PARTY_LICENSES/@types__trusted-types@2.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/unist | 2.0.11 | MIT | THIRD_PARTY_LICENSES/@types__unist@2.0.11/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/unist | 3.0.3 | MIT | THIRD_PARTY_LICENSES/@types__unist@3.0.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @ungap/structured-clone | 1.3.1 | ISC | THIRD_PARTY_LICENSES/@ungap__structured-clone@1.3.1/ | git+https://github.com/ungap/structured-clone.git |
 | @upsetjs/venn.js | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@upsetjs__venn.js@2.0.0/ | https://github.com/upsetjs/venn.js.git |
 | abort-controller | 3.0.0 | MIT | THIRD_PARTY_LICENSES/abort-controller@3.0.0/ | git+https://github.com/mysticatea/abort-controller.git |
 | accepts | 2.0.0 | MIT | THIRD_PARTY_LICENSES/accepts@2.0.0/ | jshttp/accepts |
@@ -119,7 +111,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | ansi-regex | 6.2.2 | MIT | THIRD_PARTY_LICENSES/ansi-regex@6.2.2/ | chalk/ansi-regex |
 | ansi-styles | 6.2.3 | MIT | THIRD_PARTY_LICENSES/ansi-styles@6.2.3/ | chalk/ansi-styles |
 | argparse | 2.0.1 | Python-2.0 | THIRD_PARTY_LICENSES/argparse@2.0.1/ | nodeca/argparse |
-| bail | 2.0.2 | MIT | THIRD_PARTY_LICENSES/bail@2.0.2/ | wooorm/bail |
 | base64-js | 1.5.1 | MIT | THIRD_PARTY_LICENSES/base64-js@1.5.1/ | git://github.com/beatgammit/base64-js.git |
 | bignumber.js | 9.3.1 | MIT |  | https://github.com/MikeMcl/bignumber.js.git |
 | body-parser | 2.2.2 | MIT | THIRD_PARTY_LICENSES/body-parser@2.2.2/ | expressjs/body-parser |
@@ -129,13 +120,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | bytes | 3.1.2 | MIT | THIRD_PARTY_LICENSES/bytes@3.1.2/ | visionmedia/bytes.js |
 | call-bind-apply-helpers | 1.0.2 | MIT | THIRD_PARTY_LICENSES/call-bind-apply-helpers@1.0.2/ | git+https://github.com/ljharb/call-bind-apply-helpers.git |
 | call-bound | 1.0.4 | MIT | THIRD_PARTY_LICENSES/call-bound@1.0.4/ | git+https://github.com/ljharb/call-bound.git |
-| ccount | 2.0.1 | MIT | THIRD_PARTY_LICENSES/ccount@2.0.1/ | wooorm/ccount |
-| character-entities | 2.0.2 | MIT | THIRD_PARTY_LICENSES/character-entities@2.0.2/ | wooorm/character-entities |
-| character-entities-html4 | 2.1.0 | MIT | THIRD_PARTY_LICENSES/character-entities-html4@2.1.0/ | wooorm/character-entities-html4 |
-| character-entities-legacy | 3.0.0 | MIT | THIRD_PARTY_LICENSES/character-entities-legacy@3.0.0/ | wooorm/character-entities-legacy |
-| character-reference-invalid | 2.0.1 | MIT | THIRD_PARTY_LICENSES/character-reference-invalid@2.0.1/ | wooorm/character-reference-invalid |
 | cliui | 9.0.1 | ISC | THIRD_PARTY_LICENSES/cliui@9.0.1/ | yargs/cliui |
-| comma-separated-tokens | 2.0.3 | MIT | THIRD_PARTY_LICENSES/comma-separated-tokens@2.0.3/ | wooorm/comma-separated-tokens |
 | commander | 2.20.3 | MIT | THIRD_PARTY_LICENSES/commander@2.20.3/ | https://github.com/tj/commander.js.git |
 | commander | 7.2.0 | MIT | THIRD_PARTY_LICENSES/commander@7.2.0/ | https://github.com/tj/commander.js.git |
 | commander | 8.3.0 | MIT | THIRD_PARTY_LICENSES/commander@8.3.0/ | https://github.com/tj/commander.js.git |
@@ -192,11 +177,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | data-uri-to-buffer | 4.0.1 | MIT |  | git://github.com/TooTallNate/node-data-uri-to-buffer.git |
 | dayjs | 1.11.20 | MIT | THIRD_PARTY_LICENSES/dayjs@1.11.20/ | https://github.com/iamkun/dayjs.git |
 | debug | 4.4.3 | MIT | THIRD_PARTY_LICENSES/debug@4.4.3/ | git://github.com/debug-js/debug.git |
-| decode-named-character-reference | 1.3.0 | MIT | THIRD_PARTY_LICENSES/decode-named-character-reference@1.3.0/ | wooorm/decode-named-character-reference |
 | delaunator | 5.1.0 | ISC | THIRD_PARTY_LICENSES/delaunator@5.1.0/ | https://github.com/mapbox/delaunator.git |
 | depd | 2.0.0 | MIT | THIRD_PARTY_LICENSES/depd@2.0.0/ | dougwilson/nodejs-depd |
-| dequal | 2.0.3 | MIT | THIRD_PARTY_LICENSES/dequal@2.0.3/ | lukeed/dequal |
-| devlop | 1.1.0 | MIT | THIRD_PARTY_LICENSES/devlop@1.1.0/ | wooorm/devlop |
 | dompurify | 3.4.11 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.11/ | git://github.com/cure53/DOMPurify.git |
 | dunder-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/dunder-proto@1.0.1/ | git+https://github.com/es-shims/dunder-proto.git |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | THIRD_PARTY_LICENSES/ecdsa-sig-formatter@1.0.11/ | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
@@ -210,8 +192,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | es-toolkit | 1.46.1 | MIT | THIRD_PARTY_LICENSES/es-toolkit@1.46.1/ | https://github.com/toss/es-toolkit.git |
 | escalade | 3.2.0 | MIT | THIRD_PARTY_LICENSES/escalade@3.2.0/ | lukeed/escalade |
 | escape-html | 1.0.3 | MIT | THIRD_PARTY_LICENSES/escape-html@1.0.3/ | component/escape-html |
-| escape-string-regexp | 5.0.0 | MIT | THIRD_PARTY_LICENSES/escape-string-regexp@5.0.0/ | sindresorhus/escape-string-regexp |
-| estree-util-is-identifier-name | 3.0.0 | MIT | THIRD_PARTY_LICENSES/estree-util-is-identifier-name@3.0.0/ | syntax-tree/estree-util-is-identifier-name |
 | etag | 1.8.1 | MIT | THIRD_PARTY_LICENSES/etag@1.8.1/ | jshttp/etag |
 | event-target-shim | 5.0.1 | MIT | THIRD_PARTY_LICENSES/event-target-shim@5.0.1/ | https://github.com/mysticatea/event-target-shim.git |
 | eventsource | 3.0.7 | MIT | THIRD_PARTY_LICENSES/eventsource@3.0.7/ | git://git@github.com/EventSource/eventsource.git |
@@ -245,25 +225,16 @@ Each package remains licensed under its own license terms. The table below is pr
 | hachure-fill | 0.5.2 | MIT | THIRD_PARTY_LICENSES/hachure-fill@0.5.2/ | git+https://github.com/pshihn/hachure-fill.git |
 | has-symbols | 1.1.0 | MIT | THIRD_PARTY_LICENSES/has-symbols@1.1.0/ | git://github.com/inspect-js/has-symbols.git |
 | hasown | 2.0.3 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.3/ | git+https://github.com/inspect-js/hasOwn.git |
-| hast-util-to-jsx-runtime | 2.3.6 | MIT | THIRD_PARTY_LICENSES/hast-util-to-jsx-runtime@2.3.6/ | syntax-tree/hast-util-to-jsx-runtime |
-| hast-util-whitespace | 3.0.0 | MIT | THIRD_PARTY_LICENSES/hast-util-whitespace@3.0.0/ | syntax-tree/hast-util-whitespace |
 | hono | 4.12.27 | MIT | THIRD_PARTY_LICENSES/hono@4.12.27/ | git+https://github.com/honojs/hono.git |
-| html-url-attributes | 3.0.1 | MIT | THIRD_PARTY_LICENSES/html-url-attributes@3.0.1/ | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
 | http-errors | 2.0.1 | MIT | THIRD_PARTY_LICENSES/http-errors@2.0.1/ | jshttp/http-errors |
 | https-proxy-agent | 7.0.6 | MIT | THIRD_PARTY_LICENSES/https-proxy-agent@7.0.6/ | https://github.com/TooTallNate/proxy-agents.git |
 | iconv-lite | 0.6.3 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.6.3/ | git://github.com/ashtuchkin/iconv-lite.git |
 | iconv-lite | 0.7.2 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.7.2/ | https://github.com/pillarjs/iconv-lite.git |
 | inherits | 2.0.4 | ISC | THIRD_PARTY_LICENSES/inherits@2.0.4/ | git://github.com/isaacs/inherits |
-| inline-style-parser | 0.2.7 | MIT | THIRD_PARTY_LICENSES/inline-style-parser@0.2.7/ | git+https://github.com/remarkablemark/inline-style-parser.git |
 | internmap | 1.0.1 | ISC | THIRD_PARTY_LICENSES/internmap@1.0.1/ | https://github.com/mbostock/internmap.git |
 | internmap | 2.0.3 | ISC | THIRD_PARTY_LICENSES/internmap@2.0.3/ | https://github.com/mbostock/internmap.git |
 | ip-address | 10.2.0 | MIT | THIRD_PARTY_LICENSES/ip-address@10.2.0/ | git://github.com/beaugunderson/ip-address.git |
 | ipaddr.js | 1.9.1 | MIT | THIRD_PARTY_LICENSES/ipaddr.js@1.9.1/ | git://github.com/whitequark/ipaddr.js |
-| is-alphabetical | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-alphabetical@2.0.1/ | wooorm/is-alphabetical |
-| is-alphanumerical | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-alphanumerical@2.0.1/ | wooorm/is-alphanumerical |
-| is-decimal | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-decimal@2.0.1/ | wooorm/is-decimal |
-| is-hexadecimal | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-hexadecimal@2.0.1/ | wooorm/is-hexadecimal |
-| is-plain-obj | 4.1.0 | MIT | THIRD_PARTY_LICENSES/is-plain-obj@4.1.0/ | sindresorhus/is-plain-obj |
 | is-promise | 4.0.0 | MIT | THIRD_PARTY_LICENSES/is-promise@4.0.0/ | https://github.com/then/is-promise.git |
 | isexe | 2.0.0 | ISC | THIRD_PARTY_LICENSES/isexe@2.0.0/ | git+https://github.com/isaacs/isexe.git |
 | jose | 6.2.2 | MIT | THIRD_PARTY_LICENSES/jose@6.2.2/ | panva/jose |
@@ -283,58 +254,13 @@ Each package remains licensed under its own license terms. The table below is pr
 | lodash-es | 4.18.1 | MIT | THIRD_PARTY_LICENSES/lodash-es@4.18.1/ | lodash/lodash |
 | lodash.escaperegexp | 4.1.2 | MIT | THIRD_PARTY_LICENSES/lodash.escaperegexp@4.1.2/ | lodash/lodash |
 | lodash.isequal | 4.5.0 | MIT | THIRD_PARTY_LICENSES/lodash.isequal@4.5.0/ | lodash/lodash |
-| longest-streak | 3.1.0 | MIT | THIRD_PARTY_LICENSES/longest-streak@3.1.0/ | wooorm/longest-streak |
 | lucide-react | 1.17.0 | ISC | THIRD_PARTY_LICENSES/lucide-react@1.17.0/ | https://github.com/lucide-icons/lucide.git |
-| markdown-table | 3.0.4 | MIT | THIRD_PARTY_LICENSES/markdown-table@3.0.4/ | wooorm/markdown-table |
 | marked | 16.4.2 | MIT | THIRD_PARTY_LICENSES/marked@16.4.2/ | git://github.com/markedjs/marked.git |
 | marked | 18.0.3 | MIT | THIRD_PARTY_LICENSES/marked@18.0.3/ | git://github.com/markedjs/marked.git |
 | math-intrinsics | 1.1.0 | MIT | THIRD_PARTY_LICENSES/math-intrinsics@1.1.0/ | git+https://github.com/es-shims/math-intrinsics.git |
-| mdast-util-find-and-replace | 3.0.2 | MIT | THIRD_PARTY_LICENSES/mdast-util-find-and-replace@3.0.2/ | syntax-tree/mdast-util-find-and-replace |
-| mdast-util-from-markdown | 2.0.3 | MIT | THIRD_PARTY_LICENSES/mdast-util-from-markdown@2.0.3/ | syntax-tree/mdast-util-from-markdown |
-| mdast-util-gfm | 3.1.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm@3.1.0/ | syntax-tree/mdast-util-gfm |
-| mdast-util-gfm-autolink-literal | 2.0.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-autolink-literal@2.0.1/ | syntax-tree/mdast-util-gfm-autolink-literal |
-| mdast-util-gfm-footnote | 2.1.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-footnote@2.1.0/ | syntax-tree/mdast-util-gfm-footnote |
-| mdast-util-gfm-strikethrough | 2.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-strikethrough@2.0.0/ | syntax-tree/mdast-util-gfm-strikethrough |
-| mdast-util-gfm-table | 2.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-table@2.0.0/ | syntax-tree/mdast-util-gfm-table |
-| mdast-util-gfm-task-list-item | 2.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-task-list-item@2.0.0/ | syntax-tree/mdast-util-gfm-task-list-item |
-| mdast-util-mdx-expression | 2.0.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-mdx-expression@2.0.1/ | syntax-tree/mdast-util-mdx-expression |
-| mdast-util-mdx-jsx | 3.2.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-mdx-jsx@3.2.0/ | syntax-tree/mdast-util-mdx-jsx |
-| mdast-util-mdxjs-esm | 2.0.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-mdxjs-esm@2.0.1/ | syntax-tree/mdast-util-mdxjs-esm |
-| mdast-util-phrasing | 4.1.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-phrasing@4.1.0/ | syntax-tree/mdast-util-phrasing |
-| mdast-util-to-hast | 13.2.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-hast@13.2.1/ | syntax-tree/mdast-util-to-hast |
-| mdast-util-to-markdown | 2.1.2 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-markdown@2.1.2/ | syntax-tree/mdast-util-to-markdown |
-| mdast-util-to-string | 4.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-string@4.0.0/ | syntax-tree/mdast-util-to-string |
 | media-typer | 1.1.0 | MIT | THIRD_PARTY_LICENSES/media-typer@1.1.0/ | jshttp/media-typer |
 | merge-descriptors | 2.0.0 | MIT | THIRD_PARTY_LICENSES/merge-descriptors@2.0.0/ | sindresorhus/merge-descriptors |
 | mermaid | 11.15.0 | MIT | THIRD_PARTY_LICENSES/mermaid@11.15.0/ | https://github.com/mermaid-js/mermaid |
-| micromark | 4.0.2 | MIT | THIRD_PARTY_LICENSES/micromark@4.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark |
-| micromark-core-commonmark | 2.0.3 | MIT | THIRD_PARTY_LICENSES/micromark-core-commonmark@2.0.3/ | https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark |
-| micromark-extension-gfm | 3.0.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm@3.0.0/ | micromark/micromark-extension-gfm |
-| micromark-extension-gfm-autolink-literal | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-autolink-literal@2.1.0/ | micromark/micromark-extension-gfm-autolink-literal |
-| micromark-extension-gfm-footnote | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-footnote@2.1.0/ | micromark/micromark-extension-gfm-footnote |
-| micromark-extension-gfm-strikethrough | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-strikethrough@2.1.0/ | micromark/micromark-extension-gfm-strikethrough |
-| micromark-extension-gfm-table | 2.1.1 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-table@2.1.1/ | micromark/micromark-extension-gfm-table |
-| micromark-extension-gfm-tagfilter | 2.0.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-tagfilter@2.0.0/ | micromark/micromark-extension-gfm-tagfilter |
-| micromark-extension-gfm-task-list-item | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-task-list-item@2.1.0/ | micromark/micromark-extension-gfm-task-list-item |
-| micromark-factory-destination | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-destination@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-destination |
-| micromark-factory-label | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-label@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label |
-| micromark-factory-space | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-space@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space |
-| micromark-factory-title | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-title@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-title |
-| micromark-factory-whitespace | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-whitespace@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-whitespace |
-| micromark-util-character | 2.1.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-character@2.1.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-character |
-| micromark-util-chunked | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-chunked@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-chunked |
-| micromark-util-classify-character | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-classify-character@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-classify-character |
-| micromark-util-combine-extensions | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-combine-extensions@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-combine-extensions |
-| micromark-util-decode-numeric-character-reference | 2.0.2 | MIT | THIRD_PARTY_LICENSES/micromark-util-decode-numeric-character-reference@2.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-numeric-character-reference |
-| micromark-util-decode-string | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-decode-string@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-string |
-| micromark-util-encode | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-encode@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-encode |
-| micromark-util-html-tag-name | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-html-tag-name@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-html-tag-name |
-| micromark-util-normalize-identifier | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-normalize-identifier@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-normalize-identifier |
-| micromark-util-resolve-all | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-resolve-all@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-resolve-all |
-| micromark-util-sanitize-uri | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-sanitize-uri@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-sanitize-uri |
-| micromark-util-subtokenize | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-util-subtokenize@2.1.0/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-subtokenize |
-| micromark-util-symbol | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-symbol@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-symbol |
-| micromark-util-types | 2.0.2 | MIT | THIRD_PARTY_LICENSES/micromark-util-types@2.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-types |
 | mime-db | 1.54.0 | MIT | THIRD_PARTY_LICENSES/mime-db@1.54.0/ | jshttp/mime-db |
 | mime-types | 3.0.2 | MIT | THIRD_PARTY_LICENSES/mime-types@3.0.2/ | jshttp/mime-types |
 | mlly | 1.8.2 | MIT | THIRD_PARTY_LICENSES/mlly@1.8.2/ | unjs/mlly |
@@ -362,7 +288,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | opencode-windows-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64@1.15.5/ | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.15.5.tgz |
 | opencode-windows-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.15.5.tgz |
 | package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
-| parse-entities | 4.0.2 | MIT | THIRD_PARTY_LICENSES/parse-entities@4.0.2/ | wooorm/parse-entities |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |
 | path-data-parser | 0.1.0 | MIT | THIRD_PARTY_LICENSES/path-data-parser@0.1.0/ | git+https://github.com/pshihn/path-data-parser.git |
 | path-expression-matcher | 1.5.0 | MIT | THIRD_PARTY_LICENSES/path-expression-matcher@1.5.0/ | https://github.com/NaturalIntelligence/path-expression-matcher |
@@ -385,18 +310,12 @@ Each package remains licensed under its own license terms. The table below is pr
 | postgres-bytea | 1.0.1 | MIT | THIRD_PARTY_LICENSES/postgres-bytea@1.0.1/ | bendrucker/postgres-bytea |
 | postgres-date | 1.0.7 | MIT | THIRD_PARTY_LICENSES/postgres-date@1.0.7/ | bendrucker/postgres-date |
 | postgres-interval | 1.2.0 | MIT | THIRD_PARTY_LICENSES/postgres-interval@1.2.0/ | bendrucker/postgres-interval |
-| property-information | 7.1.0 | MIT | THIRD_PARTY_LICENSES/property-information@7.1.0/ | wooorm/property-information |
 | proxy-addr | 2.0.7 | MIT | THIRD_PARTY_LICENSES/proxy-addr@2.0.7/ | jshttp/proxy-addr |
 | qs | 6.15.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/qs@6.15.2/ | https://github.com/ljharb/qs.git |
 | range-parser | 1.2.1 | MIT | THIRD_PARTY_LICENSES/range-parser@1.2.1/ | jshttp/range-parser |
 | raw-body | 3.0.2 | MIT | THIRD_PARTY_LICENSES/raw-body@3.0.2/ | stream-utils/raw-body |
 | react | 19.2.5 | MIT | THIRD_PARTY_LICENSES/react@19.2.5/ | https://github.com/facebook/react.git |
 | react-dom | 19.2.5 | MIT | THIRD_PARTY_LICENSES/react-dom@19.2.5/ | https://github.com/facebook/react.git |
-| react-markdown | 10.1.0 | MIT | THIRD_PARTY_LICENSES/react-markdown@10.1.0/ | remarkjs/react-markdown |
-| remark-gfm | 4.0.1 | MIT | THIRD_PARTY_LICENSES/remark-gfm@4.0.1/ | remarkjs/remark-gfm |
-| remark-parse | 11.0.0 | MIT | THIRD_PARTY_LICENSES/remark-parse@11.0.0/ | https://github.com/remarkjs/remark/tree/main/packages/remark-parse |
-| remark-rehype | 11.1.2 | MIT | THIRD_PARTY_LICENSES/remark-rehype@11.1.2/ | remarkjs/remark-rehype |
-| remark-stringify | 11.0.0 | MIT | THIRD_PARTY_LICENSES/remark-stringify@11.0.0/ | https://github.com/remarkjs/remark/tree/main/packages/remark-stringify |
 | remend | 1.3.0 | Apache-2.0 | THIRD_PARTY_LICENSES/remend@1.3.0/ | git+https://github.com/vercel/streamdown.git |
 | require-from-string | 2.0.2 | MIT | THIRD_PARTY_LICENSES/require-from-string@2.0.2/ | floatdrop/require-from-string |
 | robust-predicates | 3.0.3 | Unlicense | THIRD_PARTY_LICENSES/robust-predicates@3.0.3/ | https://github.com/mourner/robust-predicates.git |
@@ -417,33 +336,21 @@ Each package remains licensed under its own license terms. The table below is pr
 | side-channel-list | 1.0.1 | MIT | THIRD_PARTY_LICENSES/side-channel-list@1.0.1/ | git+https://github.com/ljharb/side-channel-list.git |
 | side-channel-map | 1.0.1 | MIT | THIRD_PARTY_LICENSES/side-channel-map@1.0.1/ | git+https://github.com/ljharb/side-channel-map.git |
 | side-channel-weakmap | 1.0.2 | MIT | THIRD_PARTY_LICENSES/side-channel-weakmap@1.0.2/ | git+https://github.com/ljharb/side-channel-weakmap.git |
-| space-separated-tokens | 2.0.2 | MIT | THIRD_PARTY_LICENSES/space-separated-tokens@2.0.2/ | wooorm/space-separated-tokens |
 | split2 | 4.2.0 | ISC | THIRD_PARTY_LICENSES/split2@4.2.0/ | https://github.com/mcollina/split2.git |
 | statuses | 2.0.2 | MIT | THIRD_PARTY_LICENSES/statuses@2.0.2/ | jshttp/statuses |
 | string-width | 7.2.0 | MIT | THIRD_PARTY_LICENSES/string-width@7.2.0/ | sindresorhus/string-width |
-| stringify-entities | 4.0.4 | MIT | THIRD_PARTY_LICENSES/stringify-entities@4.0.4/ | wooorm/stringify-entities |
 | strip-ansi | 7.2.0 | MIT | THIRD_PARTY_LICENSES/strip-ansi@7.2.0/ | chalk/strip-ansi |
 | strnum | 2.3.0 | MIT | THIRD_PARTY_LICENSES/strnum@2.3.0/ | https://github.com/NaturalIntelligence/strnum |
-| style-to-js | 1.1.21 | MIT | THIRD_PARTY_LICENSES/style-to-js@1.1.21/ | git+https://github.com/remarkablemark/style-to-js.git |
-| style-to-object | 1.0.14 | MIT | THIRD_PARTY_LICENSES/style-to-object@1.0.14/ | git+https://github.com/remarkablemark/style-to-object.git |
 | stylis | 4.3.6 | MIT | THIRD_PARTY_LICENSES/stylis@4.3.6/ | https://github.com/thysultan/stylis.js |
 | tiny-typed-emitter | 2.1.0 | MIT | THIRD_PARTY_LICENSES/tiny-typed-emitter@2.1.0/ | https://github.com/binier/tiny-typed-emitter.git |
 | tinyexec | 1.1.1 | MIT | THIRD_PARTY_LICENSES/tinyexec@1.1.1/ | git+https://github.com/tinylibs/tinyexec.git |
 | toidentifier | 1.0.1 | MIT | THIRD_PARTY_LICENSES/toidentifier@1.0.1/ | component/toidentifier |
 | topojson-client | 3.1.0 | ISC | THIRD_PARTY_LICENSES/topojson-client@3.1.0/ | https://github.com/topojson/topojson-client.git |
 | tr46 | 0.0.3 | MIT |  | git+https://github.com/Sebmaster/tr46.js.git |
-| trim-lines | 3.0.1 | MIT | THIRD_PARTY_LICENSES/trim-lines@3.0.1/ | wooorm/trim-lines |
-| trough | 2.2.0 | MIT | THIRD_PARTY_LICENSES/trough@2.2.0/ | wooorm/trough |
 | ts-dedent | 2.2.0 | MIT | THIRD_PARTY_LICENSES/ts-dedent@2.2.0/ | https://github.com/tamino-martinius/node-ts-dedent.git |
 | tslib | 2.8.1 | 0BSD | THIRD_PARTY_LICENSES/tslib@2.8.1/ | https://github.com/Microsoft/tslib.git |
 | type-is | 2.0.1 | MIT | THIRD_PARTY_LICENSES/type-is@2.0.1/ | jshttp/type-is |
 | ufo | 1.6.3 | MIT | THIRD_PARTY_LICENSES/ufo@1.6.3/ | unjs/ufo |
-| unified | 11.0.5 | MIT | THIRD_PARTY_LICENSES/unified@11.0.5/ | unifiedjs/unified |
-| unist-util-is | 6.0.1 | MIT | THIRD_PARTY_LICENSES/unist-util-is@6.0.1/ | syntax-tree/unist-util-is |
-| unist-util-position | 5.0.0 | MIT | THIRD_PARTY_LICENSES/unist-util-position@5.0.0/ | syntax-tree/unist-util-position |
-| unist-util-stringify-position | 4.0.0 | MIT | THIRD_PARTY_LICENSES/unist-util-stringify-position@4.0.0/ | syntax-tree/unist-util-stringify-position |
-| unist-util-visit | 5.1.0 | MIT | THIRD_PARTY_LICENSES/unist-util-visit@5.1.0/ | syntax-tree/unist-util-visit |
-| unist-util-visit-parents | 6.0.2 | MIT | THIRD_PARTY_LICENSES/unist-util-visit-parents@6.0.2/ | syntax-tree/unist-util-visit-parents |
 | universalify | 2.0.1 | MIT | THIRD_PARTY_LICENSES/universalify@2.0.1/ | git+https://github.com/RyanZim/universalify.git |
 | unpipe | 1.0.0 | MIT | THIRD_PARTY_LICENSES/unpipe@1.0.0/ | stream-utils/unpipe |
 | uuid | 14.0.0 | MIT | THIRD_PARTY_LICENSES/uuid@14.0.0/ | https://github.com/uuidjs/uuid.git |
@@ -484,8 +391,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | vega-view-transforms | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-view-transforms@5.1.0/ | git+https://github.com/vega/vega.git |
 | vega-voronoi | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-voronoi@5.1.0/ | git+https://github.com/vega/vega.git |
 | vega-wordcloud | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-wordcloud@5.1.0/ | git+https://github.com/vega/vega.git |
-| vfile | 6.0.3 | MIT | THIRD_PARTY_LICENSES/vfile@6.0.3/ | vfile/vfile |
-| vfile-message | 4.0.3 | MIT | THIRD_PARTY_LICENSES/vfile-message@4.0.3/ | vfile/vfile-message |
 | web-streams-polyfill | 3.3.3 | MIT | THIRD_PARTY_LICENSES/web-streams-polyfill@3.3.3/ | git+https://github.com/MattiasBuelens/web-streams-polyfill.git |
 | webidl-conversions | 3.0.1 | BSD-2-Clause | THIRD_PARTY_LICENSES/webidl-conversions@3.0.1/ | jsdom/webidl-conversions |
 | whatwg-url | 5.0.0 | MIT | THIRD_PARTY_LICENSES/whatwg-url@5.0.0/ | jsdom/whatwg-url |
@@ -501,4 +406,3 @@ Each package remains licensed under its own license terms. The table below is pr
 | zod | 4.4.3 | MIT | THIRD_PARTY_LICENSES/zod@4.4.3/ | git+https://github.com/colinhacks/zod.git |
 | zod-to-json-schema | 3.25.2 | ISC | THIRD_PARTY_LICENSES/zod-to-json-schema@3.25.2/ | https://github.com/StefanTerdell/zod-to-json-schema |
 | zustand | 5.0.12 | MIT | THIRD_PARTY_LICENSES/zustand@5.0.12/ | git+https://github.com/pmndrs/zustand.git |
-| zwitch | 2.0.4 | MIT | THIRD_PARTY_LICENSES/zwitch@2.0.4/ | wooorm/zwitch |
