@@ -569,13 +569,17 @@ function WorkspaceSwitcher() {
 
       {open && (
         <>
-          <ModalBackdrop onDismiss={() => setOpen(false)} className="fixed inset-0 z-40" />
+          {/* z-index via the --z-* design tokens, not Tailwind z-* utilities, which
+              this project's Tailwind v4 setup does not generate (they compile to
+              nothing, leaving the menu at z:auto under the sidebar nav). */}
+          <ModalBackdrop onDismiss={() => setOpen(false)} className="fixed inset-0" style={{ zIndex: 'var(--z-dropdown)' }} />
           <div
             ref={menuRef}
             role="menu"
             aria-label={t('workspace.switcherLabel', 'Switch workspace')}
             onKeyDown={handleMenuKeyDown}
-            className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg p-1 theme-popover"
+            className="absolute start-3 end-3 top-full mt-1 overflow-hidden rounded-lg p-1 theme-popover"
+            style={{ zIndex: 'var(--z-overlay)' }}
           >
           {workspaces.map((workspace) => (
             <button
