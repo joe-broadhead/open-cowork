@@ -54,4 +54,4 @@ USER node
 # container unhealthy so traffic is not routed to it. Helm probes already do this.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "const role=process.env.OPEN_COWORK_CLOUD_ROLE||'all-in-one'; if(role!=='web'&&role!=='all-in-one') process.exit(0); fetch('http://127.0.0.1:'+(process.env.OPEN_COWORK_CLOUD_PORT||'8787')+'/readyz').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "apps/desktop/dist/cloud/open-cowork-cloud.mjs"]
+CMD ["node", "--experimental-sqlite", "apps/desktop/dist/cloud/open-cowork-cloud.mjs"]

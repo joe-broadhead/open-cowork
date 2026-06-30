@@ -149,9 +149,11 @@ jobs:
 
       # The portability/sandbox proofs (and the postgres test) import
       # @open-cowork/runtime-host from its built dist (which is also the cloud's
-      # runtime supervisor artifact), so build it before they run.
-      - name: Build runtime-host for proofs
-        run: pnpm build:shared && pnpm --filter @open-cowork/runtime-host build
+      # runtime supervisor artifact); the continuation gate boots the cloud server
+      # and asserts GET / serves the unified renderer (packages/app/dist-browser).
+      # Build both before they run.
+      - name: Build runtime-host + browser renderer for proofs/continuation
+        run: pnpm build:shared && pnpm --filter @open-cowork/runtime-host build && pnpm --filter @open-cowork/ui build && pnpm --filter @open-cowork/app build:browser
 
       - name: Run OpenCode portability proof
         run: pnpm proof:cloud:opencode-portability --json

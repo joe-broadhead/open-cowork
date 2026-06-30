@@ -35,7 +35,10 @@ const cleanup = () => {
   }
 }
 
-const child = spawn(process.execPath, [bundle], {
+// The all-in-one bundle uses node:sqlite, which on the pinned Node 22.x requires
+// --experimental-sqlite (it is stable + flag-free only on Node 23.4+). Pass it so
+// the smoke matches how the bundle must be launched on the supported runtime.
+const child = spawn(process.execPath, ['--experimental-sqlite', bundle], {
   cwd: repoRoot,
   env: {
     ...process.env,
