@@ -99,7 +99,8 @@ export async function assertPostgresConcurrentSessionQuota(
      WHERE scope_id = $1 AND counter_key = 'concurrent_sessions'`,
     [orgId],
   )
-  const activeSessions = numberValue(countRow.rows[0]?.count)
+  // No counter row yet (fresh org / before the first increment) means 0.
+  const activeSessions = numberValue(countRow.rows[0]?.count ?? 0)
   if (activeSessions >= maxConcurrentSessions) {
     throw new ControlPlaneQuotaExceededError({
       message: 'Concurrent cloud session quota exceeded.',
@@ -174,7 +175,9 @@ export async function assertPostgresCommandQueueQuota(
     )
     oldestCreatedAtRaw = ageRow.rows[0]?.oldest_created_at ?? null
   }
-  const queuedCommands = numberValue(counterRow.rows[0]?.queued_commands)
+  // No counter row yet (no commands ever queued for this org) means 0; without the
+  // fallback a concurrent first-enqueue read NaN-throws instead of enforcing quota.
+  const queuedCommands = numberValue(counterRow.rows[0]?.queued_commands ?? 0)
   const maxQueuedCommands = quota.maxQueuedCommandsPerOrg
   if (maxQueuedCommands && maxQueuedCommands > 0 && queuedCommands >= maxQueuedCommands) {
     throw new ControlPlaneQuotaExceededError({
@@ -254,7 +257,7 @@ export async function assertPostgresWorkflowRunQuota(
        WHERE scope_id = $1 AND counter_key = 'concurrent_workflow_runs'`,
       [orgId],
     )
-    const activeRuns = numberValue(result.rows[0]?.count)
+    const activeRuns = numberValue(result.rows[0]?.count ?? 0)
     if (activeRuns >= maxConcurrentRuns) {
       throw new ControlPlaneQuotaExceededError({
         message: 'Concurrent cloud workflow run quota exceeded.',
