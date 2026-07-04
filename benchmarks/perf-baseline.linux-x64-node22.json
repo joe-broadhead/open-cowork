@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-04T04:15:07.000Z",
+  "generatedAt": "2026-07-04T13:40:10.000Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -61,11 +61,11 @@
     {
       "name": "agents.catalog.downstreamCatalog",
       "iterations": 18,
-      "minMs": 1.22,
-      "maxMs": 2.9,
-      "avgMs": 1.47,
-      "p50Ms": 1.47,
-      "p95Ms": 2.54
+      "minMs": 1.95,
+      "maxMs": 3.88,
+      "avgMs": 2.15,
+      "p50Ms": 2.15,
+      "p95Ms": 3.1
     },
     {
       "name": "capabilities.map.downstreamCatalog",

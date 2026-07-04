@@ -325,3 +325,34 @@ test('managed runtime drains stdio after startup parsing is detached', () => {
   assert.equal(stdout.readableFlowing, true)
   assert.equal(stderr.readableFlowing, true)
 })
+
+test('managed opencode server env spills oversized config to a file (Linux E2BIG guard)', async () => {
+  // Small config stays inline.
+  const small = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, { agent: {} })
+  assert.match(small.OPENCODE_CONFIG_CONTENT || '', /"agent"/)
+  assert.equal(small.OPENCODE_CONFIG, undefined)
+
+  // Oversized config (over the ~100 KB inline cap that protects Linux's
+  // MAX_ARG_STRLEN) moves to OPENCODE_CONFIG as a file path.
+  const bigConfig = { instructions: ['x'.repeat(150_000)] }
+  let written: string | null = null
+  const big = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig, {
+    writeConfigFile: (serialized) => {
+      written = serialized
+      return '/tmp/opencode-config-test.json'
+    },
+  })
+  assert.equal(big.OPENCODE_CONFIG_CONTENT, undefined)
+  assert.equal(big.OPENCODE_CONFIG, '/tmp/opencode-config-test.json')
+  assert.match(written || '', /"instructions"/)
+
+  // Real file path variant: written 0600 into a private temp dir.
+  const real = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig)
+  const fs = await import('node:fs')
+  assert.ok(real.OPENCODE_CONFIG, 'expected a config file path')
+  const stat = fs.statSync(real.OPENCODE_CONFIG!)
+  assert.equal(stat.mode & 0o777, 0o600)
+  const parsed = JSON.parse(fs.readFileSync(real.OPENCODE_CONFIG!, 'utf8'))
+  assert.equal(parsed.instructions[0].length, 150_000)
+  fs.rmSync(real.OPENCODE_CONFIG!, { force: true })
+})

@@ -1,5 +1,8 @@
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { randomBytes } from 'node:crypto'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   type ManagedOpencodeServerParentMessage,
   type ManagedOpencodeServerSupervisorMessage,
@@ -69,15 +72,37 @@ export function createManagedOpencodeServerAuth(): ManagedOpencodeServerAuth {
   }
 }
 
+// Linux caps a single env string at MAX_ARG_STRLEN (~128 KiB); exceeding it
+// makes the OpenCode spawn fail with E2BIG (macOS has no per-string cap, so
+// the failure only shows on Linux). The composed runtime config grows with
+// every bundled tool's permission patterns, so large configs spill to a
+// private file passed via OPENCODE_CONFIG (a path the OpenCode CLI reads
+// natively) instead of inlining via OPENCODE_CONFIG_CONTENT.
+const MAX_INLINE_OPENCODE_CONFIG_BYTES = 100_000
+
 export function buildManagedOpencodeServerEnvironment(
   env: NodeJS.ProcessEnv,
   config?: OpencodeServerOptions['config'],
+  options: { writeConfigFile?: (serialized: string) => string } = {},
 ) {
   const next = { ...env }
+  delete next.OPENCODE_CONFIG_CONTENT
   if (config !== undefined) {
-    next.OPENCODE_CONFIG_CONTENT = JSON.stringify(config ?? {})
-  } else {
-    delete next.OPENCODE_CONFIG_CONTENT
+    const serialized = JSON.stringify(config ?? {})
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_INLINE_OPENCODE_CONFIG_BYTES) {
+      const writeConfigFile = options.writeConfigFile || ((content: string) => {
+        // The config can carry provider credentials: private dir (0700) and
+        // owner-only file (0600), same protection class as OpenCode's own
+        // config files.
+        const dir = mkdtempSync(join(tmpdir(), 'open-cowork-opencode-config-'))
+        const file = join(dir, 'opencode-config.json')
+        writeFileSync(file, content, { mode: 0o600 })
+        return file
+      })
+      next.OPENCODE_CONFIG = writeConfigFile(serialized)
+    } else {
+      next.OPENCODE_CONFIG_CONTENT = serialized
+    }
   }
   return next
 }
