@@ -1,4 +1,15 @@
 @import "tailwindcss";
+/*
+ * Explicit Tailwind v4 source roots. Automatic source detection only scans
+ * under the importing build's project root, and the DESKTOP renderer build
+ * roots at apps/desktop while all UI source lives here in packages/app (and
+ * packages/ui) — index.html reaches it via a relative path. Without these
+ * directives the desktop CSS bundle silently drops every utility class used
+ * only in packages/app + packages/ui (the app shell renders display:block,
+ * stacked) while the browser build, rooted at packages/app, stays correct.
+ */
+@source "../";
+@source "../../../ui/src";
 @import "./generated/design-tokens.css";
 
 @font-face {
