@@ -88,4 +88,4 @@ if (!existsSync(join(outDir, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs'))) 
   process.exit(1)
 }
 
-console.log(`[prune-cloud-runtime] wrote ${outDir} (${packages} workspace packages, manifests + dist only)`)
+process.stdout.write(`[prune-cloud-runtime] wrote ${outDir} (${packages} workspace packages, manifests + dist only)\n`)
