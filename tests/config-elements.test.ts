@@ -25,9 +25,9 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   const mcps = getConfiguredMcpsFromConfig()
   const agents = getConfiguredAgentsFromConfig()
 
-  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep')
-  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator,openwiki-research,openwiki-edit-review,openwiki-ingest,time-keep')
-  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep')
+  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep,opencode-gateway')
+  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator,openwiki-research,openwiki-edit-review,openwiki-ingest,time-keep,opencode-gateway')
+  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep,opencode-gateway')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,agent-builder,workflow-designer,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'agents')!).includes('mcp__agents__save_agent'), true)
@@ -42,6 +42,9 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   // state) ask for approval.
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!).includes('mcp__time-keep__timer_set'), true)
   assert.equal(tools.find((tool) => tool.id === 'time-keep')?.allowPatterns?.includes('mcp__time-keep__business_days'), true)
+  // opencode-gateway: inspection tools auto-allowed; durable-work mutations ask.
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'opencode-gateway')!).includes('mcp__opencode-gateway__task_create'), true)
+  assert.equal(tools.find((tool) => tool.id === 'opencode-gateway')?.allowPatterns?.includes('mcp__opencode-gateway__briefing'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'clock')!).length, 0)
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()
