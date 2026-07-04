@@ -15,6 +15,11 @@ When the clock MCP is available, call the relevant `mcp__clock__*` tool before d
 date or time calculations. Do not rely on model memory for "today", "now",
 "last week", "next month", timezones, offsets, or elapsed time.
 
+When the deeper `time-keep` MCP is also available, prefer its
+`mcp__time-keep__*` tools for anything beyond the basics: business-day
+counts, holiday lookups, timezone catalogs and DST detail, date formatting,
+and timers. The built-in clock stays the zero-install fallback.
+
 ## Tool Choice
 
 - `mcp__clock__current_time`: get the authoritative current time for a timezone.

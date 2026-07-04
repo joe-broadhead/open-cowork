@@ -196,6 +196,24 @@
         "mcp__openwiki__wiki.propose_edit", "mcp__openwiki__wiki.propose_synthesis",
         "mcp__openwiki__wiki.propose_source", "mcp__openwiki__wiki.comment_on_proposal"
       ]
+    },
+    {
+      "id": "time-keep",
+      "name": "Time Keep",
+      "icon": "timer",
+      "description": "Deep time engine: IANA timezone operations, calendar queries, date arithmetic, business days, offline holidays (2000-2030), and local timers. Requires the time-keep CLI on this machine.",
+      "kind": "mcp",
+      "namespace": "time-keep",
+      "writeAccess": true,
+      "patterns": ["mcp__time-keep__*"],
+      "allowPatterns": [
+        "mcp__time-keep__current_time", "mcp__time-keep__list_timezones", "mcp__time-keep__timezone_info",
+        "mcp__time-keep__convert_timezone", "mcp__time-keep__calendar_query", "mcp__time-keep__date_arithmetic",
+        "mcp__time-keep__date_diff", "mcp__time-keep__date_format", "mcp__time-keep__holidays",
+        "mcp__time-keep__business_days", "mcp__time-keep__timer_get", "mcp__time-keep__timer_list",
+        "mcp__time-keep__timer_check"
+      ],
+      "askPatterns": ["mcp__time-keep__timer_set", "mcp__time-keep__timer_delete"]
     }
   ],
   "skills": [
@@ -261,6 +279,13 @@
       "badge": "Skill",
       "sourceName": "openwiki-ingest",
       "toolIds": ["openwiki"]
+    },
+    {
+      "name": "Time Keep",
+      "description": "Use the time-keep MCP for timezone operations, calendar math, business days, offline holidays, and local timers.",
+      "badge": "Skill",
+      "sourceName": "time-keep",
+      "toolIds": ["time-keep"]
     }
   ],
   "mcps": [
@@ -319,6 +344,13 @@
       "description": "OpenWiki knowledge base: fusion search, cited reads, claim tracing, graph queries, and human-reviewed edit proposals.",
       "authMode": "none",
       "command": ["openwiki", "mcp", "--stdio", "--tools", "proposal"]
+    },
+    {
+      "name": "time-keep",
+      "type": "local",
+      "description": "Local-first agent clock: IANA timezone operations, calendar queries, date arithmetic, business days, offline holidays (2000-2030), and SQLite timers.",
+      "authMode": "none",
+      "command": ["time-keep", "server", "start", "--transport", "stdio"]
     }
   ],
   "agents": [

@@ -32,11 +32,14 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
     'openwiki-ingest',
     'openwiki-research',
     'skill-creator',
+    'time-keep',
     'workflow-creator',
   ])
 
-  // Brand words whose display casing differs from naive Title Case.
+  // Brand words whose display casing differs from naive Title Case, and full
+  // skill names whose H1 keeps the lowercase brand form.
   const displayWordOverrides: Record<string, string> = { openwiki: 'OpenWiki' }
+  const displayTitleOverrides: Record<string, string> = { 'time-keep': 'time-keep' }
 
   for (const skillName of skillNames) {
     assert.match(skillName, safeSkillName)
@@ -51,7 +54,7 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
       assert.match(frontmatter.description, /auto research/)
       assert.match(frontmatter.description, /autoresearch/)
     }
-    assert.match(content, new RegExp(`# ${skillName.split('-').map((part) => displayWordOverrides[part] || part[0].toUpperCase() + part.slice(1)).join(' ')}`))
+    assert.match(content, new RegExp(`# ${displayTitleOverrides[skillName] || skillName.split('-').map((part) => displayWordOverrides[part] || part[0].toUpperCase() + part.slice(1)).join(' ')}`))
 
     const referencedMarkdownFiles = Array.from(content.matchAll(/references\/[a-z0-9-]+\.md/g)).map((match) => match[0])
     for (const relativePath of referencedMarkdownFiles) {

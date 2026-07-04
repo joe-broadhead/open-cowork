@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-04T04:03:37.099Z",
+  "generatedAt": "2026-07-04T10:37:50.198Z",
   "environment": {
     "platform": "darwin",
     "arch": "arm64",
@@ -17,83 +17,83 @@
     {
       "name": "history.project.large",
       "iterations": 40,
-      "minMs": 0.42,
-      "maxMs": 0.92,
-      "avgMs": 0.46,
-      "p50Ms": 0.43,
-      "p95Ms": 0.54
+      "minMs": 0.66,
+      "maxMs": 1.35,
+      "avgMs": 0.85,
+      "p50Ms": 0.82,
+      "p95Ms": 1.04
     },
     {
       "name": "engine.hydrate.large",
       "iterations": 24,
-      "minMs": 0.33,
-      "maxMs": 0.67,
-      "avgMs": 0.39,
-      "p50Ms": 0.38,
-      "p95Ms": 0.47
+      "minMs": 0.53,
+      "maxMs": 1.11,
+      "avgMs": 0.71,
+      "p50Ms": 0.68,
+      "p95Ms": 0.86
     },
     {
       "name": "engine.view.large",
       "iterations": 30,
-      "minMs": 0.23,
-      "maxMs": 0.42,
-      "avgMs": 0.26,
-      "p50Ms": 0.26,
-      "p95Ms": 0.32
+      "minMs": 0.38,
+      "maxMs": 0.57,
+      "avgMs": 0.43,
+      "p50Ms": 0.41,
+      "p95Ms": 0.5
     },
     {
       "name": "engine.stream.mixed",
       "iterations": 20,
-      "minMs": 0.81,
-      "maxMs": 1.39,
-      "avgMs": 0.91,
-      "p50Ms": 0.9,
-      "p95Ms": 1.02
+      "minMs": 1.31,
+      "maxMs": 2.74,
+      "avgMs": 1.65,
+      "p50Ms": 1.6,
+      "p95Ms": 2.05
     },
     {
       "name": "runtime.permission.downstreamCatalog",
       "iterations": 24,
-      "minMs": 0.02,
-      "maxMs": 0.08,
-      "avgMs": 0.03,
-      "p50Ms": 0.03,
-      "p95Ms": 0.03
+      "minMs": 0.04,
+      "maxMs": 0.1,
+      "avgMs": 0.05,
+      "p50Ms": 0.05,
+      "p95Ms": 0.07
     },
     {
       "name": "agents.catalog.downstreamCatalog",
       "iterations": 18,
-      "minMs": 0.61,
-      "maxMs": 1.1,
-      "avgMs": 0.73,
-      "p50Ms": 0.7,
-      "p95Ms": 0.97
+      "minMs": 1.27,
+      "maxMs": 5.4,
+      "avgMs": 1.81,
+      "p50Ms": 1.66,
+      "p95Ms": 2.14
     },
     {
       "name": "capabilities.map.downstreamCatalog",
       "iterations": 30,
-      "minMs": 0.43,
-      "maxMs": 0.99,
-      "avgMs": 0.48,
-      "p50Ms": 0.47,
-      "p95Ms": 0.56
+      "minMs": 0.71,
+      "maxMs": 1.67,
+      "avgMs": 0.83,
+      "p50Ms": 0.77,
+      "p95Ms": 1.09
     },
     {
       "name": "catalog.relationship.downstreamCatalog",
       "iterations": 30,
-      "minMs": 0.11,
-      "maxMs": 1.02,
-      "avgMs": 0.15,
-      "p50Ms": 0.13,
-      "p95Ms": 0.16
+      "minMs": 0.16,
+      "maxMs": 1.48,
+      "avgMs": 0.25,
+      "p50Ms": 0.23,
+      "p95Ms": 0.35
     },
     {
       "name": "agents.preview.downstreamCatalog",
       "iterations": 30,
       "minMs": 0.01,
-      "maxMs": 0.02,
+      "maxMs": 0.04,
       "avgMs": 0.01,
       "p50Ms": 0.01,
-      "p95Ms": 0.01
+      "p95Ms": 0.02
     },
     {
       "name": "threads.search.downstreamHistory",
@@ -102,7 +102,7 @@
       "maxMs": 0.01,
       "avgMs": 0,
       "p50Ms": 0,
-      "p95Ms": 0
+      "p95Ms": 0.01
     }
   ]
 }

@@ -51,6 +51,19 @@ short tool name such as `bar_chart`.
     `mcp__clock__date_math`, `mcp__clock__date_range`, and
     `mcp__clock__duration_between`. Source: `mcps/clock/src/index.ts`.
 
+-   :material-timer-outline: **`time-keep` MCP** <span class="status-badge preview">preview</span>
+
+    ---
+
+    Deep time engine backed by the external
+    [time-keep](https://github.com/joe-broadhead/time-keep) CLI: IANA
+    timezone catalogs and DST detail, calendar queries, date arithmetic
+    and formatting, business-day counts, offline holiday lookups
+    (2000–2030), and local SQLite timers. Read and lookup tools are
+    auto-allowed; `timer_set`/`timer_delete` ask for approval. The tool
+    reports as not installed until the `time-keep` binary is on PATH —
+    the built-in `clock` MCP stays the zero-install fallback.
+
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 
     ---
