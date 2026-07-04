@@ -809,6 +809,7 @@ export function App() {
           <Suspense fallback={null}>
             <CommandPalette
               onClose={() => setShowCommandPalette(false)}
+              features={config?.features}
               onNavigate={navigateView}
               onCreateThread={createAndActivateSession}
               onEnsureSession={ensureActiveSession}

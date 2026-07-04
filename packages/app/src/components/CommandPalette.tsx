@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BuiltInAgentDetail,
   CustomAgentSummary,
+  DesktopFeatureFlags,
   SessionInfo,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
@@ -20,6 +21,8 @@ import {
 
 interface CommandPaletteProps {
   onClose: () => void
+  // Per-deployment feature flags; disabled product areas are dropped from Go To.
+  features?: DesktopFeatureFlags
   onNavigate: (view: View) => void
   onCreateThread: (directory?: string) => Promise<SessionInfo | null>
   onEnsureSession: () => Promise<boolean>
@@ -32,6 +35,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({
   onClose,
+  features,
   onNavigate,
   onCreateThread,
   onEnsureSession,
@@ -80,6 +84,7 @@ export function CommandPalette({
       currentProjectDirectory,
       platform: getShortcutPlatform(),
       devMode: import.meta.env.DEV,
+      features,
       onNavigate,
       onCreateThread,
       onEnsureSession,
@@ -113,7 +118,7 @@ export function CommandPalette({
         return window.coworkApi.command.run(sessionId, name)
       },
     })
-  }, [builtinAgents, commands, customAgents, currentProjectDirectory, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, setSessionPrimaryAgent, onSetAgentMode, onStartAgentChat, onOpenSettings, onToggleSearch])
+  }, [builtinAgents, commands, customAgents, currentProjectDirectory, features, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, setSessionPrimaryAgent, onSetAgentMode, onStartAgentChat, onOpenSettings, onToggleSearch])
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()

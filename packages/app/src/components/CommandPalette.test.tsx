@@ -248,4 +248,66 @@ describe('CommandPalette', () => {
     expect(onNavigate).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
   })
+
+  it('navigates to Knowledge from the Go To section', async () => {
+    const onClose = vi.fn()
+    const onNavigate = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <CommandPalette
+        onClose={onClose}
+        onNavigate={onNavigate}
+        onCreateThread={vi.fn(async () => null)}
+        onEnsureSession={vi.fn(async () => true)}
+        onInsertComposer={vi.fn()}
+        onSetAgentMode={vi.fn()}
+        onStartAgentChat={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onToggleSearch={vi.fn()}
+      />,
+    )
+
+    const search = screen.getByRole('searchbox', { name: 'Search command palette' })
+    await user.type(search, 'knowledge')
+    const option = await screen.findByRole('option', { name: /Knowledge/ })
+    await user.click(option)
+
+    expect(onNavigate).toHaveBeenCalledWith('knowledge')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops Go To entries for feature-disabled product areas so the palette matches the sidebar', async () => {
+    const onNavigate = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <CommandPalette
+        onClose={vi.fn()}
+        features={{ channels: false, knowledge: false }}
+        onNavigate={onNavigate}
+        onCreateThread={vi.fn(async () => null)}
+        onEnsureSession={vi.fn(async () => true)}
+        onInsertComposer={vi.fn()}
+        onSetAgentMode={vi.fn()}
+        onStartAgentChat={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onToggleSearch={vi.fn()}
+      />,
+    )
+
+    const search = screen.getByRole('searchbox', { name: 'Search command palette' })
+    await user.type(search, 'channels')
+    expect(screen.queryByRole('option', { name: /Channels/ })).not.toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, 'knowledge')
+    expect(screen.queryByRole('option', { name: /Knowledge/ })).not.toBeInTheDocument()
+
+    // Ungated destinations stay available.
+    await user.clear(search)
+    await user.type(search, 'health')
+    expect(await screen.findByRole('option', { name: /Health Center/ })).toBeInTheDocument()
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
 })

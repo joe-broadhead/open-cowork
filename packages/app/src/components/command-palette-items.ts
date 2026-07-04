@@ -1,4 +1,5 @@
 import {
+  isDesktopFeatureEnabled,
   NEW_THREAD_SHORTCUT,
   SEARCH_THREADS_SHORTCUT,
   SETTINGS_SHORTCUT,
@@ -6,6 +7,8 @@ import {
 import type {
   BuiltInAgentDetail,
   CustomAgentSummary,
+  DesktopFeatureFlags,
+  DesktopFeatureKey,
   SessionInfo,
 } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../app-types.ts'
@@ -67,6 +70,10 @@ type BuildPaletteItemsInput = {
   // passes import.meta.env.DEV. Kept as an input (not read here) so this module stays
   // node-testable without a vite import.meta.env.
   devMode?: boolean
+  // Per-deployment feature flags (PublicAppConfig.features). Nav items for disabled
+  // product areas are dropped so the palette matches the sidebar instead of offering
+  // silent no-ops (App.navigateView blocks disabled views as defence in depth).
+  features?: DesktopFeatureFlags
   onNavigate: (view: View) => void
   onCreateThread: (directory?: string) => Promise<SessionInfo | null>
   onEnsureSession: () => Promise<boolean>
@@ -88,6 +95,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     currentProjectDirectory = null,
     platform = '',
     devMode = false,
+    features,
     onNavigate,
     onCreateThread,
     onEnsureSession,
@@ -188,7 +196,9 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       })),
   ].sort((a, b) => a.title.localeCompare(b.title))
 
-  const navigationItems: PaletteItem[] = [
+  // Gated entries carry the same DesktopFeatureKey the sidebar uses, so a
+  // deployment that disables a product area drops it from BOTH surfaces.
+  const gatedNavigationItems: Array<PaletteItem & { feature?: DesktopFeatureKey }> = [
     {
       id: 'nav:home',
       title: 'Home',
@@ -206,7 +216,18 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       hint: formatShortcutLabel(SEARCH_THREADS_SHORTCUT, platform),
       keywords: 'projects chats threads search history tags filters work',
+      feature: 'projects',
       run: () => onNavigate('projects'),
+    },
+    {
+      id: 'nav:knowledge',
+      title: 'Knowledge',
+      subtitle: 'Browse the workspace knowledge graph, notes, and shared context.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'knowledge notes graph wiki context library',
+      feature: 'knowledge',
+      run: () => onNavigate('knowledge'),
     },
     {
       id: 'nav:approvals',
@@ -215,6 +236,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       section: 'Go To',
       badge: 'Navigate',
       keywords: 'approvals permissions questions review needs input',
+      feature: 'approvals',
       run: () => onNavigate('approvals'),
     },
     {
@@ -224,6 +246,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       section: 'Go To',
       badge: 'Navigate',
       keywords: 'playbooks workflows setup chat thread workflow designer runs scheduled recurring webhook',
+      feature: 'playbooks',
       run: () => onNavigate('playbooks'),
     },
     {
@@ -234,6 +257,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       hint: 'Cmd + Shift + A',
       keywords: 'team agents coworkers built-in custom',
+      feature: 'team',
       run: () => onNavigate('team'),
     },
     {
@@ -243,6 +267,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       section: 'Go To',
       badge: 'Navigate',
       keywords: 'channels gateway workspace cloud desktop paired',
+      feature: 'channels',
       run: () => onNavigate('channels'),
     },
     {
@@ -253,6 +278,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       hint: 'Cmd + Shift + C',
       keywords: 'capabilities tools skills mcps',
+      feature: 'tools',
       run: () => onNavigate('tools'),
     },
     {
@@ -262,6 +288,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       section: 'Go To',
       badge: 'Navigate',
       keywords: 'artifacts files charts downloads review deliverables',
+      feature: 'artifacts',
       run: () => onNavigate('artifacts'),
     },
     {
@@ -273,6 +300,12 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       keywords: 'health setup onboarding readiness doctor smoke workspace authority',
       run: () => onNavigate('health'),
     },
+  ]
+
+  const navigationItems: PaletteItem[] = [
+    ...gatedNavigationItems
+      .filter((item) => !item.feature || isDesktopFeatureEnabled(features, item.feature))
+      .map(({ feature: _feature, ...item }) => item),
     // The UI-primitives gallery view is DEV-only (UI_PRIMITIVES_ENABLED in App.tsx);
     // gate the palette entry on the same flag so production builds don't offer a route
     // that renders nothing.
