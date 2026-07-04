@@ -86,6 +86,7 @@ export type BuiltInMcpSkipReason =
   | 'not-signed-in-google'
   | 'disabled-by-user'
   | 'awaiting-oauth-opt-in'
+  | 'command-not-installed'
 
 export type BuiltInMcpResolution =
   | { status: 'ready'; entry: ResolvedRuntimeMcpEntry }
@@ -131,9 +132,32 @@ function isOAuthMcp(builtin: BundleMcp): boolean {
   return builtin.authMode === 'oauth'
 }
 
+// A bundled MCP that runs an EXTERNAL command (e.g. the openwiki CLI) is only
+// spawnable when that binary actually resolves. Skip it cleanly otherwise —
+// same principle as the auth/credential prerequisites below: the UI should
+// show an install CTA, not a confusing SDK spawn failure.
+function externalCommandResolves(command: string[] | undefined): boolean {
+  const executable = command?.[0]?.trim()
+  if (!executable) return true // packageName-backed bundled MCPs have no external binary.
+  if (executable.includes('/') || executable.includes('\\')) {
+    return existsSync(isAbsolute(executable) ? executable : resolve(executable))
+  }
+  // Bare name: resolvable iff present in some PATH entry. `node` is always
+  // present in dev, and packaged builds use packageName entries instead.
+  const pathValue = process.env.PATH || ''
+  for (const dir of pathValue.split(':')) {
+    if (dir && existsSync(join(dir, executable))) return true
+  }
+  return false
+}
+
 export function evaluateBuiltInMcp(builtin: BundleMcp, settings: CoworkSettings): BuiltInMcpResolution {
   if (builtin.name === 'semantic-ui' && process.env.OPEN_COWORK_DISABLE_SEMANTIC_UI_MCP === '1') {
     return { status: 'skipped', reason: 'disabled-by-user' }
+  }
+
+  if (builtin.type === 'local' && builtin.command && !externalCommandResolves(builtin.command)) {
+    return { status: 'skipped', reason: 'command-not-installed' }
   }
 
   const explicit = getExplicitEnabledState(builtin, settings)

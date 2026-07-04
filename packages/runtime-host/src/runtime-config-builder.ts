@@ -431,6 +431,7 @@ function buildRuntimeConfigWithCustomMcpsResult(
     'not-signed-in-google': [],
     'disabled-by-user': [],
     'awaiting-oauth-opt-in': [],
+    'command-not-installed': [],
   }
   if (mcpPolicy === 'deny') {
     diagnostics.push({ scope: 'mcp', message: 'Skipping MCP registration because MCP tools are disabled by user settings.' })

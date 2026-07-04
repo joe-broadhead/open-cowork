@@ -107,6 +107,51 @@ test('evaluateBuiltInMcp — local MCP with required credentials present is read
   })
 })
 
+test('evaluateBuiltInMcp — external-command MCP whose binary is missing is skipped, not spawned', () => {
+  withConfigDir(baseConfig({}), () => {
+    // Mirrors the bundled openwiki entry: an external CLI the user may not
+    // have installed. A missing binary must skip cleanly (install CTA), not
+    // reach the runtime and produce a confusing SDK spawn failure.
+    const mcp: BundleMcp = {
+      name: 'openwiki',
+      type: 'local',
+      description: 'OpenWiki knowledge base',
+      authMode: 'none',
+      command: ['definitely-not-an-installed-binary-open-cowork-test', 'mcp', '--stdio'],
+    }
+    const result = evaluateBuiltInMcp(mcp, { ...BASE_SETTINGS })
+    assert.deepEqual(result, { status: 'skipped', reason: 'command-not-installed' })
+  })
+})
+
+test('evaluateBuiltInMcp — external-command MCP resolves when the binary exists on PATH', () => {
+  withConfigDir(baseConfig({}), () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'open-cowork-openwiki-bin-'))
+    const binary = join(binDir, 'openwiki')
+    writeFileSync(binary, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    const previousPath = process.env.PATH
+    process.env.PATH = `${binDir}:${previousPath || ''}`
+    try {
+      const mcp: BundleMcp = {
+        name: 'openwiki',
+        type: 'local',
+        description: 'OpenWiki knowledge base',
+        authMode: 'none',
+        command: ['openwiki', 'mcp', '--stdio', '--tools', 'proposal'],
+      }
+      const result = evaluateBuiltInMcp(mcp, { ...BASE_SETTINGS })
+      assert.equal(result.status, 'ready')
+      if (result.status !== 'ready') return
+      assert.equal(result.entry.type, 'local')
+      if (result.entry.type !== 'local') return
+      assert.deepEqual(result.entry.command, ['openwiki', 'mcp', '--stdio', '--tools', 'proposal'])
+    } finally {
+      process.env.PATH = previousPath
+      rmSync(binDir, { recursive: true, force: true })
+    }
+  })
+})
+
 test('resolveBundledMcpNodeCommand uses Electron as Node in packaged builds', () => {
   assert.deepEqual(resolveBundledMcpNodeCommand('/tmp/charts.js', {
     isPackaged: false,

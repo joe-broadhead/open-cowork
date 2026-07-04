@@ -25,15 +25,19 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   const mcps = getConfiguredMcpsFromConfig()
   const agents = getConfiguredAgentsFromConfig()
 
-  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui')
-  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator')
-  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui')
+  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki')
+  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator,openwiki-research,openwiki-edit-review,openwiki-ingest')
+  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,agent-builder,workflow-designer,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'agents')!).includes('mcp__agents__save_agent'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'workflows')!).includes('mcp__workflows__create_workflow'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'knowledge')!).includes('mcp__knowledge__propose_knowledge_edit'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'semantic-ui')!).includes('mcp__semantic-ui__ui_execute_action'), true)
+  // OpenWiki ships the pack's trust posture: read tier auto-allowed, proposal
+  // tier asks, write tier structurally absent (the MCP runs --tools proposal).
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'openwiki')!).includes('mcp__openwiki__wiki.propose_edit'), true)
+  assert.equal(tools.find((tool) => tool.id === 'openwiki')?.allowPatterns?.includes('mcp__openwiki__wiki.search'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'clock')!).length, 0)
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()

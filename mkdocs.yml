@@ -109,6 +109,7 @@ nav:
       - Agents: agent-authoring.md
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
+      - OpenWiki Knowledge Base: openwiki.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
