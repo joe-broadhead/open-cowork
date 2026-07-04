@@ -14,6 +14,7 @@ import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-types'
+import { appHashFor, parseAppHash } from './browser-url-routing'
 import { isDesktopRuntime } from './runtime-env'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
@@ -65,8 +66,21 @@ function canUseViewTransition() {
   )
 }
 
+// Browser (cloud web) runtime routes the active view through the URL hash so
+// refresh restores place and views are shareable. Electron keeps in-memory
+// view state (plus the dev-only #/ui-primitives hash), unchanged.
+function browserUrlRoutingEnabled(): boolean {
+  return typeof window !== 'undefined' && !isDesktopRuntime()
+}
+
 function initialAppView(): AppView {
   if (UI_PRIMITIVES_ENABLED && typeof window !== 'undefined' && window.location.hash === UI_PRIMITIVES_HASH) return 'ui-primitives'
+  if (browserUrlRoutingEnabled()) {
+    const parsed = parseAppHash(window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
+    // Chat deep links resolve after boot (the session must load first); the
+    // boot effect below opens the thread. Everything else starts in place.
+    if (parsed.view && parsed.view !== 'chat') return parsed.view
+  }
   return 'home'
 }
 
@@ -463,11 +477,60 @@ export function App() {
 
   useEffect(() => {
     const listener = () => {
+      if (browserUrlRoutingEnabled()) {
+        const parsed = parseAppHash(window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
+        if (parsed.view === 'chat' && parsed.sessionId) {
+          if (parsed.sessionId !== useSessionStore.getState().currentSessionId) {
+            void openExistingThread(parsed.sessionId)
+          } else {
+            navigateView('chat')
+          }
+          return
+        }
+        if (parsed.view) navigateView(parsed.view)
+        return
+      }
       if (UI_PRIMITIVES_ENABLED && window.location.hash === UI_PRIMITIVES_HASH) navigateView('ui-primitives')
     }
     window.addEventListener('hashchange', listener)
     return () => window.removeEventListener('hashchange', listener)
-  }, [navigateView])
+  }, [navigateView, openExistingThread])
+
+  // Browser runtime: mirror view state into the URL hash. Plain assignment
+  // creates history entries so browser Back/Forward walk the app's views (the
+  // hashchange listener above applies them); the very first write replaces the
+  // empty-hash entry instead of stacking a redundant one.
+  useEffect(() => {
+    if (!browserUrlRoutingEnabled()) return
+    const next = appHashFor(view, view === 'chat' ? currentSessionId : null)
+    if (window.location.hash === next) return
+    if (!window.location.hash) {
+      window.history.replaceState(window.history.state, '', next)
+      return
+    }
+    window.location.hash = next
+  }, [view, currentSessionId])
+
+  // Browser runtime, one-shot after auth/config resolve: apply a chat deep
+  // link (#/chat/<id> — the session had to load before the thread could open)
+  // and bounce off any deep-linked view this deployment has feature-disabled
+  // (initialAppView ran before config existed, so navigateView's gate could
+  // not have vetted it).
+  const bootHashAppliedRef = useRef(false)
+  useEffect(() => {
+    if (!browserUrlRoutingEnabled() || bootHashAppliedRef.current) return
+    if (!config || !authChecked) return
+    if (config.auth.enabled && !authenticated) return
+    bootHashAppliedRef.current = true
+    if (!isDesktopFeatureEnabled(config.features, view as DesktopFeatureKey)) {
+      navigateView('home')
+      return
+    }
+    const parsed = parseAppHash(window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
+    if (parsed.view === 'chat' && parsed.sessionId) {
+      void openExistingThread(parsed.sessionId)
+    }
+  }, [authChecked, authenticated, config, navigateView, openExistingThread, view])
 
   // If the current thread disappears while the chat view is active —
   // deleted from the sidebar, reset, or reverted to null by a runtime
