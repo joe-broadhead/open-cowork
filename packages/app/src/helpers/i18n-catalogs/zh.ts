@@ -159,6 +159,7 @@ const strings: Record<string, string> = {
   'settings.language.label': '语言',
   'settings.language.description': '选择界面语言。选择会记忆在本机。部分翻译的语言会为缺失的字符串回退到英文。',
   'settings.language.systemDefault': '自动检测（系统）',
+  'settings.language.partialOption': '{{label}} — 已翻译 {{percent}}%',
 
   'agents.create': '创建智能体',
 

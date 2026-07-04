@@ -81,7 +81,9 @@ describe('focused accessibility smoke', () => {
     expect(document.documentElement).toHaveAttribute('lang', 'ar')
     expect(document.documentElement).toHaveAttribute('dir', 'rtl')
     expect(await screen.findByText('الإعدادات')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'اللغة: العربية' })).toHaveTextContent('العربية')
+    // The language option's accessible name now carries the honest partial-
+    // coverage suffix ("العربية — NN٪ مترجم"), so match the stable lead.
+    expect(screen.getByRole('button', { name: /^اللغة: العربية/ })).toHaveTextContent('العربية')
     await expectNoA11yViolations(container)
   })
 })

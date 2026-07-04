@@ -156,6 +156,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'Sprache',
   'settings.language.description': 'Wähle die Oberflächensprache. Die Auswahl wird auf diesem Gerät gespeichert. Teilweise übersetzte Sprachen fallen bei fehlenden Strings auf Englisch zurück.',
   'settings.language.systemDefault': 'Automatisch erkennen (System)',
+  'settings.language.partialOption': '{{label}} — zu {{percent}} % übersetzt',
 
   'agents.create': 'Agent erstellen',
 

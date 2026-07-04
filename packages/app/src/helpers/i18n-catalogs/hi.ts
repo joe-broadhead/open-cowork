@@ -156,6 +156,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'भाषा',
   'settings.language.description': 'इंटरफ़ेस भाषा चुनें। चयन इस डिवाइस पर याद रखा जाता है। आंशिक रूप से अनुवादित भाषाएँ लापता स्ट्रिंग्स के लिए अंग्रेज़ी पर फ़ॉलबैक होंगी।',
   'settings.language.systemDefault': 'स्वचालित पहचान (सिस्टम)',
+  'settings.language.partialOption': '{{label}} — {{percent}}% अनूदित',
 
   'agents.create': 'एजेंट बनाएँ',
 

@@ -156,6 +156,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'Язык',
   'settings.language.description': 'Выберите язык интерфейса. Выбор сохраняется на этом устройстве. Для частично переведённых языков недостающие строки показываются на английском.',
   'settings.language.systemDefault': 'Автоопределение (система)',
+  'settings.language.partialOption': '{{label}} — переведено {{percent}} %',
 
   'agents.create': 'Создать агента',
 

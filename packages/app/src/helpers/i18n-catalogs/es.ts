@@ -176,6 +176,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'Idioma',
   'settings.language.description': 'Elige el idioma de la interfaz. La selección se recuerda en este dispositivo. Los idiomas parcialmente traducidos mostrarán los textos faltantes en inglés.',
   'settings.language.systemDefault': 'Detección automática (sistema)',
+  'settings.language.partialOption': '{{label}} — {{percent}} % traducido',
 
   // Agent builder basics
   'agents.create': 'Crear agente',

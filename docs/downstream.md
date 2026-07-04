@@ -513,6 +513,25 @@ Two things happen when this is set:
    inline English default when no translation exists. Partial
    catalogs are fine; untranslated keys stay in English.
 
+### Launch posture: English-first, honestly partial elsewhere
+
+The public build is **English-first**. The built-in non-English
+catalogs (ar, de, es, fr, hi, it, ja, ko, pt, ru, zh) currently
+translate roughly a third of the renderer's strings; everything
+else renders its inline English fallback. That state is deliberate
+policy, not drift:
+
+- Untranslated keys are tracked in the documented allowlist
+  (`tests/i18n-english-only-allowlist.json`); a new `t()` key that
+  is neither translated nor allowlisted fails CI, so the backlog
+  can only shrink or be made visible — never grow silently.
+- Strings are **never machine-translated in bulk**; catalog entries
+  are added deliberately so a native reader can trust what ships.
+- The language picker shows the honest coverage figure per locale
+  ("Deutsch — zu 32 % übersetzt"), generated from the live backlog
+  by `node scripts/i18n-coverage.mjs --write-status` and kept in
+  sync by the `i18n:check` gate.
+
 The upstream source hasn't migrated every string to the catalog
 yet — only the highest-visibility ones (see the focused roadmap in
 `docs/roadmap.md`). Downstream forks that need

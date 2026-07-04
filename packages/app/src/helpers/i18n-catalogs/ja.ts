@@ -156,6 +156,7 @@ const strings: Record<string, string> = {
   'settings.language.label': '言語',
   'settings.language.description': 'インターフェース言語を選択します。この端末で選択が記憶されます。部分的にしか翻訳されていない言語では、欠けている文字列は英語で表示されます。',
   'settings.language.systemDefault': '自動検出 (システム)',
+  'settings.language.partialOption': '{{label}} — 翻訳率 {{percent}}%',
 
   'agents.create': 'エージェントを作成',
 

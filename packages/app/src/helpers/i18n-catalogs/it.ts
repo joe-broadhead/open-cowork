@@ -156,6 +156,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'Lingua',
   'settings.language.description': 'Scegli la lingua dell\u2019interfaccia. La selezione viene ricordata su questo dispositivo. Le lingue parzialmente tradotte mostreranno le stringhe mancanti in inglese.',
   'settings.language.systemDefault': 'Rilevamento automatico (sistema)',
+  'settings.language.partialOption': '{{label}} — tradotto al {{percent}} %',
 
   'agents.create': 'Crea agente',
 

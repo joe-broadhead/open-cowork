@@ -160,6 +160,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'Langue',
   'settings.language.description': 'Choisissez la langue de l\u2019interface. La sélection est mémorisée sur cet appareil. Les langues avec une traduction partielle afficheront les chaînes non traduites en anglais.',
   'settings.language.systemDefault': 'Détection automatique (système)',
+  'settings.language.partialOption': '{{label}} — traduit à {{percent}} %',
 
   'settings.storage.supportDiagnostics': 'Diagnostics de support',
   'settings.storage.supportDescription': 'Copie un rapport en texte brut (configuration, entrées du runtime, journaux récents) dans votre presse-papiers. Les identifiants sont masqués afin que le rapport puisse être partagé.',

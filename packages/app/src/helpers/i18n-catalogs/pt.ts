@@ -159,6 +159,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'Idioma',
   'settings.language.description': 'Escolha o idioma da interface. A seleção é lembrada neste dispositivo. Idiomas parcialmente traduzidos mostrarão textos faltantes em inglês.',
   'settings.language.systemDefault': 'Detecção automática (sistema)',
+  'settings.language.partialOption': '{{label}} — {{percent}} % traduzido',
 
   'agents.create': 'Criar agente',
 

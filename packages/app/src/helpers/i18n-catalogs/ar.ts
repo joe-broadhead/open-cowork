@@ -160,6 +160,7 @@ const strings: Record<string, string> = {
   'settings.language.label': 'اللغة',
   'settings.language.description': 'اختر لغة الواجهة. يُحفظ الاختيار على هذا الجهاز. تعود اللغات المترجمة جزئيًا إلى الإنجليزية للسلاسل المفقودة.',
   'settings.language.systemDefault': 'كشف تلقائي (النظام)',
+  'settings.language.partialOption': '{{label}} — {{percent}}٪ مترجم',
 
   'agents.create': 'إنشاء عميل',
 
