@@ -20,6 +20,10 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @open-cowork/shared build
 RUN pnpm --filter @open-cowork/runtime-host build
 RUN pnpm cloud:build
+# Prune to the runtime tree: workspace manifests + built dist output only
+# (bundle entrypoints, browser renderer, MCP dist, skills, config, licenses).
+# No TypeScript source, tests, or scripts ship in the public runtime image.
+RUN node scripts/prune-cloud-runtime.mjs /runtime
 
 FROM node:26-bookworm-slim@sha256:79723b41edbedf595f62e943a9f8b0ba9af5b1e61045c5f8f59c2c02c1212a16
 
@@ -27,19 +31,18 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-# .npmrc (public-hoist-pattern[]=ajv) must reach the runtime --prod install too, or
-# ajv is left nested and the externalized cloud bundle fails at import.
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
-COPY --from=build /app/apps ./apps
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/mcps ./mcps
-COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/open-cowork.config.json /app/open-cowork.config.schema.json ./
-COPY --from=build /app/tsconfig.base.json ./
-# Carry the MIT license + curated third-party attribution into the redistributed
-# image, matching what the desktop app bundles (LIC-03).
-COPY --from=build /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
-COPY --from=build /app/THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
+# The pruned runtime tree carries the root manifests (.npmrc's public-hoist
+# patterns must reach the --prod install or the externalized cloud bundle can't
+# resolve ajv/pg), the per-package package.json + dist pairs, config + schema,
+# and the MIT license + curated third-party attribution set (LIC-03).
+#
+# The bundle's workspace externals (@open-cowork/shared, @open-cowork/
+# runtime-host) resolve because the ROOT package.json declares them as PROD
+# dependencies — the --prod install links them into /app/node_modules, which is
+# the only node_modules on the resolution walk up from apps/desktop/dist/cloud.
+# (They must never move back to devDependencies: the old full-source COPY only
+# booted by accident, via build-stage node_modules symlinks riding along.)
+COPY --from=build /runtime ./
 
 RUN pnpm install --frozen-lockfile --prod
 RUN mkdir -p /data/open-cowork-cloud && chown -R node:node /data/open-cowork-cloud

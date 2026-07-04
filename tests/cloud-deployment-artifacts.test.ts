@@ -742,6 +742,30 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(dockerfile, /pnpm --filter @open-cowork\/shared build/)
   assert.match(dockerfile, /pnpm cloud:build/)
   assert.match(dockerfile, /USER node/)
+  // The runtime stage ships the PRUNED tree (manifests + dist only), never the
+  // full monorepo source: scripts/prune-cloud-runtime.mjs runs in the build
+  // stage and the runtime stage copies its output.
+  assert.match(dockerfile, /prune-cloud-runtime\.mjs \/runtime/)
+  assert.match(dockerfile, /COPY --from=build \/runtime \.\//)
+  assert.doesNotMatch(dockerfile, /COPY --from=build \/app\/apps \.\/apps/)
+  // The cloud bundle's workspace externals resolve through ROOT PROD deps in
+  // the pruned runtime tree. As devDependencies the old full-source image only
+  // booted by accident (build-stage node_modules symlinks riding the COPY); a
+  // clean --prod install cannot resolve them and the container crash-loops.
+  const rootManifest = JSON.parse(readRepoFile('package.json')) as {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+  }
+  for (const workspaceExternal of ['@open-cowork/shared', '@open-cowork/runtime-host']) {
+    assert.ok(
+      rootManifest.dependencies?.[workspaceExternal],
+      `${workspaceExternal} must be a root PROD dependency so the pruned cloud image can resolve the bundle's workspace externals`,
+    )
+    assert.ok(
+      !rootManifest.devDependencies?.[workspaceExternal],
+      `${workspaceExternal} must not also appear in root devDependencies`,
+    )
+  }
   // The container healthcheck must probe readiness (/readyz), not bare liveness, so a
   // degraded backing service marks the container unhealthy instead of accepting traffic.
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/readyz/)

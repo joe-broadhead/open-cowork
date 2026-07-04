@@ -140,12 +140,14 @@
       }
     }
   },
+  "dependencies": {
+    "@open-cowork/runtime-host": "workspace:*",
+    "@open-cowork/shared": "workspace:*"
+  },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.2",
     "pg": "^8.21.0",
     "@open-cowork/cloud-server": "workspace:*",
-    "@open-cowork/runtime-host": "workspace:*",
-    "@open-cowork/shared": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",

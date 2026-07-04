@@ -23,6 +23,13 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      '@open-cowork/runtime-host':
+        specifier: workspace:*
+        version: link:packages/runtime-host
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:packages/shared
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.2
@@ -33,12 +40,6 @@ importers:
       '@open-cowork/cloud-server':
         specifier: workspace:*
         version: link:packages/cloud-server
-      '@open-cowork/runtime-host':
-        specifier: workspace:*
-        version: link:packages/runtime-host
-      '@open-cowork/shared':
-        specifier: workspace:*
-        version: link:packages/shared
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.60.1
         version: 8.60.1(@typescript-eslint/parser@8.60.1(eslint@10.4.1(jiti@2.7.0))(typescript@6.0.3))(eslint@10.4.1(jiti@2.7.0))(typescript@6.0.3)
