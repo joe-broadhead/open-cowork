@@ -37,6 +37,10 @@ export type GatewayMetrics = {
   // Deliveries shed (not enqueued) because the local dispatcher queue hit its cap (P1-C); they
   // stay unacked and the cloud re-serves them, so this is a sustained-overload backpressure signal.
   deliverySheds: number
+  // Duplicate delivery re-serves suppressed rather than re-sent to the channel: either the id is
+  // still queued/in-flight in the dispatcher, or it was already sent and is re-acked instead of
+  // re-dispatched. A sustained rate signals claim-TTL lapses or a cloud ack-recording problem.
+  deliveryDuplicatesSuppressed: number
   errors: number
   providerMetrics: Record<string, GatewayProviderMetrics>
 }
@@ -107,6 +111,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     streamBackpressureDisconnects: 0,
     deliveryQueueDepthMax: 0,
     deliverySheds: 0,
+    deliveryDuplicatesSuppressed: 0,
     errors: 0,
     providerMetrics: {},
   }
@@ -221,6 +226,9 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# HELP open_cowork_gateway_delivery_sheds_total Deliveries shed because the local dispatcher queue hit its cap (re-served by the cloud).',
     '# TYPE open_cowork_gateway_delivery_sheds_total counter',
     `open_cowork_gateway_delivery_sheds_total ${metrics.deliverySheds}`,
+    '# HELP open_cowork_gateway_delivery_duplicates_suppressed_total Duplicate delivery re-serves suppressed (still queued/in-flight, or already sent and re-acked) rather than re-sent to the channel.',
+    '# TYPE open_cowork_gateway_delivery_duplicates_suppressed_total counter',
+    `open_cowork_gateway_delivery_duplicates_suppressed_total ${metrics.deliveryDuplicatesSuppressed}`,
     ...renderProviderMetrics(metrics),
     '',
   ].join('\n')

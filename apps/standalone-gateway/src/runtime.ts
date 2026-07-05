@@ -146,6 +146,9 @@ export function createStandaloneGatewayRuntime(input: {
         if (options.isActive && !options.isActive()) break;
         const job = await repository.claimNextJob({ claimedBy, ttlMs: 30_000, lease: options.lease });
         if (!job) break;
+        // Every claimed job gets a claim audit regardless of kind, so the audit trail is consistent
+        // between the executable "prompt" path and the unsupported kinds below.
+        await repository.recordAudit("standalone.job.claimed", claimedBy, { jobId: job.jobId, kind: job.kind });
         // Only "prompt" jobs have an execution path in the standalone appliance. Every other kind
         // must finish as failed with a descriptive reason — never as a silent "completed".
         if (job.kind !== "prompt") {
@@ -160,7 +163,6 @@ export function createStandaloneGatewayRuntime(input: {
           continue;
         }
         try {
-          await repository.recordAudit("standalone.job.claimed", claimedBy, { jobId: job.jobId, kind: job.kind });
           await runPromptJob(job);
           await repository.finishJob({ jobId: job.jobId, claimToken: job.claimToken || "", status: "completed" });
         } catch (error) {
@@ -189,7 +191,7 @@ async function sendChannelReply(input: {
   if (!replyText || !input.message.target.chatId) return;
   const deliveryBase = `standalone:${input.session.sessionId}:${input.message.providerEventId || input.message.id}:reply`;
   try {
-    const chunks = chunkText(replyText, input.provider.capabilities.maxTextLength);
+    const chunks = splitReplyToLimit(replyText, input.provider.capabilities.maxTextLength);
     for (const [index, chunk] of chunks.entries()) {
       await input.provider.sendText(input.message.target, chunk, {
         deliveryId: chunks.length === 1 ? deliveryBase : `${deliveryBase}:chunk:${index + 1}`,
@@ -203,6 +205,22 @@ async function sendChannelReply(input: {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+// chunkText requires a limit >= 100. Real chat providers are far above that (Telegram 4096,
+// etc.), but a provider that declares a sub-100 maxTextLength would otherwise make chunkText
+// throw and silently drop every reply. For that case fall back to a plain content-preserving
+// hard split at the provider's real limit so the answer is still delivered in valid chunks.
+function splitReplyToLimit(text: string, maxTextLength: number): string[] {
+  if (Number.isInteger(maxTextLength) && maxTextLength >= 100) {
+    return chunkText(text, maxTextLength);
+  }
+  const limit = Math.max(1, Math.floor(maxTextLength));
+  const chunks: string[] = [];
+  for (let index = 0; index < text.length; index += limit) {
+    chunks.push(text.slice(index, index + limit));
+  }
+  return chunks.length ? chunks : [text];
 }
 
 function coalesceAssistantText(parts: string[]): string {

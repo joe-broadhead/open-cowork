@@ -1061,6 +1061,9 @@ export function createRuntimeDeltaCoalescer(options: {
     // issued synchronously in transcript order; DURABLE ordering additionally requires the
     // route itself to serialize per session (the production wiring wraps routeRuntimeEvent
     // in createSessionSerializedRuntimeEventRouter — issue #855).
+    // INVARIANT: these are fire-and-forget (`void`), so `options.route` must never reject —
+    // the production wiring pre-wraps it in `.catch(recordLoopError)`. Keep that catch if you
+    // rewire the route, or these calls will surface as unhandled promise rejections.
     if (sessionId) void flushSession(sessionId)
     void options.route(event)
   }

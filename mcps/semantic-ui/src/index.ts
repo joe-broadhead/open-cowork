@@ -13,6 +13,9 @@ const { postToBridge } = createBridge<'/status' | '/snapshot' | '/actions/list' 
   tokenEnvVar: 'OPEN_COWORK_SEMANTIC_UI_TOKEN',
   bridgeName: 'semantic UI bridge',
   bridgeLabel: 'Semantic UI bridge',
+  // Interactive UI actions want a snappier abort than the default bridge timeout: keep the
+  // original 5s posture so an unresponsive local bridge fails fast instead of hanging 10s.
+  timeoutMs: 5_000,
 })
 
 function textResult(value: unknown) {

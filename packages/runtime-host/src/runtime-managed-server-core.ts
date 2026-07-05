@@ -98,9 +98,17 @@ export function buildManagedOpencodeServerEnvironment(
         // owner-only file (0600), same protection class as OpenCode's own
         // config files.
         const dir = mkdtempSync(join(tmpdir(), 'open-cowork-opencode-config-'))
-        options.onTempConfigDirCreated?.(dir)
         const file = join(dir, 'opencode-config.json')
-        writeFileSync(file, content, { mode: 0o600 })
+        try {
+          writeFileSync(file, content, { mode: 0o600 })
+        } catch (error) {
+          // If the write fails the server object (and its close() cleanup hook) is never
+          // returned, so remove the freshly created dir here rather than leaking it.
+          rmSync(dir, { recursive: true, force: true })
+          throw error
+        }
+        // Only register the dir for lifecycle cleanup once it actually holds the file.
+        options.onTempConfigDirCreated?.(dir)
         return file
       })
       next.OPENCODE_CONFIG = writeConfigFile(serialized)

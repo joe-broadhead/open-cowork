@@ -306,6 +306,9 @@ export function createGatewayRuntime(
       if (depth > metrics.deliveryQueueDepthMax) metrics.deliveryQueueDepthMax = depth
     },
     onShed: () => { metrics.deliverySheds += 1 },
+    // A re-served delivery whose id is still queued/in-flight is dropped instead of dispatched
+    // again; count it as a suppressed duplicate so a high re-serve rate is visible in metrics.
+    onDuplicate: () => { metrics.deliveryDuplicatesSuppressed += 1 },
   })
   let started = false
   // Tracks whether the cloud delivery subscription is live. The gateway's job is to relay between
@@ -350,6 +353,7 @@ export function createGatewayRuntime(
             // the user does not see the message twice; at-least-once is untouched because only
             // ids that actually reached the provider are ever recorded here.
             if (sentDeliveryIds.has(delivery.deliveryId)) {
+              metrics.deliveryDuplicatesSuppressed += 1
               void cloud.ackDelivery(delivery.deliveryId, {
                 status: 'sent',
                 claimedBy: delivery.claimedBy,

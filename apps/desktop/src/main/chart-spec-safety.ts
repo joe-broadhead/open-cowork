@@ -23,10 +23,20 @@ import { MAX_CHART_ARRAY_ITEMS } from '@open-cowork/shared'
 export const MAX_CHART_GENERATED_ROWS = 20_000
 
 // Maximum estimated rows any single data pipeline may reach after transforms.
-// Estimates are deliberately conservative (worst case), so this sits above the
-// per-generator cap to leave headroom for legitimate fold/flatten usage while
-// still rejecting multiplicative blow-ups long before they execute.
-export const MAX_CHART_ESTIMATED_ROWS = 50_000
+// Estimates are deliberately conservative (worst case), so this sits well above
+// the per-generator cap to leave headroom for legitimate dense charts (e.g. a
+// ~4200-row fold across a dozen series lands near 50k) while still rejecting
+// the multiplicative blow-ups (millions to billions of rows) long before they
+// execute.
+export const MAX_CHART_ESTIMATED_ROWS = 250_000
+
+// Maximum number of grid cells a compute-heavy raster transform (contour,
+// isocontour, heatmap) may declare. These transforms iterate every cell of a
+// size[0] x size[1] grid but emit only a handful of output rows (polygons or a
+// single image), so their cost is invisible to the row-count estimate above and
+// needs its own bound. ~4M cells keeps legitimate density maps working while
+// rejecting grids whose per-cell work would block the event loop.
+export const MAX_CHART_GRID_CELLS = 4_000_000
 
 function blockedRenderError(detail: string) {
   return new Error(`Chart rendering rejected an unsafe or oversized spec: ${detail}`)
@@ -64,9 +74,9 @@ function boundedSequenceRowCount(transform: Record<string, unknown>) {
 // density/kde generate `steps` samples per group; quantile generates ~1/step
 // probabilities. Cap the step-count parameters so they cannot be used as row
 // generators (their defaults are tiny, so legitimate specs are unaffected),
-// and return the implied per-group row count for the pipeline estimate.
-// Note: per-group amplification (groupby * steps) is not modeled; steps alone
-// is capped, which removes the constant-input blow-up these generators allow.
+// and return the implied PER-GROUP row count for the pipeline estimate. The
+// caller multiplies this by the (bounded) group count when the transform has a
+// `groupby`, since these generators run once per distinct group.
 function boundedGeneratorRowCount(type: string, transform: Record<string, unknown>) {
   if (type === 'density' || type === 'kde') {
     // Vega defaults: minsteps 25, maxsteps 200.
@@ -90,6 +100,51 @@ function boundedGeneratorRowCount(type: string, transform: Record<string, unknow
     return Math.ceil(1 / step)
   }
   return Array.isArray(transform.probs) ? transform.probs.length : 100
+}
+
+// True when a transform partitions its input by one or more group keys. groupby
+// may be a field name, an array of fields, or a signal; any non-empty form runs
+// the transform once per distinct group.
+function hasGroupby(transform: Record<string, unknown>) {
+  const groupby = transform.groupby
+  if (Array.isArray(groupby)) return groupby.length > 0
+  return groupby !== undefined && groupby !== null && groupby !== ''
+}
+
+// A generator/expander that runs per group emits `perGroup` rows for EVERY
+// distinct group. The group count is data-dependent and opaque here, but every
+// group requires at least one input row, so it is bounded by the stream's
+// estimated input rows. Worst-case output is therefore perGroup * inputRows,
+// which the caller caps against MAX_CHART_ESTIMATED_ROWS.
+function amplifyPerGroup(perGroup: number, transform: Record<string, unknown>, inputRows: number) {
+  if (!hasGroupby(transform)) return perGroup
+  return perGroup * Math.max(1, inputRows)
+}
+
+// contour/isocontour/heatmap iterate every cell of a declared size[0] x size[1]
+// grid. The output is a few polygons or a single image, so the row-count guard
+// never sees the cost; bound the grid area directly instead. A non-numeric
+// (e.g. signal) size cannot be bounded statically and is rejected outright, as
+// with the other generator parameters.
+function assertBoundedGridSize(type: string, transform: Record<string, unknown>) {
+  const size = transform.size
+  // Grids without a declared size derive their extent from input grid objects,
+  // which are themselves bounded by the inline array-item cap; nothing to add.
+  if (size === undefined) return
+  if (!Array.isArray(size) || size.length < 2) {
+    throw blockedRenderError(`${type} transform requires a static numeric [width, height] size`)
+  }
+  const width = toFiniteNumber(size[0])
+  const height = toFiniteNumber(size[1])
+  if (width === null || height === null || width < 0 || height < 0) {
+    throw blockedRenderError(`${type} transform size must be finite, non-negative numbers`)
+  }
+  const cells = width * height
+  if (cells > MAX_CHART_GRID_CELLS) {
+    throw blockedRenderError(
+      `${type} transform would compute a ${cells}-cell grid (max ${MAX_CHART_GRID_CELLS} cells)`,
+    )
+  }
 }
 
 function estimateDataPipeline(
@@ -125,7 +180,7 @@ function estimateDataPipeline(
 
     switch (type) {
       case 'sequence':
-        rows = Math.max(rows, boundedSequenceRowCount(transform))
+        rows = Math.max(rows, amplifyPerGroup(boundedSequenceRowCount(transform), transform, rows))
         break
       case 'cross':
         // Cartesian product: output is |left| * |right|, which cannot be
@@ -156,7 +211,22 @@ function estimateDataPipeline(
       case 'density':
       case 'kde':
       case 'quantile':
-        rows = Math.max(rows, boundedGeneratorRowCount(type, transform))
+        rows = Math.max(rows, amplifyPerGroup(boundedGeneratorRowCount(type, transform), transform, rows))
+        break
+      case 'impute': {
+        // impute materializes a full (key x groupby) grid, filling every
+        // missing combination. Output rows = distinct(key) * distinct(groupby);
+        // both distinct counts are data-dependent but bounded by the input row
+        // count. Without a groupby there is a single group and no blow-up; with
+        // one, the worst case is inputRows^2, which the cap below rejects.
+        const factor = hasGroupby(transform) ? Math.max(1, rows) : 1
+        rows = Math.max(rows, rows * factor)
+        break
+      }
+      case 'contour':
+      case 'isocontour':
+      case 'heatmap':
+        assertBoundedGridSize(type, transform)
         break
       default:
         // Remaining transforms (filter, aggregate, stack, formula, ...) do not
