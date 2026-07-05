@@ -1,5 +1,5 @@
 import { type WorkflowWebhookAuth, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
-import { createHash, randomUUID } from 'crypto'
+import { randomUUID } from 'crypto'
 import type {
   CapabilitySkill,
   CapabilityTool,
@@ -13,16 +13,12 @@ import type {
   WorkflowDetail,
   WorkflowDraft,
   WorkflowListPayload,
-  WorkflowRun,
   WorkflowStatus,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import {
-  assertSafeSessionImportPayload,
-  coordinationWatchRecipientCanReceive,
   type CloudSessionMessage,
   type CloudSessionProjectionView,
-  type CloudSessionViewRecord,
   type CloudProjectSnapshotUploadInput,
   type CloudProjectSnapshotUploadResult,
   type CloudProjectSource,
@@ -39,7 +35,6 @@ import type {
   BillingSubscriptionRecord,
   ChannelBindingRecord,
   ChannelDeliveryRecord,
-  CreateChannelDeliveryInput,
   ChannelIdentityRecord,
   ChannelInteractionRecord,
   ChannelCursorUpdateResult,
@@ -63,7 +58,6 @@ import type {
   ListSessionsPageRecord,
   ThreadSmartFilterRecord,
   ThreadTagRecord,
-  UsageEventRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
 import { CloudServiceError } from './cloud-service-error.ts'
@@ -80,8 +74,6 @@ import type { ByokSecretMetadata, ByokSecretStore } from './byok-secret-store.ts
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEvent,
-  CloudRuntimeExecutionContext,
-  CloudRuntimePromptPart,
 } from './runtime-adapter.ts'
 import {
   type CloudRuntimePolicy,
@@ -108,6 +100,10 @@ import {
   type PublicOrgMemberRecord,
 } from './services/member-service.ts'
 import { CloudCoordinationService } from './services/coordination-service.ts'
+import { CloudPrincipalService } from './services/principal-service.ts'
+import { CloudSessionImportService } from './services/session-import-service.ts'
+import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
+import { CloudSessionExecutionService } from './session-execution-operations.ts'
 import { CloudCapabilityService } from './services/capability-service.ts'
 import { CloudSettingMetadataService } from './services/setting-metadata-service.ts'
 import {
@@ -117,10 +113,6 @@ import {
 } from './services/overview-service.ts'
 import { CloudProjectSourceService } from './services/project-source-service.ts'
 import {
-  normalizePermissionPayload,
-  normalizePromptPayload,
-  normalizeQuestionRejectPayload,
-  normalizeQuestionReplyPayload,
   type PermissionRespondPayload,
   type QuestionRejectPayload,
   type QuestionReplyPayload,
@@ -130,7 +122,6 @@ import {
   type RemoteInteractionPolicyInput,
 } from './services/remote-approval-policy.ts'
 import {
-  resolvedSignupMode,
   type CloudIdentityPolicy,
   type PublicApiTokenRecord,
 } from './services/api-token-policy.ts'
@@ -151,133 +142,41 @@ import { CloudApiTokenOperationsService } from './session-api-token-operations.t
 import { CloudUsageOperationsService } from './session-usage-operations.ts'
 import { CloudWorkflowOperationsService } from './session-workflow-operations.ts'
 import {
-  principalCanManageOrg,
   principalCanViewOperations,
-  principalEmailDomain,
 } from './session-principal-access.ts'
-import { runOnAbort, throwIfAborted } from './cloud-abort-helpers.ts'
-import { boundedImportText, normalizeImportCounts } from './session-import-validation.ts'
 import {
-  asRecord,
-  includesAllowed,
-  readString,
   stableCloudId,
 } from './session-input-validation.ts'
-import { normalizeChannelProviderId } from './channel-provider-utils.ts'
-import { log } from '@open-cowork/shared/node'
 import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
 
-export type CloudPrincipal = {
-  tenantId: string
-  tenantName?: string
-  userId: string
-  email: string
-  orgId?: string
-  accountId?: string
-  role?: 'owner' | 'admin' | 'member'
-  authSource?: 'user' | 'api_token' | 'local' | 'header' | 'worker'
-  tokenId?: string
-  tokenScopes?: ApiTokenScope[]
-  workerId?: string
-  workerPoolId?: string
-  workerCredentialId?: string
-  workerScopes?: string[]
-}
+import {
+  DISABLED_ABUSE_POLICY,
+  HOUR_MS,
+  type ChannelActorInput,
+  type ChannelInteractionResolutionInput,
+  type CloudDiagnosticsBundle,
+  type CloudPrincipal,
+  type CloudSessionView,
+  type CloudUsageSummary,
+  type CloudWorkflowStartResult,
+  type CreateCloudSessionRecordInput,
+  type IssuedPublicApiTokenRecord,
+} from './session-service-types.ts'
+
+export type {
+  CloudPrincipal,
+  CloudSessionView,
+  CloudUsageTotalRecord,
+  CloudUsageQuotaWindowRecord,
+  CloudUsageSummary,
+  CloudDiagnosticsBundle,
+  IssuedPublicApiTokenRecord,
+  CloudWorkflowStartResult,
+} from './session-service-types.ts'
 
 export type { CloudEmailMessage } from './services/member-service.ts'
 export type { CloudEmailSender, MembershipInviteResult, PublicOrgMemberRecord }
 export type { CloudAdminPolicyOverview, CloudWorkspaceOverview } from './services/overview-service.ts'
-
-export type CloudUsageTotalRecord = {
-  eventType: string
-  unit: string
-  quantity: number
-}
-
-export type CloudUsageQuotaWindowRecord = {
-  quotaKey: string
-  label: string
-  unit: 'count' | 'byte' | 'minute'
-  enabled: boolean
-  limit: number | null
-  used: number
-  remaining: number | null
-  windowMs: number
-  windowStartedAt: string
-  resetAt: string
-  policyCode: string
-}
-
-export type CloudUsageSummary = {
-  enabled: boolean
-  generatedAt: string
-  totalsScope: 'recent_events'
-  eventSampleLimit: number
-  events: UsageEventRecord[]
-  totals: CloudUsageTotalRecord[]
-  quotas: CloudUsageQuotaWindowRecord[]
-}
-
-export type CloudDiagnosticsBundle = {
-  generatedAt: string
-  redaction: 'secrets-redacted'
-  org: {
-    orgId: string
-    tenantId: string
-    role: string
-    profileName: string
-  }
-  runtime: {
-    role: CloudRuntimePolicy['role']
-    profileName: string
-    canExecute: boolean
-    commandProcessing: 'inline' | 'durable' | 'delegated'
-    checkpoints: boolean
-    heartbeatCount: number
-    heartbeats: Array<{
-      workerId: string
-      role: string
-      activeSessionCount: number
-      lastSeenAt: string
-      ageMs: number
-      stale: boolean
-    }>
-  }
-  billing: {
-    enabled: boolean
-    mode: 'disabled' | 'self-host' | 'managed'
-    providerId: string
-    subscription: BillingSubscriptionRecord | null
-    entitlements: Record<string, unknown>
-    active: boolean
-    plans: Array<{
-      planKey: string
-      label: string
-      default: boolean
-      entitlements: Record<string, unknown>
-    }>
-  }
-  byok: {
-    configuredProviders: number
-    providers: ByokSecretMetadata[]
-  }
-  usage: CloudUsageSummary
-  gateway: {
-    agents: {
-      total: number
-      active: number
-      disabled: number
-    }
-    bindingsByProvider: Record<string, number>
-    deliveriesByStatus: Record<string, number>
-    deliveriesByStatusScope: 'recent_deliveries'
-    deliverySampleLimit: number
-  }
-  links: {
-    deploymentDocs: string
-    managedByokRunbook: string
-  }
-}
 
 export type { CloudIdentityPolicy, PublicApiTokenRecord } from './services/api-token-policy.ts'
 export type {
@@ -285,11 +184,6 @@ export type {
   PublicChannelDeliveryRecord,
   PublicChannelIdentityRecord,
 } from './public-channel-records.ts'
-
-export type IssuedPublicApiTokenRecord = {
-  token: PublicApiTokenRecord
-  plaintext: string
-}
 
 export type {
   ByokEntitlementChecker,
@@ -302,87 +196,6 @@ export type {
 export { CloudServiceError } from './cloud-service-error.ts'
 
 export type { CloudSessionMessage, CloudSessionProjectionView }
-
-export type CloudSessionView = CloudSessionViewRecord<SessionRecord> & {
-  projection: SessionProjectionRecord | null
-}
-
-type CreateCloudSessionRecordInput = {
-  tenantId: string
-  userId: string
-  orgId?: string | null
-  accountId?: string | null
-  profileName: string
-  sessionId?: string | null
-  title?: string | null
-  deferRuntime?: boolean
-}
-
-export type CloudWorkflowStartResult = {
-  tenantId: string
-  workflow: WorkflowDetail
-  run: WorkflowRun
-  sessionId: string
-  command: SessionCommandRecord
-}
-
-type ChannelActorInput = {
-  identityId?: string | null
-  provider?: ChannelProviderId | null
-  externalWorkspaceId?: string | null
-  externalUserId?: string | null
-}
-
-type ChannelInteractionResolutionInput = ChannelActorInput & {
-  token?: string | null
-  externalInteractionId?: string | null
-  response?: unknown
-  answers?: unknown[]
-  reject?: boolean
-}
-
-const SESSION_IMPORT_MAX_MESSAGES = 2_000
-const HOUR_MS = 60 * 60 * 1000
-
-const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
-  enabled: false,
-  maxConcurrentSessionsPerOrg: null,
-  maxConcurrentWorkflowRunsPerOrg: null,
-  maxActiveWorkersPerOrg: null,
-  maxQueuedCommandsPerOrg: null,
-  maxQueueAgeMs: null,
-  maxPromptsPerHour: null,
-  maxWorkflowRunsPerHour: null,
-  maxGatewayPromptsPerHour: null,
-  maxWorkerMinutesPerHour: null,
-  maxGatewayDeliveriesPerHour: null,
-  maxGatewayChannelBindingsPerOrg: null,
-  maxArtifactBytesPerDay: null,
-  httpRateLimit: {
-    enabled: false,
-    windowMs: 60 * 1000,
-    maxRequests: 600,
-  },
-  authBackoff: {
-    enabled: false,
-    windowMs: 60 * 1000,
-    maxFailures: 10,
-    backoffMs: 60 * 1000,
-  },
-}
-
-
-function promptParts(text: string): CloudRuntimePromptPart[] {
-  return [{ type: 'text', text }]
-}
-
-function importAuditActor(principal: CloudPrincipal): { actorType: 'user' | 'api_token', actorId: string, accountId: string | null } {
-  return {
-    actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-    actorId: principal.tokenId || principal.userId,
-    accountId: principal.accountId || principal.userId,
-  }
-}
 
 export class CloudSessionService {
   private readonly store: ControlPlaneStore
@@ -415,15 +228,10 @@ export class CloudSessionService {
   private readonly workflowOperations: CloudWorkflowOperationsService
   private readonly inviteSigningSecret: string | Buffer | null
   private readonly emailSender: CloudEmailSender | null
-  // Per-(tenant,account) "already bootstrapped" markers. The org-active and
-  // membership-active gates still run on EVERY request via
-  // resolvePrincipalMembership (a read); this only lets a request SKIP the
-  // idempotent bootstrap WRITES (createTenant / ensureOrgForTenant /
-  // createAccount / ensureUser / upsertMembership) once a principal has been
-  // bootstrapped within the short TTL. No principal/role is cached, so a revoked
-  // token, deactivated org, or inactive membership is still rejected on the very
-  // next request — there is no revocation window.
-  private readonly bootstrappedPrincipals = new Map<string, number>()
+  private readonly principalService: CloudPrincipalService
+  private readonly sessionImportService: CloudSessionImportService
+  private readonly coordinationDispatch: CloudCoordinationDispatchService
+  private readonly sessionExecution: CloudSessionExecutionService
 
   constructor(
     store: ControlPlaneStore,
@@ -449,6 +257,12 @@ export class CloudSessionService {
     this.workspaceEvents = workspaceEvents
     this.projections = new CloudSessionProjectionService(store, events, workspaceEvents)
     this.ids = ids
+    this.identityPolicy = identityPolicy
+    this.principalService = new CloudPrincipalService({ store, identityPolicy })
+    this.coordinationDispatch = new CloudCoordinationDispatchService({
+      store,
+      resolveOrgIdForTenant: (tenantId) => this.resolveOrgIdForTenant(tenantId),
+    })
     this.byokService = new CloudByokService({
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
@@ -459,7 +273,6 @@ export class CloudSessionService {
     this.abuse = abuse
     this.billingConfig = billingConfig
     this.billingAdapter = billingAdapter
-    this.identityPolicy = identityPolicy
     this.projectSources = projectSources
     this.inviteSigningSecret = inviteSigningSecret
     this.emailSender = emailSender
@@ -570,6 +383,31 @@ export class CloudSessionService {
       assertBillingAllowed: (input) => this.assertBillingAllowed(input),
       createCloudSessionRecord: (input) => this.createCloudSessionRecord(input),
     })
+    this.sessionImportService = new CloudSessionImportService({
+      store,
+      policy,
+      ids,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      assertBillingAllowed: (input) => this.assertBillingAllowed(input),
+      createCloudSessionRecord: (input) => this.createCloudSessionRecord(input),
+      appendProjectedEvent: (input) => this.appendProjectedEvent(input),
+      getSessionView: (principal, sessionId) => this.getSessionView(principal, sessionId),
+    })
+    this.sessionExecution = new CloudSessionExecutionService({
+      store,
+      runtime,
+      policy,
+      ids,
+      abuse,
+      usageGovernance: this.usageGovernance,
+      workflowOperations: this.workflowOperations,
+      appendProjectedEvent: (input) => this.appendProjectedEvent(input),
+      getSessionView: (principal, sessionId) => this.getSessionView(principal, sessionId),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      assertBillingAllowed: (input) => this.assertBillingAllowed(input),
+      assertRemoteInteractionAllowed: (principal, input) => this.assertRemoteInteractionAllowed(principal, input),
+    })
   }
 
   get eventBus() {
@@ -616,124 +454,7 @@ export class CloudSessionService {
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
-    const signupMode = resolvedSignupMode(this.identityPolicy)
-    const allowedDomains = (this.identityPolicy.allowedEmailDomains || [])
-      .map((domain) => domain.trim().toLowerCase())
-      .filter(Boolean)
-    if (principal.authSource !== 'local' && signupMode === 'domain' && allowedDomains.length > 0) {
-      const emailDomain = principalEmailDomain(principal.email)
-      if (!emailDomain || !allowedDomains.includes(emailDomain)) {
-        throw new CloudServiceError(403, 'Cloud signup is restricted to approved email domains.')
-      }
-    }
-    const existingMembership = await this.store.resolvePrincipalMembership({
-      tenantId: principal.tenantId,
-      accountId: principal.accountId || principal.userId,
-      idpSubject: principal.userId,
-      email: principal.email,
-    })
-    const requiresExistingMembership = principal.authSource !== 'local' && principal.authSource !== 'api_token'
-      && (!this.identityPolicy.allowSelfServiceSignup || signupMode === 'disabled' || signupMode === 'closed' || signupMode === 'invite')
-    if (requiresExistingMembership) {
-      const acceptableStatuses: ControlPlaneMembershipStatus[] = signupMode === 'invite'
-        ? ['active', 'invited']
-        : ['active']
-      if (
-        !existingMembership
-        || !acceptableStatuses.includes(existingMembership.membership.status)
-      ) {
-        throw new CloudServiceError(403, 'Cloud membership is not active.')
-      }
-    }
-    // Fast path: once a (tenant, account) has been bootstrapped within the TTL,
-    // skip the idempotent bootstrap WRITES below. Every security gate is still
-    // enforced on THIS request from the fresh `existingMembership` read above —
-    // org must be active, membership must be active — so a deactivated org or
-    // revoked/expired membership is rejected on the very next request. Nothing
-    // is mutated server-side; only the redundant upserts are avoided.
-    const bootstrapKey = `${principal.tenantId}\u0000${principal.accountId || principal.userId}`
-    const bootstrappedUntil = this.bootstrappedPrincipals.get(bootstrapKey)
-    if (
-      bootstrappedUntil !== undefined
-      && bootstrappedUntil > Date.now()
-      && existingMembership
-      && existingMembership.membership.status === 'active'
-      && (principal.authSource === 'local' || existingMembership.org.status === 'active')
-    ) {
-      principal.tenantId = existingMembership.org.tenantId
-      principal.orgId = existingMembership.org.orgId
-      principal.tenantName = existingMembership.org.name
-      principal.accountId = existingMembership.account.accountId
-      principal.email = existingMembership.account.email
-      principal.role = existingMembership.membership.role
-      return
-    }
-    await this.store.createTenant({
-      tenantId: principal.tenantId,
-      name: principal.tenantName || principal.tenantId,
-      orgId: principal.orgId,
-    })
-    const org = await this.store.ensureOrgForTenant({
-      tenantId: principal.tenantId,
-      name: principal.tenantName || principal.tenantId,
-      orgId: principal.orgId,
-    })
-    if (principal.authSource !== 'local' && org.status !== 'active') {
-      throw new CloudServiceError(403, 'Cloud org is not active.')
-    }
-    const account = await this.store.createAccount({
-      accountId: existingMembership?.account.accountId || principal.accountId || principal.userId,
-      idpSubject: principal.userId,
-      email: principal.email,
-    })
-    const role = existingMembership?.membership.role || principal.role || 'member'
-    const user = await this.store.ensureUser({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      email: principal.email,
-      role,
-    })
-    const membership = await this.store.resolvePrincipalMembership({
-      tenantId: principal.tenantId,
-      accountId: account.accountId,
-      email: account.email,
-    })
-    let effectiveRole: ControlPlaneRole
-    if (!membership) {
-      if (requiresExistingMembership) {
-        throw new CloudServiceError(403, 'Cloud membership is not active.')
-      }
-      const createdMembership = await this.store.upsertMembership({
-        orgId: org.orgId,
-        accountId: account.accountId,
-        role: principal.role || user.role,
-        status: 'active',
-        actor: { actorType: 'system', actorId: 'principal.bootstrap' },
-      })
-      effectiveRole = createdMembership.role
-    } else if (membership.membership.status === 'invited' && principal.authSource === 'user' && signupMode === 'invite') {
-      const activatedMembership = await this.store.upsertMembership({
-        orgId: org.orgId,
-        accountId: account.accountId,
-        role: membership.membership.role,
-        status: 'active',
-        actor: { actorType: 'system', actorId: 'membership.invite.accepted' },
-      })
-      effectiveRole = activatedMembership.role
-    } else if (membership.membership.status !== 'active') {
-      throw new CloudServiceError(403, 'Cloud membership is not active.')
-    } else {
-      effectiveRole = membership.membership.role
-    }
-    principal.tenantId = org.tenantId
-    principal.orgId = org.orgId
-    principal.tenantName = org.name
-    principal.accountId = account.accountId
-    principal.email = account.email
-    principal.role = effectiveRole
-    // Mark bootstrapped so subsequent requests within the TTL take the fast path
-    // above and skip these idempotent writes (the gates still re-run each time).
-    this.bootstrappedPrincipals.set(bootstrapKey, Date.now() + 60_000)
+    return this.principalService.ensurePrincipal(principal)
   }
 
   async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {
@@ -865,133 +586,7 @@ export class CloudSessionService {
   }
 
   async createImportedSession(principal: CloudPrincipal, input: SessionImportRequest): Promise<CloudSessionView> {
-    await this.ensurePrincipal(principal)
-    if (!this.policy.features.chat) throw new Error('Chat is disabled for this cloud profile.')
-    try {
-      assertSafeSessionImportPayload(input)
-    } catch (error) {
-      throw new CloudServiceError(400, error instanceof Error ? error.message : 'Session import payload is unsafe.')
-    }
-    const source = input.source
-    if (!source || source.kind !== 'local-session' || !source.fingerprint) {
-      throw new CloudServiceError(400, 'Session import requires a redacted local source fingerprint.')
-    }
-    const profileName = input.profileName || this.policy.profileName
-    await this.assertBillingAllowed({
-      orgId: this.principalOrgId(principal),
-      action: 'session.create',
-      profileName,
-    })
-    const itemCounts = normalizeImportCounts(input.itemCounts)
-    const actor = importAuditActor(principal)
-    await this.store.recordAuditEvent({
-      orgId: this.principalOrgId(principal),
-      accountId: actor.accountId,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      eventType: 'session_import.requested',
-      targetType: 'session',
-      targetId: null,
-      metadata: {
-        sourceKind: source.kind,
-        sourceFingerprint: source.fingerprint,
-        title: boundedImportText(input.title, 'Import title', 512),
-        itemCounts,
-      },
-    })
-
-    try {
-      const title = boundedImportText(input.title, 'Import title', 512) || source.title || 'Imported session'
-      const session = await this.createCloudSessionRecord({
-        tenantId: principal.tenantId,
-        userId: principal.userId,
-        orgId: this.principalOrgId(principal),
-        accountId: principal.accountId || principal.userId,
-        profileName,
-        sessionId: this.ids.randomUUID(),
-        title,
-      })
-      const importedAt = new Date()
-      await this.appendProjectedEvent({
-        tenantId: principal.tenantId,
-        sessionId: session.sessionId,
-        type: 'session.imported',
-        payload: {
-          sourceFingerprint: source.fingerprint,
-          importedAt: importedAt.toISOString(),
-          itemCounts,
-        },
-        createdAt: importedAt,
-      })
-
-      const messages = Array.isArray(input.messages) ? input.messages.slice(0, SESSION_IMPORT_MAX_MESSAGES) : []
-      for (const message of messages) {
-        if (message.role !== 'user' && message.role !== 'assistant') continue
-        const content = boundedImportText(message.content, 'Imported message')
-        const createdAt = message.timestamp ? new Date(message.timestamp) : importedAt
-        await this.appendProjectedEvent({
-          tenantId: principal.tenantId,
-          sessionId: session.sessionId,
-          type: message.role === 'user' ? 'prompt.submitted' : 'assistant.message',
-          payload: message.role === 'user'
-            ? {
-                messageId: message.id,
-                text: content,
-                imported: true,
-                attachments: Array.isArray(message.attachments) ? message.attachments : [],
-              }
-            : {
-                messageId: message.id,
-                content,
-                imported: true,
-                attachments: Array.isArray(message.attachments) ? message.attachments : [],
-              },
-          createdAt: Number.isFinite(createdAt.getTime()) ? createdAt : importedAt,
-        })
-      }
-
-      const todos = Array.isArray(input.todos) ? input.todos.slice(0, 500) : []
-      if (todos.length) {
-        await this.appendProjectedEvent({
-          tenantId: principal.tenantId,
-          sessionId: session.sessionId,
-          type: 'todos.updated',
-          payload: { todos },
-          createdAt: importedAt,
-        })
-      }
-
-      if (input.sessionCost || input.sessionTokens) {
-        await this.appendProjectedEvent({
-          tenantId: principal.tenantId,
-          sessionId: session.sessionId,
-          type: 'cost.updated',
-          payload: {
-            cost: typeof input.sessionCost === 'number' && Number.isFinite(input.sessionCost) ? input.sessionCost : 0,
-            tokens: input.sessionTokens || {},
-            imported: true,
-          },
-          createdAt: importedAt,
-        })
-      }
-
-      await this.appendProjectedEvent({
-        tenantId: principal.tenantId,
-        sessionId: session.sessionId,
-        type: 'session.idle',
-        payload: { imported: true },
-        createdAt: importedAt,
-      })
-
-      return this.getSessionView(principal, session.sessionId)
-    } catch (error) {
-      await this.recordImportFailed(principal, {
-        sourceFingerprint: source.fingerprint,
-        itemCounts,
-        error,
-      })
-      throw error
-    }
+    return this.sessionImportService.createImportedSession(principal, input)
   }
 
   async completeSessionImport(
@@ -999,47 +594,14 @@ export class CloudSessionService {
     sessionId: string,
     input: { sourceFingerprint: string, itemCounts: SessionImportItemCounts },
   ) {
-    await this.getSessionView(principal, sessionId)
-    const actor = importAuditActor(principal)
-    await this.store.recordAuditEvent({
-      orgId: this.principalOrgId(principal),
-      accountId: actor.accountId,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      eventType: 'session_import.completed',
-      targetType: 'session',
-      targetId: sessionId,
-      metadata: {
-        sourceKind: 'local-session',
-        sourceFingerprint: input.sourceFingerprint,
-        destinationSessionId: sessionId,
-        itemCounts: normalizeImportCounts(input.itemCounts),
-      },
-    })
+    return this.sessionImportService.completeSessionImport(principal, sessionId, input)
   }
 
   async recordImportFailed(
     principal: CloudPrincipal,
     input: { sourceFingerprint: string, itemCounts?: Partial<SessionImportItemCounts>, sessionId?: string | null, error: unknown },
   ) {
-    const actor = importAuditActor(principal)
-    const message = input.error instanceof Error ? input.error.message : String(input.error)
-    await this.store.recordAuditEvent({
-      orgId: this.principalOrgId(principal),
-      accountId: actor.accountId,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      eventType: 'session_import.failed',
-      targetType: input.sessionId ? 'session' : null,
-      targetId: input.sessionId || null,
-      metadata: {
-        sourceKind: 'local-session',
-        sourceFingerprint: input.sourceFingerprint,
-        destinationSessionId: input.sessionId || null,
-        itemCounts: normalizeImportCounts(input.itemCounts),
-        error: boundedImportText(message, 'Import error', 512),
-      },
-    })
+    return this.sessionImportService.recordImportFailed(principal, input)
   }
 
   async listSessions(principal: CloudPrincipal): Promise<SessionRecord[]> {
@@ -1849,79 +1411,11 @@ export class CloudSessionService {
     sessionId: string,
     input: { text: string, agent?: string | null },
   ): Promise<SessionCommandRecord> {
-    const view = await this.getSessionView(principal, sessionId)
-    // Enforce the deployer's agent allowlist on the prompt path, mirroring the
-    // workflow-draft check (`assertWorkflowDraftAllowed`). Without this, a caller
-    // could request an arbitrary agent name on a prompt and bypass a profile that
-    // restricts `agents`. `allowedAgents === null` (the default) imposes no limit.
-    const agentName = input.agent || 'build'
-    if (!includesAllowed(agentName, this.policy.allowedAgents)) {
-      throw new CloudServiceError(
-        403,
-        `Agent "${agentName}" is not enabled for cloud profile "${this.policy.profileName}".`,
-        { policyCode: 'policy.agent_not_enabled' },
-      )
-    }
-    await this.assertBillingAllowed({
-      orgId: this.principalOrgId(principal),
-      action: 'prompt.enqueue',
-      profileName: view.session.profileName,
-    })
-    const orgId = this.principalOrgId(principal)
-    const promptQuota = await this.usageGovernance.usageQuotaForOrg({
-      orgId,
-      quotaKey: 'prompts:hour',
-      limit: this.abuse.maxPromptsPerHour,
-      entitlementLimitKey: 'maxPromptsPerHour',
-      windowMs: HOUR_MS,
-      policyCode: 'quota.prompts_per_hour_exceeded',
-    })
-    const commandId = this.ids.randomUUID()
-    let command: SessionCommandRecord
-    try {
-      command = await this.store.enqueueSessionCommand({
-        commandId,
-        tenantId: principal.tenantId,
-        userId: principal.userId,
-        sessionId,
-        kind: 'prompt',
-        payload: {
-          text: input.text,
-          agent: input.agent || 'build',
-        },
-        quota: await this.usageGovernance.commandQueueQuotaForOrg(orgId),
-        usageQuotas: [promptQuota].filter((quota) => quota !== null),
-      })
-    } catch (error) {
-      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
-    }
-    await this.usageGovernance.recordUsage({
-      orgId,
-      accountId: principal.accountId || principal.userId,
-      eventType: 'work.queued',
-      unit: 'count',
-      metadata: { tenantId: principal.tenantId, sessionId, commandId, commandKind: command.kind, source: 'api' },
-    })
-    await this.usageGovernance.recordUsage({
-      orgId,
-      accountId: principal.accountId || principal.userId,
-      eventType: 'prompt.enqueued',
-      unit: 'count',
-      metadata: { tenantId: principal.tenantId, sessionId, source: 'api' },
-    })
-    return command
+    return this.sessionExecution.enqueuePrompt(principal, sessionId, input)
   }
 
   async enqueueAbort(principal: CloudPrincipal, sessionId: string): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
-    return this.store.enqueueSessionCommand({
-      commandId: this.ids.randomUUID(),
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      sessionId,
-      kind: 'abort',
-      payload: {},
-    })
+    return this.sessionExecution.enqueueAbort(principal, sessionId)
   }
 
   async enqueueQuestionReply(
@@ -1929,22 +1423,7 @@ export class CloudSessionService {
     sessionId: string,
     payload: QuestionReplyPayload,
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
-    const commandId = this.ids.randomUUID()
-    await this.assertRemoteInteractionAllowed(principal, {
-      sessionId,
-      commandId,
-      interaction: 'question-reply',
-      targetId: payload.requestId,
-    })
-    return this.store.enqueueSessionCommand({
-      commandId,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      sessionId,
-      kind: 'question.reply',
-      payload,
-    })
+    return this.sessionExecution.enqueueQuestionReply(principal, sessionId, payload)
   }
 
   async enqueueQuestionReject(
@@ -1952,22 +1431,7 @@ export class CloudSessionService {
     sessionId: string,
     payload: QuestionRejectPayload,
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
-    const commandId = this.ids.randomUUID()
-    await this.assertRemoteInteractionAllowed(principal, {
-      sessionId,
-      commandId,
-      interaction: 'question-reject',
-      targetId: payload.requestId,
-    })
-    return this.store.enqueueSessionCommand({
-      commandId,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      sessionId,
-      kind: 'question.reject',
-      payload,
-    })
+    return this.sessionExecution.enqueueQuestionReject(principal, sessionId, payload)
   }
 
   async enqueuePermissionResponse(
@@ -1975,22 +1439,7 @@ export class CloudSessionService {
     sessionId: string,
     payload: PermissionRespondPayload,
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
-    const commandId = this.ids.randomUUID()
-    await this.assertRemoteInteractionAllowed(principal, {
-      sessionId,
-      commandId,
-      interaction: 'permission-approval',
-      targetId: payload.permissionId,
-    })
-    return this.store.enqueueSessionCommand({
-      commandId,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      sessionId,
-      kind: 'permission.respond',
-      payload,
-    })
+    return this.sessionExecution.enqueuePermissionResponse(principal, sessionId, payload)
   }
 
   async executeCommand(
@@ -1998,45 +1447,7 @@ export class CloudSessionService {
     command: SessionCommandRecord,
     options: { signal?: AbortSignal } = {},
   ): Promise<void> {
-    try {
-      throwIfAborted(options.signal)
-      switch (command.kind) {
-        case 'prompt':
-          await this.executePromptCommand(lease, command, options.signal)
-          break
-        case 'abort':
-          await this.executeAbortCommand(lease, command, options.signal)
-          break
-        case 'question.reply':
-          await this.executeQuestionReplyCommand(lease, command, options.signal)
-          break
-        case 'question.reject':
-          await this.executeQuestionRejectCommand(lease, command, options.signal)
-          break
-        case 'permission.respond':
-          await this.executePermissionCommand(lease, command, options.signal)
-          break
-        default: {
-          const unsupported: never = command.kind
-          throw new Error(`Unsupported command kind ${String(unsupported)}.`)
-        }
-      }
-      throwIfAborted(options.signal)
-      await this.store.ackSessionCommand(lease, command.commandId)
-    } catch (error) {
-      if (options.signal?.aborted) throw error
-      const message = error instanceof Error ? error.message : String(error)
-      await this.appendProjectedEvent({
-        tenantId: command.tenantId,
-        sessionId: command.sessionId,
-        type: 'runtime.error',
-        payload: { commandId: command.commandId, message },
-        leaseToken: lease.leaseToken,
-      })
-      await this.workflowOperations.failWorkflowRunForSession(command.tenantId, command.sessionId, message, lease.leaseToken)
-      await this.store.failSessionCommand(lease, command.commandId, message)
-      throw error
-    }
+    return this.sessionExecution.executeCommand(lease, command, options)
   }
 
   appendRuntimeEvent(input: {
@@ -2045,219 +1456,7 @@ export class CloudSessionService {
     event: CloudRuntimeEvent
     leaseToken?: string | null
   }): Promise<SessionEventRecord> {
-    if (input.event.type === 'session.idle') {
-      return this.updateStatusThenAppendRuntimeEvent(input, 'idle')
-    } else if (input.event.type === 'session.status') {
-      const statusType = readString(input.event.payload.statusType)
-      if (statusType === 'busy' || statusType === 'running' || statusType === 'idle') {
-        return this.updateStatusThenAppendRuntimeEvent(input, statusType === 'idle' ? 'idle' : 'running')
-      }
-    } else if (input.event.type === 'runtime.error') {
-      return this.updateStatusThenAppendRuntimeEvent(input, 'errored')
-    }
-    return this.appendProjectedEvent({
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      type: input.event.type,
-      payload: input.event.payload,
-      leaseToken: input.leaseToken,
-    })
-  }
-
-  private async updateStatusThenAppendRuntimeEvent(
-    input: {
-      tenantId: string
-      sessionId: string
-      event: CloudRuntimeEvent
-      leaseToken?: string | null
-    },
-    status: SessionRecord['status'],
-  ) {
-    await this.store.updateSessionStatus({
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      status,
-      leaseToken: input.leaseToken,
-    })
-    return this.appendProjectedEvent({
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      type: input.event.type,
-      payload: input.event.payload,
-      leaseToken: input.leaseToken,
-    })
-  }
-
-  private async executePromptCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
-    throwIfAborted(signal)
-    const payload = normalizePromptPayload(command.payload)
-    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
-    const runtimeSessionId = await this.ensureRuntimeSessionBound(lease)
-    const context = this.runtimeContext(session)
-    throwIfAborted(signal)
-    await this.store.updateSessionStatus({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      status: 'running',
-      leaseToken: lease.leaseToken,
-    })
-    await this.appendProjectedEvent({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      type: 'prompt.submitted',
-      payload: {
-        commandId: command.commandId,
-        messageId: `${command.commandId}:user`,
-        text: payload.text,
-        agent: payload.agent,
-      },
-      leaseToken: lease.leaseToken,
-    })
-    const stopAbortHandler = runOnAbort(signal, () => this.runtime.abortSession({
-      sessionId: runtimeSessionId,
-      context,
-    }))
-    let result: Awaited<ReturnType<CloudRuntimeAdapter['promptSession']>>
-    try {
-      result = await this.runtime.promptSession({
-        sessionId: runtimeSessionId,
-        parts: promptParts(payload.text),
-        agent: payload.agent,
-        context,
-        messageId: command.commandId,
-        signal,
-      })
-    } finally {
-      stopAbortHandler()
-    }
-    throwIfAborted(signal)
-    for (const event of result?.events || []) {
-      await this.applyRuntimeEvent(lease, command.sessionId, event)
-    }
-    await this.workflowOperations.completeWorkflowRunForSession(
-      command.tenantId,
-      command.sessionId,
-      this.workflowOperations.workflowSummaryFromRuntimeEvents(result?.events || []),
-      lease.leaseToken,
-    )
-  }
-
-  private async executeAbortCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
-    throwIfAborted(signal)
-    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
-    if (session.opencodeSessionId) {
-      await this.runtime.abortSession({
-        sessionId: session.opencodeSessionId,
-        context: this.runtimeContext(session),
-        signal,
-      })
-    }
-    throwIfAborted(signal)
-    await this.store.updateSessionStatus({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      status: 'idle',
-      leaseToken: lease.leaseToken,
-    })
-    await this.appendProjectedEvent({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      type: 'session.aborted',
-      payload: {
-        commandId: command.commandId,
-      },
-      leaseToken: lease.leaseToken,
-    })
-  }
-
-  private async executeQuestionReplyCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
-    throwIfAborted(signal)
-    const payload = normalizeQuestionReplyPayload(command.payload)
-    if (!payload.requestId) throw new Error('Question reply requires a request id.')
-    if (!this.runtime.replyToQuestion) throw new Error('OpenCode question replies are not available.')
-    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
-    await this.runtime.replyToQuestion({
-      requestId: payload.requestId,
-      answers: payload.answers,
-      context: this.runtimeContext(session),
-      signal,
-    })
-    throwIfAborted(signal)
-    await this.appendProjectedEvent({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      type: 'question.resolved',
-      payload: {
-        commandId: command.commandId,
-        requestId: payload.requestId,
-        answers: payload.answers,
-      },
-      leaseToken: lease.leaseToken,
-    })
-  }
-
-  private async executeQuestionRejectCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
-    throwIfAborted(signal)
-    const payload = normalizeQuestionRejectPayload(command.payload)
-    if (!payload.requestId) throw new Error('Question rejection requires a request id.')
-    if (!this.runtime.rejectQuestion) throw new Error('OpenCode question rejection is not available.')
-    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
-    await this.runtime.rejectQuestion({
-      requestId: payload.requestId,
-      context: this.runtimeContext(session),
-      signal,
-    })
-    throwIfAborted(signal)
-    await this.appendProjectedEvent({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      type: 'question.resolved',
-      payload: {
-        commandId: command.commandId,
-        requestId: payload.requestId,
-        rejected: true,
-      },
-      leaseToken: lease.leaseToken,
-    })
-  }
-
-  private async executePermissionCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
-    throwIfAborted(signal)
-    const payload = normalizePermissionPayload(command.payload)
-    if (!payload.permissionId) throw new Error('Permission response requires a permission id.')
-    if (!this.runtime.respondToPermission) throw new Error('OpenCode permission responses are not available.')
-    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
-    const allowed = asRecord(payload.response).allowed === true
-      || payload.response === true
-      || payload.response === 'allow'
-      || payload.response === 'once'
-    await this.runtime.respondToPermission({
-      permissionId: payload.permissionId,
-      allowed,
-      context: this.runtimeContext(session),
-      signal,
-    })
-    throwIfAborted(signal)
-    await this.appendProjectedEvent({
-      tenantId: command.tenantId,
-      sessionId: command.sessionId,
-      type: 'permission.resolved',
-      payload: {
-        commandId: command.commandId,
-        permissionId: payload.permissionId,
-        allowed,
-      },
-      leaseToken: lease.leaseToken,
-    })
-  }
-
-  private async applyRuntimeEvent(lease: WorkerLeaseRecord, sessionId: string, event: CloudRuntimeEvent) {
-    await this.appendRuntimeEvent({
-      tenantId: lease.tenantId,
-      sessionId,
-      event,
-      leaseToken: lease.leaseToken,
-    })
+    return this.sessionExecution.appendRuntimeEvent(input)
   }
 
   private async appendProjectedEvent(input: AppendProjectedEventInput) {
@@ -2267,340 +1466,23 @@ export class CloudSessionService {
   }
 
   private dispatchCloudCoordinationWatchEvent(input: AppendProjectedEventInput, event: SessionEventRecord) {
-    const watchEvent = this.coordinationWatchEventFromProjectedEvent(input, event)
-    if (!watchEvent) return
-    void this.deliverCloudCoordinationWatchEvent(watchEvent).catch((error: unknown) => {
-      log('coordination', `Cloud watch event dispatch failed event=${input.type} session=${input.sessionId}: ${error instanceof Error ? error.message : String(error)}`)
-    })
+    this.coordinationDispatch.dispatchCloudCoordinationWatchEvent(input, event)
   }
 
-  private async deliverCloudCoordinationWatchEvent(event: CoordinationWatchEvent) {
-    const workspaceId = event.workspaceId?.trim() || 'cloud:default'
-    const watches = await this.store.listMatchingCloudCoordinationWatches({
-      workspaceId,
-      eventType: event.eventType,
-      targets: this.cloudWatchRelatedTargets(event),
-    })
-    if (watches.length === 0) return
-
-    const tenantId = workspaceId.startsWith('cloud:') ? workspaceId.slice('cloud:'.length) : workspaceId
-    const normalizedTenantId = tenantId.trim() || 'default'
-    const orgId = await this.resolveOrgIdForTenant(normalizedTenantId)
-
-    for (const watch of watches) {
-      if (!coordinationWatchRecipientCanReceive(watch.recipient?.role, event.eventType)) continue
-      try {
-        await this.createSystemChannelDelivery({
-          orgId,
-          agentId: watch.channel.agentId,
-          channelBindingId: watch.channel.channelBindingId,
-          sessionBindingId: watch.channel.sessionBindingId || null,
-          provider: normalizeChannelProviderId(watch.channel.provider),
-          target: watch.channel.target,
-          eventType: event.eventType,
-          payload: this.cloudWatchPayload(watch, event),
-          deliveryId: this.cloudWatchDeliveryId(watch, event),
-        })
-      } catch (error) {
-        log('coordination', `Cloud watch delivery failed watch=${watch.id} event=${event.eventType}: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
+  private deliverCloudCoordinationWatchEvent(event: CoordinationWatchEvent) {
+    return this.coordinationDispatch.deliverCloudCoordinationWatchEvent(event)
   }
 
-  private async createSystemChannelDelivery(input: CreateChannelDeliveryInput) {
-    await this.store.createChannelDelivery(input)
-  }
-
-  private cloudWatchRelatedTargets(event: CoordinationWatchEvent): CoordinationTarget[] {
-    return [event.target, ...(event.relatedTargets || [])]
-  }
-
-  private cloudWatchPayload(watch: CoordinationWatch, event: CoordinationWatchEvent): Record<string, unknown> {
-    return {
-      watchId: watch.id,
-      eventType: event.eventType,
-      target: event.target,
-      relatedTargets: event.relatedTargets || [],
-      title: event.title || null,
-      message: event.message || null,
-      severity: event.severity || 'info',
-      occurredAt: event.occurredAt || new Date().toISOString(),
-      metadata: event.metadata || {},
-    }
-  }
-
-  private cloudWatchDeliveryId(watch: CoordinationWatch, event: CoordinationWatchEvent) {
-    const timestampScopedEvent = event.eventType === 'task.moved'
-      || event.eventType === 'task.review_ready'
-      || event.eventType === 'run.finished'
-      || event.eventType === 'daily_summary'
-    const eventKey = {
-      watchId: watch.id,
-      eventType: event.eventType,
-      target: event.target,
-      relatedTargets: event.relatedTargets || [],
-      metadata: event.metadata || {},
-      occurredAt: timestampScopedEvent ? event.occurredAt || null : null,
-    }
-    const digest = createHash('sha256').update(JSON.stringify(eventKey)).digest('hex').slice(0, 40)
-    return `watch:${event.eventType}:${digest}`
-  }
-
-  private coordinationWatchEventFromProjectedEvent(
-    input: AppendProjectedEventInput,
-    event: SessionEventRecord,
-  ): CoordinationWatchEvent | null {
-    const workspaceId = `cloud:${input.tenantId}`
-    const sessionTarget = { kind: 'session' as const, id: input.sessionId }
-    const conversationTarget = { kind: 'conversation' as const, id: input.sessionId }
-    const payload = input.payload || {}
-    const occurredAt = event.createdAt
-    if (input.type === 'session.idle') {
-      return {
-        eventType: 'run.finished',
-        workspaceId,
-        target: sessionTarget,
-        relatedTargets: [conversationTarget],
-        title: 'Run finished',
-        message: 'OpenCode finished processing the cloud run.',
-        severity: 'success',
-        occurredAt,
-        metadata: {
-          tenantId: input.tenantId,
-          sessionId: input.sessionId,
-          runtimeSessionId: readString(payload.sessionId) || null,
-          cloudEventType: input.type,
-        },
-      }
-    }
-    if (input.type === 'permission.requested') {
-      const requestId = readString(payload.permissionId) || readString(payload.id) || readString(payload.requestId) || null
-      return {
-        eventType: 'needs_input',
-        workspaceId,
-        target: conversationTarget,
-        relatedTargets: [sessionTarget],
-        title: 'Approval needed',
-        message: readString(payload.description) || readString(payload.tool) || 'A cloud run needs approval.',
-        severity: 'warning',
-        occurredAt,
-        metadata: {
-          tenantId: input.tenantId,
-          sessionId: input.sessionId,
-          requestId,
-          kind: input.type,
-          tool: readString(payload.tool) || null,
-        },
-      }
-    }
-    if (input.type === 'question.asked') {
-      const requestId = readString(payload.requestId) || readString(payload.id) || null
-      const questions = Array.isArray(payload.questions) ? payload.questions : []
-      const firstQuestion = readString(asRecord(questions[0]).question)
-      return {
-        eventType: 'needs_input',
-        workspaceId,
-        target: conversationTarget,
-        relatedTargets: [sessionTarget],
-        title: 'Question needs an answer',
-        message: firstQuestion || 'A cloud run needs an answer.',
-        severity: 'warning',
-        occurredAt,
-        metadata: {
-          tenantId: input.tenantId,
-          sessionId: input.sessionId,
-          requestId,
-          kind: input.type,
-        },
-      }
-    }
-    return null
-  }
-
-  private async requireSessionRecord(tenantId: string, sessionId: string) {
-    const session = await this.store.getSessionForTenant(tenantId, sessionId)
-    if (!session) throw new Error(`Unknown session ${sessionId}.`)
-    return session
-  }
-
-  private shouldCreateRuntimeSessionsEagerly() {
-    if (this.runtime.requiresWorkerContext) return false
-    return this.policy.role === 'all-in-one' || this.policy.role === 'worker'
-  }
-
-  private runtimeContext(input: { tenantId: string, sessionId: string, profileName?: string | null }): CloudRuntimeExecutionContext {
-    return {
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      profileName: input.profileName || this.policy.profileName,
-    }
-  }
-
-  private async createStoredSession(input: {
-    tenantId: string
-    userId: string
-    orgId?: string | null
-    accountId?: string | null
-    sessionId: string
-    opencodeSessionId: string
-    profileName: string
-    title?: string | null
-    createdAt?: Date
-  }) {
-    try {
-      const concurrentSessionLimit = await this.usageGovernance.effectiveQuotaLimit(
-        input.orgId || input.tenantId,
-        this.abuse.maxConcurrentSessionsPerOrg,
-        'maxConcurrentSessionsPerOrg',
-      )
-      const session = await this.store.createSession({
-        tenantId: input.tenantId,
-        userId: input.userId,
-        sessionId: input.sessionId,
-        opencodeSessionId: input.opencodeSessionId,
-        profileName: input.profileName,
-        title: input.title,
-        createdAt: input.createdAt,
-        quota: this.usageGovernance.quotaLimit(concurrentSessionLimit)
-          ? {
-              orgId: input.orgId || input.tenantId,
-              maxConcurrentSessionsPerOrg: concurrentSessionLimit,
-              policyCode: 'quota.concurrent_sessions_exceeded',
-            }
-          : null,
-      })
-      await this.usageGovernance.recordUsage({
-        orgId: input.orgId || input.tenantId,
-        accountId: input.accountId || input.userId,
-        eventType: 'session.created',
-        unit: 'count',
-        metadata: { tenantId: input.tenantId, userId: input.userId, sessionId: input.sessionId },
-      })
-      return session
-    } catch (error) {
-      this.usageGovernance.translateQuotaError(error, 'Concurrent cloud session quota exceeded.', 'quota.concurrent_sessions_exceeded')
-    }
-  }
-
-  private async createCloudSessionRecord(input: CreateCloudSessionRecordInput): Promise<SessionRecord> {
-    if (input.sessionId) {
-      const existing = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
-      if (existing) return existing
-      const now = new Date()
-      const title = input.title || 'New session'
-      await this.createStoredSession({
-        tenantId: input.tenantId,
-        userId: input.userId,
-        orgId: input.orgId,
-        accountId: input.accountId,
-        sessionId: input.sessionId,
-        opencodeSessionId: '',
-        profileName: input.profileName,
-        title,
-        createdAt: now,
-      })
-      await this.appendProjectedEvent({
-        tenantId: input.tenantId,
-        sessionId: input.sessionId,
-        type: 'session.created',
-        payload: {
-          title,
-          runtimePending: true,
-        },
-        createdAt: now,
-      })
-      return this.requireSessionRecord(input.tenantId, input.sessionId)
-    }
-
-    if (!input.deferRuntime && this.shouldCreateRuntimeSessionsEagerly() && !this.usageGovernance.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)) {
-      const runtimeSession = await this.runtime.createSession({
-        profileName: input.profileName,
-        context: this.runtimeContext({
-          tenantId: input.tenantId,
-          sessionId: input.sessionId || '',
-          profileName: input.profileName,
-        }),
-      })
-      const title = input.title || runtimeSession.title
-      await this.createStoredSession({
-        tenantId: input.tenantId,
-        userId: input.userId,
-        orgId: input.orgId,
-        accountId: input.accountId,
-        sessionId: runtimeSession.id,
-        opencodeSessionId: runtimeSession.id,
-        profileName: input.profileName,
-        title,
-        createdAt: new Date(runtimeSession.createdAt),
-      })
-      await this.appendProjectedEvent({
-        tenantId: input.tenantId,
-        sessionId: runtimeSession.id,
-        type: 'session.created',
-        payload: { title },
-        createdAt: new Date(runtimeSession.updatedAt),
-      })
-      return this.requireSessionRecord(input.tenantId, runtimeSession.id)
-    }
-
-    const now = new Date()
-    const sessionId = this.ids.randomUUID()
-    const title = input.title || 'New session'
-    await this.createStoredSession({
-      tenantId: input.tenantId,
-      userId: input.userId,
-      orgId: input.orgId,
-      accountId: input.accountId,
-      sessionId,
-      opencodeSessionId: '',
-      profileName: input.profileName,
-      title,
-      createdAt: now,
-    })
-    await this.appendProjectedEvent({
-      tenantId: input.tenantId,
-      sessionId,
-      type: 'session.created',
-      payload: {
-        title,
-        runtimePending: true,
-      },
-      createdAt: now,
-    })
-    return this.requireSessionRecord(input.tenantId, sessionId)
-  }
-
-  private async ensureRuntimeSessionBound(lease: WorkerLeaseRecord) {
-    const session = await this.requireSessionRecord(lease.tenantId, lease.sessionId)
-    if (session.opencodeSessionId) return session.opencodeSessionId
-
-    const runtimeSession = await this.runtime.createSession({
-      profileName: session.profileName,
-      context: this.runtimeContext(session),
-    })
-    await this.store.bindSessionRuntime({
-      tenantId: session.tenantId,
-      sessionId: session.sessionId,
-      opencodeSessionId: runtimeSession.id,
-      title: session.title || runtimeSession.title,
-      leaseToken: lease.leaseToken,
-      updatedAt: new Date(runtimeSession.updatedAt),
-    })
-    return runtimeSession.id
+  private createCloudSessionRecord(input: CreateCloudSessionRecordInput): Promise<SessionRecord> {
+    return this.sessionExecution.createCloudSessionRecord(input)
   }
 
   private principalOrgId(principal: CloudPrincipal) {
-    return principal.orgId || principal.tenantId
+    return this.principalService.principalOrgId(principal)
   }
 
   private async principalIsActiveWorkspaceMember(principal: CloudPrincipal) {
-    const membership = await this.store.resolvePrincipalMembership({
-      tenantId: principal.tenantId,
-      accountId: principal.accountId || principal.userId,
-      idpSubject: principal.userId,
-      email: principal.email,
-    })
-    return membership?.membership.status === 'active'
+    return this.principalService.principalIsActiveWorkspaceMember(principal)
   }
 
   private assertRemoteInteractionAllowed(principal: CloudPrincipal, input: RemoteInteractionPolicyInput) {
@@ -2616,9 +1498,7 @@ export class CloudSessionService {
   }
 
   private assertOrgAdmin(principal: CloudPrincipal) {
-    if (!principalCanManageOrg(principal)) {
-      throw new CloudServiceError(403, 'Org administration requires an org admin or admin-scoped API token.')
-    }
+    return this.principalService.assertOrgAdmin(principal)
   }
 
   private async assertBillingAllowed(input: {
@@ -2702,7 +1582,7 @@ export class CloudSessionService {
   }
 
   private auditActor(principal: CloudPrincipal) {
-    return importAuditActor(principal)
+    return this.principalService.auditActor(principal)
   }
 
   private async getTenantSessionView(tenantId: string, sessionId: string): Promise<CloudSessionView> {
