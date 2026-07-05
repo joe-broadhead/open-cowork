@@ -9,6 +9,7 @@ import {
 import {
   MAX_CHART_ESTIMATED_ROWS,
   MAX_CHART_GENERATED_ROWS,
+  MAX_CHART_GRID_CELLS,
   assertBoundedVegaSpecCardinality,
 } from '../apps/desktop/src/main/chart-spec-safety.ts'
 import { renderChartSpecToSvg } from '../apps/desktop/src/main/chart-renderer.ts'
@@ -135,10 +136,13 @@ test('assertBoundedVegaSpecCardinality caps estimated derived rows across chaine
     new RegExp(`max ${MAX_CHART_ESTIMATED_ROWS}`),
   )
   // Fold duplication feeding a flatten in a downstream pipeline is also bounded.
+  // The flatten worst case is duplication * MAX_CHART_ARRAY_ITEMS, so the fold
+  // must duplicate enough (>~12.5x for a 20k item cap) to clear the estimate.
+  const wideFields = Array.from({ length: 14 }, (_, index) => `f${index}`)
   assert.throws(
     () => assertBoundedVegaSpecCardinality({
       data: [
-        { name: 'source_0', values: [{ a: [1, 2] }], transform: [{ type: 'fold', fields }] },
+        { name: 'source_0', values: [{ a: [1, 2] }], transform: [{ type: 'fold', fields: wideFields }] },
         { name: 'data_0', source: 'source_0', transform: [{ type: 'flatten', fields: ['a'] }] },
       ],
     }),
@@ -168,6 +172,91 @@ test('assertBoundedVegaSpecCardinality bounds density and quantile step paramete
   )
   assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
     data: [{ name: 'd', values: [{ v: 1 }, { v: 2 }], transform: [{ type: 'kde', field: 'v' }] }],
+  }))
+})
+
+test('assertBoundedVegaSpecCardinality models per-group amplification of density/kde generators', () => {
+  // ~1500 input rows x 200 steps = ~300k materialized rows once the generator
+  // runs once per group; the group count is bounded by the input row count.
+  const values = Array.from({ length: 1500 }, (_, index) => ({ v: index % 7, g: index % 1500 }))
+  assert.throws(
+    () => assertBoundedVegaSpecCardinality({
+      data: [{ name: 'd', values, transform: [{ type: 'kde', field: 'v', groupby: ['g'] }] }],
+    }),
+    new RegExp(`max ${MAX_CHART_ESTIMATED_ROWS}`),
+  )
+  // A grouped kde over a small stream stays well within the cap.
+  assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
+    data: [{
+      name: 'd',
+      values: Array.from({ length: 10 }, (_, index) => ({ v: index, g: index % 3 })),
+      transform: [{ type: 'kde', field: 'v', groupby: ['g'] }],
+    }],
+  }))
+})
+
+test('assertBoundedVegaSpecCardinality models impute grid amplification', () => {
+  // impute with a groupby fills a distinct(key) x distinct(groupby) grid; the
+  // worst case (both bounded by input rows) is inputRows^2. 600^2 = 360k > cap.
+  const values = Array.from({ length: 600 }, (_, index) => ({ x: index, series: index % 600, y: index }))
+  assert.throws(
+    () => assertBoundedVegaSpecCardinality({
+      data: [{ name: 'd', values, transform: [{ type: 'impute', key: 'x', groupby: ['series'], field: 'y' }] }],
+    }),
+    new RegExp(`max ${MAX_CHART_ESTIMATED_ROWS}`),
+  )
+  // A small impute grid, and an impute with no groupby (no blow-up), both pass.
+  assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
+    data: [{
+      name: 'd',
+      values: Array.from({ length: 100 }, (_, index) => ({ x: index, series: index % 4, y: index })),
+      transform: [{ type: 'impute', key: 'x', groupby: ['series'], field: 'y' }],
+    }],
+  }))
+  assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
+    data: [{
+      name: 'd',
+      values: Array.from({ length: 5000 }, (_, index) => ({ x: index, y: index })),
+      transform: [{ type: 'impute', key: 'x', field: 'y' }],
+    }],
+  }))
+})
+
+test('assertBoundedVegaSpecCardinality bounds compute-heavy raster grid transforms', () => {
+  // 3000 x 3000 = 9M cells of per-cell work but only a few output rows: the
+  // row-count guard cannot see it, so the grid-area bound must reject it.
+  assert.throws(
+    () => assertBoundedVegaSpecCardinality({
+      data: [{ name: 'd', values: [{ x: 1, y: 1 }], transform: [{ type: 'contour', x: 'x', y: 'y', size: [3000, 3000] }] }],
+    }),
+    new RegExp(`max ${MAX_CHART_GRID_CELLS} cells`),
+  )
+  // A non-numeric (signal) size cannot be bounded statically and is rejected.
+  assert.throws(
+    () => assertBoundedVegaSpecCardinality({
+      data: [{ name: 'd', values: [{ x: 1 }], transform: [{ type: 'heatmap', size: { signal: 'grid' } }] }],
+    }),
+    /static numeric \[width, height\] size/,
+  )
+  // A modest declared grid renders fine.
+  assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
+    data: [{ name: 'd', values: [{ x: 1, y: 1 }], transform: [{ type: 'contour', x: 'x', y: 'y', size: [400, 400] }] }],
+  }))
+})
+
+test('assertBoundedVegaSpecCardinality accepts a legitimate dense multi-series fold', () => {
+  // ~4200 rows folded across 12 series is ~50k rows: a real wide dashboard chart
+  // that the previous 50k estimate cap false-rejected. It must pass now.
+  const series = Array.from({ length: 12 }, (_, index) => `s${index}`)
+  const values = Array.from({ length: 4200 }, (_, row) =>
+    Object.fromEntries([['t', row], ...series.map((name, index) => [name, row + index])]),
+  )
+  assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
+    data: [
+      { name: 'source_0', values },
+      { name: 'data_0', source: 'source_0', transform: [{ type: 'fold', fields: series, as: ['series', 'value'] }] },
+    ],
+    marks: [{ type: 'line', from: { data: 'data_0' } }],
   }))
 })
 

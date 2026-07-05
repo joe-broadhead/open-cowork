@@ -100,6 +100,7 @@ test('gateway runtime re-acks instead of re-sending a re-served delivery that wa
     await waitFor(() => acks.length === 1)
     assert.equal(acks[0]?.input.status, 'sent')
     assert.equal(provider.sent.length, 1)
+    assert.equal(runtime.metrics.deliveryDuplicatesSuppressed, 0)
 
     // The claim lapsed before the cloud recorded the 'sent' ack, so it re-serves the same id.
     // The user must not see the message twice: no new provider send, just a fresh 'sent' ack.
@@ -108,6 +109,8 @@ test('gateway runtime re-acks instead of re-sending a re-served delivery that wa
     assert.equal(acks[1]?.deliveryId, 'delivery-1')
     assert.equal(acks[1]?.input.status, 'sent')
     assert.equal(provider.sent.length, 1)
+    // The suppressed re-serve must be visible to operators as a counter increment.
+    assert.equal(runtime.metrics.deliveryDuplicatesSuppressed, 1)
   } finally {
     await runtime.stop()
   }

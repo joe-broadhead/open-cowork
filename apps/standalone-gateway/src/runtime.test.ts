@@ -82,6 +82,26 @@ test("standalone runtime replies in-channel with the assistant output", async ()
   assert.ok(provider.sent[0]?.options?.deliveryId);
 });
 
+test("standalone runtime still replies when a provider declares a sub-100 text limit", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  // A non-conformant provider whose maxTextLength is below chunkText's minimum (100) must not
+  // make every reply throw and get silently swallowed as standalone.reply.failed.
+  const provider = new FakeChannelProvider({ id: "cli-standalone", capabilities: { maxTextLength: 20 } });
+
+  await runtime.handleMessage(provider, providerConfig, message("message-1", "hi"));
+
+  // "Standalone response: hi" (23 chars) is split into provider-sized (<=20) chunks and fully
+  // delivered — no chunkText throw, no dropped reply, all content preserved.
+  assert.ok(provider.sent.length >= 1, "reply must be delivered");
+  for (const sent of provider.sent) assert.ok((sent.text?.length ?? 0) <= 20);
+  assert.equal(provider.sent.map((s) => s.text).join(""), "Standalone response: hi");
+  const snapshot = await repository.dashboardSnapshot();
+  assert.ok(!snapshot.audits.find((a) => a.action === "standalone.reply.failed"), "reply must not fail");
+});
+
 test("standalone runtime chunks long replies to the provider text limit", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
   await authorize(repository);
@@ -208,8 +228,13 @@ for (const kind of ["workflow", "watch", "team_task"] as const) {
     const snapshot = await repository.dashboardSnapshot();
     assert.equal(snapshot.jobs[0]?.status, "failed");
     assert.match(snapshot.jobs[0]?.lastError || "", /not implemented in the standalone gateway/);
-    assert.equal(snapshot.audits[0]?.action, "standalone.job.unsupported");
-    assert.equal(snapshot.audits[0]?.metadata.kind, kind);
+    const unsupported = snapshot.audits.find((a) => a.action === "standalone.job.unsupported");
+    assert.ok(unsupported, "expected a standalone.job.unsupported audit");
+    assert.equal(unsupported.metadata.kind, kind);
+    // Every claimed job — including unsupported kinds — records a claim audit for a consistent trail.
+    const claimed = snapshot.audits.find((a) => a.action === "standalone.job.claimed");
+    assert.ok(claimed, "expected a standalone.job.claimed audit for the unsupported kind");
+    assert.equal(claimed.metadata.kind, kind);
   });
 }
 
