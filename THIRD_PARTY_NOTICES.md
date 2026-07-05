@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `eb1185f7e29852237256468407ebe6091cf3efb2972adcdc19c75723eddfac62`
+- pnpm lockfile SHA-256: `c8f80f9174d5060f9d08baa32f276971b3a221637b823d4a2ae5e3ab9267fa4e`
 - Production package entries: 395
 - Bundled license directories: 379 (16 package entries have no standalone license file or are workspace links)
 
@@ -104,7 +104,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @upsetjs/venn.js | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@upsetjs__venn.js@2.0.0/ | https://github.com/upsetjs/venn.js.git |
 | abort-controller | 3.0.0 | MIT | THIRD_PARTY_LICENSES/abort-controller@3.0.0/ | git+https://github.com/mysticatea/abort-controller.git |
 | accepts | 2.0.0 | MIT | THIRD_PARTY_LICENSES/accepts@2.0.0/ | jshttp/accepts |
-| acorn | 8.16.0 | MIT | THIRD_PARTY_LICENSES/acorn@8.16.0/ | git+https://github.com/acornjs/acorn.git |
+| acorn | 8.17.0 | MIT | THIRD_PARTY_LICENSES/acorn@8.17.0/ | git+https://github.com/acornjs/acorn.git |
 | agent-base | 7.1.4 | MIT | THIRD_PARTY_LICENSES/agent-base@7.1.4/ | https://github.com/TooTallNate/proxy-agents.git |
 | ajv | 8.20.0 | MIT | THIRD_PARTY_LICENSES/ajv@8.20.0/ | ajv-validator/ajv |
 | ajv-formats | 3.0.1 | MIT | THIRD_PARTY_LICENSES/ajv-formats@3.0.1/ | git+https://github.com/ajv-validator/ajv-formats.git |
@@ -350,7 +350,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | ts-dedent | 2.2.0 | MIT | THIRD_PARTY_LICENSES/ts-dedent@2.2.0/ | https://github.com/tamino-martinius/node-ts-dedent.git |
 | tslib | 2.8.1 | 0BSD | THIRD_PARTY_LICENSES/tslib@2.8.1/ | https://github.com/Microsoft/tslib.git |
 | type-is | 2.0.1 | MIT | THIRD_PARTY_LICENSES/type-is@2.0.1/ | jshttp/type-is |
-| ufo | 1.6.3 | MIT | THIRD_PARTY_LICENSES/ufo@1.6.3/ | unjs/ufo |
+| ufo | 1.6.4 | MIT | THIRD_PARTY_LICENSES/ufo@1.6.4/ | unjs/ufo |
 | universalify | 2.0.1 | MIT | THIRD_PARTY_LICENSES/universalify@2.0.1/ | git+https://github.com/RyanZim/universalify.git |
 | unpipe | 1.0.0 | MIT | THIRD_PARTY_LICENSES/unpipe@1.0.0/ | stream-utils/unpipe |
 | uuid | 14.0.0 | MIT | THIRD_PARTY_LICENSES/uuid@14.0.0/ | https://github.com/uuidjs/uuid.git |
