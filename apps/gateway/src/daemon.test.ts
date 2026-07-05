@@ -14,8 +14,10 @@ import {
   createGatewayProviderRegistry,
   createGatewayRuntime,
   GatewayWebhookRateLimiter,
+  isLoopbackOperatorBypassRequest,
   resolveGatewayConfig as resolveGatewayConfigBase,
 } from '../dist/index.js'
+import type { IncomingMessage } from 'node:http'
 
 test('webhook rate limiter evicts non-blocking records under cap pressure, preserving active blocks', () => {
   const limiter = new GatewayWebhookRateLimiter(2)
@@ -939,6 +941,34 @@ test('gateway loopback operator bypass rejects proxied-looking requests', async 
     await http.close()
     await runtime.stop()
   }
+})
+
+test('gateway loopback operator bypass is denied when the socket remoteAddress is empty/undefined (fail closed)', () => {
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: 'true',
+  })
+
+  const makeReq = (remoteAddress: string | undefined): IncomingMessage => ({
+    headers: { host: '127.0.0.1' },
+    socket: { remoteAddress },
+  } as unknown as IncomingMessage)
+
+  // Sanity: a genuine loopback socket is allowed the bypass.
+  assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('127.0.0.1')), true)
+  // Fail closed: an empty or missing remoteAddress must NOT be treated as loopback.
+  assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('')), false)
+  assert.equal(isLoopbackOperatorBypassRequest(config, makeReq(undefined)), false)
 })
 
 test('gateway operator endpoints require the admin token when configured', async () => {

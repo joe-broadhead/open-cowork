@@ -78,6 +78,33 @@ asarUnpack:
   - "node_modules/.pnpm/opencode-ai@*/node_modules/opencode-ai/**/*"
   - "node_modules/.pnpm/opencode-*/node_modules/opencode-*/**/*"
 
+# Electron fuses harden the packaged binary (audit issue #873). electron-builder
+# applies these via @electron/fuses immediately before code signing, so the
+# final signature always covers the patched binary.
+electronFuses:
+  # MUST stay enabled: packages/runtime-host/src/runtime-mcp.ts spawns the
+  # bundled MCP servers via process.execPath with ELECTRON_RUN_AS_NODE=1.
+  # Disabling this fuse would break every packaged MCP server. Set explicitly
+  # so a future Electron default flip cannot silently break them either.
+  runAsNode: true
+  # Ignore --inspect/--inspect-brk (and the SIGUSR1 inspector) so a local
+  # attacker cannot attach a debugger to the privileged main process.
+  enableNodeCliInspectArguments: false
+  # Only boot the app from app.asar, never from an unpacked app directory an
+  # attacker could drop next to it. The asarUnpack'ed opencode-ai binaries are
+  # spawned as child processes, not loaded as the app, so they are unaffected.
+  onlyLoadAppFromAsar: true
+  # Validate the app.asar header hash at startup. electron-builder embeds
+  # ElectronAsarIntegrity into Info.plist for macOS builds automatically; on
+  # Linux, Electron does not implement the check, so the fuse is inert there.
+  # Files shipped via asarUnpack/extraResources sit outside the asar and are
+  # not covered by this check (they are covered by macOS code signing).
+  enableEmbeddedAsarIntegrityValidation: true
+  # Re-apply an ad-hoc signature after patching the binary so unsigned preview
+  # builds still launch on macOS (arm64 refuses unsigned binaries). Signed
+  # release builds replace this with the real signature right afterwards.
+  resetAdHocDarwinSignature: true
+
 mac:
   icon: ${env.APP_ICON_MAC}
   category: public.app-category.productivity

@@ -7,8 +7,7 @@ import {
   type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   getAppConfig,
@@ -170,11 +169,11 @@ export function getRuntimeOpencodeAuthPath() {
   return join(getRuntimeEnvPaths().dataHome, 'opencode', 'auth.json')
 }
 
-export function getNativeOpencodeAuthPath() {
-  const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share')
-  return join(dataHome, 'opencode', 'auth.json')
-}
-
+// Provider auth is always app-owned: the managed runtime writes provider
+// auth under Cowork's runtime data directory, never into the user's real
+// OpenCode auth store. The symlink removal below clears any leftover
+// native-store bridge link created by older builds so the runtime auth
+// path is a regular app-owned file again (audit #869).
 export function ensureIsolatedProviderAuthStore() {
   const runtimeAuthPath = getRuntimeOpencodeAuthPath()
   mkdirSync(dirname(runtimeAuthPath), { recursive: true })
@@ -186,49 +185,6 @@ export function ensureIsolatedProviderAuthStore() {
   } catch {
     // No runtime auth path exists yet.
   }
-}
-
-export function ensureNativeProviderAuthBridge() {
-  const runtimeAuthPath = getRuntimeOpencodeAuthPath()
-  const nativeAuthPath = getNativeOpencodeAuthPath()
-  if (resolve(runtimeAuthPath) === resolve(nativeAuthPath)) return
-
-  mkdirSync(dirname(runtimeAuthPath), { recursive: true })
-  mkdirSync(dirname(nativeAuthPath), { recursive: true })
-
-  try {
-    const existing = lstatSync(runtimeAuthPath)
-    if (existing.isSymbolicLink()) {
-      if (resolve(dirname(runtimeAuthPath), readlinkSync(runtimeAuthPath)) === resolve(nativeAuthPath)) return
-      rmSync(runtimeAuthPath, { force: true })
-    } else if (!existsSync(nativeAuthPath)) {
-      copyFileSync(runtimeAuthPath, nativeAuthPath)
-      chmodSync(nativeAuthPath, 0o600)
-      rmSync(runtimeAuthPath, { force: true })
-    } else {
-      rmSync(runtimeAuthPath, { force: true })
-    }
-  } catch {
-    // No runtime-owned auth file exists yet.
-  }
-
-  try {
-    symlinkSync(nativeAuthPath, runtimeAuthPath)
-  } catch (err) {
-    // Symlinks are the only reliable way for provider OAuth completed
-    // inside Cowork to land in OpenCode's native auth store. If the
-    // link cannot be created, keep going and let OpenCode surface its
-    // native auth error rather than silently copying stale credentials.
-    log('runtime', `Could not bridge OpenCode provider auth store: ${err instanceof Error ? err.message : String(err)}`)
-  }
-}
-
-export function reconcileProviderAuthBridge(enabled: boolean) {
-  if (enabled) {
-    ensureNativeProviderAuthBridge()
-    return
-  }
-  ensureIsolatedProviderAuthStore()
 }
 
 async function syncProviderApiAuth(c: V2OpencodeClient) {
@@ -258,9 +214,9 @@ async function syncProviderApiAuth(c: V2OpencodeClient) {
 
 // Scope the spawned `opencode` binary to our runtime-home so it cannot
 // read from or write app config to the user's on-machine OpenCode install.
-// By default, provider auth is also app-owned. Users may opt into sharing
-// OpenCode's native auth store from advanced settings, but that bridge is not
-// enabled implicitly. We care about this isolation for two reasons:
+// Provider auth is also app-owned; there is no setting that shares
+// OpenCode's native auth store with the managed runtime. We care about
+// this isolation for two reasons:
 //   1. Non-technical users (our target audience) don't have on-machine
 //      OpenCode — leaking their $HOME/.opencode content into our runtime
 //      would be surprising, and in the other direction, writing our
@@ -275,8 +231,7 @@ async function syncProviderApiAuth(c: V2OpencodeClient) {
 //     all four XDG base-dir env vars point at `runtime-home/.config`,
 //     `.local/share`, `.cache`, `.local/state`. OpenCode and the Google
 //     SDKs both honor XDG, so skills, provider auth, chat history, and
-//     derived state land in our sandbox unless native auth sharing is
-//     explicitly enabled.
+//     derived state all land in our sandbox.
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
@@ -399,7 +354,7 @@ async function logRuntimeVersions(
 
 async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
   ensureSandboxDirs()
-  reconcileProviderAuthBridge(false)
+  ensureIsolatedProviderAuthStore()
   await prepareShellEnvironment()
   syncRuntimeHomeToolingBridge({
     enabled: !plan.useMachineOpenCodeConfig && plan.settings.runtimeToolingBridgeEnabled,

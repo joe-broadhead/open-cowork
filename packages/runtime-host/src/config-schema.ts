@@ -37,7 +37,7 @@ function cloneSchemaWithoutRequired(node: JsonSchemaNode): JsonSchemaNode {
 
 function resolveSchemaPath() {
   const candidates = [
-    ((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()) ? join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), 'open-cowork.config.schema.json') : null,
+    (process as { resourcesPath?: string }).resourcesPath ? join((process as { resourcesPath?: string }).resourcesPath!, 'open-cowork.config.schema.json') : null,
     typeof __dirname === 'string' ? resolve(__dirname, '../../../../open-cowork.config.schema.json') : null,
     getAppPathHost()?.getAppPath ? resolve(getAppPathHost()!.getAppPath!(), '..', '..', 'open-cowork.config.schema.json') : null,
     resolve(process.cwd(), 'open-cowork.config.schema.json'),

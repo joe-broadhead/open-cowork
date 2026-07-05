@@ -34,9 +34,9 @@ test('release checks verifier requires every configured check to be successful',
   assert.deepEqual(validateRequiredReleaseChecks({
     requiredChecks: 'validate,coverage',
     checkRuns: [
-      { name: 'validate', status: 'completed', conclusion: 'success' },
-      { name: 'coverage', status: 'completed', conclusion: 'success' },
-      { name: 'release-preflight', status: 'completed', conclusion: 'success' },
+      { name: 'validate', status: 'completed', conclusion: 'success', app: { slug: 'github-actions' } },
+      { name: 'coverage', status: 'completed', conclusion: 'success', app: { slug: 'github-actions' } },
+      { name: 'release-preflight', status: 'completed', conclusion: 'success', app: { slug: 'github-actions' } },
     ],
   }).requiredChecks, ['validate', 'coverage'])
 
@@ -44,11 +44,33 @@ test('release checks verifier requires every configured check to be successful',
     () => validateRequiredReleaseChecks({
       requiredChecks: 'validate,coverage',
       checkRuns: [
-        { name: 'validate', status: 'completed', conclusion: 'success' },
-        { name: 'coverage', status: 'completed', conclusion: 'failure' },
+        { name: 'validate', status: 'completed', conclusion: 'success', app: { slug: 'github-actions' } },
+        { name: 'coverage', status: 'completed', conclusion: 'failure', app: { slug: 'github-actions' } },
       ],
     }),
     /coverage/,
+  )
+})
+
+test('release checks verifier only trusts check runs minted by the github-actions app', () => {
+  assert.throws(
+    () => validateRequiredReleaseChecks({
+      requiredChecks: 'validate',
+      checkRuns: [
+        { name: 'validate', status: 'completed', conclusion: 'success', app: { slug: 'third-party-ci' } },
+      ],
+    }),
+    /validate/,
+  )
+
+  assert.throws(
+    () => validateRequiredReleaseChecks({
+      requiredChecks: 'validate',
+      checkRuns: [
+        { name: 'validate', status: 'completed', conclusion: 'success' },
+      ],
+    }),
+    /validate/,
   )
 })
 
@@ -67,9 +89,10 @@ test('release checks verifier paginates commit check runs from GitHub', async ()
               name: `non-required-${index}`,
               status: 'completed',
               conclusion: 'success',
+              app: { slug: 'github-actions' },
             }))
           : [
-              { name: 'validate', status: 'completed', conclusion: 'success' },
+              { name: 'validate', status: 'completed', conclusion: 'success', app: { slug: 'github-actions' } },
             ],
       }),
       text: async () => '',

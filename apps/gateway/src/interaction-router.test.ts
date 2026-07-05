@@ -94,6 +94,79 @@ test('interaction router resolves channel button tokens through cloud and acknow
   assert.equal(metrics.providerMetrics.fake?.interactionsResolved, 1)
 })
 
+test('interaction router resolves unrecognized interaction tokens as a denial, never an approval (#874)', async () => {
+  const provider = new FakeChannelProvider()
+  const calls: unknown[] = []
+  const cloud = {
+    async resolveChannelInteraction(input: unknown) {
+      calls.push(input)
+      return { interaction: { interactionId: 'interaction-1' }, command: { commandId: 'cmd-1' }, processed: 1 }
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }).providers[0]
+  const metrics = createGatewayMetrics()
+
+  // No apv:/den:/ans:/rej: prefix → parseGatewayInteractionToken falls back to 'default'. The safe
+  // resolution for an unparseable approval token is deny (fail closed), not an implicit approval.
+  const handled = await routeGatewayInteraction({
+    cloud,
+    provider,
+    providerConfig: config,
+    metrics,
+    message: {
+      id: 'message-1',
+      provider: 'cli',
+      target: {
+        provider: 'cli',
+        chatId: 'chat-1',
+        threadId: 'thread-1',
+      },
+      sender: {
+        providerUserId: 'user-1',
+      },
+      text: 'token-1',
+      rawText: 'token-1',
+      isCommand: false,
+      attachments: [],
+      interaction: {
+        id: 'callback-1',
+        token: 'mystery:token-1',
+        kind: 'button',
+      },
+      receivedAt: new Date(0),
+      raw: {},
+    },
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(calls, [{
+    provider: 'cli',
+    externalWorkspaceId: null,
+    externalUserId: 'user-1',
+    token: 'mystery:token-1',
+    externalInteractionId: 'callback-1',
+    response: { allowed: false },
+  }])
+  assert.deepEqual(provider.answered, [{
+    interactionId: 'callback-1',
+    text: 'Denied',
+    alert: undefined,
+  }])
+})
+
 test('interaction router resolves deny, answer, and reject fallback commands through cloud', async () => {
   const provider = new FakeChannelProvider()
   const calls: unknown[] = []

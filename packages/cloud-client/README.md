@@ -23,6 +23,7 @@ APIs.
 - `@open-cowork/cloud-client/domains/channels`
 - `@open-cowork/cloud-client/domains/config`
 - `@open-cowork/cloud-client/domains/identity`
+- `@open-cowork/cloud-client/domains/launchpad`
 - `@open-cowork/cloud-client/domains/sessions`
 - `@open-cowork/cloud-client/domains/settings`
 - `@open-cowork/cloud-client/domains/threads`

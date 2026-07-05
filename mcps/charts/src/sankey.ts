@@ -139,6 +139,10 @@ export function buildSankeySpec(input: SankeyInput) {
     }
   }
 
+  if (processed.size < nodeIds.length) {
+    throw new Error('Sankey charts require acyclic flows; the provided source/target links contain a cycle.')
+  }
+
   const sourceSum = new Map<string, number>(nodeIds.map((id) => [id, 0]))
   const targetSum = new Map<string, number>(nodeIds.map((id) => [id, 0]))
   for (const link of rawLinks) {

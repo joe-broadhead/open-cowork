@@ -91,8 +91,9 @@ the renderer runs against a typed `CoworkAPI` shim
 SSE API; on Electron the same renderer runs against the preload IPC bridge.
 Auth bootstrap, routing, threads, chat, agents, capabilities, workflows,
 artifacts, admin/settings surfaces, and theme switching all live in the single
-renderer. New feature code should use the renderer's
-`packages/app/src/app-api.ts` contract instead of direct `fetch`,
+renderer. New feature code should use the shared `CoworkAPI` contract
+(`packages/shared/src`) through the renderer's browser client
+`packages/app/src/browser/cowork-api.ts` instead of direct `fetch`,
 `EventSource`, or `window.coworkApi` access.
 
 The production visual QA contract for shared Studio surfaces is documented in

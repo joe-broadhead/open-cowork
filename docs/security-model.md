@@ -259,13 +259,14 @@ SSH-agent sockets, and command overrides such as `OPENAI_API_KEY`, cloud
 session tokens, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND` are not forwarded into
 the managed runtime.
 
-Provider authentication is app-owned by default. OpenCode still owns
-provider login flows, but the managed runtime writes provider auth under
-Open Cowork's runtime data directory so app credentials do not pollute a
-machine-local OpenCode install. Advanced users can enable native OpenCode
-auth sharing from Settings → Permissions; that opt-in links OpenCode's
-native `auth.json` into the managed runtime and requires a runtime restart
-before newly spawned OpenCode processes use the changed auth boundary.
+Provider authentication is app-owned. OpenCode still owns provider login
+flows, but the managed runtime writes provider auth under Open Cowork's
+runtime data directory so app credentials do not pollute a machine-local
+OpenCode install. There is no setting that links OpenCode's native
+`auth.json` into the managed runtime; the Machine OpenCode config source
+described above is the only mode in which OpenCode reads native provider
+auth, and it repoints the whole runtime at the real `HOME`/XDG roots
+rather than bridging the app-owned auth store.
 Credentialless OpenCode-native providers such as GitHub Copilot still follow
 this boundary: Open Cowork may activate the provider in runtime config, but
 OpenCode owns the login/device-code flow and token storage. Copilot tokens are
@@ -430,6 +431,11 @@ credential-bearing signed artifact URLs.
     dependency stays on the current major used by the rest of the bundle.
   - `electron-builder-squirrel-windows` is pinned while the package graph
     contains mixed Electron Builder helper versions.
+- Audit-gate exceptions: when an advisory that trips the CI audit gate has
+  no fixed release yet, add its identifier to `pnpm.auditConfig.ignoreCves`
+  (or `pnpm.auditConfig.ignoreGhsas`) in the root `package.json` with a
+  justification in the PR description. The entry is removed once a patched
+  release ships and is re-reviewed during monthly maintenance.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

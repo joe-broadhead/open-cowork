@@ -1,6 +1,6 @@
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -83,7 +83,10 @@ const MAX_INLINE_OPENCODE_CONFIG_BYTES = 100_000
 export function buildManagedOpencodeServerEnvironment(
   env: NodeJS.ProcessEnv,
   config?: OpencodeServerOptions['config'],
-  options: { writeConfigFile?: (serialized: string) => string } = {},
+  options: {
+    writeConfigFile?: (serialized: string) => string
+    onTempConfigDirCreated?: (dir: string) => void
+  } = {},
 ) {
   const next = { ...env }
   delete next.OPENCODE_CONFIG_CONTENT
@@ -95,6 +98,7 @@ export function buildManagedOpencodeServerEnvironment(
         // owner-only file (0600), same protection class as OpenCode's own
         // config files.
         const dir = mkdtempSync(join(tmpdir(), 'open-cowork-opencode-config-'))
+        options.onTempConfigDirCreated?.(dir)
         const file = join(dir, 'opencode-config.json')
         writeFileSync(file, content, { mode: 0o600 })
         return file
@@ -180,11 +184,20 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
 
   const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args, process.platform, resolved.opencodeBinPath)
   const proc = resolved.forkSupervisor(resolved.supervisorPath)
+  // Tracks the private temp directory an oversized (credential-bearing)
+  // config spills into so teardown can remove it (audit #868). OpenCode
+  // reads OPENCODE_CONFIG once at spawn, so it is safe to delete the file
+  // whenever the server stops.
+  let tempConfigDir: string | null = null
   const bootMessage: ManagedOpencodeServerParentMessage = {
     type: 'boot',
     command: spawnPlan.command,
     args: spawnPlan.args,
-    env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
+    env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config, {
+      onTempConfigDirCreated: (dir) => {
+        tempConfigDir = dir
+      },
+    }),
     cwd: resolved.cwd,
     timeoutMs: resolved.timeout,
   }
@@ -217,10 +230,22 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
     startupTimer = null
   }
 
+  function cleanupTempConfigDir() {
+    if (!tempConfigDir) return
+    const dir = tempConfigDir
+    tempConfigDir = null
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      // Best-effort: leave the 0700 dir for the OS temp cleaner if removal fails.
+    }
+  }
+
   function shutdownSupervisor() {
     closeRequested = true
     clearAbort()
     clearStartupTimer()
+    cleanupTempConfigDir()
     try {
       proc.postMessage({ type: 'shutdown' })
     } catch {
@@ -275,6 +300,7 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
         return
       }
       if (message.type === 'exited' && startupSettled && !closeRequested) {
+        cleanupTempConfigDir()
         resolved.onUnexpectedExit?.({ code: message.code, signal: message.signal })
       } else if (message.type === 'exited' && !startupSettled) {
         rejectStartup(new Error(`Server exited with code ${message.code}`))
@@ -286,6 +312,7 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
         rejectStartup(new Error(withSupervisorOutput(`Managed OpenCode supervisor exited with code ${code}`)))
         return
       }
+      cleanupTempConfigDir()
       if (!closeRequested) {
         resolved.onUnexpectedExit?.({ code, signal: signal || null })
       }

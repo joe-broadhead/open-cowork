@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-01.
+Last updated: 2026-07-05.
 
 Open Cowork is now planned as a multi-authority product over OpenCode:
 
@@ -73,9 +73,10 @@ source product remains deployable without commercial lock-in.
 
 ## Strategic Roadmap
 
-The active multi-authority roadmap is tracked by
-[issue #575](https://github.com/joe-broadhead/open-cowork/issues/575). The
-child issues below are the source of truth for implementation scope and
+The multi-authority roadmap was tracked by
+[issue #575](https://github.com/joe-broadhead/open-cowork/issues/575), which is
+now closed along with its child issues; the work it scoped has shipped. Those
+child issues remain the historical record of implementation scope and
 acceptance. The canonical workspace and authority semantics live in the
 [Product Contract](product-contract.md). Optional Cloud registration for
 Standalone Gateway workspaces and edge capacity is defined in

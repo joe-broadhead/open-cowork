@@ -9,6 +9,7 @@ This directory contains MCP servers that ship with Open Cowork.
 - `workflows/` previews and creates Open Cowork workflows through the app bridge.
 - `knowledge/` proposes human-reviewed knowledge-base (wiki) edits through the app bridge.
 - `semantic-ui/` reports UI status/snapshots and runs approval-gated local UI actions through the app bridge.
+- `shared/` holds the bridge HTTP client (`shared/bridge.ts`) used by the bridge-backed MCPs above. It is not a workspace package: each MCP imports it by relative path (`../../shared/bridge.js`) and esbuild inlines it into that MCP's bundle. Host policy is explicit per MCP — agents, workflows, and semantic-ui are loopback-http-only, while knowledge additionally allows non-loopback https for its cloud runtime (`allowNonLoopbackHttps: true`).
 
 Each MCP is still an OpenCode-native MCP server. Open Cowork packages,
 configures, and permission-scopes these servers; it does not replace

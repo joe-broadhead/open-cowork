@@ -3,6 +3,13 @@ packages:
   - mcps/*
   - packages/*
 
+# Supply-chain cooldown: refuse to resolve npm versions published less than this
+# many minutes ago (3 days). Blunts the "compromised package published hours before
+# a Dependabot run lands in the lockfile" window, since `pnpm audit` lags advisory
+# publication. Frozen-lockfile CI installs are unaffected (they install exactly what
+# the lockfile already pins); this only gates fresh version resolution.
+minimumReleaseAge: 4320
+
 # macOS packaging produces x64 and arm64 artifacts from the same runner.
 # Linux public release artifacts are x64-only for v0.0.0, but installing both
 # native CPU packages keeps local/downstream packaging deterministic when a

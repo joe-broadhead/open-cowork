@@ -646,6 +646,7 @@ class SmtpClient {
   }
 
   async command(line: string, expected: number | number[]): Promise<void> {
+    if (/[\r\n]/.test(line)) throw new Error('SMTP command line must not contain CR or LF.');
     this.socket.write(`${line}\r\n`);
     await this.expect(expected);
   }

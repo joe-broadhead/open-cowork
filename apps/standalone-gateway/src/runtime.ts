@@ -1,9 +1,10 @@
+import { chunkText } from "@open-cowork/gateway-channel";
 import type { ChannelProvider, IncomingChannelMessage } from "@open-cowork/gateway-channel";
 
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
 import { canIdentityPrompt } from "./repository.js";
 import type { StandaloneGatewayRepository, StandaloneGatewayLeaseRef } from "./repository.js";
-import type { StandaloneGatewayProviderConfig, StandaloneRuntimeEvent } from "./types.js";
+import type { StandaloneGatewayJobRecord, StandaloneGatewayProviderConfig, StandaloneRuntimeEvent } from "./types.js";
 
 export interface StandaloneGatewayRuntime {
   handleMessage(provider: ChannelProvider, providerConfig: StandaloneGatewayProviderConfig, message: IncomingChannelMessage): Promise<void>;
@@ -26,6 +27,21 @@ export function createStandaloneGatewayRuntime(input: {
       if (sessionQueues.get(key) === tracked) sessionQueues.delete(key);
     });
     return run;
+  }
+
+  async function runPromptJob(job: StandaloneGatewayJobRecord): Promise<void> {
+    const text = stringField(job.payload, "text");
+    if (!text) throw new Error("Prompt job payload is missing a non-empty \"text\" field.");
+    const sessionId = job.sessionId;
+    const opencodeSessionId = stringField(job.payload, "opencodeSessionId")
+      || (await opencode.createSession({ title: text.slice(0, 80) })).opencodeSessionId;
+    await opencode.prompt({
+      opencodeSessionId,
+      text,
+      onEvent: async (event) => {
+        if (sessionId) await appendRuntimeEvent(repository, sessionId, event);
+      },
+    });
   }
 
   return {
@@ -73,16 +89,27 @@ export function createStandaloneGatewayRuntime(input: {
               status: "running",
             });
           }
+          const assistantTexts: string[] = [];
           await opencode.prompt({
             opencodeSessionId: runtimeSession.opencodeSessionId || session.sessionId,
             text,
-            onEvent: (event) => appendRuntimeEvent(repository, session.sessionId, event),
+            onEvent: async (event) => {
+              if (event.type === "assistant.message") {
+                const assistantText = stringField(objectRecord(event.payload), "text");
+                if (assistantText) assistantTexts.push(assistantText);
+              }
+              await appendRuntimeEvent(repository, session.sessionId, event);
+            },
           });
           await repository.updateSessionRuntime({
             sessionId: session.sessionId,
             opencodeSessionId: runtimeSession.opencodeSessionId,
             status: "idle",
           });
+          // Deliver the final assistant output back into the originating channel. Persisting the
+          // event alone is not a reply — without this the appliance only ever answers via the
+          // admin dashboard. Delivery failures are audited but never fail the prompt itself.
+          await sendChannelReply({ repository, provider, session, message, text: coalesceAssistantText(assistantTexts) });
           await repository.recordAudit("standalone.prompt", message.sender.providerUserId, {
             provider: provider.id,
             providerKind: provider.kind,
@@ -119,10 +146,23 @@ export function createStandaloneGatewayRuntime(input: {
         if (options.isActive && !options.isActive()) break;
         const job = await repository.claimNextJob({ claimedBy, ttlMs: 30_000, lease: options.lease });
         if (!job) break;
+        // Only "prompt" jobs have an execution path in the standalone appliance. Every other kind
+        // must finish as failed with a descriptive reason — never as a silent "completed".
+        if (job.kind !== "prompt") {
+          await repository.recordAudit("standalone.job.unsupported", claimedBy, { jobId: job.jobId, kind: job.kind });
+          await repository.finishJob({
+            jobId: job.jobId,
+            claimToken: job.claimToken || "",
+            status: "failed",
+            lastError: `Job kind "${job.kind}" is not implemented in the standalone gateway.`,
+          });
+          processed += 1;
+          continue;
+        }
         try {
           await repository.recordAudit("standalone.job.claimed", claimedBy, { jobId: job.jobId, kind: job.kind });
+          await runPromptJob(job);
           await repository.finishJob({ jobId: job.jobId, claimToken: job.claimToken || "", status: "completed" });
-          processed += 1;
         } catch (error) {
           await repository.finishJob({
             jobId: job.jobId,
@@ -131,10 +171,58 @@ export function createStandaloneGatewayRuntime(input: {
             lastError: error instanceof Error ? error.message : String(error),
           });
         }
+        processed += 1;
       }
       return processed;
     },
   };
+}
+
+async function sendChannelReply(input: {
+  repository: StandaloneGatewayRepository;
+  provider: ChannelProvider;
+  session: { sessionId: string };
+  message: IncomingChannelMessage;
+  text: string;
+}): Promise<void> {
+  const replyText = input.text.trim();
+  if (!replyText || !input.message.target.chatId) return;
+  const deliveryBase = `standalone:${input.session.sessionId}:${input.message.providerEventId || input.message.id}:reply`;
+  try {
+    const chunks = chunkText(replyText, input.provider.capabilities.maxTextLength);
+    for (const [index, chunk] of chunks.entries()) {
+      await input.provider.sendText(input.message.target, chunk, {
+        deliveryId: chunks.length === 1 ? deliveryBase : `${deliveryBase}:chunk:${index + 1}`,
+      });
+    }
+  } catch (error) {
+    await input.repository.recordAudit("standalone.reply.failed", input.message.sender.providerUserId, {
+      provider: input.provider.id,
+      providerKind: input.provider.kind,
+      sessionId: input.session.sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function coalesceAssistantText(parts: string[]): string {
+  let merged = "";
+  for (const part of parts) {
+    const text = part.trim();
+    if (!text) continue;
+    if (!merged) {
+      merged = text;
+      continue;
+    }
+    // Streaming snapshots repeat earlier text — keep the superset instead of duplicating it.
+    if (text.startsWith(merged)) {
+      merged = text;
+      continue;
+    }
+    if (merged.includes(text)) continue;
+    merged = `${merged}\n\n${text}`;
+  }
+  return merged;
 }
 
 function promptDenyReason(identity: { role: string; status: string }): string {

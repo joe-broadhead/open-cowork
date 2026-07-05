@@ -556,12 +556,12 @@ function isLoopbackHost(hostname: string) {
     || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
 }
 
-function isLoopbackOperatorBypassRequest(config: GatewayConfig, req: IncomingMessage) {
+export function isLoopbackOperatorBypassRequest(config: GatewayConfig, req: IncomingMessage) {
   if (!isLoopbackHost(config.server.host)) return false
   if (config.server.publicBaseUrl) return false
   if (hasForwardedHeaders(req)) return false
   const remoteAddress = req.socket.remoteAddress || ''
-  if (remoteAddress && !isLoopbackHost(remoteAddress)) return false
+  if (!remoteAddress || !isLoopbackHost(remoteAddress)) return false
   const hostHeader = hostHeaderHostname(firstHeader(req.headers.host)) || config.server.host
   return isLoopbackHost(hostHeader)
 }

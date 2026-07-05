@@ -26,6 +26,7 @@ if ! docker compose -p "${project_name}" -f "${compose_file}" up --build -d; the
   exit 1
 fi
 
+cloud_ready=false
 for _ in $(seq 1 90); do
   if curl -fsS "http://127.0.0.1:8787/healthz" >"${health_file}"; then
     cat "${health_file}"
@@ -43,12 +44,13 @@ for _ in $(seq 1 90); do
       fi
       exit 0
     fi
+    cloud_ready=true
     break
   fi
   sleep 2
 done
 
-if [ -n "${gateway_smoke_url}" ]; then
+if [ "${cloud_ready}" = true ] && [ -n "${gateway_smoke_url}" ]; then
   for _ in $(seq 1 90); do
     if curl -fsS "${gateway_smoke_url}" >"${gateway_health_file}"; then
       cat "${gateway_health_file}"
@@ -65,7 +67,7 @@ if [ -n "${gateway_smoke_url}" ]; then
 fi
 
 print_diagnostics
-if [ -n "${gateway_smoke_url}" ]; then
+if [ "${cloud_ready}" = true ] && [ -n "${gateway_smoke_url}" ]; then
   echo "open-cowork cloud+gateway compose smoke test did not reach ${gateway_smoke_url}" >&2
 else
   echo "open-cowork-cloud compose smoke test did not reach /healthz and /livez" >&2

@@ -29,6 +29,13 @@ const PROVIDER_EVENT_CLAIM_TTL_MS = 5 * 60_000
 // wait + chunked send), it preserves at-least-once while stopping the duplicate; the cloud still
 // re-serves after this window if the gateway actually dies mid-delivery.
 const DELIVERY_CLAIM_TTL_MS = 2 * 60_000
+// Bounded cache of delivery ids that were successfully sent (audit #857). A delivery that waits in
+// the local queue past its (unrenewed) claim TTL is re-served by the cloud after we already sent
+// it — resending would show the user the message twice. Recording ids at send time (before the
+// 'sent' ack, so an ack failure can't lose the fact) lets the runtime short-circuit a re-serve and
+// re-ack 'sent' instead. FIFO-evicted at this cap so memory stays bounded; sized well above the
+// max local queue depth (512) so an id comfortably outlives its claim-TTL re-serve window.
+const SENT_DELIVERY_CACHE_SIZE = 2048
 
 export type DeliverySubscriber = { start(): void; close(): void }
 
@@ -156,6 +163,7 @@ export function createDeliveryDispatcher(input: {
   laneKey?: (delivery: ChannelDeliveryRecord) => string
   onQueueDepth?: (depth: number) => void
   onShed?: (delivery: ChannelDeliveryRecord) => void
+  onDuplicate?: (delivery: ChannelDeliveryRecord) => void
 }): DeliveryDispatcher {
   const maxConcurrency = Math.max(1, Math.floor(input.maxConcurrency ?? 8))
   // Hard cap on locally-queued deliveries (P1-C). A backlog drain streams the whole
@@ -165,14 +173,36 @@ export function createDeliveryDispatcher(input: {
   // and the cloud re-serves it later — bounded memory, no message loss.
   const maxQueueDepth = Math.max(maxConcurrency, Math.floor(input.maxQueueDepth ?? 512))
   const laneKey = input.laneKey ?? deliveryLaneKey
-  const lanes = new Map<string, { queue: ChannelDeliveryRecord[]; running: boolean }>()
+  const lanes = new Map<string, { queue: ChannelDeliveryRecord[]; running: boolean; ready: boolean }>()
+  // FIFO of lane keys awaiting a slot (audit #858 fairness). pump() previously re-scanned the
+  // `lanes` Map from the front whenever a slot freed, so the first ~maxConcurrency continuously-hot
+  // lanes always reclaimed the freed slot and later-inserted lanes starved unboundedly. Dispatching
+  // in ready-queue order — and re-appending a still-backlogged lane to the BACK after each send —
+  // round-robins freed slots across every waiting lane, so no destination starves while per-lane
+  // ordering and the global concurrency cap are preserved. Invariant: a lane key is in `readyLanes`
+  // iff `lane.ready` is true, and never while the lane is running.
+  const readyLanes: string[] = []
+  // Delivery ids currently queued or in-flight (audit #857 idempotency). The cloud claim is not
+  // renewed in-flight, so a delivery that waits here past its claim TTL can be re-served while the
+  // first copy is still pending; without this guard both copies would send and the user would see
+  // the message twice. Bounded by maxQueueDepth + maxConcurrency.
+  const pendingDeliveryIds = new Set<string>()
   const inFlight = new Set<Promise<void>>()
   let active = 0
   let queued = 0
 
+  const markReady = (key: string, lane: { ready: boolean }) => {
+    if (lane.ready) return
+    lane.ready = true
+    readyLanes.push(key)
+  }
+
   const pump = () => {
-    for (const [key, lane] of lanes) {
-      if (active >= maxConcurrency) break
+    while (active < maxConcurrency && readyLanes.length > 0) {
+      const key = readyLanes.shift()!
+      const lane = lanes.get(key)
+      if (!lane) continue
+      lane.ready = false
       if (lane.running || lane.queue.length === 0) continue
       const delivery = lane.queue.shift()!
       queued -= 1
@@ -184,7 +214,9 @@ export function createDeliveryDispatcher(input: {
         .finally(() => {
           active -= 1
           lane.running = false
+          pendingDeliveryIds.delete(delivery.deliveryId)
           if (lane.queue.length === 0) lanes.delete(key)
+          else markReady(key, lane) // back of the line: freed slots rotate across waiting lanes
           inFlight.delete(task)
           pump()
         })
@@ -194,6 +226,12 @@ export function createDeliveryDispatcher(input: {
 
   return {
     enqueue(delivery) {
+      // Drop a re-served copy of a delivery that is still queued or in-flight here (audit #857).
+      // Left unacked on purpose: the surviving copy acks the shared delivery id when it settles.
+      if (pendingDeliveryIds.has(delivery.deliveryId)) {
+        input.onDuplicate?.(delivery)
+        return
+      }
       // Shed when at capacity: leave the delivery unacked so the cloud re-serves it after its
       // claim expires, rather than growing the local queue without bound past the claim TTL.
       if (queued >= maxQueueDepth) {
@@ -202,9 +240,11 @@ export function createDeliveryDispatcher(input: {
       }
       const key = laneKey(delivery)
       let lane = lanes.get(key)
-      if (!lane) { lane = { queue: [], running: false }; lanes.set(key, lane) }
+      if (!lane) { lane = { queue: [], running: false, ready: false }; lanes.set(key, lane) }
       lane.queue.push(delivery)
       queued += 1
+      pendingDeliveryIds.add(delivery.deliveryId)
+      if (!lane.running) markReady(key, lane)
       input.onQueueDepth?.(queued)
       pump()
     },
@@ -245,8 +285,21 @@ export function createGatewayRuntime(
   const claimedBy = `gateway:${config.instanceId}`
   const channelBindingIds = [...new Set(config.providers.filter((provider) => provider.enabled).map((provider) => provider.channelBindingId))]
   const deliverySubscriptions: Array<{ close(): void }> = []
+  // Insertion-ordered set of recently-sent delivery ids (see SENT_DELIVERY_CACHE_SIZE). Like the
+  // dropped-message notice, this keeps the channel idempotent on the delivery id when the cloud
+  // re-serves work we already completed.
+  const sentDeliveryIds = new Set<string>()
+  const rememberSentDelivery = (deliveryId: string) => {
+    sentDeliveryIds.delete(deliveryId) // re-insert so eviction order tracks recency
+    sentDeliveryIds.add(deliveryId)
+    while (sentDeliveryIds.size > SENT_DELIVERY_CACHE_SIZE) {
+      const oldest = sentDeliveryIds.values().next().value
+      if (oldest === undefined) break
+      sentDeliveryIds.delete(oldest)
+    }
+  }
   const deliveryDispatcher = createDeliveryDispatcher({
-    handle: (delivery) => handleDelivery(delivery, providers, cloud, metrics),
+    handle: (delivery) => handleDelivery(delivery, providers, cloud, metrics, rememberSentDelivery),
     maxConcurrency: config.maxDeliveryConcurrency,
     maxQueueDepth: config.maxDeliveryQueueDepth,
     onQueueDepth: (depth) => {
@@ -291,7 +344,21 @@ export function createGatewayRuntime(
             onError: handlers.onError,
             onClose: handlers.onClose,
           }),
-          onDelivery: (delivery) => deliveryDispatcher.enqueue(delivery),
+          onDelivery: (delivery) => {
+            // Already delivered — the claim lapsed (or the 'sent' ack failed) before the cloud
+            // learned the send succeeded, so it re-served the id. Re-ack instead of re-sending so
+            // the user does not see the message twice; at-least-once is untouched because only
+            // ids that actually reached the provider are ever recorded here.
+            if (sentDeliveryIds.has(delivery.deliveryId)) {
+              void cloud.ackDelivery(delivery.deliveryId, {
+                status: 'sent',
+                claimedBy: delivery.claimedBy,
+                lastError: null,
+              }).catch(() => {})
+              return
+            }
+            deliveryDispatcher.enqueue(delivery)
+          },
           onHealthy: (healthy) => { cloudDeliveriesHealthy = healthy },
           onError: () => {
             metrics.cloudSubscriptionErrors += 1
@@ -494,6 +561,7 @@ async function handleDelivery(
   providers: GatewayProviderRegistry,
   cloud: CloudGateway,
   metrics: GatewayMetrics,
+  onSent?: (deliveryId: string) => void,
 ) {
   const startedAt = Date.now()
   metrics.deliveriesReceived += 1
@@ -513,6 +581,9 @@ async function handleDelivery(
 
   try {
     await sendDelivery(registration.provider, delivery)
+    // Record the send before acking: if the 'sent' ack fails the cloud will re-serve this id, and
+    // the dedupe cache must already know the message reached the provider (audit #857).
+    onSent?.(delivery.deliveryId)
     await cloud.ackDelivery(delivery.deliveryId, {
       status: 'sent',
       claimedBy: delivery.claimedBy,

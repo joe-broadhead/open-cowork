@@ -29,8 +29,16 @@ Standalone Gateway owns:
 - Gateway Postgres/control-plane rows
 - channel provider bindings and identities
 - sessions, ordered events, jobs, audit, artifacts metadata, and dashboard state
-- scheduler/background jobs, team tasks, watches, backup, retention, doctor,
-  smoke, and metrics surfaces
+- in-channel response delivery for prompt-capable identities
+- the background job queue, backup, retention, doctor, smoke, and metrics
+  surfaces
+
+The job queue currently executes only `prompt` jobs. Jobs enqueued with the
+`workflow`, `watch`, or `team_task` kinds are claimed and then finished as
+`failed` with a descriptive `lastError` and a `standalone.job.unsupported`
+audit event — they are not silently completed and they do not run. Team tasks,
+watches, and scheduled workflows therefore have durable queue/table shape but
+no execution engine in this product mode yet.
 
 Those Gateway-owned surfaces use the shared
 [Coordination Model](coordination-model.md): team projects/tasks map to
@@ -139,7 +147,8 @@ pnpm deploy:standalone-gateway:validate
 ```
 
 The dashboard is served by the Standalone Gateway process and reads Gateway
-database rows, not Cloud APIs:
+database rows, not Cloud APIs. It is an operator observation surface on top of
+the in-channel replies described below, not the only place responses appear:
 
 ```bash
 curl -H "Authorization: Bearer $OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
@@ -152,6 +161,29 @@ Operator metrics are also admin-token protected:
 curl -H "Authorization: Bearer $OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   http://127.0.0.1:8795/metrics
 ```
+
+## Response Delivery
+
+When a prompt-capable identity messages the appliance, the Standalone Gateway
+prompts private OpenCode and then:
+
+- persists every projected runtime event (assistant messages, tool activity,
+  errors) as ordered session events in Gateway Postgres, visible in the
+  dashboard
+- sends the final assistant output back into the originating channel via the
+  provider (for example, a Telegram reply in the same chat/thread)
+
+In-channel replies deliver the coalesced final assistant text once per prompt
+rather than re-sending every streaming delta. Replies are split to the
+provider's message-length limit, and each chunk carries a deterministic
+delivery id so provider-side retries stay idempotent. If reply delivery fails
+(provider offline, chat unavailable), the prompt itself still succeeds: the
+session events remain in Postgres and the failure is audited as
+`standalone.reply.failed` without message text.
+
+Approval and question flows are not yet wired to channel buttons in this
+product mode. Permission and question events are persisted and visible in the
+dashboard, but they cannot be answered from the channel.
 
 ## Provider Modes
 
@@ -201,8 +233,8 @@ Roles are deliberately small:
 
 - `owner` and `admin` can prompt, approve, and manage identities.
 - `member` can prompt from their channel identity.
-- `approver` can approve/respond when approval flows are wired, but cannot start
-  private OpenCode work.
+- `approver` is reserved for approval flows, which are not yet wired to
+  channels in this product mode; it cannot start private OpenCode work.
 - `viewer` and disabled identities cannot prompt.
 
 The doctor check fails until at least one active `owner`, `admin`, or `member`

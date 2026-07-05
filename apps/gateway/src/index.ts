@@ -20,6 +20,7 @@ export {
   createGatewayDaemon,
   createGatewayHttpServer,
   GatewayWebhookRateLimiter,
+  isLoopbackOperatorBypassRequest,
   type GatewayDaemon,
   type GatewayHttpServer,
 } from './daemon.js'

@@ -1,4 +1,5 @@
 import { isFullVegaSpec, normalizeVegaSpecSchema, validateInlineChartSpec } from '@open-cowork/shared'
+import { assertBoundedVegaSpecCardinality } from './chart-spec-safety.ts'
 
 const DEFAULT_CHART_RENDER_TIMEOUT_MS = 1_500
 const MIN_CHART_RENDER_TIMEOUT_MS = 250
@@ -65,6 +66,10 @@ export async function renderChartSpecToSvg(spec: Record<string, unknown>) {
   validateInlineChartSpec(spec)
   const { vega, vegaLite } = await getChartRenderModules()
   const vegaSpec = toRenderableVegaSpec(spec, vegaLite.compile)
+  // The timeout race below cannot interrupt Vega's synchronous dataflow
+  // evaluation, so generative/amplifying transforms must be bounded statically
+  // BEFORE vega.parse starts executing them (audit issue #865).
+  assertBoundedVegaSpecCardinality(vegaSpec)
   const runtime = vega.parse(vegaSpec as any)
   const view = new vega.View(runtime, {
     loader: createRestrictedVegaLoader() as any,
