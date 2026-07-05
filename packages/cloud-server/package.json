@@ -76,14 +76,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1054.0",
+    "@aws-sdk/client-s3": "^3.1079.0",
     "@open-cowork/app": "workspace:*",
     "@open-cowork/cloud-client": "workspace:*",
     "@open-cowork/runtime-host": "workspace:*",
     "@open-cowork/shared": "workspace:*",
-    "@opencode-ai/sdk": "1.15.5",
-    "google-auth-library": "^10.6.2",
-    "pg": "^8.21.0"
+    "@opencode-ai/sdk": "1.17.13",
+    "google-auth-library": "^10.9.0",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^22.12.0",
