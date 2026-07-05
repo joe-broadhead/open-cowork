@@ -45,13 +45,14 @@ test('docs Mermaid vendor manifest matches the locked workspace dependency', () 
 })
 
 test('docs Mermaid vendor check passes when the generated bundle matches the manifest', () => {
+  const mermaidPackage = readJson<PackageJson>('packages/app/node_modules/mermaid/package.json')
   const result = spawnSync(process.execPath, ['scripts/build-docs-mermaid-vendor.mjs', '--check'], {
     cwd: new URL('../', import.meta.url),
     encoding: 'utf8',
   })
 
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /matches mermaid 11\.15\.0/)
+  assert.match(result.stdout, new RegExp(`matches mermaid ${String(mermaidPackage.version).replace(/\./g, '\\.')}`))
 })
 
 function readJson<T>(path: string): T {
