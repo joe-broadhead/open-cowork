@@ -52,7 +52,7 @@ test('docs Mermaid vendor check passes when the generated bundle matches the man
   })
 
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, new RegExp(`matches mermaid ${String(mermaidPackage.version).replace(/\./g, '\\.')}`))
+  assert.equal(result.stdout.includes(`matches mermaid ${String(mermaidPackage.version)}`), true, result.stdout)
 })
 
 function readJson<T>(path: string): T {
