@@ -350,9 +350,15 @@ test('managed opencode server env spills oversized config to a file (Linux E2BIG
   const real = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig)
   const fs = await import('node:fs')
   assert.ok(real.OPENCODE_CONFIG, 'expected a config file path')
-  const stat = fs.statSync(real.OPENCODE_CONFIG!)
-  assert.equal(stat.mode & 0o777, 0o600)
-  const parsed = JSON.parse(fs.readFileSync(real.OPENCODE_CONFIG!, 'utf8'))
-  assert.equal(parsed.instructions[0].length, 150_000)
-  fs.rmSync(real.OPENCODE_CONFIG!, { force: true })
+  // Single descriptor for stat + read (no check-then-use race).
+  const fd = fs.openSync(real.OPENCODE_CONFIG!, 'r')
+  try {
+    const stat = fs.fstatSync(fd)
+    assert.equal(stat.mode & 0o777, 0o600)
+    const parsed = JSON.parse(fs.readFileSync(fd, 'utf8'))
+    assert.equal(parsed.instructions[0].length, 150_000)
+  } finally {
+    fs.closeSync(fd)
+    fs.rmSync(real.OPENCODE_CONFIG!, { force: true })
+  }
 })
