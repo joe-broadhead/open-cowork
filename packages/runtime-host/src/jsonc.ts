@@ -1,0 +1,306 @@
+import { writeFileAtomic, readTextFileCheckedSync } from '@open-cowork/shared/node'
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import {
+  jsonConfigCandidates,
+  parseJsoncText,
+  stripJsonComments,
+  stripTrailingCommas,
+  type JsonObject,
+} from '@open-cowork/shared'
+export {
+  jsonConfigCandidates,
+  parseJsoncText,
+  stripJsonComments,
+  stripTrailingCommas,
+}
+export type { JsonObject }
+
+export function readJsoncFile<T extends JsonObject = JsonObject>(path: string): T {
+  let raw: string
+  try {
+    raw = readTextFileCheckedSync(path).content.trim()
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return {} as T
+    throw error
+  }
+  if (!raw) return {} as T
+  return parseJsoncText<T>(raw)
+}
+
+export function writeJsonFile(path: string, value: JsonObject) {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`)
+}
+
+export function resolveExistingJsonConfigPath(path: string) {
+  return jsonConfigCandidates(path).find((candidate) => existsSync(candidate)) || path
+}
+
+type TopLevelProperty = {
+  key: string
+  start: number
+  end: number
+  hasTrailingComma: boolean
+}
+
+function skipWhitespaceAndComments(text: string, index: number) {
+  let cursor = index
+  while (cursor < text.length) {
+    const current = text[cursor]
+    const next = text[cursor + 1]
+
+    if (/\s/.test(current || '')) {
+      cursor += 1
+      continue
+    }
+
+    if (current === '/' && next === '/') {
+      cursor += 2
+      while (cursor < text.length && text[cursor] !== '\n') {
+        cursor += 1
+      }
+      continue
+    }
+
+    if (current === '/' && next === '*') {
+      cursor += 2
+      while (cursor < text.length && !(text[cursor] === '*' && text[cursor + 1] === '/')) {
+        cursor += 1
+      }
+      cursor += 2
+      continue
+    }
+
+    break
+  }
+  return cursor
+}
+
+function parseJsonString(text: string, index: number) {
+  let cursor = index + 1
+  let escaped = false
+  while (cursor < text.length) {
+    const current = text[cursor]
+    if (escaped) {
+      escaped = false
+    } else if (current === '\\') {
+      escaped = true
+    } else if (current === '"') {
+      break
+    }
+    cursor += 1
+  }
+  if (cursor >= text.length) {
+    throw new Error('Unterminated JSON string')
+  }
+  return {
+    value: JSON.parse(text.slice(index, cursor + 1)) as string,
+    end: cursor + 1,
+  }
+}
+
+function scanValueBoundary(text: string, index: number, rootEnd: number) {
+  let cursor = index
+  let depthCurly = 0
+  let depthBracket = 0
+  let inString = false
+  let escaped = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  while (cursor < rootEnd) {
+    const current = text[cursor]
+    const next = text[cursor + 1]
+
+    if (inLineComment) {
+      if (current === '\n') inLineComment = false
+      cursor += 1
+      continue
+    }
+
+    if (inBlockComment) {
+      if (current === '*' && next === '/') {
+        inBlockComment = false
+        cursor += 2
+        continue
+      }
+      cursor += 1
+      continue
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (current === '\\') {
+        escaped = true
+      } else if (current === '"') {
+        inString = false
+      }
+      cursor += 1
+      continue
+    }
+
+    if (current === '"') {
+      inString = true
+      cursor += 1
+      continue
+    }
+
+    if (current === '/' && next === '/') {
+      inLineComment = true
+      cursor += 2
+      continue
+    }
+
+    if (current === '/' && next === '*') {
+      inBlockComment = true
+      cursor += 2
+      continue
+    }
+
+    if (current === '{') {
+      depthCurly += 1
+      cursor += 1
+      continue
+    }
+    if (current === '}') {
+      if (depthCurly === 0 && depthBracket === 0) return cursor
+      depthCurly -= 1
+      cursor += 1
+      continue
+    }
+    if (current === '[') {
+      depthBracket += 1
+      cursor += 1
+      continue
+    }
+    if (current === ']') {
+      depthBracket -= 1
+      cursor += 1
+      continue
+    }
+    if (current === ',' && depthCurly === 0 && depthBracket === 0) {
+      return cursor
+    }
+
+    cursor += 1
+  }
+
+  return rootEnd
+}
+
+function analyzeTopLevelProperties(text: string) {
+  const rootStart = skipWhitespaceAndComments(text, 0)
+  if (text[rootStart] !== '{') {
+    throw new Error('Expected a top-level JSON object')
+  }
+
+  const rootEnd = text.lastIndexOf('}')
+  if (rootEnd < rootStart) {
+    throw new Error('Unterminated top-level JSON object')
+  }
+
+  const properties: TopLevelProperty[] = []
+  let cursor = rootStart + 1
+
+  while (cursor < rootEnd) {
+    cursor = skipWhitespaceAndComments(text, cursor)
+    if (cursor >= rootEnd || text[cursor] === '}') break
+    const start = cursor
+    const parsedKey = parseJsonString(text, cursor)
+    cursor = skipWhitespaceAndComments(text, parsedKey.end)
+    if (text[cursor] !== ':') {
+      throw new Error('Expected ":" after property key')
+    }
+    cursor = skipWhitespaceAndComments(text, cursor + 1)
+    const boundary = scanValueBoundary(text, cursor, rootEnd)
+    const valueEnd = skipWhitespaceAndComments(text, boundary)
+    const hasTrailingComma = text[valueEnd] === ','
+    properties.push({
+      key: parsedKey.value,
+      start,
+      end: hasTrailingComma ? valueEnd + 1 : valueEnd,
+      hasTrailingComma,
+    })
+    cursor = hasTrailingComma ? valueEnd + 1 : valueEnd
+  }
+
+  const indentMatch = text.match(/\n([ \t]+)"/)
+  return {
+    rootStart,
+    rootEnd,
+    properties,
+    indent: indentMatch?.[1] || '  ',
+    newline: text.includes('\r\n') ? '\r\n' : '\n',
+  }
+}
+
+function serializeTopLevelProperty(key: string, value: JsonObject, indent: string, newline: string) {
+  const valueLines = JSON.stringify(value, null, 2).split('\n')
+  if (valueLines.length === 1) {
+    return `${indent}${JSON.stringify(key)}: ${valueLines[0]}`
+  }
+  return [
+    `${indent}${JSON.stringify(key)}: ${valueLines[0]}`,
+    ...valueLines.slice(1).map((line) => `${indent}${line}`),
+  ].join(newline)
+}
+
+export function updateTopLevelObjectPropertyInJsonc(
+  raw: string,
+  key: string,
+  value: JsonObject | null,
+) {
+  const { rootEnd, properties, indent, newline } = analyzeTopLevelProperties(raw)
+  const existing = properties.find((property) => property.key === key)
+
+  if (existing) {
+    if (value === null) {
+      return `${raw.slice(0, existing.start)}${raw.slice(existing.end)}`.replace(/,\s*}/g, `${newline}}`)
+    }
+    const replacement = serializeTopLevelProperty(key, value, indent, newline) + (existing.hasTrailingComma ? ',' : '')
+    return `${raw.slice(0, existing.start)}${replacement}${raw.slice(existing.end)}`
+  }
+
+  if (value === null) return raw
+
+  const serialized = serializeTopLevelProperty(key, value, indent, newline)
+  if (properties.length === 0) {
+    return `${raw.slice(0, rootEnd)}${newline}${serialized}${newline}${raw.slice(rootEnd)}`
+  }
+
+  const last = properties[properties.length - 1]!
+  const separator = last.hasTrailingComma ? '' : ','
+  return `${raw.slice(0, last.end)}${separator}${newline}${serialized}${raw.slice(last.end)}`
+}
+
+export function writeTopLevelObjectPropertyFile(
+  preferredPath: string,
+  key: string,
+  value: JsonObject | null,
+) {
+  const path = resolveExistingJsonConfigPath(preferredPath)
+  let raw: string
+  try {
+    raw = readTextFileCheckedSync(path).content
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      raw = ''
+    } else {
+      throw error
+    }
+  }
+
+  if (!raw.trim()) {
+    if (value === null) return path
+    writeJsonFile(path, { [key]: value })
+    return path
+  }
+
+  const next = updateTopLevelObjectPropertyInJsonc(raw, key, value)
+  writeFileAtomic(path, next.endsWith('\n') ? next : `${next}\n`)
+  return path
+}

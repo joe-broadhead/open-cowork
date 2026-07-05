@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { channelWebhookErrorCode } from "@open-cowork/gateway-channel";
 import { resolveHttpClientSource } from "@open-cowork/shared";
 
 import { renderStandaloneGatewayDashboard, renderStandaloneGatewayMetrics } from "./dashboard.js";
-import { runStandaloneGatewayDoctor } from "./doctor.js";
+import { runStandaloneGatewayDoctor, type StandaloneGatewayDoctorReport } from "./doctor.js";
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
 import type { StandaloneProviderRegistry } from "./provider-registry.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
@@ -65,10 +66,29 @@ class WebhookRateLimiter {
     const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 };
     this.records.set(key, record);
     if (this.records.size > maxWebhookRateRecords) this.prune(nowMs);
+    // Evict by relevance, not insertion order (audit P3-11): prefer dropping a record that is NOT
+    // currently blocking, and among equals the one expiring soonest. FIFO-by-insertion could evict
+    // an early-inserted hot key that is still BLOCKING — resetting an attacker's block — while idle
+    // keys persisted.
     while (this.records.size > maxWebhookRateRecords) {
-      const oldest = this.records.keys().next().value;
-      if (!oldest) break;
-      this.records.delete(oldest);
+      let evictKey: string | null = null;
+      let evictBlocking = true;
+      let evictExpiry = Infinity;
+      for (const [candidateKey, candidate] of this.records) {
+        const blocking = candidate.blockedUntil > nowMs;
+        const expiry = Math.max(candidate.resetAt, candidate.blockedUntil);
+        if (
+          evictKey === null
+          || (!blocking && evictBlocking)
+          || (blocking === evictBlocking && expiry < evictExpiry)
+        ) {
+          evictKey = candidateKey;
+          evictBlocking = blocking;
+          evictExpiry = expiry;
+        }
+      }
+      if (!evictKey) break;
+      this.records.delete(evictKey);
     }
     return record;
   }
@@ -93,8 +113,12 @@ export function createStandaloneGatewayServer(input: {
   providers: StandaloneProviderRegistry;
 }): StandaloneGatewayServer {
   const webhookLimiter = new WebhookRateLimiter();
+  // Cache the readiness doctor behind a short TTL with single-flight (audit P1-G3): /ready is
+  // unauthenticated and an anonymous caller could hammer it into repeated OpenCode round-trips +
+  // identity scans. Bounds the real work to once per window regardless of probe rate.
+  const cachedDoctor = createCachedDoctor(() => runStandaloneGatewayDoctor(input), READY_DOCTOR_CACHE_MS);
   const server = createServer((req, res) => {
-    void handleRequest(input, req, res, webhookLimiter).catch((error) => {
+    void handleRequest(input, req, res, webhookLimiter, cachedDoctor).catch((error) => {
       const responseError = publicErrorResponse(error);
       if (responseError.statusCode >= 500) logInternalError(error);
       writeJson(res, responseError.statusCode, { ok: false, error: responseError.message }, responseError.retryAfterMs ? {
@@ -102,6 +126,12 @@ export function createStandaloneGatewayServer(input: {
       } : {});
     });
   });
+  // Slowloris + connection-exhaustion guards (the body reader caps bytes, not time),
+  // mirroring apps/gateway. This single daemon is internet-facing in webhook mode.
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 10_000;
+  server.maxConnections = 1_024;
   return {
     url() {
       const address = server.address();
@@ -124,19 +154,41 @@ export function createStandaloneGatewayServer(input: {
   };
 }
 
+const READY_DOCTOR_CACHE_MS = 2_000;
+
+// Short-TTL, single-flight cache around the readiness doctor. Concurrent probes within the window
+// share one in-flight run, and the result is reused until it expires, so /ready can't be turned into
+// a load amplifier (each run does an OpenCode round-trip + a DB readiness check).
+export function createCachedDoctor(
+  run: () => Promise<StandaloneGatewayDoctorReport>,
+  ttlMs: number,
+  now: () => number = () => Date.now(),
+): () => Promise<StandaloneGatewayDoctorReport> {
+  let cached: { at: number; report: StandaloneGatewayDoctorReport } | null = null;
+  let inflight: Promise<StandaloneGatewayDoctorReport> | null = null;
+  return () => {
+    if (cached && now() - cached.at < ttlMs) return Promise.resolve(cached.report);
+    if (inflight) return inflight;
+    inflight = run()
+      .then((report) => { cached = { at: now(), report }; return report; })
+      .finally(() => { inflight = null; });
+    return inflight;
+  };
+}
+
 async function handleRequest(input: {
   config: StandaloneGatewayConfig;
   repository: StandaloneGatewayRepository;
   opencode: StandaloneOpenCodeAdapter;
   providers: StandaloneProviderRegistry;
-}, req: IncomingMessage, res: ServerResponse, webhookLimiter: WebhookRateLimiter): Promise<void> {
+}, req: IncomingMessage, res: ServerResponse, webhookLimiter: WebhookRateLimiter, cachedDoctor: () => Promise<StandaloneGatewayDoctorReport>): Promise<void> {
   const url = new URL(req.url || "/", "http://localhost");
   if (req.method === "GET" && url.pathname === "/health") {
     writeJson(res, 200, { ok: true, productMode: "standalone" });
     return;
   }
   if (req.method === "GET" && url.pathname === "/ready") {
-    const doctor = await runStandaloneGatewayDoctor(input);
+    const doctor = await cachedDoctor();
     writeJson(res, doctor.ok ? 200 : 503, isAdminRequest(input.config, req) ? doctor : { ok: doctor.ok });
     return;
   }
@@ -293,6 +345,10 @@ function isStandaloneHttpError(error: unknown): error is StandaloneHttpError {
 }
 
 function isWebhookAuthFailure(error: unknown): boolean {
+  // Prefer the provider's stable error code (audit G4); only fall back to the message-keyword
+  // heuristic when the throw site has not been migrated to a typed ChannelWebhookError.
+  const code = channelWebhookErrorCode(error);
+  if (code) return code === "auth";
   const message = error instanceof Error ? error.message : String(error);
   return /signature|secret|authorization|authorized|token|timestamp|replay/i.test(message);
 }

@@ -1,26 +1,13 @@
+import { chooseTaskTitle, extractAgentName, isPlaceholderTaskTitle, normalizeAgentName, toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
+import { touchSessionRecord, updateSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { normalizeSessionInfo, normalizeTodoItems } from '@open-cowork/runtime-host'
+import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString, extractRuntimeErrorMessage, normalizePermissionEvent, readRuntimeSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { trackPermission } from './permission-tracker.ts'
 import { log } from './logger.ts'
-import {
-  normalizeSessionInfo,
-  normalizeTodoItems,
-} from './opencode-adapter.ts'
-import {
-  asRecord,
-  readRecordArray,
-  readRecordValue,
-  readString,
-} from './normalizer-utils.ts'
-import {
-  extractRuntimeErrorMessage,
-  normalizePermissionEvent,
-  readRuntimeSessionId,
-} from './runtime-event-normalizers.ts'
-import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dropSessionFromDispatcherQueues, publishNotification } from './session-event-dispatcher.ts'
-import { shortSessionId } from './log-sanitizer.ts'
-import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
-import { sessionEngine } from './session-engine.ts'
+import { dropSessionFromDispatcherQueues, publishNotification } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {
   handleWorkflowSessionError,
@@ -41,13 +28,6 @@ import {
   updateTaskRun,
 } from './event-task-state.ts'
 import { emitTaskRun } from './event-task-run-dispatch.ts'
-import {
-  chooseTaskTitle,
-  extractAgentName,
-  isPlaceholderTaskTitle,
-  normalizeAgentName,
-  toIsoTimestamp,
-} from './task-run-utils.ts'
 import type { PermissionRequest } from '@open-cowork/shared'
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
@@ -251,6 +231,35 @@ export function handleRuntimeSideEffectEvent(input: {
       if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
         win.webContents.send('permission:request', approval)
       }
+      return true
+    }
+
+    case 'permission.replied': {
+      // The authoritative resolution event for a permission. When a request is
+      // answered out-of-band (another client, an auto-approve rule, the SDK
+      // itself) this is the only signal that arrives — without it the desktop
+      // approval card goes stale. Mirror the `question.replied` handler:
+      // clear the pending approval and reconcile the session back to idle.
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
+      const rootSessionId = resolveRootSession(actualSessionId)
+      const requestId = readString(readRecordValue(properties, 'requestID'))
+      if (!rootSessionId || !requestId) return true
+
+      dispatchRuntimeEvent(win, {
+        type: 'approval_resolved',
+        sessionId: rootSessionId,
+        data: {
+          type: 'approval_resolved',
+          id: requestId,
+        },
+      })
+      startSessionStatusReconciliation(rootSessionId, {
+        getMainWindow,
+        onIdle: (reconciledWin: BrowserWindow | null, reconciledSessionId: string) => {
+          if (!reconciledWin || reconciledWin.isDestroyed()) return
+          dispatchSyntheticIdle(reconciledWin, reconciledSessionId, dispatchRuntimeEvent)
+        },
+      })
       return true
     }
 
@@ -504,20 +513,17 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
-    case 'session.error':
-    case 'session.failure': {
+    case 'session.error': {
       const actualSessionId = readRuntimeSessionId(properties)
       const rootSessionId = resolveRootSession(actualSessionId)
-      const error = asRecord(readRecordValue(properties, 'error'))
-      const failure = asRecord(readRecordValue(properties, 'failure'))
-      const errorPayload = Object.keys(error).length > 0 ? error : failure
+      const errorPayload = asRecord(readRecordValue(properties, 'error'))
       if (!rootSessionId) return true
 
       forgetSubmittedPrompt(rootSessionId)
       touchSessionRecord(rootSessionId)
       stopSessionStatusReconciliation(rootSessionId)
       const message = extractRuntimeErrorMessage(properties, errorPayload)
-      log('error', `Session ${type === 'session.failure' ? 'failure' : 'error'}: ${message}`)
+      log('error', `Session error: ${message}`)
 
       const taskRunId = actualSessionId && actualSessionId !== rootSessionId
         ? (getTaskRunIdForChild(actualSessionId)

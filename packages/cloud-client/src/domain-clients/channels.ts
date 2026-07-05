@@ -199,6 +199,7 @@ export type CloudChannelsClient = {
     channelBindingIds?: readonly string[]
     onDelivery: (delivery: ChannelDeliveryRecord) => void
     onError?: (error: unknown) => void
+    onClose?: () => void
   }): CloudTransportSubscription
 }
 
@@ -369,6 +370,7 @@ export function createCloudChannelsClient(context: CloudChannelsClientContext): 
       return subscribeCloudEvents(context, url, {
         onEvent,
         onError: input.onError,
+        onClose: input.onClose,
       })
     },
   }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { sanitizeForExport } from '@open-cowork/shared'
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -12,8 +13,6 @@ import {
   type HeadlessHostRequest,
   type HeadlessTopology,
 } from '../apps/desktop/src/main/headless-host.ts'
-import { sanitizeForExport } from '../apps/desktop/src/main/log-sanitizer.ts'
-
 const MODES = new Set<HeadlessHostMode>(['check', 'status', 'doctor', 'start', 'stop'])
 const TOPOLOGIES = new Set<HeadlessTopology>(['loopback', 'lan', 'remote', 'tunnel'])
 

@@ -44,7 +44,11 @@ export function Card(props: CardProps) {
   const content = (
     <>
       {tile ? (
-        <span className="ui-card__tile" aria-label={typeof tileLabel === 'string' ? tileLabel : undefined}>
+        <span
+          className="ui-card__tile"
+          role={typeof tileLabel === 'string' ? 'img' : undefined}
+          aria-label={typeof tileLabel === 'string' ? tileLabel : undefined}
+        >
           {tile}
         </span>
       ) : null}

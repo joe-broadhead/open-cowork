@@ -73,13 +73,16 @@ async function shoot(page: Page, outputDir: string, name: string) {
 
 async function gotoHome(page: Page) {
   await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("What should your team tackle today?")', { timeout: 30_000 })
+  // Home greeting is "Good {morning|afternoon|evening}." — match the stable lead word.
+  await page.waitForSelector('h1:has-text("Good")', { timeout: 30_000 })
 }
 
 async function gotoAgents(page: Page) {
   await page.getByRole('button', { name: 'Team', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("Agents")', { timeout: 30_000 })
-  await page.getByText('Built-in agents', { exact: true }).waitFor({ timeout: 10_000 })
+  // Studio copy: the Team page header is "Coworkers" and built-ins render
+  // under the "Built-in coworkers" section label.
+  await page.waitForSelector('h1:has-text("Coworkers")', { timeout: 30_000 })
+  await page.getByText('Built-in coworkers', { exact: true }).waitFor({ timeout: 10_000 })
 }
 
 async function gotoCapabilities(page: Page) {
@@ -89,7 +92,7 @@ async function gotoCapabilities(page: Page) {
 
 async function gotoWorkflows(page: Page) {
   await page.getByRole('button', { name: 'Playbooks', exact: true }).first().click()
-  await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor({ timeout: 30_000 })
+  await page.getByRole('heading', { name: 'Playbooks', exact: true }).waitFor({ timeout: 30_000 })
 }
 
 async function captureSettingsTabs(page: Page, outputDir: string) {
@@ -101,23 +104,28 @@ async function captureSettingsTabs(page: Page, outputDir: string) {
   // Each settings tab button renders the label + a description on the
   // next line, so the accessible name is "Appearance Theme, color
   // scheme, and fonts". Match the leading label rather than exact-name.
+  // Studio copy renamed "Models" → "Model" and "Workflows" → "Automations";
+  // the historical asset IDs stay stable so docs references don't break.
   const tabs: Array<{ pattern: RegExp; id: string }> = [
     { pattern: /^Appearance\b/, id: 'settings-appearance' },
-    { pattern: /^Models\b/, id: 'settings-models' },
+    { pattern: /^Model\b/, id: 'settings-models' },
     { pattern: /^Permissions\b/, id: 'settings-permissions' },
-    { pattern: /^Workflows\b/, id: 'settings-workflows' },
+    { pattern: /^Automations\b/, id: 'settings-workflows' },
     { pattern: /^Storage\b/, id: 'settings-storage' },
   ]
 
   for (const tab of tabs) {
-    await page.locator('aside').getByRole('button', { name: tab.pattern }).first().click()
+    await page.getByRole('button', { name: tab.pattern }).first().click()
     await page.waitForTimeout(200)
     await shoot(page, outputDir, tab.id)
   }
 
-  // SettingsPanel exposes a "Done" button that calls onClose — clicking
-  // it collapses the sidebar back to the normal nav width.
-  await page.locator('aside').getByRole('button', { name: /^Done$/ }).first().click().catch(() => undefined)
+  // Settings now renders as a modal Dialog; close it via the Dialog's
+  // "Close dialog" icon button (Escape as a fallback) so the modal does
+  // not intercept pointer events for every capture that follows.
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).first().click().catch(() => undefined)
+  await page.keyboard.press('Escape').catch(() => undefined)
+  await page.locator('[role="dialog"]').first().waitFor({ state: 'detached', timeout: 5_000 }).catch(() => undefined)
   await page.waitForTimeout(200)
 }
 
@@ -125,26 +133,27 @@ async function captureCapabilitiesViews(page: Page, outputDir: string) {
   await gotoCapabilities(page)
   await shoot(page, outputDir, 'capabilities-tools')
 
-  // Switch to Skills tab. The tab strip is a row of buttons inside the
-  // page header, exact-name match avoids sidebar collisions.
+  // Switch to the Abilities (skills) view. The tab strip is a SegmentedControl
+  // (role=radiogroup with role=radio options) in the page header; Studio copy
+  // renamed the tabs to "Tools & Skills" / "Connections" / "Abilities".
   const mainArea = page.locator('main')
-  await mainArea.getByRole('button', { name: 'Skills', exact: true }).first().click()
+  await mainArea.getByRole('radio', { name: 'Abilities', exact: true }).first().click()
   await page.waitForTimeout(200)
   await shoot(page, outputDir, 'capabilities-skills')
 
-  // Open the Add skill form
-  await mainArea.getByRole('button', { name: 'Add skill', exact: true }).click()
+  // Open the Add ability form
+  await mainArea.getByRole('button', { name: 'Add ability', exact: true }).click()
   await page.waitForTimeout(400)
   await shoot(page, outputDir, 'capabilities-add-skill')
 
-  // Cancel back to Skills tab
+  // Cancel back to the Abilities view
   await mainArea.getByRole('button', { name: /Cancel/i }).first().click()
   await page.waitForTimeout(200)
 
-  // Switch back to Tools and open Add tool
-  await mainArea.getByRole('button', { name: 'Tools', exact: true }).first().click()
+  // Switch to Connections (tools) and open Add connection
+  await mainArea.getByRole('radio', { name: 'Connections', exact: true }).first().click()
   await page.waitForTimeout(150)
-  await mainArea.getByRole('button', { name: 'Add tool', exact: true }).click()
+  await mainArea.getByRole('button', { name: 'Add connection', exact: true }).click()
   await page.waitForTimeout(400)
   await shoot(page, outputDir, 'capabilities-add-tool')
 
@@ -172,40 +181,42 @@ async function captureAgentsViews(page: Page, outputDir: string) {
   await gotoAgents(page)
   await shoot(page, outputDir, 'agents')
 
-  // Open the template picker via "New agent"
-  await page.getByRole('button', { name: /New agent/ }).click()
+  // Open the template picker via "New coworker"
+  await page.getByRole('button', { name: /New coworker/ }).click()
   // The picker header is unique copy that won't appear elsewhere on the page.
-  await page.getByRole('heading', { name: 'Start a new agent', exact: true }).waitFor({ timeout: 10_000 })
+  await page.getByRole('heading', { name: 'Start a new coworker', exact: true }).waitFor({ timeout: 10_000 })
   await shoot(page, outputDir, 'agents-template-picker')
 
   // Pick "Start from blank" — that's the last template in the picker
   // and unconditionally routes into the AgentBuilderPage with a blank
   // seed. No heuristics, no card-text matching.
   await page.getByRole('button', { name: /Start from blank/i }).click()
-  // AgentBuilderPage has a unique "Create agent" save button at the
-  // top-right that doesn't appear on the agents list or anywhere else.
-  await page.getByRole('button', { name: 'Create agent', exact: true }).waitFor({ timeout: 10_000 })
+  // The builder's save affordance for a not-yet-created coworker is the
+  // unique "Hire coworker" button that doesn't appear on the grid.
+  await page.getByRole('button', { name: 'Hire coworker', exact: true }).waitFor({ timeout: 10_000 })
   await shoot(page, outputDir, 'agents-builder')
 
-  // Exit the builder. Cancel button rejoins the agents grid.
-  await page.locator('main').getByRole('button', { name: 'Cancel', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("Agents")', { timeout: 10_000 })
+  // Exit the builder via the chevron-left "Team" back button (scoped to
+  // main so it can't hit the sidebar's Team nav item). A blank draft counts
+  // as dirty (template seeding replaces the draft reference), so confirm
+  // the "Discard unsaved changes?" dialog when it appears.
+  await page.locator('main').getByRole('button', { name: 'Team', exact: true }).first().click()
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click({ timeout: 3_000 }).catch(() => undefined)
+  await page.waitForSelector('h1:has-text("Coworkers")', { timeout: 10_000 })
 
-  // Click a real built-in agent card to capture the builder in
-  // read/edit mode (with skills, tools, and instructions populated).
+  // Click a real built-in agent card to capture the workbench in
+  // read-only mode (with capabilities and instructions populated).
   // Card click target = `<button class="w-full text-start p-4 ...">`.
   const cards = page.locator('main button.text-start.p-4')
   if (await cards.count()) {
     await cards.first().click()
-    // Built-in agents render the picker in read-only mode; the back
-    // affordance is the chevron-left "Agents" link, but the page also
-    // shows the Skills/Tools/Instructions/Inference tab strip — wait
-    // on a tab that won't collide with the agents grid.
-    await page.locator('main').getByRole('button', { name: 'Inference', exact: true }).waitFor({ timeout: 10_000 })
+    // Built-in coworkers render the workbench read-only; wait on the
+    // "Model & behavior" tab, which never appears on the Coworkers grid.
+    await page.locator('main').getByRole('button', { name: 'Model & behavior', exact: true }).waitFor({ timeout: 10_000 })
     await shoot(page, outputDir, 'agents-builder-detail')
-    // Exit via the chevron back link
-    await page.locator('main').getByRole('button', { name: /^Agents$/ }).first().click().catch(() => undefined)
-    await page.waitForSelector('h1:has-text("Agents")', { timeout: 10_000 })
+    // Exit via the chevron-left "Team" back link
+    await page.locator('main').getByRole('button', { name: 'Team', exact: true }).first().click().catch(() => undefined)
+    await page.waitForSelector('h1:has-text("Coworkers")', { timeout: 10_000 })
   }
 }
 
@@ -227,7 +238,7 @@ async function captureChatViews(page: Page, outputDir: string) {
   // on API keys or capture a missing-credential error banner.
   await page.getByRole('button', { name: 'New Chat', exact: true }).click()
   await page.getByRole('button', { name: /^Blank chat\b/ }).click()
-  await page.waitForSelector('h1:has-text("What should your team tackle today?")', {
+  await page.waitForSelector('h1:has-text("Good")', {
     state: 'detached',
     timeout: 15_000,
   })

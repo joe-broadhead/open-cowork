@@ -11,7 +11,7 @@ import {
   laneElapsedMs,
   selectAggregateTiming,
   summarizeStatus,
-} from '../apps/desktop/src/renderer/components/chat/agent-run-utils.ts'
+} from '../packages/app/src/components/chat/agent-run-utils.ts'
 
 function makeTask(overrides: Partial<TaskRun> = {}): TaskRun {
   return {

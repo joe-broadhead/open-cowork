@@ -1,7 +1,4 @@
-import {
-  chooseTaskTitle,
-  isPlaceholderTaskTitle,
-} from './task-run-utils.ts'
+import { chooseTaskTitle, isPlaceholderTaskTitle } from '@open-cowork/runtime-host/task-run-utils'
 import {
   applyTaskTimingTransition,
   isTerminalTaskStatus,
@@ -13,6 +10,14 @@ import {
   shiftQueueValue,
   spliceQueueValue,
 } from './queue-map.ts'
+
+// Bounds applied by sweepStaleTaskState. taskRuns and pendingSubmittedPromptBySession
+// have no per-entry expiry — they're only cleared when their whole session is removed
+// (taskRuns) or when an echo arrives (prompts). A long-lived parent session that spawns
+// many sub-tasks, or aborted prompts whose echo never lands, would grow them without
+// limit, so the periodic sweep caps both.
+const MAX_RETAINED_TASK_RUNS = 2_000
+const MAX_PENDING_PROMPTS = 2_000
 
 export type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -119,7 +124,7 @@ export class SessionTaskStateStore {
         && (taskRun.status === 'queued' || taskRun.status === 'running')
     })
 
-    return candidates.length === 1 ? cloneTaskRunMeta(candidates[0]) : null
+    return candidates.length === 1 ? cloneTaskRunMeta(candidates[0]!) : null
   }
 
   bindTaskRunToChild(taskRunId: string, childSessionId: string) {
@@ -371,6 +376,18 @@ export class SessionTaskStateStore {
       }
     }
 
+    // Bound terminal task-run accumulation: evict the oldest completed/errored
+    // runs once over the cap, never queued/running ones (those are live work).
+    this.pruneTerminalTaskRuns(MAX_RETAINED_TASK_RUNS)
+
+    // A submitted prompt is normally cleared when its echo arrives; an aborted or
+    // never-echoed prompt would otherwise linger forever. Cap the map by oldest.
+    while (this.pendingSubmittedPromptBySession.size > MAX_PENDING_PROMPTS) {
+      const oldest = this.pendingSubmittedPromptBySession.keys().next().value
+      if (!oldest) break
+      this.pendingSubmittedPromptBySession.delete(oldest)
+    }
+
     if (!messageRoles) return
 
     while (messageRoles.size > 2000) {
@@ -496,6 +513,26 @@ export class SessionTaskStateStore {
       }
     }
     this.removeTaskRunAliasesForTaskIds(deletedTaskRunIds)
+  }
+
+  private pruneTerminalTaskRuns(max: number) {
+    if (this.taskRuns.size <= max) return
+    const evicted = new Set<string>()
+    // Map iteration is insertion order, so the oldest terminal runs are visited first.
+    for (const [taskRunId, taskRun] of this.taskRuns.entries()) {
+      if (this.taskRuns.size - evicted.size <= max) break
+      if (!isTerminalTaskStatus(taskRun.status)) continue
+      evicted.add(taskRunId)
+    }
+    if (evicted.size === 0) return
+    for (const taskRunId of evicted) {
+      this.taskRuns.delete(taskRunId)
+      this.removePendingTaskRun(taskRunId)
+    }
+    for (const [childSessionId, taskRunId] of this.childSessionToTaskRunId.entries()) {
+      if (evicted.has(taskRunId)) this.childSessionToTaskRunId.delete(childSessionId)
+    }
+    this.removeTaskRunAliasesForTaskIds(evicted)
   }
 
   private removeTaskRunAliasesForTaskIds(taskRunIds: Set<string>) {

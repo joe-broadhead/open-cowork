@@ -10,7 +10,7 @@ behavior stay aligned:
 ```bash
 pnpm lint
 pnpm perf:check
-pnpm test:cloud-web
+pnpm test:renderer
 pnpm cloud:dev
 pnpm cloud:build
 pnpm cloud:start
@@ -31,10 +31,14 @@ Release-sensitive scripts should stay deterministic, avoid network calls
 unless the caller clearly expects them, and produce actionable errors for
 CI logs.
 
-`pnpm cloud:dev` builds the Cloud Web React client, then starts the TypeScript source entrypoint for local iteration.
-`pnpm cloud:build` first builds the Cloud Web package, including the Vite
-React client asset, then emits the production cloud bundle and copies the
-client asset under `apps/desktop/dist/cloud/assets`. `pnpm cloud:start` starts
+`pnpm cloud:dev` starts the TypeScript source entrypoint for local iteration. It
+serves the unified renderer at `GET /` from `packages/app/dist-browser`; build
+that first with `pnpm --filter @open-cowork/app build:browser`.
+`pnpm cloud:build` builds the unified renderer's browser bundle
+(`pnpm --filter @open-cowork/app build:browser` → `packages/app/dist-browser`),
+copies it next to the cloud entry under
+`apps/desktop/dist/cloud/browser-renderer/`, then emits the production cloud
+bundle. `pnpm cloud:start` starts
 the role selected by `OPEN_COWORK_CLOUD_ROLE` from that bundle. Use
 `docker-compose.cloud.yml` for local all-in-one checks and
 `docker-compose.cloud.split.yml` for web/worker/scheduler topology checks.

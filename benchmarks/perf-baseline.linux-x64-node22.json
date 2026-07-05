@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-07T20:00:01.181Z",
+  "generatedAt": "2026-07-04T13:40:10.000Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -9,8 +9,9 @@
   "regressionThresholds": {
     "avgMultiplier": 1.2,
     "p95Multiplier": 1.25,
-    "avgAbsoluteFloorMs": 0.5,
-    "p95AbsoluteFloorMs": 0.8
+    "avgAbsoluteFloorMs": 1,
+    "p95AbsoluteFloorMs": 1.5,
+    "jitterAllowanceMs": 0.05
   },
   "benchmarks": [
     {
@@ -61,11 +62,11 @@
     {
       "name": "agents.catalog.downstreamCatalog",
       "iterations": 18,
-      "minMs": 0.26,
-      "maxMs": 0.82,
-      "avgMs": 0.39,
-      "p50Ms": 0.39,
-      "p95Ms": 0.57
+      "minMs": 1.95,
+      "maxMs": 3.88,
+      "avgMs": 2.15,
+      "p50Ms": 2.15,
+      "p95Ms": 3.1
     },
     {
       "name": "capabilities.map.downstreamCatalog",

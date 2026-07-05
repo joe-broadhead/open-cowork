@@ -548,6 +548,29 @@ export function isCoordinationWatchEvent(value: unknown): value is CoordinationW
   return typeof value === 'string' && COORDINATION_WATCH_EVENTS.includes(value as CoordinationWatchEventType)
 }
 
+// Lenient read-side coercers shared by the SQLite and Postgres CoordinationWatch row
+// mappers so a malformed or legacy-shaped persisted row degrades identically on both
+// backends. Writes are validated by the stricter normalizers in each store; these only
+// guard already-stored data and must never throw.
+export function coerceCoordinationWatchChannel(value: unknown): CoordinationWatchChannel {
+  const record = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+  return {
+    provider: typeof record.provider === 'string' ? record.provider : '',
+    agentId: typeof record.agentId === 'string' ? record.agentId : '',
+    channelBindingId: typeof record.channelBindingId === 'string' ? record.channelBindingId : '',
+    sessionBindingId: typeof record.sessionBindingId === 'string' ? record.sessionBindingId : null,
+    target: record.target && typeof record.target === 'object' && !Array.isArray(record.target)
+      ? record.target as Record<string, unknown>
+      : {},
+  }
+}
+
+export function coerceCoordinationWatchEvents(value: unknown): CoordinationWatchEventType[] {
+  return Array.isArray(value) ? value.filter(isCoordinationWatchEvent) : []
+}
+
 export function isCoordinationWatchStatus(value: unknown): value is CoordinationWatchStatus {
   return typeof value === 'string' && COORDINATION_WATCH_STATUSES.includes(value as CoordinationWatchStatus)
 }

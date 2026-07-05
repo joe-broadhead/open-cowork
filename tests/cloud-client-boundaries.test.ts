@@ -23,7 +23,7 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     publishConfig?: unknown
   }
   const clientSource = clientSources(join(root, 'packages/cloud-client/src')).join('\n')
-  const desktopTransport = readFileSync(join(root, 'apps/desktop/src/main/cloud/transport-adapter.ts'), 'utf8')
+  const desktopTransport = readFileSync(join(root, 'packages/cloud-server/src/transport-adapter.ts'), 'utf8')
   const readme = readFileSync(join(root, 'packages/cloud-client/README.md'), 'utf8')
   const docs = readFileSync(join(root, 'docs/cloud-client.md'), 'utf8')
 
@@ -54,7 +54,10 @@ test('cloud client package boundary and desktop transport compatibility re-expor
   assert.equal(sharedPackageJson.name, '@open-cowork/shared')
   assert.equal(sharedPackageJson.private, true)
   assert.equal(sharedPackageJson.publishConfig, undefined)
-  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './package.json'])
+  // '.' is the browser-safe barrel; './node' is the Node-only runtime substrate
+  // (node:fs/node:crypto helpers) shared by the Electron main process and the cloud
+  // server — it must never be imported from a browser bundle.
+  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './node', './package.json'])
   assert.deepEqual(sharedPackageJson.files, ['dist'])
   assert.equal(sharedPackageJson.sideEffects, false)
   for (const dependencyName of Object.keys(packageJson.dependencies || {})) {
@@ -63,7 +66,7 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     assert.equal(dependencyPackage.private, true, `${dependencyName} must remain a private workspace package until standalone SDK publication is explicit`)
   }
   assert.doesNotMatch(clientSource, /apps\/desktop|control-plane-store|session-service|@opencode-ai\/sdk/)
-  assert.equal(desktopTransport.trim(), "export * from '../../../../../packages/cloud-client/src/index.ts'")
+  assert.equal(desktopTransport.trim(), "export * from '@open-cowork/cloud-client'")
   for (const document of [readme, docs]) {
     assert.match(document, /supported typed .*client|workspace\/source\s+package/i)
     assert.match(document, /not an independently versioned public npm SDK|standalone SDK publishing/i)
@@ -82,9 +85,8 @@ test('first-party client surfaces stay on public cloud-client/shared boundaries'
   const root = process.cwd()
   const clientRoots = [
     'apps/desktop/src/preload',
-    'apps/desktop/src/renderer',
+    'packages/app/src',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [
@@ -115,8 +117,8 @@ test('first-party client surfaces stay on public cloud-client/shared boundaries'
 
 test('cloud API token policy is extracted from the monolithic session service', () => {
   const root = process.cwd()
-  const policySource = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/api-token-policy.ts'), 'utf8')
-  const sessionService = readFileSync(join(root, 'apps/desktop/src/main/cloud/session-service.ts'), 'utf8')
+  const policySource = readFileSync(join(root, 'packages/cloud-server/src/services/api-token-policy.ts'), 'utf8')
+  const sessionService = readFileSync(join(root, 'packages/cloud-server/src/session-service.ts'), 'utf8')
 
   assert.match(policySource, /export function normalizeApiTokenScopes/)
   assert.match(policySource, /export function normalizeApiTokenExpiresAt/)
@@ -176,11 +178,11 @@ test('cloud client adapter delegates concrete operations to domain clients', () 
 
 test('cloud session service delegates channel behavior to the extracted domain service', () => {
   const root = process.cwd()
-  const sessionService = readFileSync(join(root, 'apps/desktop/src/main/cloud/session-service.ts'), 'utf8')
-  const channelDomainService = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-domain-service.ts'), 'utf8')
-  const channelContext = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-domain-context.ts'), 'utf8')
-  const channelSessionActions = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-session-actions.ts'), 'utf8')
-  const channelInteractionActions = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-interaction-actions.ts'), 'utf8')
+  const sessionService = readFileSync(join(root, 'packages/cloud-server/src/session-service.ts'), 'utf8')
+  const channelDomainService = readFileSync(join(root, 'packages/cloud-server/src/services/channel-domain-service.ts'), 'utf8')
+  const channelContext = readFileSync(join(root, 'packages/cloud-server/src/services/channel-domain-context.ts'), 'utf8')
+  const channelSessionActions = readFileSync(join(root, 'packages/cloud-server/src/services/channel-session-actions.ts'), 'utf8')
+  const channelInteractionActions = readFileSync(join(root, 'packages/cloud-server/src/services/channel-interaction-actions.ts'), 'utf8')
 
   assert.match(channelDomainService, /export class CloudChannelDomainService/)
   assert.match(channelDomainService, /return sessionActions\.bindChannelSession\(this\.options, principal, input\)/)

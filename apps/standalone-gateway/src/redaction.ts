@@ -1,3 +1,5 @@
+import { sanitizeLogMessage } from "@open-cowork/shared";
+
 const SECRET_KEY_PATTERN = /token|secret|password|credential|authorization|api[_-]?key/i;
 
 const SECRET_TEXT_PATTERNS: Array<{
@@ -31,10 +33,14 @@ const SECRET_TEXT_PATTERNS: Array<{
 ];
 
 export function redactSecretText(value: string, maxLength = 2000): string {
-  return SECRET_TEXT_PATTERNS.reduce((text, entry) => {
+  const structured = SECRET_TEXT_PATTERNS.reduce((text, entry) => {
     if (typeof entry.replacement === "string") return text.replace(entry.pattern, entry.replacement);
     return text.replace(entry.pattern, entry.replacement);
-  }, value).slice(0, maxLength);
+  }, value);
+  // Layer the shared sanitizer's comprehensive token/secret patterns — Google (ya29./AIza),
+  // JWTs, AWS AKIA, GitHub ghp_/github_pat_, HuggingFace hf_, Databricks dapi, etc. — that this
+  // internet-facing gateway's local list was missing (its "ghp-" arm did not even match ghp_).
+  return sanitizeLogMessage(structured).slice(0, maxLength);
 }
 
 export function redactSecretRecord(input: Record<string, unknown>): Record<string, unknown> {

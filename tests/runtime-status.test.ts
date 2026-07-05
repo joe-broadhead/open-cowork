@@ -1,19 +1,7 @@
+import { getRuntimeStatus, isRuntimeReady, reduceRuntimeStatus, recordRuntimeComponentVerification, recordRuntimeDoctorCheck, recordRuntimeReadinessPhase, resetRuntimeStatus, RuntimeStatusStore, setRuntimeError, setRuntimeReady, type RuntimeStatusState } from '@open-cowork/runtime-host/runtime-status'
+import { verifyRuntimeComponentManifest } from '@open-cowork/runtime-host/runtime-component-manifest'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  getRuntimeStatus,
-  isRuntimeReady,
-  reduceRuntimeStatus,
-  recordRuntimeComponentVerification,
-  recordRuntimeDoctorCheck,
-  recordRuntimeReadinessPhase,
-  resetRuntimeStatus,
-  RuntimeStatusStore,
-  setRuntimeError,
-  setRuntimeReady,
-  type RuntimeStatusState,
-} from '../apps/desktop/src/main/runtime-status.ts'
-import { verifyRuntimeComponentManifest } from '../apps/desktop/src/main/runtime-component-manifest.ts'
 import { RUNTIME_COMPONENT_MANIFEST_FORMAT } from '../packages/shared/src/runtime.ts'
 
 test('runtime status reducer derives phase changes without mutating prior state', () => {

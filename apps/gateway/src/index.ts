@@ -19,15 +19,22 @@ export {
 export {
   createGatewayDaemon,
   createGatewayHttpServer,
+  GatewayWebhookRateLimiter,
   type GatewayDaemon,
   type GatewayHttpServer,
 } from './daemon.js'
 export {
   createGatewayRuntime,
+  createDeliverySubscriber,
+  createDeliveryDispatcher,
   type GatewayRuntime,
+  type DeliverySubscriber,
+  type DeliveryDispatcher,
 } from './gateway-runtime.js'
 export {
   createGatewayMetrics,
+  createLatencyHistogram,
+  observeGatewayDeliveryLatency,
   renderPrometheusMetrics,
   type GatewayMetrics,
 } from './metrics.js'

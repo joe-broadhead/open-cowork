@@ -5,8 +5,8 @@ export const DEFAULT_ACCENT_PRESET_ID = 'azure'
 export const DESIGN_ACCENT_PRESETS = {
   azure: {
     label: 'Azure',
-    accent: '#2f6bf0',
-    accent2: '#5a8cf5',
+    accent: '#8290ff',
+    accent2: '#9aa8ff',
   },
   indigo: {
     label: 'Indigo',
@@ -118,8 +118,17 @@ function accentActionPlanForColors(accent: string, accent2: string | undefined) 
       overlayAlpha: 0.01,
     }
   }
-  if (white.overlayAlpha !== black.overlayAlpha) return white.overlayAlpha < black.overlayAlpha ? white : black
-  return white.score >= black.score ? white : black
+  // Honor the brand ink: the action fill is a solid accent button, so the text
+  // colour should follow the accent's own contrast (white on a dark accent,
+  // black on a light one) rather than whichever colour reaches the WCAG target
+  // with the least overlay. A small overlay then keeps the chosen ink readable
+  // across the gradient, so the result stays accessible while looking on-brand.
+  const preferredForeground = accentForegroundForColor(accent) as '#000000' | '#ffffff'
+  const preferred = preferredForeground === '#ffffff' ? white : black
+  const alternate = preferredForeground === '#ffffff' ? black : white
+  if (preferred.score >= 4.5) return preferred
+  if (alternate.score >= 4.5) return alternate
+  return preferred.score >= alternate.score ? preferred : alternate
 }
 
 export function accentActionForegroundForColors(accent: string, accent2: string | undefined) {
@@ -216,9 +225,9 @@ export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
   red: '#d6587e',
   info: '#6f8cc4',
   accentForeground: '#ffffff',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
-  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.045), transparent 62%)',
+  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.42), 0 12px 30px rgba(0, 0, 0, 0.46)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.5), 0 24px 60px rgba(0, 0, 0, 0.58)',
+  bgImage: 'none',
 }
 
 export const DEFAULT_LIGHT_BRAND_THEME: BrandThemeTokens = {
@@ -245,7 +254,7 @@ export const DEFAULT_LIGHT_BRAND_THEME: BrandThemeTokens = {
   accentForeground: '#ffffff',
   shadowCard: '0 1px 1px rgba(42, 37, 32, 0.08), 0 10px 24px rgba(42, 37, 32, 0.08)',
   shadowElevated: '0 2px 6px rgba(42, 37, 32, 0.10), 0 20px 48px rgba(42, 37, 32, 0.12)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.06), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.04), transparent 62%)',
+  bgImage: 'none',
 }
 
 export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
@@ -539,6 +548,7 @@ function parseHexColor(value: string) {
   const match = value.match(/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)
   if (!match) return null
   const hex = match[1]
+  if (!hex) return null
   const isShort = hex.length === 3 || hex.length === 4
   const pairs = isShort
     ? hex.split('').map((part) => part + part)
@@ -562,9 +572,14 @@ function parseRgbColor(value: string) {
 }
 
 function colorFunctionArgs(value: string, name: string) {
-  const match = value.match(new RegExp(`^${name}a?\\(\\s*([^)]+?)\\s*\\)$`, 'i'))
+  // Bound the input and use a linear pattern: the previous `\s*([^)]+?)\s*` overlapped the
+  // surrounding whitespace with the lazy body, giving catastrophic backtracking on a long run
+  // of spaces (operator branding tokens reach this). `[^)]*` then `\)$` is deterministic; trim
+  // in code. `name` is always a literal ('rgb'/'hsl'), never user input.
+  if (value.length > 256) return null
+  const match = value.match(new RegExp(`^${name}a?\\(([^)]*)\\)$`, 'i'))
   if (!match) return null
-  const body = match[1] || ''
+  const body = (match[1] || '').trim()
   if (body.includes('/')) return null
   return (body.includes(',') ? body.split(',') : body.trim().split(/\s+/))
     .map((part) => part.trim())
@@ -723,7 +738,7 @@ export const DESIGN_TOKENS = {
     '2xs': '14px',
     xs: '16px',
     sm: '18px',
-    md: '21px',
+    md: '20px',
     lg: '24px',
     xl: '26px',
     '2xl': '30px',
@@ -746,17 +761,22 @@ export const DESIGN_TOKENS = {
   tracking: {
     tight: '-0.01em',
     display: '-0.02em',
+    eyebrow: '0.06em',
   },
   radius: {
-    xs: '6px',
-    sm: '8px',
-    md: '10px',
-    lg: '14px',
-    xl: '18px',
+    xs: '5px',
+    sm: '7px',
+    md: '9px',
+    lg: '12px',
+    xl: '16px',
+    '2xl': '16px',
+    '3xl': '22px',
     full: '9999px',
   },
   shadow: {
-    1: '0 1px 1px rgba(0,0,0,.30), 0 2px 4px rgba(0,0,0,.16)',
+    // Resting cards/rows are shadowless — depth comes from the raised hairline.
+    // shadow.card/elevated (floating layers only) come from the live theme.
+    1: 'none',
     card: DEFAULT_DARK_BRAND_THEME.shadowCard,
     elevated: DEFAULT_DARK_BRAND_THEME.shadowElevated,
   },
@@ -764,20 +784,24 @@ export const DESIGN_TOKENS = {
     popover: 'var(--shadow-3)',
   },
   specular: {
-    default: 'inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent)',
-    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 11%, transparent)',
+    default: 'inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent)',
+    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent)',
   },
   glass: {
-    bg: 'color-mix(in srgb, var(--color-elevated) 72%, transparent)',
-    blur: 'blur(22px) saturate(1.5)',
+    bg: 'color-mix(in srgb, var(--color-elevated) 86%, transparent)',
+    blur: 'blur(14px) saturate(1.05)',
     border: 'color-mix(in srgb, var(--color-accent) 24%, transparent)',
   },
+  // Precise operator console: accent emphasis is a crisp 1px ring, not a bloom.
   glow: {
-    accent: '0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 18px color-mix(in srgb, var(--color-accent) 32%, transparent)',
-    soft: '0 0 24px color-mix(in srgb, var(--color-accent) 22%, transparent)',
+    accent: '0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent)',
+    soft: 'none',
   },
   ring: {
-    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 60%, transparent), 0 0 16px color-mix(in srgb, var(--color-accent) 30%, transparent)',
+    // Solid, fully-opaque accent ring. A semi-transparent ring blended to ~2:1
+    // against the surface and failed WCAG 2.2 SC 1.4.11 (needs >=3:1); the solid
+    // accent measures ~3.4-4.7:1 against every surface background.
+    focus: '0 0 0 2px var(--color-accent)',
     selected: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent)',
   },
   ease: {
@@ -786,10 +810,10 @@ export const DESIGN_TOKENS = {
     spring: 'cubic-bezier(0.16, 1, 0.3, 1)',
   },
   duration: {
-    1: '120ms',
-    2: '180ms',
-    3: '240ms',
-    4: '420ms',
+    1: '100ms',
+    2: '140ms',
+    3: '200ms',
+    4: '320ms',
   },
   z: {
     sticky: '10',
@@ -801,6 +825,7 @@ export const DESIGN_TOKENS = {
     tooltip: '90',
   },
   controlHeight: {
+    xs: '24px',
     sm: '28px',
     md: '32px',
     lg: '40px',
@@ -815,9 +840,9 @@ export const DESIGN_TOKENS = {
     taskLaneW: '320px',
   },
   density: {
-    compactGap: '13px',
-    compactPad: '7px',
-    regularGap: '18px',
+    compactGap: '12px',
+    compactPad: '6px',
+    regularGap: '16px',
     regularPad: '10px',
     comfyGap: '24px',
     comfyPad: '14px',
@@ -826,8 +851,8 @@ export const DESIGN_TOKENS = {
     lead: 'var(--color-accent)',
     strategist: 'var(--color-info)',
     builder: 'var(--color-green)',
-    reviewer: 'var(--color-amber)',
-    operator: 'var(--color-red)',
+    reviewer: 'color-mix(in srgb, var(--color-amber) 70%, var(--color-info))',
+    operator: 'color-mix(in srgb, var(--color-red) 80%, var(--color-info))',
     neutral: 'var(--color-text-secondary)',
   },
   lane: {

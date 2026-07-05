@@ -1,20 +1,13 @@
+import { configuredToolLabels } from '@open-cowork/runtime-host/capability-catalog'
+import { getBuiltInAgentOverride } from '@open-cowork/runtime-host/built-in-agent-overrides'
+import { configuredAgentConfiguredToolIds, configuredAgentNativeToolIds, configuredToolAccess, getNativeToolIdsForBuiltInAgent, nativeToolLabels } from '@open-cowork/runtime-host/agent-tool-access'
+import { createConfiguredAgentPrompt } from '@open-cowork/runtime-host/agent-prompts'
 import type { BuiltInAgentDetail } from '@open-cowork/shared'
 
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredToolsFromConfig,
 } from './config-loader.ts'
-import { configuredToolLabels } from './capability-catalog.ts'
-import { createConfiguredAgentPrompt } from './agent-prompts.ts'
-import { getBuiltInAgentOverride } from './built-in-agent-overrides.ts'
-import {
-  configuredAgentConfiguredToolIds,
-  configuredAgentNativeToolIds,
-  configuredToolAccess,
-  getNativeToolIdsForBuiltInAgent,
-  nativeToolLabels,
-} from './agent-tool-access.ts'
-
 function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
   return getConfiguredAgentsFromConfig().map((agent) => ({
     name: agent.name,

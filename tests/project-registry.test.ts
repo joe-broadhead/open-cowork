@@ -1,3 +1,4 @@
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -5,8 +6,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { listRecentProjects } from '../apps/desktop/src/main/project-registry.ts'
-import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
-
 test('listRecentProjects derives Cmd/Ctrl number targets from latest project sessions', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-project-registry-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR

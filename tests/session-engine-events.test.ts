@@ -1,12 +1,6 @@
+import { buildPendingApproval, buildPendingQuestion, buildTaskRunUpdate, normalizeToolStatus } from '@open-cowork/runtime-host/session-engine-events'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-
-import {
-  buildPendingApproval,
-  buildPendingQuestion,
-  buildTaskRunUpdate,
-  normalizeToolStatus,
-} from '../apps/desktop/src/main/session-engine-events.ts'
 
 test('normalizeToolStatus accepts only runtime tool terminal states', () => {
   assert.equal(normalizeToolStatus('running'), 'running')

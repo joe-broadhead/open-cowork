@@ -1,23 +1,11 @@
+import { configureAgentToolBridge, ensureAgentToolBridge, getAgentToolBridgeEnvironment, stopAgentToolBridge } from '@open-cowork/runtime-host/agent-tool-bridge'
+import { deleteAgentFromTool, getAgentFromTool, listAgentsFromTool, previewAgentFromTool, saveAgentFromTool } from '@open-cowork/runtime-host/agent-tool-actions'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  deleteAgentFromTool,
-  getAgentFromTool,
-  listAgentsFromTool,
-  previewAgentFromTool,
-  saveAgentFromTool,
-} from '../apps/desktop/src/main/agent-tool-actions.ts'
-import {
-  configureAgentToolBridge,
-  ensureAgentToolBridge,
-  getAgentToolBridgeEnvironment,
-  stopAgentToolBridge,
-} from '../apps/desktop/src/main/agent-tool-bridge.ts'
-
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-agent-tool-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 }

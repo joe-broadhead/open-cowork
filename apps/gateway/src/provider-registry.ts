@@ -8,6 +8,7 @@ import type {
   ChannelTarget,
   IncomingChannelMessage,
 } from '@open-cowork/gateway-channel'
+import { WebhookProviderNotFoundError } from '@open-cowork/gateway-channel'
 import { CliProvider } from '@open-cowork/gateway-provider-cli'
 import { DiscordProvider } from '@open-cowork/gateway-provider-discord'
 import { EmailProvider } from '@open-cowork/gateway-provider-email'
@@ -92,7 +93,7 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
     },
     async handleWebhook(id, payload, headers, rawBody) {
       const registration = this.get(id)
-      if (!registration) throw new Error(`Unknown gateway provider ${id}.`)
+      if (!registration) throw new WebhookProviderNotFoundError(`Unknown gateway provider ${id}.`)
       if (registration.config.kind === 'telegram') {
         await (registration.provider as TelegramProvider).handleWebhookUpdate(payload, {
           headers,
@@ -132,7 +133,7 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
         await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider, payload))
         return
       }
-      throw new Error(`Gateway provider ${id} does not expose a webhook endpoint.`)
+      throw new WebhookProviderNotFoundError(`Gateway provider ${id} does not expose a webhook endpoint.`)
     },
     async emitFake(id, input) {
       const registration = this.get(id)
@@ -211,6 +212,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
     return new EmailProvider({
       providerId: channelProviderConfigId(config),
       from: requiredSetting(config, 'from'),
+      subject: settingString(config, 'subject') || undefined,
       inboundSecret: requiredCredential(config, 'inboundSecret'),
       maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
       smtp: {

@@ -194,11 +194,10 @@ test('managed worker phase 5 deployment artifacts exist and cover operations', (
 
 test('managed worker client and route boundaries do not import OpenCode SDK', () => {
   const forbiddenRoots = [
-    'apps/desktop/src/renderer',
-    'apps/desktop/src/main/cloud/http-routes',
-    'apps/desktop/src/main/cloud/control-plane-domains',
+    'packages/app/src',
+    'packages/cloud-server/src/http-routes',
+    'packages/cloud-server/src/control-plane-domains',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const sdkImportPattern = /@opencode-ai\/sdk|opencode-ai/

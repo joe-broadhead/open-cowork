@@ -1,11 +1,10 @@
+import { getMachineSkillsDir } from '@open-cowork/runtime-host/runtime-paths'
+import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '@open-cowork/runtime-host/capability-catalog'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../apps/desktop/src/main/capability-catalog.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
-
 test('built-in capabilities expose discoverable metadata without source parsing', async () => {
   const tools = await listCapabilityTools()
   const charts = await getCapabilityTool('charts')

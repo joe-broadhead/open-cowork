@@ -1,11 +1,6 @@
+import { extractRuntimeErrorMessage, normalizePermissionEvent, readRuntimeSessionId } from '@open-cowork/shared'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  extractRuntimeErrorMessage,
-  normalizePermissionEvent,
-  readRuntimeSessionId,
-} from '../apps/desktop/src/main/runtime-event-normalizers.ts'
-
 test('readRuntimeSessionId accepts SDK sessionID and camelCase sessionId fields', () => {
   assert.equal(readRuntimeSessionId({ sessionID: 'session-a' }), 'session-a')
   assert.equal(readRuntimeSessionId({ sessionId: 'session-b' }), 'session-b')

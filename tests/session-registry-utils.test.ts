@@ -1,10 +1,6 @@
+import { extractManagedSessionIdsFromLogContents, normalizeStoredSessionRecord } from '@open-cowork/runtime-host/session-registry-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  extractManagedSessionIdsFromLogContents,
-  normalizeStoredSessionRecord,
-} from '../apps/desktop/src/main/session-registry-utils.ts'
-
 test('extractManagedSessionIdsFromLogContents finds created and forked Cowork sessions', () => {
   const ids = extractManagedSessionIdsFromLogContents([
     '[2026-04-11T14:35:24.993Z] [session] Created session ses_aaa111\n',

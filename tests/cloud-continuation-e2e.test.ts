@@ -17,18 +17,18 @@ import type {
   SessionView,
 } from '../packages/shared/src/session.ts'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
-import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
-import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-server.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
+import { createApiTokenCloudAuthResolver } from '@open-cowork/cloud-server/app'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createCloudHttpServer } from '@open-cowork/cloud-server/http-server'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEvent,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
+} from '@open-cowork/cloud-server/runtime-adapter'
+import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
+import { CloudWorker } from '@open-cowork/cloud-server/worker'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
 import {
   CloudWorkspaceAdapter,

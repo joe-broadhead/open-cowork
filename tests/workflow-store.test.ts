@@ -1,3 +1,6 @@
+import { createWorkflowFromTool, previewWorkflowFromTool } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
+import { attachWorkflowRunSession, claimDueWorkflowRun, clearWorkflowStoreCache, createWorkflow, createWorkflowRun, getWorkflow, getWorkflowRun, getWorkflowRunProjectionCheckpoint, listDueWorkflows, listWorkflows, markWorkflowRunCompleted, markWorkflowRunFailed, previewWorkflowDraft, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, parseWorkflowTriggersFromStorage, serializeWorkflowTriggersForStorage, setWorkflowDatabaseForTests, setWorkflowSecretStorageForTests, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { normalizeWorkflowDraft, previewWorkflowDraft as previewWorkflowDraftCalculation } from '@open-cowork/runtime-host/workflow/workflow-normalization'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
@@ -6,37 +9,6 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { cloudProjectionFenceObserved } from '../packages/shared/src/cloud-session-contract.ts'
-import {
-  attachWorkflowRunSession,
-  claimDueWorkflowRun,
-  clearWorkflowStoreCache,
-  createWorkflow,
-  createWorkflowRun,
-  getWorkflow,
-  getWorkflowRun,
-  getWorkflowRunProjectionCheckpoint,
-  listDueWorkflows,
-  listWorkflows,
-  markWorkflowRunCompleted,
-  markWorkflowRunFailed,
-  previewWorkflowDraft,
-  regenerateWorkflowWebhookSecret,
-  recoverInterruptedWorkflowRuns,
-  parseWorkflowTriggersFromStorage,
-  serializeWorkflowTriggersForStorage,
-  setWorkflowDatabaseForTests,
-  setWorkflowSecretStorageForTests,
-  updateWorkflowStatus,
-} from '../apps/desktop/src/main/workflow/workflow-store.ts'
-import {
-  normalizeWorkflowDraft,
-  previewWorkflowDraft as previewWorkflowDraftCalculation,
-} from '../apps/desktop/src/main/workflow/workflow-normalization.ts'
-import {
-  createWorkflowFromTool,
-  previewWorkflowFromTool,
-} from '../apps/desktop/src/main/workflow/workflow-tool-actions.ts'
-
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 }

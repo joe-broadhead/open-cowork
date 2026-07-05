@@ -102,7 +102,6 @@ Validation:
 pnpm deploy:validate
 pnpm deploy:launch:validate
 pnpm ops:validate
-pnpm test:cloud-web
 ```
 
 ### Cloud Channel Gateway

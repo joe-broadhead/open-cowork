@@ -1,13 +1,13 @@
+import { ThreadIndexStore } from '@open-cowork/runtime-host/thread-index/thread-index-store'
+import { SessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { buildCoworkRuntimePermissionConfig } from '@open-cowork/runtime-host/runtime-permissions'
+import { summarizeCustomAgents } from '@open-cowork/runtime-host/custom-agents-utils'
+import { buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-config'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SessionEngine } from '../../apps/desktop/src/main/session-engine.ts'
-import { buildOpenCoworkAgentConfig } from '../../apps/desktop/src/main/agent-config.ts'
-import { summarizeCustomAgents } from '../../apps/desktop/src/main/custom-agents-utils.ts'
-import { buildCoworkRuntimePermissionConfig } from '../../apps/desktop/src/main/runtime-permissions.ts'
-import { ThreadIndexStore } from '../../apps/desktop/src/main/thread-index/thread-index-store.ts'
-import { buildCapabilityMapGroups } from '../../apps/desktop/src/renderer/components/capabilities/capabilities-page-support.ts'
-import { compileAgentPreview } from '../../apps/desktop/src/renderer/components/agents/agent-builder-utils.ts'
+import { buildCapabilityMapGroups } from '../../packages/app/src/components/capabilities/capabilities-page-support.ts'
+import { compileAgentPreview } from '../../packages/app/src/components/agents/agent-builder-utils.ts'
 import {
   createDownstreamCatalogFixture,
   DOWNSTREAM_SKILL_COUNT,
@@ -59,12 +59,18 @@ export async function runSessionBenchmarks() {
 
   try {
     const results = [
-      await runBenchmark('history.project.large', 10, async () => {
+      // This is the suite's only *async* benchmark and it runs first, so its
+      // measured window inherits the GC/JIT churn from the heavy fixture setup
+      // above. At 10 samples `p95` is just the max sample, so a single inherited
+      // pause spiked p95 to ~4 ms (vs a ~0.4 ms steady state that matches the
+      // baseline) and failed the gate. More warmup absorbs the setup churn and
+      // more samples make p95 a real percentile rather than the lone worst run.
+      await runBenchmark('history.project.large', 40, async () => {
         const items = await buildProjectedHistory(historyFixture)
         if (items.length === 0) {
           throw new Error('history.project.large produced no items')
         }
-      }, { batchSize: 4, warmupIterations: 3 }),
+      }, { batchSize: 4, warmupIterations: 16 }),
       await runBenchmark('engine.hydrate.large', 24, () => {
         const engine = new SessionEngine()
         engine.activateSession('perf-hydrate')

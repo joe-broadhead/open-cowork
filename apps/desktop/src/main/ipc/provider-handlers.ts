@@ -1,3 +1,8 @@
+import { getEffectiveSettings, getProviderCredentialValue } from '@open-cowork/runtime-host/settings'
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
+import { getClient } from '@open-cowork/runtime-host/runtime'
+import { normalizeProviderListResponse, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
+import { refreshProviderCatalog, modelInfoKeys } from '@open-cowork/runtime-host'
 import type { IpcHandlerContext } from './context.ts'
 import {
   mergeRuntimeProviderModels,
@@ -10,13 +15,6 @@ import {
 } from './app-handler-support.ts'
 import { getProviderDescriptor, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
 import { log } from '../logger.ts'
-import { refreshProviderCatalog } from '../provider-catalog.ts'
-import { modelInfoKeys } from '../model-info-utils.ts'
-import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
-import { getClient } from '../runtime.ts'
-import { sdkErrorMessage } from '../sdk-error.ts'
-import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
-
 type ElectronShell = typeof import('electron').shell
 const MAX_PROVIDER_MODEL_ID_LENGTH = 512
 

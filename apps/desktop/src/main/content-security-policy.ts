@@ -81,7 +81,7 @@ export const PACKAGED_CONTENT_SECURITY_POLICY = buildContentSecurityPolicy()
 //      Electron-specific escape hatches.
 //   7. `postMessage` handlers in the parent check `event.origin` and
 //      `event.source === iframe.contentWindow` before trusting the
-//      payload (see `apps/desktop/src/renderer/components/chat/VegaChart.tsx`).
+//      payload (see `packages/app/src/components/chat/VegaChart.tsx`).
 export function buildChartFrameContentSecurityPolicy(options: ContentSecurityPolicyOptions = {}) {
   const devServerOrigin = normalizeDevServerOrigin(options.devServerUrl)
   const scriptSrc = new Set(["'self'", "'unsafe-eval'", `${CHART_FRAME_ASSET_PROTOCOL}:`])

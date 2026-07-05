@@ -244,12 +244,12 @@ projection, channel adapters, and deployment ergonomics.
 |---|---|---|
 | Gateway providers | `packages/gateway-provider-*`, `packages/gateway-channel`, `apps/gateway/src/provider-registry.ts` | Implement the provider contract and register capabilities. Gateway providers send/receive channel messages only; they do not spawn OpenCode, import Cloud stores, or own execution state. |
 | Deployment recipes | `deploy/`, `helm/`, `docker-compose*.yml`, `scripts/validate-deployment-configs.mjs` | Compose public templates from config/env refs. Keep real project ids, domains, account ids, customer values, prices, and secrets in private deployment repos. |
-| Billing adapters | `apps/desktop/src/main/cloud/billing-adapter.ts`, `stripe-billing-adapter.ts`, `stub-billing-adapter.ts` | Add provider-specific billing behind the adapter. Core entitlement and quota logic consumes provider-neutral subscription records. |
-| Object-store adapters | `apps/desktop/src/main/cloud/object-store.ts`, deployment object-store config | Add storage providers behind the object-store interface. Artifact, upload, snapshot, and checkpoint callers should not branch on cloud provider names. |
-| Secret adapters | `apps/desktop/src/main/cloud/secret-adapter.ts`, BYOK secret store, config refs | Resolve or protect secrets behind refs. Raw provider keys, OAuth tokens, cookies, channel secrets, and signed URLs must never enter renderer state, cache, diagnostics, or public templates. |
+| Billing adapters | `packages/cloud-server/src/billing-adapter.ts`, `stripe-billing-adapter.ts`, `stub-billing-adapter.ts` | Add provider-specific billing behind the adapter. Core entitlement and quota logic consumes provider-neutral subscription records. |
+| Object-store adapters | `packages/cloud-server/src/object-store.ts`, deployment object-store config | Add storage providers behind the object-store interface. Artifact, upload, snapshot, and checkpoint callers should not branch on cloud provider names. |
+| Secret adapters | `packages/cloud-server/src/secret-adapter.ts`, BYOK secret store, config refs | Resolve or protect secrets behind refs. Raw provider keys, OAuth tokens, cookies, channel secrets, and signed URLs must never enter renderer state, cache, diagnostics, or public templates. |
 | Worker pool modes | `docs/managed-workers.md`, `managed-worker-types.ts`, `services/managed-worker-service.ts` | Add worker modes only after the trust model is documented. Customer-hosted workers remain deferred until a separate review covers updates, liability, networking, and data residency. |
 | Runtime profiles and policy packs | `cloud.profiles`, `cloud.runtime`, `cloud-config.ts`, `runtime-config-builder.ts` | Cloud profiles own feature flags and allowlists. Machine runtime config, arbitrary local stdio MCPs, and host project directories stay disabled unless explicitly reviewed and allowlisted. |
-| Cloud Web feature modules and admin panels | `apps/website/src`, `docs/cloud-web-workbench.md`, route/API matrix tests | Cloud Web is a cloud API client. It must not import server-only stores, runtime adapters, secret adapters, or provider-specific internals. |
+| Cloud Web feature modules and admin panels | `packages/app/src`, `packages/app/src/browser/cowork-api.ts`, `docs/cloud-web-workbench.md` | Cloud Web is the unified renderer running in the browser over the cloud HTTP/SSE shim. It must not import server-only stores, runtime adapters, secret adapters, or provider-specific internals. |
 | BYOK validation and injection hooks | `byok-secret-store.ts`, `runtime-config-builder.ts`, `opencode-runtime-adapter.ts`, `cloud-config.ts` | Provider keys enter OpenCode through runtime config provider options. They never enter process env, logs, renderer state, diagnostics, cache, or read APIs. |
 | Cloud event and projection contract | `packages/shared/src/cloud-session-projection.ts`, `opencode-runtime-adapter.ts`, `session-projection-service.ts`, gateway renderers | Runtime translation happens once at the worker/runtime boundary. Desktop, Web, and Gateway consume canonical Cloud events/projections rather than raw SDK events. |
 
@@ -297,8 +297,8 @@ downstream config references.
 Skills only become visible to the runtime when they are listed under `skills`
 in the active config — a skill directory that nobody references is ignored.
 
-See `apps/desktop/src/main/runtime-content.ts` and
-`apps/desktop/src/main/effective-skills.ts` for the resolution code.
+See `packages/runtime-host/src/runtime-content.ts` and
+`packages/runtime-host/src/effective-skills.ts` for the resolution code.
 
 ## MCPs overlay
 
@@ -311,7 +311,7 @@ MCP packages are resolved from:
 As with skills, the MCP must be declared in the active config (`mcps` section)
 before the runtime spawns it.
 
-See `apps/desktop/src/main/runtime-mcp.ts`.
+See `packages/runtime-host/src/runtime-mcp.ts`.
 
 ## Environment placeholders in config
 
@@ -504,7 +504,7 @@ without forking the codebase:
 Two things happen when this is set:
 
 1. **Date formatting** (`formatDate` from
-   `apps/desktop/src/renderer/helpers/i18n.ts`) switches to the
+   `packages/app/src/helpers/i18n.ts`) switches to the
    configured locale. Dates render as `31.12.2026` in `de-DE` and
    `12/31/2026` in `en-US`.
 
@@ -512,6 +512,25 @@ Two things happen when this is set:
    looks up the configured translation and falls back to the
    inline English default when no translation exists. Partial
    catalogs are fine; untranslated keys stay in English.
+
+### Launch posture: English-first, honestly partial elsewhere
+
+The public build is **English-first**. The built-in non-English
+catalogs (ar, de, es, fr, hi, it, ja, ko, pt, ru, zh) currently
+translate roughly a third of the renderer's strings; everything
+else renders its inline English fallback. That state is deliberate
+policy, not drift:
+
+- Untranslated keys are tracked in the documented allowlist
+  (`tests/i18n-english-only-allowlist.json`); a new `t()` key that
+  is neither translated nor allowlisted fails CI, so the backlog
+  can only shrink or be made visible — never grow silently.
+- Strings are **never machine-translated in bulk**; catalog entries
+  are added deliberately so a native reader can trust what ships.
+- The language picker shows the honest coverage figure per locale
+  ("Deutsch — zu 32 % übersetzt"), generated from the live backlog
+  by `node scripts/i18n-coverage.mjs --write-status` and kept in
+  sync by the `i18n:check` gate.
 
 The upstream source hasn't migrated every string to the catalog
 yet — only the highest-visibility ones (see the focused roadmap in
@@ -528,7 +547,7 @@ numbers / dates / currencies.
 
 ## Telemetry forwarding
 
-Every in-app event tracked by `apps/desktop/src/main/telemetry.ts`
+Every in-app event tracked by `packages/runtime-host/src/telemetry.ts`
 (app launch, auth
 login, session creation, perf-slow, error) is written to a local
 NDJSON file by default — no data leaves the user's machine.

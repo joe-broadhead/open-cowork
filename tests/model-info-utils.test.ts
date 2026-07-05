@@ -1,8 +1,7 @@
+import { buildModelInfoSnapshot } from '@open-cowork/runtime-host'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { ModelInfoSnapshot } from '../packages/shared/src/index.ts'
-import { buildModelInfoSnapshot } from '../apps/desktop/src/main/model-info-utils.ts'
-
 const emptyFallbacks: ModelInfoSnapshot = { pricing: {}, contextLimits: {} }
 
 describe('buildModelInfoSnapshot', () => {

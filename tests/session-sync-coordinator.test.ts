@@ -1,7 +1,6 @@
+import { createSessionSyncCoordinator } from '@open-cowork/runtime-host/session-sync-coordinator'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createSessionSyncCoordinator } from '../apps/desktop/src/main/session-sync-coordinator.ts'
-
 test('session sync coordinator dedupes concurrent sync requests for the same session', async () => {
   const calls: Array<{ sessionId: string; force: boolean }> = []
   let resolveSync: ((value: string) => void) | null = null

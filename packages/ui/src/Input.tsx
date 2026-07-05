@@ -97,7 +97,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function InputPrim
   }
 
   return (
-    <label className="ui-field">
+    // A plain wrapper, not a <label>: this primitive has no visible label text of
+    // its own, and self-wrapping in a <label> produced invalid nested labels when a
+    // caller wraps the field in its own <label htmlFor>. Callers own the labelling.
+    <div className="ui-field">
       <span className="ui-field__chrome">
         {leftIcon ? <span className="ui-field__left-icon"><Icon name={leftIcon} size={16} /></span> : null}
         <input
@@ -128,7 +131,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function InputPrim
       </span>
       {error ? <span id={errorId} className="ui-field__message ui-field__message--error">{error}</span> : null}
       {disabledReason ? <DisabledHint id={disabledId!} reason={disabledReason} /> : null}
-    </label>
+    </div>
   )
 })
 
@@ -180,7 +183,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   }
 
   return (
-    <label className="ui-field">
+    // Plain wrapper, not a <label> — see the Input primitive above. Callers own labelling.
+    <div className="ui-field">
       <textarea
         {...props}
         ref={(node) => {
@@ -196,6 +200,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       />
       {error ? <span id={errorId} className="ui-field__message ui-field__message--error">{error}</span> : null}
       {disabledReason ? <DisabledHint id={disabledId!} reason={disabledReason} /> : null}
-    </label>
+    </div>
   )
 })

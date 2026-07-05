@@ -1,3 +1,4 @@
+import { createCoordinationWatch, deleteCoordinationWatch, getCoordinationWatchDetail, listCoordinationWatches, pauseCoordinationWatch, resumeCoordinationWatch, updateCoordinationWatch } from '@open-cowork/runtime-host/coordination/coordination-service'
 import { randomUUID } from 'node:crypto'
 import {
   buildChannelProviderStatuses,
@@ -20,23 +21,14 @@ import {
   type WorkspaceOptions,
 } from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
-import { DEFAULT_CONFIG } from '../config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { getAppConfig } from '../config-loader.ts'
-import { createUnavailableRuntimeAdapter } from '../cloud/unavailable-runtime-adapter.ts'
-import { resolveCloudRuntimePolicy } from '../cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../cloud/in-memory-control-plane-store.ts'
-import { normalizeChannelProviderId } from '../cloud/channel-provider-utils.ts'
-import { publicChannelIdentity } from '../cloud/public-channel-records.ts'
-import { CloudSessionService, type CloudPrincipal } from '../cloud/session-service.ts'
-import {
-  createCoordinationWatch,
-  deleteCoordinationWatch,
-  getCoordinationWatchDetail,
-  listCoordinationWatches,
-  pauseCoordinationWatch,
-  resumeCoordinationWatch,
-  updateCoordinationWatch,
-} from '../coordination/coordination-service.ts'
+import { createUnavailableRuntimeAdapter } from '@open-cowork/cloud-server/unavailable-runtime-adapter'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { normalizeChannelProviderId } from '@open-cowork/cloud-server/channel-provider-utils'
+import { publicChannelIdentity } from '@open-cowork/cloud-server/public-channel-records'
+import { CloudSessionService, type CloudPrincipal } from '@open-cowork/cloud-server/session-service'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 import type { IpcHandlerContext } from './context.ts'
 import {

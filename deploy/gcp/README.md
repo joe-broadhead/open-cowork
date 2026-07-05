@@ -46,6 +46,11 @@ Production deployments should use the GKE split-role profile in
 focused pilot profile for demos and smoke testing; it is not the scale-out
 worker topology.
 
+For teams that prefer Terraform over Helm/YAML, [`terraform/`](terraform/)
+carries a syntax-checked reference module (Cloud Run split roles, Cloud SQL,
+GCS, Secret Manager). Validate and plan against your own project before
+applying.
+
 ## Required GCP APIs
 
 Enable these APIs before rollout:

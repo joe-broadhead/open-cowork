@@ -1,13 +1,13 @@
+import { maskEffectiveSettingsCredentials } from '@open-cowork/runtime-host/settings'
+import { getRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
+import { getBundledOpencodeVersion } from '@open-cowork/runtime-host/runtime-opencode-cli'
+import { getPerfSnapshot } from '@open-cowork/runtime-host/perf-metrics'
+import { sanitizeForExport } from '@open-cowork/shared'
 import { closeSync, fstatSync, openSync, readSync } from 'fs'
 import { getPublicAppConfig } from './config-loader.ts'
 import { getLogFilePath } from './logger.ts'
-import { getPerfSnapshot } from './perf-metrics.ts'
 import { getRuntimeInputDiagnostics } from './runtime-input-diagnostics.ts'
-import { getRuntimeStatus } from './runtime-status.ts'
-import { getBundledOpencodeVersion } from './runtime-opencode-cli.ts'
-import { sanitizeForExport } from './log-sanitizer.ts'
-import { maskEffectiveSettingsCredentials } from './settings.ts'
-import { getEffectiveSettings } from './settings.ts'
+import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 
 // Number of log tail lines included in the bundle. Enough to cover a
 // normal session's error window without bloating the text beyond what's

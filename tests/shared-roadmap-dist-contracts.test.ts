@@ -1,3 +1,4 @@
+import { applyCapabilityBundleInstall, applyCapabilityBundleUninstall, applyCapabilityBundleUpdate, createEmptyCapabilityBundleLifecycleState, normalizeCapabilityBundleManifest, planCapabilityBundleInstall, planCapabilityBundleUninstall, planCapabilityBundleUpdate, validateCapabilityBundleRuntimeSupport } from '@open-cowork/runtime-host/capability-bundle-engine'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -14,15 +15,6 @@ import {
 } from '../packages/shared/dist/app-config.js'
 import {
   CAPABILITY_BUNDLE_FORMAT,
-  applyCapabilityBundleInstall,
-  applyCapabilityBundleUninstall,
-  applyCapabilityBundleUpdate,
-  createEmptyCapabilityBundleLifecycleState,
-  normalizeCapabilityBundleManifest,
-  planCapabilityBundleInstall,
-  planCapabilityBundleUninstall,
-  planCapabilityBundleUpdate,
-  validateCapabilityBundleRuntimeSupport,
   type CapabilityBundleManifest,
 } from '../packages/shared/dist/capabilities.js'
 import {

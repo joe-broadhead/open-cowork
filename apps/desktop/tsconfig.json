@@ -1,11 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
     "jsx": "react-jsx",
     "outDir": "dist",
     "rootDir": "../..",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "react", "react-dom"],
+    "types": ["vite/client"],
     "allowImportingTsExtensions": true
   },
   "include": ["src/**/*"],

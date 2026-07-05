@@ -5,7 +5,7 @@ import {
   MAX_CHART_DEPTH,
   MAX_CHART_SPEC_BYTES,
   validateInlineChartSpec,
-} from '../apps/desktop/src/lib/chart-spec-safety.ts'
+} from '../packages/shared/src/chart-spec-safety.ts'
 
 test('validateInlineChartSpec accepts bounded inline data specs', () => {
   assert.doesNotThrow(() => validateInlineChartSpec({

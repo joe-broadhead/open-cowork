@@ -3,7 +3,14 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "lib": ["ESNext"]
+    "lib": ["ESNext"],
+    "noUncheckedIndexedAccess": true,
+    // Disable ambient @types auto-inclusion so the browser-safe barrel never
+    // silently picks up Node globals. Node-only modules under src/node/** opt in
+    // explicitly via `/// <reference types="node" />`; everything else stays
+    // platform-agnostic (this is what makes accidental `process`/`Buffer` use in
+    // shared a compile error rather than a runtime surprise).
+    "types": []
   },
   "include": ["src/**/*"]
 }

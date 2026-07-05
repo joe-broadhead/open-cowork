@@ -1,13 +1,6 @@
+import { getPerfSnapshot, incrementPerfCounter, measureAsyncPerf, observePerf, resetPerfMetrics } from '@open-cowork/runtime-host/perf-metrics'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  getPerfSnapshot,
-  incrementPerfCounter,
-  measureAsyncPerf,
-  observePerf,
-  resetPerfMetrics,
-} from '../apps/desktop/src/main/perf-metrics.ts'
-
 test('perf metrics snapshot tracks counters and rolling distribution summaries', async () => {
   resetPerfMetrics()
 

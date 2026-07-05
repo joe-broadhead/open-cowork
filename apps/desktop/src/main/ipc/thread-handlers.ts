@@ -1,5 +1,6 @@
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { normalizeSmartFilterInput, normalizeTagInput } from '@open-cowork/runtime-host/thread-index/thread-index-normalizers'
 import type { IpcHandlerContext } from './context.ts'
-import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import {
   THREAD_BULK_MAX_SESSION_IDS,
   THREAD_FILTER_MAX_VALUES,
@@ -17,7 +18,6 @@ import {
   stringAndOptionalObjectArgs,
 } from './schema.ts'
 import { validateThreadSearchQuery } from './object-validators.ts'
-import { normalizeSmartFilterInput, normalizeTagInput } from '../thread-index/thread-index-normalizers.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 function requireStringArray(value: unknown, label: string, max = THREAD_BULK_MAX_SESSION_IDS) {

@@ -1,10 +1,9 @@
+import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import type {
   DesktopPairingPolicy,
   DesktopPairingRemoteEvent,
   SessionInfo,
 } from '@open-cowork/shared'
-import type { RuntimeSessionEvent } from '../session-event-dispatcher.ts'
-
 const MAX_STRING_BYTES = 16 * 1024
 const MAX_ARRAY_ITEMS = 50
 const MAX_OBJECT_KEYS = 100

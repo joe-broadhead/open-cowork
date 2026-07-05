@@ -55,8 +55,10 @@ function accentLineToken() {
 
 const GRADIENT_NONE = 'none'
 
-const DARK_SHADOW_SOFT = '0 1px 1px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(0, 0, 0, 0.16)'
-const DARK_SHADOW_SOFT_LG = '0 2px 6px rgba(0, 0, 0, 0.30), 0 18px 44px rgba(0, 0, 0, 0.24)'
+// Hue-matched, single-light-source shadows (tinted toward the deep cool base, not
+// pure black) — tight vertical offset + modest blur, no decorative spread.
+const DARK_SHADOW_SOFT = '0 1px 2px rgba(7, 7, 15, 0.50), 0 4px 12px rgba(7, 7, 15, 0.30)'
+const DARK_SHADOW_SOFT_LG = '0 2px 6px rgba(7, 7, 15, 0.50), 0 12px 32px rgba(7, 7, 15, 0.40)'
 const DARK_SHADOW_FLAT = '0 1px 1px rgba(0, 0, 0, 0.28), 0 3px 8px rgba(0, 0, 0, 0.18)'
 const DARK_SHADOW_FLAT_LG = '0 2px 4px rgba(0, 0, 0, 0.32), 0 10px 24px rgba(0, 0, 0, 0.22)'
 
@@ -71,6 +73,7 @@ function parseHexRgb(value: string) {
   const match = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
   if (!match) return null
   const hex = match[1]
+  if (!hex) return null
   const pairs = hex.length === 3
     ? hex.split('').map((part) => part + part)
     : hex.match(/[0-9a-f]{2}/gi)
@@ -226,10 +229,40 @@ const UI_THEME_PRESET_SEEDS = {
   },
   mercury: {
     label: 'Mercury',
-    description: 'Graphite Studio default — cool black surfaces, crisp lines, and the Azure signature accent.',
-    swatches: ['#0c0d0f', '#141619', '#2f6bf0', '#eceef1'],
+    description: 'Studio default — graphite operator console with a single surgical periwinkle accent.',
+    swatches: ['#0d0e11', '#8290ff', '#bcc0cc', '#7fd0e6'],
     dark: {
       ...DEFAULT_DARK_BRAND_THEME,
+      // Codex-grade: a near-neutral graphite field. Surfaces/borders are a cool-WHITE
+      // luminance overlay (not periwinkle tint), so the shell reads monochrome and the
+      // one accent stays surgical. Depth comes from raised hairlines, not glass/shadow.
+      base: '#0d0e11',
+      surface: 'rgba(228, 232, 242, 0.055)',
+      surfaceHover: 'rgba(228, 232, 242, 0.10)',
+      surfaceActive: 'rgba(228, 232, 242, 0.17)',
+      elevated: '#1a1b20',
+      border: 'rgba(228, 232, 242, 0.16)',
+      borderSubtle: 'rgba(228, 232, 242, 0.08)',
+      borderStrong: 'rgba(228, 232, 242, 0.30)',
+      text: '#f4f6fb',
+      textSecondary: '#bcc0cc',
+      textMuted: '#888d99',
+      accent: '#8290ff',
+      accentHover: '#9fa8ff',
+      // Same-hue lighter accent2 so the primary-action gradient stays one
+      // periwinkle hue (monochrome-first), not a saturated two-tone blue.
+      accent2: '#9aa8ff',
+      green: '#74e0a4',
+      amber: '#f0bd6e',
+      red: '#ff8aae',
+      info: '#7fd0e6',
+      accentForeground: '#0a0a12',
+      // Pure-black occlusion, reserved for floating layers (popover/menu/dialog).
+      // Resting cards/rows are shadowless (shadow-1 -> none); their edge is the hairline.
+      shadowCard: '0 1px 2px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.30)',
+      shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.50), 0 16px 40px rgba(0, 0, 0, 0.40)',
+      // Flat graphite field — no wash. Depth is structural (hairlines + luminance steps).
+      bgImage: 'none',
     },
     light: {
       ...DEFAULT_LIGHT_BRAND_THEME,

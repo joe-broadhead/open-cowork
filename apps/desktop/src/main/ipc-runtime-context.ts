@@ -1,18 +1,13 @@
+import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
+import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from '@open-cowork/runtime-host/runtime'
+import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
 import type {
   RuntimeContextOptions,
   ScopedArtifactRef,
 } from '@open-cowork/shared'
-import {
-  getClientForDirectory,
-  getRuntimeHomeDir,
-  getV2ClientForDirectory,
-} from './runtime.ts'
 import { getBrandName } from './config-loader.ts'
-import { getEffectiveSettings } from './settings.ts'
-import { ensureRuntimeContextDirectory } from './runtime-context.ts'
-import { sessionEngine } from './session-engine.ts'
-import type { SessionRecord } from './session-registry.ts'
-
 type RuntimeContextDependencies = {
   ensureSessionRecord: (sessionId: string) => SessionRecord | null
   resolveGrantedProjectDirectory: (directory?: string | null) => string | null

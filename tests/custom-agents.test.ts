@@ -1,18 +1,12 @@
+import { clearSettingsCache, saveSettings } from '@open-cowork/runtime-host/settings'
+import { CUSTOM_AGENT_LIMITS } from '@open-cowork/runtime-host/custom-content-limits'
+import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog, buildRuntimeCustomAgents, summarizeCustomAgents, validateCustomAgent } from '@open-cowork/runtime-host/custom-agents-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { clearSettingsCache, saveSettings } from '../apps/desktop/src/main/settings.ts'
-import {
-  buildCustomAgentCatalog,
-  buildCustomAgentPermissionFromCatalog,
-  buildRuntimeCustomAgents,
-  summarizeCustomAgents,
-  validateCustomAgent,
-} from '../apps/desktop/src/main/custom-agents-utils.ts'
-import { CUSTOM_AGENT_LIMITS } from '../apps/desktop/src/main/custom-content-limits.ts'
 import { validateCustomAgentConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 
 const builtinTools = [

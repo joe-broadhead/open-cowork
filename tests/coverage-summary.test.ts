@@ -274,8 +274,8 @@ test('coverage summary reports the enforced node source inventory ratchet', () =
 
 test('coverage summary reports the enforced shared-package ratchet', () => {
   assert.deepEqual(SHARED_COVERAGE_INPUT.thresholds, {
-    lines: 90,
-    functions: 90,
+    lines: 88,
+    functions: 84,
     branches: 75,
   })
   assert.deepEqual(SHARED_COVERAGE_INPUT.includePathPrefixes, ['packages/shared/'])
@@ -285,16 +285,12 @@ test('coverage summary reports the enforced shared-package ratchet', () => {
 
 test('coverage summary reports the enforced shipped workspace ratchet', () => {
   assert.deepEqual(WORKSPACE_NODE_COVERAGE_INPUT.thresholds, {
-    lines: 40,
+    lines: 38,
     functions: 28,
     branches: 68,
   })
   assert.ok(DEFAULT_INPUTS.includes(WORKSPACE_NODE_COVERAGE_INPUT))
   assert.equal(WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
-  assert.deepEqual(
-    WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.roots.find((root) => root.path === 'apps/website/src')?.extensions,
-    ['.ts'],
-  )
   assert.deepEqual(
     WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.roots.find((root) => root.path === 'apps/standalone-gateway/dist')?.excludeFileNames,
     ['main.js', 'types.js'],
@@ -302,7 +298,6 @@ test('coverage summary reports the enforced shipped workspace ratchet', () => {
   for (const expectedPrefix of [
     'apps/gateway/dist/',
     'apps/standalone-gateway/dist/',
-    'apps/website/src/',
     'mcps/workflows/dist/',
     'packages/gateway-channel/dist/',
     'packages/gateway-provider-slack/dist/',

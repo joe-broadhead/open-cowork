@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { attachmentFromArtifact, buildChartRerenderPrompt } from '../apps/desktop/src/renderer/components/chat/composer-events.ts'
+import { attachmentFromArtifact, buildChartRerenderPrompt } from '../packages/app/src/components/chat/composer-events.ts'
 
 test('attachmentFromArtifact marks image payloads as previewable composer attachments', () => {
   const attachment = attachmentFromArtifact({

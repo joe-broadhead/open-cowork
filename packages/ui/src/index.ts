@@ -1,4 +1,3 @@
-export { AppApiProvider, useAppApi, type AppApiProviderProps } from './AppApiProvider.js'
 export { ActionCluster, type ActionClusterItem, type ActionClusterProps } from './ActionCluster.js'
 export { AgentCapabilityProfileView, type AgentCapabilityProfileViewProps } from './AgentCapabilityProfileView.js'
 export {
@@ -10,6 +9,10 @@ export {
   type ApprovalsQueueSurfaceProps,
 } from './ApprovalsQueueSurface.js'
 export { ArtifactsLibrarySurface, type ArtifactsLibrarySurfaceProps } from './ArtifactsLibrarySurface.js'
+export { approvalsSurfaceCss, artifactsSurfaceCss, channelsSurfaceCss, controlsSurfaceCss, knowledgeGraphCss, primitivesSurfaceCss, projectsSurfaceCss, sharedKeyframesCss, studioSurfaceStyles, wikiSurfaceCss } from './surface-styles.js'
+export { KnowledgeGraph, type KnowledgeGraphProps } from './KnowledgeGraph.js'
+export { KNOWLEDGE_SPACE_HUES, knowledgeSpaceHue } from './knowledge-hues.js'
+export { WikiProposeEditDialog, type WikiProposeEditDialogProps, type WikiProposeEditSubmit } from './WikiProposeEditDialog.js'
 export { Badge, type BadgeProps, type BadgeTone } from './Badge.js'
 export {
   Button,
@@ -33,6 +36,7 @@ export { ProjectsKanbanSurface, type ProjectsKanbanSurfaceProps } from './Projec
 export { Menu, Select, type MenuItem, type MenuProps, type SelectOption, type SelectProps } from './Select.js'
 export { SegmentedControl, type SegmentedControlOption, type SegmentedControlProps } from './SegmentedControl.js'
 export { Skeleton, type SkeletonProps } from './Skeleton.js'
+export { Switch, type SwitchProps } from './Switch.js'
 export {
   ApprovalCard,
   ArtifactCard,
@@ -104,7 +108,7 @@ export {
 } from './StudioPrimitives.js'
 export { Tooltip, type TooltipProps } from './Tooltip.js'
 export { WorkbenchLayout, type WorkbenchLayoutProps } from './WorkbenchLayout.js'
-export { cn, nextEnabledIndex } from './utils.js'
+export { cn, entityChroma, nextEnabledIndex } from './utils.js'
 export {
   Toaster,
   toast,

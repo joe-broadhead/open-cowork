@@ -87,6 +87,15 @@ export interface BrandingConfig {
   appId: string
   dataDirName: string
   helpUrl: string
+  // Base URL the in-app "read docs" links resolve `docs/*.md` paths against. Defaults
+  // to the upstream repo for the public app; downstream builders point it at their own
+  // docs so no upstream identity is hardcoded into a deployment.
+  docsBaseUrl?: string
+  // Branding-relative path (under the `branding/` asset dir, e.g. "app-icon.png") to the
+  // OS window/dock icon shown by the running desktop app. Falls back to the bundled default
+  // when unset. Installer/bundle icons are set at build time (see APP_ICON_* env in the dist
+  // script) since they must be baked into the binary.
+  appIcon?: string
   supportUrl?: string
   privacyUrl?: string
   securityUrl?: string
@@ -153,7 +162,13 @@ export interface ManagedOrgConnectionLabels {
 export interface PublicBrandingConfig {
   productName: string
   shortName?: string
+  /** Meta description + Open Graph/Twitter description for the public web shell. */
+  description?: string
   logoUrl?: string
+  /** Favicon URL (https). Falls back to the logo, then a generated accent mark. */
+  faviconUrl?: string
+  /** Open Graph / Twitter card image URL (https). Falls back to the logo. */
+  ogImageUrl?: string
   supportUrl?: string
   privacyUrl?: string
   securityUrl?: string
@@ -191,9 +206,11 @@ const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
   amber: '#e0913a',
   red: '#d6587e',
   info: '#6f8cc4',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
-  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.045), transparent 62%)',
+  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.42), 0 12px 30px rgba(0, 0, 0, 0.46)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.5), 0 24px 60px rgba(0, 0, 0, 0.58)',
+  // Flat Mercury base (Phase 0 Fix #1) — must mirror the canonical dark theme
+  // (DEFAULT_DARK_PUBLIC_BRANDING_THEME); the design-tokens-sync test asserts equality.
+  bgImage: 'none',
 }
 
 export const GATEWAY_PRODUCT_MODES = [
@@ -367,6 +384,25 @@ export interface AppMetadata {
 
 export type RuntimePermissionPolicy = 'allow' | 'ask' | 'deny'
 
+// Per-deployment desktop feature flags. A downstream builder disables a product area
+// (it disappears from the sidebar and its route is blocked) by setting its key false;
+// omitted keys default to enabled, so the standard build ships everything.
+export type DesktopFeatureKey =
+  | 'projects'
+  | 'knowledge'
+  | 'approvals'
+  | 'team'
+  | 'playbooks'
+  | 'channels'
+  | 'tools'
+  | 'artifacts'
+
+export type DesktopFeatureFlags = Partial<Record<DesktopFeatureKey, boolean>>
+
+export function isDesktopFeatureEnabled(features: DesktopFeatureFlags | undefined, key: DesktopFeatureKey): boolean {
+  return features?.[key] !== false
+}
+
 export interface PublicAppConfig {
   branding: BrandingConfig
   auth: {
@@ -388,6 +424,7 @@ export interface PublicAppConfig {
   agentStarterTemplates: AgentStarterTemplate[]
   toolTrace?: ToolTraceConfig
   i18n?: AppI18nConfig
+  features?: DesktopFeatureFlags
 }
 
 export interface AppSettings {

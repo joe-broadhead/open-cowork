@@ -1,10 +1,9 @@
+import { writeBufferFullySync, writeFileAtomic } from '@open-cowork/shared/node'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { writeBufferFullySync, writeFileAtomic } from '../apps/desktop/src/main/fs-atomic.ts'
-
 function withTempDir(fn: (dir: string) => void | Promise<void>) {
   const dir = mkdtempSync(join(tmpdir(), 'cowork-atomic-'))
   return Promise.resolve(fn(dir)).finally(() => rmSync(dir, { recursive: true, force: true }))

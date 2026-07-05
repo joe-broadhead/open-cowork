@@ -210,13 +210,14 @@ The cloud web role serves the Cloud Web Workbench at `/`. The workbench is an
 API client for the same cloud control plane used by desktop sync and gateway
 clients; it does not access Postgres or secret storage directly.
 
-The browser app currently keeps a no-framework, server-rendered shell with an
-inline nonce-protected client script. That is intentional for the first cloud
-workbench build-out: it keeps the cloud image simple, preserves the existing
-CSP and cookie-auth path, and avoids introducing a separate asset build before
-the browser product surface needs richer interaction. The shell is still split
-around typed route metadata so the app can grow into a bundled browser client
-without changing the Cloud API contract.
+The browser app is the unified Open Cowork renderer (`packages/app/src`)
+— the same UI that runs on Electron Desktop. In the browser it runs against a
+typed `CoworkAPI` shim (`packages/app/src/browser/cowork-api.ts`)
+backed by the cloud HTTP + SSE API, and is served as a hashed-asset SPA under
+the server's CSP nonce and cookie-auth path. There is no separate Cloud Web
+codebase: the cloud serves the renderer's browser build
+(`apps/desktop/dist-browser`, produced by `pnpm cloud:build`), so Desktop and
+Cloud Web cannot drift.
 
 The information architecture is split into two surfaces:
 
@@ -301,25 +302,26 @@ same session list, projection, and SSE contracts.
 ### Cloud Web Workbench readiness gates
 
 The browser workbench has its own release gates because `/healthz` only proves
-the server is alive. Run these before provider rollout and keep them in CI:
+the server is alive. Cloud Web is the browser build of the desktop renderer, so
+its UI is covered by the renderer suite, while the cloud control-plane behavior
+is covered by the cloud HTTP and continuation suites. Run these before provider
+rollout and keep them in CI:
 
 ```bash
-pnpm --filter @open-cowork/website test:browser
-pnpm --filter @open-cowork/website test:a11y
-pnpm --filter @open-cowork/website perf:check
-pnpm test:cloud-web
+pnpm test:renderer
+pnpm test:cloud-continuation
+pnpm cloud:smoke
 ```
 
-The browser E2E gate hydrates the actual workbench client in a DOM harness and
-checks signed-out, member, admin, thread create/prompt/continue, SSE refresh,
-approval/question, artifact, workflow, BYOK, gateway, billing, diagnostics,
-policy-blocked, quota-blocked, and billing-blocked flows.
-
-The accessibility gate checks labelled controls, keyboard-reachable navigation,
-focus management, active route state, reduced-motion CSS, responsive layout
-rules, and contrast budgets. The performance and scale gate checks 10k-thread
-fixtures, hundreds of capabilities, bounded DOM row rendering, load-more
-behavior, client-side filtering budgets, and SSE reconnect handling.
+The renderer suite exercises the actual UI — signed-out, member, and admin
+states; thread create/prompt/continue, SSE refresh, approval/question, artifact,
+workflow, BYOK, gateway, billing, and diagnostics flows; policy/quota/billing
+blocked states — together with labelled controls, keyboard-reachable navigation,
+focus management, active route state, reduced-motion CSS, responsive layout, and
+contrast. The cloud suites verify large thread/capability fixtures, bounded
+pagination, cursor validation, and SSE reconnect against the real cloud API, and
+`pnpm cloud:smoke` builds the production cloud bundle (including the browser
+renderer) and runs an import smoke so the served `GET /` keeps shipping.
 
 Signed-in member users can open the workbench and read allowed org/policy/usage
 state. Admin-only panels are hidden for members and all admin mutations remain
@@ -676,14 +678,26 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_ROLE` | `all-in-one`, `web`, `worker`, or `scheduler`. |
 | `OPEN_COWORK_CLOUD_PROFILE` | Deployment profile such as `full`, `focused-agent`, or `custom`. |
 | `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Postgres connection URL for durable cloud state. |
+| `OPEN_COWORK_CLOUD_PG_POOL_MAX` | Max Postgres pool connections (default 10). The control plane saturates here first under load — size against your Postgres `max_connections` and replica count. |
+| `OPEN_COWORK_CLOUD_PG_STATEMENT_TIMEOUT_MS` | Per-statement timeout (default 30000); a non-zero default bounds an unbounded read from pinning a connection. DDL/migrations are exempt. |
+| `OPEN_COWORK_CLOUD_PG_IDLE_TX_TIMEOUT_MS` | `idle_in_transaction_session_timeout` (default 120000) so an abandoned transaction can't hold a connection forever. |
+| `OPEN_COWORK_CLOUD_PG_CONNECTION_TIMEOUT_MS` / `OPEN_COWORK_CLOUD_PG_IDLE_TIMEOUT_MS` | Pool connect timeout and idle-connection eviction window. |
+| `OPEN_COWORK_CLOUD_PG_APP_NAME` | `application_name` set on each connection for Postgres-side observability. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_KIND` | `filesystem`, `minio`, `s3`, `gcs`, `azure-blob`, or `digitalocean-spaces`. |
 | `OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET` | Bucket/container name for artifacts and snapshots. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT` | Custom endpoint URL (MinIO / S3-compatible / DigitalOcean Spaces). |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_REGION` | Region for the S3/Spaces backend. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_PREFIX` | Optional key prefix namespacing all objects. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID` / `OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY` / `OPEN_COWORK_CLOUD_OBJECT_STORE_SESSION_TOKEN` | S3/MinIO/Spaces static credentials (session token optional for STS). |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_ACCOUNT_NAME` / `OPEN_COWORK_CLOUD_OBJECT_STORE_SAS_TOKEN` | Azure Blob account name + SAS token. |
+| `OPEN_COWORK_CLOUD_OBJECT_STORE_BEARER_TOKEN` | GCS OAuth bearer token (when not using ambient ADC). |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
+| `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS` / `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF` | Comma-separated retired envelope keys (raw values or secret-manager refs) kept in the decrypt keyring for rotation. New writes always use the current key and stamp its key id; already-stored ciphertexts decrypt with the matching retired key. Re-encrypt and drop the old key once migration completes. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies; falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
-| `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. |
+| `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
 | `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
 | `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
 | `OPEN_COWORK_CLOUD_BRAND_LOGO_URL` | HTTPS logo URL for the browser dashboard. |
@@ -715,6 +729,25 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OTLP_FLUSH_INTERVAL_MS` | Optional non-negative OTLP export interval in milliseconds; defaults to `30000`; `0` disables the timer and relies on explicit flush/close. |
 | `OPEN_COWORK_CLOUD_OTLP_MAX_QUEUE_SIZE` | Optional positive maximum queued spans and metrics per OTLP record type before oldest records are dropped and counted; defaults to `1000`. |
 | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED` | `true` enables worker runtime/workspace checkpoints in object storage. |
+
+Data-retention variables (scheduler/all-in-one roles). The scheduler runs a bounded, batched
+retention sweep no more than once per `OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS`. Every window is in
+milliseconds and deletes rows older than the window, oldest-first; a window of `0`/unset disables
+that prune (the scheduler does nothing destructive until you opt in). The event-log windows are
+compliance/replay-sensitive — they default **off**:
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS` | Minimum gap between retention sweeps. Defaults to one hour. |
+| `OPEN_COWORK_CLOUD_RETENTION_BATCH_SIZE` / `OPEN_COWORK_CLOUD_RETENTION_MAX_BATCHES` | Rows deleted per batch and max batches per table per sweep. Defaults `500` / `20`. |
+| `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS` | Prune terminal (`sent`/`dead`) channel deliveries older than this. Off by default. |
+| `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_INTERACTION_MS` | Prune expired one-shot channel-interaction tokens older than this. Off by default. |
+| `OPEN_COWORK_CLOUD_RETENTION_STALE_THROTTLE_MS` | Prune stale rate-limit windows + expired auth-backoff rows. Pure bookkeeping that grows one row per client IP, so this defaults **on** at one hour; `0` disables. |
+| `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default; the durable session projection still covers the trimmed window. |
+| `OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS` | Prune `cloud_audit_events` older than this. Off by default — enable only if your compliance/retention policy permits deleting the audit trail. |
+| `OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS` | Prune `cloud_usage_events` older than this. Off by default — enable only after the usage data has been exported/aggregated for billing. |
+| `OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` | Prune `cloud_workspace_events` older than this. Written 1:1 with `cloud_session_events`, so set this alongside `RETENTION_SESSION_EVENT_MS` to bound the workspace-event log's growth; the durable projection still covers the trimmed window. Off by default. |
+| `OPEN_COWORK_CLOUD_CONCURRENCY_RECONCILE_MS` | Optional interval for the scheduler to recompute the concurrency gauges (`cloud_concurrency_counters`) from their source tables. Off by default — the gauges are drift-free for normal activity; enable as a belt-and-suspenders correction (e.g. one hour). |
 
 Managed billing variables:
 
@@ -782,6 +815,45 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES` | Optional generic webhook attachment cap; defaults to `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress HMAC signatures and outbound bridge authentication. Inbound and outbound generic webhook requests include `x-open-cowork-gateway-webhook-timestamp` and `x-open-cowork-gateway-webhook-signature` over the raw body. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the generic webhook provider (default `webhook`). |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_ALLOWED_HOSTS` | Comma-separated host allowlist for outbound webhook/bridge delivery URLs. Constrains SSRF blast radius; leave empty to allow any public host. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_ALLOW_PRIVATE_DELIVERY` | Allows outbound webhook/bridge delivery to private/loopback addresses. Off by default (SSRF guard); enable only for trusted internal bridges. |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the Telegram provider (default `telegram`). |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_MODE` | `polling` (private VPS) or `webhook` (when `OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL` is reachable by Telegram). |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL` | Public HTTPS base URL Telegram calls in webhook mode; falls back to `OPEN_COWORK_GATEWAY_PUBLIC_URL`. |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_RESPOND_IN_GROUPS` | Whether the Telegram bot responds to non-mention group messages. |
+| `OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID` | Optional default Slack channel id for outbound posts. |
+| `OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL` | Optional Slack API base URL override (testing / Slack-compatible gateways). |
+| `OPEN_COWORK_GATEWAY_EMAIL_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the email provider (default `email`). |
+| `OPEN_COWORK_GATEWAY_EMAIL_DOMAIN` | Inbound email domain advertised in channel binding setup. |
+| `OPEN_COWORK_GATEWAY_LOG_LEVEL` | Gateway log level: `debug`, `info`, `warn`, `error`, or `silent` (default `info`). |
+| `OPEN_COWORK_GATEWAY_BRAND_LOGO_URL` | HTTPS logo URL returned in gateway health/readiness and setup metadata. |
+| `OPEN_COWORK_GATEWAY_MAX_DELIVERY_CONCURRENCY` | Maximum cloud→channel deliveries dispatched at once (default `8`, clamped `1`–`256`). Caps outbound fan-out so a backlog drain cannot storm providers into rate limits. |
+| `OPEN_COWORK_GATEWAY_MAX_DELIVERY_QUEUE_DEPTH` | Hard cap on locally queued deliveries (default `512`, clamped `16`–`100000`). Beyond it deliveries are shed back to the cloud to re-serve instead of growing the heap. |
+| `OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER` | Local/demo escape hatch that permits the fake provider on a public bind. Keep off; real public deployments must use a real provider. |
+| `OPEN_COWORK_GATEWAY_FAKE_CHANNEL_BINDING_ID` / `OPEN_COWORK_GATEWAY_FAKE_WORKSPACE_ID` | Channel binding id and external workspace id for the local/demo fake provider. |
+| `OPEN_COWORK_GATEWAY_CLI_ENABLED` | Enables the local CLI channel provider for development/testing. |
+| `OPEN_COWORK_GATEWAY_CLI_CHANNEL_BINDING_ID` / `OPEN_COWORK_GATEWAY_CLI_WORKSPACE_ID` | Channel binding id and external workspace id for the CLI provider. |
+
+### Bridge providers (discord / whatsapp / signal)
+
+Discord, WhatsApp, and Signal are outbound-bridge providers: Open Cowork signs
+and POSTs messages to an external bridge process that owns the platform
+connection, and the bridge POSTs inbound messages back through the signed
+generic-webhook ingress path. Each provider is configured from a parallel env
+family (substitute `DISCORD`, `WHATSAPP`, or `SIGNAL` for `<KIND>`). A provider
+is only created when its `_DELIVERY_URL` is set, and it then requires a
+`_SHARED_SECRET`.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_GATEWAY_DISCORD_DELIVERY_URL` / `OPEN_COWORK_GATEWAY_WHATSAPP_DELIVERY_URL` / `OPEN_COWORK_GATEWAY_SIGNAL_DELIVERY_URL` | Outbound URL of the external bridge for that platform. Setting it enables the provider. |
+| `OPEN_COWORK_GATEWAY_DISCORD_SHARED_SECRET` / `OPEN_COWORK_GATEWAY_WHATSAPP_SHARED_SECRET` / `OPEN_COWORK_GATEWAY_SIGNAL_SHARED_SECRET` | Required HMAC shared secret for that bridge's signed inbound ingress and outbound delivery. |
+| `OPEN_COWORK_GATEWAY_<KIND>_CHANNEL_BINDING_ID` | Cloud channel binding id mapped to the bridge provider (defaults to the kind). |
+| `OPEN_COWORK_GATEWAY_<KIND>_WORKSPACE_ID` | Optional external workspace id for the bridge binding. |
+| `OPEN_COWORK_GATEWAY_<KIND>_DELIVERY_ALLOWED_HOSTS` | Comma-separated host allowlist for outbound bridge delivery (SSRF guard). |
+| `OPEN_COWORK_GATEWAY_<KIND>_ALLOW_PRIVATE_DELIVERY` | Allows bridge delivery to private/loopback addresses. Off by default. |
+| `OPEN_COWORK_GATEWAY_<KIND>_MAX_ATTACHMENT_BYTES` | Optional attachment cap; defaults to `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`. |
 
 Gateway config JSON from `OPEN_COWORK_CONFIG_PATH`,
 `OPEN_COWORK_CONFIG_DIR`, `OPEN_COWORK_DOWNSTREAM_ROOT`,
@@ -803,6 +875,11 @@ to `0` to disable that quota for self-hosted/private installs.
 | `OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG` | Maximum non-closed cloud sessions per org. |
 | `OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG` | Maximum active worker leases per org. |
 | `OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR` | Per-org prompt enqueue quota. |
+| `OPEN_COWORK_CLOUD_MAX_GATEWAY_PROMPTS_PER_HOUR` | Per-org prompt quota for channel-gateway-originated prompts. |
+| `OPEN_COWORK_CLOUD_MAX_WORKFLOW_RUNS_PER_HOUR` | Per-org workflow-run start quota. |
+| `OPEN_COWORK_CLOUD_MAX_CONCURRENT_WORKFLOW_RUNS_PER_ORG` | Maximum simultaneously-running workflow runs per org. |
+| `OPEN_COWORK_CLOUD_MAX_QUEUED_COMMANDS_PER_ORG` | Maximum pending session commands queued per org. |
+| `OPEN_COWORK_CLOUD_MAX_QUEUE_AGE_MS` | Maximum age of the oldest pending command before new enqueues are rejected (backpressure). |
 | `OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR` | Per-org worker-minute quota used to block new execution after hourly usage is exhausted. |
 | `OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR` | Per-org gateway delivery claim quota. |
 | `OPEN_COWORK_CLOUD_MAX_GATEWAY_CHANNEL_BINDINGS_PER_ORG` | Maximum active gateway channel bindings per org. |
@@ -829,9 +906,41 @@ Role-specific knobs:
 | `OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS` | `all-in-one` | Process queued commands inline for local/demo use. |
 | `OPEN_COWORK_CLOUD_WORKER_ID` | `worker`, `all-in-one` | Stable worker identity for leases and heartbeats. |
 | `OPEN_COWORK_CLOUD_WORKER_POLL_MS` | `worker`, `all-in-one` | Durable command polling interval. |
+| `OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY` | `worker`, `all-in-one` | How many distinct sessions one worker tick processes concurrently (default `4`, clamped `1`–`32`). Sessions are independent, so this stops one long-running command from head-of-line-blocking other tenants on the worker; set to `1` for the previous strictly-serial behaviour. Each concurrent session can run its own runtime, so size it against the worker's CPU/memory and the per-org worker entitlement. |
+| `OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK` | `worker`, `all-in-one` | How many commands a single session drains before yielding its lane back to the pool (default `50`, clamped `1`–`10000`). Bounds a session with a large backlog from monopolising a lane; the session is re-surveyed on the next pass while it still has pending commands. |
 | `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` | `worker`, `scheduler`, `all-in-one` | Grace window used during process shutdown to let an active worker/scheduler loop finish after a drain or termination signal. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_ID` | `scheduler`, `all-in-one` | Stable scheduler identity for heartbeats. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS` | `scheduler`, `all-in-one` | Workflow scheduler polling interval. |
+
+### Cloud advanced / tuning
+
+Most deployments never set these; they carry safe defaults. They exist so an
+operator can tune storage location, connection caps, the runtime cache, and
+Postgres safety timeouts per deployment.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_ROOT` | Filesystem root for cloud runtime working data (logs, ephemeral workspaces, and the filesystem object-store adapter). Compose references set `/data/open-cowork-cloud`. |
+| `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER` | Deployment tier that gates production safety checks: `local` for demos, `public_production` for hosted deployments (rejects insecure auth, weak secrets, ephemeral storage, and other unsafe defaults). |
+| `OPEN_COWORK_CLOUD_CORS_ORIGIN` | Single allowed CORS origin for the cloud HTTP/SSE API. Leave unset for same-origin browser access; set it when a separate first-party origin must call the API. |
+| `OPEN_COWORK_CLOUD_RUN_MIGRATIONS` | Defaults to `true` so the web/worker boot path applies embedded schema migrations. Set `false` for change-managed rollouts that run `pnpm cloud:migrate` as a separate step. |
+| `OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE` | Explicit operator acknowledgement that non-durable control-plane/object storage is acceptable. Required to start a `public_production` tier on ephemeral storage; keep unset so accidental ephemeral storage fails closed. |
+| `OPEN_COWORK_CLOUD_LIVENESS_PORT` | Optional dedicated port for a minimal liveness server (separate from the main HTTP port). `0`/unset disables it; the main `/livez` route remains available. |
+| `OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES` | Maximum cached OpenCode runtimes a worker keeps warm (default `100`). Bounds worker memory under many concurrent sessions. |
+| `OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS` | Idle eviction window for cached worker runtimes (default `1800000`, 30 minutes). |
+| `OPEN_COWORK_CLOUD_PG_LOCK_TIMEOUT_MS` | Postgres `lock_timeout` per connection (default `0`, disabled). Set a non-zero value to bound how long a statement waits on a row/table lock before failing fast. |
+| `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` | Maximum simultaneous TCP connections accepted by the cloud HTTP server (default `10000`). A connection-exhaustion guard above the Node default of unbounded. |
+| `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams per org (default `200`). Excess subscriptions for one org are rejected so a single tenant cannot exhaust stream slots. |
+| `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS` | SSE read-poll cadence in milliseconds (default `1000`). Each open stream polls the control plane at this interval for new events; lower it to cut delivery latency at the cost of more control-plane queries, raise it to shed query load at the cost of latency. |
+| `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Opt-in Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). When `true`, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and web pods open one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop above always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) for byte-for-byte unchanged poll-only delivery. |
+| `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
+
+`OPEN_COWORK_CLOUD_PUBLIC_URL` doubles as the HSTS switch: the server only emits
+`Strict-Transport-Security` when `OPEN_COWORK_CLOUD_PUBLIC_URL` is an HTTPS,
+non-loopback origin. Any HTTPS-fronted deployment — including self-host tiers
+behind a TLS-terminating reverse proxy or ingress — must set
+`OPEN_COWORK_CLOUD_PUBLIC_URL` to the canonical `https://` origin so HSTS is
+emitted (and so redirects/cookies never depend on untrusted forwarded headers).
 
 Profiles are enforced server-side and in generated OpenCode config. Cloud
 profiles default to app-managed runtime config and deny arbitrary host project

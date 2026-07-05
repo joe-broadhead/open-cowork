@@ -51,7 +51,6 @@ separate SHA256 value.
 | `pnpm deploy:gcp:preflight` | | | | | |
 | `pnpm deploy:gcp:smoke` | | | | | |
 | `pnpm test:cloud-continuation` | | | | | |
-| `pnpm test:cloud-web` | | | | | |
 | BYOK security tests | | | | | |
 | billing entitlement tests | | | | | |
 | `git diff --check` | | | | | |

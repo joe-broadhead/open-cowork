@@ -1,3 +1,4 @@
+import { normalizeConfigLayers } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'fs'
@@ -18,22 +19,32 @@ import {
   getPublicAppConfig,
   getProviderDescriptors,
 } from '../apps/desktop/src/main/config-loader.ts'
-import { normalizeConfigLayers } from '../apps/desktop/src/main/config-normalizer.ts'
-
 test('open core ships with built-in tools, skills, mcps, and agents configured by default', () => {
   const tools = getConfiguredToolsFromConfig()
   const skills = getConfiguredSkillsFromConfig()
   const mcps = getConfiguredMcpsFromConfig()
   const agents = getConfiguredAgentsFromConfig()
 
-  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,semantic-ui')
-  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator')
-  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,semantic-ui')
+  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep,opencode-gateway')
+  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator,openwiki-research,openwiki-edit-review,openwiki-ingest,time-keep,opencode-gateway')
+  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep,opencode-gateway')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,agent-builder,workflow-designer,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'agents')!).includes('mcp__agents__save_agent'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'workflows')!).includes('mcp__workflows__create_workflow'), true)
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'knowledge')!).includes('mcp__knowledge__propose_knowledge_edit'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'semantic-ui')!).includes('mcp__semantic-ui__ui_execute_action'), true)
+  // OpenWiki ships the pack's trust posture: read tier auto-allowed, proposal
+  // tier asks, write tier structurally absent (the MCP runs --tools proposal).
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'openwiki')!).includes('mcp__openwiki__wiki.propose_edit'), true)
+  assert.equal(tools.find((tool) => tool.id === 'openwiki')?.allowPatterns?.includes('mcp__openwiki__wiki.search'), true)
+  // time-keep: read/lookup tools auto-allowed; timer mutations (local SQLite
+  // state) ask for approval.
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!).includes('mcp__time-keep__timer_set'), true)
+  assert.equal(tools.find((tool) => tool.id === 'time-keep')?.allowPatterns?.includes('mcp__time-keep__business_days'), true)
+  // opencode-gateway: inspection tools auto-allowed; durable-work mutations ask.
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'opencode-gateway')!).includes('mcp__opencode-gateway__task_create'), true)
+  assert.equal(tools.find((tool) => tool.id === 'opencode-gateway')?.allowPatterns?.includes('mcp__opencode-gateway__briefing'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'clock')!).length, 0)
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()

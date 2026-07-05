@@ -9,7 +9,7 @@ import {
   linkedSkillNamesForMcp,
   nextSkillToolIdsForMcp,
   toggleStringSelection,
-} from '../apps/desktop/src/renderer/components/plugins/custom-mcp-form-support.ts'
+} from '../packages/app/src/components/plugins/custom-mcp-form-support.ts'
 
 function makeSkill(name: string, toolIds: string[] = []): CustomSkillConfig {
   return {

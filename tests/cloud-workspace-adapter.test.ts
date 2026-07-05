@@ -8,7 +8,7 @@ import {
   cloudWorkspaceCacheKey,
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
-import type { CloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+import type { CloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
 import type { SessionView, WorkflowRun, WorkflowStatus } from '@open-cowork/shared'
 
 function workflowSummary(status: WorkflowStatus = 'active') {
@@ -1086,6 +1086,9 @@ test('cloud workspace adapter resumes workspace event streams from cached cursor
   })
 
   assert.equal(observedAfterSequence, 100)
+  // Event handling is now sequenced per subscription (audit P1-X2), so the cursor advances on the
+  // next microtask rather than synchronously.
+  await delay(0)
   assert.equal(cache.getEventCursor(cacheKey, 'workspace'), 101)
 })
 
@@ -1185,4 +1188,56 @@ test('cloud workspace adapter refreshes snapshots and resets cursor on workspace
   assert.equal(cache.getWorkflowList(cacheKey)?.workflows[0]?.id, 'workflow-1')
   assert.equal(cache.listSettings(cacheKey)?.[0]?.key, 'portable-settings')
   assert.equal(cache.listArtifacts(cacheKey, 'session-1')?.[0]?.cloudArtifactId, 'artifact-1')
+})
+
+test('cloud workspace adapter delivers workspace events in order even when a snapshot sync is slow', async () => {
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-event-order-')), 'cloud-workspace-cache.json'),
+    mode: 'full',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const connection = {
+    id: 'cloud:test',
+    baseUrl: 'https://cloud.example.test',
+    label: 'Test Cloud',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    lastSyncedAt: null,
+  }
+  const base = transport()
+  let releaseSync!: () => void
+  const syncGate = new Promise<void>((resolve) => { releaseSync = resolve })
+  let firstListSessions = true
+  const order: string[] = []
+  let capturedOnEvent: ((event: Parameters<Parameters<NonNullable<CloudTransportAdapter['subscribeWorkspaceEvents']>>[0]['onEvent']>[0]) => void) | null = null
+  const adapter = new CloudWorkspaceAdapter({
+    connection,
+    cache,
+    transport: {
+      ...base,
+      listSessions: async () => {
+        // Gate only the snapshot-triggered sync (first call) so the following event would race it.
+        if (firstListSessions) { firstListSessions = false; await syncGate }
+        return base.listSessions()
+      },
+      subscribeWorkspaceEvents: (input) => { capturedOnEvent = input.onEvent; return { close() {} } },
+    },
+  })
+
+  adapter.subscribeWorkspaceEvents({ onEvent: (event) => { order.push(event.type) } })
+
+  // A snapshot.required (slow sync) immediately followed by a normal event.
+  capturedOnEvent!({ eventId: 'snapshot-required:100', sequence: 100, type: 'snapshot.required', payload: { reason: 'event_retention_gap', afterSequence: 100 } })
+  capturedOnEvent!({ eventId: 'event-101', sequence: 101, sessionId: 'session-1', type: 'session.status', payload: { statusType: 'running' } })
+
+  await delay(10)
+  // The normal event must NOT be delivered before the still-syncing snapshot (would be out of order).
+  assert.deepEqual(order, [])
+  releaseSync()
+  await delay(10)
+  assert.deepEqual(order, ['snapshot.required', 'session.status'])
 })

@@ -3,15 +3,15 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 
-import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
-import { ControlPlaneQuotaExceededError } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
+import { ControlPlaneQuotaExceededError } from '@open-cowork/cloud-server/control-plane-store'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
 const POSTGRES_SKIP = POSTGRES_URL
   ? false
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres cloud concurrency tests.'
-const require = createRequire(new URL('../apps/desktop/src/main/cloud/postgres-control-plane-store.ts', import.meta.url))
+const require = createRequire(new URL('../packages/cloud-server/src/postgres-control-plane-store.ts', import.meta.url))
 
 type PgPool = {
   query(text: string, values?: unknown[]): Promise<unknown>
@@ -123,6 +123,9 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
     )))
     try {
       const migrations = await stores[0]?.listSchemaMigrations()
+      // The list pins the deterministic APPLY order (= the postgres-schema.ts
+      // registration order, which is not numeric — e.g. 010 and 024 are appended
+      // late). Update it when migrations are added/reordered there.
       assert.deepEqual(migrations?.map((migration) => migration.id), [
         '001_cloud_control_plane',
         '002_org_identity_tokens_audit',
@@ -138,7 +141,16 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '013_api_token_channel_binding_grants',
         '014_cloud_coordination_watches',
         '015_cloud_workflow_steps',
+        '016_cloud_knowledge',
+        '017_cloud_concurrency_counters',
+        '018_concurrency_counter_sessions',
+        '019_concurrency_counter_commands',
+        '024_concurrency_counter_clamp_on_read',
         '010_managed_work_reaper_indexes',
+        '020_session_lookup_indexes',
+        '021_performance_indexes',
+        '022_event_retention_indexes',
+        '025_workspace_event_retention_and_interaction_index',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))

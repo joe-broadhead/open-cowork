@@ -1,3 +1,11 @@
+import {
+  boundedPositiveInt,
+  cappedBackoffMs as sharedCappedBackoffMs,
+  parseRetryAfterMs as sharedParseRetryAfterMs,
+  withRetry,
+  type WithRetryOptions,
+} from "@open-cowork/gateway-channel";
+
 export const defaultWebhookRetryAttempts = 3;
 export const defaultWebhookRetryInitialDelayMs = 1000;
 export const defaultWebhookRetryMaxDelayMs = 10_000;
@@ -17,29 +25,18 @@ export async function withWebhookRetry<T>(
   operation: () => Promise<T>,
   options: WebhookRetryOptions = {},
 ): Promise<T> {
-  const attempts = Math.min(maxWebhookRetryAttempts, boundedPositiveInt(options.attempts, defaultWebhookRetryAttempts));
-  const sleep = options.sleep ?? delay;
-  const random = typeof options.random === "function" ? options.random : Math.random;
-  let attempt = 0;
-
-  while (true) {
-    try {
-      return await operation();
-    } catch (error) {
-      attempt += 1;
-      const delayMs = webhookRetryDelayMs(error, attempt, options);
-      if (attempt >= attempts || delayMs === null) {
-        throw error;
-      }
-      await sleep(jitteredDelayMs(
-        delayMs,
-        options.jitterRatio,
-        random,
-        shouldJitterWebhookDelay(error),
-        options.maxDelayMs,
-      ));
-    }
-  }
+  const retryOptions: WithRetryOptions = {
+    attempts: options.attempts,
+    defaultAttempts: defaultWebhookRetryAttempts,
+    maxAttempts: maxWebhookRetryAttempts,
+    classifyDelayMs: (error, attempt) => webhookRetryDelayMs(error, attempt, options),
+    jitterForError: shouldJitterWebhookDelay,
+    jitterRatio: options.jitterRatio ?? defaultWebhookRetryJitterRatio,
+    maxDelayMs: boundedPositiveInt(options.maxDelayMs, defaultWebhookRetryMaxDelayMs),
+    sleep: options.sleep,
+    random: options.random,
+  };
+  return withRetry(operation, retryOptions);
 }
 
 export function webhookRetryDelayMs(error: unknown, attempt: number, options: WebhookRetryOptions = {}): number | null {
@@ -122,59 +119,16 @@ export function isAbortError(error: unknown): boolean {
 }
 
 export function parseRetryAfterMs(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) {
-    return Math.max(0, seconds * 1000);
-  }
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) {
-    return Math.max(0, date.getTime() - Date.now());
-  }
-  return null;
-}
-
-export function boundedPositiveInt(value: unknown, fallback: number): number {
-  return Number.isInteger(value) && Number(value) > 0 ? Math.floor(Number(value)) : fallback;
+  return sharedParseRetryAfterMs(value);
 }
 
 function cappedBackoffMs(attempt: number, options: WebhookRetryOptions = {}): number {
-  const initialDelayMs = boundedPositiveInt(options.initialDelayMs, defaultWebhookRetryInitialDelayMs);
-  const maxDelayMs = boundedPositiveInt(options.maxDelayMs, defaultWebhookRetryMaxDelayMs);
-  return Math.min(maxDelayMs, initialDelayMs * 2 ** Math.max(0, attempt - 1));
-}
-
-function jitteredDelayMs(
-  delayMs: number,
-  jitterRatio: number | undefined,
-  random: () => number,
-  enabled: boolean,
-  maxDelayMs: number | undefined,
-): number {
-  const maxMs = boundedPositiveInt(maxDelayMs, defaultWebhookRetryMaxDelayMs);
-  if (!enabled) {
-    return Math.min(delayMs, maxMs);
-  }
-  const ratio = boundedNonNegativeNumber(jitterRatio, defaultWebhookRetryJitterRatio);
-  if (ratio === 0 || delayMs === 0) {
-    return Math.min(delayMs, maxMs);
-  }
-  const spread = delayMs * ratio;
-  return Math.min(maxMs, Math.max(0, Math.floor(delayMs - spread + random() * spread * 2)));
-}
-
-function boundedNonNegativeNumber(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+  return sharedCappedBackoffMs(attempt, {
+    initialDelayMs: options.initialDelayMs ?? defaultWebhookRetryInitialDelayMs,
+    maxDelayMs: options.maxDelayMs ?? defaultWebhookRetryMaxDelayMs,
+  });
 }
 
 function shouldJitterWebhookDelay(error: unknown): boolean {
   return !(error instanceof WebhookDeliveryError && error.status === 429 && error.retryAfterMs !== null);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }

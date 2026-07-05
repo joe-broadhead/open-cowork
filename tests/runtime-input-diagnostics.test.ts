@@ -1,3 +1,5 @@
+import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/runtime-host/settings'
+import { saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
@@ -5,9 +7,6 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getRuntimeInputDiagnostics } from '../apps/desktop/src/main/runtime-input-diagnostics.ts'
-import { saveCustomMcp, saveCustomSkill } from '../apps/desktop/src/main/native-customizations.ts'
-import { clearSettingsCache, loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
-
 test('getRuntimeInputDiagnostics reports effective provider inputs and override sources', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-inputs-'))
   const configDir = join(tempRoot, 'config')

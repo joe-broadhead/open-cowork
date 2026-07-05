@@ -1,19 +1,8 @@
-import electron from 'electron'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
+import { getAppPathHost, getSafeStorageHost, quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-import {
-  readSafeStorageBackendForPolicy,
-  resolveSecretStorageMode,
-  type SecretStorageMode,
-} from './secure-storage-policy.ts'
-
-const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
-const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
-  getSelectedStorageBackend?: () => string
-}) | undefined
-
 type SecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString: (plaintext: string) => Buffer
@@ -60,17 +49,18 @@ function defaultCredentialPath() {
 
 function defaultSecretStorageMode() {
   return resolveSecretStorageMode({
-    isPackaged: Boolean(electron.app?.isPackaged),
-    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
+    encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
-      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+      getSafeStorageHost()?.getSelectedStorageBackend,
     ),
   })
 }
 
 function requireSafeStorage() {
-  if (!electronSafeStorage) throw new Error('Electron safeStorage is unavailable')
-  return electronSafeStorage
+  const safeStorage = getSafeStorageHost()
+  if (!safeStorage) throw new Error('Electron safeStorage is unavailable')
+  return safeStorage
 }
 
 function boundedToken(value: unknown, label: string) {
@@ -190,22 +180,32 @@ export class FileCloudWorkspaceCredentialStore implements CloudWorkspaceCredenti
     if (!existsSync(this.path)) return []
     const mode = this.storageMode()
     if (mode === 'unavailable') return []
+    let raw: Buffer
     try {
-      const raw = readFileSync(this.path)
-      const json = mode === 'encrypted'
-        ? this.storage().decryptString(raw)
-        : raw.toString('utf-8')
-      const parsed = JSON.parse(json) as unknown
-      if (!Array.isArray(parsed)) return []
-      return parsed
-        .map(normalizeRecord)
-        .filter((record): record is CloudWorkspaceCredentialRecord => Boolean(record))
+      raw = readFileSync(this.path)
     } catch {
-      if (mode === 'encrypted') {
-        try { rmSync(this.path, { force: true }) } catch { /* ignore corrupted credential cleanup */ }
-      }
       return []
     }
+    let json: string
+    try {
+      json = mode === 'encrypted' ? this.storage().decryptString(raw) : raw.toString('utf-8')
+    } catch {
+      // Transient decrypt failure (keychain locked / safeStorage unavailable): the ciphertext is
+      // intact (audit P2-12) — do NOT delete, or the user is forced to re-login. Retry on next read.
+      return []
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json) as unknown
+    } catch {
+      // Decrypted but not valid JSON → genuinely corrupt. Quarantine for diagnosis, never destroy.
+      if (mode === 'encrypted') quarantineCorruptFile(this.path)
+      return []
+    }
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(normalizeRecord)
+      .filter((record): record is CloudWorkspaceCredentialRecord => Boolean(record))
   }
 
   private writeRecords(records: CloudWorkspaceCredentialRecord[]) {

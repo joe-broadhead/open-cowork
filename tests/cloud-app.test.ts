@@ -1,3 +1,4 @@
+import { clearKnowledgeStoreCache } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { IncomingMessage } from 'node:http'
@@ -5,10 +6,14 @@ import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import type { SecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import {
   assertCloudProductionDeploymentSafe,
   assertCloudAuthDeploymentSafe,
+  assertSecretAdapterRoundTrips,
+  describeUnacknowledgedEphemeralStorage,
   createControlPlaneStoreForCloud,
   createHeaderCloudAuthResolver,
   createCloudAuthResolverForConfig,
@@ -27,19 +32,18 @@ import {
   shouldRunCloudWeb,
   shouldRunCloudWorker,
   startCloudApp,
-} from '../apps/desktop/src/main/cloud/app.ts'
+} from '@open-cowork/cloud-server/app'
 import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createInMemoryObjectStore, createUnavailableObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
-import { createUnavailableSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createInMemoryObjectStore, createUnavailableObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+import { createUnavailableSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEventListener,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { sessionCheckpointLatestKey } from '../apps/desktop/src/main/cloud/workspace-checkpoint-store.ts'
-
+} from '@open-cowork/cloud-server/runtime-adapter'
+import { sessionCheckpointLatestKey } from '@open-cowork/cloud-server/workspace-checkpoint-store'
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 const STRONG_CLOUD_SECRET = 'Pp4J9_kV2rTq8YzLmN6bHwC3sDxF7uAaG1eOiR5v'
 const STRONG_CLOUD_COOKIE_SECRET = 'Vs7Qm2_ZxHa93LpNuR4TwE8cYbK6jFoDiG1rS5el'
@@ -206,6 +210,10 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: '2500',
     OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES: '42',
     OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS: '1234',
+    OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG: '321',
+    OPEN_COWORK_CLOUD_MAX_CONNECTIONS: '4096',
+    OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS: '250',
+    OPEN_COWORK_CLOUD_SSE_PG_NOTIFY: 'true',
     OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: 'false',
     OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: 'true',
     OPEN_COWORK_CLOUD_COOKIE_SECURE: 'false',
@@ -222,6 +230,10 @@ test('cloud bootstrap parses env options and role helpers', () => {
     shutdownGraceMs: 2500,
     runtimeCacheMaxEntries: 42,
     runtimeCacheIdleTtlMs: 1234,
+    maxSseConnectionsPerOrg: 321,
+    maxConnections: 4096,
+    ssePollIntervalMs: 250,
+    ssePgNotifyEnabled: true,
     corsOrigin: null,
     autoProcessCommands: false,
     checkpointsEnabled: true,
@@ -242,6 +254,43 @@ test('cloud bootstrap parses env options and role helpers', () => {
   assert.equal(parseCloudDeploymentTier(null), 'local')
   assert.equal(parseCloudDeploymentTier('public_production'), 'public_production')
   assert.throws(() => parseCloudDeploymentTier('ga'), /Invalid OPEN_COWORK_CLOUD_DEPLOYMENT_TIER/)
+})
+
+test('describeUnacknowledgedEphemeralStorage warns beta tiers on ephemeral storage unless acknowledged', () => {
+  const ephemeralStore = new InMemoryControlPlaneStore()
+  const durableStore = { __durable: true } as never // any non-InMemoryControlPlaneStore instance
+  const filesystemObjectStore = { kind: 'filesystem' } as never
+  const durableObjectStore = { kind: 's3' } as never
+
+  // Beta tier on in-memory control plane + filesystem object store → flagged (both ephemeral).
+  assert.deepEqual(
+    describeUnacknowledgedEphemeralStorage({ tier: 'self_host_beta', store: ephemeralStore, objectStore: filesystemObjectStore, env: {} }),
+    { controlPlane: 'in-memory', objectStore: 'filesystem' },
+  )
+  // private_beta with a durable control plane but filesystem object store → still flagged (object store is ephemeral).
+  assert.deepEqual(
+    describeUnacknowledgedEphemeralStorage({ tier: 'private_beta', store: durableStore, objectStore: filesystemObjectStore, env: {} }),
+    { controlPlane: 'durable', objectStore: 'filesystem' },
+  )
+  // Acknowledged via env opt-in → no warning.
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'self_host_beta', store: ephemeralStore, objectStore: filesystemObjectStore, env: { OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE: 'true' } }),
+    null,
+  )
+  // Fully durable storage → no warning.
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'self_host_beta', store: durableStore, objectStore: durableObjectStore, env: {} }),
+    null,
+  )
+  // `local` (dev) and `public_production` (hard-blocked elsewhere) are out of scope → never warns here.
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'local', store: ephemeralStore, objectStore: filesystemObjectStore, env: {} }),
+    null,
+  )
+  assert.equal(
+    describeUnacknowledgedEphemeralStorage({ tier: 'public_production', store: ephemeralStore, objectStore: filesystemObjectStore, env: {} }),
+    null,
+  )
 })
 
 test('cloud public branding resolves from config and env JSON', () => {
@@ -317,12 +366,19 @@ test('cloud public branding ignores unsafe env URLs', () => {
   const branding = resolveCloudPublicBranding(config, {
     OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: JSON.stringify({
       logoUrl: 'http://assets.example.test/logo.png',
+      faviconUrl: 'http://assets.example.test/favicon.png',
+      ogImageUrl: 'https://cdn.example.test/social.png',
+      description: 'Custom deployment description.',
       supportUrl: 'javascript:alert(1)',
       privacyUrl: 'mailto:privacy@example.test',
     }),
   })
 
   assert.equal(branding.logoUrl, undefined)
+  // Favicon enforces https (non-https rejected); og image + description pass through.
+  assert.equal(branding.faviconUrl, undefined)
+  assert.equal(branding.ogImageUrl, 'https://cdn.example.test/social.png')
+  assert.equal(branding.description, 'Custom deployment description.')
   assert.equal(branding.supportUrl, 'https://support.config.example/cowork')
   assert.equal(branding.privacyUrl, DEFAULT_CONFIG.cloud.publicBranding.privacyUrl)
 })
@@ -983,6 +1039,41 @@ test('cloud web role starts transport without processing worker commands inline'
     assert.equal(runtime.prompts.length, 0)
   } finally {
     await app.close()
+  }
+})
+
+test('cloud app stores Knowledge data under the configured cloud app data root', async () => {
+  const runtime = new FakeRuntime()
+  const paths = createCloudPathProvider(await mkdtemp(join(tmpdir(), 'open-cowork-cloud-knowledge-')))
+  const app = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    runtime,
+    paths,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+
+  try {
+    assert.ok(app.url)
+    const response = await fetch(`${app.url}/api/knowledge`, {
+      headers: {
+        'x-open-cowork-tenant-id': 'tenant-knowledge',
+        'x-open-cowork-user-id': 'user-knowledge',
+        'x-open-cowork-user-email': 'knowledge@example.test',
+        'x-open-cowork-user-role': 'owner',
+      },
+    })
+    assert.equal(response.status, 200)
+    const dbStat = await stat(join(paths.getAppDataDir(), 'knowledge.sqlite'))
+    assert.equal(dbStat.isFile(), true)
+  } finally {
+    await app.close()
+    clearKnowledgeStoreCache()
   }
 })
 
@@ -1825,4 +1916,64 @@ test('cloud header auth resolver maps request headers to tenant principal', asyn
   await assert.rejects(async () => {
     await auth({ headers: spoofed } as unknown as IncomingMessage)
   }, /signature is invalid/)
+})
+
+test('public production deployment guard rejects reusing the secret key as the cookie secret (P2-17)', () => {
+  const productionConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      storage: {
+        controlPlane: { kind: 'postgres' as const },
+        objectStore: { kind: 'gcs' as const, bucket: 'open-cowork-test-bucket' },
+      },
+    },
+  }
+  const reusedKeyEnv = {
+    OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
+    OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_SECRET, // identical → crypto key reuse
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+  }
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: reusedKeyEnv,
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /distinct from OPEN_COWORK_CLOUD_SECRET_KEY/)
+
+  // A distinct cookie secret passes the reuse check.
+  assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: { ...reusedKeyEnv, OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }))
+})
+
+test('secret adapter boot canary passes a healthy adapter and fails a broken one (P2-17)', () => {
+  assert.doesNotThrow(() => assertSecretAdapterRoundTrips(createEnvelopeSecretAdapter(STRONG_CLOUD_SECRET)))
+
+  // A non-envelope adapter is skipped (the canary only guards the encryption path).
+  const plaintextAdapter: SecretAdapter = { mode: 'plaintext', protect: (value) => value, reveal: (value) => value }
+  assert.doesNotThrow(() => assertSecretAdapterRoundTrips(plaintextAdapter))
+
+  // An envelope adapter that cannot round-trip fails the canary instead of corrupting work.
+  const brokenAdapter: SecretAdapter = { mode: 'envelope-v1', protect: (value) => value, reveal: () => 'tampered' }
+  assert.throws(() => assertSecretAdapterRoundTrips(brokenAdapter), /did not round-trip/)
+
+  const throwingAdapter: SecretAdapter = {
+    mode: 'envelope-v1',
+    protect: (value) => value,
+    reveal: () => { throw new Error('key unavailable') },
+  }
+  assert.throws(() => assertSecretAdapterRoundTrips(throwingAdapter), /boot canary/)
 })

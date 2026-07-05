@@ -4,7 +4,7 @@ import {
   clampTaskDrillInWidth,
   DEFAULT_TASK_DRILL_IN_WIDTH,
   resolveTaskDrillInWidth,
-} from '../apps/desktop/src/renderer/components/chat/task-drill-in-layout.ts'
+} from '../packages/app/src/components/chat/task-drill-in-layout.ts'
 
 test('clampTaskDrillInWidth keeps custom widths within the viewport-safe range', () => {
   assert.equal(clampTaskDrillInWidth(200, 1400), 420)

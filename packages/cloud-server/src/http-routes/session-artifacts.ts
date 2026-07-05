@@ -1,0 +1,140 @@
+import type { ArtifactKind, ArtifactStatus } from '@open-cowork/shared'
+import type { CloudApiRouteInput } from './types.ts'
+
+export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput): Promise<boolean> {
+  const { req, res, options, context, resource, itemId: sessionId, action, artifactId, tools } = input
+  if (resource !== 'sessions' || action !== 'artifacts' || !sessionId) return false
+
+  if (!options.policy.features.artifacts) {
+    tools.writePolicyError(res, 403, 'Artifacts are disabled for this cloud profile.', 'artifacts.disabled', options.corsOrigin)
+    return true
+  }
+  if (!options.artifacts) {
+    tools.writeError(res, 503, 'Cloud artifact storage is not configured.', options.corsOrigin)
+    return true
+  }
+  if (!artifactId && req.method === 'GET') {
+    tools.writeJson(res, 200, {
+      artifacts: await options.artifacts.listPublicSessionArtifacts(context.principal, sessionId),
+    }, options.corsOrigin)
+    return true
+  }
+  if (!artifactId && req.method === 'POST') {
+    // Opt-in direct-to-store upload (begin phase). When the client asks (?transfer=presigned)
+    // AND the configured object store supports presigning, mint a time-limited PUT URL the
+    // client uploads bytes straight to object storage with, then calls the finalize endpoint
+    // below to record the row. When presigning is unavailable (non-S3 / no static creds) we
+    // reply transfer:'unsupported' so the client falls back to the buffered upload below — the
+    // default-safe path. The begin request carries only metadata (no bytes), so it stays small.
+    if (context.url.searchParams.get('transfer') === 'presigned') {
+      const beginBody = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const begun = await options.artifacts.presignSessionArtifactUpload(context.principal, sessionId, {
+        filename: tools.readString(beginBody.filename) || '',
+        contentType: tools.readString(beginBody.contentType),
+      })
+      if (begun) {
+        tools.writeJson(res, 200, {
+          upload: {
+            transfer: 'presigned',
+            artifactId: begun.artifactId,
+            uploadUrl: begun.presigned.url,
+            uploadMethod: begun.presigned.method,
+            uploadHeaders: begun.presigned.headers,
+            uploadExpiresAt: begun.presigned.expiresAt,
+          },
+        }, options.corsOrigin)
+        return true
+      }
+      tools.writeJson(res, 200, { upload: { transfer: 'unsupported' } }, options.corsOrigin)
+      return true
+    }
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
+    const uploaded = await options.artifacts.uploadSessionArtifact(context.principal, sessionId, {
+      filename: tools.readString(body.filename) || '',
+      contentType: tools.readString(body.contentType),
+      dataBase64: tools.readString(body.dataBase64) || '',
+      kind: tools.readString(body.kind) as ArtifactKind | null,
+      status: tools.readString(body.status) as ArtifactStatus | null,
+      authorAgentId: tools.readString(body.authorAgentId),
+      projectId: tools.readString(body.projectId),
+      taskId: tools.readString(body.taskId),
+      statusUpdatedBy: tools.readString(body.statusUpdatedBy),
+      statusUpdatedAt: tools.readString(body.statusUpdatedAt),
+    })
+    tools.writeJson(res, 201, { artifact: options.artifacts.publicArtifact(uploaded) }, options.corsOrigin)
+    return true
+  }
+
+  const artifactSubaction = context.segments[5]
+  if (artifactId && artifactSubaction === 'finalize' && req.method === 'POST') {
+    // Finalize phase of the direct-to-store upload: the bytes are already in object storage
+    // (the client PUT them to the presigned URL); record the metadata row, reusing the same
+    // write the buffered upload performs. Size/content-type are read authoritatively from the
+    // store via headObject in the service, so the request body carries only descriptive metadata.
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const finalized = await options.artifacts.finalizeSessionArtifactUpload(context.principal, sessionId, {
+      artifactId,
+      filename: tools.readString(body.filename) || '',
+      contentType: tools.readString(body.contentType),
+      kind: tools.readString(body.kind) as ArtifactKind | null,
+      status: tools.readString(body.status) as ArtifactStatus | null,
+      authorAgentId: tools.readString(body.authorAgentId),
+      projectId: tools.readString(body.projectId),
+      taskId: tools.readString(body.taskId),
+      statusUpdatedBy: tools.readString(body.statusUpdatedBy),
+      statusUpdatedAt: tools.readString(body.statusUpdatedAt),
+    })
+    tools.writeJson(res, 201, { artifact: options.artifacts.publicArtifact(finalized) }, options.corsOrigin)
+    return true
+  }
+  if (artifactId && artifactSubaction === 'status' && req.method === 'POST') {
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const nextStatus = tools.readString(body.status)
+    if (!nextStatus) {
+      tools.writeError(res, 400, 'Artifact status is required.', options.corsOrigin)
+      return true
+    }
+    const artifact = await options.artifacts.updateSessionArtifactStatus(context.principal, sessionId, artifactId, {
+      status: nextStatus as ArtifactStatus,
+      updatedBy: tools.readString(body.updatedBy),
+      authorAgentId: tools.readString(body.authorAgentId),
+      projectId: tools.readString(body.projectId),
+      taskId: tools.readString(body.taskId),
+      kind: tools.readString(body.kind) as ArtifactKind | null,
+    })
+    tools.writeJson(res, 200, { artifact: options.artifacts.publicArtifact(artifact) }, options.corsOrigin)
+    return true
+  }
+  if (artifactId && !artifactSubaction && req.method === 'GET') {
+    // Opt-in direct-to-store download. When the client asks (?transfer=presigned) AND the
+    // configured object store supports presigning, hand back a time-limited URL the client
+    // fetches straight from object storage instead of base64-buffering the bytes through the
+    // pod. Any other case (no opt-in, or no presign support) falls through to the buffered
+    // base64 response below, which stays the default-safe path.
+    if (context.url.searchParams.get('transfer') === 'presigned') {
+      const presigned = await options.artifacts.presignSessionArtifactDownload(context.principal, sessionId, artifactId)
+      if (presigned) {
+        tools.writeJson(res, 200, {
+          artifact: {
+            ...options.artifacts.publicArtifact(presigned.artifact),
+            transfer: 'presigned',
+            downloadUrl: presigned.presigned.url,
+            downloadExpiresAt: presigned.presigned.expiresAt,
+          },
+        }, options.corsOrigin)
+        return true
+      }
+    }
+    const artifact = await options.artifacts.readSessionArtifact(context.principal, sessionId, artifactId)
+    tools.writeJson(res, 200, {
+      artifact: {
+        ...options.artifacts.publicArtifact(artifact),
+        contentType: artifact.contentType,
+        dataBase64: artifact.dataBase64,
+      },
+    }, options.corsOrigin)
+    return true
+  }
+  tools.writeError(res, 404, 'Not found.', options.corsOrigin)
+  return true
+}

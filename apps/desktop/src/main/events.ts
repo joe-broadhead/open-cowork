@@ -1,14 +1,12 @@
+import { getEffectiveSettings, loadSettings } from '@open-cowork/runtime-host/settings'
+import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
+import { normalizeMcpStatusEntries, normalizeRuntimeEventEnvelope } from '@open-cowork/runtime-host'
 import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { log } from './logger.ts'
-import {
-  normalizeMcpStatusEntries,
-  normalizeRuntimeEventEnvelope,
-} from './opencode-adapter.ts'
-import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { getEffectiveSettings, loadSettings } from './settings.ts'
+import { dispatchRuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import {
   sweepStaleTaskState,
 } from './event-task-state.ts'
@@ -20,8 +18,6 @@ import {
   sweepSessionScopedMessageState,
 } from './event-message-handlers.ts'
 import { handleRuntimeSideEffectEvent } from './event-runtime-handlers.ts'
-import { sdkErrorMessage } from './sdk-error.ts'
-
 export { removeParentSession } from './event-runtime-handlers.ts'
 
 const UNKNOWN_EVENT_LOG_INTERVAL_MS = 60_000

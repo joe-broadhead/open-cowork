@@ -65,7 +65,7 @@ updated JSON.
 ## Renderer component tests
 
 Renderer component tests live next to the components under
-`apps/desktop/src/renderer/**/*.test.tsx` and run with
+`packages/app/src/**/*.test.tsx` and run with
 `pnpm test:renderer`. Use them for branchy UI behavior, unsafe
 content rendering, permission/auth controls, and component-level
 regressions that do not need a full Electron process.

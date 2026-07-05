@@ -1,10 +1,4 @@
-import {
-  evaluateHttpMcpUrl,
-  evaluateHttpMcpUrlResolved,
-  type McpDnsResolver,
-  type McpUrlPolicyResult,
-} from '../mcp-url-policy.ts'
-
+import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpDnsResolver, type McpUrlPolicyResult } from '@open-cowork/runtime-host/mcp-url-policy'
 export type DesktopPairingBrokerUrlResolutionOptions = {
   resolveHostname?: McpDnsResolver
 }

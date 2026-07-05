@@ -1,10 +1,10 @@
+import { getSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { isRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
+import { measureAsyncPerf } from '@open-cowork/runtime-host/perf-metrics'
+import { shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
-import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
-import { isRuntimeReady } from './runtime-status.ts'
-import { getSessionRecord } from './session-registry.ts'
 import { log } from './logger.ts'
-import { shortSessionId } from './log-sanitizer.ts'
-import { measureAsyncPerf } from './perf-metrics.ts'
 import { createSessionStatusReconciler } from './session-status-coordinator.ts'
 
 type RuntimeSessionStatusReconcilerOptions = {

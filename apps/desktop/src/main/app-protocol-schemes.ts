@@ -1,6 +1,6 @@
+import { BRANDING_ASSET_PROTOCOL } from '@open-cowork/runtime-host'
 import electron from 'electron'
 import type { CustomScheme } from 'electron'
-import { BRANDING_ASSET_PROTOCOL } from './branding-assets.ts'
 import { CHART_FRAME_ASSET_PROTOCOL } from '../lib/chart-frame-assets.ts'
 
 const electronProtocol = (electron as { protocol?: typeof import('electron').protocol }).protocol

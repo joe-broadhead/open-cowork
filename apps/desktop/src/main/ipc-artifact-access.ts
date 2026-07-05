@@ -1,12 +1,11 @@
+import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { isSandboxWorkspaceDir } from '@open-cowork/runtime-host/runtime-paths'
 import { isAbsolute, relative, resolve } from 'path'
 import type { SessionArtifactRequest } from '@open-cowork/shared'
 import { getChartArtifactsRoot } from './chart-artifacts.ts'
 import { getBrandName } from './config-loader.ts'
 import { resolveContainedArtifactPath } from './artifact-path-policy.ts'
-import { getRuntimeHomeDir } from './runtime.ts'
-import { isSandboxWorkspaceDir } from './runtime-paths.ts'
-import type { SessionRecord } from './session-registry.ts'
-
 function isInsideOrSame(root: string, source: string) {
   const relativeToRoot = relative(root, source)
   return relativeToRoot === '' || (!relativeToRoot.startsWith('..') && !isAbsolute(relativeToRoot))

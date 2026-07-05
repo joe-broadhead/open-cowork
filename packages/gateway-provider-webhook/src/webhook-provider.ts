@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
@@ -16,9 +16,8 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { channelProviderKindFromId, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { boundedPositiveInt, channelProviderKindFromId, constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 import {
-  boundedPositiveInt,
   isAbortError,
   isRetryableWebhookDeliveryError,
   parseRetryAfterMs,
@@ -389,7 +388,10 @@ export class WebhookProvider implements ChannelProvider {
             host: this.deliveryUrl.host
           },
           body: signed.body,
-          signal: controller.signal
+          signal: controller.signal,
+          // Never auto-follow a redirect: it would re-resolve to an unpinned (possibly
+          // private) host and defeat the SSRF address pin. A 3xx surfaces as !ok below.
+          redirect: "manual"
         });
         if (!attempt.ok) {
           throw WebhookDeliveryError.fromResponse(attempt);
@@ -479,35 +481,35 @@ export class WebhookProvider implements ChannelProvider {
       return null;
     }
     if (!expectedSecret) {
-      throw new Error("Webhook shared secret is required for ingress");
+      throw new WebhookAuthError("Webhook shared secret is required for ingress");
     }
 
     const timestamp = headerValue(auth.headers, "x-open-cowork-gateway-webhook-timestamp");
     const signature = headerValue(auth.headers, "x-open-cowork-gateway-webhook-signature");
     const rawBody = auth.rawBody || "";
     if (!timestamp || !signature || !rawBody) {
-      throw new Error("Webhook timestamp signature is required for ingress");
+      throw new WebhookAuthError("Webhook timestamp signature is required for ingress");
     }
     const timestampSeconds = Number(timestamp);
     if (!Number.isFinite(timestampSeconds)) {
-      throw new Error("Webhook timestamp is invalid");
+      throw new WebhookAuthError("Webhook timestamp is invalid");
     }
     const nowMs = this.config.now?.().getTime() ?? Date.now();
     const maxAgeMs = this.config.maxSignatureAgeMs ?? defaultMaxSignatureAgeMs;
     const timestampMs = timestampSeconds * 1000;
     if (Math.abs(nowMs - timestampMs) > maxAgeMs) {
-      throw new Error("Webhook timestamp is outside the allowed window");
+      throw new WebhookAuthError("Webhook timestamp is outside the allowed window");
     }
 
     const expectedSignature = signWebhookIngressPayload(rawBody, expectedSecret, timestamp);
     if (!constantTimeStringEqual(signature, expectedSignature)) {
-      throw new Error("Webhook signature verification failed");
+      throw new WebhookAuthError("Webhook signature verification failed");
     }
     this.purgeSeenIngressSignatures(nowMs);
     const replayKey = `${timestamp}:${signature}`;
     const existing = this.seenIngressSignatures.get(replayKey);
     if (existing && existing.expiresAt > nowMs) {
-      throw new Error("Webhook signature replay rejected");
+      throw new WebhookAuthError("Webhook signature replay rejected");
     }
     const scope = webhookReplayScopeFromRawBody(rawBody, this.id);
     const entry = { expiresAt: nowMs + maxAgeMs, scope };
@@ -869,17 +871,6 @@ function headerValue(
   return undefined;
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string): boolean {
-  if (typeof left !== "string") {
-    return false;
-  }
-  const leftBuffer = Buffer.from(left, "utf8");
-  const rightBuffer = Buffer.from(right, "utf8");
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}
 
 function containsControlCharacter(value: string): boolean {
   for (const character of value) {

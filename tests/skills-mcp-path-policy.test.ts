@@ -1,11 +1,10 @@
+import { CUSTOM_SKILL_LIMITS } from '@open-cowork/runtime-host/custom-content-limits'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { isSafeRelativePath, isSafeSkillBundleName, resolveSafeSkillsRoot, saveSkillBundle } from '../mcps/skills/src/index.ts'
-import { CUSTOM_SKILL_LIMITS } from '../apps/desktop/src/main/custom-content-limits.ts'
-
 function skillContent(name: string, description = 'Valid test skill bundle.') {
   return [
     '---',

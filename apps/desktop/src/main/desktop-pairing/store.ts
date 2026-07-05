@@ -1,3 +1,4 @@
+import { quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
 import {
   DEFAULT_DESKTOP_PAIRING_POLICY,
   type DesktopPairingAuditEvent,
@@ -6,10 +7,9 @@ import {
   type DesktopPairingRecord,
   type DesktopPairingUpdateInput,
 } from '@open-cowork/shared'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppDataDir } from '../config-loader.ts'
-import { writeFileAtomic } from '../fs-atomic.ts'
 import { evaluateDesktopPairingBrokerUrl } from './broker-url-policy.ts'
 
 const MAX_TEXT_BYTES = 512
@@ -252,8 +252,18 @@ function sortRecords(records: DesktopPairingRecord[]) {
   return records.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
 }
 
+type DesktopPairingState = { pairings: DesktopPairingRecord[]; audit: DesktopPairingAuditEvent[] }
+
 export class FileDesktopPairingStore implements DesktopPairingStore {
   private readonly path: string
+  // In-memory cache of the parsed+normalized state, keyed on the file's mtime.
+  // readState() runs on every store op — including observeRuntimeEvent, which
+  // fires per runtime session event — and re-parsing + re-normalizing up to
+  // MAX_AUDIT_EVENTS entries each time blocked the Electron main loop. This
+  // store is the sole writer, so we refresh the cache on write and fall back to
+  // an mtime check to pick up any out-of-band edit. Callers never mutate the
+  // returned arrays in place (they slice/spread/filter), so sharing by ref is safe.
+  private cache: { mtimeMs: number; state: DesktopPairingState } | null = null
 
   constructor(path = defaultStorePath()) {
     this.path = path
@@ -307,14 +317,19 @@ export class FileDesktopPairingStore implements DesktopPairingStore {
     return normalized
   }
 
-  private readState(): { pairings: DesktopPairingRecord[]; audit: DesktopPairingAuditEvent[] } {
-    if (!existsSync(this.path)) return { pairings: [], audit: [] }
+  private readState(): DesktopPairingState {
+    if (!existsSync(this.path)) {
+      this.cache = null
+      return { pairings: [], audit: [] }
+    }
+    const mtimeMs = this.currentMtimeMs()
+    if (this.cache && mtimeMs !== null && this.cache.mtimeMs === mtimeMs) return this.cache.state
     try {
       const parsed = JSON.parse(readFileSync(this.path, 'utf-8')) as unknown
       const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
         ? parsed as { pairings?: unknown; audit?: unknown }
         : {}
-      return {
+      const state: DesktopPairingState = {
         pairings: Array.isArray(record.pairings)
           ? record.pairings.map(normalizeRecord).filter((entry): entry is DesktopPairingRecord => Boolean(entry))
           : [],
@@ -322,13 +337,20 @@ export class FileDesktopPairingStore implements DesktopPairingStore {
           ? record.audit.map(normalizeAuditEvent).filter((entry): entry is DesktopPairingAuditEvent => Boolean(entry))
           : [],
       }
+      if (mtimeMs !== null) this.cache = { mtimeMs, state }
+      return state
     } catch {
+      // A corrupt/half-written file is NOT "no pairings" (audit P2-13): quarantine it to .corrupt so
+      // the good-but-unreadable data is preserved for recovery and the next writeState can't clobber
+      // it down to only the newest entry.
+      quarantineCorruptFile(this.path)
+      this.cache = null
       return { pairings: [], audit: [] }
     }
   }
 
-  private writeState(state: { pairings: DesktopPairingRecord[]; audit: DesktopPairingAuditEvent[] }) {
-    const safeState = {
+  private writeState(state: DesktopPairingState) {
+    const safeState: DesktopPairingState = {
       pairings: sortRecords(state.pairings)
         .map(normalizeRecord)
         .filter((entry): entry is DesktopPairingRecord => Boolean(entry)),
@@ -338,6 +360,16 @@ export class FileDesktopPairingStore implements DesktopPairingStore {
         .slice(-MAX_AUDIT_EVENTS),
     }
     writeFileAtomic(this.path, JSON.stringify(safeState, null, 2), { mode: 0o600 })
+    const mtimeMs = this.currentMtimeMs()
+    this.cache = mtimeMs !== null ? { mtimeMs, state: safeState } : null
+  }
+
+  private currentMtimeMs(): number | null {
+    try {
+      return statSync(this.path).mtimeMs
+    } catch {
+      return null
+    }
   }
 }
 

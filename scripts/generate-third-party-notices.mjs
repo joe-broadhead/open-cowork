@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 const rootDir = process.cwd()
 const outputPath = join(rootDir, 'THIRD_PARTY_NOTICES.md')
@@ -30,10 +30,7 @@ function normalizeRepository(value) {
   return ''
 }
 
-function detectLicenseFromFiles(packagePath, packageName) {
-  if (packageName.startsWith('opencode-')) {
-    return 'MIT (opencode-ai companion package)'
-  }
+function detectLicenseFromFiles(packagePath) {
   for (const licenseFileName of licenseFileNames) {
     const licensePath = join(packagePath, licenseFileName)
     if (!existsSync(licensePath)) continue
@@ -91,6 +88,61 @@ function collectExistingGeneratedLicenseFiles(name, version) {
     .filter((entry) => entry.text.length > 0)
 }
 
+// First-party @open-cowork/* workspace packages are linked into the dependency
+// graph via link:/file:/workspace: specs and resolve to source directories inside
+// this repository. They are part of Open Cowork itself, not redistributed
+// third-party code, so they must not be attributed in THIRD_PARTY_NOTICES.md.
+function isWorkspaceLink(spec, packagePath) {
+  if (typeof spec === 'string' && /^(?:link:|file:|workspace:)/.test(spec)) return true
+  if (typeof packagePath === 'string' && packagePath.length > 0) {
+    const resolved = resolve(packagePath)
+    const insideRoot = resolved === rootDir || resolved.startsWith(rootDir + sep)
+    const insideNodeModules = resolved.split(sep).includes('node_modules')
+    if (insideRoot && !insideNodeModules) return true
+  }
+  return false
+}
+
+// opencode-ai ships its native runtime as companion packages named
+// opencode-<os>-<arch>(-...). Those companions carry no per-package manifest
+// license field and no LICENSE file of their own — they are published as part of
+// opencode-ai and inherit its terms. We resolve their attribution from the parent
+// opencode-ai manifest/LICENSE rather than a hardcoded string.
+function isOpencodeCompanion(name) {
+  return name.startsWith('opencode-') && name !== 'opencode-ai'
+}
+
+// Resolve the parent opencode-ai package's license id and LICENSE files from the
+// installed dependency tree so companion binaries can inherit real attribution.
+function resolveOpencodeAiParent(nodes) {
+  let parent = null
+  const walk = (node) => {
+    if (parent) return
+    for (const dependencies of [node?.dependencies, node?.optionalDependencies]) {
+      if (!dependencies) continue
+      for (const [dependencyName, dependency] of Object.entries(dependencies)) {
+        if (parent) return
+        const name = dependency?.name || dependency?.from || dependencyName
+        if (name === 'opencode-ai' && dependency?.path) {
+          const manifestPath = join(dependency.path, 'package.json')
+          const manifest = existsSync(manifestPath) ? readJson(manifestPath) : {}
+          const manifestLicense = normalizeLicense(manifest.license || manifest.licenses)
+          parent = {
+            license: manifestLicense === 'UNKNOWN'
+              ? detectLicenseFromFiles(dependency.path)
+              : manifestLicense,
+            licenseFiles: collectTextFiles(dependency.path, licenseFileNames),
+          }
+          return
+        }
+        walk(dependency)
+      }
+    }
+  }
+  for (const node of nodes) walk(node)
+  return parent
+}
+
 function collectDependencyNodes(node, packages) {
   const dependencySets = [node?.dependencies, node?.optionalDependencies]
   for (const dependencies of dependencySets) {
@@ -98,19 +150,40 @@ function collectDependencyNodes(node, packages) {
     for (const [dependencyName, dependency] of Object.entries(dependencies)) {
       const name = dependency?.name || dependency?.from || dependencyName
       if (!name || !dependency?.version || !dependency?.path) continue
+      if (isWorkspaceLink(dependency.version, dependency.path)) {
+        // Skip the first-party package itself, but still recurse so its
+        // transitive third-party dependencies remain attributed.
+        collectDependencyNodes(dependency, packages)
+        continue
+      }
       const key = `${name}@${dependency.version}`
       if (!packages.has(key)) {
         const manifestPath = join(dependency.path, 'package.json')
         const manifest = existsSync(manifestPath) ? readJson(manifestPath) : {}
         const notices = collectTextFiles(dependency.path, noticeFileNames)
-        const licenseFiles = collectTextFiles(dependency.path, licenseFileNames)
+        let licenseFiles = collectTextFiles(dependency.path, licenseFileNames)
         const manifestLicense = normalizeLicense(manifest.license || manifest.licenses)
+        let license = manifestLicense === 'UNKNOWN'
+          ? detectLicenseFromFiles(dependency.path)
+          : manifestLicense
+        if (isOpencodeCompanion(name)) {
+          if (license === 'UNKNOWN') {
+            // Inherit the resolved parent opencode-ai license. The fallback below
+            // is only reached if the parent manifest itself lacks license info.
+            license = opencodeAiParent?.license && opencodeAiParent.license !== 'UNKNOWN'
+              ? opencodeAiParent.license
+              : 'MIT (opencode-ai companion package; parent manifest license unavailable)'
+          }
+          if (licenseFiles.length === 0 && opencodeAiParent?.licenseFiles?.length) {
+            // Copy opencode-ai's LICENSE into the companion's notices entry so the
+            // shipped native binary carries the same bundled attribution file.
+            licenseFiles = opencodeAiParent.licenseFiles.map((file) => ({ ...file }))
+          }
+        }
         packages.set(key, {
           name,
           version: dependency.version,
-          license: manifestLicense === 'UNKNOWN'
-            ? detectLicenseFromFiles(dependency.path, name)
-            : manifestLicense,
+          license,
           repository: normalizeRepository(manifest.repository) || manifest.homepage || dependency.resolved || '',
           notices,
           licenseFiles,
@@ -127,6 +200,7 @@ const listJson = execFileSync(
   { cwd: rootDir, encoding: 'utf8', maxBuffer: 100 * 1024 * 1024 },
 )
 const workspaceNodes = JSON.parse(listJson)
+const opencodeAiParent = resolveOpencodeAiParent(workspaceNodes)
 const packages = new Map()
 for (const workspaceNode of workspaceNodes) {
   collectDependencyNodes(workspaceNode, packages)

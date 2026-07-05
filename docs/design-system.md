@@ -7,9 +7,9 @@ Open Cowork uses a small, enforceable design system so UI work stays consistent 
 Canonical structural tokens live in
 `packages/shared/src/design-tokens.ts` and are documented in
 [Design Tokens](design-tokens.md). Desktop imports the generated CSS variables
-from `apps/desktop/src/renderer/styles/generated/design-tokens.css`; Cloud Web
-emits the same structural `:root` block from `emitRootTokensCss()` in its
-server-rendered shell while the Vite React client scaffold comes online.
+from `packages/app/src/styles/generated/design-tokens.css`; Cloud Web
+is the browser build of the same renderer, so it ships the same structural
+`:root` block (also produced by `emitRootTokensCss()` for the cloud shell).
 `pnpm design-tokens:build`
 updates the generated Desktop partial, and `tests/design-tokens-sync.test.ts`
 drift-gates it against the shared module, the default dark public branding
@@ -35,7 +35,7 @@ Avoid adding new Tailwind arbitrary font-size utilities such as `text-[13px]`. `
 
 Shared React primitives live in `packages/ui` and are exported as the private
 workspace package `@open-cowork/ui`. Desktop keeps compatibility re-export
-shims in `apps/desktop/src/renderer/components/ui/`, but new primitive work
+shims in `packages/app/src/components/ui/`, but new primitive work
 should happen in the package:
 
 - `Button` and `IconButton` for actions. `IconButton` requires a `label` prop; `pnpm lint` fails if a usage omits it.
@@ -55,9 +55,9 @@ should happen in the package:
   `KanbanBoard`, `KanbanTaskCard`, drawer-capable `Dialog`, `RunTimeline`,
   `PermissionEditorRow`, `DeliverableCard`, progress-enabled `ProjectCard`,
   `ChannelRow`, `PersonRow`, `WizardSteps`, `WizardStepPane`, `TraitSlider`,
-  `WorkingStyleBars`, `WikiSpaceRail`, and `WikiPage`. Desktop renders all of
-  these in `#/ui-primitives`; Cloud Web styles the same class contract through
-  `apps/website/src/style-studio-primitives.ts`.
+  `WorkingStyleBars`, `WikiSpaceRail`, and `WikiPage`. The renderer renders all
+  of these in `#/ui-primitives` from the same `@open-cowork/ui` primitives on
+  both Desktop and Cloud Web.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
 
@@ -80,29 +80,26 @@ advanced free-text model ID fallback for power users and uncataloged models.
 Desktop and Cloud Web both expose the same workbench structure through
 `data-workbench-pane="threads"`, `data-workbench-pane="conversation"`,
 `data-workbench-pane="review"`, `data-action-cluster="true"`, and
-`data-diff-view="true"`. Desktop styles these classes in
-`apps/desktop/src/renderer/styles/globals.css`; Cloud Web styles the same
-contract in `apps/website/src/style-shared-ui.ts`. Keep future chat,
-artifact, and review affordances on those shared hooks so the two surfaces do
-not drift.
+`data-diff-view="true"`. The renderer styles these classes once in
+`packages/app/src/styles/globals.css` for both Desktop and Cloud Web.
+Keep future chat, artifact, and review affordances on those shared hooks.
 
-Cloud Web has a React SSR/controller scaffold at
-`apps/website/src/react-client.tsx`, `apps/website/src/react-shell.ts`, and
-`apps/website/src/react-shell-controller.tsx`. It mounts a React controller for
-`#open-cowork-cloud-react-root`, uses `@open-cowork/ui/app-api` for the shared
-provider/hook, and uses `apps/website/src/app-api.ts` as the Cloud fetch/SSE
-adapter. Auth bootstrap, routing, threads, chat, agents, capabilities,
-workflows, artifacts, admin/settings surfaces, and Cloud theme switching are
-React-owned; the old vanilla feature-script directory has been retired. New
-React feature code should use `useAppApi()` instead of direct `fetch`,
+Cloud Web is the browser build of the unified renderer
+(`packages/app/src`), served by the cloud at `GET /`. In the browser
+the renderer runs against a typed `CoworkAPI` shim
+(`packages/app/src/browser/cowork-api.ts`) backed by the cloud HTTP +
+SSE API; on Electron the same renderer runs against the preload IPC bridge.
+Auth bootstrap, routing, threads, chat, agents, capabilities, workflows,
+artifacts, admin/settings surfaces, and theme switching all live in the single
+renderer. New feature code should use the renderer's
+`packages/app/src/app-api.ts` contract instead of direct `fetch`,
 `EventSource`, or `window.coworkApi` access.
 
-The production visual QA contract for shared Studio surfaces lives in
-`apps/website/src/studio-production-qa.ts` and is documented in
-[Cloud Web Studio](cloud-web-workbench.md). It is a parity gate, not a new
-runtime contract: OpenCode still owns execution, while Desktop and Cloud Web
-must share the same visual language, product vocabulary, primitive usage, and
-state coverage.
+The production visual QA contract for shared Studio surfaces is documented in
+[Cloud Web Studio](cloud-web-workbench.md). Because Desktop and Cloud Web are
+the same renderer, the visual language, product vocabulary, and primitive usage
+are shared by construction; the contract verifies the browser shim's boundaries
+and responsive layout while OpenCode still owns execution.
 
 ## Accessibility Gates
 

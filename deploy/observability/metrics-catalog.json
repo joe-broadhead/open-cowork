@@ -165,10 +165,40 @@
       "description": "BYOK plaintext reveal failures without including secret material."
     },
     {
-      "name": "open_cowork_object_store_errors_total",
+      "name": "open_cowork_cloud_scheduler_loop_duration_ms",
+      "type": "gauge",
+      "owner": "scheduler",
+      "description": "Scheduler loop wall-clock duration in milliseconds; absent/zero feeds the SchedulerStalled alert."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_cache_close_failures_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Worker runtime-cache evictions that failed to close a runtime (leaked OpenCode child/workspace)."
+    },
+    {
+      "name": "open_cowork_cloud_otlp_dropped_records_total",
+      "type": "counter",
+      "owner": "cloud",
+      "description": "OTLP spans/metrics dropped on telemetry-queue overflow (observability degraded)."
+    },
+    {
+      "name": "open_cowork_cloud_auth_accounting_errors_total",
+      "type": "counter",
+      "owner": "cloud",
+      "description": "Auth rate-limit/backoff bookkeeping failures (security throttling may not be enforced)."
+    },
+    {
+      "name": "open_cowork_cloud_object_store_operations_total",
       "type": "counter",
       "owner": "object-store-adapter",
-      "description": "Object-store read/write/list/delete failures by adapter kind and operation."
+      "description": "Object-store read/write/list/delete operations by cloud_object_store_kind + operation, tagged status=ok|error (errors are a status filter)."
+    },
+    {
+      "name": "open_cowork_cloud_object_store_operation_duration_ms",
+      "type": "histogram",
+      "owner": "object-store-adapter",
+      "description": "Object-store operation latency in milliseconds by cloud_object_store_kind + operation + status."
     },
     {
       "name": "pg_up",
@@ -213,16 +243,34 @@
       "description": "Channel deliveries scheduled for retry."
     },
     {
+      "name": "open_cowork_gateway_delivery_sheds_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Deliveries shed because the local dispatcher queue hit its cap (re-served by the cloud); a sustained-overload backpressure signal."
+    },
+    {
       "name": "open_cowork_gateway_delivery_dead_letters_total",
       "type": "counter",
       "owner": "gateway",
       "description": "Channel deliveries dead-lettered."
     },
     {
-      "name": "open_cowork_gateway_delivery_latency_ms_total",
-      "type": "counter",
+      "name": "open_cowork_gateway_delivery_latency_ms",
+      "type": "histogram",
       "owner": "gateway",
-      "description": "Total gateway delivery handling latency in milliseconds."
+      "description": "Gateway delivery handling latency in milliseconds (cloud delivery received to channel send). Use histogram_quantile over the _bucket series; the per-provider open_cowork_gateway_provider_delivery_latency_ms histogram carries provider_id/provider_kind labels."
+    },
+    {
+      "name": "open_cowork_gateway_provider_delivery_latency_ms",
+      "type": "histogram",
+      "owner": "gateway",
+      "description": "Per-provider delivery handling latency in milliseconds, labelled provider_id/provider_kind."
+    },
+    {
+      "name": "open_cowork_gateway_providers",
+      "type": "gauge",
+      "owner": "gateway",
+      "description": "Count of configured active channel providers; the GatewayNoProviders alert fires when this drops below 1."
     },
     {
       "name": "open_cowork_gateway_session_streams",

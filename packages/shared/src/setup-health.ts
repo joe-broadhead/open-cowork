@@ -120,7 +120,6 @@ export const SETUP_INTENTS: SetupIntent[] = [
     validationCommands: [
       'pnpm deploy:validate',
       'pnpm ops:validate',
-      'pnpm test:cloud-web',
     ],
     readyWhen: [
       'workspace.cloud.authenticated',

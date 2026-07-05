@@ -23,6 +23,8 @@
         "appId": { "type": "string" },
         "dataDirName": { "type": "string" },
         "helpUrl": { "type": "string" },
+        "docsBaseUrl": { "type": "string" },
+        "appIcon": { "type": "string" },
         "supportUrl": { "$ref": "#/$defs/cloudPublicBrandingSupportUrl" },
         "privacyUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
         "securityUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
@@ -263,6 +265,20 @@
           }
         }
       }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projects": { "type": "boolean" },
+        "knowledge": { "type": "boolean" },
+        "approvals": { "type": "boolean" },
+        "team": { "type": "boolean" },
+        "playbooks": { "type": "boolean" },
+        "channels": { "type": "boolean" },
+        "tools": { "type": "boolean" },
+        "artifacts": { "type": "boolean" }
+      }
     }
   },
   "required": ["contractVersion", "allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
@@ -390,7 +406,10 @@
       "properties": {
         "productName": { "type": "string", "minLength": 1, "maxLength": 120 },
         "shortName": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "description": { "type": "string", "maxLength": 300 },
         "logoUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "faviconUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "ogImageUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
         "supportUrl": { "$ref": "#/$defs/cloudPublicBrandingSupportUrl" },
         "privacyUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
         "securityUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
@@ -431,7 +450,7 @@
         "branding": { "$ref": "#/$defs/cloudPublicBranding" },
         "cloud": { "$ref": "#/$defs/gatewayCloudConfig" },
         "server": { "$ref": "#/$defs/gatewayServerConfig" },
-        "productMode": { "type": "string", "enum": ["cloud_channel", "standalone", "hybrid"] },
+        "productMode": { "type": "string", "enum": ["cloud_channel", "standalone", "hybrid"], "description": "Gateway product mode. `cloud_channel` (the apps/gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup." },
         "mode": { "type": "string", "enum": ["self-host", "managed"] },
         "logging": {
           "type": "object",
@@ -534,7 +553,8 @@
         "id": { "$ref": "#/$defs/cloudName" },
         "kind": {
           "type": "string",
-          "enum": ["fake", "telegram", "slack", "email", "webhook", "discord", "whatsapp", "signal", "cli"]
+          "enum": ["fake", "telegram", "slack", "email", "webhook", "discord", "whatsapp", "signal", "cli"],
+          "description": "Channel provider kind. `telegram`/`slack`/`email`/`webhook` are turnkey (native ingress); `discord`/`whatsapp`/`signal` are bridge-only and require an external relay configured via `settings.deliveryUrl` + `credentials.sharedSecret`."
         },
         "enabled": { "type": "boolean" },
         "channelBindingId": { "$ref": "#/$defs/cloudName" },
@@ -559,7 +579,30 @@
           "additionalProperties": true
         }
       },
-      "required": ["kind", "channelBindingId"]
+      "required": ["kind", "channelBindingId"],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "enum": ["discord", "whatsapp", "signal"] } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "properties": { "sharedSecret": { "type": "string", "minLength": 1 } },
+                "required": ["sharedSecret"]
+              },
+              "settings": {
+                "type": "object",
+                "properties": { "deliveryUrl": { "type": "string", "minLength": 1 } },
+                "required": ["deliveryUrl"]
+              }
+            },
+            "required": ["credentials", "settings"]
+          }
+        }
+      ]
     },
     "cloudName": {
       "type": "string",
@@ -584,7 +627,10 @@
         "settings": { "type": "boolean" },
         "customSkills": { "type": "boolean" },
         "customAgents": { "type": "boolean" },
-        "customMcps": { "type": "boolean" }
+        "customMcps": { "type": "boolean" },
+        "knowledge": { "type": "boolean" },
+        "channels": { "type": "boolean" },
+        "byok": { "type": "boolean" }
       }
     },
     "cloudAbuse": {

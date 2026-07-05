@@ -9,10 +9,10 @@ import { launchSmokeApp } from './smoke-helpers.ts'
 test('home renders the Studio launchpad, composer, status strip, and no removed dashboard content', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
-    // Greeting is a single stable line now (we tried rotating and it
-    // felt off — product voice is clearer with one tagline). Match the
-    // exact copy in the English catalog's inline fallback.
-    await page.waitForSelector('h1:has-text("What should your team tackle today?")', { timeout: 30_000 })
+    // Greeting is a single time-of-day line now: "Good {morning|afternoon|evening}."
+    // with the time word in accent. The word varies by wall-clock, so match the
+    // stable lead word "Good" (the inline English fallback from studioHome.greeting.lead).
+    await page.waitForSelector('h1:has-text("Good")', { timeout: 30_000 })
 
     // The composer textarea is the primary action on Home. Its
     // placeholder mentions @-mention; we match a loose regex so i18n

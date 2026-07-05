@@ -1,19 +1,10 @@
+import { clearSettingsCache, saveSettings } from '@open-cowork/runtime-host/settings'
+import { listCustomMcps, listCustomAgents, removeCustomMcp, saveCustomMcp, saveCustomAgent, removeCustomAgent, syncCustomAgentRuntimeGuidance } from '@open-cowork/runtime-host/native-customizations'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { clearSettingsCache, saveSettings } from '../apps/desktop/src/main/settings.ts'
-import {
-  listCustomMcps,
-  listCustomAgents,
-  removeCustomMcp,
-  saveCustomMcp,
-  saveCustomAgent,
-  removeCustomAgent,
-  syncCustomAgentRuntimeGuidance,
-} from '../apps/desktop/src/main/native-customizations.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

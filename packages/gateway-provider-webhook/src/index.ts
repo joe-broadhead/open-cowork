@@ -14,6 +14,7 @@ export type {
   WebhookProviderConfig
 } from "./webhook-provider.js";
 export {
+  isCloudMetadataHost,
   isPrivateOrReservedIpAddress,
   resolveWebhookDeliveryAddresses,
   validateWebhookDeliveryUrl

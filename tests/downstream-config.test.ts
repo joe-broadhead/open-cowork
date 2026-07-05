@@ -1,13 +1,10 @@
+import { buildPublicAppConfig, validateConfigSemantics, validateResolvedConfig } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { OpenCoworkConfig } from '../apps/desktop/src/main/config-types.ts'
-import { validateResolvedConfig } from '../apps/desktop/src/main/config-schema.ts'
-import { validateConfigSemantics } from '../apps/desktop/src/main/config-layer-utils.ts'
-import { buildPublicAppConfig } from '../apps/desktop/src/main/config-public.ts'
-import { resolveCloudPublicBranding } from '../apps/desktop/src/main/cloud/app.ts'
-import { cloudWebsiteHtml } from '../apps/website/src/render.ts'
+import type { OpenCoworkConfig } from '@open-cowork/shared'
+import { resolveCloudPublicBranding } from '@open-cowork/cloud-server/app'
 
 const root = process.cwd()
 const exampleRoot = 'examples/downstream/example-org'
@@ -18,12 +15,6 @@ function read(relativePath: string) {
 
 function readExampleConfig(): OpenCoworkConfig {
   return JSON.parse(read(`${exampleRoot}/open-cowork.config.json`)) as OpenCoworkConfig
-}
-
-function readBootstrap(html: string) {
-  const match = html.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
-  assert.ok(match, 'cloud website bootstrap script must exist')
-  return JSON.parse(match[1])
 }
 
 test('downstream example validates and keeps Desktop Cloud Gateway branding aligned', () => {
@@ -125,29 +116,6 @@ test('public bootstrap branding exposes only whitelisted safe metadata', () => {
   assert.equal((branding.theme as Record<string, unknown>).backgroundImage, undefined)
   assert.equal((branding.dashboard as Record<string, unknown>).adminToken, undefined)
   assert.equal((branding.managedOrgConnectionLabels as Record<string, unknown>).adminSecret, undefined)
-
-  const pollutedBranding = {
-    ...branding,
-    secretToken: 'not-public',
-    dashboard: {
-      ...branding.dashboard,
-      adminToken: 'not-public',
-    },
-  } as typeof branding & Record<string, unknown>
-  const html = cloudWebsiteHtml({
-    role: 'owner',
-    profileName: config.cloud.defaultProfile,
-    features: config.cloud.features,
-  }, pollutedBranding)
-  const bootstrap = readBootstrap(html)
-  assert.equal(bootstrap.publicBranding.productName, 'Bootstrap Cowork')
-  assert.equal(bootstrap.publicBranding.secretToken, undefined)
-  assert.equal(bootstrap.publicBranding.dashboard.adminToken, undefined)
-  assert.equal(bootstrap.auth, undefined)
-  assert.equal(bootstrap.storage, undefined)
-  assert.equal(bootstrap.billing, undefined)
-  assert.ok(Array.isArray(bootstrap.routes))
-  assert.ok(Array.isArray(bootstrap.api))
 })
 
 test('downstream docs cover supported adapters historical identifiers and SaaS split', () => {

@@ -1156,7 +1156,7 @@ function validateTopologyProfiles() {
   const expectedCommands = {
     'desktop-only': ['pnpm test:e2e'],
     'gateway-only': ['pnpm deploy:standalone-gateway:validate', 'pnpm deploy:standalone-gateway:smoke'],
-    'cloud-only': ['pnpm deploy:validate', 'pnpm ops:validate', 'pnpm test:cloud-web'],
+    'cloud-only': ['pnpm deploy:validate', 'pnpm ops:validate'],
     'cloud-channel-gateway': ['pnpm deploy:validate', 'pnpm deploy:gateway:smoke', 'pnpm deploy:continuation:smoke'],
     'desktop-gateway': ['pnpm test:e2e'],
     'cloud-gateway-edge': ['pnpm deploy:validate', 'pnpm deploy:gateway:smoke'],
@@ -1362,11 +1362,16 @@ function validateHybridSecurityGates() {
     throw new Error('apps/standalone-gateway/src/network-policy.ts must reject public OpenCode endpoint')
   }
 
-  const cloudHttpServer = read('apps/desktop/src/main/cloud/http-server.ts')
-  for (const phrase of ['Retry-After', 'quota_rejections']) {
-    if (!cloudHttpServer.includes(phrase)) {
-      throw new Error(`apps/desktop/src/main/cloud/http-server.ts must include ${phrase}`)
-    }
+  // Rate-limit handling is split after the cloud-server extraction: the HTTP server
+  // emits the quota_rejections metric + the 429 path, while the shared response writer
+  // sets the Retry-After header. Assert each phrase in its owning module.
+  const cloudHttpServer = read('packages/cloud-server/src/http-server.ts')
+  if (!cloudHttpServer.includes('quota_rejections')) {
+    throw new Error('packages/cloud-server/src/http-server.ts must include quota_rejections')
+  }
+  const cloudHttpResponseWriters = read('packages/cloud-server/src/http-response-writers.ts')
+  if (!cloudHttpResponseWriters.includes('Retry-After')) {
+    throw new Error('packages/cloud-server/src/http-response-writers.ts must include Retry-After')
   }
 
   const workspace = read('packages/shared/src/workspace.ts')
@@ -1380,10 +1385,10 @@ function validateHybridSecurityGates() {
 function validateSetupHealthCenter() {
   const setupContractPath = 'packages/shared/src/setup-health.ts'
   const setupDocsPath = 'docs/setup-and-health-center.md'
-  const setupScreenPath = 'apps/desktop/src/renderer/components/SetupScreen.tsx'
-  const healthCenterPath = 'apps/desktop/src/renderer/components/health/HealthCenterPage.tsx'
-  const sidebarPath = 'apps/desktop/src/renderer/components/layout/Sidebar.tsx'
-  const appTypesPath = 'apps/desktop/src/renderer/app-types.ts'
+  const setupScreenPath = 'packages/app/src/components/SetupScreen.tsx'
+  const healthCenterPath = 'packages/app/src/components/health/HealthCenterPage.tsx'
+  const sidebarPath = 'packages/app/src/components/layout/Sidebar.tsx'
+  const appTypesPath = 'packages/app/src/app-types.ts'
   const standaloneSetupPath = 'scripts/standalone-gateway-setup.mjs'
   const setupContract = read(setupContractPath)
   const setupDocs = read(setupDocsPath)
@@ -1714,7 +1719,7 @@ function validateDocs() {
     'open_cowork_cloud_scheduler_claims_total',
     'open_cowork_cloud_projection_lag_events',
     'open_cowork_cloud_byok_reveal_failures_total',
-    'open_cowork_object_store_errors_total',
+    'open_cowork_cloud_object_store_operations_total',
     'pg_up',
     'pg_stat_activity_count',
     'open_cowork_gateway_delivery_retries_total',
@@ -2375,7 +2380,6 @@ function validateReleaseSupplyChain() {
   }
 
   for (const phrase of [
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
@@ -2427,7 +2431,6 @@ function validateReleaseSupplyChain() {
   }
 
   for (const phrase of [
-    'Cloud Web Workbench browser readiness gates',
     'Desktop Web Gateway continuation gates',
     'Deployment and launch readiness gates',
     'Generate cloud image SBOM',
@@ -2452,7 +2455,6 @@ function validateReleaseSupplyChain() {
   }
 
   for (const phrase of [
-    'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:smoke:strict',

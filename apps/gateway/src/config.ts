@@ -15,8 +15,8 @@ import {
 
 export type { GatewayProductMode } from '@open-cowork/shared'
 
-export type GatewayMode = 'self-host' | 'managed'
-export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
+type GatewayMode = 'self-host' | 'managed'
+type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 export type GatewayProviderKind = ChannelProviderKind | 'fake'
 
 export type GatewayConfig = {
@@ -54,6 +54,13 @@ export type GatewayConfig = {
     smtpMs: number
     shutdownDrainMs: number
   }
+  // Max cloud→channel deliveries the bounded dispatcher runs at once (audit P1-G2). Deliveries to
+  // the same channel binding+target are serialized for ordering regardless; this caps the global
+  // outbound fan-out so a backlog drain can't storm providers into 429s.
+  maxDeliveryConcurrency: number
+  // Hard cap on locally-queued deliveries (P1-C); beyond it, deliveries are shed (left unacked
+  // for the cloud to re-serve) instead of growing the heap past their claim TTL.
+  maxDeliveryQueueDepth: number
   providers: GatewayProviderConfig[]
 }
 
@@ -76,7 +83,10 @@ type GatewayRawProvider = NonNullable<GatewayRawConfig['providers']>[number]
 export type GatewayEnv = Record<string, string | undefined>
 
 const defaultHost = '127.0.0.1'
-const defaultPort = 8787
+// Gateway listens on its own documented/EXPOSEd port (8790) by default, NOT the
+// cloud control-plane port (8787) — a bare `gateway` run must not collide with a
+// co-located cloud process. Operators override with OPEN_COWORK_GATEWAY_PORT.
+const defaultPort = 8790
 const defaultMaxRequestBodyBytes = 1024 * 1024
 const maxAllowedRequestBodyBytes = 64 * 1024 * 1024
 const defaultTimeouts = {
@@ -163,6 +173,8 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
       enabled: readBoolean(env.OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED, raw.diagnostics?.enabled ?? mode === 'self-host'),
     },
     timeouts,
+    maxDeliveryConcurrency: readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_DELIVERY_CONCURRENCY, 8, 1, 256),
+    maxDeliveryQueueDepth: readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_DELIVERY_QUEUE_DEPTH, 512, 16, 100_000),
     providers: normalizeProviders(raw.providers, env, serverPublicBaseUrl, serverMaxRequestBodyBytes),
   }
   assertGatewayConfigSafe(config, {
@@ -323,12 +335,15 @@ function deepMergeGateway(base: unknown, override: unknown): unknown {
     return Object.fromEntries(Object.entries({
       ...current,
       ...(override as Record<string, unknown>),
-    }).map(([key, value]) => [
-      key,
-      Object.prototype.hasOwnProperty.call(override as Record<string, unknown>, key)
-        ? deepMergeGateway(current[key], value)
-        : value,
-    ]))
+    })
+      // Prototype-pollution insurance (audit P3-6): never merge a key onto the prototype chain.
+      .filter(([key]) => key !== '__proto__' && key !== 'constructor' && key !== 'prototype')
+      .map(([key, value]) => [
+        key,
+        Object.prototype.hasOwnProperty.call(override as Record<string, unknown>, key)
+          ? deepMergeGateway(current[key], value)
+          : value,
+      ]))
   }
   return override === undefined ? base : override
 }

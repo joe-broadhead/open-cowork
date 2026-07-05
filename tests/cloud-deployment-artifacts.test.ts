@@ -18,9 +18,11 @@ test('split cloud compose declares web, worker, and scheduler roles', () => {
   assert.match(compose, /OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: "true"/)
   assert.match(compose, /OPEN_COWORK_CLOUD_COOKIE_SECRET: change-me-for-local-cookie-secret/)
   assert.match(compose, /OPEN_COWORK_CLOUD_INTERNAL_TOKEN: change-me-for-local-internal-token/)
-  assert.match(compose, /OPEN_COWORK_CONFIG_PATH: \$\{OPEN_COWORK_CONFIG_PATH:-\}/)
-  assert.match(compose, /OPEN_COWORK_CONFIG_DIR: \$\{OPEN_COWORK_CONFIG_DIR:-\}/)
-  assert.match(compose, /OPEN_COWORK_DOWNSTREAM_ROOT: \$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\}/)
+  // Config bind-mount env defaults to the in-container mount target so the advertised
+  // mount loads out-of-box (audit Tranche E); an explicit external value still wins.
+  assert.match(compose, /OPEN_COWORK_CONFIG_PATH: \$\{OPEN_COWORK_CONFIG_PATH:-\/etc\/open-cowork\/open-cowork\.config\.json\}/)
+  assert.match(compose, /OPEN_COWORK_CONFIG_DIR: \$\{OPEN_COWORK_CONFIG_DIR:-\/etc\/open-cowork\/config\}/)
+  assert.match(compose, /OPEN_COWORK_DOWNSTREAM_ROOT: \$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\/etc\/open-cowork\/downstream\}/)
   assert.match(compose, /\$\{OPEN_COWORK_CONFIG_PATH:-\.\/open-cowork\.config\.json\}:\$\{OPEN_COWORK_CONFIG_PATH:-\/etc\/open-cowork\/open-cowork\.config\.json\}:ro/)
   assert.match(compose, /\$\{OPEN_COWORK_CONFIG_DIR:-\.\}:\$\{OPEN_COWORK_CONFIG_DIR:-\/etc\/open-cowork\/config\}:ro/)
   assert.match(compose, /\$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\.\}:\$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\/etc\/open-cowork\/downstream\}:ro/)
@@ -56,9 +58,11 @@ test('combined cloud and gateway compose declares self-host gateway wiring', () 
   assert.match(compose, /image: \$\{OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local\}/)
   assert.match(compose, /image: \$\{OPEN_COWORK_GATEWAY_IMAGE:-open-cowork-gateway:local\}/)
   assert.match(compose, /docker\/open-cowork-gateway\/Dockerfile/)
-  assert.match(compose, /OPEN_COWORK_CONFIG_PATH: \$\{OPEN_COWORK_CONFIG_PATH:-\}/)
-  assert.match(compose, /OPEN_COWORK_CONFIG_DIR: \$\{OPEN_COWORK_CONFIG_DIR:-\}/)
-  assert.match(compose, /OPEN_COWORK_DOWNSTREAM_ROOT: \$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\}/)
+  // Config bind-mount env defaults to the in-container mount target so the advertised
+  // mount loads out-of-box (audit Tranche E); an explicit external value still wins.
+  assert.match(compose, /OPEN_COWORK_CONFIG_PATH: \$\{OPEN_COWORK_CONFIG_PATH:-\/etc\/open-cowork\/open-cowork\.config\.json\}/)
+  assert.match(compose, /OPEN_COWORK_CONFIG_DIR: \$\{OPEN_COWORK_CONFIG_DIR:-\/etc\/open-cowork\/config\}/)
+  assert.match(compose, /OPEN_COWORK_DOWNSTREAM_ROOT: \$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\/etc\/open-cowork\/downstream\}/)
   assert.match(compose, /\$\{OPEN_COWORK_CONFIG_PATH:-\.\/open-cowork\.config\.json\}:\$\{OPEN_COWORK_CONFIG_PATH:-\/etc\/open-cowork\/open-cowork\.config\.json\}:ro/)
   assert.match(compose, /\$\{OPEN_COWORK_CONFIG_DIR:-\.\}:\$\{OPEN_COWORK_CONFIG_DIR:-\/etc\/open-cowork\/config\}:ro/)
   assert.match(compose, /\$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\.\}:\$\{OPEN_COWORK_DOWNSTREAM_ROOT:-\/etc\/open-cowork\/downstream\}:ro/)
@@ -131,7 +135,6 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /GET \/api\/metrics/)
   assert.match(docs, /web app at `\/`/)
   assert.match(docs, /Cloud Web Workbench readiness gates/)
-  assert.match(docs, /pnpm test:cloud-web/)
   assert.match(docs, /createHttpSseCloudTransportAdapter/)
   assert.match(docs, /Generic Docker: Cloud \+ Gateway/)
   assert.match(docs, /docker-compose\.cloud-gateway\.yml/)
@@ -266,6 +269,8 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(deployment, /path: \/livez/)
   assert.match(deployment, /readinessProbe:/)
   assert.match(deployment, /path: \/readyz/)
+  // preStop drain so the Service endpoint is removed before SIGTERM (no dropped requests on rollout).
+  assert.match(deployment, /lifecycle:\s*\n\s*preStop:/)
   assert.match(deployment, /checksum\/config:/)
   assert.match(deployment, /checksum\/secret:/)
   assert.match(deployment, /public_production rejects cloud\.allowInsecureAuth=true/)
@@ -720,24 +725,54 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
   const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')
   const buildScript = readRepoFile('scripts/build-cloud.mjs')
-  const browserApp = readRepoFile('apps/desktop/src/main/cloud/browser-app.ts')
-  const websitePackage = readRepoFile('apps/website/package.json')
 
   assert.match(buildScript, /cloudElectronShimPlugin/)
   assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
   assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
-  assert.match(browserApp, /website\/src\/render\.ts/)
-  assert.match(websitePackage, /"test:browser"/)
-  assert.match(websitePackage, /"test:a11y"/)
-  assert.match(websitePackage, /"perf:check"/)
+  // The cloud serves the UNIFIED RENDERER (the one-UI-codebase cutover): build-cloud
+  // builds the shared @open-cowork/app browser renderer and copies it next to the cloud
+  // entry under ./browser-renderer/, the location packages/cloud-server/src/browser-renderer-app.ts
+  // resolves at runtime. The bespoke website is gone, so there is no website build step.
+  assert.match(buildScript, /--filter', '@open-cowork\/app', 'build:browser/)
+  assert.match(buildScript, /browser-renderer/)
+  assert.doesNotMatch(buildScript, /@open-cowork\/website/)
 
   assert.match(dockerfile, /pnpm install --frozen-lockfile/)
   assert.match(dockerfile, /pnpm install --frozen-lockfile --prod/)
   assert.match(dockerfile, /pnpm --filter @open-cowork\/shared build/)
   assert.match(dockerfile, /pnpm cloud:build/)
   assert.match(dockerfile, /USER node/)
-  assert.match(dockerfile, /HEALTHCHECK/)
-  assert.match(dockerfile, /CMD \["node", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
+  // The runtime stage ships the PRUNED tree (manifests + dist only), never the
+  // full monorepo source: scripts/prune-cloud-runtime.mjs runs in the build
+  // stage and the runtime stage copies its output.
+  assert.match(dockerfile, /prune-cloud-runtime\.mjs \/runtime/)
+  assert.match(dockerfile, /COPY --from=build \/runtime \.\//)
+  assert.doesNotMatch(dockerfile, /COPY --from=build \/app\/apps \.\/apps/)
+  // The cloud bundle's workspace externals resolve through ROOT PROD deps in
+  // the pruned runtime tree. As devDependencies the old full-source image only
+  // booted by accident (build-stage node_modules symlinks riding the COPY); a
+  // clean --prod install cannot resolve them and the container crash-loops.
+  const rootManifest = JSON.parse(readRepoFile('package.json')) as {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+  }
+  for (const workspaceExternal of ['@open-cowork/shared', '@open-cowork/runtime-host']) {
+    assert.ok(
+      rootManifest.dependencies?.[workspaceExternal],
+      `${workspaceExternal} must be a root PROD dependency so the pruned cloud image can resolve the bundle's workspace externals`,
+    )
+    assert.ok(
+      !rootManifest.devDependencies?.[workspaceExternal],
+      `${workspaceExternal} must not also appear in root devDependencies`,
+    )
+  }
+  // The container healthcheck must probe readiness (/readyz), not bare liveness, so a
+  // degraded backing service marks the container unhealthy instead of accepting traffic.
+  assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/readyz/)
+  assert.doesNotMatch(dockerfile, /HEALTHCHECK[\s\S]*\/healthz/)
+  // --experimental-sqlite is required for the all-in-one node:sqlite store on the
+  // pinned Node 22.x (stable/flag-free only on 23.4+).
+  assert.match(dockerfile, /CMD \["node", "--experimental-sqlite", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
 
   assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/gateway build/)
   assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/shared build/)
@@ -926,7 +961,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
     'open_cowork_cloud_quota_rejections_total',
     'open_cowork_cloud_auth_failures_total',
     'open_cowork_cloud_byok_reveal_failures_total',
-    'open_cowork_object_store_errors_total',
+    'open_cowork_cloud_object_store_operations_total',
     'pg_up',
     'pg_stat_activity_count',
     'open_cowork_gateway_deliveries_received_total',
@@ -1019,8 +1054,8 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(smoke, /\/healthz/)
   assert.match(smoke, /\/livez/)
   assert.match(smoke, /cloud web workbench/)
-  assert.match(smoke, /open-cowork-cloud-bootstrap/)
-  assert.match(smoke, /data-route-panel="threads"/)
+  assert.match(smoke, /id="cowork-bootstrap"/)
+  assert.match(smoke, /\/app\/assets\//)
   assert.match(smoke, /content-security-policy/)
   assert.match(smoke, /\/api\/config/)
   assert.match(smoke, /\/api\/workspace/)
@@ -1100,7 +1135,6 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(workflow, /helm lint helm\/open-cowork-gateway/)
   assert.match(workflow, /helm template open-cowork-gateway helm\/open-cowork-gateway/)
   assert.match(workflow, /pnpm deploy:validate -- --require-tools/)
-  assert.match(workflow, /pnpm test:cloud-web/)
 
   const smoke = readRepoFile('scripts/ci-cloud-compose-smoke.sh')
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" up --build -d/)

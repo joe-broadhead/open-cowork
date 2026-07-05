@@ -1,3 +1,10 @@
+import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
+import { humanizeToolId, isVisibleRuntimeToolId, runtimeToolId } from '@open-cowork/runtime-host/runtime-tools'
+import { resolveConfiguredMcpRuntimeEntry, resolveCustomMcpRuntimeEntryForRuntime, type ResolvedRuntimeMcpEntry } from '@open-cowork/runtime-host/runtime-mcp'
+import { listCustomMcps } from '@open-cowork/runtime-host/native-customizations'
+import { validateCustomMcpStdioCommand } from '@open-cowork/runtime-host/mcp-stdio-policy'
+import { getCustomAgentCatalog } from '@open-cowork/runtime-host/custom-agents'
+import { buildCustomAgentPermissionFromCatalog } from '@open-cowork/runtime-host/custom-agents-utils'
 import type {
   CapabilityTool,
   CapabilityToolEntry,
@@ -7,19 +14,7 @@ import type {
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { getEffectiveSettings } from './settings.ts'
-import { getCustomAgentCatalog } from './custom-agents.ts'
-import { buildCustomAgentPermissionFromCatalog } from './custom-agents-utils.ts'
 import { listBuiltInAgentDetails } from './built-in-agent-details.ts'
-import { humanizeToolId, isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
-import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
-import { listCustomMcps } from './native-customizations.ts'
-import {
-  resolveConfiguredMcpRuntimeEntry,
-  resolveCustomMcpRuntimeEntryForRuntime,
-  type ResolvedRuntimeMcpEntry,
-} from './runtime-mcp.ts'
-
 type CapabilityToolDiscoveryDeps = {
   resolveContextDirectory: (options?: RuntimeContextOptions) => string | null
   logHandlerError: (handler: string, err: unknown) => void

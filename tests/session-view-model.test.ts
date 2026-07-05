@@ -1,24 +1,6 @@
+import { MAX_WARM_SESSION_DETAILS, beginCompactionNotice, buildMessages, buildSessionStateFromItems, createEmptySessionViewState, createEmptyTaskRun, deriveVisibleSessionPatch, finishCompactionNotice, importMessage, mergeStreamingText, pruneSessionDetailCache, upsertTaskRunList, withMessageText, withTaskRun, type HistoryItem, type SessionViewState } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  MAX_WARM_SESSION_DETAILS,
-  beginCompactionNotice,
-  buildMessages,
-  buildSessionStateFromItems,
-  createEmptySessionViewState,
-  createEmptyTaskRun,
-  deriveVisibleSessionPatch,
-  finishCompactionNotice,
-  importMessage,
-  mergeStreamingText,
-  pruneSessionDetailCache,
-  upsertTaskRunList,
-  withMessageText,
-  withTaskRun,
-  type HistoryItem,
-  type SessionViewState,
-} from '../apps/desktop/src/lib/session-view-model.ts'
-
 // The test suite focuses on surface area that `session-store-reducer.test.ts`
 // does not already cover: execution plan derivation, task-run timing
 // precedence, compaction notice flow, the LRU eviction bound, and the

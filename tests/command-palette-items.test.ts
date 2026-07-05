@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { BuiltInAgentDetail, CustomAgentSummary, SessionInfo } from '@open-cowork/shared'
-import { buildCommandPaletteItems, getShortcutPlatform } from '../apps/desktop/src/renderer/components/command-palette-items.ts'
-import type { PrimaryAgentMode } from '../apps/desktop/src/renderer/stores/session.ts'
+import { buildCommandPaletteItems, getShortcutPlatform } from '../packages/app/src/components/command-palette-items.ts'
+import type { PrimaryAgentMode } from '../packages/app/src/stores/session.ts'
 
 function createCallbacks() {
   const calls: Array<{ type: string; value?: string }> = []

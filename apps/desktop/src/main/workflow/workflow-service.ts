@@ -1,3 +1,14 @@
+import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
+import { attachWorkflowRunSession, claimDueWorkflowRun, createWorkflowRun, getWorkflow, getWorkflowRun, listWorkflows as listWorkflowState, markWorkflowRunCompleted, markWorkflowRunFailed, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
+import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
+import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
+import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
+import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from '@open-cowork/runtime-host'
+import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth, WebhookHttpError } from '@open-cowork/shared/node'
 import type { BrowserWindow } from 'electron'
 import type {
   SessionInfo,
@@ -6,41 +17,10 @@ import type {
   WorkflowRun,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
-import {
-  attachWorkflowRunSession,
-  claimDueWorkflowRun,
-  createWorkflowRun,
-  getWorkflow,
-  getWorkflowRun,
-  listWorkflows as listWorkflowState,
-  markWorkflowRunCompleted,
-  markWorkflowRunFailed,
-  regenerateWorkflowWebhookSecret,
-  recoverInterruptedWorkflowRuns,
-  updateWorkflowStatus,
-} from './workflow-store.ts'
-import { configureWorkflowToolActions } from './workflow-tool-actions.ts'
-import {
-  configureWorkflowWebhookServer,
-  ensureWorkflowWebhookServer,
-  getWorkflowWebhookBaseUrl,
-  stopWorkflowWebhookServer,
-  claimWorkflowWebhookSignatureOnce,
-  verifyWorkflowWebhookAuth,
-  WebhookHttpError,
-} from './workflow-webhook-server.ts'
-import { getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
-import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { getConfiguredAgentsFromConfig } from '../config-loader.ts'
-import { getEffectiveSettings } from '../settings.ts'
 import { trackParentSession } from '../event-task-state.ts'
-import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from '../opencode-adapter.ts'
-import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '../session-registry.ts'
-import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
-import { toIsoTimestamp } from '../task-run-utils.ts'
 import { log } from '../logger.ts'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
-import { sdkErrorMessage } from '../sdk-error.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null

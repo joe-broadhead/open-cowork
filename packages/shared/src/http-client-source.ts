@@ -42,7 +42,7 @@ export function resolveHttpClientSource(input: HttpClientSourceInput): string {
   if (!candidates.every((candidate) => candidate.normalized === candidates[0]?.normalized)) {
     return socket
   }
-  return candidates[0].normalized
+  return candidates[0]?.normalized ?? socket
 }
 
 function forwardedClientChains(headers: Record<string, string | string[] | undefined>) {
@@ -199,8 +199,10 @@ function splitIpv6Half(value: string): number[] | null {
       if (part !== parts[parts.length - 1]) return null
       const ipv4 = parseIpv4(part)
       if (!ipv4) return null
-      words.push((ipv4.bytes[0] << 8) | ipv4.bytes[1])
-      words.push((ipv4.bytes[2] << 8) | ipv4.bytes[3])
+      const [b0, b1, b2, b3] = ipv4.bytes
+      if (b0 === undefined || b1 === undefined || b2 === undefined || b3 === undefined) return null
+      words.push((b0 << 8) | b1)
+      words.push((b2 << 8) | b3)
       continue
     }
     if (!/^[0-9a-f]{1,4}$/i.test(part)) return null
@@ -218,11 +220,14 @@ function ipv4MappedWords(words: readonly number[]): ParsedIp | null {
     && words[4] === 0
     && words[5] === 0xffff
   ) {
+    const w6 = words[6]
+    const w7 = words[7]
+    if (w6 === undefined || w7 === undefined) return null
     const bytes = [
-      (words[6] >> 8) & 0xff,
-      words[6] & 0xff,
-      (words[7] >> 8) & 0xff,
-      words[7] & 0xff,
+      (w6 >> 8) & 0xff,
+      w6 & 0xff,
+      (w7 >> 8) & 0xff,
+      w7 & 0xff,
     ]
     return { version: 4, bytes, normalized: bytes.join('.') }
   }

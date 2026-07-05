@@ -1,0 +1,31 @@
+{
+  "name": "@open-cowork/mcp-knowledge",
+  "version": "0.0.0",
+  "description": "Open Cowork knowledge wiki proposal MCP server",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "mcps/knowledge"
+  },
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node ../build.mjs",
+    "dev": "node ../build.mjs",
+    "typecheck": "tsc --noEmit --rootDir ../..",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test tests/*.test.ts",
+    "security": "pnpm audit --prod --audit-level high"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3"
+  }
+}

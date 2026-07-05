@@ -28,3 +28,14 @@ test('permission tracker clears all permissions for a session', () => {
 
   clearPermission('perm-c')
 })
+
+test('permission tracker bounds memory by evicting the oldest entries (P3-13)', () => {
+  // Far exceed the cap with permissions that are never explicitly cleared (auto-resolved/superseded).
+  for (let index = 0; index < 1_200; index += 1) {
+    trackPermission(`leak-${index}`, `session-${index}`)
+  }
+  // The oldest entries are evicted; the most recent survive.
+  assert.equal(getPermissionSession('leak-0'), null)
+  assert.equal(getPermissionSession('leak-1199'), 'session-1199')
+  clearPermissionsForSession('session-1199')
+})

@@ -171,17 +171,17 @@ provider control plane.
 
 - Treat the browser workbench as a release-critical client, not only as an
   admin convenience UI.
-- Run the browser E2E gate before provider rollout:
-  `pnpm --filter @open-cowork/website test:browser`.
-- Run the accessibility gate before provider rollout:
-  `pnpm --filter @open-cowork/website test:a11y`.
-- Run the performance and scale gate before provider rollout:
-  `pnpm --filter @open-cowork/website perf:check`.
-- `pnpm test:cloud-web` runs all three gates together for CI and release
-  qualification.
-- The workbench route at `GET /` must return HTML with the bootstrap JSON,
-  route panels, `cache-control: no-store`, and a nonce-backed
-  `Content-Security-Policy`.
+- Cloud Web is the browser build of the desktop renderer, so its UI — including
+  browser E2E behavior, accessibility, and performance and scale — is covered by
+  the renderer suite: run `pnpm test:renderer` before provider rollout.
+- Run `pnpm test:cloud-continuation` before provider rollout to verify the cloud
+  control-plane behavior the browser depends on: sessions, bounded pagination,
+  cursor validation, SSE reconnect, and redaction.
+- Run `pnpm cloud:smoke` to build the production cloud bundle, including the
+  browser renderer, and prove it imports and serves.
+- The workbench route at `GET /` must return the renderer entry document with
+  the bootstrap JSON, hashed `/assets/*` module scripts, `cache-control:
+  no-store` on the document, and a nonce-backed `Content-Security-Policy`.
 - API bootstrap endpoints such as `GET /api/config` and `GET /api/workspace`
   must be reachable through the deployed origin and return either authenticated
   metadata or an expected auth error, never a proxy/static-asset failure.

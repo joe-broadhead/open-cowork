@@ -13,7 +13,7 @@ import {
   normalizeChannelCapabilities,
 } from './operations.js'
 import { sanitizeChannelText } from './sanitize.js'
-import type { GatewaySessionRenderState } from './state.js'
+import { setRenderStateEntry, type GatewaySessionRenderState } from './state.js'
 
 export type RenderArtifactInput = {
   cloud: CloudGateway
@@ -49,7 +49,7 @@ export async function renderArtifactCreated(input: RenderArtifactInput): Promise
         file,
       })
       const providerMessageId = result.sentMessage?.messageId ?? existing?.providerMessageId ?? null
-      input.state.artifacts.set(artifact.artifactId, {
+      setRenderStateEntry(input.state.artifacts, artifact.artifactId, {
         artifactId: artifact.artifactId,
         providerMessageId,
         renderedSequence: input.event.sequence,
@@ -68,7 +68,7 @@ export async function renderArtifactCreated(input: RenderArtifactInput): Promise
     },
   })
   const providerMessageId = result.sentMessage?.messageId ?? existing?.providerMessageId ?? null
-  input.state.artifacts.set(artifact.artifactId, {
+  setRenderStateEntry(input.state.artifacts, artifact.artifactId, {
     artifactId: artifact.artifactId,
     providerMessageId,
     renderedSequence: input.event.sequence,
@@ -95,7 +95,7 @@ export async function renderArtifactUpdated(input: RenderArtifactInput): Promise
     },
   })
   const providerMessageId = result.sentMessage?.messageId ?? existing?.providerMessageId ?? null
-  input.state.artifacts.set(artifact.artifactId, {
+  setRenderStateEntry(input.state.artifacts, artifact.artifactId, {
     artifactId: artifact.artifactId,
     providerMessageId,
     renderedSequence: input.event.sequence,

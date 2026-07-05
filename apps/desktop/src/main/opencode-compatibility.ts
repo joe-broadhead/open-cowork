@@ -1,8 +1,7 @@
+import { getBundledOpencodeVersion } from '@open-cowork/runtime-host/runtime-opencode-cli'
 import type { RuntimeCompatibilityAssumption, RuntimeCompatibilityReport } from '@open-cowork/shared'
 import { existsSync, readFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
-import { getBundledOpencodeVersion } from './runtime-opencode-cli.ts'
-
 const QUALIFIED_OPENCODE_VERSION = 'bundled'
 const REQUIRED_COMPATIBILITY_CATEGORIES = ['sdk-import', 'config', 'event', 'permission', 'plugin'] as const
 const VALID_COMPATIBILITY_STATUSES = new Set(['supported', 'shim', 'private-assumption', 'blocked', 'unknown'])

@@ -1,11 +1,7 @@
+import { getMachineSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
+import { buildManagedExternalDirectoryRules, buildManagedSkillRules, buildPermissionConfig } from '@open-cowork/runtime-host/permission-config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildManagedExternalDirectoryRules, buildManagedSkillRules, buildPermissionConfig } from '../apps/desktop/src/main/permission-config.ts'
-import {
-  getMachineSkillsDir,
-  getRuntimeHomeDir,
-  getRuntimeSkillCatalogDir,
-} from '../apps/desktop/src/main/runtime-paths.ts'
 import { getProjectOverlayDirName } from '../apps/desktop/src/main/config-loader.ts'
 
 test('buildManagedSkillRules dedupes and sorts skill names deterministically', () => {

@@ -1,0 +1,169 @@
+import { redactOperationalText } from '../operational-text-redaction.ts'
+import {
+  clone,
+  key,
+  normalizeNullableText,
+  normalizeText,
+  nowIso,
+  stableJson,
+} from './store-helpers.ts'
+import { createHash } from 'node:crypto'
+import type {
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
+  ChannelProviderEventType,
+  ChannelProviderId,
+  ClaimChannelProviderEventInput,
+  CompleteChannelProviderEventInput,
+} from '../channel-provider-types.ts'
+import { normalizeChannelProviderId as normalizeProvider } from '../channel-provider-utils.ts'
+
+const CHANNEL_TEXT_MAX_LENGTH = 256
+const CHANNEL_METADATA_MAX_BYTES = 16_384
+const CHANNEL_PROVIDER_EVENT_ERROR_MAX_LENGTH = 1024
+
+type InMemoryChannelProviderEventsHost = {
+  orgExists(orgId: string): boolean
+}
+
+export class InMemoryChannelProviderEventsDomain {
+  private readonly events = new Map<string, ChannelProviderEventRecord>()
+  private readonly host: InMemoryChannelProviderEventsHost
+
+  constructor(host: InMemoryChannelProviderEventsHost) {
+    this.host = host
+  }
+
+  claim(input: ClaimChannelProviderEventInput): ChannelProviderEventClaimResult {
+    if (!this.host.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const now = input.now || new Date()
+    const nowIsoValue = now.toISOString()
+    const ttlMs = Math.max(1, Math.min(input.ttlMs || 5 * 60_000, 60 * 60_000))
+    const eventKey = channelProviderEventKey(input)
+    const existing = this.events.get(eventKey)
+    const provider = normalizeProvider(input.provider)
+    const eventType = normalizeChannelProviderEventType(input.eventType)
+    const canReclaim = existing && (
+      (existing.status === 'processing' && existing.claimExpiresAt && new Date(existing.claimExpiresAt).getTime() <= now.getTime())
+      || (existing.status === 'failed' && existing.retryable)
+      || existing.status === 'received'
+    )
+
+    if (!existing) {
+      const record: ChannelProviderEventRecord = {
+        eventId: normalizeText(
+          input.eventId || stableId('channel_provider_event', input.orgId, provider, input.providerInstanceId, input.externalWorkspaceId || '', eventType, input.providerEventId),
+          CHANNEL_TEXT_MAX_LENGTH,
+          'Channel provider event id',
+        ),
+        orgId: input.orgId,
+        provider,
+        providerInstanceId: normalizeText(input.providerInstanceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider instance id'),
+        externalWorkspaceId: normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel external workspace id'),
+        providerEventId: normalizeText(input.providerEventId, CHANNEL_TEXT_MAX_LENGTH, 'Provider event id'),
+        eventType,
+        status: 'processing',
+        claimedBy: normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant'),
+        claimExpiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+        attemptCount: 1,
+        retryable: true,
+        lastError: null,
+        metadata: normalizeRecord(input.metadata || {}, 'Channel provider event metadata'),
+        processedAt: null,
+        createdAt: nowIsoValue,
+        updatedAt: nowIsoValue,
+      }
+      this.events.set(eventKey, record)
+      return { event: clone(record), claimed: true, duplicate: false }
+    }
+
+    existing.updatedAt = nowIsoValue
+    if (canReclaim) {
+      existing.provider = provider
+      existing.eventType = eventType
+      existing.status = 'processing'
+      existing.claimedBy = normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant')
+      existing.claimExpiresAt = new Date(now.getTime() + ttlMs).toISOString()
+      existing.attemptCount += 1
+      existing.retryable = true
+      existing.lastError = null
+      // Match postgres on reclaim: a falsy input overwrites with {} (does NOT preserve the prior
+      // metadata), so both stores behave identically. Unreachable via the service today (callers
+      // always pass non-empty metadata) but aligned so the parity contract is authoritative.
+      existing.metadata = normalizeRecord(input.metadata || {}, 'Channel provider event metadata')
+      existing.processedAt = null
+      return { event: clone(existing), claimed: true, duplicate: false }
+    }
+
+    return { event: clone(existing), claimed: false, duplicate: true }
+  }
+
+  complete(input: CompleteChannelProviderEventInput): ChannelProviderEventRecord | null {
+    const event = Array.from(this.events.values())
+      .find((candidate) => candidate.orgId === input.orgId && candidate.eventId === input.eventId)
+    if (!event) return null
+    if (!providerEventMatchesChannelBindingScope(event, input.channelBindingIds)) return null
+    if (event.claimedBy !== normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant')) return null
+
+    const updatedAt = nowIso(input.updatedAt)
+    event.status = input.status
+    event.claimedBy = null
+    event.claimExpiresAt = null
+    event.retryable = input.status === 'failed' ? input.retryable !== false : false
+    event.lastError = input.status === 'failed' && input.lastError
+      ? redactOperationalText(input.lastError, CHANNEL_PROVIDER_EVENT_ERROR_MAX_LENGTH, 'Provider event error')
+      : null
+    event.processedAt = input.status === 'processed' ? updatedAt : event.processedAt
+    event.updatedAt = updatedAt
+    return clone(event)
+  }
+}
+
+function providerEventMatchesChannelBindingScope(
+  event: ChannelProviderEventRecord,
+  channelBindingIds: readonly string[] | null | undefined,
+) {
+  if (channelBindingIds === null || channelBindingIds === undefined) return true
+  if (!Object.prototype.hasOwnProperty.call(event.metadata, 'channelBindingId')) return true
+  const bindingId = typeof event.metadata.channelBindingId === 'string' ? event.metadata.channelBindingId : null
+  return bindingId !== null && channelBindingIds.includes(bindingId)
+}
+
+function channelProviderEventKey(input: {
+  orgId: string
+  provider: ChannelProviderId
+  providerInstanceId: string
+  externalWorkspaceId?: string | null
+  eventType: ChannelProviderEventType
+  providerEventId: string
+}) {
+  return key(
+    input.orgId,
+    normalizeProvider(input.provider),
+    normalizeText(input.providerInstanceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider instance id'),
+    normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel external workspace id') || '',
+    normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider event type'),
+    normalizeText(input.providerEventId, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider event id'),
+  )
+}
+
+function normalizeChannelProviderEventType(value: unknown): ChannelProviderEventType {
+  const eventType = normalizeText(value || 'message', 32, 'Channel provider event type') as ChannelProviderEventType
+  if (!['message', 'command', 'interaction'].includes(eventType)) throw new Error(`Unsupported channel provider event type ${eventType}.`)
+  return eventType
+}
+
+function stableId(prefix: string, ...parts: string[]) {
+  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
+}
+
+function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
+  const record = value && typeof value === 'object' && !Array.isArray(value)
+    ? clone(value as Record<string, unknown>)
+    : {}
+  const serialized = stableJson(record)
+  if (Buffer.byteLength(serialized, 'utf8') > maxBytes) {
+    throw new Error(`${label} exceeds ${maxBytes} bytes.`)
+  }
+  return record
+}

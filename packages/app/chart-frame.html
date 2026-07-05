@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Cowork Chart Frame</title>
+    <style>
+      html, body, #chart-root {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background: transparent;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      #chart-root {
+        display: block;
+      }
+    </style>
+    <!-- Browser build of the Vega chart iframe. Unlike the Electron entry
+         (apps/desktop/chart-frame.html, which rewrites this script to the
+         open-cowork-chart:// asset protocol at build time), the browser build
+         keeps a normal hashed-asset URL: vite's `base: '/app/'` emits this as
+         `/app/assets/chartFrame-<hash>.js`, which the cloud server serves under
+         the same /app/assets prefix as the rest of the renderer. -->
+    <script type="module" src="/src/chart-frame.ts"></script>
+  </head>
+  <body>
+    <div id="chart-root"></div>
+  </body>
+</html>

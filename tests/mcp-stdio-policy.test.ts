@@ -1,10 +1,9 @@
+import { validateCustomMcpStdioCommand } from '@open-cowork/runtime-host/mcp-stdio-policy'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { validateCustomMcpStdioCommand } from '../apps/desktop/src/main/mcp-stdio-policy.ts'
-
 test('allows common bare runtime commands for local MCPs', () => {
   assert.doesNotThrow(() => validateCustomMcpStdioCommand({
     name: 'filesystem',

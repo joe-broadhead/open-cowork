@@ -1,10 +1,9 @@
+import { syncRuntimeHomeToolingBridge } from '@open-cowork/runtime-host/runtime-home-bridge'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import test from 'node:test'
-import { syncRuntimeHomeToolingBridge } from '../apps/desktop/src/main/runtime-home-bridge.ts'
-
 function readLinkedTarget(path: string) {
   return readlinkSync(path)
 }

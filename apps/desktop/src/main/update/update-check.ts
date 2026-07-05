@@ -1,7 +1,7 @@
+import { sanitizeLogMessage } from '@open-cowork/shared'
 import { log } from '../logger.ts'
 import type { UpdateCheckResult } from '@open-cowork/shared'
 import { resolveUpdateReleaseSource, UpdateReleaseSourceError } from './update-release-source.ts'
-import { sanitizeLogMessage } from '../log-sanitizer.ts'
 export { compareVersions, parseGithubRepo } from './update-version.ts'
 
 // Package.json's `version` is load-bearing for this check — it's what

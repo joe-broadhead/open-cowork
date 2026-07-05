@@ -7,8 +7,8 @@ import {
   InMemoryCloudEventFanoutAdapter,
   type CloudSessionEventFilter,
   type CloudWorkspaceEventFilter,
-} from '../apps/desktop/src/main/cloud/session-event-bus.ts'
-import type { SessionEventRecord, WorkspaceEventRecord } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+} from '@open-cowork/cloud-server/session-event-bus'
+import type { SessionEventRecord, WorkspaceEventRecord } from '@open-cowork/cloud-server/control-plane-store'
 
 test('cloud event buses use injectable fanout adapters with sequence filtering', () => {
   const sessionFanout = new InMemoryCloudEventFanoutAdapter<SessionEventRecord, CloudSessionEventFilter>((filter, event) => (
@@ -92,4 +92,45 @@ test('cloud event buses use injectable fanout adapters with sequence filtering',
   unsubscribeWorkspace()
   assert.equal(sessionBus.subscriberCount, 0)
   assert.equal(workspaceBus.subscriberCount, 0)
+})
+
+function sessionEvent(sessionId: string, sequence: number): SessionEventRecord {
+  return {
+    tenantId: 'tenant-1',
+    sessionId,
+    eventId: `${sessionId}-${sequence}`,
+    sequence,
+    type: 'assistant.message',
+    payload: {},
+    createdAt: '2026-05-30T10:00:00.000Z',
+  }
+}
+
+test('default session bus routes by sessionId yet still delivers to unkeyed subscribers', () => {
+  const bus = new CloudSessionEventBus()
+  const one: string[] = []
+  const two: string[] = []
+  const all: string[] = []
+
+  const unsubOne = bus.subscribe({ tenantId: 'tenant-1', sessionId: 'session-1' }, (event) => one.push(event.eventId))
+  const unsubTwo = bus.subscribe({ tenantId: 'tenant-1', sessionId: 'session-2' }, (event) => two.push(event.eventId))
+  // No sessionId on the filter: an unkeyed subscriber must see every session's events.
+  const unsubAll = bus.subscribe({ tenantId: 'tenant-1' }, (event) => all.push(event.eventId))
+
+  assert.equal(bus.subscriberCount, 3)
+  bus.publish(sessionEvent('session-1', 1))
+  bus.publish(sessionEvent('session-2', 1))
+
+  // Keyed subscribers only receive their own session; the unkeyed one receives both.
+  assert.deepEqual(one, ['session-1-1'])
+  assert.deepEqual(two, ['session-2-1'])
+  assert.deepEqual(all, ['session-1-1', 'session-2-1'])
+
+  unsubOne()
+  unsubTwo()
+  unsubAll()
+  assert.equal(bus.subscriberCount, 0)
+  // After the last keyed unsubscribe, a further publish reaches nobody.
+  bus.publish(sessionEvent('session-1', 2))
+  assert.deepEqual(one, ['session-1-1'])
 })

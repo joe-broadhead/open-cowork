@@ -12,11 +12,16 @@ import {
 async function subscribeWorkspaceUpdates(context: IpcHandlerContext, event: IpcMainInvokeEvent, workspaceId: string) {
   const workspace = context.workspaceGateway.list(event).find((entry) => entry.id === workspaceId)
   if (!workspace || workspace.kind !== 'cloud' || workspace.status !== 'online') return
+  // Sequence the fetch+send per subscription (audit P1-X2): firing independent listCloudSessions
+  // fetches and sending on whichever .then resolves first let a stale snapshot (older
+  // lastEventSequence) overwrite a newer one in the renderer. Chaining keeps the sends in event order.
+  let tail: Promise<void> = Promise.resolve()
   await context.workspaceGateway.subscribeCloudWorkspaceEvents(event, {
     workspaceId,
     onEvent: (cloudEvent) => {
-      void context.workspaceGateway.listCloudSessions(event, workspaceId)
-        .then((sessions) => {
+      tail = tail.then(async () => {
+        try {
+          const sessions = await context.workspaceGateway.listCloudSessions(event, workspaceId)
           const sender = event.sender as { isDestroyed?: () => boolean, send?: (channel: string, payload: unknown) => void }
           if (sender.isDestroyed?.()) return
           sender.send?.('workspace:sessions-updated', {
@@ -25,8 +30,10 @@ async function subscribeWorkspaceUpdates(context: IpcHandlerContext, event: IpcM
             lastEventSequence: Number.isFinite(cloudEvent.sequence) ? cloudEvent.sequence : null,
             syncedAt: new Date().toISOString(),
           })
-        })
-        .catch((error) => context.logHandlerError('workspace:sessions-updated', error))
+        } catch (error) {
+          context.logHandlerError('workspace:sessions-updated', error)
+        }
+      })
     },
     onError: (error) => context.logHandlerError('workspace:events', error),
   })

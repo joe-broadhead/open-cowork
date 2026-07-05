@@ -1,7 +1,6 @@
+import { findOnlyIndexedCandidate } from '@open-cowork/runtime-host/task-binding-policy'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { findOnlyIndexedCandidate } from '../apps/desktop/src/main/task-binding-policy.ts'
-
 test('findOnlyIndexedCandidate returns the single entry without inspecting metadata', () => {
   assert.equal(findOnlyIndexedCandidate([{ title: 'Only task', agent: null }]), 0)
 })

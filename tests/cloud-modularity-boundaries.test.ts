@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = process.cwd()
-const cloudRoot = join(root, 'apps/desktop/src/main/cloud')
+const cloudRoot = join(root, 'packages/cloud-server/src')
 const cloudClientRoot = join(root, 'packages/cloud-client/src')
 const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
 const downstreamDoc = readFileSync(join(root, 'docs/downstream.md'), 'utf8')
@@ -14,14 +14,18 @@ const postgresMigrations = readFileSync(join(cloudRoot, 'postgres-migrations.ts'
 const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
 const postgresChannelDeliveriesDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/channel-deliveries.ts'), 'utf8')
 const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
+const postgresWorkflowsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/workflows.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
 const lineThreshold = 2_000
+// Budgets are ratcheted to just above the current size so a decomposed file cannot
+// silently re-grow (previously they sat 600-2,000+ lines above actuals). Lower these
+// (never raise) whenever a file shrinks further.
 const documentedLargeFileBudgets = new Map([
-  ['apps/desktop/src/main/cloud/http-server.ts', 2_100],
-  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 4_300],
-  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_500],
-  ['apps/desktop/src/main/cloud/session-service.ts', 4_200],
+  ['packages/cloud-server/src/http-server.ts', 1_800],
+  ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_600],
+  ['packages/cloud-server/src/session-service.ts', 2_720],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
@@ -175,7 +179,9 @@ test('postgres store delegates row mapping to domain modules', () => {
   assert.match(source, /postgres-domains\/sessions\.ts/)
   assert.match(source, /postgres-domains\/channels\.ts/)
   assert.match(source, /postgres-store-domains\/workers\.ts/)
-  assert.match(source, /postgres-domains\/workflows\.ts/)
+  assert.match(source, /postgres-store-domains\/workflows\.ts/)
+  // The workflow row mappers now live in the extracted workflows repository.
+  assert.match(postgresWorkflowsDomain, /postgres-domains\/workflows\.ts/)
 
   for (const file of sourceFiles(join(cloudRoot, 'postgres-domains'))) {
     const relativePath = relative(root, file)
@@ -198,6 +204,18 @@ test('session service delegates command payload parsing to command service modul
   assert.match(source, /services\/session-command-service\.ts/)
 })
 
+test('session service delegates workflow-draft validation to the workflow-validation module', () => {
+  const source = readFileSync(join(cloudRoot, 'session-service.ts'), 'utf8')
+  const workflowOps = readFileSync(join(cloudRoot, 'session-workflow-operations.ts'), 'utf8')
+  // The draft normalizers/validators were carved out of the god class, and workflow
+  // orchestration itself now lives in session-workflow-operations.ts; the draft
+  // validators must not re-grow as private methods on either CloudSessionService or its
+  // workflow collaborator (ARCH god-class carve).
+  assert.doesNotMatch(source, /private (normalizeWorkflowDraft|normalizeWorkflowTriggers|assertWorkflowDraftAllowed)\(/)
+  assert.doesNotMatch(workflowOps, /private (normalizeWorkflowDraft|normalizeWorkflowTriggers|assertWorkflowDraftAllowed)\(/)
+  assert.match(workflowOps, /session-workflow-validation\.ts/)
+})
+
 test('cloud route and service modules stay behind store and runtime boundaries', () => {
   const checkedRoots = [
     join(cloudRoot, 'http-routes'),
@@ -215,9 +233,8 @@ test('cloud route and service modules stay behind store and runtime boundaries',
 
 test('client surfaces do not import server-only cloud internals', () => {
   const checkedRoots = [
-    'apps/desktop/src/renderer',
+    'packages/app/src',
     'apps/gateway/src',
-    'apps/website/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [
@@ -247,6 +264,15 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_sessions_user_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_user_status_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, status, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_user_profile_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, profile_name, updated_at DESC, session_id')
+  assertIndexShape('cloud_sessions_session_id_idx', 'cloud_sessions', 'session_id')
+  assertIndexShape('cloud_sessions_opencode_session_idx', 'cloud_sessions', 'opencode_session_id')
+  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
+  assertIndexShape('cloud_workflow_runs_due_idx', 'cloud_workflow_runs', 'created_at, run_id', "WHERE claim_token IS NULL AND status IN ('queued', 'running')")
+  assertIndexShape('cloud_channel_deliveries_retention_idx', 'cloud_channel_deliveries', 'updated_at', "WHERE status IN ('sent', 'dead')")
+  assertIndexShape('cloud_channel_interactions_expiry_idx', 'cloud_channel_interactions', 'expires_at')
+  assertIndexShape('cloud_webhook_replay_claims_seen_idx', 'cloud_webhook_replay_claims', 'seen_at_ms')
+  assertIndexShape('cloud_memberships_account_idx', 'cloud_memberships', 'account_id, updated_at DESC')
+  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
   assertIndexShape('cloud_session_events_sequence_idx', 'cloud_session_events', 'tenant_id, session_id, sequence')
   assertIndexShape('cloud_workspace_events_sequence_idx', 'cloud_workspace_events', 'tenant_id, user_id, sequence')
   assertIndexShape('cloud_session_commands_available_idx', 'cloud_session_commands', 'status, available_at, tenant_id, session_id, created_sequence')
@@ -266,13 +292,26 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_managed_worker_heartbeats_org_idx', 'cloud_managed_worker_heartbeats', 'org_id, received_at DESC')
 
   assert.match(postgresStore, /async listSessionsPage[\s\S]*LIMIT \$\$\{params\.length\}/)
+  assert.match(postgresStore, /async listSessions\b[\s\S]*WHERE s\.tenant_id = \$1 AND s\.user_id = \$2[\s\S]*LIMIT 1000/)
+  assert.match(postgresStore, /async pruneExpiredChannelInteractions[\s\S]*DELETE FROM cloud_channel_interactions[\s\S]*WHERE ctid IN \([\s\S]*WHERE expires_at < \$1[\s\S]*LIMIT \$2/)
+  assert.match(postgresStore, /async pruneStaleThrottleState[\s\S]*DELETE FROM cloud_rate_limits[\s\S]*window_started_at_ms < \$1[\s\S]*DELETE FROM cloud_auth_failures[\s\S]*blocked_until_ms < \$1/)
+  // Event-log retention (P1-C3) deletes via a ctid-keyed, ORDER BY created_at bounded subselect.
+  assert.match(postgresStore, /private async pruneByCreatedAt[\s\S]*DELETE FROM \$\{table\}[\s\S]*WHERE ctid IN \([\s\S]*WHERE created_at < \$1[\s\S]*ORDER BY created_at[\s\S]*LIMIT \$2/)
+  for (const method of ['pruneExpiredSessionEvents', 'pruneExpiredAuditEvents', 'pruneExpiredUsageEvents']) {
+    assert.match(postgresStore, new RegExp(`async ${method}[\\s\\S]*pruneByCreatedAt\\(`), `${method} should delegate to the bounded created_at prune`)
+  }
+  assert.match(postgresChannelDeliveriesDomain, /async pruneTerminal[\s\S]*DELETE FROM cloud_channel_deliveries[\s\S]*WHERE ctid IN \([\s\S]*status IN \('sent', 'dead'\)[\s\S]*LIMIT \$2/)
+  // P2-7: the concurrency gauge is clamped on READ (the trigger no longer clamps writes), and the
+  // drift-correcting reconcile is co-located with the gauge reads in the quotas domain.
+  assert.match(postgresQuotaDomain, /SELECT GREATEST\(0, value\)::int AS count[\s\S]*counter_key = 'concurrent_sessions'/)
+  assert.match(postgresQuotaDomain, /export async function reconcilePostgresConcurrencyCounters/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)
   assert.doesNotMatch(extractMethodSource(postgresStore, 'claimRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresChannelDeliveriesDomain, /async claimNext[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
-  assert.match(postgresStore, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
+  assert.match(postgresWorkflowsDomain, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
 })
 
 test('cloud and gateway OCI builds keep generated artifacts out of Docker context', () => {

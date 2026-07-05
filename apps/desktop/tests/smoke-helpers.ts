@@ -14,7 +14,7 @@ import {
 import {
   E2E_ARG_ENV_ENABLE_KEY,
   buildE2EArgEnvironment,
-} from '../src/main/e2e-remote-debugging.ts'
+} from '@open-cowork/runtime-host/e2e-remote-debugging'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never

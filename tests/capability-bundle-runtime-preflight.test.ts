@@ -1,3 +1,5 @@
+import { installCapabilityBundle } from '@open-cowork/runtime-host/capability-bundle-store'
+import { preflightConfiguredCapabilityBundlesForRuntime } from '@open-cowork/runtime-host/capability-bundle-runtime-preflight'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
@@ -8,9 +10,6 @@ import {
   clearConfigCaches,
   getConfiguredCapabilityBundlesFromConfig,
 } from '../apps/desktop/src/main/config-loader.ts'
-import { installCapabilityBundle } from '../apps/desktop/src/main/capability-bundle-store.ts'
-import { preflightConfiguredCapabilityBundlesForRuntime } from '../apps/desktop/src/main/capability-bundle-runtime-preflight.ts'
-
 function withConfigOverride(config: Record<string, unknown>, run: (rootDir: string) => void) {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-capability-bundle-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')

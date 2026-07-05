@@ -30,8 +30,8 @@ import type {
   WorkflowRun,
   WorkspacePolicy,
 } from '@open-cowork/shared'
-import type { SessionRecord } from './cloud/control-plane-store.ts'
-import { cloudSessionViewToSessionView } from './cloud/session-view-contract.ts'
+import type { SessionRecord } from '@open-cowork/cloud-server/control-plane-store'
+import { cloudSessionViewToSessionView } from '@open-cowork/cloud-server/session-view-contract'
 import {
   createHttpSseCloudTransportAdapter,
   type CloudTransportAdapter,
@@ -40,7 +40,7 @@ import {
   type CloudTransportSessionEvent,
   type CloudTransportSubscription,
   type CloudTransportWorkspaceEvent,
-} from './cloud/transport-adapter.ts'
+} from '@open-cowork/cloud-server/transport-adapter'
 import type { CloudWorkspaceConnectionRecord } from './cloud-workspace-registry.ts'
 import {
   createFileCloudWorkspaceCache,
@@ -181,7 +181,7 @@ async function settleWithConcurrency<T>(
       const index = nextIndex
       nextIndex += 1
       try {
-        await task(items[index], index)
+        await task(items[index]!, index)
         results[index] = { status: 'fulfilled', value: undefined }
       } catch (reason) {
         results[index] = { status: 'rejected', reason }
@@ -661,24 +661,32 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const plan = await this.listSessionsForSync(cacheKey, generation)
     if (generation !== this.syncGeneration) return
-    await settleWithConcurrency(plan.viewRefreshCandidates, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
-      if (generation !== this.syncGeneration) return
-      await retrySyncRefresh(() => this.getSessionView(session.id))
-    })
-    if (generation !== this.syncGeneration) return
-    if (this.transport.listArtifacts) {
-      await settleWithConcurrency(plan.artifactRefreshCandidates, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
+    // Coalesce every per-session view/artifact upsert this pass performs into one durable cache
+    // read + write (P1-E): otherwise each of up to 100 upserts re-serializes + encrypts + fsyncs
+    // the whole transcript cache on the Electron main thread (O(n^2)).
+    this.cache?.beginCacheBatch()
+    try {
+      await settleWithConcurrency(plan.viewRefreshCandidates, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
         if (generation !== this.syncGeneration) return
-        await retrySyncRefresh(() => this.listArtifacts(session.id))
+        await retrySyncRefresh(() => this.getSessionView(session.id))
       })
-    }
-    if (generation !== this.syncGeneration) return
-    if (this.transport.listWorkflows) {
-      await this.listWorkflows().catch(() => undefined)
-    }
-    if (generation !== this.syncGeneration) return
-    if (this.transport.listSettings) {
-      await this.listSettings().catch(() => undefined)
+      if (generation !== this.syncGeneration) return
+      if (this.transport.listArtifacts) {
+        await settleWithConcurrency(plan.artifactRefreshCandidates, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
+          if (generation !== this.syncGeneration) return
+          await retrySyncRefresh(() => this.listArtifacts(session.id))
+        })
+      }
+      if (generation !== this.syncGeneration) return
+      if (this.transport.listWorkflows) {
+        await this.listWorkflows().catch(() => undefined)
+      }
+      if (generation !== this.syncGeneration) return
+      if (this.transport.listSettings) {
+        await this.listSettings().catch(() => undefined)
+      }
+    } finally {
+      this.cache?.endCacheBatch()
     }
   }
 
@@ -691,10 +699,15 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   ): CloudTransportSubscription {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const afterSequence = input.afterSequence ?? this.cache?.getEventCursor(cacheKey, 'workspace') ?? undefined
+    // Sequence per subscription (audit P1-X2): each event's async handling (notably the
+    // snapshot.required sync()) must complete before the next event is delivered, otherwise event N's
+    // await wouldn't gate N+1 and input.onEvent could fire out of order — letting a stale snapshot
+    // overwrite a newer one downstream. A tail-promise chain serializes handling without dropping events.
+    let tail: Promise<void> = Promise.resolve()
     return this.transport.subscribeWorkspaceEvents({
       afterSequence,
       onEvent: (event) => {
-        void (async () => {
+        tail = tail.then(async () => {
           try {
             if (event.type === 'snapshot.required') {
               await this.sync()
@@ -707,7 +720,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
           } catch (error) {
             input.onError?.(error)
           }
-        })()
+        })
       },
       onError: input.onError,
     })

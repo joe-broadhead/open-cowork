@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { CloudSseReplayHub } from '../apps/desktop/src/main/cloud/sse-replay.ts'
+import { CloudSseReplayHub } from '@open-cowork/cloud-server/sse-replay'
 
 function waitFor(predicate: () => boolean, label: string) {
   const started = Date.now()
@@ -108,4 +108,43 @@ test('SSE replay hub catches up a late subscriber that joins during an in-flight
     unsubscribeFirst()
     hub.close()
   }
+})
+
+import { CloudSseStreamRegistry } from '@open-cowork/cloud-server/sse-replay'
+
+function mockSseConn() {
+  const handlers = new Map<string, Array<() => void>>()
+  const res = {
+    socket: { destroyed: false, destroy() { this.destroyed = true } },
+    writableEnded: false,
+    destroyed: false,
+    writes: [] as string[],
+    write(s: string) { this.writes.push(s); return true },
+    end() { this.writableEnded = true },
+    destroy() { this.destroyed = true },
+    once(ev: string, h: () => void) { const a = handlers.get(ev) || []; a.push(h); handlers.set(ev, a) },
+    off() {},
+    fireClose() { for (const h of handlers.get('close') || []) h() },
+  }
+  const req = { socket: res.socket, once() {}, off() {} }
+  return { req: req as never, res: res as never, raw: res }
+}
+
+test('SSE stream registry enforces a per-org concurrent-connection cap', () => {
+  const registry = new CloudSseStreamRegistry()
+  const scope = { orgKey: 'org-a', maxPerOrg: 2 }
+  const a = mockSseConn(); const b = mockSseConn(); const c = mockSseConn()
+  assert.equal(registry.track(a.req, a.res, () => {}, scope), true)
+  assert.equal(registry.track(b.req, b.res, () => {}, scope), true)
+  // Third over the cap is rejected with an SSE error and dropped.
+  assert.equal(registry.track(c.req, c.res, () => {}, scope), false)
+  assert.ok(c.raw.writes.some((w: string) => w.includes('Too many concurrent streams')))
+  assert.equal(c.raw.destroyed, true)
+  // A different org is unaffected.
+  const other = mockSseConn()
+  assert.equal(registry.track(other.req, other.res, () => {}, { orgKey: 'org-b', maxPerOrg: 2 }), true)
+  // Closing one frees a slot for org-a.
+  a.raw.fireClose()
+  const d = mockSseConn()
+  assert.equal(registry.track(d.req, d.res, () => {}, scope), true)
 })

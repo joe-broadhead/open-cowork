@@ -3,7 +3,7 @@ import test from 'node:test'
 import {
   BUILT_IN_LOCALE_METADATA,
   loadBuiltInCatalog,
-} from '../apps/desktop/src/renderer/helpers/i18n-catalogs/registry.ts'
+} from '../packages/app/src/helpers/i18n-catalogs/registry.ts'
 
 test('built-in translated locale catalogs keep the same key set', async () => {
   const translatedCatalogs = await Promise.all(

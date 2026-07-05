@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
-import { artifactForTool, listArtifactsForTools, listSessionArtifacts, listVisibleSessionArtifacts, sanitizeArtifactToolInput } from '../apps/desktop/src/renderer/components/chat/session-artifacts.ts'
+import { artifactForTool, listArtifactsForTools, listSessionArtifacts, listVisibleSessionArtifacts, sanitizeArtifactToolInput } from '../packages/app/src/components/chat/session-artifacts.ts'
 
 function tool(overrides: Partial<ToolCall>): ToolCall {
   return {

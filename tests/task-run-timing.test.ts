@@ -1,9 +1,6 @@
+import { createEmptyTaskRun, upsertTaskRunList } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  createEmptyTaskRun,
-  upsertTaskRunList,
-} from '../apps/desktop/src/lib/session-view-model.ts'
 import {
   getTaskRun,
   registerTaskRun,
@@ -104,7 +101,7 @@ test('main task-run state clears stale finishedAt when a task returns to running
 })
 
 test('deriveVisibleSessionPatch backfills startedAt for terminal tasks that only have finishedAt', async () => {
-  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('@open-cowork/shared')
   const finishedAt = '2026-04-16T19:00:05.000Z'
   const state = createEmptySessionViewState({ hydrated: true, lastEventAt: 1_700_000_000_000 })
   state.taskRuns = [
@@ -133,7 +130,7 @@ test('deriveVisibleSessionPatch backfills startedAt for terminal tasks that only
 })
 
 test('deriveVisibleSessionPatch backfills finishedAt for terminal tasks that only have startedAt', async () => {
-  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('@open-cowork/shared')
   const startedAt = '2026-04-16T19:00:05.000Z'
   const state = createEmptySessionViewState({ hydrated: true, lastEventAt: 1_700_000_000_000 })
   state.taskRuns = [
@@ -162,7 +159,7 @@ test('deriveVisibleSessionPatch backfills finishedAt for terminal tasks that onl
 })
 
 test('deriveVisibleSessionPatch backfills startedAt for running tasks with a missing anchor', async () => {
-  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('@open-cowork/shared')
   const state = createEmptySessionViewState({ hydrated: true, lastEventAt: 1_700_000_000_000 })
   state.taskRuns = [
     {
@@ -191,7 +188,7 @@ test('deriveVisibleSessionPatch backfills startedAt for running tasks with a mis
 })
 
 test('history hydration that completes a running task preserves its startedAt so the clock stays visible', async () => {
-  const { buildSessionStateFromItems, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+  const { buildSessionStateFromItems, createEmptySessionViewState } = await import('@open-cowork/shared')
 
   const existingStart = '2026-04-16T19:00:00.000Z'
   const existing = createEmptySessionViewState({ hydrated: true, lastEventAt: 1_700_000_000_000 })
@@ -240,7 +237,7 @@ test('history hydration that completes a running task preserves its startedAt so
 })
 
 test('history hydration carries projector-supplied startedAt and finishedAt into a brand-new task run', async () => {
-  const { buildSessionStateFromItems, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+  const { buildSessionStateFromItems, createEmptySessionViewState } = await import('@open-cowork/shared')
 
   // Simulates a reloaded thread where the subagent finished before the
   // app started watching — projector has both timestamps from the child

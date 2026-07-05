@@ -1,3 +1,6 @@
+import { normalizeThreadSearchQuery } from '@open-cowork/runtime-host/thread-index/thread-index-normalizers'
+import type { CoworkSettings } from '@open-cowork/runtime-host/settings'
+import { assertCustomMcpContentLimits, assertCustomSkillContent, assertCustomSkillFiles } from '@open-cowork/runtime-host/custom-content-limits'
 import type {
   ArtifactIndexRequest,
   ArtifactStatusUpdateRequest,
@@ -18,11 +21,7 @@ import type {
   WorkspaceOptions,
 } from '@open-cowork/shared'
 import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
-import type { CoworkSettings } from '../settings.ts'
-import { assertCustomMcpContentLimits, assertCustomSkillContent, assertCustomSkillFiles } from '../custom-content-limits.ts'
-import { validateCustomAgentContentLimits } from '../custom-content-limits.ts'
-import { normalizeThreadSearchQuery } from '../thread-index/thread-index-normalizers.ts'
-
+import { validateCustomAgentContentLimits } from '@open-cowork/runtime-host/custom-content-limits'
 const MAX_IPC_STRING_BYTES = 64 * 1024
 const MAX_IPC_ID_BYTES = 512
 const MAX_SETTINGS_UPDATE_BYTES = 512 * 1024

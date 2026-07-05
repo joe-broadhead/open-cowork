@@ -5,15 +5,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
-import { createSdkCloudRuntimeAdapter } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+import { createSdkCloudRuntimeAdapter } from '@open-cowork/cloud-server/runtime-adapter'
 import {
   buildNodeOpencodeCloudRuntimeClientConfig,
   createNodeOpencodeCloudRuntimeAdapter,
   subscribeToOpencodeCloudRuntimeEvents,
   translateOpencodeRuntimeEvent,
   translateOpencodeRuntimeEventWithDiagnostics,
-} from '../apps/desktop/src/main/cloud/opencode-runtime-adapter.ts'
+} from '@open-cowork/cloud-server/opencode-runtime-adapter'
 
 const MANAGED_RUNTIME_START_TIMEOUT_MS = 15_000
 
@@ -289,6 +289,46 @@ test('cloud OpenCode event translator preserves projection-critical runtime even
       todos: [{ id: 'todo-1', content: 'Ship sync', status: 'in_progress', priority: 'high' }],
     },
   }])
+})
+
+test('cloud OpenCode runtime adapter streams message.part.delta as append-mode assistant text', () => {
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'message.part.delta',
+      properties: {
+        sessionID: 'session-1',
+        messageID: 'msg-1',
+        partID: 'part-1',
+        field: 'text',
+        delta: 'Hello',
+      },
+    },
+  }), [{
+    type: 'assistant.message',
+    payload: {
+      sessionId: 'session-1',
+      messageId: 'msg-1',
+      content: 'Hello',
+      mode: 'append',
+    },
+  }])
+
+  // Non-text streaming fields (reasoning, tool input) are not surfaced as
+  // assistant message content.
+  const reasoning = translateOpencodeRuntimeEventWithDiagnostics({
+    payload: {
+      type: 'message.part.delta',
+      properties: {
+        sessionID: 'session-1',
+        messageID: 'msg-1',
+        partID: 'part-1',
+        field: 'reasoning',
+        delta: 'thinking',
+      },
+    },
+  })
+  assert.deepEqual(reasoning.events, [])
+  assert.equal(reasoning.dropped?.reason, 'no-projected-events')
 })
 
 test('cloud OpenCode runtime subscription translates stream events and reports failures', async () => {

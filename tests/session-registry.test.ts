@@ -1,3 +1,4 @@
+import { clearSessionRegistryCache, flushSessionRegistryWrites, getSessionRecord, listSessionRecords, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -5,17 +6,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
-import {
-  clearSessionRegistryCache,
-  flushSessionRegistryWrites,
-  getSessionRecord,
-  listSessionRecords,
-  removeSessionRecord,
-  toSessionRecord,
-  updateSessionRecord,
-  upsertSessionRecord,
-} from '../apps/desktop/src/main/session-registry.ts'
-
 function uniqueUserDataDir(name: string) {
   return mkdtempSync(join(tmpdir(), `open-cowork-session-registry-${name}-`))
 }

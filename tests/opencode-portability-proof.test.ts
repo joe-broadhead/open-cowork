@@ -7,7 +7,7 @@ import {
   digestSdkSnapshot,
   mapPortableEntryPath,
 } from '../scripts/opencode-portability-proof.ts'
-import { runtimePathsForPortability } from '../apps/desktop/src/main/cloud/runtime-portability.ts'
+import { runtimePathsForPortability } from '@open-cowork/cloud-server/runtime-portability'
 
 test('OpenCode portability proof maps portable runtime paths into a separate restore root', () => {
   const sourceRuntimePaths = runtimePathsForPortability({

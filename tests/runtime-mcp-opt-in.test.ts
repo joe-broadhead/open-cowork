@@ -1,13 +1,9 @@
+import { evaluateBuiltInMcp, resolveBundledMcpNodeCommand, resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import {
-  evaluateBuiltInMcp,
-  resolveBundledMcpNodeCommand,
-  resolveCustomMcpRuntimeEntryForRuntime,
-} from '../apps/desktop/src/main/runtime-mcp.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import type { AppSettings } from '../packages/shared/src/index.ts'
 import type { BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
@@ -108,6 +104,51 @@ test('evaluateBuiltInMcp — local MCP with required credentials present is read
     assert.equal(result.entry.type, 'local')
     if (result.entry.type !== 'local') return
     assert.equal(result.entry.environment?.PERPLEXITY_API_KEY, 'sk-test')
+  })
+})
+
+test('evaluateBuiltInMcp — external-command MCP whose binary is missing is skipped, not spawned', () => {
+  withConfigDir(baseConfig({}), () => {
+    // Mirrors the bundled openwiki entry: an external CLI the user may not
+    // have installed. A missing binary must skip cleanly (install CTA), not
+    // reach the runtime and produce a confusing SDK spawn failure.
+    const mcp: BundleMcp = {
+      name: 'openwiki',
+      type: 'local',
+      description: 'OpenWiki knowledge base',
+      authMode: 'none',
+      command: ['definitely-not-an-installed-binary-open-cowork-test', 'mcp', '--stdio'],
+    }
+    const result = evaluateBuiltInMcp(mcp, { ...BASE_SETTINGS })
+    assert.deepEqual(result, { status: 'skipped', reason: 'command-not-installed' })
+  })
+})
+
+test('evaluateBuiltInMcp — external-command MCP resolves when the binary exists on PATH', () => {
+  withConfigDir(baseConfig({}), () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'open-cowork-openwiki-bin-'))
+    const binary = join(binDir, 'openwiki')
+    writeFileSync(binary, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    const previousPath = process.env.PATH
+    process.env.PATH = `${binDir}:${previousPath || ''}`
+    try {
+      const mcp: BundleMcp = {
+        name: 'openwiki',
+        type: 'local',
+        description: 'OpenWiki knowledge base',
+        authMode: 'none',
+        command: ['openwiki', 'mcp', '--stdio', '--tools', 'proposal'],
+      }
+      const result = evaluateBuiltInMcp(mcp, { ...BASE_SETTINGS })
+      assert.equal(result.status, 'ready')
+      if (result.status !== 'ready') return
+      assert.equal(result.entry.type, 'local')
+      if (result.entry.type !== 'local') return
+      assert.deepEqual(result.entry.command, ['openwiki', 'mcp', '--stdio', '--tools', 'proposal'])
+    } finally {
+      process.env.PATH = previousPath
+      rmSync(binDir, { recursive: true, force: true })
+    }
   })
 })
 

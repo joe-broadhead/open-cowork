@@ -1,3 +1,6 @@
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { assignCoordinationTask, clearCoordinationStoreCache, createCoordinationProject, createCoordinationTask, createCoordinationWatch, deleteCoordinationWatch, listCoordinationBoard, listCoordinationTasks, listCoordinationWatches, moveCoordinationTask, setCoordinationDatabaseForTests, updateCoordinationTask, updateCoordinationWatch } from '@open-cowork/runtime-host/coordination/coordination-store'
+import { configureCoordinationWatchDeliveryAdapter, emitCoordinationWatchEvent, getCoordinationTaskWorkTarget, linkCoordinationTaskToSession, moveCoordinationTask as moveCoordinationTaskService, planCoordinationProjectWithCleo, updateCoordinationTask as updateCoordinationTaskService } from '@open-cowork/runtime-host/coordination/coordination-service'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
@@ -9,36 +12,6 @@ import {
   coordinationTaskColumnForStatus,
 } from '../packages/shared/src/coordination.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  assignCoordinationTask,
-  clearCoordinationStoreCache,
-  createCoordinationProject,
-  createCoordinationTask,
-  createCoordinationWatch,
-  deleteCoordinationWatch,
-  listCoordinationBoard,
-  listCoordinationTasks,
-  listCoordinationWatches,
-  moveCoordinationTask,
-  setCoordinationDatabaseForTests,
-  updateCoordinationTask,
-  updateCoordinationWatch,
-} from '../apps/desktop/src/main/coordination/coordination-store.ts'
-import {
-  configureCoordinationWatchDeliveryAdapter,
-  emitCoordinationWatchEvent,
-  getCoordinationTaskWorkTarget,
-  linkCoordinationTaskToSession,
-  moveCoordinationTask as moveCoordinationTaskService,
-  planCoordinationProjectWithCleo,
-  updateCoordinationTask as updateCoordinationTaskService,
-} from '../apps/desktop/src/main/coordination/coordination-service.ts'
-import {
-  clearSessionRegistryCache,
-  toSessionRecord,
-  upsertSessionRecord,
-} from '../apps/desktop/src/main/session-registry.ts'
-
 function withTempAppData(name: string, run: (dir: string) => void) {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const dir = mkdtempSync(join(tmpdir(), `open-cowork-coordination-${name}-`))

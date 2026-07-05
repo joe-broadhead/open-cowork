@@ -1,8 +1,8 @@
+import { sanitizeForExport } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { sanitizeForExport } from '../apps/desktop/src/main/log-sanitizer.ts'
-import { sanitizeCloudObservabilityAttributes } from '../apps/desktop/src/main/cloud/observability.ts'
+import { sanitizeCloudObservabilityAttributes } from '@open-cowork/cloud-server/observability'
 import { redactGatewayConfig, resolveGatewayConfig } from '../apps/gateway/dist/config.js'
 
 test('cloud and gateway distribution diagnostics redact secrets, signed URLs, and local paths', () => {

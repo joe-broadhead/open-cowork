@@ -1,7 +1,6 @@
+import { escapeHtml } from '@open-cowork/runtime-host/html-escape'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { escapeHtml } from '../apps/desktop/src/main/html-escape.ts'
-
 test('escapeHtml escapes HTML-sensitive characters in main-process responses', () => {
   assert.equal(
     escapeHtml(`Signed in as <alice@example.com> & "Open Cowork's" user`),

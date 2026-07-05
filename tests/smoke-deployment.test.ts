@@ -54,18 +54,16 @@ function sendText(response: ServerResponse, body: string) {
 }
 
 function sendCloudWorkbench(response: ServerResponse) {
-  const nonce = 'strict-smoke-nonce'
+  // Unified renderer SPA shell: bootstrap blob + hashed /app/assets module scripts,
+  // CSP with script-src 'self' (hashed modules, no inline scripts / nonce).
   response.writeHead(200, {
     'content-type': 'text/html',
     'cache-control': 'no-store',
-    'content-security-policy': `default-src 'self'; connect-src 'self'; frame-ancestors 'none'; script-src 'nonce-${nonce}'`,
+    'content-security-policy': `default-src 'self'; connect-src 'self'; frame-ancestors 'none'; script-src 'self'`,
   })
   response.end(`<!doctype html>
-    <meta name="open-cowork-cloud-bootstrap" content="true">
-    <div data-route-panel="threads"></div>
-    <div data-route-panel="chat"></div>
-    <div data-route-panel="byok"></div>
-    <script nonce="${nonce}"></script>`)
+    <script id="cowork-bootstrap" type="application/json">{}</script>
+    <script type="module" src="/app/assets/index-deadbeef.js"></script>`)
 }
 
 async function listen(server: ReturnType<typeof createServer>) {

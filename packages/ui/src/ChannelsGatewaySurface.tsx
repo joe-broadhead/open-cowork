@@ -1,5 +1,6 @@
 import {
   type ComponentPropsWithoutRef,
+  type CSSProperties,
   type FormEvent,
   useMemo,
   useState,
@@ -25,9 +26,10 @@ import {
 import { Badge, type BadgeTone } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
-import { Icon, type IconName } from './Icon.js'
-import { CoworkerAvatar, StudioPageHeader } from './StudioPrimitives.js'
-import { cn } from './utils.js'
+import { Icon } from './Icon.js'
+import { Skeleton } from './Skeleton.js'
+import { CoworkerAvatar, StudioPageHeader, StudioStatusDot, type StudioStatusTone } from './StudioPrimitives.js'
+import { cn, entityChroma } from './utils.js'
 
 const DISPLAY_PROVIDER_ORDER: ChannelProviderKind[] = [
   'whatsapp',
@@ -58,24 +60,6 @@ const ROLE_DESCRIPTIONS: Record<ChannelIdentityRole, string> = {
   approver: 'Can approve requests and unblock work on the go.',
   viewer: 'Can follow safe delivery updates.',
 }
-
-const REACH_CARDS: Array<{ title: string; body: string; icon: IconName }> = [
-  {
-    title: 'Start work',
-    body: 'Inbound channel messages can open or continue Cloud work without changing OpenCode execution semantics.',
-    icon: 'message-square',
-  },
-  {
-    title: 'Get updates',
-    body: 'Watches route project and conversation events back to the right people.',
-    icon: 'bell',
-  },
-  {
-    title: 'Approve on the go',
-    body: 'Approver identities can receive permission and question prompts through trusted channels.',
-    icon: 'badge-check',
-  },
-]
 
 type Notice = {
   tone: 'success' | 'warning'
@@ -130,16 +114,18 @@ function roleLabel(role: ChannelIdentityRole | CoordinationWatchRecipientRole | 
 }
 
 function roleTone(role: ChannelIdentityRole | CoordinationWatchRecipientRole | null | undefined): BadgeTone {
+  // Roles are metadata, not status — keep them as quiet tags. Only the Owner carries
+  // the accent; everyone else is neutral/muted so the roster isn't a rainbow of chips.
   if (role === 'owner') return 'accent'
-  if (role === 'admin') return 'success'
-  if (role === 'approver') return 'warning'
+  if (role === 'viewer') return 'muted'
   return 'neutral'
 }
 
-function statusTone(status: string | null | undefined): BadgeTone {
+function statusTone(status: string | null | undefined): StudioStatusTone {
   const value = String(status || '').toLowerCase()
   if (value === 'active' || value === 'connected' || value === 'sent') return 'success'
-  if (value === 'auth_required' || value === 'pending' || value === 'claimed' || value === 'paused') return 'warning'
+  // Only states that genuinely need the user are warning; benign transitional states stay neutral.
+  if (value === 'auth_required') return 'warning'
   if (value === 'failed' || value === 'dead' || value === 'error' || value === 'disabled') return 'danger'
   return 'neutral'
 }
@@ -278,49 +264,12 @@ function ChannelsNotice({ notice, error }: { notice: Notice | null; error?: stri
   return <p className="studio-channel-notice" data-tone={notice.tone}>{notice.message}</p>
 }
 
-function ReachCards() {
-  return (
-    <div className="studio-channel-reach-grid" id="channel-reach-cards">
-      {REACH_CARDS.map((card) => (
-        <article className="studio-channel-reach-card" key={card.title}>
-          <span className="studio-channel-reach-card__icon" aria-hidden="true">
-            <Icon name={card.icon} size={16} />
-          </span>
-          <div>
-            <h3>{card.title}</h3>
-            <p>{card.body}</p>
-          </div>
-        </article>
-      ))}
-    </div>
-  )
-}
-
-function SummaryRows({
-  agents,
-  bindings,
-  deliveries,
-  watches,
-  people,
-}: Pick<ChannelsGatewaySurfaceProps, 'agents' | 'bindings' | 'deliveries' | 'watches' | 'people'>) {
-  const activeBindings = bindings.filter((binding) => binding.status === 'active').length
-  const attentionDeliveries = deliveries.filter((delivery) => ['failed', 'dead', 'error'].includes(delivery.status)).length
-  return (
-    <div className="studio-channel-summary" id="channel-summary-list">
-      <div className="row compact"><strong>Channel coworkers</strong><span>{agents.length}</span></div>
-      <div className="row compact"><strong>Connected channels</strong><span>{activeBindings}/{bindings.length}</span></div>
-      <div className="row compact"><strong>People</strong><span>{people.length}</span></div>
-      <div className="row compact"><strong>Active watches</strong><span>{watches.filter((watch) => watch.status === 'active').length}/{watches.length}</span></div>
-      <div className="row compact"><strong>Needs attention</strong><span>{attentionDeliveries}</span></div>
-    </div>
-  )
-}
-
 function ConnectedChannels({
   bindings,
   agents,
   canManage,
   busy,
+  loading,
   disabledReason,
   onDisconnect,
 }: {
@@ -328,11 +277,21 @@ function ConnectedChannels({
   agents: ChannelAgentRecord[]
   canManage: boolean
   busy: string | null
+  loading: boolean
   disabledReason: string
   onDisconnect: (bindingId: string) => void
 }) {
   const visible = bindings.filter((binding) => binding.status !== 'disabled')
   if (!visible.length) {
+    if (loading) {
+      return (
+        <div className="studio-channel-grid" id="channel-connected-grid" aria-hidden="true">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="card" className="studio-channel-card" />
+          ))}
+        </div>
+      )
+    }
     return (
       <EmptyState
         icon="radio"
@@ -346,7 +305,11 @@ function ConnectedChannels({
       {visible.map((binding) => (
         <article className="studio-channel-card" key={binding.bindingId}>
           <div className="studio-channel-card__head">
-            <span className="studio-channel-card__icon" aria-hidden="true">
+            <span
+              className="studio-channel-card__icon entity-tile"
+              style={{ '--entity-chroma': entityChroma(providerKind(binding.provider) || binding.provider) } as CSSProperties}
+              aria-hidden="true"
+            >
               <Icon name="radio" size={16} />
             </span>
             <div>
@@ -355,7 +318,7 @@ function ConnectedChannels({
             </div>
           </div>
           <div className="studio-channel-card__meta">
-            <Badge tone={statusTone(binding.status)}>{binding.status}</Badge>
+            <StudioStatusDot tone={statusTone(binding.status)} label={binding.status} />
             <span>{safeDisplay(bindingAgentName(binding, agents), 'channel coworker')}</span>
           </div>
           <div className="studio-channel-actions">
@@ -408,7 +371,11 @@ function ProviderGrid({
         return (
           <article className="studio-channel-card studio-channel-card--provider" key={provider.provider}>
             <div className="studio-channel-card__head">
-              <span className="studio-channel-card__icon" aria-hidden="true">
+              <span
+                className="studio-channel-card__icon entity-tile"
+                style={{ '--entity-chroma': entityChroma(provider.provider) } as CSSProperties}
+                aria-hidden="true"
+              >
                 <Icon name={connected ? 'badge-check' : setupInProgress ? 'loader-circle' : 'plus'} size={16} />
               </span>
               <div>
@@ -417,7 +384,7 @@ function ProviderGrid({
               </div>
             </div>
             <div className="studio-channel-card__meta">
-              <Badge tone={connected ? 'success' : setupInProgress ? 'warning' : 'neutral'}>{connected ? 'Connected' : setupInProgress ? 'Pending' : 'Available'}</Badge>
+              <StudioStatusDot tone={connected ? 'success' : setupInProgress ? 'warning' : 'neutral'} label={connected ? 'Connected' : setupInProgress ? 'Pending' : 'Available'} />
             </div>
             <div className="studio-channel-actions">
               <Button
@@ -448,6 +415,7 @@ function PeopleRoster({
   bindings,
   canManage,
   busy,
+  loading,
   disabledReason,
   onInvite,
 }: {
@@ -455,6 +423,7 @@ function PeopleRoster({
   bindings: ChannelBindingPublicRecord[]
   canManage: boolean
   busy: string | null
+  loading: boolean
   disabledReason: string
   onInvite: (input: ChannelPersonResolveInput) => void
 }) {
@@ -512,8 +481,16 @@ function PeopleRoster({
               <span>{ROLE_DESCRIPTIONS[person.role]}</span>
             </div>
           </div>
-        )) : (
-          <p className="empty">No people loaded.</p>
+        )) : loading ? (
+          Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="row" className="studio-person-row" />
+          ))
+        ) : (
+          <EmptyState
+            icon="users"
+            title="No people mapped yet"
+            body="Connect a channel to start mapping provider handles to coworkers and delivery roles."
+          />
         )}
       </div>
       <form className="studio-channel-form" onSubmit={submit}>
@@ -558,6 +535,7 @@ function WatchesPanel({
   bindings,
   canManage,
   busy,
+  loading,
   disabledReason,
   onCreate,
   onPause,
@@ -568,6 +546,7 @@ function WatchesPanel({
   bindings: ChannelBindingPublicRecord[]
   canManage: boolean
   busy: string | null
+  loading: boolean
   disabledReason: string
   onCreate: (input: CoordinationWatchInput) => void
   onPause: (watchId: string) => void
@@ -643,7 +622,7 @@ function WatchesPanel({
               <small>{watchRecipientLabel(watch)} - {roleLabel(watch.recipient?.role)}</small>
             </div>
             <div className="studio-channel-actions">
-              <Badge tone={statusTone(watch.status)}>{watch.status}</Badge>
+              <StudioStatusDot tone={statusTone(watch.status)} label={watch.status} />
               {watch.status === 'paused' ? (
                 <Button size="sm" variant="ghost" data-admin-control="true" loading={busy === `resume:${watch.id}`} disabledReason={actionDisabledReason(canManage, disabledReason)} onClick={() => onResume(watch.id)}>Resume</Button>
               ) : (
@@ -652,8 +631,16 @@ function WatchesPanel({
               <Button size="sm" variant="danger" data-admin-control="true" loading={busy === `delete:${watch.id}`} disabledReason={actionDisabledReason(canManage, disabledReason)} onClick={() => onDelete(watch.id)}>Delete</Button>
             </div>
           </div>
-        )) : (
-          <p className="empty">No watches loaded.</p>
+        )) : loading ? (
+          Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="row" className="studio-channel-watch" />
+          ))
+        ) : (
+          <EmptyState
+            icon="bell"
+            title="No watches yet"
+            body="Add a watch to deliver project and conversation events to a connected channel."
+          />
         )}
       </div>
       <form className="studio-channel-form" onSubmit={submit}>
@@ -715,9 +702,27 @@ function WatchesPanel({
 function DeliveryRows({
   deliveries,
   bindings,
+  loading,
   onOpenDeliverySession,
-}: Pick<ChannelsGatewaySurfaceProps, 'deliveries' | 'bindings' | 'onOpenDeliverySession'>) {
-  if (!deliveries.length) return <p className="empty">No channel deliveries loaded.</p>
+}: Pick<ChannelsGatewaySurfaceProps, 'deliveries' | 'bindings' | 'onOpenDeliverySession'> & { loading: boolean }) {
+  if (!deliveries.length) {
+    if (loading) {
+      return (
+        <div className="studio-channel-list studio-channel-deliveries" id="channel-delivery-list" aria-hidden="true">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="row" className="studio-channel-delivery-row" />
+          ))}
+        </div>
+      )
+    }
+    return (
+      <EmptyState
+        icon="send"
+        title="No deliveries yet"
+        body="Channel delivery attempts appear here once a watch or coworker sends an update."
+      />
+    )
+  }
   return (
     <div className="studio-channel-list studio-channel-deliveries" id="channel-delivery-list">
       {deliveries.slice(0, 50).map((delivery) => {
@@ -729,7 +734,7 @@ function DeliveryRows({
               <p>{providerDisplayName(delivery.provider)} - {bindingLabel(bindings, delivery.channelBindingId)} - attempt {delivery.attemptCount}</p>
             </div>
             <div className="studio-channel-actions">
-              <Badge tone={statusTone(delivery.status)}>{delivery.status}</Badge>
+              <StudioStatusDot tone={statusTone(delivery.status)} label={delivery.status} />
               {sessionId && onOpenDeliverySession ? (
                 <Button size="sm" variant="ghost" onClick={() => void onOpenDeliverySession(sessionId)}>Open chat</Button>
               ) : null}
@@ -769,7 +774,6 @@ export function ChannelsGatewaySurface({
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
   const providerStatuses = useMemo(() => displayProviders(providers, bindings, allowProviderFallback), [allowProviderFallback, bindings, providers])
-  const connectedCount = bindings.filter((binding) => binding.status === 'active').length
 
   const runAction = async (busyKey: string, successMessage: string, action: () => Promise<unknown> | unknown) => {
     setBusy(busyKey)
@@ -828,7 +832,7 @@ export function ChannelsGatewaySurface({
         description="Connect channels, map people, and subscribe watches while OpenCode remains the execution runtime."
         meta={(
           <div className="studio-channel-header-meta">
-            <Badge tone={canManage ? 'success' : 'warning'}>{canManage ? 'Setup enabled' : 'Admin gated'}</Badge>
+            <Badge tone={canManage ? 'accent' : 'neutral'}>{canManage ? 'Setup enabled' : 'Admin gated'}</Badge>
             <span>{platformLabel}</span>
           </div>
         )}
@@ -844,18 +848,7 @@ export function ChannelsGatewaySurface({
         ]}
       />
       <ChannelsNotice notice={notice} error={error} />
-      <ReachCards />
       <div className="studio-channel-dashboard">
-        <div className="studio-channel-panel studio-channel-panel--summary">
-          <div className="studio-channel-panel__head">
-            <div>
-              <h2>Reach</h2>
-              <p>{connectedCount} active channel(s), {watches.length} watch(es).</p>
-            </div>
-            <Badge tone={loading ? 'warning' : 'neutral'}>{loading ? 'Loading' : 'Live'}</Badge>
-          </div>
-          <SummaryRows agents={agents} bindings={bindings} deliveries={deliveries} watches={watches} people={people} />
-        </div>
         <div className="studio-channel-panel">
           <div className="studio-channel-panel__head">
             <div>
@@ -868,6 +861,7 @@ export function ChannelsGatewaySurface({
             agents={agents}
             canManage={canManage}
             busy={busy}
+            loading={loading}
             disabledReason={manageDisabledReason}
             onDisconnect={disconnectBinding}
           />
@@ -893,6 +887,7 @@ export function ChannelsGatewaySurface({
           bindings={bindings}
           canManage={canManage}
           busy={busy}
+          loading={loading}
           disabledReason={manageDisabledReason}
           onInvite={invitePerson}
         />
@@ -901,6 +896,7 @@ export function ChannelsGatewaySurface({
           bindings={bindings}
           canManage={canManage}
           busy={busy}
+          loading={loading}
           disabledReason={manageDisabledReason}
           onCreate={createWatch}
           onPause={pauseWatch}
@@ -915,7 +911,7 @@ export function ChannelsGatewaySurface({
             </div>
             <Badge tone="neutral">{Math.min(deliveries.length, 50)} shown</Badge>
           </div>
-          <DeliveryRows deliveries={deliveries} bindings={bindings} onOpenDeliverySession={onOpenDeliverySession} />
+          <DeliveryRows deliveries={deliveries} bindings={bindings} loading={loading} onOpenDeliverySession={onOpenDeliverySession} />
         </div>
       </div>
     </section>

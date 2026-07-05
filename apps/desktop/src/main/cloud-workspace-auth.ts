@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import electron from 'electron'
+import { getDesktopShellHost } from '@open-cowork/shared/node'
+import { evaluateHttpMcpUrlResolved, type McpDnsResolver } from '@open-cowork/runtime-host/mcp-url-policy'
 import type { CloudWorkspaceConnectionRecord } from './cloud-workspace-registry.ts'
 
 type CloudWorkspaceAuthResponse = {
@@ -17,6 +18,7 @@ export type CloudWorkspaceAuthFetch = (
     method?: string
     headers?: Record<string, string>
     body?: string
+    redirect?: 'manual' | 'error' | 'follow'
   },
 ) => Promise<CloudWorkspaceAuthResponse>
 
@@ -41,6 +43,7 @@ export type CloudWorkspaceDesktopAuthenticatorOptions = {
   openExternal?: (url: string) => Promise<unknown> | unknown
   callbackTimeoutMs?: number
   brandName?: string
+  dnsResolver?: McpDnsResolver
 }
 
 type OidcDiscovery = {
@@ -57,7 +60,9 @@ function defaultFetch(): CloudWorkspaceAuthFetch {
 }
 
 function defaultOpenExternal(url: string) {
-  return electron.shell.openExternal(url)
+  const shell = getDesktopShellHost()
+  if (!shell) throw new Error('Desktop shell is unavailable; cannot open an external URL.')
+  return shell.openExternal(url)
 }
 
 function jsonRecord(value: unknown, label: string) {
@@ -125,6 +130,15 @@ function callbackPage(title: string, body = '') {
 
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function isLoopbackCloudWorkspaceBaseUrl(baseUrl: string) {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
+  } catch {
+    return false
+  }
 }
 
 async function closeServer(server: Server) {
@@ -198,19 +212,45 @@ export class CloudWorkspaceDesktopAuthenticator {
   private readonly openExternal: (url: string) => Promise<unknown> | unknown
   private readonly callbackTimeoutMs: number
   private readonly brandName: string
+  private readonly dnsResolver?: McpDnsResolver
 
   constructor(options: CloudWorkspaceDesktopAuthenticatorOptions = {}) {
     this.fetcher = options.fetch || defaultFetch()
     this.openExternal = options.openExternal || defaultOpenExternal
     this.callbackTimeoutMs = options.callbackTimeoutMs || DEFAULT_CALLBACK_TIMEOUT_MS
     this.brandName = options.brandName?.trim() || DEFAULT_BRAND_NAME
+    this.dnsResolver = options.dnsResolver
+  }
+
+  // Validate an OIDC endpoint URL returned by the (only TLS-trusted) cloud backend before
+  // the main process fetches it: a malicious/compromised backend must not be able to steer
+  // discovery/token requests — which carry the auth code, PKCE verifier, and refresh token —
+  // at internal hosts or cloud metadata. Resolves DNS and blocks private/metadata addresses
+  // (matching the MCP/webhook SSRF policy). Loopback is allowed only when the workspace base
+  // URL is itself loopback (local development); otherwise https is required.
+  private async assertSafeEndpoint(rawUrl: string, baseUrl: string, label: string): Promise<string> {
+    const baseLoopback = isLoopbackCloudWorkspaceBaseUrl(baseUrl)
+    const verdict = await evaluateHttpMcpUrlResolved(rawUrl, {
+      allowPrivateNetwork: baseLoopback,
+      resolveHostname: this.dnsResolver,
+    })
+    if (!verdict.ok) {
+      throw new Error(`${label} endpoint is not allowed: ${verdict.reason}`)
+    }
+    if (!baseLoopback && verdict.url.protocol !== 'https:') {
+      throw new Error(`${label} endpoint must use https.`)
+    }
+    return verdict.url.toString()
   }
 
   async login(connection: CloudWorkspaceConnectionRecord): Promise<CloudWorkspaceLoginResult> {
     const config = await this.fetchDesktopConfig(connection)
-    const discovery = await this.fetchDiscovery(config.issuerUrl)
-    const authorizationEndpoint = readRequiredString(discovery, 'authorization_endpoint', 'OIDC discovery')
-    const tokenEndpoint = readRequiredString(discovery, 'token_endpoint', 'OIDC discovery')
+    const issuerUrl = await this.assertSafeEndpoint(config.issuerUrl, connection.baseUrl, 'OIDC issuer')
+    const discovery = await this.fetchDiscovery(issuerUrl)
+    const authorizationEndpoint = await this.assertSafeEndpoint(
+      readRequiredString(discovery, 'authorization_endpoint', 'OIDC discovery'), connection.baseUrl, 'OIDC authorization')
+    const tokenEndpoint = await this.assertSafeEndpoint(
+      readRequiredString(discovery, 'token_endpoint', 'OIDC discovery'), connection.baseUrl, 'OIDC token')
     const state = base64Url(randomBytes(24))
     const nonce = base64Url(randomBytes(24))
     const verifier = base64Url(randomBytes(32))
@@ -253,8 +293,10 @@ export class CloudWorkspaceDesktopAuthenticator {
 
   async refresh(connection: CloudWorkspaceConnectionRecord, refreshToken: string): Promise<CloudWorkspaceLoginResult> {
     const config = await this.fetchDesktopConfig(connection)
-    const discovery = await this.fetchDiscovery(config.issuerUrl)
-    const tokenEndpoint = readRequiredString(discovery, 'token_endpoint', 'OIDC discovery')
+    const issuerUrl = await this.assertSafeEndpoint(config.issuerUrl, connection.baseUrl, 'OIDC issuer')
+    const discovery = await this.fetchDiscovery(issuerUrl)
+    const tokenEndpoint = await this.assertSafeEndpoint(
+      readRequiredString(discovery, 'token_endpoint', 'OIDC discovery'), connection.baseUrl, 'OIDC token')
     const token = await this.refreshToken(tokenEndpoint, {
       clientId: config.clientId,
       refreshToken,
@@ -277,6 +319,7 @@ export class CloudWorkspaceDesktopAuthenticator {
     const body = await readJsonRecord(
       await this.fetcher(`${normalizeBaseUrl(connection.baseUrl)}/auth/desktop/config`, {
         headers: { accept: 'application/json' },
+        redirect: 'manual',
       }),
       'Cloud desktop auth config',
     )
@@ -295,6 +338,7 @@ export class CloudWorkspaceDesktopAuthenticator {
     return await readJsonRecord(
       await this.fetcher(`${issuer}/.well-known/openid-configuration`, {
         headers: { accept: 'application/json' },
+        redirect: 'manual',
       }),
       'OIDC discovery',
     ) as OidcDiscovery & Record<string, unknown>
@@ -324,6 +368,7 @@ export class CloudWorkspaceDesktopAuthenticator {
           'content-type': 'application/x-www-form-urlencoded',
         },
         body: form.toString(),
+        redirect: 'manual',
       }),
       'OIDC token',
     )
@@ -349,6 +394,7 @@ export class CloudWorkspaceDesktopAuthenticator {
           'content-type': 'application/x-www-form-urlencoded',
         },
         body: form.toString(),
+        redirect: 'manual',
       }),
       'OIDC refresh',
     )
@@ -361,6 +407,7 @@ export class CloudWorkspaceDesktopAuthenticator {
           accept: 'application/json',
           authorization: `Bearer ${accessToken}`,
         },
+        redirect: 'manual',
       }),
       'Cloud auth bootstrap',
     )

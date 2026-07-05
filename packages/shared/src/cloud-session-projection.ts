@@ -748,7 +748,18 @@ export function reduceCloudSessionProjectionEvent(
         createdAt: eventTime,
         ...(Array.isArray(payload.attachments) ? { attachments: cloneProjectionValue(payload.attachments as MessageAttachment[]) } : {}),
       })
-    case 'assistant.message':
+    case 'assistant.message': {
+      const messageId = readString(payload.messageId, `${session.sessionId}:${event.sequence}:assistant`)
+      // `mode: 'append'` carries an incremental streaming delta (projected from
+      // the SDK `message.part.delta` event). Concatenate it onto the existing
+      // message so cloud SSE streams token-granular; full `message.part.updated`
+      // snapshots still arrive as the default replace mode and resync content.
+      // The delta string is read verbatim (not via `readString`) so that
+      // whitespace-only chunks between words are not dropped.
+      const isAppend = payload.mode === 'append'
+      const existing = isAppend ? current.messages.find((message) => message.id === messageId) : undefined
+      const deltaText = typeof payload.content === 'string' ? payload.content : ''
+      const content = existing ? existing.content + deltaText : (isAppend ? deltaText : readString(payload.content))
       return addMessage({
         ...current,
         status: current.status,
@@ -756,12 +767,13 @@ export function reduceCloudSessionProjectionEvent(
         lastError: null,
         updatedAt: eventTime,
       }, {
-        id: readString(payload.messageId, `${session.sessionId}:${event.sequence}:assistant`),
+        id: messageId,
         role: 'assistant',
-        content: readString(payload.content),
-        createdAt: eventTime,
+        content,
+        createdAt: existing?.createdAt ?? eventTime,
         ...(Array.isArray(payload.attachments) ? { attachments: cloneProjectionValue(payload.attachments as MessageAttachment[]) } : {}),
       })
+    }
     case 'tool.call': {
       const toolCall = toolCallFromPayload(session, payload, event)
       const taskRunId = readNullableString(payload.taskRunId)

@@ -1,0 +1,422 @@
+{
+  "name": "@open-cowork/runtime-host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Node + OpenCode-SDK runtime substrate shared by the desktop main process and the cloud server",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "packages/runtime-host"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./agent-config": {
+      "types": "./dist/agent-config.d.ts",
+      "import": "./dist/agent-config.js"
+    },
+    "./agent-prompts": {
+      "types": "./dist/agent-prompts.d.ts",
+      "import": "./dist/agent-prompts.js"
+    },
+    "./agent-tool-access": {
+      "types": "./dist/agent-tool-access.d.ts",
+      "import": "./dist/agent-tool-access.js"
+    },
+    "./agent-tool-actions": {
+      "types": "./dist/agent-tool-actions.d.ts",
+      "import": "./dist/agent-tool-actions.js"
+    },
+    "./agent-tool-bridge": {
+      "types": "./dist/agent-tool-bridge.d.ts",
+      "import": "./dist/agent-tool-bridge.js"
+    },
+    "./artifact-index": {
+      "types": "./dist/artifact-index.d.ts",
+      "import": "./dist/artifact-index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js"
+    },
+    "./auth-utils": {
+      "types": "./dist/auth-utils.d.ts",
+      "import": "./dist/auth-utils.js"
+    },
+    "./built-in-agent-overrides": {
+      "types": "./dist/built-in-agent-overrides.d.ts",
+      "import": "./dist/built-in-agent-overrides.js"
+    },
+    "./bundled-skill-index": {
+      "types": "./dist/bundled-skill-index.d.ts",
+      "import": "./dist/bundled-skill-index.js"
+    },
+    "./capability-bundle-engine": {
+      "types": "./dist/capability-bundle-engine.d.ts",
+      "import": "./dist/capability-bundle-engine.js"
+    },
+    "./capability-bundle-runtime-preflight": {
+      "types": "./dist/capability-bundle-runtime-preflight.d.ts",
+      "import": "./dist/capability-bundle-runtime-preflight.js"
+    },
+    "./capability-bundle-store": {
+      "types": "./dist/capability-bundle-store.d.ts",
+      "import": "./dist/capability-bundle-store.js"
+    },
+    "./capability-catalog": {
+      "types": "./dist/capability-catalog.d.ts",
+      "import": "./dist/capability-catalog.js"
+    },
+    "./coordination/coordination-service": {
+      "types": "./dist/coordination/coordination-service.d.ts",
+      "import": "./dist/coordination/coordination-service.js"
+    },
+    "./coordination/coordination-store": {
+      "types": "./dist/coordination/coordination-store.d.ts",
+      "import": "./dist/coordination/coordination-store.js"
+    },
+    "./custom-agents": {
+      "types": "./dist/custom-agents.d.ts",
+      "import": "./dist/custom-agents.js"
+    },
+    "./custom-agents-utils": {
+      "types": "./dist/custom-agents-utils.d.ts",
+      "import": "./dist/custom-agents-utils.js"
+    },
+    "./custom-content-limits": {
+      "types": "./dist/custom-content-limits.d.ts",
+      "import": "./dist/custom-content-limits.js"
+    },
+    "./delay": {
+      "types": "./dist/delay.d.ts",
+      "import": "./dist/delay.js"
+    },
+    "./e2e-remote-debugging": {
+      "types": "./dist/e2e-remote-debugging.d.ts",
+      "import": "./dist/e2e-remote-debugging.js"
+    },
+    "./effective-skills": {
+      "types": "./dist/effective-skills.d.ts",
+      "import": "./dist/effective-skills.js"
+    },
+    "./html-escape": {
+      "types": "./dist/html-escape.d.ts",
+      "import": "./dist/html-escape.js"
+    },
+    "./internal-message-utils": {
+      "types": "./dist/internal-message-utils.d.ts",
+      "import": "./dist/internal-message-utils.js"
+    },
+    "./knowledge/knowledge-service": {
+      "types": "./dist/knowledge/knowledge-service.d.ts",
+      "import": "./dist/knowledge/knowledge-service.js"
+    },
+    "./knowledge/knowledge-store": {
+      "types": "./dist/knowledge/knowledge-store.d.ts",
+      "import": "./dist/knowledge/knowledge-store.js"
+    },
+    "./knowledge/knowledge-tool-bridge": {
+      "types": "./dist/knowledge/knowledge-tool-bridge.d.ts",
+      "import": "./dist/knowledge/knowledge-tool-bridge.js"
+    },
+    "./knowledge/postgres-knowledge-store": {
+      "types": "./dist/knowledge/postgres-knowledge-store.d.ts",
+      "import": "./dist/knowledge/postgres-knowledge-store.js"
+    },
+    "./launchpad/launchpad-service": {
+      "types": "./dist/launchpad/launchpad-service.d.ts",
+      "import": "./dist/launchpad/launchpad-service.js"
+    },
+    "./mcp-stdio-policy": {
+      "types": "./dist/mcp-stdio-policy.d.ts",
+      "import": "./dist/mcp-stdio-policy.js"
+    },
+    "./mcp-url-policy": {
+      "types": "./dist/mcp-url-policy.d.ts",
+      "import": "./dist/mcp-url-policy.js"
+    },
+    "./native-customizations": {
+      "types": "./dist/native-customizations.d.ts",
+      "import": "./dist/native-customizations.js"
+    },
+    "./perf-metrics": {
+      "types": "./dist/perf-metrics.d.ts",
+      "import": "./dist/perf-metrics.js"
+    },
+    "./permission-config": {
+      "types": "./dist/permission-config.d.ts",
+      "import": "./dist/permission-config.js"
+    },
+    "./pricing-core": {
+      "types": "./dist/pricing-core.d.ts",
+      "import": "./dist/pricing-core.js"
+    },
+    "./pricing-utils": {
+      "types": "./dist/pricing-utils.d.ts",
+      "import": "./dist/pricing-utils.js"
+    },
+    "./provider-utils": {
+      "types": "./dist/provider-utils.d.ts",
+      "import": "./dist/provider-utils.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./runtime-catalog-snapshot": {
+      "types": "./dist/runtime-catalog-snapshot.d.ts",
+      "import": "./dist/runtime-catalog-snapshot.js"
+    },
+    "./runtime-client-cache": {
+      "types": "./dist/runtime-client-cache.d.ts",
+      "import": "./dist/runtime-client-cache.js"
+    },
+    "./runtime-component-manifest": {
+      "types": "./dist/runtime-component-manifest.d.ts",
+      "import": "./dist/runtime-component-manifest.js"
+    },
+    "./runtime-config-builder": {
+      "types": "./dist/runtime-config-builder.d.ts",
+      "import": "./dist/runtime-config-builder.js"
+    },
+    "./runtime-content": {
+      "types": "./dist/runtime-content.d.ts",
+      "import": "./dist/runtime-content.js"
+    },
+    "./runtime-context": {
+      "types": "./dist/runtime-context.d.ts",
+      "import": "./dist/runtime-context.js"
+    },
+    "./runtime-environment": {
+      "types": "./dist/runtime-environment.d.ts",
+      "import": "./dist/runtime-environment.js"
+    },
+    "./runtime-fallback-ids": {
+      "types": "./dist/runtime-fallback-ids.d.ts",
+      "import": "./dist/runtime-fallback-ids.js"
+    },
+    "./runtime-home-bridge": {
+      "types": "./dist/runtime-home-bridge.d.ts",
+      "import": "./dist/runtime-home-bridge.js"
+    },
+    "./runtime-managed-server": {
+      "types": "./dist/runtime-managed-server.d.ts",
+      "import": "./dist/runtime-managed-server.js"
+    },
+    "./runtime-mcp": {
+      "types": "./dist/runtime-mcp.d.ts",
+      "import": "./dist/runtime-mcp.js"
+    },
+    "./runtime-node-managed-server": {
+      "types": "./dist/runtime-node-managed-server.d.ts",
+      "import": "./dist/runtime-node-managed-server.js"
+    },
+    "./runtime-opencode-cli": {
+      "types": "./dist/runtime-opencode-cli.d.ts",
+      "import": "./dist/runtime-opencode-cli.js"
+    },
+    "./runtime-paths": {
+      "types": "./dist/runtime-paths.d.ts",
+      "import": "./dist/runtime-paths.js"
+    },
+    "./runtime-permissions": {
+      "types": "./dist/runtime-permissions.d.ts",
+      "import": "./dist/runtime-permissions.js"
+    },
+    "./runtime-process-cleanup": {
+      "types": "./dist/runtime-process-cleanup.d.ts",
+      "import": "./dist/runtime-process-cleanup.js"
+    },
+    "./runtime-project-overlay": {
+      "types": "./dist/runtime-project-overlay.d.ts",
+      "import": "./dist/runtime-project-overlay.js"
+    },
+    "./runtime-skill-catalog": {
+      "types": "./dist/runtime-skill-catalog.d.ts",
+      "import": "./dist/runtime-skill-catalog.js"
+    },
+    "./runtime-skill-mirror": {
+      "types": "./dist/runtime-skill-mirror.d.ts",
+      "import": "./dist/runtime-skill-mirror.js"
+    },
+    "./runtime-skill-verifier": {
+      "types": "./dist/runtime-skill-verifier.d.ts",
+      "import": "./dist/runtime-skill-verifier.js"
+    },
+    "./runtime-state": {
+      "types": "./dist/runtime-state.d.ts",
+      "import": "./dist/runtime-state.js"
+    },
+    "./runtime-status": {
+      "types": "./dist/runtime-status.d.ts",
+      "import": "./dist/runtime-status.js"
+    },
+    "./runtime-tool-cache": {
+      "types": "./dist/runtime-tool-cache.d.ts",
+      "import": "./dist/runtime-tool-cache.js"
+    },
+    "./runtime-tools": {
+      "types": "./dist/runtime-tools.d.ts",
+      "import": "./dist/runtime-tools.js"
+    },
+    "./sdk-error": {
+      "types": "./dist/sdk-error.d.ts",
+      "import": "./dist/sdk-error.js"
+    },
+    "./secure-storage-policy": {
+      "types": "./dist/secure-storage-policy.d.ts",
+      "import": "./dist/secure-storage-policy.js"
+    },
+    "./semantic-ui-bridge": {
+      "types": "./dist/semantic-ui-bridge.d.ts",
+      "import": "./dist/semantic-ui-bridge.js"
+    },
+    "./session-cost-event-tracker": {
+      "types": "./dist/session-cost-event-tracker.d.ts",
+      "import": "./dist/session-cost-event-tracker.js"
+    },
+    "./session-diff-fallback": {
+      "types": "./dist/session-diff-fallback.d.ts",
+      "import": "./dist/session-diff-fallback.js"
+    },
+    "./session-engine": {
+      "types": "./dist/session-engine.d.ts",
+      "import": "./dist/session-engine.js"
+    },
+    "./session-engine-costs": {
+      "types": "./dist/session-engine-costs.d.ts",
+      "import": "./dist/session-engine-costs.js"
+    },
+    "./session-engine-events": {
+      "types": "./dist/session-engine-events.d.ts",
+      "import": "./dist/session-engine-events.js"
+    },
+    "./session-engine-helpers": {
+      "types": "./dist/session-engine-helpers.d.ts",
+      "import": "./dist/session-engine-helpers.js"
+    },
+    "./session-event-dispatcher": {
+      "types": "./dist/session-event-dispatcher.d.ts",
+      "import": "./dist/session-event-dispatcher.js"
+    },
+    "./session-history-loader": {
+      "types": "./dist/session-history-loader.d.ts",
+      "import": "./dist/session-history-loader.js"
+    },
+    "./session-history-projection-utils": {
+      "types": "./dist/session-history-projection-utils.d.ts",
+      "import": "./dist/session-history-projection-utils.js"
+    },
+    "./session-history-projector": {
+      "types": "./dist/session-history-projector.d.ts",
+      "import": "./dist/session-history-projector.js"
+    },
+    "./session-history-task-binding": {
+      "types": "./dist/session-history-task-binding.d.ts",
+      "import": "./dist/session-history-task-binding.js"
+    },
+    "./session-registry": {
+      "types": "./dist/session-registry.d.ts",
+      "import": "./dist/session-registry.js"
+    },
+    "./session-registry-utils": {
+      "types": "./dist/session-registry-utils.d.ts",
+      "import": "./dist/session-registry-utils.js"
+    },
+    "./session-sync-coordinator": {
+      "types": "./dist/session-sync-coordinator.d.ts",
+      "import": "./dist/session-sync-coordinator.js"
+    },
+    "./session-usage-summary": {
+      "types": "./dist/session-usage-summary.d.ts",
+      "import": "./dist/session-usage-summary.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "import": "./dist/settings.js"
+    },
+    "./shell-env": {
+      "types": "./dist/shell-env.d.ts",
+      "import": "./dist/shell-env.js"
+    },
+    "./skill-bundle-validation": {
+      "types": "./dist/skill-bundle-validation.d.ts",
+      "import": "./dist/skill-bundle-validation.js"
+    },
+    "./task-binding-policy": {
+      "types": "./dist/task-binding-policy.d.ts",
+      "import": "./dist/task-binding-policy.js"
+    },
+    "./task-run-utils": {
+      "types": "./dist/task-run-utils.d.ts",
+      "import": "./dist/task-run-utils.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "import": "./dist/telemetry.js"
+    },
+    "./thread-index/thread-index-normalizers": {
+      "types": "./dist/thread-index/thread-index-normalizers.d.ts",
+      "import": "./dist/thread-index/thread-index-normalizers.js"
+    },
+    "./thread-index/thread-index-service": {
+      "types": "./dist/thread-index/thread-index-service.d.ts",
+      "import": "./dist/thread-index/thread-index-service.js"
+    },
+    "./thread-index/thread-index-store": {
+      "types": "./dist/thread-index/thread-index-store.d.ts",
+      "import": "./dist/thread-index/thread-index-store.js"
+    },
+    "./workflow/workflow-normalization": {
+      "types": "./dist/workflow/workflow-normalization.d.ts",
+      "import": "./dist/workflow/workflow-normalization.js"
+    },
+    "./workflow/workflow-schedule": {
+      "types": "./dist/workflow/workflow-schedule.d.ts",
+      "import": "./dist/workflow/workflow-schedule.js"
+    },
+    "./workflow/workflow-store": {
+      "types": "./dist/workflow/workflow-store.d.ts",
+      "import": "./dist/workflow/workflow-store.js"
+    },
+    "./workflow/workflow-tool-actions": {
+      "types": "./dist/workflow/workflow-tool-actions.d.ts",
+      "import": "./dist/workflow/workflow-tool-actions.js"
+    },
+    "./workflow/workflow-tool-bridge": {
+      "types": "./dist/workflow/workflow-tool-bridge.d.ts",
+      "import": "./dist/workflow/workflow-tool-bridge.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@open-cowork/shared": "workspace:*",
+    "@opencode-ai/sdk": "1.15.5",
+    "ajv": "^8.20.0",
+    "google-auth-library": "^10.6.2",
+    "opencode-ai": "1.15.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^6.0.3"
+  }
+}

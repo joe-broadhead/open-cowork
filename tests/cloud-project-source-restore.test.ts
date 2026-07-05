@@ -7,11 +7,11 @@ import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
-import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
-import { createCloudProjectSourceService } from '../apps/desktop/src/main/cloud/project-source-service.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { createInMemoryObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+import { createCloudProjectSourceService } from '@open-cowork/cloud-server/project-source-service'
 
 const execFile = promisify(execFileCallback)
 

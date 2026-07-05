@@ -6,8 +6,8 @@ import {
   normalizeApiTokenExpiresAt,
   normalizeApiTokenScopes,
   resolvedSignupMode,
-} from '../apps/desktop/src/main/cloud/services/api-token-policy.ts'
-import { CloudServiceError } from '../apps/desktop/src/main/cloud/cloud-service-error.ts'
+} from '@open-cowork/cloud-server/services/api-token-policy'
+import { CloudServiceError } from '@open-cowork/cloud-server/cloud-service-error'
 
 test('cloud API token policy normalizes TTL, scope, and signup policy outside session service', () => {
   assert.deepEqual(normalizeApiTokenScopes(['desktop', 'desktop', 'gateway']), ['desktop', 'gateway'])

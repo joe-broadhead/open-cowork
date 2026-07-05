@@ -106,6 +106,7 @@ export function subscribeCloudEvents(
   input: {
     onEvent: (event: CloudTransportWorkspaceEvent) => void
     onError?: (error: unknown) => void
+    onClose?: () => void
   },
 ): CloudTransportSubscription {
   const headers = context.headers || {}
@@ -116,6 +117,7 @@ export function subscribeCloudEvents(
       signal: context.signal,
       onEvent: input.onEvent,
       onError: input.onError,
+      onClose: input.onClose,
     })
   }
   const EventSourceImpl = context.eventSource || (globalThis as unknown as { EventSource?: CloudTransportEventSource }).EventSource
@@ -203,6 +205,11 @@ function subscribeFetchSse(
     credentials?: 'include'
     onEvent: (event: CloudTransportWorkspaceEvent) => void
     onError?: (error: unknown) => void
+    // Fired once when the server ends the stream gracefully without the consumer calling close()
+    // (idle timeout, deploy, scale/LB event). A clean end produces no read error, so without this
+    // the consumer can't tell a healthy idle stream from a silently-dropped one. Consumer-initiated
+    // close() does NOT fire it.
+    onClose?: () => void
     signal?: AbortSignal
   },
 ) {
@@ -304,6 +311,10 @@ function subscribeFetchSse(
       } finally {
         reader.releaseLock()
       }
+      // The stream ended without the consumer closing it: a graceful server-initiated close
+      // (idle timeout / deploy / scale event). Surface it so the consumer can resubscribe instead
+      // of silently treating the dead pipe as healthy.
+      if (!closed) input.onClose?.()
     } finally {
       detachAbortSignal()
     }

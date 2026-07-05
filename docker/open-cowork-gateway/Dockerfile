@@ -4,13 +4,16 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc carries the public-hoist-pattern needed for externalized-bundle deps (ajv).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps ./apps
 COPY packages ./packages
 COPY mcps ./mcps
 COPY scripts ./scripts
 COPY open-cowork.config.json open-cowork.config.schema.json ./
 COPY tsconfig.base.json ./
+COPY LICENSE THIRD_PARTY_NOTICES.md ./
+COPY THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @open-cowork/shared build
@@ -22,13 +25,18 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+# .npmrc (public-hoist-pattern) must reach the runtime --prod install too.
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=build /app/apps ./apps
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/mcps ./mcps
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/open-cowork.config.json /app/open-cowork.config.schema.json ./
 COPY --from=build /app/tsconfig.base.json ./
+# Carry the MIT license + curated third-party attribution into the redistributed
+# image, matching what the desktop app bundles (LIC-03).
+COPY --from=build /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
+COPY --from=build /app/THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 
 RUN pnpm install --frozen-lockfile --prod
 

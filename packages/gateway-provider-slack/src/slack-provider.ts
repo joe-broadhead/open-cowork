@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import type {
@@ -14,7 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 
 export interface SlackProviderConfig {
   providerId?: ChannelProviderId;
@@ -227,18 +227,18 @@ export class SlackProvider implements ChannelProvider {
     const timestamp = headerValue(auth.headers, "x-slack-request-timestamp");
     const signature = headerValue(auth.headers, "x-slack-signature");
     if (!signingSecret || !rawBody || !timestamp || !signature) {
-      throw new Error("Slack webhook signature is required.");
+      throw new WebhookAuthError("Slack webhook signature is required.");
     }
     const timestampSeconds = Number(timestamp);
-    if (!Number.isFinite(timestampSeconds)) throw new Error("Slack webhook timestamp is invalid.");
+    if (!Number.isFinite(timestampSeconds)) throw new WebhookAuthError("Slack webhook timestamp is invalid.");
     const nowMs = this.config.now?.().getTime() ?? Date.now();
     const maxAgeMs = this.config.maxSignatureAgeMs ?? defaultMaxSignatureAgeMs;
     if (Math.abs(nowMs - timestampSeconds * 1000) > maxAgeMs) {
-      throw new Error("Slack webhook timestamp is outside the allowed window.");
+      throw new WebhookAuthError("Slack webhook timestamp is outside the allowed window.");
     }
     const expected = `v0=${createHmac("sha256", signingSecret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
     if (!constantTimeStringEqual(signature, expected)) {
-      throw new Error("Slack webhook signature verification failed.");
+      throw new WebhookAuthError("Slack webhook signature verification failed.");
     }
     return this.claimWebhookSignature(`${timestamp}:${signature}`, slackReplayScopeFromRawBody(rawBody, this.id), nowMs, maxAgeMs);
   }
@@ -247,7 +247,7 @@ export class SlackProvider implements ChannelProvider {
     this.purgeSeenWebhookSignatures(nowMs);
     const existing = this.seenWebhookSignatures.get(replayKey);
     if (existing && existing.expiresAt > nowMs) {
-      throw new Error("Slack webhook signature replay rejected.");
+      throw new WebhookAuthError("Slack webhook signature replay rejected.");
     }
     const entry = { expiresAt: nowMs + maxAgeMs, scope };
     this.seenWebhookSignatures.set(replayKey, entry);
@@ -563,13 +563,6 @@ function headerValue(headers: SlackWebhookAuth["headers"], name: string): string
   return null;
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined): boolean {
-  if (!left || !right) return false;
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
-
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -578,7 +571,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function stringField(value: Record<string, unknown>, key: string): string | null {
+function stringField(value: Record<string, unknown> | undefined, key: string): string | null {
+  if (!value) return null;
   const entry = value[key];
   return typeof entry === "string" && entry.trim() ? entry.trim() : null;
 }

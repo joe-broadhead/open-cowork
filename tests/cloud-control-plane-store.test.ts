@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 
 import {
   ControlPlaneQuotaExceededError,
-} from '../apps/desktop/src/main/cloud/control-plane-store.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
+} from '@open-cowork/cloud-server/control-plane-store'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 
 function seededStore() {
   const store = new InMemoryControlPlaneStore()

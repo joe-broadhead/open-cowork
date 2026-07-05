@@ -1,5 +1,19 @@
 # Design Refinement + Cloud Web → React Proposal
 
+> **⚠️ Superseded (2026-06-24).** The Studio design pass reversed two premises here: Open
+> Cowork now ships a **single Mercury identity** (Mercury dark / Day light) — the multi-preset
+> theme list and the ambient radial glow were removed. Read this as a historical proposal;
+> current state is in `theme-presets.ts` (`USER_FACING_THEME_IDS`) and
+> [`design/repo-deep-audit-2026-06.md`](design/repo-deep-audit-2026-06.md).
+>
+> The "Cloud Web → React" migration proposed below was also overtaken: Cloud Web is no
+> longer a separate `apps/website` app. The single unified renderer (`packages/app/src`)
+> now runs both Desktop (Electron, real IPC) and Cloud Web (the browser, over a typed `CoworkAPI`
+> shim at `packages/app/src/browser/cowork-api.ts`), and the cloud serves it at `GET /`.
+> The `apps/website` package was deleted. The "Current architecture (grounded)" table and the
+> `apps/website` references below describe the pre-unification state. See
+> [architecture](architecture.md) and [Cloud Web Studio](cloud-web-workbench.md).
+
 > Status: **Proposal / for review** · Author: design+arch pass · Date: 2026-06-05
 >
 > Two pillars, decided up front:

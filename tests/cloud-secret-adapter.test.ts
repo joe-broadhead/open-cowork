@@ -12,7 +12,7 @@ import {
   resolveCloudSecretRef,
   validateCloudSecretKeyMaterial,
   type CloudSecretStoreHttpClient,
-} from '../apps/desktop/src/main/cloud/secret-adapter.ts'
+} from '@open-cowork/cloud-server/secret-adapter'
 
 test('cloud envelope secret adapter encrypts and decrypts with context binding', () => {
   const adapter = createEnvelopeSecretAdapter('test-key-material')
@@ -201,4 +201,63 @@ test('cloud unavailable secret adapter rejects all operations', () => {
 
   assert.throws(() => adapter.protect('secret'), /no store/)
   assert.throws(() => adapter.reveal('secret'), /no store/)
+})
+
+test('envelope adapter rotates keys via kid + a previous-key ring (P2-1)', () => {
+  const k1 = 'rotation-key-one-with-enough-entropy'
+  const k2 = 'rotation-key-two-with-enough-entropy'
+
+  const v1 = createEnvelopeSecretAdapter(k1)
+  const cipher1 = v1.protect('secret-value', 'ctx')
+  assert.equal(v1.reveal(cipher1, 'ctx'), 'secret-value')
+  // New envelopes carry a kid.
+  const envelope1 = JSON.parse(Buffer.from(cipher1.slice(CLOUD_SECRET_ENVELOPE_PREFIX.length), 'base64url').toString('utf8'))
+  assert.equal(typeof envelope1.kid, 'string')
+
+  // Rotate: k2 is current, k1 retained in the ring.
+  const v2 = createEnvelopeSecretAdapter(k2, [k1])
+  assert.equal(v2.reveal(cipher1, 'ctx'), 'secret-value') // old ciphertext still decrypts (kid k1 in ring)
+  const cipher2 = v2.protect('new-secret', 'ctx')
+  assert.equal(v2.reveal(cipher2, 'ctx'), 'new-secret') // new ciphertext sealed with k2
+
+  // An adapter that dropped k1 cannot read the old ciphertext — and never silently uses the wrong key.
+  assert.throws(() => createEnvelopeSecretAdapter(k2).reveal(cipher1, 'ctx'), /No cloud secret key available for kid/)
+})
+
+test('envelope adapter trial-decrypts legacy (no-kid) envelopes across the ring (P2-1)', () => {
+  const k1 = 'legacy-key-one-with-enough-entropy'
+  const k2 = 'legacy-key-two-with-enough-entropy'
+
+  // Forge a pre-kid envelope: encrypt with k1, then strip the kid the adapter now stamps.
+  const sealed = createEnvelopeSecretAdapter(k1).protect('legacy-secret')
+  const envelope = JSON.parse(Buffer.from(sealed.slice(CLOUD_SECRET_ENVELOPE_PREFIX.length), 'base64url').toString('utf8'))
+  delete envelope.kid
+  const legacyCipher = CLOUD_SECRET_ENVELOPE_PREFIX + Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url')
+
+  // After rotation to k2 with k1 retained, the no-kid envelope still decrypts (trial across the ring).
+  assert.equal(createEnvelopeSecretAdapter(k2, [k1]).reveal(legacyCipher), 'legacy-secret')
+})
+
+test('createCloudSecretAdapterFromEnv loads previous keys for rotation (P2-1)', async () => {
+  const k1 = 'env-rotation-key-one-with-entropy'
+  const k2 = 'env-rotation-key-two-with-entropy'
+  const cipher1 = createEnvelopeSecretAdapter(k1).protect('env-secret', 'ctx')
+
+  const adapter = await createCloudSecretAdapterFromEnv({
+    OPEN_COWORK_CLOUD_SECRET_KEY: k2,
+    OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS: k1,
+  })
+  assert.equal(adapter.reveal(cipher1, 'ctx'), 'env-secret')
+})
+
+test('AWS Secrets Manager ref rejects a region that would redirect the SigV4 host (P2)', async () => {
+  await assert.rejects(
+    () => resolveCloudSecretRef('aws-sm://my/secret?region=evil.com/%3F', { env: {} }),
+    /region must be a valid region name/,
+  )
+  // A well-formed region still gets past the region check (then fails later for missing creds).
+  await assert.rejects(
+    () => resolveCloudSecretRef('aws-sm://my/secret?region=us-east-1', { env: {} }),
+    /require AWS credentials/,
+  )
 })

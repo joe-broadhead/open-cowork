@@ -58,10 +58,11 @@ export default defineConfig({
     // modulepreload link generation keeps lazy feature chunks from becoming
     // startup dependencies when Rolldown shares preload bookkeeping.
     modulePreload: false,
-    // Mermaid is loaded only after a diagram is rendered. Keep the warning
-    // threshold above that isolated lazy chunk while still catching accidental
-    // multi-megabyte growth elsewhere.
-    chunkSizeWarningLimit: 3000,
+    // Mermaid/vega are loaded only after a diagram is rendered (lazy chunks).
+    // Keep the warning threshold low so accidental multi-hundred-KB growth on
+    // the eager startup path surfaces in the build log; the CI-enforced eager
+    // budget lives in scripts/check-bundle-size.mjs (browser build).
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
@@ -103,7 +104,10 @@ export default defineConfig({
         },
       },
       {
-        entry: 'src/main/runtime-managed-server-supervisor.ts',
+        // Supervisor source now lives in @open-cowork/runtime-host; the desktop still
+        // emits it as a sibling of the built main bundle so the Electron utilityProcess
+        // forker (resolveManagedOpencodeSupervisorPath) finds it next to main.
+        entry: '../../packages/runtime-host/src/runtime-managed-server-supervisor.ts',
         vite: {
           build: {
             outDir: 'dist/main',
@@ -131,7 +135,19 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src/renderer'),
+      // The unified renderer now lives in the shared @open-cowork/app package.
+      // The Electron build keeps its root + vite-plugin-electron wiring here and
+      // consumes the renderer source through this alias so packaging and the
+      // main process's renderer load paths stay unchanged.
+      '@': resolve(__dirname, '../../packages/app/src'),
+    },
+  },
+  server: {
+    // Dev mode serves the renderer from packages/app, which is outside this
+    // config's root (apps/desktop). Allow Vite to read the workspace root so the
+    // HTML entries' ../../packages/app/src/* scripts resolve during `vite`.
+    fs: {
+      allow: [resolve(__dirname, '../..')],
     },
   },
 })

@@ -5,7 +5,27 @@ import { loadStandaloneGatewayConfig } from "../dist/config.js";
 import { FakeStandaloneOpenCodeAdapter } from "../dist/opencode.js";
 import { createStandaloneProviderRegistry } from "../dist/provider-registry.js";
 import { InMemoryStandaloneGatewayRepository } from "../dist/repository.js";
-import { createStandaloneGatewayServer } from "../dist/server.js";
+import { createStandaloneGatewayServer, createCachedDoctor } from "../dist/server.js";
+
+test("readiness doctor cache single-flights concurrent probes and expires on TTL", async () => {
+  let runs = 0;
+  let clock = 1_000;
+  const report = { ok: true, checks: [] } as Awaited<ReturnType<Parameters<typeof createCachedDoctor>[0]>>;
+  const cached = createCachedDoctor(async () => { runs += 1; return report; }, 2_000, () => clock);
+
+  // Concurrent probes within the window share a single in-flight run.
+  await Promise.all([cached(), cached(), cached()]);
+  assert.equal(runs, 1);
+
+  // A probe still inside the TTL reuses the cached result without re-running.
+  await cached();
+  assert.equal(runs, 1);
+
+  // Past the TTL the doctor runs again.
+  clock += 2_500;
+  await cached();
+  assert.equal(runs, 2);
+});
 
 test("standalone server exposes health, readiness, and admin-gated dashboard", async () => {
   const config = loadStandaloneGatewayConfig({

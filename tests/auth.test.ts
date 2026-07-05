@@ -44,7 +44,9 @@ function writeAdc(userDataDir: string) {
 }
 
 async function importFreshAuthModule(label: string) {
-  return import(`../apps/desktop/src/main/auth.ts?${label}-${Date.now()}`)
+  // auth now lives in @open-cowork/runtime-host; a package specifier can't carry
+  // the cache-busting query, so reload the built dist module directly.
+  return import(`../packages/runtime-host/dist/auth.js?${label}-${Date.now()}`)
 }
 
 async function withGoogleAuthFixture<T>(

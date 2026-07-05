@@ -97,10 +97,10 @@ export function useFocusTrap(
 
       if (event.shiftKey && current === first) {
         event.preventDefault()
-        last.focus()
+        last?.focus()
       } else if (!event.shiftKey && current === last) {
         event.preventDefault()
-        first.focus()
+        first?.focus()
       }
     }
 

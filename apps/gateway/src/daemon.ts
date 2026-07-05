@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { timingSafeEqual } from 'node:crypto'
+import { channelWebhookErrorCode, constantTimeStringEqual } from '@open-cowork/gateway-channel'
 import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 
@@ -22,8 +22,10 @@ type GatewayWebhookRateRecord = {
 
 const maxWebhookRateRecords = 10_000
 
-class GatewayWebhookRateLimiter {
+export class GatewayWebhookRateLimiter {
   private readonly records = new Map<string, GatewayWebhookRateRecord>()
+
+  constructor(private readonly maxRecords = maxWebhookRateRecords) {}
 
   claim(input: { key: string, nowMs: number, windowMs: number, maxRequests: number }) {
     const record = this.record(input.key, input.nowMs, input.windowMs)
@@ -63,11 +65,30 @@ class GatewayWebhookRateLimiter {
     if (existing && existing.resetAt > nowMs) return existing
     const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 }
     this.records.set(key, record)
-    if (this.records.size > maxWebhookRateRecords) this.prune(nowMs)
-    while (this.records.size > maxWebhookRateRecords) {
-      const oldest = this.records.keys().next().value
-      if (!oldest) break
-      this.records.delete(oldest)
+    if (this.records.size > this.maxRecords) this.prune(nowMs)
+    // Evict by relevance, not insertion order (audit P3-11): prefer dropping a record that is NOT
+    // currently blocking, and among equals the one expiring soonest. FIFO-by-insertion could evict
+    // an early-inserted hot key that is still BLOCKING — resetting an attacker's block — while idle
+    // keys persisted.
+    while (this.records.size > this.maxRecords) {
+      let evictKey: string | null = null
+      let evictBlocking = true
+      let evictExpiry = Infinity
+      for (const [candidateKey, candidate] of this.records) {
+        const blocking = candidate.blockedUntil > nowMs
+        const expiry = Math.max(candidate.resetAt, candidate.blockedUntil)
+        if (
+          evictKey === null
+          || (!blocking && evictBlocking)
+          || (blocking === evictBlocking && expiry < evictExpiry)
+        ) {
+          evictKey = candidateKey
+          evictBlocking = blocking
+          evictExpiry = expiry
+        }
+      }
+      if (!evictKey) break
+      this.records.delete(evictKey)
     }
     return record
   }
@@ -148,6 +169,14 @@ export function createGatewayHttpServer(config: GatewayConfig, runtime: GatewayR
       })
     })
   })
+
+  // Socket-level limits on the internet-facing webhook endpoint. The body reader caps bytes
+  // but not time, so without these a client trickling bytes under the size cap (slowloris)
+  // could hold a connection open indefinitely.
+  server.requestTimeout = 30_000
+  server.headersTimeout = 15_000
+  server.keepAliveTimeout = 10_000
+  server.maxConnections = 1_024
 
   return {
     server,
@@ -314,7 +343,7 @@ async function handleRequest(
   const webhookMatch = /^\/webhooks\/([^/]+)$/.exec(url.pathname)
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
-    const providerId = decodeURIComponent(webhookMatch[1])
+    const providerId = decodeURIComponent(webhookMatch[1] ?? '')
     const providerConfig = configuredProvider(config, providerId)
     if (providerConfig) ensureGatewayProviderMetrics(runtime.metrics, providerConfig).webhookRequests += 1
     const source = webhookSource(req, config.server.trustProxyHeaders, config.server.trustedProxyCidrs)
@@ -345,6 +374,13 @@ async function handleRequest(
 }
 
 function classifyGatewayWebhookError(error: unknown) {
+  // Classify on the provider's stable error code first (audit G4); the message-keyword heuristic
+  // below is a fallback for any throw site not yet migrated to a typed ChannelWebhookError.
+  const code = channelWebhookErrorCode(error)
+  if (code === 'not_found') return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
+  if (code === 'auth') return new GatewayHttpError(401, 'Gateway webhook authorization failed.')
+  if (code === 'payload') return new GatewayHttpError(400, 'Gateway webhook payload is invalid.')
+  if (code === 'upstream') return new GatewayHttpError(502, 'Gateway webhook provider failed.')
   const message = error instanceof Error ? error.message : String(error)
   if (/unknown gateway provider|does not expose a webhook endpoint/i.test(message)) {
     return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
@@ -549,20 +585,21 @@ function hasForwardedHeaders(req: IncomingMessage) {
   )
 }
 
-function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
-  if (!left || !right) return false
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-}
-
 async function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024) {
-  let raw = ''
+  // Accumulate raw Buffers and decode ONCE at the end (audit G1). Concatenating chunks as strings
+  // (`raw += chunk`) decodes each chunk independently, so a multibyte UTF-8 sequence straddling a
+  // chunk boundary is split and replaced with U+FFFD — corrupting the exact bytes the HMAC is
+  // computed over and silently breaking signature verification. Buffering the bytes and decoding the
+  // joined Buffer reproduces the request body faithfully, mirroring the standalone-gateway reader.
+  const chunks: Buffer[] = []
+  let totalBytes = 0
   for await (const chunk of req) {
-    raw += chunk
-    if (Buffer.byteLength(raw) > maxBytes) throw new GatewayHttpError(413, 'Gateway request body exceeds the configured limit.')
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += buffer.length
+    if (totalBytes > maxBytes) throw new GatewayHttpError(413, 'Gateway request body exceeds the configured limit.')
+    chunks.push(buffer)
   }
-  return { raw }
+  return { raw: Buffer.concat(chunks).toString('utf8') }
 }
 
 function parseRequestBody(raw: string, contentType: string | string[] | undefined) {

@@ -1,3 +1,4 @@
+import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
 import type { BrowserWindow, IpcMain } from 'electron'
 import type {
   CapabilityTool,
@@ -10,7 +11,6 @@ import type {
   ToolListOptions,
 } from '@open-cowork/shared'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
-import type { SessionRecord } from '../session-registry'
 import type { NativeConfirmationOptions } from '../native-confirmation.ts'
 import type { WorkspaceGateway } from '../workspace-gateway.ts'
 import type { DesktopPairingService } from '../desktop-pairing/service.ts'

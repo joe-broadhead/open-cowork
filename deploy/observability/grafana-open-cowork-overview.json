@@ -81,7 +81,7 @@
       "type": "timeseries",
       "title": "Object-store errors",
       "targets": [
-        { "expr": "sum(rate(open_cowork_object_store_errors_total[5m])) by (kind, operation)" }
+        { "expr": "sum(rate(open_cowork_cloud_object_store_operations_total{status=\"error\"}[5m])) by (cloud_object_store_kind, operation)" }
       ]
     },
     {
@@ -93,7 +93,8 @@
         { "expr": "sum(rate(open_cowork_gateway_deliveries_sent_total[5m]))" },
         { "expr": "sum(rate(open_cowork_gateway_delivery_retries_total[5m]))" },
         { "expr": "sum(rate(open_cowork_gateway_delivery_dead_letters_total[5m]))" },
-        { "expr": "max(open_cowork_gateway_delivery_latency_ms_total)" }
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(open_cowork_gateway_delivery_latency_ms_bucket[5m])))" },
+        { "expr": "histogram_quantile(0.95, sum by (le, provider_id, provider_kind) (rate(open_cowork_gateway_provider_delivery_latency_ms_bucket[5m])))" }
       ]
     },
     {

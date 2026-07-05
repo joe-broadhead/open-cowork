@@ -1,14 +1,10 @@
+import { createNodeManagedOpencodeServer, resolveNodeManagedOpencodeSupervisorPath } from '@open-cowork/runtime-host/runtime-node-managed-server'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-
-import {
-  createNodeManagedOpencodeServer,
-  resolveNodeManagedOpencodeSupervisorPath,
-} from '../apps/desktop/src/main/runtime-node-managed-server.ts'
 
 const NODE_MANAGED_RUNTIME_TEST_TIMEOUT_MS = 15_000
 

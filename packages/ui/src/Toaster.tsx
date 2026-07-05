@@ -238,12 +238,10 @@ export function Toaster({ errors = [], onDismissError }: ToasterProps = {}) {
     : visibleToasts.slice(-MAX_VISIBLE)
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label="Notifications"
-      className="ui-toaster pointer-events-none flex flex-col items-end gap-2"
-    >
+    // Presentational stack only — NOT a live region. Each ToastCard is its own
+    // live region (alert/assertive for errors, status/polite otherwise); making the
+    // container a live region too nested them and double-announced every toast.
+    <div className="ui-toaster pointer-events-none flex flex-col items-end gap-2">
       {hiddenCount > 0 ? (
         <div className="pointer-events-auto rounded-full border border-border-subtle bg-elevated px-3 py-1 text-xs font-semibold text-text-muted shadow-card">
           +{hiddenCount} earlier {hiddenCount === 1 ? 'notice' : 'notices'}

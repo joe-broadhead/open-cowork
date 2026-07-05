@@ -1,44 +1,47 @@
+import { invalidateRuntimeCatalogSnapshotCache } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
+import { setKnowledgeDatabaseForTests } from '@open-cowork/runtime-host/knowledge/knowledge-store'
+import { clearCoordinationStoreCache } from '@open-cowork/runtime-host/coordination/coordination-store'
+import { signWorkflowWebhookPayload, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
-import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
-import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
-import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
-import { createByokSecretStore, type ByokSecretStoreOptions } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
-import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
+import { CloudArtifactService } from '@open-cowork/cloud-server/artifact-service'
+import type { BillingAdapter } from '@open-cowork/cloud-server/billing-adapter'
+import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '@open-cowork/cloud-server/app'
+import { createByokSecretStore, type ByokSecretStoreOptions } from '@open-cowork/cloud-server/byok-secret-store'
+import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import {
   CloudHttpError,
   createCloudHttpServer,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
   type CloudDesktopAuthConfig,
-} from '../apps/desktop/src/main/cloud/http-server.ts'
-import { createHttpSseCloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+} from '@open-cowork/cloud-server/http-server'
+import { createHttpSseCloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
+import { browserRendererBuildExists } from '@open-cowork/cloud-server/browser-renderer-app'
 import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
-import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
-import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
-import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy, type CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
-import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
-import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
+import { createInMemoryObjectStore, type ObjectStoreAdapter } from '@open-cowork/cloud-server/object-store'
+import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { createCloudSessionCookieManager } from '@open-cowork/cloud-server/session-cookie-auth'
+import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudIdentityPolicy, type CloudPrincipal } from '@open-cowork/cloud-server/session-service'
+import { createStubBillingAdapter } from '@open-cowork/cloud-server/stub-billing-adapter'
+import { CloudWorker } from '@open-cowork/cloud-server/worker'
+import {
+  KNOWLEDGE_AGENT_TOKEN_TTL_MS,
+  signKnowledgeAgentToken,
+} from '@open-cowork/cloud-server/knowledge-agent-token'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
-} from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import {
-  signWorkflowWebhookPayload,
-  type WorkflowWebhookSecurityStore,
-} from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
-import { invalidateRuntimeCatalogSnapshotCache } from '../apps/desktop/src/main/runtime-catalog-snapshot.ts'
-
+} from '@open-cowork/cloud-server/runtime-adapter'
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {
@@ -117,10 +120,14 @@ function createFixture(options: {
   webhookSecurity?: WorkflowWebhookSecurityStore | null
   trustProxyHeaders?: boolean
   trustedProxyCidrs?: readonly string[] | null
+  inviteSigningSecret?: string | null
+  emailSender?: CloudEmailSender | null
+  knowledgeAgentTokenSecret?: string | null
+  objectStore?: ObjectStoreAdapter
 } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
-  const objectStore = createInMemoryObjectStore()
+  const objectStore = options.objectStore || createInMemoryObjectStore()
   const policy = options.policy || resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('cloud-http-test-byok-key'), {
@@ -129,7 +136,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null, options.inviteSigningSecret ?? null, options.emailSender ?? null)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -151,6 +158,7 @@ function createFixture(options: {
     webhookSecurity: options.webhookSecurity,
     trustProxyHeaders: options.trustProxyHeaders,
     trustedProxyCidrs: options.trustedProxyCidrs,
+    knowledgeAgentTokenSecret: options.knowledgeAgentTokenSecret,
     auth: options.auth || (async (req) => {
       const authorization = String(req.headers.authorization || '')
       if (authorization.startsWith('Bearer ocw_')) return workerAuth(req)
@@ -369,14 +377,21 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(health.ok, true)
     assert.equal(health.role, 'all-in-one')
 
-    const htmlResponse = await fetch(`${baseUrl}/`)
-    assert.equal(htmlResponse.status, 200)
-    assert.match(htmlResponse.headers.get('content-type') || '', /text\/html/)
-    const html = await htmlResponse.text()
-    assert.match(html, /Open Cowork Cloud/)
-    assert.match(html, /\/api\/workspace/)
-    assert.match(html, /\/api\/byok/)
-    assert.match(html, /\/api\/api-tokens/)
+    // GET / serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
+    // bespoke website is gone), not a server-rendered website shell. This needs
+    // the browser renderer build present; CI builds it before the suite (the
+    // cloud-surface gate). When it's absent locally, GET / returns 404 — assert
+    // the markers only when the build exists, mirroring the /app test below.
+    if (browserRendererBuildExists()) {
+      const htmlResponse = await fetch(`${baseUrl}/`)
+      assert.equal(htmlResponse.status, 200)
+      assert.match(htmlResponse.headers.get('content-type') || '', /text\/html/)
+      const html = await htmlResponse.text()
+      // Renderer markers: hashed assets mounted under /app/assets and the
+      // bootstrap blob injected into <script id="cowork-bootstrap">.
+      assert.match(html, /\/app\/assets\//)
+      assert.match(html, /id="cowork-bootstrap"/)
+    }
 
     const config = await readJson(await fetch(`${baseUrl}/api/config`))
     assert.equal(config.profileName, 'full')
@@ -445,6 +460,351 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
   } finally {
     await fixture.server.close()
+  }
+})
+
+test('cloud HTTP knowledge routes expose snapshot, proposal review, and version history', async () => {
+  const knowledgeDb = new DatabaseSync(':memory:')
+  setKnowledgeDatabaseForTests(knowledgeDb)
+  const ownerPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner',
+    authSource: 'user',
+  }
+  const memberPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'member-1',
+    accountId: 'member-1',
+    email: 'member@example.test',
+    role: 'member',
+    authSource: 'user',
+  }
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-role']) === 'member' ? memberPrincipal : ownerPrincipal,
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const snapshot = await readJson(await fetch(`${baseUrl}/api/knowledge`))
+    const spaces = asArray(snapshot.spaces).map(asRecord)
+    const pages = asArray(snapshot.pages).map(asRecord)
+    assert.equal(spaces[0]?.role, 'Maintainer')
+    assert.equal(pages[0]?.version, 1)
+    assert.equal(snapshot.limit, 100)
+    assert.equal(snapshot.truncated, false)
+    assert.ok(asArray(asRecord(snapshot.graph).nodes).some((node) => asRecord(node).label === 'Company OS'))
+
+    // Creating a Space is org-admin gated (structural). A member cannot; the org admin can, and the
+    // new Space is tenant-scoped and appears in the snapshot — making the Space model usable.
+    const memberSpace = await fetch(`${baseUrl}/api/knowledge/spaces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({ name: 'Member space', visibility: 'team' }),
+    })
+    assert.equal(memberSpace.status, 403)
+    const createdSpace = await fetch(`${baseUrl}/api/knowledge/spaces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Engineering', visibility: 'team', icon: 'blocks' }),
+    })
+    assert.equal(createdSpace.status, 201)
+    assert.equal(asRecord(await readJson(createdSpace)).name, 'Engineering')
+    assert.ok(asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/knowledge`))).spaces)
+      .map(asRecord).some((space) => space.name === 'Engineering'))
+
+    // A member with a contributor/maintainer Space role MAY propose — the space role governs (the
+    // store's assertCanPropose), not the Cloud org-admin role. Proposals stay pending until a
+    // Maintainer reviews, so the "Contributor can propose" path is reachable on cloud.
+    const memberProposal = await fetch(`${baseUrl}/api/knowledge/proposals`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({
+        spaceId: String(spaces[0]?.id),
+        pageId: String(pages[0]?.id),
+        pageTitle: String(pages[0]?.title),
+        by: 'member',
+        summary: 'A member contributor proposes a Cloud Knowledge change.',
+        body: [{ type: 'p', text: 'Member proposal pending review.' }],
+      }),
+    })
+    assert.equal(memberProposal.status, 201)
+    const memberProposalId = String(asRecord(await readJson(memberProposal)).id)
+    // Reviewing still requires admin authority — decline it as the org admin so it does not linger.
+    const memberProposalDecline = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(memberProposalId)}/decline`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'maintainer' }),
+    })
+    assert.equal(memberProposalDecline.status, 200)
+
+    const proposalResponse = await fetch(`${baseUrl}/api/knowledge/proposals`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        spaceId: String(spaces[0]?.id),
+        pageId: String(pages[0]?.id),
+        pageTitle: String(pages[0]?.title),
+        by: 'you',
+        summary: 'Capture Cloud conversation decisions for review.',
+        links: [{ kind: 'thread', label: 'Cloud conversation', targetId: 'session-1' }],
+        body: [
+          { type: 'callout', text: 'Captured from Cloud Web for Knowledge review.' },
+          { type: 'p', text: 'The accepted result should publish as the next version.' },
+        ],
+      }),
+    })
+    assert.equal(proposalResponse.status, 201)
+    const proposal = await readJson(proposalResponse)
+    assert.equal(proposal.status, 'pending')
+    assert.equal(proposal.pageId, pages[0]?.id)
+    assert.equal(proposal.by, ownerPrincipal.email)
+
+    const unauthorizedReview = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({ reviewedBy: 'member' }),
+    })
+    assert.equal(unauthorizedReview.status, 403)
+    assert.match(String((await readJson(unauthorizedReview)).error), /admin|review/i)
+
+    const acceptedResponse = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'maintainer' }),
+    })
+    assert.equal(acceptedResponse.status, 200)
+    const accepted = await readJson(acceptedResponse)
+    assert.equal(asRecord(accepted.proposal).status, 'accepted')
+    assert.equal(asRecord(accepted.proposal).reviewedBy, ownerPrincipal.email)
+    assert.equal(asRecord(accepted.page).id, pages[0]?.id)
+    assert.equal(asRecord(accepted.page).pageId, pages[0]?.id)
+    assert.equal(asRecord(accepted.page).versionId, `version:${String(pages[0]?.id)}:2`)
+    assert.equal(asRecord(accepted.page).version, 2)
+    assert.equal(asRecord(accepted.page).proposalId, proposal.id)
+
+    const history = asArray(await readJson(await fetch(`${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/history`))).map(asRecord)
+    assert.deepEqual(history.map((entry) => entry.version), [2, 1])
+    assert.deepEqual(history.map((entry) => entry.id), [pages[0]?.id, pages[0]?.id])
+    const limitedHistory = asArray(await readJson(await fetch(`${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/history?limit=1`))).map(asRecord)
+    assert.deepEqual(limitedHistory.map((entry) => entry.version), [2])
+
+    const afterAccept = await readJson(await fetch(`${baseUrl}/api/knowledge`))
+    assert.equal(asArray(afterAccept.proposals).length, 0)
+    assert.equal(asArray(afterAccept.pages).map(asRecord).find((page) => page.id === pages[0]?.id)?.version, 2)
+
+    // Restoring a historical version requires review authority and publishes a new audited version.
+    const restoreUrl = `${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/restore`
+    const restoreVersionId = `version:${String(pages[0]?.id)}:1`
+    const unauthorizedRestore = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-role': 'member' },
+      body: JSON.stringify({ versionId: restoreVersionId }),
+    })
+    assert.equal(unauthorizedRestore.status, 403)
+
+    const restored = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ versionId: restoreVersionId }),
+    })
+    assert.equal(restored.status, 200)
+    const restoredPage = asRecord((await readJson(restored)).page)
+    assert.equal(restoredPage.version, 3)
+    assert.equal(restoredPage.versionId, `version:${String(pages[0]?.id)}:3`)
+    assert.equal(restoredPage.proposalId, null)
+
+    const afterRestore = asArray(await readJson(await fetch(`${baseUrl}/api/knowledge/pages/${encodeURIComponent(String(pages[0]?.id))}/history`))).map(asRecord)
+    assert.deepEqual(afterRestore.map((entry) => entry.version), [3, 2, 1])
+
+    // Restoring the version that is already current is a client error; unknown versions are not-found.
+    const alreadyCurrent = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ versionId: `version:${String(pages[0]?.id)}:3` }),
+    })
+    assert.equal(alreadyCurrent.status, 400)
+    const unknownVersion = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ versionId: `version:${String(pages[0]?.id)}:99` }),
+    })
+    assert.equal(unknownVersion.status, 404)
+    const missingVersionId = await fetch(restoreUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(missingVersionId.status, 400)
+
+    const missing = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/decline`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'maintainer' }),
+    })
+    assert.equal(missing.status, 400)
+
+    fixture.store.upsertMembership({
+      orgId: ownerPrincipal.orgId || ownerPrincipal.tenantId,
+      accountId: ownerPrincipal.accountId || ownerPrincipal.userId,
+      role: 'member',
+      status: 'disabled',
+    })
+    const staleOwnerHeader = await fetch(`${baseUrl}/api/knowledge`, {
+      headers: { 'x-test-role': 'owner' },
+    })
+    assert.equal(staleOwnerHeader.status, 403)
+    assert.match(String((await readJson(staleOwnerHeader)).error), /membership is not active/i)
+  } finally {
+    await fixture.server.close()
+    setKnowledgeDatabaseForTests(null)
+    knowledgeDb.close()
+  }
+})
+
+test('cloud HTTP knowledge agent-propose route is token-authed, tenant-scoped from the token, and propose-only', async () => {
+  const knowledgeDb = new DatabaseSync(':memory:')
+  setKnowledgeDatabaseForTests(knowledgeDb)
+  const AGENT_SECRET = 'cloud-knowledge-agent-secret-for-tests'
+  const now = Date.now()
+  // A principal is still supplied by the fixture, but this route is pre-user-auth:
+  // it authenticates ONLY via the signed agent token, not the principal.
+  const fixture = createFixture({ knowledgeAgentTokenSecret: AGENT_SECRET })
+  const baseUrl = await fixture.server.listen()
+  const proposeUrl = `${baseUrl}/api/knowledge/agent/propose`
+  // The seeded default Space for the token's tenant (cloud:tenant-1). The agent
+  // never learns this from the body — it proposes against its own workspace.
+  const tokenSpaceId = 'space:cloud:tenant-1:company-os'
+  const proposalBody = (extra: Record<string, unknown> = {}) => JSON.stringify({
+    spaceId: tokenSpaceId,
+    pageTitle: 'Operating Model',
+    summary: 'A cloud coworker proposes a knowledge change.',
+    body: [{ type: 'p', text: 'Proposed by an agent; pending human review.' }],
+    ...extra,
+  })
+  const signToken = (payload: { tenantId: string; sessionId: string; exp?: number }) =>
+    signKnowledgeAgentToken(AGENT_SECRET, {
+      tenantId: payload.tenantId,
+      sessionId: payload.sessionId,
+      exp: payload.exp ?? now + KNOWLEDGE_AGENT_TOKEN_TTL_MS,
+    })
+
+  try {
+    // Missing token → 401.
+    assert.equal((await fetch(proposeUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: proposalBody() })).status, 401)
+
+    // Malformed / wrong-secret / expired tokens → 401.
+    assert.equal((await fetch(proposeUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: proposalBody() })).status, 401)
+    assert.equal((await fetch(proposeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${signKnowledgeAgentToken('a-different-secret', { tenantId: 'tenant-1', sessionId: 's-1', exp: now + 1000 })}` },
+      body: proposalBody(),
+    })).status, 401)
+    assert.equal((await fetch(proposeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${signToken({ tenantId: 'tenant-1', sessionId: 's-1', exp: now - 1 })}` },
+      body: proposalBody(),
+    })).status, 401)
+
+    // Non-POST is rejected (propose-only, single verb).
+    assert.equal((await fetch(proposeUrl, { method: 'GET', headers: { authorization: `Bearer ${signToken({ tenantId: 'tenant-1', sessionId: 's-1' })}` } })).status, 405)
+
+    // Valid token → 201, a PENDING proposal scoped to the TOKEN's tenant.
+    const validToken = signToken({ tenantId: 'tenant-1', sessionId: 'session-abc' })
+    const created = await fetch(proposeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
+      // The agent supplies a hostile `by` + a body-level workspace/tenant override.
+      body: proposalBody({ by: 'totally-the-admin', workspaceId: 'cloud:tenant-victim', tenantId: 'tenant-victim' }),
+    })
+    assert.equal(created.status, 201)
+    const createdBody = asRecord(await readJson(created))
+    assert.equal(createdBody.ok, true)
+    const proposal = asRecord(createdBody.proposal)
+    assert.ok(proposal.id)
+    // `by` is server-forced to 'Coworker' (the hostile body `by` is ignored).
+    assert.equal(proposal.by, 'Coworker')
+    // Created PENDING — it stays for a human Maintainer.
+    assert.equal(proposal.status, 'pending')
+    assert.equal(proposal.spaceId, tokenSpaceId)
+
+    // The proposal landed in the TOKEN's tenant (cloud:tenant-1), NOT the body's
+    // claimed tenant. It is visible in tenant-1's snapshot…
+    const tenant1Snapshot = asRecord(await readJson(await fetch(`${baseUrl}/api/knowledge`, { headers: { 'x-test-role': 'owner' } })))
+    assert.ok(asArray(tenant1Snapshot.proposals).map(asRecord).some((entry) => entry.id === proposal.id))
+
+    // The agent route is propose-ONLY: there is no agent accept/decline/list/read
+    // surface. The only other path under the agent base 404s (it is not routed as
+    // a human knowledge API — it sits pre-user-auth and only matches the exact
+    // propose path), so the agent token cannot reach review/read endpoints.
+    const acceptViaAgent = await fetch(`${baseUrl}/api/knowledge/agent/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
+      body: JSON.stringify({}),
+    })
+    // Not the propose path ⇒ falls through to the desktop-API user-principal gate,
+    // which the agent token is not. It never reaches an accept handler.
+    assert.notEqual(acceptViaAgent.status, 200)
+    assert.equal(asArray(tenant1Snapshot.proposals).map(asRecord).find((entry) => entry.id === proposal.id)?.status, 'pending')
+  } finally {
+    await fixture.server.close()
+    setKnowledgeDatabaseForTests(null)
+    knowledgeDb.close()
+  }
+})
+
+test('cloud HTTP knowledge agent-propose route fails closed without a secret and when knowledge is disabled', async () => {
+  const knowledgeDb = new DatabaseSync(':memory:')
+  setKnowledgeDatabaseForTests(knowledgeDb)
+  const now = Date.now()
+  const proposalBody = JSON.stringify({
+    spaceId: 'space:cloud:tenant-1:company-os',
+    pageTitle: 'Operating Model',
+    summary: 'A cloud coworker proposes a knowledge change.',
+    body: [{ type: 'p', text: 'Proposed by an agent.' }],
+  })
+
+  // No configured secret ⇒ the route rejects even a structurally valid-looking
+  // token (it must NOT verify against an empty secret). Fail closed → 401.
+  const noSecretFixture = createFixture({ knowledgeAgentTokenSecret: null })
+  const noSecretUrl = await noSecretFixture.server.listen()
+  try {
+    const forged = signKnowledgeAgentToken('', { tenantId: 'tenant-1', sessionId: 's-1', exp: now + 1000 })
+    const rejected = await fetch(`${noSecretUrl}/api/knowledge/agent/propose`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${forged}` },
+      body: proposalBody,
+    })
+    assert.equal(rejected.status, 401)
+  } finally {
+    await noSecretFixture.server.close()
+  }
+
+  // Knowledge disabled by policy ⇒ 403 (feature gate), even with a valid token.
+  const disabledPolicy: CloudRuntimePolicy = {
+    ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    features: { ...resolveCloudRuntimePolicy(DEFAULT_CONFIG).features, knowledge: false },
+  }
+  const AGENT_SECRET = 'cloud-knowledge-agent-secret-for-tests'
+  const disabledFixture = createFixture({ policy: disabledPolicy, knowledgeAgentTokenSecret: AGENT_SECRET })
+  const disabledUrl = await disabledFixture.server.listen()
+  try {
+    const validToken = signKnowledgeAgentToken(AGENT_SECRET, { tenantId: 'tenant-1', sessionId: 's-1', exp: now + KNOWLEDGE_AGENT_TOKEN_TTL_MS })
+    const gated = await fetch(`${disabledUrl}/api/knowledge/agent/propose`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
+      body: proposalBody,
+    })
+    assert.equal(gated.status, 403)
+  } finally {
+    await disabledFixture.server.close()
+    setKnowledgeDatabaseForTests(null)
+    knowledgeDb.close()
   }
 })
 
@@ -3168,17 +3528,30 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
     const html = await fetch(`${baseUrl}/`, {
       headers: { origin: 'https://app.example.test' },
     })
+    // Build-independent security/CORS headers apply to every response (including the
+    // 404 when the renderer build is absent in this lane).
     assert.equal(html.headers.get('access-control-allow-origin'), 'https://app.example.test')
     assert.equal(html.headers.get('access-control-allow-credentials'), null)
     assert.equal(html.headers.get('vary'), 'Origin')
     assert.equal(html.headers.get('x-content-type-options'), 'nosniff')
     assert.equal(html.headers.get('referrer-policy'), 'no-referrer')
     assert.equal(html.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains')
-    const csp = html.headers.get('content-security-policy') || ''
-    assert.match(csp, /script-src 'self' 'nonce-/)
-    assert.match(csp, /font-src 'self'/)
-    assert.match(csp, /object-src 'none'/)
-    assert.doesNotMatch(csp, /unsafe-inline/)
+    // GET / now serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
+    // bespoke website is gone), identical to /app. Its CSP is relaxed for the
+    // runtime-injected <style> element but stays script-strict. Gate the CSP body
+    // assertions on the renderer build, which isn't produced in every CI lane.
+    if (browserRendererBuildExists()) {
+      assert.equal(html.status, 200)
+      const csp = html.headers.get('content-security-policy') || ''
+      // RELAXED for the runtime-injected <style> element: style-src has 'unsafe-inline'.
+      assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+      assert.match(csp, /style-src-attr 'unsafe-inline'/)
+      assert.match(csp, /font-src 'self'/)
+      assert.match(csp, /object-src 'none'/)
+      // Scripts stay strict — external hashed modules only, NO inline script execution.
+      assert.match(csp, /script-src 'self'/)
+      assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    }
 
     const mismatched = await fetch(`${baseUrl}/api/config`, {
       headers: { origin: 'https://evil.example.test' },
@@ -3190,44 +3563,271 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
   }
 })
 
-test('cloud HTTP server serves only allow-listed Cloud Web font assets', async () => {
+// The unified renderer ships its OWN fonts as hashed /app/assets/*.woff2 files (served
+// by browser-renderer-app.ts). The bespoke website's /assets/fonts/* route and its
+// react-client /assets/*.js route are gone with the website — the renderer is the only
+// UI the cloud serves. Unknown static paths now fall through to the auth/API pipeline
+// (they 404/401 there), so there is no dedicated font/react-client serving test.
+
+// The unified renderer browser build (packages/app/dist-browser) is not produced in
+// every CI lane, so gate on its presence — but assert the full route wiring (the
+// /app SPA document with its relaxed-but-script-strict CSP, and a hashed /app/assets
+// JS file with the right content-type) when the build IS present.
+test('cloud HTTP server serves the unified renderer at /app with a script-strict, style-relaxed CSP', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
   try {
-    for (const fontName of [
-      'mona-sans-latin-wght-normal.woff2',
-      'schibsted-grotesk-latin-wght-normal.woff2',
-    ]) {
-      const font = await fetch(`${baseUrl}/assets/fonts/${fontName}`)
-      assert.equal(font.status, 200)
-      assert.equal(font.headers.get('content-type'), 'font/woff2')
-      assert.equal(font.headers.get('cache-control'), 'public, max-age=86400')
-      assert.ok((await font.arrayBuffer()).byteLength > 1024, `${fontName} response has woff2 bytes`)
-    }
+    const app = await fetch(`${baseUrl}/app`)
+    assert.equal(app.status, 200)
+    assert.match(app.headers.get('content-type') || '', /text\/html/)
+    const body = await app.text()
+    // The served document is the dist-browser SPA: it references the renderer's
+    // hashed assets, rewritten under /app/assets so they load mounted at /app.
+    assert.match(body, /\/app\/assets\//)
+    assert.match(body, /id="cowork-bootstrap"/)
 
-    const unknown = await fetch(`${baseUrl}/assets/fonts/not-a-font.woff2`)
-    assert.equal(unknown.status, 404)
-    assert.match(JSON.stringify(await readJson(unknown)), /not found/i)
+    const csp = app.headers.get('content-security-policy') || ''
+    // RELAXED for the runtime-injected <style> element: style-src has 'unsafe-inline'.
+    assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+    assert.match(csp, /style-src-attr 'unsafe-inline'/)
+    // STRICT for scripts: external hashed modules only — script-src has NO inline.
+    assert.match(csp, /script-src 'self'/)
+    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    assert.match(csp, /connect-src 'self'/)
+    assert.match(csp, /object-src 'none'/)
 
-    const traversal = await fetch(`${baseUrl}/assets/fonts/..%2Fpackage.json`)
-    assert.equal(traversal.status, 404)
+    // /app/ (trailing slash) serves the same document.
+    const appSlash = await fetch(`${baseUrl}/app/`)
+    assert.equal(appSlash.status, 200)
+
+    // A hashed asset referenced by the document serves with the JS content-type and
+    // immutable caching. Pull the first /app/assets/*.js path out of the document.
+    const assetMatch = body.match(/\/app\/assets\/[A-Za-z0-9_-]+\.js/)
+    assert.ok(assetMatch, 'served /app document references a hashed JS asset')
+    const asset = await fetch(`${baseUrl}${assetMatch![0]}`)
+    assert.equal(asset.status, 200)
+    assert.match(asset.headers.get('content-type') || '', /text\/javascript/)
+    assert.match(asset.headers.get('cache-control') || '', /immutable/)
+    assert.ok((await asset.arrayBuffer()).byteLength > 0)
+
+    // Path traversal / unknown assets 404 (no leaking files outside dist-browser).
+    const bad = await fetch(`${baseUrl}/app/assets/not-a-real-chunk.js`)
+    assert.equal(bad.status, 404)
   } finally {
     await fixture.server.close()
   }
 })
 
-test('cloud HTTP server serves the allow-listed Cloud Web React client asset', async () => {
+// Permanent cutover: GET / (and /index.html) is now the UNIFIED RENDERER, identical
+// to /app — the bespoke website is deleted and the renderer is the only UI the cloud
+// serves. (The old OPEN_COWORK_CLOUD_UNIFIED_UI reversible-cutover flag is gone; the
+// renderer is always on.) Gated on the renderer build, which isn't built in every lane.
+test('cloud HTTP server serves the unified renderer as the default route (/, /index.html) identically to /app', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
   try {
-    const asset = await fetch(`${baseUrl}/assets/open-cowork-cloud-react.js`)
-    assert.equal(asset.status, 200)
-    assert.equal(asset.headers.get('content-type'), 'application/javascript; charset=utf-8')
-    assert.equal(asset.headers.get('cache-control'), 'no-store')
-    assert.match(await asset.text(), /open-cowork-cloud-react-root|cloud-react-probe|reactStatus/)
+    for (const path of ['/', '/index.html']) {
+      const root = await fetch(`${baseUrl}${path}`)
+      assert.equal(root.status, 200, `${path} serves the renderer SPA`)
+      assert.match(root.headers.get('content-type') || '', /text\/html/)
+      const body = await root.text()
+      // The renderer SPA references its hashed assets under /app/assets and carries
+      // the bootstrap tag the browser shim reads at runtime.
+      assert.match(body, /\/app\/assets\//)
+      assert.match(body, /id="cowork-bootstrap"/)
+      const csp = root.headers.get('content-security-policy') || ''
+      // Relaxed-but-script-strict CSP, same as /app (NOT a nonce'd website SSR shell).
+      assert.match(csp, /style-src 'self' 'unsafe-inline'/)
+      assert.match(csp, /script-src 'self'/)
+      assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+    }
 
-    const unknown = await fetch(`${baseUrl}/assets/not-the-react-client.js`)
-    assert.equal(unknown.status, 404)
+    // / and /app serve byte-identical documents (same browserRendererHtml output).
+    const rootBody = await (await fetch(`${baseUrl}/`)).text()
+    const appBody = await (await fetch(`${baseUrl}/app`)).text()
+    assert.equal(rootBody, appBody, '/ and /app serve the same renderer document')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// An object store that supports presigned transfer, used to exercise the cloud's
+// presigned-upload CSP + billing/quota gates. Wraps the in-memory store with presign
+// capability whose URLs target a fixed cross-origin object-store origin.
+const PRESIGN_OBJECT_STORE_ORIGIN = 'https://objects.example.test'
+function createPresignCapableObjectStore(): ObjectStoreAdapter {
+  const base = createInMemoryObjectStore()
+  return {
+    ...base,
+    async presignPut(input) {
+      return {
+        method: 'PUT',
+        url: `${PRESIGN_OBJECT_STORE_ORIGIN}/${input.key}`,
+        headers: input.contentType ? { 'content-type': input.contentType } : {},
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      }
+    },
+    async presignGet(key) {
+      return {
+        method: 'GET',
+        url: `${PRESIGN_OBJECT_STORE_ORIGIN}/${key}`,
+        headers: {},
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      }
+    },
+  }
+}
+
+// SEC-2: when the object store can presign, the browser shim PUTs F4 uploads directly to
+// that cross-origin store, so the served renderer's CSP connect-src must allow its origin
+// (else the PUT is silently blocked and direct transfer is dead in the browser). Gated on
+// the renderer build, which isn't produced in every CI lane.
+test('cloud HTTP server adds the presigned object-store origin to the renderer CSP connect-src', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture({ objectStore: createPresignCapableObjectStore() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    for (const path of ['/', '/app']) {
+      const res = await fetch(`${baseUrl}${path}`)
+      assert.equal(res.status, 200)
+      const csp = res.headers.get('content-security-policy') || ''
+      assert.match(
+        csp,
+        new RegExp(`connect-src 'self' ${PRESIGN_OBJECT_STORE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+        `${path} CSP allows the object-store origin for the presigned PUT`,
+      )
+    }
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// A buffered-only store (no presign) leaves connect-src 'self' — the shim uses the
+// same-origin buffered path. Gated on the renderer build.
+test('cloud HTTP server keeps renderer CSP connect-src self for buffered-only object stores', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const csp = (await fetch(`${baseUrl}/`)).headers.get('content-security-policy') || ''
+    assert.match(csp, /connect-src 'self'(;|$)/)
+    assert.doesNotMatch(csp, /objects\.example\.test/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// BUNDLE-1: interactive Vega charts render inside a sandboxed iframe whose document is
+// chart-frame.html. The cloud must serve it at /chart-frame.html and /app/chart-frame.html
+// with a vega-capable, embeddable CSP, and its hashed chunks under /app/assets. Gated on
+// the renderer build.
+test('cloud HTTP server serves the Vega chart frame with an embeddable, vega-capable CSP', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    for (const path of ['/chart-frame.html', '/app/chart-frame.html']) {
+      const frame = await fetch(`${baseUrl}${path}`)
+      assert.equal(frame.status, 200, `${path} serves the chart frame`)
+      assert.match(frame.headers.get('content-type') || '', /text\/html/)
+      const body = await frame.text()
+      // References the hashed chartFrame module chunk under /app/assets.
+      assert.match(body, /\/app\/assets\/chartFrame-[A-Za-z0-9_-]+\.js/)
+      const csp = frame.headers.get('content-security-policy') || ''
+      // vega compiles specs to functions at runtime → needs 'unsafe-eval'.
+      assert.match(csp, /script-src 'self' 'unsafe-eval'/)
+      // Embeddable by the same-origin SPA (overrides the global X-Frame-Options DENY).
+      assert.match(csp, /frame-ancestors 'self'/)
+      assert.equal(frame.headers.get('x-frame-options'), 'SAMEORIGIN')
+    }
+
+    // The chart frame's hashed module chunk serves through /app/assets with a wildcard
+    // ACAO so the sandboxed (opaque-origin) iframe can load it in CORS mode.
+    const frameBody = await (await fetch(`${baseUrl}/chart-frame.html`)).text()
+    const chunk = frameBody.match(/\/app\/assets\/chartFrame-[A-Za-z0-9_-]+\.js/)
+    assert.ok(chunk, 'chart frame references a hashed chartFrame chunk')
+    const asset = await fetch(`${baseUrl}${chunk![0]}`)
+    assert.equal(asset.status, 200)
+    assert.match(asset.headers.get('content-type') || '', /text\/javascript/)
+    assert.equal(asset.headers.get('access-control-allow-origin'), '*')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+// SEC-1: the presigned-upload BEGIN endpoint mints a URL that writes bytes straight to the
+// object store, bypassing the pod — so it must run the SAME billing + quota gate the
+// buffered upload runs. A canceled subscription must reject the mint (402), not hand out a
+// bypass URL.
+test('cloud HTTP server gates presigned artifact upload BEGIN behind the billing/quota check', async () => {
+  const billing = testBillingConfig()
+  const fixture = createFixture({
+    billing,
+    billingAdapter: createStubBillingAdapter(billing),
+    objectStore: createPresignCapableObjectStore(),
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Activate billing (the stub checkout creates an active subscription) so the org can
+    // create sessions; we cancel it below to prove the presign gate rejects the mint.
+    const checkout = await fetch(`${baseUrl}/api/billing/checkout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ planKey: 'pro' }),
+    })
+    assert.equal(checkout.status, 200)
+
+    const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(createdResponse.status, 201)
+    const sessionId = String(asRecord((await readJson(createdResponse)).session).sessionId)
+
+    // With billing active, BEGIN mints a presigned URL.
+    const allowed = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'chart.png', contentType: 'image/png' }),
+    })
+    assert.equal(allowed.status, 200)
+    assert.equal(asRecord((await readJson(allowed)).upload).transfer, 'presigned')
+
+    // Cancel the subscription, then BEGIN must be rejected before minting any URL.
+    await fixture.store.upsertBillingSubscription({
+      orgId: 'tenant-1',
+      providerId: 'stub',
+      providerCustomerId: 'stub_customer_tenant-1',
+      providerSubscriptionId: 'stub_subscription_tenant-1',
+      planKey: 'pro',
+      status: 'canceled',
+    })
+
+    const blocked = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'chart.png', contentType: 'image/png' }),
+    })
+    assert.equal(blocked.status, 402)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'billing.subscription_inactive')
   } finally {
     await fixture.server.close()
   }
@@ -3343,6 +3943,46 @@ test('cloud HTTP server rejects user-bound admin API token privileges after role
   } finally {
     await server.close()
   }
+})
+
+test('principal bootstrap fast-path skips redundant writes but still enforces the membership gate', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const bootstrapOrg = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const bootstrapAccount = store.createAccount({ accountId: 'account-1', idpSubject: 'subject-1', email: 'member@example.test' })
+  store.ensureUser({ tenantId: 'tenant-1', userId: bootstrapAccount.accountId, email: bootstrapAccount.email })
+  store.upsertMembership({ orgId: bootstrapOrg.orgId, accountId: bootstrapAccount.accountId, role: 'admin', status: 'active' })
+  const service = new CloudSessionService(store, new FakeRuntimeAdapter(), resolveCloudRuntimePolicy(DEFAULT_CONFIG))
+
+  // Count the bootstrap WRITES so we can prove the fast path skips them.
+  let bootstrapWrites = 0
+  const realCreateAccount = store.createAccount.bind(store)
+  store.createAccount = ((input: Parameters<typeof realCreateAccount>[0]) => {
+    bootstrapWrites += 1
+    return realCreateAccount(input)
+  }) as typeof store.createAccount
+
+  const principal = (): CloudPrincipal => ({
+    tenantId: 'tenant-1',
+    orgId: bootstrapOrg.orgId,
+    tenantName: 'Tenant 1',
+    userId: bootstrapAccount.accountId,
+    accountId: bootstrapAccount.accountId,
+    email: bootstrapAccount.email,
+    role: 'admin',
+    authSource: 'api_token',
+    tokenId: 'token-1',
+  })
+
+  await service.ensurePrincipal(principal()) // first call bootstraps (writes)
+  await service.ensurePrincipal(principal()) // second call takes the fast path (no writes)
+  assert.equal(bootstrapWrites, 1, 'the second request reused the bootstrap and skipped the idempotent writes')
+
+  // Suspend the membership AFTER bootstrap. The gate must still fire on the next
+  // request even though the principal is cached as bootstrapped — the fast path
+  // re-reads membership status every request, so there is no revocation window.
+  store.upsertMembership({ orgId: bootstrapOrg.orgId, accountId: bootstrapAccount.accountId, role: 'admin', status: 'suspended' })
+  await assert.rejects(() => service.ensurePrincipal(principal()), /membership is not active/i)
 })
 
 test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', async () => {
@@ -3850,6 +4490,87 @@ test('cloud HTTP admin APIs manage invited members and expose redacted audit', a
     assert.match(auditText, /membership\.updated/)
     assert.equal(auditText.includes('occ_'), false)
     assert.equal(auditText.includes('sk-'), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP issues a signed team invite, emails it, and accepts it via the public endpoint', async () => {
+  const emails: Array<{ to: string, subject: string }> = []
+  const fixture = createFixture({
+    identityPolicy: { allowSelfServiceSignup: false, signupMode: 'invite', allowedEmailDomains: ['example.test'] },
+    inviteSigningSecret: 'cloud-http-invite-signing-secret-key',
+    emailSender: { send: async (message) => { emails.push({ to: message.to, subject: message.subject }) } },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Admin invites → response carries a single-use invite token + expiry, and the email seam fires.
+    const invitedResponse = await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'invitee@example.test', role: 'member' }),
+    })
+    assert.equal(invitedResponse.status, 201)
+    const invitedBody = asRecord(await readJson(invitedResponse))
+    assert.equal(asRecord(invitedBody.member).status, 'invited')
+    const token = String(invitedBody.inviteToken)
+    assert.ok(token.length > 0)
+    assert.equal(typeof invitedBody.inviteExpiresAt, 'string')
+    assert.deepEqual(emails, [{ to: 'invitee@example.test', subject: 'You have been invited to a team' }])
+
+    // The public, pre-auth accept endpoint activates the membership (the token is the credential).
+    const acceptResponse = await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    assert.equal(acceptResponse.status, 200)
+    assert.equal(asRecord(asRecord(await readJson(acceptResponse)).membership).status, 'active')
+
+    // The member now shows active in the admin list.
+    const members = asArray((await readJson(await fetch(`${baseUrl}/api/admin/members?q=invitee`))).members)
+    assert.equal(asRecord(members[0]).status, 'active')
+
+    // Accepting again is idempotent; a garbage token is rejected.
+    assert.equal((await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }),
+    })).status, 200)
+    assert.equal((await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'not-a-valid-token' }),
+    })).status, 400)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects an invite accept after the membership is revoked', async () => {
+  const fixture = createFixture({
+    identityPolicy: { allowSelfServiceSignup: false, signupMode: 'invite', allowedEmailDomains: ['example.test'] },
+    inviteSigningSecret: 'cloud-http-invite-signing-secret-key',
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const invitedBody = asRecord(await readJson(await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'revoked@example.test', role: 'member' }),
+    })))
+    const token = String(invitedBody.inviteToken)
+    const accountId = String(asRecord(invitedBody.member).accountId)
+
+    // Admin revokes (disables) the invited membership before it is accepted.
+    await fetch(`${baseUrl}/api/admin/members/${encodeURIComponent(accountId)}/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'disabled', confirm: accountId }),
+    })
+
+    const accept = await fetch(`${baseUrl}/api/invites/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    assert.equal(accept.status, 403)
   } finally {
     await fixture.server.close()
   }
@@ -6074,6 +6795,122 @@ test('cloud HTTP rejects settings APIs when the cloud profile disables them', as
   }
 })
 
+test('cloud HTTP rejects knowledge APIs when the cloud profile disables them', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        knowledge: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/knowledge`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Knowledge is disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Knowledge is disabled for this cloud profile.',
+      policyCode: 'knowledge.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects channel APIs when the cloud profile disables them', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        channels: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/channels`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Channels are disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Channels are disabled for this cloud profile.',
+      policyCode: 'channels.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects BYOK APIs when the cloud profile disables them', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        byok: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Bring-your-own-key is disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Bring-your-own-key is disabled for this cloud profile.',
+      policyCode: 'byok.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP enforces the deployer agent allowlist on the prompt path', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: { ...basePolicy, allowedAgents: ['plan'] },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    // An agent outside the deployer allowlist is rejected — without this gate a
+    // caller could name any agent on a prompt and bypass a restricted profile.
+    const blocked = await fetch(`${baseUrl}/api/sessions/oc-session-1/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'hello', agent: 'build' }),
+    })
+    assert.equal(blocked.status, 403)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'policy.agent_not_enabled')
+
+    // An allowlisted agent is accepted.
+    const allowed = await fetch(`${baseUrl}/api/sessions/oc-session-1/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'hello', agent: 'plan' }),
+    })
+    assert.equal(allowed.status, 202)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP exposes durable thread tags, metadata, and smart filters', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -6992,6 +7829,203 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
       role: 'owner' as const,
       authSource: 'user' as const,
     }, sessionId, String(uploaded.artifactId)), /Cloud session was not found|Unknown session|Unknown tenant/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact download hands back a presigned URL when the store supports it, else buffers (F4)', async () => {
+  const inner = createInMemoryObjectStore()
+  let presignedKey: string | null = null
+  // A presign-capable store: real storage stays in-memory (so the buffered fallback still
+  // works), but presignGet returns a direct URL — modelling the S3 adapter's behaviour.
+  const presigningStore: ObjectStoreAdapter = {
+    ...inner,
+    async presignGet(key) {
+      presignedKey = key
+      return { method: 'GET', url: `https://object-store.test/${key}?sig=test`, headers: {}, expiresAt: '2099-01-01T00:00:00.000Z' }
+    },
+  }
+  const fixture = createFixture({ objectStore: presigningStore, abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const uploaded = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', dataBase64: Buffer.from('direct transfer').toString('base64') }),
+    }))).artifact)
+    const artifactId = String(uploaded.artifactId)
+
+    // Opt-in presigned transfer ⇒ a direct download URL, no base64 buffered through the pod.
+    const presigned = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}?transfer=presigned`,
+    ))).artifact)
+    assert.equal(presigned.transfer, 'presigned')
+    assert.match(String(presigned.downloadUrl), /^https:\/\/object-store\.test\//)
+    assert.equal(presigned.downloadExpiresAt, '2099-01-01T00:00:00.000Z')
+    assert.equal('dataBase64' in presigned, false)
+    assert.equal('key' in presigned, false)
+    assert.ok(presignedKey, 'expected the store to be asked to presign the artifact key')
+
+    // Presign download still records usage (attributed by the recorded size).
+    const usageEvents = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/usage/events`))).events).map(asRecord)
+    assert.equal(usageEvents.find((event) => event.eventType === 'artifact.downloaded')?.quantity, 'direct transfer'.length)
+
+    // Default (no opt-in) ⇒ buffered base64 response is unchanged.
+    const buffered = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}`,
+    ))).artifact)
+    assert.equal(Buffer.from(String(buffered.dataBase64), 'base64').toString('utf8'), 'direct transfer')
+    assert.equal('downloadUrl' in buffered, false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact download falls back to buffered base64 when the store cannot presign (F4)', async () => {
+  // The default in-memory store has no presign capability, so ?transfer=presigned must
+  // transparently fall back to the buffered base64 response.
+  const fixture = createFixture({ abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const uploaded = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', dataBase64: Buffer.from('buffered body').toString('base64') }),
+    }))).artifact)
+    const artifactId = String(uploaded.artifactId)
+
+    const download = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}?transfer=presigned`,
+    ))).artifact)
+    assert.equal(Buffer.from(String(download.dataBase64), 'base64').toString('utf8'), 'buffered body')
+    assert.equal('downloadUrl' in download, false)
+    assert.equal('transfer' in download, false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact upload issues a presigned PUT, then finalize records the row (F4)', async () => {
+  const inner = createInMemoryObjectStore()
+  let presignedPutKey: string | null = null
+  // A presign-capable store: presignPut hands back a direct PUT URL (modelling S3); real storage
+  // stays in-memory so the test can simulate the landed PUT and finalize's headObject finds it.
+  const presigningStore: ObjectStoreAdapter = {
+    ...inner,
+    async presignPut(input) {
+      presignedPutKey = input.key
+      return {
+        method: 'PUT',
+        url: `https://object-store.test/${input.key}?sig=put`,
+        headers: input.contentType ? { 'content-type': input.contentType } : {},
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      }
+    },
+  }
+  const fixture = createFixture({ objectStore: presigningStore, abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    // Begin: ask for a presigned upload. The store supports it, so we get a direct PUT URL.
+    const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).upload)
+    assert.equal(begin.transfer, 'presigned')
+    assert.match(String(begin.uploadUrl), /^https:\/\/object-store\.test\//)
+    assert.equal(begin.uploadMethod, 'PUT')
+    assert.equal(begin.uploadExpiresAt, '2099-01-01T00:00:00.000Z')
+    assert.deepEqual(begin.uploadHeaders, { 'content-type': 'text/plain' })
+    const artifactId = String(begin.artifactId)
+    assert.ok(artifactId)
+    assert.ok(presignedPutKey, 'expected the store to be asked to presign the upload key')
+
+    // Simulate the client PUTting bytes directly to the object store at the presigned key.
+    await inner.putObject({ key: presignedPutKey!, body: Buffer.from('direct upload body'), contentType: 'text/plain' })
+
+    // Finalize: record the metadata row. Size is read authoritatively from the store (headObject).
+    const finalized = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).artifact)
+    assert.equal(finalized.filename, 'report.txt')
+    assert.equal(finalized.contentType, 'text/plain')
+    assert.equal(finalized.size, 'direct upload body'.length)
+    assert.equal(String(finalized.cloudArtifactId || finalized.artifactId), artifactId)
+
+    // The finalized artifact now shows up in the session's artifact list, like a buffered upload.
+    const listed = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))).artifacts).map(asRecord)
+    assert.equal(listed.some((entry) => String(entry.cloudArtifactId || entry.artifactId) === artifactId), true)
+
+    // Finalize attributes the uploaded bytes for usage/billing, exactly like the buffered path.
+    const usageEvents = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/usage/events`))).events).map(asRecord)
+    assert.equal(usageEvents.find((event) => event.eventType === 'artifact.uploaded')?.quantity, 'direct upload body'.length)
+
+    // Finalize before the PUT lands is a 409 (object missing), so the client can retry/fall back.
+    const missing = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}-not-real/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    })
+    assert.equal(missing.status, 409)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP artifact upload begin signals unsupported when the store cannot presign, so the client buffers (F4)', async () => {
+  // The default in-memory store has no presignPut capability, so a presigned-upload begin must
+  // reply transfer:'unsupported' and the buffered upload must still work unchanged.
+  const fixture = createFixture({ abuse: testAbuseConfig() })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).upload)
+    assert.equal(begin.transfer, 'unsupported')
+    assert.equal('uploadUrl' in begin, false)
+
+    // The buffered upload (no transfer opt-in) is unchanged and still records the artifact.
+    const uploaded = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', dataBase64: Buffer.from('buffered body').toString('base64') }),
+    }))).artifact)
+    assert.equal(uploaded.size, 'buffered body'.length)
+    const download = asRecord(asRecord(await readJson(await fetch(
+      `${baseUrl}/api/sessions/${sessionId}/artifacts/${String(uploaded.artifactId)}`,
+    ))).artifact)
+    assert.equal(Buffer.from(String(download.dataBase64), 'base64').toString('utf8'), 'buffered body')
   } finally {
     await fixture.server.close()
   }

@@ -27,16 +27,17 @@ const ignoredDirs = new Set([
   '.venv-docs',
   'coverage',
   'dist',
+  'dist-browser',
   'node_modules',
   'release',
   'site',
 ])
 const consoleLogAllowlist = new Set([
-  'apps/desktop/src/main/logger.ts',
+  'packages/shared/src/node/logger.ts',
   'scripts/lint.mjs',
 ])
 const secretScanAllowlist = new Set([
-  'apps/desktop/src/main/log-sanitizer.ts',
+  'packages/shared/src/log-sanitizer.ts',
   'scripts/lint.mjs',
   'tests/log-sanitizer.test.ts',
 ])
@@ -55,21 +56,21 @@ const legacyNamingAllowlist = new Set([
   'scripts/lint.mjs',
   'scripts/perf/suite.ts',
   '.github/workflows/release.yml',
-  'apps/desktop/src/main/agent-config.ts',
-  'apps/desktop/src/main/config-layer-utils.ts',
-  'apps/desktop/src/main/config-loader.ts',
-  'apps/desktop/src/main/config-public.ts',
-  'apps/desktop/src/main/config-types.ts',
-  'apps/desktop/src/main/custom-agent-store.ts',
-  'apps/desktop/src/main/runtime-config-builder.ts',
-  'apps/desktop/src/renderer/helpers/i18n.ts',
-  'apps/desktop/src/renderer/components/chat/useTaskDrillInLayout.ts',
+  'packages/runtime-host/src/agent-config.ts',
+  'packages/runtime-host/src/config-layer-utils.ts',
+  'packages/runtime-host/src/config-loader-core.ts',
+  'packages/runtime-host/src/config-public.ts',
+  'packages/shared/src/config-types.ts',
+  'packages/runtime-host/src/custom-agent-store.ts',
+  'packages/runtime-host/src/runtime-config-builder.ts',
+  'packages/app/src/helpers/i18n.ts',
+  'packages/app/src/components/chat/useTaskDrillInLayout.ts',
 ])
 const legacyNamingAllowlistPatterns = [
   /^tests\//,
   /^apps\/desktop\/tests\//,
-  /^apps\/desktop\/src\/renderer\/.*\.test\.tsx$/,
-  /^apps\/desktop\/src\/renderer\/test\//,
+  /^packages\/app\/src\/.*\.test\.tsx$/,
+  /^packages\/app\/src\/test\//,
 ]
 const ignoredFiles = new Set([
   'docs/javascripts/vendor/mermaid.min.js',
@@ -89,9 +90,13 @@ const privateSdkAccessPatterns = [
     guidance: 'Use OAuth2ClientOptions.redirectUri or GetTokenOptions.redirect_uri instead.',
   },
 ]
-const rendererArbitraryFontSizeLimit = 833
+const rendererArbitraryFontSizeLimit = 0
 const arbitraryFontSizePattern = /\btext-\[\d+px\]/g
 let rendererArbitraryFontSizeCount = 0
+const rendererRawPaletteLimit = 0
+const rawPaletteStatusPattern =
+  /\b(?:text|bg|border|ring|ring-offset|from|to|via|fill|stroke|outline|divide|decoration|caret|accent)-(?:green|emerald|lime|teal|amber|yellow|orange|red|rose|pink|sky|cyan|blue|indigo|violet|purple)-[0-9]{2,3}\b/g
+let rendererRawPaletteCount = 0
 
 function visit(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -149,8 +154,12 @@ function lintFile(fullPath) {
     }
   }
 
-  if (shouldLintStyle && relPath.startsWith('apps/desktop/src/renderer/')) {
+  if (shouldLintStyle && relPath.startsWith('packages/app/src/')) {
     rendererArbitraryFontSizeCount += content.match(arbitraryFontSizePattern)?.length || 0
+    rendererRawPaletteCount += content.match(rawPaletteStatusPattern)?.length || 0
+    if (/\bwindow\.(?:alert|confirm)\s*\(/.test(content)) {
+      errors.push(`${relPath}: native window.alert/window.confirm is banned in the renderer — it blocks the window and breaks the design system. Use toast() for messages and the shared <Dialog> or confirm.requestDestructive for confirmations.`)
+    }
     if (ext === '.tsx') validateIconButtonLabels(relPath, content)
   }
 
@@ -230,8 +239,16 @@ function validateArchitectureSdkVersionPolicy() {
 function validateRendererDesignSystemGates() {
   if (rendererArbitraryFontSizeCount > rendererArbitraryFontSizeLimit) {
     errors.push(
-      `apps/desktop/src/renderer: arbitrary font-size utility count is ${rendererArbitraryFontSizeCount}; `
-      + `limit is ${rendererArbitraryFontSizeLimit}. Use text tokens/classes or lower the ratchet intentionally.`,
+      `packages/app/src: ${rendererArbitraryFontSizeCount} arbitrary text-[Npx] utilities found; `
+      + `these are banned. Use a paired type-scale utility instead (text-2xs/xs/sm/md/lg/xl/2xl/3xl/hero) `
+      + `or a .text-role-* class so size and line-height stay on the token scale.`,
+    )
+  }
+  if (rendererRawPaletteCount > rendererRawPaletteLimit) {
+    errors.push(
+      `packages/app/src: ${rendererRawPaletteCount} raw Tailwind palette status utilities found `
+      + `(e.g. text-amber-200, bg-red-500, border-sky-400); these bypass the cool theme. Use the semantic `
+      + `token utilities instead (text/bg/border-{green|amber|red|info|accent}) so the themed hues apply.`,
     )
   }
 }

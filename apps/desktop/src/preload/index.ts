@@ -76,6 +76,13 @@ const PRELOAD_INVOKE_CHANNELS = [
   'artifact:storage-stats',
   'artifact:cleanup',
   'launchpad:feed',
+  'knowledge:snapshot',
+  'knowledge:space:create',
+  'knowledge:proposal:create',
+  'knowledge:proposal:accept',
+  'knowledge:proposal:decline',
+  'knowledge:page:history',
+  'knowledge:page:restore',
   'confirm:request-destructive',
   'clipboard:write-text',
   'tool:list',
@@ -228,6 +235,7 @@ const PRELOAD_LISTEN_CHANNELS = [
   'workspace:sessions-updated',
   'workflow:updated',
   'coordination:updated',
+  'knowledge:updated',
 ] as const
 
 type PreloadInvokeChannel = typeof PRELOAD_INVOKE_CHANNELS[number]
@@ -343,6 +351,15 @@ const api: CoworkAPI = {
   },
   launchpad: {
     feed: (request = {}) => invoke('launchpad:feed', request),
+  },
+  knowledge: {
+    snapshot: (options) => options ? invoke('knowledge:snapshot', options) : invoke('knowledge:snapshot'),
+    createSpace: (input) => invoke('knowledge:space:create', input),
+    propose: (input) => invoke('knowledge:proposal:create', input),
+    acceptProposal: (proposalId, input) => input ? invoke('knowledge:proposal:accept', proposalId, input) : invoke('knowledge:proposal:accept', proposalId),
+    declineProposal: (proposalId, input) => input ? invoke('knowledge:proposal:decline', proposalId, input) : invoke('knowledge:proposal:decline', proposalId),
+    history: (pageId, options) => options ? invoke('knowledge:page:history', pageId, options) : invoke('knowledge:page:history', pageId),
+    restoreVersion: (pageId, versionId, input) => input ? invoke('knowledge:page:restore', pageId, versionId, input) : invoke('knowledge:page:restore', pageId, versionId),
   },
   confirm: {
     requestDestructive: (request) => invoke('confirm:request-destructive', request),
@@ -593,6 +610,10 @@ const api: CoworkAPI = {
     coordinationUpdated: (callback: () => void) => {
       const handler = () => callback()
       return listen('coordination:updated', handler)
+    },
+    knowledgeUpdated: (callback: () => void) => {
+      const handler = () => callback()
+      return listen('knowledge:updated', handler)
     },
   },
 }

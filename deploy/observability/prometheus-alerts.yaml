@@ -92,7 +92,7 @@ groups:
           summary: BYOK plaintext reveal failed in worker runtime path.
           runbook: docs/runbooks/cloud-managed-operations.md#byok-provider-key-failure
       - alert: OpenCoworkObjectStoreErrors
-        expr: sum(rate(open_cowork_object_store_errors_total[5m])) > 0
+        expr: sum(rate(open_cowork_cloud_object_store_operations_total{status="error"}[5m])) > 0
         for: 10m
         labels:
           severity: page
@@ -118,6 +118,33 @@ groups:
         annotations:
           summary: Postgres connection usage is above 80% of max connections.
           runbook: docs/runbooks/cloud-managed-operations.md#postgres-connection-exhaustion
+      - alert: OpenCoworkRuntimeCacheCloseFailures
+        expr: sum(rate(open_cowork_cloud_runtime_cache_close_failures_total[10m])) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          surface: worker
+        annotations:
+          summary: Worker runtime-cache evictions are failing to close runtimes (leaked OpenCode child processes / workspaces).
+          runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkOtlpDroppedRecords
+        expr: sum(rate(open_cowork_cloud_otlp_dropped_records_total[10m])) > 0
+        for: 15m
+        labels:
+          severity: ticket
+          surface: cloud
+        annotations:
+          summary: OTLP exporter is dropping spans/metrics (telemetry queue overflow) — observability is degraded.
+          runbook: docs/runbooks/cloud-managed-operations.md#web-unavailable-or-erroring
+      - alert: OpenCoworkAuthAccountingErrors
+        expr: sum(rate(open_cowork_cloud_auth_accounting_errors_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          surface: cloud
+        annotations:
+          summary: Auth accounting (rate-limit / backoff bookkeeping) is failing — security throttling may not be enforced.
+          runbook: docs/runbooks/cloud-managed-operations.md#kms-or-secret-adapter-errors
   - name: open-cowork-gateway
     rules:
       - alert: OpenCoworkGatewayDeliveryBacklog

@@ -157,14 +157,26 @@ import type {
   LaunchpadFeedPayload,
   LaunchpadFeedRequest,
 } from './launchpad.js'
+import type {
+  KnowledgePageVersion,
+  KnowledgeProposal,
+  KnowledgeProposalInput,
+  KnowledgeReviewInput,
+  KnowledgeSnapshotOptions,
+  KnowledgeSnapshotPayload,
+  KnowledgeSpace,
+  KnowledgeSpaceInput,
+} from './knowledge.js'
 
 export * from './app-config.js'
-export * from './app-api.js'
+export * from './config-types.js'
+export * from './log-sanitizer.js'
 export * from './agent-capability-profile.js'
 export * from './agent-validation.js'
 export * from './artifacts.js'
 export * from './capabilities.js'
 export * from './channels.js'
+export * from './chart-spec-safety.js'
 export * from './cloud-gateway-registration.js'
 export * from './cloud-session-projection.js'
 export * from './conversation-context.js'
@@ -177,15 +189,29 @@ export * from './events.js'
 export * from './explorer.js'
 export * from './http-client-source.js'
 export * from './jsonc.js'
+export * from './knowledge.js'
+export * from './knowledge-input.js'
+export * from './knowledge-store-contract.js'
 export * from './launchpad.js'
+export * from './normalizer-utils.js'
 export * from './providers.js'
 export * from './project-source.js'
 export * from './remote-approval-policy.js'
 export * from './resource-identity.js'
 export * from './runtime.js'
+export * from './runtime-event-normalizers.js'
 export * from './semantic-ui.js'
 export * from './session.js'
 export * from './session-import.js'
+export * from './session-view-tokens.js'
+export * from './session-view-order.js'
+export * from './session-view-streaming-state.js'
+export * from './session-view-text.js'
+export * from './session-view-compaction.js'
+export * from './session-view-messages.js'
+export * from './session-view-task-runs.js'
+export * from './session-view-sync.js'
+export * from './session-view-model.js'
 export * from './shortcuts.js'
 export * from './setup-health.js'
 export * from './skill-validation.js'
@@ -193,6 +219,7 @@ export * from './threads.js'
 export * from './theme-preset-data.js'
 export * from './tool-trace.js'
 export * from './updates.js'
+export * from './vega-spec.js'
 export * from './workspace.js'
 export * from './workflow.js'
 
@@ -280,6 +307,15 @@ export interface CoworkAPI {
   channels: ChannelApiSurface
   launchpad: {
     feed: (request?: LaunchpadFeedRequest) => Promise<LaunchpadFeedPayload>
+  }
+  knowledge: {
+    snapshot: (options?: KnowledgeSnapshotOptions) => Promise<KnowledgeSnapshotPayload>
+    createSpace: (input: KnowledgeSpaceInput) => Promise<KnowledgeSpace>
+    propose: (input: KnowledgeProposalInput) => Promise<KnowledgeProposal>
+    acceptProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<{ proposal: KnowledgeProposal; page: KnowledgePageVersion }>
+    declineProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<KnowledgeProposal>
+    history: (pageId: string, options?: KnowledgeSnapshotOptions) => Promise<KnowledgePageVersion[]>
+    restoreVersion: (pageId: string, versionId: string, input?: KnowledgeReviewInput) => Promise<{ page: KnowledgePageVersion }>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
@@ -506,6 +542,7 @@ export interface CoworkAPI {
     workspaceSessionsUpdated: (callback: (data: WorkspaceSessionsUpdatedEvent) => void) => () => void
     workflowUpdated: (callback: () => void) => () => void
     coordinationUpdated: (callback: () => void) => () => void
+    knowledgeUpdated: (callback: () => void) => () => void
   }
 }
 

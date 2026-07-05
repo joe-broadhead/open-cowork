@@ -1,5 +1,6 @@
-import electron from 'electron'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
+import { getAppPathHost, getSafeStorageHost, quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type {
   CloudProjectSourceSummary,
@@ -9,20 +10,8 @@ import type {
   WorkflowListPayload,
 } from '@open-cowork/shared'
 import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
-import type { CloudTransportSettingMetadata } from './cloud/transport-adapter.ts'
+import type { CloudTransportSettingMetadata } from '@open-cowork/cloud-server/transport-adapter'
 import { getAppDataDir } from './config-loader.ts'
-import { writeFileAtomic } from './fs-atomic.ts'
-import {
-  readSafeStorageBackendForPolicy,
-  resolveSecretStorageMode,
-  type SecretStorageMode,
-} from './secure-storage-policy.ts'
-
-const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
-const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
-  getSelectedStorageBackend?: () => string
-}) | undefined
-
 type SecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString: (plaintext: string) => Buffer
@@ -63,6 +52,9 @@ export type CloudWorkspaceCache = {
   upsertSessionInfo(workspaceId: string, session: SessionInfo, now?: Date): void
   upsertSessionView(workspaceId: string, sessionId: string, view: SessionView, now?: Date): void
   removeWorkspace(workspaceId: string): void
+  // Coalesce a sync pass's per-session upserts into one durable read + write (P1-E).
+  beginCacheBatch(): void
+  endCacheBatch(): void
 }
 
 function defaultCachePath() {
@@ -73,17 +65,18 @@ function defaultCachePath() {
 
 function defaultSecretStorageMode() {
   return resolveSecretStorageMode({
-    isPackaged: Boolean(electron.app?.isPackaged),
-    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    isPackaged: Boolean(getAppPathHost()?.isPackaged),
+    encryptionAvailable: Boolean(getSafeStorageHost()?.isEncryptionAvailable()),
     selectedStorageBackend: readSafeStorageBackendForPolicy(
-      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+      getSafeStorageHost()?.getSelectedStorageBackend,
     ),
   })
 }
 
 function requireSafeStorage() {
-  if (!electronSafeStorage) throw new Error('Electron safeStorage is unavailable')
-  return electronSafeStorage
+  const safeStorage = getSafeStorageHost()
+  if (!safeStorage) throw new Error('Electron safeStorage is unavailable')
+  return safeStorage
 }
 
 function normalizeWorkspaceId(value: unknown) {
@@ -270,6 +263,18 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   readonly mode: CloudWorkspaceCacheMode
   private readonly path: string
   private readonly secretStorage: SecretStorageAdapter | null
+  // Event cursors live in a tiny, plain (sequence numbers aren't secret) sibling file,
+  // written debounced — decoupled from the big encrypted views blob. setEventCursor is
+  // called per streamed cloud event; persisting it previously re-read, re-decrypted,
+  // re-serialized, re-encrypted and fsync'd EVERY transcript on each call, blocking the
+  // Electron main loop. Cursors are advisory (re-reading events is idempotent), so a
+  // debounced write — and losing the last few hundred ms on an abrupt quit — is safe.
+  private readonly cursorsPath: string
+  private cursorState: Map<string, Map<string, number>> | null = null
+  // Non-null while a sync batch is open: upserts mutate this buffer instead of re-reading +
+  // re-writing the whole cache per call (P1-E). Persisted once on endCacheBatch.
+  private batchBuffer: CloudWorkspaceCacheRecord[] | null = null
+  private cursorFlushTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: {
     path?: string
@@ -278,6 +283,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
     secretStorage?: SecretStorageAdapter | null
   } = {}) {
     this.path = options.path || defaultCachePath()
+    this.cursorsPath = `${this.path}.cursors.json`
     const requestedMode = options.mode || 'full'
     this.secretStorage = options.secretStorage === undefined ? null : options.secretStorage
     if (requestedMode === 'full' && this.storageMode() === 'unavailable') {
@@ -305,40 +311,86 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   }
 
   getEventCursor(workspaceId: string, scope: string): number | null {
-    return this.readRecord(workspaceId)?.eventCursors[scope] ?? null
+    const id = normalizeWorkspaceId(workspaceId)
+    if (!id) return null
+    return this.loadCursorState().get(id)?.get(scope) ?? null
   }
 
-  setEventCursor(workspaceId: string, scope: string, sequence: number, now = new Date()): void {
+  setEventCursor(workspaceId: string, scope: string, sequence: number, _now = new Date()): void {
     if (this.mode === 'disabled' || !scope || !Number.isFinite(sequence) || sequence < 0) return
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
-    const records = this.readRecords()
-    const existing = records.find((record) => record.workspaceId === id) || this.emptyRecord(id, now)
-    const current = existing.eventCursors[scope] || 0
-    this.writeRecord(records, {
-      ...existing,
-      eventCursors: {
-        ...existing.eventCursors,
-        [scope]: Math.max(current, Math.floor(sequence)),
-      },
-      updatedAt: now.toISOString(),
-    })
+    const state = this.loadCursorState()
+    const scopes = state.get(id) || new Map<string, number>()
+    const current = scopes.get(scope) || 0
+    scopes.set(scope, Math.max(current, Math.floor(sequence)))
+    state.set(id, scopes)
+    this.scheduleCursorFlush()
   }
 
-  resetEventCursor(workspaceId: string, scope: string, sequence = 0, now = new Date()): void {
+  resetEventCursor(workspaceId: string, scope: string, sequence = 0, _now = new Date()): void {
     if (this.mode === 'disabled' || !scope || !Number.isFinite(sequence) || sequence < 0) return
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
-    const records = this.readRecords()
-    const existing = records.find((record) => record.workspaceId === id) || this.emptyRecord(id, now)
-    this.writeRecord(records, {
-      ...existing,
-      eventCursors: {
-        ...existing.eventCursors,
-        [scope]: Math.floor(sequence),
-      },
-      updatedAt: now.toISOString(),
-    })
+    const state = this.loadCursorState()
+    const scopes = state.get(id) || new Map<string, number>()
+    scopes.set(scope, Math.floor(sequence))
+    state.set(id, scopes)
+    this.scheduleCursorFlush()
+  }
+
+  // Lazily load cursors from the dedicated file; on first run migrate any cursors that
+  // were previously stored inline in the (encrypted) records file.
+  private loadCursorState(): Map<string, Map<string, number>> {
+    if (this.cursorState) return this.cursorState
+    const state = new Map<string, Map<string, number>>()
+    if (this.mode === 'disabled') { this.cursorState = state; return state }
+    if (existsSync(this.cursorsPath)) {
+      try {
+        const parsed = JSON.parse(readFileSync(this.cursorsPath, 'utf-8')) as unknown
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [ws, scopes] of Object.entries(parsed as Record<string, unknown>)) {
+            if (!scopes || typeof scopes !== 'object') continue
+            const scopeMap = new Map<string, number>()
+            for (const [scope, seq] of Object.entries(scopes as Record<string, unknown>)) {
+              if (typeof seq === 'number' && Number.isFinite(seq) && seq >= 0) scopeMap.set(scope, Math.floor(seq))
+            }
+            if (scopeMap.size > 0) state.set(ws, scopeMap)
+          }
+        }
+      } catch { /* corrupt cursor file → start empty; cursors are advisory */ }
+    } else {
+      // Migration: seed from the inline cursors in the legacy records file.
+      for (const record of this.readRecords()) {
+        const scopeMap = new Map<string, number>()
+        for (const [scope, seq] of Object.entries(record.eventCursors || {})) {
+          if (typeof seq === 'number' && Number.isFinite(seq) && seq >= 0) scopeMap.set(scope, Math.floor(seq))
+        }
+        if (scopeMap.size > 0) state.set(record.workspaceId, scopeMap)
+      }
+    }
+    this.cursorState = state
+    return state
+  }
+
+  private scheduleCursorFlush(): void {
+    if (this.cursorFlushTimer) return
+    this.cursorFlushTimer = setTimeout(() => {
+      this.cursorFlushTimer = null
+      this.flushCursorState()
+    }, 250)
+    this.cursorFlushTimer.unref?.()
+  }
+
+  private flushCursorState(): void {
+    if (this.mode === 'disabled' || !this.cursorState) return
+    const serialized: Record<string, Record<string, number>> = {}
+    for (const [ws, scopes] of this.cursorState) {
+      serialized[ws] = Object.fromEntries(scopes)
+    }
+    try {
+      writeFileAtomic(this.cursorsPath, JSON.stringify(serialized), { mode: 0o600 })
+    } catch { /* best-effort; cursors are advisory and re-derive from replay */ }
   }
 
   getWorkflowList(workspaceId: string): WorkflowListPayload | null {
@@ -469,6 +521,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   removeWorkspace(workspaceId: string): void {
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
+    if (this.loadCursorState().delete(id)) this.scheduleCursorFlush()
     const records = this.readRecords()
     const next = records.filter((record) => record.workspaceId !== id)
     if (next.length === records.length) return
@@ -503,23 +556,35 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   }
 
   private readRecords(): CloudWorkspaceCacheRecord[] {
+    if (this.batchBuffer !== null) return this.batchBuffer
     if (this.mode === 'disabled' || !existsSync(this.path)) return []
     const storageMode = this.storageMode()
     if (storageMode === 'unavailable' && this.mode === 'full') return []
+    const encrypted = this.mode === 'full' && storageMode === 'encrypted'
+    let raw: Buffer
     try {
-      const raw = readFileSync(this.path)
-      const json = this.mode === 'full' && storageMode === 'encrypted'
-        ? this.storage().decryptString(raw)
-        : raw.toString('utf-8')
-      const parsed = JSON.parse(json) as unknown
-      if (!Array.isArray(parsed)) return []
-      return parsed.map(normalizeRecord).filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
+      raw = readFileSync(this.path)
     } catch {
-      if (this.mode === 'full' && storageMode === 'encrypted') {
-        try { rmSync(this.path, { force: true }) } catch { /* ignore corrupted cache cleanup */ }
-      }
       return []
     }
+    let json: string
+    try {
+      json = encrypted ? this.storage().decryptString(raw) : raw.toString('utf-8')
+    } catch {
+      // Transient decrypt failure (keychain locked): the encrypted transcript cache is intact
+      // (audit P2-12) — do NOT delete, just skip it for this read so it isn't lost on a hiccup.
+      return []
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json) as unknown
+    } catch {
+      // Decrypted but not valid JSON → genuinely corrupt. Quarantine for diagnosis, never destroy.
+      if (encrypted) quarantineCorruptFile(this.path)
+      return []
+    }
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeRecord).filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
   }
 
   private writeRecord(records: CloudWorkspaceCacheRecord[], nextRecord: CloudWorkspaceCacheRecord) {
@@ -538,6 +603,17 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       }))
       .filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
       .sort((a, b) => a.workspaceId.localeCompare(b.workspaceId))
+    // During a sync batch, accumulate in memory and persist once at endCacheBatch (P1-E). The
+    // n per-session upserts a sync performs would otherwise each re-serialize + encrypt + fsync
+    // the entire cache — O(n^2) bytes on the Electron main thread.
+    if (this.batchBuffer !== null) {
+      this.batchBuffer = safeRecords
+      return
+    }
+    this.persistRecords(safeRecords)
+  }
+
+  private persistRecords(safeRecords: CloudWorkspaceCacheRecord[]) {
     const json = JSON.stringify(safeRecords, null, 2)
     const storageMode = this.storageMode()
     if (this.mode === 'full' && storageMode === 'encrypted') {
@@ -548,6 +624,19 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist full cloud workspace cache in production without OS-backed secret storage.')
     }
     writeFileAtomic(this.path, json, { mode: 0o600 })
+  }
+
+  // Coalesce the durable writes of a sync pass: read the cache once, let every upsert mutate the
+  // in-memory buffer, then write once. Idempotent + always paired with endCacheBatch in a finally.
+  beginCacheBatch(): void {
+    if (this.mode === 'disabled' || this.batchBuffer !== null) return
+    this.batchBuffer = this.readRecords()
+  }
+
+  endCacheBatch(): void {
+    const buffered = this.batchBuffer
+    this.batchBuffer = null
+    if (buffered) this.persistRecords(buffered)
   }
 }
 

@@ -1,10 +1,6 @@
+import { readSafeStorageBackendForPolicy, resolveSecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  readSafeStorageBackendForPolicy,
-  resolveSecretStorageMode,
-} from '../apps/desktop/src/main/secure-storage-policy.ts'
-
 test('resolveSecretStorageMode prefers encrypted storage whenever protective safeStorage is available', () => {
   assert.equal(resolveSecretStorageMode({ isPackaged: false, encryptionAvailable: true }), 'encrypted')
   assert.equal(resolveSecretStorageMode({ isPackaged: true, encryptionAvailable: true }), 'encrypted')

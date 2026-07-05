@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isFullVegaSpec, normalizeVegaSpecSchema } from '../apps/desktop/src/lib/vega-spec.ts'
-import { applyVegaTheme, makeInteractiveVegaSpecResponsive } from '../apps/desktop/src/renderer/components/chat/vega-chart-utils.ts'
+import { isFullVegaSpec, normalizeVegaSpecSchema } from '../packages/shared/src/vega-spec.ts'
+import { applyVegaTheme, makeInteractiveVegaSpecResponsive } from '../packages/app/src/components/chat/vega-chart-utils.ts'
 
 test('normalizeVegaSpecSchema upgrades legacy vega-lite schemas to v6', () => {
   const spec = {

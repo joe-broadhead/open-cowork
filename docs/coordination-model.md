@@ -177,7 +177,7 @@ can keep Gateway-owned tables. When these states cross a public boundary, they
 should map to the shared coordination contract.
 
 Desktop Local now stores projects, tasks, and watches in `coordination.sqlite` through
-`apps/desktop/src/main/coordination/coordination-store.ts` and exposes service,
+`packages/runtime-host/src/coordination/coordination-store.ts` and exposes service,
 IPC, preload, AppAPI, and Cloud HTTP routes for the same shared contract.
 
 ## Validation

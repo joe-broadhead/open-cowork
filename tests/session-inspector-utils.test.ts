@@ -7,7 +7,7 @@ import {
   formatProviderLabel,
   formatTokens,
   serializeToolPayload,
-} from '../apps/desktop/src/renderer/components/chat/session-inspector-utils.ts'
+} from '../packages/app/src/components/chat/session-inspector-utils.ts'
 
 test('formatters produce stable human-readable values', () => {
   assert.equal(formatTokens(999), '999')

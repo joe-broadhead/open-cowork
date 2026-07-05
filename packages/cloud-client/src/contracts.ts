@@ -839,6 +839,7 @@ export type CloudTransportAdapter = {
     channelBindingIds?: readonly string[]
     onDelivery: (delivery: ChannelDeliveryRecord) => void
     onError?: (error: unknown) => void
+    onClose?: () => void
   }): CloudTransportSubscription
   workspaceEventsUrl(afterSequence?: number): string
   sessionEventsUrl(sessionId: string, afterSequence?: number): string

@@ -1,18 +1,9 @@
+import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '@open-cowork/runtime-host/runtime-process-cleanup'
+import { buildManagedOpencodeAuthorizationHeader, buildManagedOpencodeServerEnvironment, createManagedOpencodeServerAuth, drainManagedOpencodeProcessOutput, parseManagedOpencodeServerStdoutChunk, resolveManagedOpencodeCommand, resolveManagedOpencodeSpawn } from '@open-cowork/runtime-host/runtime-managed-server'
+import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtime-environment'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
-import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime-environment.ts'
-import {
-  buildManagedOpencodeAuthorizationHeader,
-  buildManagedOpencodeServerEnvironment,
-  createManagedOpencodeServerAuth,
-  drainManagedOpencodeProcessOutput,
-  parseManagedOpencodeServerStdoutChunk,
-  resolveManagedOpencodeCommand,
-  resolveManagedOpencodeSpawn,
-} from '../apps/desktop/src/main/runtime-managed-server.ts'
-import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
-
 const runtimePaths = {
   home: '/tmp/open-cowork/runtime-home',
   configHome: '/tmp/open-cowork/runtime-home/.config',
@@ -333,4 +324,41 @@ test('managed runtime drains stdio after startup parsing is detached', () => {
 
   assert.equal(stdout.readableFlowing, true)
   assert.equal(stderr.readableFlowing, true)
+})
+
+test('managed opencode server env spills oversized config to a file (Linux E2BIG guard)', async () => {
+  // Small config stays inline.
+  const small = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, { agent: {} })
+  assert.match(small.OPENCODE_CONFIG_CONTENT || '', /"agent"/)
+  assert.equal(small.OPENCODE_CONFIG, undefined)
+
+  // Oversized config (over the ~100 KB inline cap that protects Linux's
+  // MAX_ARG_STRLEN) moves to OPENCODE_CONFIG as a file path.
+  const bigConfig = { instructions: ['x'.repeat(150_000)] }
+  let written: string | null = null
+  const big = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig, {
+    writeConfigFile: (serialized) => {
+      written = serialized
+      return '/tmp/opencode-config-test.json'
+    },
+  })
+  assert.equal(big.OPENCODE_CONFIG_CONTENT, undefined)
+  assert.equal(big.OPENCODE_CONFIG, '/tmp/opencode-config-test.json')
+  assert.match(written || '', /"instructions"/)
+
+  // Real file path variant: written 0600 into a private temp dir.
+  const real = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig)
+  const fs = await import('node:fs')
+  assert.ok(real.OPENCODE_CONFIG, 'expected a config file path')
+  // Single descriptor for stat + read (no check-then-use race).
+  const fd = fs.openSync(real.OPENCODE_CONFIG!, 'r')
+  try {
+    const stat = fs.fstatSync(fd)
+    assert.equal(stat.mode & 0o777, 0o600)
+    const parsed = JSON.parse(fs.readFileSync(fd, 'utf8'))
+    assert.equal(parsed.instructions[0].length, 150_000)
+  } finally {
+    fs.closeSync(fd)
+    fs.rmSync(real.OPENCODE_CONFIG!, { force: true })
+  }
 })

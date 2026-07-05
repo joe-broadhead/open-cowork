@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Badge } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Textarea } from './Input.js'
+import { Skeleton } from './Skeleton.js'
 import { ApprovalCard, CoworkerAvatar, type StudioAction, type StudioTone } from './StudioPrimitives.js'
 import { cn } from './utils.js'
 
@@ -91,7 +92,7 @@ function requesterLine(item: ApprovalsQueueItem) {
 function metaChips(item: ApprovalsQueueItem) {
   return (
     <div className="studio-approval-item__chips">
-      <Badge tone={item.kind === 'permission' ? 'warning' : 'accent'}>
+      <Badge tone="muted">
         {item.kind === 'permission' ? 'Permission' : 'Question'}
       </Badge>
       <Badge tone="neutral">via {item.viaLabel}</Badge>
@@ -107,12 +108,8 @@ function isStudioAction(action: StudioAction | null): action is StudioAction {
 function permissionDetails(item: ApprovalsQueuePermissionItem) {
   const input = item.input && Object.keys(item.input).length ? item.input : null
   if (!input) return null
-  return (
-    <details className="studio-approval-details">
-      <summary>Permission input</summary>
-      <pre>{JSON.stringify(input, null, 2)}</pre>
-    </details>
-  )
+  // Always-visible monospace command block (prototype .cmd) — not a collapsed disclosure.
+  return <pre className="studio-approval-command">{JSON.stringify(input, null, 2)}</pre>
 }
 
 function QuestionControls({
@@ -332,15 +329,6 @@ function QuestionCard({
   )
 }
 
-function Stat({ label, value }: { label: ReactNode; value: number }) {
-  return (
-    <div className="studio-approvals-stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
 export function ApprovalsQueueSurface({
   items,
   loading = false,
@@ -355,17 +343,9 @@ export function ApprovalsQueueSurface({
   onRejectQuestion,
 }: ApprovalsQueueSurfaceProps) {
   const sortedItems = useMemo(() => [...items].sort((left, right) => (right.sortOrder || 0) - (left.sortOrder || 0)), [items])
-  const permissionCount = sortedItems.filter((item) => item.kind === 'permission').length
-  const questionCount = sortedItems.filter((item) => item.kind === 'question').length
-  const sessionCount = new Set(sortedItems.map((item) => item.sessionId)).size
 
   return (
     <section className={cn('studio-approvals-surface', loading && 'studio-approvals-surface--loading')} aria-label="Approvals queue">
-      <div className="studio-approvals-summary" aria-label="Approvals summary">
-        <Stat label="Permission requests" value={permissionCount} />
-        <Stat label="Questions" value={questionCount} />
-        <Stat label="Sessions waiting" value={sessionCount} />
-      </div>
       {error ? <p className="notice" data-kind="error">{error}</p> : null}
       {sortedItems.length ? (
         <div className="studio-approvals-list">
@@ -389,6 +369,12 @@ export function ApprovalsQueueSurface({
                 onRejectQuestion={onRejectQuestion}
               />
             ))}
+        </div>
+      ) : loading ? (
+        <div className="studio-approvals-list" aria-hidden="true">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} variant="card" className="studio-approval-item" />
+          ))}
         </div>
       ) : (
         <EmptyState icon="badge-check" title={emptyTitle} body={emptyBody} />

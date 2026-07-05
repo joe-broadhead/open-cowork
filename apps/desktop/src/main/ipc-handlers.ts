@@ -1,36 +1,35 @@
+import { listWorkflows as listWorkflowState } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
+import { getSessionRecord, listSessionRecords } from '@open-cowork/runtime-host/session-registry'
+import { syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
+import { addRuntimeSessionEventObserver, dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from '@open-cowork/runtime-host/session-event-dispatcher'
+import { configureSemanticUiBridge } from '@open-cowork/runtime-host/semantic-ui-bridge'
+import { buildDiagnosticsBundle } from './diagnostics-export.ts'
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
+import { getClient, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { listRuntimeToolsForResolvedContext } from '@open-cowork/runtime-host/runtime-tools'
+import { createSandboxWorkspaceDir } from '@open-cowork/runtime-host/runtime-paths'
+import { observePerf } from '@open-cowork/runtime-host/perf-metrics'
+import { configureKnowledgeService } from '@open-cowork/runtime-host/knowledge/knowledge-service'
+import { delay } from '@open-cowork/runtime-host/delay'
 import type { BrowserWindow, IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import type {
   CapabilityToolEntry,
   DestructiveConfirmationRequest,
   ToolListOptions,
 } from '@open-cowork/shared'
-import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
+import { isMcpAuthRequiredStatus, shortSessionId } from '@open-cowork/shared'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import {
-  getClient,
-  getRuntimeHomeDir,
-} from './runtime.ts'
-import { getEffectiveSettings } from './settings.ts'
 import { getAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
-import { shortSessionId } from './log-sanitizer.ts'
-import {
-  addRuntimeSessionEventObserver,
-  dispatchRuntimeSessionEvent,
-  setSessionHistoryRefreshHandler,
-} from './session-event-dispatcher.ts'
-import { getSessionRecord, listSessionRecords } from './session-registry.ts'
-import { syncSessionView } from './session-history-loader.ts'
-import { listRuntimeToolsForResolvedContext } from './runtime-tools.ts'
-import { createSandboxWorkspaceDir } from './runtime-paths.ts'
 import { createDestructiveConfirmationManager } from './destructive-actions.ts'
-import { listWorkflows as listWorkflowState } from './workflow/workflow-store.ts'
-import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
 import { registerLaunchpadHandlers } from './ipc/launchpad-handlers.ts'
+import { registerKnowledgeHandlers } from './ipc/knowledge-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCoordinationHandlers } from './ipc/coordination-handlers.ts'
@@ -47,7 +46,6 @@ import { validateDestructiveConfirmationRequest } from './ipc/object-validators.
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
 import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
-import { delay } from './delay.ts'
 import {
   buildCustomAgentPermission,
   createCapabilityToolDiscovery,
@@ -56,19 +54,16 @@ import {
 } from './capability-tool-discovery.ts'
 import { resolvePrivateSessionArtifactPath } from './ipc-artifact-access.ts'
 import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
-import { getThreadIndexService } from './thread-index/thread-index-service.ts'
 import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
-import { sdkErrorMessage } from './sdk-error.ts'
 import { createWorkspaceGateway } from './workspace-gateway.ts'
 import { createDesktopPairingService } from './desktop-pairing/service.ts'
 import { createDesktopPairingLocalExecutor } from './desktop-pairing/local-executor.ts'
-import { configureSemanticUiBridge } from './semantic-ui-bridge.ts'
 import {
   createSemanticUiLocalActionList,
   executeSemanticUiLocalAction,
 } from './semantic-ui-local-actions.ts'
 
-export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
+export { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
 
 type IpcSenderEvent = IpcMainEvent | IpcMainInvokeEvent
 
@@ -379,6 +374,10 @@ export function setupIpcHandlers(
   configureSemanticUiBridge({
     actionListProvider: () => createSemanticUiLocalActionList('desktop-local'),
     actionExecutor: (actionId, input) => executeSemanticUiLocalAction(context, actionId, input),
+    diagnosticsBundleBuilder: () => buildDiagnosticsBundle(),
+  })
+  configureKnowledgeService({
+    getMainWindow,
   })
 
   registerIpcInvoke(context, 'confirm:request-destructive', objectArg<DestructiveConfirmationRequest>('destructive confirmation request', validateDestructiveConfirmationRequest), async (_event, request) => {
@@ -399,6 +398,7 @@ export function setupIpcHandlers(
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerLaunchpadHandlers(context)
+  registerKnowledgeHandlers(context)
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerWorkflowHandlers(context)

@@ -60,6 +60,9 @@ jobs:
       - name: Audit full dependency graph (high advisory)
         run: pnpm audit --audit-level high
 
+      - name: Check production license compatibility (copyleft gate)
+        run: pnpm license:check
+
       - name: Verify third-party notices
         run: |
           node scripts/generate-third-party-notices.mjs --skip-license-output
@@ -78,14 +81,18 @@ jobs:
       - name: Lint (a11y)
         run: pnpm lint:a11y --max-warnings=0
 
+      # Build the unified renderer's browser bundle before the test suite so the
+      # cloud-surface gate runs: the cloud-serving tests assert GET / serves the
+      # SPA (needs packages/app/dist-browser), and this is the only place the
+      # served renderer + its CSRF/auth transport are exercised in CI.
+      - name: Build unified renderer (browser) for cloud-surface tests
+        run: pnpm build:shared && pnpm --filter @open-cowork/ui build && pnpm --filter @open-cowork/app build:browser
+
       - name: Test
         run: pnpm test
 
       - name: Live scenario evidence
         run: pnpm test:live-scenarios
-
-      - name: Cloud Web Workbench browser readiness gates
-        run: pnpm test:cloud-web
 
       - name: Renderer component tests
         run: pnpm test:renderer
@@ -96,8 +103,17 @@ jobs:
       - name: Performance gate
         run: pnpm perf:check
 
-      - name: Build all (packages, MCPs, gateway, website, desktop)
+      - name: Build all (packages, MCPs, gateway, desktop)
         run: pnpm build
+
+      - name: Cloud bundle build
+        run: pnpm cloud:build
+
+      - name: Cloud bundle startup smoke
+        # Boots the built bundle (sqlite all-in-one, no postgres) and waits for the
+        # ready line — catches an unresolvable external (e.g. ajv) at import time in
+        # seconds, without the heavyweight docker-compose stack.
+        run: pnpm cloud:smoke:import
 
   cloud-gates:
     runs-on: ubuntu-latest
@@ -130,6 +146,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The portability/sandbox proofs (and the postgres test) import
+      # @open-cowork/runtime-host from its built dist (which is also the cloud's
+      # runtime supervisor artifact); the continuation gate boots the cloud server
+      # and asserts GET / serves the unified renderer (packages/app/dist-browser).
+      # Build both before they run.
+      - name: Build runtime-host + browser renderer for proofs/continuation
+        run: pnpm build:shared && pnpm --filter @open-cowork/runtime-host build && pnpm --filter @open-cowork/ui build && pnpm --filter @open-cowork/app build:browser
 
       - name: Run OpenCode portability proof
         run: pnpm proof:cloud:opencode-portability --json

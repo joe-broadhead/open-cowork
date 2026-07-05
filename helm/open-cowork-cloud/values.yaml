@@ -140,6 +140,9 @@ roles:
     replicas: 1
     port: 8787
     autoProcessCommands: false
+    # preStop sleep (seconds) so the Service endpoint is removed before SIGTERM —
+    # avoids dropped requests during rollouts. Must be < terminationGracePeriodSeconds.
+    preStopDrainSeconds: 10
     startupProbe:
       enabled: true
       periodSeconds: 10
@@ -162,6 +165,12 @@ roles:
     replicas: 1
     pollMs: 1000
     checkpointsEnabled: true
+    # The app serves /livez on this port so a wedged-event-loop worker is restarted.
+    livenessPort: 8788
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 4
     terminationGracePeriodSeconds: 300
     updateStrategy:
       type: RollingUpdate
@@ -182,6 +191,11 @@ roles:
     enabled: false
     replicas: 1
     pollMs: 1000
+    livenessPort: 8788
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 4
     terminationGracePeriodSeconds: 120
     updateStrategy:
       type: RollingUpdate

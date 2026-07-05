@@ -109,6 +109,7 @@ nav:
       - Agents: agent-authoring.md
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
+      - OpenWiki Knowledge Base: openwiki.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
@@ -157,6 +158,7 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
+      - Claw-Like Agent Operations: claw-like-agents.md
       - Contributing: contributing.md
       - First Contribution: first-contribution.md
 
@@ -171,3 +173,5 @@ extra:
 # `mkdocs build --strict`'s "not in nav" info message.
 not_in_nav: |
   /assets/README.md
+  /design-refinement-and-cloud-react-proposal.md
+  /design/**

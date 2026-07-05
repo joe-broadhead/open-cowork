@@ -1,10 +1,9 @@
+import { isTrustedResolvedShellPath, isTrustedShellPath } from '@open-cowork/runtime-host/shell-env'
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { isTrustedResolvedShellPath, isTrustedShellPath } from '../apps/desktop/src/main/shell-env.ts'
-
 test('isTrustedShellPath accepts only known shell binaries', () => {
   const trustedShell = ['/bin/sh', '/bin/bash', '/bin/zsh'].find((candidate) => isTrustedShellPath(candidate))
   assert.ok(trustedShell, 'expected at least one trusted shell path on the host')

@@ -304,10 +304,13 @@ Start here:
 ## Repository layout
 
 ```text
-apps/desktop                       Electron main process, preload bridge, renderer UI, runtime composition, cloud control plane, packaging
-apps/website                       Cloud Web browser workbench and route/API matrix
+apps/desktop                       Electron shell — main process, preload bridge, and packaging — that loads the packages/app renderer; also hosts runtime composition and the cloud control plane
 apps/gateway                       Cloud Channel Gateway daemon
 apps/standalone-gateway            Standalone Team Gateway appliance
+packages/app                       Unified renderer UI — runs on Electron (real IPC) and in the browser via the CoworkAPI shim (cloud)
+packages/ui                        Shared design-system primitives
+packages/cloud-server              Cloud HTTP/SSE server
+packages/runtime-host              OpenCode runtime host/supervisor
 packages/shared                    Shared types, IPC contracts, and cloud projection contracts
 packages/cloud-client              Workspace Cloud HTTP/SSE client package
 packages/gateway-*                 Provider-neutral gateway contracts, testing helpers, and provider adapters

@@ -1,3 +1,6 @@
+import { ThreadIndexStore } from '@open-cowork/runtime-host/thread-index/thread-index-store'
+import { ThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { clearSessionRegistryCache, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -5,10 +8,6 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { SessionView } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { clearSessionRegistryCache, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
-import { ThreadIndexService } from '../apps/desktop/src/main/thread-index/thread-index-service.ts'
-import { ThreadIndexStore } from '../apps/desktop/src/main/thread-index/thread-index-store.ts'
-
 function emptySessionView(overrides: Partial<SessionView> = {}): SessionView {
   return {
     messages: [],
@@ -470,3 +469,66 @@ test('thread index service preserves view-derived tools during record-only updat
   assert.deepEqual(thread.actualTools, [{ name: 'charts.create', mcpName: 'charts', count: 1 }])
   assert.equal(thread.suggestions.some((suggestion) => suggestion.label === 'reporting'), true)
 }))
+
+test('thread index service skips no-op reindexes but still writes on real changes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-thread-service-noop-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  // Count how many times the projection is actually written so we can prove that re-running a
+  // refresh for an unchanged record performs no write (the streamed-event debounce hot path).
+  let writes = 0
+  class CountingStore extends ThreadIndexStore {
+    override upsertThreadWithSuggestions(...args: Parameters<ThreadIndexStore['upsertThreadWithSuggestions']>) {
+      writes += 1
+      return super.upsertThreadWithSuggestions(...args)
+    }
+  }
+  const store = new CountingStore(join(root, 'thread-index.sqlite'))
+  const service = new ThreadIndexService(store)
+  try {
+    process.env.OPEN_COWORK_USER_DATA_DIR = root
+    clearConfigCaches()
+    clearSessionRegistryCache()
+
+    const record = upsertSessionRecord(toSessionRecord({
+      id: 'session-noop',
+      title: 'Initial title',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      opencodeDirectory: '/workspace/noop',
+      providerId: 'openrouter',
+      modelId: 'openrouter/sonnet',
+    }))
+    assert.ok(record)
+
+    service.upsertThreadFromSessionRecord(record)
+    assert.equal(writes, 1)
+
+    // Same record state → identical projection signature → no write.
+    service.upsertThreadFromSessionRecord(record)
+    service.upsertThreadFromSessionRecord(record)
+    assert.equal(writes, 1)
+
+    // A real change (renamed thread) writes exactly once more, then re-settles to no-op.
+    const renamed = updateSessionRecord('session-noop', { title: 'Renamed title', updatedAt: '2026-01-03T00:00:00.000Z' })
+    assert.ok(renamed)
+    service.upsertThreadFromSessionRecord(renamed)
+    assert.equal(writes, 2)
+    service.upsertThreadFromSessionRecord(renamed)
+    assert.equal(writes, 2)
+
+    // Removing the thread drops its signature, so a re-add writes again rather than being skipped.
+    service.removeThread('session-noop')
+    service.upsertThreadFromSessionRecord(renamed)
+    assert.equal(writes, 3)
+
+    assert.equal(service.search({ text: 'renamed' }).threads.length, 1)
+  } finally {
+    service.dispose()
+    store.close()
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(root, { recursive: true, force: true })
+  }
+})

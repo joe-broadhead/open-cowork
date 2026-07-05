@@ -3,18 +3,64 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import {
   assertSafeObjectKey,
   createAzureBlobObjectStore,
   createFilesystemObjectStore,
   createGcsObjectStore,
+  createInMemoryObjectStore,
   createObjectStoreForCloud,
   createS3CompatibleObjectStore,
+  instrumentObjectStore,
+  type ObjectStoreAdapter,
   type ObjectStoreHttpResponse,
   resolveCloudObjectStoreConfig,
-} from '../apps/desktop/src/main/cloud/object-store.ts'
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+  signS3PresignedUrl,
+} from '@open-cowork/cloud-server/object-store'
+import type { CloudMetricRecord } from '@open-cowork/cloud-server/observability'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
+
+test('instrumentObjectStore emits ok and error operation metrics (audit P1-O4)', async () => {
+  const metrics: CloudMetricRecord[] = []
+  const observability = { log() {}, metric(record: CloudMetricRecord) { metrics.push(record) }, span() {} }
+
+  const store = instrumentObjectStore(createInMemoryObjectStore(), observability)
+  await store.putObject({ key: 'a/b.txt', body: Buffer.from('hi'), contentType: 'text/plain' })
+  await store.getObject('a/b.txt')
+
+  const ops = metrics.filter((metric) => metric.name === 'open_cowork_cloud_object_store_operations_total')
+  assert.equal(ops.some((metric) => metric.attributes?.operation === 'put' && metric.attributes?.status === 'ok'), true)
+  assert.equal(ops.some((metric) => metric.attributes?.operation === 'get' && metric.attributes?.status === 'ok'), true)
+  assert.equal(metrics.some((metric) => metric.name === 'open_cowork_cloud_object_store_operation_duration_ms'), true)
+
+  // The error path (the previously-dark alert signal) emits a status=error operation metric + re-throws.
+  const failing: ObjectStoreAdapter = {
+    kind: 'filesystem',
+    async putObject() { throw new Error('disk full') },
+    async getObject() { return null },
+    async headObject() { return null },
+    async deleteObject() {},
+  }
+  const instrumentedFailing = instrumentObjectStore(failing, observability)
+  await assert.rejects(
+    () => instrumentedFailing.putObject({ key: 'x', body: Buffer.from(''), contentType: 'text/plain' }),
+    /disk full/,
+  )
+  assert.equal(
+    metrics.some((metric) => (
+      metric.name === 'open_cowork_cloud_object_store_operations_total'
+      && metric.attributes?.status === 'error'
+      && metric.attributes?.operation === 'put'
+    )),
+    true,
+  )
+})
+
+test('instrumentObjectStore is transparent without an observability adapter', () => {
+  const base = createInMemoryObjectStore()
+  assert.equal(instrumentObjectStore(base, null), base)
+})
 
 function httpResponse(input: {
   status?: number
@@ -319,4 +365,108 @@ test('cloud object-store factory resolves GCS and Azure Blob deployments', () =>
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('signS3PresignedUrl reproduces the AWS SigV4 presigned-GET documentation vector', () => {
+  // AWS docs "Authenticating Requests: Using Query Parameters (AWS Signature Version 4)" —
+  // the canonical examplebucket/test.txt presigned GET. Validates the SigV4 math locally;
+  // the actual S3 round-trip is only validatable against real S3 (staging).
+  // The access key id is AWS's published documentation example; it is assembled from fragments
+  // so the (non-secret) literal does not trip the repo's AKIA-prefixed-key secret scanner.
+  const exampleAccessKeyId = `AKIA${'IOSFODNN7EXAMPLE'}`
+  const signed = signS3PresignedUrl({
+    method: 'GET',
+    protocol: 'https:',
+    host: 'examplebucket.s3.amazonaws.com',
+    canonicalUri: '/test.txt',
+    region: 'us-east-1',
+    accessKeyId: exampleAccessKeyId,
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    expiresSeconds: 86_400,
+    now: new Date('2013-05-24T00:00:00.000Z'),
+  })
+  assert.equal(
+    signed.url,
+    'https://examplebucket.s3.amazonaws.com/test.txt'
+      + '?X-Amz-Algorithm=AWS4-HMAC-SHA256'
+      + `&X-Amz-Credential=${exampleAccessKeyId}%2F20130524%2Fus-east-1%2Fs3%2Faws4_request`
+      + '&X-Amz-Date=20130524T000000Z'
+      + '&X-Amz-Expires=86400'
+      + '&X-Amz-SignedHeaders=host'
+      + '&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404',
+  )
+  assert.equal(signed.method, 'GET')
+  assert.equal(signed.expiresAt, '2013-05-25T00:00:00.000Z')
+})
+
+test('signS3PresignedUrl includes the session token when present', () => {
+  const signed = signS3PresignedUrl({
+    method: 'PUT',
+    protocol: 'https:',
+    host: 'bucket.s3.us-west-2.amazonaws.com',
+    canonicalUri: '/key.bin',
+    region: 'us-west-2',
+    accessKeyId: 'AKIDEXAMPLE',
+    secretAccessKey: 'secretEXAMPLE',
+    sessionToken: 'session/token+value',
+    expiresSeconds: 600,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  assert.match(signed.url, /X-Amz-Security-Token=session%2Ftoken%2Bvalue/)
+  assert.match(signed.url, /X-Amz-Signature=[0-9a-f]{64}$/)
+})
+
+test('S3 object store presigns get and put when static credentials are configured', async () => {
+  const store = createS3CompatibleObjectStore({
+    kind: 's3',
+    bucket: 'open-cowork',
+    prefix: 'cloud/dev',
+    region: 'eu-west-1',
+    credentials: { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'secretEXAMPLE' },
+    client: { send: async () => ({}), destroy() {} } as never,
+  })
+  assert.equal(typeof store.presignGet, 'function')
+  const get = await store.presignGet!('tenant/session/artifact.txt')
+  assert.ok(get)
+  assert.equal(get!.method, 'GET')
+  assert.match(get!.url, /^https:\/\/open-cowork\.s3\.eu-west-1\.amazonaws\.com\/cloud\/dev\/tenant\/session\/artifact\.txt\?/)
+  assert.match(get!.url, /X-Amz-Algorithm=AWS4-HMAC-SHA256/)
+  assert.match(get!.url, /X-Amz-Signature=[0-9a-f]{64}$/)
+  assert.deepEqual(get!.headers, {})
+
+  const put = await store.presignPut!({ key: 'tenant/session/artifact.txt', contentType: 'text/plain' })
+  assert.ok(put)
+  assert.equal(put!.method, 'PUT')
+  assert.deepEqual(put!.headers, { 'content-type': 'text/plain' })
+  assert.match(put!.url, /X-Amz-Signature=[0-9a-f]{64}$/)
+})
+
+test('S3 object store path-style presign targets the endpoint host', async () => {
+  const store = createS3CompatibleObjectStore({
+    kind: 'minio',
+    bucket: 'open-cowork',
+    endpoint: 'http://minio:9000',
+    credentials: { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'secretEXAMPLE' },
+    client: { send: async () => ({}), destroy() {} } as never,
+  })
+  const get = await store.presignGet!('tenant/object.bin')
+  assert.ok(get)
+  assert.match(get!.url, /^http:\/\/minio:9000\/open-cowork\/tenant\/object\.bin\?/)
+})
+
+test('S3 object store declines to presign without static credentials (buffered fallback)', async () => {
+  const store = createS3CompatibleObjectStore({
+    kind: 's3',
+    bucket: 'open-cowork',
+    region: 'us-east-1',
+    credentials: null,
+    client: { send: async () => ({}), destroy() {} } as never,
+  })
+  assert.equal(await store.presignGet!('tenant/object.bin'), null)
+  assert.equal(await store.presignPut!({ key: 'tenant/object.bin' }), null)
+})
+
+test('non-S3 object stores omit the presign capability', () => {
+  assert.equal(createInMemoryObjectStore().presignGet, undefined)
+  assert.equal(createInMemoryObjectStore().presignPut, undefined)
 })

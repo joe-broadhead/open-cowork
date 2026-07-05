@@ -1,28 +1,14 @@
+import { clearThreadIndexStoreCache } from '@open-cowork/runtime-host/thread-index/thread-index-store'
+import { clearThreadIndexServiceCache } from '@open-cowork/runtime-host/thread-index/thread-index-service'
+import { clearSessionRegistryCache, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { dispatchRuntimeSessionEvent, dropSessionFromDispatcherQueues, getRuntimeNotification, getSessionPatch, publishSessionView, setSessionHistoryRefreshHandler, shouldPublishSessionView } from '@open-cowork/runtime-host/session-event-dispatcher'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import {
-  dispatchRuntimeSessionEvent,
-  dropSessionFromDispatcherQueues,
-  getRuntimeNotification,
-  getSessionPatch,
-  publishSessionView,
-  setSessionHistoryRefreshHandler,
-  shouldPublishSessionView,
-} from '../apps/desktop/src/main/session-event-dispatcher.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  clearSessionRegistryCache,
-  toSessionRecord,
-  updateSessionRecord,
-  upsertSessionRecord,
-} from '../apps/desktop/src/main/session-registry.ts'
-import { clearThreadIndexServiceCache } from '../apps/desktop/src/main/thread-index/thread-index-service.ts'
-import { clearThreadIndexStoreCache } from '../apps/desktop/src/main/thread-index/thread-index-store.ts'
-
 function eventOf(type: string, sessionId?: string | null) {
   return {
     type,

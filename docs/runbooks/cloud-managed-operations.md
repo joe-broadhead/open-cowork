@@ -225,7 +225,7 @@ grows. The queue-depth signal is a bounded estimate from worker scans; use it
 with oldest queued age and claim latency rather than as an exact backlog count.
 
 1. Check `open_cowork_cloud_command_queue_depth_estimate`,
-   `open_cowork_cloud_command_oldest_age_ms`, and
+   `open_cowork_cloud_runnable_session_claim_duration_ms`, and
    `open_cowork_cloud_worker_loop_duration_ms`.
 2. Check worker heartbeats and active sessions in `GET /api/workers/heartbeats`.
 3. Check lease signals: `open_cowork_cloud_worker_lease_claims_total`,
@@ -282,6 +282,10 @@ or timeout errors.
 
 Use this when artifacts, uploads, exports, or checkpoint restore/save fails.
 
+0. Watch `open_cowork_cloud_object_store_operations_total{status="error"}` (by `operation`
+   = get/put/head/delete and `cloud_object_store_kind`) and the
+   `open_cowork_cloud_object_store_operation_duration_ms` latency — these cover every durable
+   read/write, including the object-store I/O behind checkpoint save/restore.
 1. Check object-store service health and credentials/workload identity.
 2. Verify bucket/container/prefix exists and has versioning enabled.
 3. Check checkpoint restore logs before allowing workers to resume failed

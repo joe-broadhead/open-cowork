@@ -2,10 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 
-import { DEFAULT_CONFIG, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
-import { evaluateBillingEntitlement } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
-import { createStripeBillingAdapter } from '../apps/desktop/src/main/cloud/stripe-billing-adapter.ts'
-import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
+import { DEFAULT_CONFIG, type CloudBillingConfig } from '@open-cowork/shared'
+import { evaluateBillingEntitlement } from '@open-cowork/cloud-server/billing-adapter'
+import { createStripeBillingAdapter } from '@open-cowork/cloud-server/stripe-billing-adapter'
+import { createStubBillingAdapter } from '@open-cowork/cloud-server/stub-billing-adapter'
 
 function billingConfig(): CloudBillingConfig {
   return {
@@ -178,4 +178,59 @@ test('billing entitlement evaluator returns machine-readable 402 decisions', () 
   })
   assert.equal(inactive.status, 402)
   assert.equal(inactive.policyCode, 'billing.subscription_inactive')
+})
+
+test('billing entitlement evaluator enforces per-plan feature entitlements', () => {
+  const config: CloudBillingConfig = {
+    ...billingConfig(),
+    plans: {
+      pro: {
+        label: 'Pro',
+        stripePriceId: 'price_pro',
+        entitlements: {
+          allowNewSessions: true,
+          allowPrompts: true,
+          allowWorkers: true,
+          features: { workflows: false, byok: false },
+        },
+      },
+    },
+  }
+  const subscription = {
+    orgId: 'org-1',
+    planKey: 'pro',
+    providerId: 'stripe',
+    providerCustomerId: 'cus_123',
+    providerSubscriptionId: 'sub_123',
+    status: 'active' as const,
+    seats: 1,
+    entitlements: {},
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    metadata: {},
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+
+  // worker.execute maps to the plan-disabled `workflows` feature → denied.
+  const workers = evaluateBillingEntitlement({ config, subscription, action: 'worker.execute' })
+  assert.equal(workers.allowed, false)
+  assert.equal(workers.status, 402)
+  assert.equal(workers.policyCode, 'billing.feature_not_entitled')
+
+  // byok.provider maps to the plan-disabled `byok` feature → denied.
+  assert.equal(
+    evaluateBillingEntitlement({ config, subscription, action: 'byok.provider', providerId: 'anthropic' }).policyCode,
+    'billing.feature_not_entitled',
+  )
+
+  // chat-mapped actions are unset in `features` → still allowed (default-allow).
+  assert.equal(evaluateBillingEntitlement({ config, subscription, action: 'session.create' }).allowed, true)
+  assert.equal(evaluateBillingEntitlement({ config, subscription, action: 'prompt.enqueue' }).allowed, true)
+
+  // A plan with no `features` block is unaffected.
+  assert.equal(
+    evaluateBillingEntitlement({ config: billingConfig(), subscription, action: 'worker.execute' }).allowed,
+    true,
+  )
 })

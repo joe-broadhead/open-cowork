@@ -7,7 +7,7 @@ import {
   summarizeTodoCounts,
   todoPriorityVisual,
   todoStatusVisual,
-} from '../apps/desktop/src/renderer/components/chat/todo-utils.ts'
+} from '../packages/app/src/components/chat/todo-utils.ts'
 
 test('todoStatusVisual returns distinct glyphs for each SDK status', () => {
   assert.equal(todoStatusVisual('pending').glyph, '○')

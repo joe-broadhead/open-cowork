@@ -1,5 +1,4 @@
 import {
-  type ChangeEvent,
   type ComponentPropsWithoutRef,
   type CSSProperties,
   type DragEvent,
@@ -20,13 +19,16 @@ import type {
 } from '@open-cowork/shared'
 import { Badge } from './Badge.js'
 import { Button } from './Button.js'
+import { Dialog } from './Dialog.js'
 import { EmptyState } from './EmptyState.js'
+import { Menu, type MenuItem } from './Select.js'
 import {
   CoworkerAvatar,
   KanbanTaskCard,
   ProjectCard,
   RunTimeline,
   StudioPageHeader,
+  StudioStatusDot,
   type KanbanPriority,
   type StudioTone,
 } from './StudioPrimitives.js'
@@ -379,7 +381,7 @@ function ProjectHeader({
         <p>{project.objective}</p>
         <div className="studio-project-board-header__meta">
           <span className="studio-project-progress" aria-label={stats.label}>
-            <span><i style={{ '--studio-progress': `${stats.progress}%` } as CSSProperties} /></span>
+            <span className="studio-u-progress-track"><i className="studio-u-progress-fill" style={{ '--studio-progress': `${stats.progress}%` } as CSSProperties} /></span>
             <em>{stats.label}</em>
           </span>
           <TeamAvatars agents={agents} />
@@ -394,6 +396,60 @@ function ProjectHeader({
         </Button>
       </div>
     </div>
+  )
+}
+
+function coworkerAvatar(agent: string) {
+  return <CoworkerAvatar name={agentLabel(agent)} initials={initials(agent)} tone={toneForName(agent)} size="sm" aria-hidden="true" />
+}
+
+/**
+ * An avatar pick-menu for selecting a coworker — the design's replacement for a
+ * native `<select>`. The trigger shows the current coworker's avatar + name and
+ * the menu lists each coworker with their avatar. Built on the shared `Menu`, so
+ * it inherits keyboard support, the focus trap, and Escape-to-close.
+ */
+function CoworkerPickMenu({
+  label,
+  value,
+  agents,
+  onChange,
+  includeUnassigned = false,
+  disabled,
+  disabledReason,
+}: {
+  label: string
+  value: string
+  agents: string[]
+  onChange: (value: string) => void
+  includeUnassigned?: boolean
+  disabled?: boolean
+  disabledReason?: string
+}) {
+  const items: MenuItem[] = [
+    ...(includeUnassigned
+      ? [{ id: '', label: 'Unassigned', icon: <CoworkerAvatar name="Unassigned" initials="—" tone="neutral" size="sm" aria-hidden="true" /> }]
+      : []),
+    ...agents.map((agent) => ({ id: agent, label: agentLabel(agent), icon: coworkerAvatar(agent) })),
+  ]
+  const current = value ? agentLabel(value) : 'Unassigned'
+  return (
+    <Menu
+      label={label}
+      className="studio-pick-menu"
+      triggerLabel={(
+        <span className="studio-pick-trigger" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          {value
+            ? coworkerAvatar(value)
+            : <CoworkerAvatar name="Unassigned" initials="—" tone="neutral" size="sm" aria-hidden="true" />}
+          <span>{current}</span>
+        </span>
+      )}
+      items={items}
+      onSelect={onChange}
+      disabled={disabled}
+      disabledReason={disabledReason}
+    />
   )
 }
 
@@ -435,15 +491,11 @@ function TaskDrawer({
   const allAgents = unique([task.assigneeAgent, ...agents])
   const selectedAgent = handoffAgent || task.assigneeAgent || allAgents[0] || ''
 
-  const assign = async (event: ChangeEvent<HTMLSelectElement>) => {
-    await onAssign(task, event.currentTarget.value || null)
-  }
-
   return (
     <aside className="studio-task-drawer" aria-label="Task detail">
       <header className="studio-task-drawer__header">
         <div>
-          <Badge tone={task.status === 'running' ? 'accent' : task.column === 'done' ? 'success' : 'neutral'}>{task.status}</Badge>
+          <StudioStatusDot tone={task.status === 'running' ? 'accent' : task.column === 'done' ? 'success' : 'neutral'} label={task.status} />
           <h2>{task.title}</h2>
           {task.description ? <p>{task.description}</p> : null}
         </div>
@@ -462,13 +514,18 @@ function TaskDrawer({
       />
       <section className="studio-task-drawer__section">
         <h3>Assignee</h3>
-        <label className="studio-select-row">
+        <div className="studio-select-row">
           <span>Coworker</span>
-          <select value={task.assigneeAgent || ''} onChange={(event) => void assign(event)} disabled={disabled} title={disabled ? disabledReason : undefined}>
-            <option value="">Unassigned</option>
-            {allAgents.map((agent) => <option key={agent} value={agent}>{agentLabel(agent)}</option>)}
-          </select>
-        </label>
+          <CoworkerPickMenu
+            label="Coworker"
+            value={task.assigneeAgent || ''}
+            agents={allAgents}
+            includeUnassigned
+            disabled={disabled}
+            disabledReason={disabled ? disabledReason : undefined}
+            onChange={(agent) => void onAssign(task, agent || null)}
+          />
+        </div>
       </section>
       <section className="studio-task-drawer__section">
         <h3>Stage</h3>
@@ -494,12 +551,17 @@ function TaskDrawer({
           <Button size="sm" variant="secondary" leftIcon="external-link" onClick={() => void onOpenWork(task)}>
             Open the work
           </Button>
-          <label className="studio-hand-to">
+          <div className="studio-hand-to">
             <span>Hand to</span>
-            <select value={selectedAgent} onChange={(event) => setHandoffAgent(event.currentTarget.value)} disabled={disabled || !allAgents.length} title={disabled ? disabledReason : undefined}>
-              {allAgents.length ? allAgents.map((agent) => <option key={agent} value={agent}>{agentLabel(agent)}</option>) : <option value="">No coworkers</option>}
-            </select>
-          </label>
+            <CoworkerPickMenu
+              label="Hand to"
+              value={selectedAgent}
+              agents={allAgents}
+              disabled={disabled || !allAgents.length}
+              disabledReason={disabled ? disabledReason : (!allAgents.length ? 'No coworkers available.' : undefined)}
+              onChange={setHandoffAgent}
+            />
+          </div>
           <Button
             size="sm"
             variant="primary"
@@ -535,8 +597,8 @@ export function ProjectsKanbanSurface({
   className,
   ...props
 }: ProjectsKanbanSurfaceProps) {
-  const projects = board?.projects || []
-  const tasks = board?.tasks || []
+  const projects = useMemo(() => board?.projects || [], [board?.projects])
+  const tasks = useMemo(() => board?.tasks || [], [board?.tasks])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0]?.id || null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
@@ -553,10 +615,15 @@ export function ProjectsKanbanSurface({
   }, [projects])
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0] || null
-  const projectTasks = selectedProject ? tasks.filter((task) => task.projectId === selectedProject.id) : []
+  const projectTasks = useMemo(
+    () => (selectedProject ? tasks.filter((task) => task.projectId === selectedProject.id) : []),
+    [selectedProject, tasks],
+  )
 
+  // The task detail is a slide-in overlay, so it stays closed until a card is
+  // opened; only drop a stale selection when its task leaves the active project.
   useEffect(() => {
-    setSelectedTaskId((current) => current && projectTasks.some((task) => task.id === current) ? current : projectTasks[0]?.id || null)
+    setSelectedTaskId((current) => current && projectTasks.some((task) => task.id === current) ? current : null)
   }, [projectTasks])
 
   const selectedTask = projectTasks.find((task) => task.id === selectedTaskId) || null
@@ -782,6 +849,10 @@ export function ProjectsKanbanSurface({
                 <div className="studio-project-board__main">
                   <section className="studio-kanban-board" aria-label={`${selectedProject.title} task board`}>
                     {boardColumns.map((column) => (
+                      // Drag-and-drop drop target: HTML has no native "drop zone"
+                      // element, so the column section observes dragover/drop. Task
+                      // cards carry the interactive/keyboard semantics.
+                      // (no-static-element-interactions is suppressed for this file in eslint.a11y.config.mjs.)
                       <section
                         key={column.id}
                         className="studio-kanban-column"
@@ -802,22 +873,26 @@ export function ProjectsKanbanSurface({
                       </section>
                     ))}
                   </section>
-                  <TaskDrawer
-                    task={selectedTask}
-                    agents={allAgents}
-                    disabled={disabled}
-                    disabledReason={actionDisabledReason}
-                    onMove={moveTask}
-                    onAssign={assignTask}
-                    onOpenWork={openWork}
-                    onHandToAgent={handToAgent}
-                  />
                 </div>
               </>
             ) : null}
           </div>
         </div>
       )}
+      {selectedTask ? (
+        <Dialog title="Task detail" variant="drawer" side="right" onClose={() => setSelectedTaskId(null)}>
+          <TaskDrawer
+            task={selectedTask}
+            agents={allAgents}
+            disabled={disabled}
+            disabledReason={actionDisabledReason}
+            onMove={moveTask}
+            onAssign={assignTask}
+            onOpenWork={openWork}
+            onHandToAgent={handToAgent}
+          />
+        </Dialog>
+      ) : null}
     </section>
   )
 }

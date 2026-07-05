@@ -1,11 +1,7 @@
+import { bindingHintsForSubtask, timingFromChild } from '@open-cowork/runtime-host/session-history-task-binding'
+import type { NormalizedMessagePart } from '@open-cowork/runtime-host'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-
-import type { NormalizedMessagePart } from '../apps/desktop/src/main/opencode-adapter.ts'
-import {
-  bindingHintsForSubtask,
-  timingFromChild,
-} from '../apps/desktop/src/main/session-history-task-binding.ts'
 
 function subtaskPart(fields: Partial<NormalizedMessagePart>): NormalizedMessagePart {
   return {

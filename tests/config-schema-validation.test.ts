@@ -1,9 +1,7 @@
+import { validateConfigSemantics, validateResolvedConfig } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'fs'
-import { validateResolvedConfig } from '../apps/desktop/src/main/config-schema.ts'
-import { validateConfigSemantics } from '../apps/desktop/src/main/config-layer-utils.ts'
-
 function readRootConfig() {
   return JSON.parse(readFileSync('open-cowork.config.json', 'utf-8'))
 }
@@ -414,6 +412,44 @@ test('gateway deployer config validates shared branding providers and safety sem
 
   config.gateway.productMode = 'cloud'
   assert.throws(() => validateResolvedConfig(config, 'gateway deployer config'), /gateway\.productMode/)
+})
+
+test('gateway deployer config fails closed when a bridge provider omits its relay', () => {
+  const config = cloneConfig()
+  config.allowedEnvPlaceholders = ['ACME_GATEWAY_SERVICE_TOKEN', 'ACME_GATEWAY_ADMIN_TOKEN', 'ACME_BRIDGE_SECRET']
+  const gateway = {
+    cloud: { baseUrl: 'https://cowork.acme.example', serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}' },
+    productMode: 'cloud_channel',
+    server: {
+      host: '0.0.0.0',
+      port: 8790,
+      publicBaseUrl: 'https://cowork-gateway.acme.example',
+      adminToken: '{env:ACME_GATEWAY_ADMIN_TOKEN}',
+    },
+    mode: 'self-host',
+  }
+
+  // A bridge-only provider (discord/whatsapp/signal) WITH its relay validates.
+  config.gateway = { ...gateway, providers: [{
+    id: 'acme-discord',
+    kind: 'discord',
+    channelBindingId: 'acme-discord',
+    credentials: { sharedSecret: '{env:ACME_BRIDGE_SECRET}' },
+    settings: { deliveryUrl: 'https://bridge.acme.example/discord' },
+  }] }
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'gateway deployer config'))
+
+  // The same provider WITHOUT a relay fails closed at schema time (no longer
+  // presented as turnkey) — matching the gateway runtime's own requirement.
+  config.gateway = { ...gateway, providers: [{
+    id: 'acme-discord',
+    kind: 'discord',
+    channelBindingId: 'acme-discord',
+  }] }
+  assert.throws(
+    () => validateResolvedConfig(config, 'gateway deployer config'),
+    /sharedSecret|deliveryUrl|credentials|settings/,
+  )
 })
 
 test('gateway deployer config allows gateway-only secrets to be injected outside desktop validation', () => {

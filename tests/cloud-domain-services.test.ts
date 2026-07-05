@@ -8,14 +8,14 @@ import {
   CloudIdentityService,
   CloudQuotaService,
   CloudWorkflowService,
-} from '../apps/desktop/src/main/cloud/services/index.ts'
-import { CloudChannelDomainService } from '../apps/desktop/src/main/cloud/services/channel-domain-service.ts'
-import { CloudServiceError } from '../apps/desktop/src/main/cloud/cloud-service-error.ts'
-import type { ByokSecretMetadata, ByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
-import type { CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
-import type { HeadlessAgentRecord } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
-import type { ChannelControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-domains/channels.ts'
-import type { CloudUsageGovernanceService } from '../apps/desktop/src/main/cloud/services/usage-governance-service.ts'
+} from '@open-cowork/cloud-server/services/index'
+import { CloudChannelDomainService } from '@open-cowork/cloud-server/services/channel-domain-service'
+import { CloudServiceError } from '@open-cowork/cloud-server/cloud-service-error'
+import type { ByokSecretMetadata, ByokSecretStore } from '@open-cowork/cloud-server/byok-secret-store'
+import type { CloudPrincipal } from '@open-cowork/cloud-server/session-service'
+import type { HeadlessAgentRecord } from '@open-cowork/cloud-server/control-plane-store'
+import type { ChannelControlPlaneStore } from '@open-cowork/cloud-server/control-plane-domains/channels'
+import type { CloudUsageGovernanceService } from '@open-cowork/cloud-server/services/usage-governance-service'
 
 const principal: CloudPrincipal = {
   tenantId: 'tenant-1',

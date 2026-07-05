@@ -386,3 +386,22 @@ test('headless host detached start leaves recoverable state for later status and
     rmSync(stateDir, { recursive: true, force: true })
   }
 })
+
+test('readHeadlessHostState distinguishes a corrupt state file from no host running', async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), 'headless-corrupt-'))
+  try {
+    // No file at all → genuinely no host running.
+    assert.equal(await readHeadlessHostState(stateDir), null)
+
+    // A truncated/corrupt state file must NOT read as "no host" (that would orphan a live runtime);
+    // it surfaces instead so the caller can refuse to start a duplicate.
+    writeFileSync(join(stateDir, 'state.json'), '{ "schemaVersion": 1, "redact')
+    await assert.rejects(() => readHeadlessHostState(stateDir), /corrupt/)
+
+    // A parseable but schema-incompatible state is still treated as no usable host.
+    writeFileSync(join(stateDir, 'state.json'), JSON.stringify({ schemaVersion: 999, redacted: true }))
+    assert.equal(await readHeadlessHostState(stateDir), null)
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true })
+  }
+})

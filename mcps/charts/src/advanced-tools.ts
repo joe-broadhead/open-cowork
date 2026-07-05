@@ -4,6 +4,13 @@ import { chartToolDescription, rawVegaResult, vegaResult } from './chart-results
 import { buildSankeySpec } from './sankey.js'
 import { chartDataSchema, chartDimensionSchema, chartFieldNameSchema, vegaLiteSpecSchema } from './schemas.js'
 
+// User-supplied field names are interpolated into Vega `calculate` expression strings as
+// `datum["<field>"]`. Escape backslashes + double-quotes so a crafted field name (e.g.
+// `x"] ? (1) : (0`) cannot break out of the string literal and inject an arbitrary expression.
+function vegaField(name: string) {
+  return name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 export function registerAdvancedChartTools(server: McpServer) {
   server.tool(
     'funnel_chart',
@@ -64,10 +71,10 @@ export function registerAdvancedChartTools(server: McpServer) {
         data: { values: data },
         transform: [
           { window: [{ op: 'sum', field: value, as: '__running_total' }] },
-          { calculate: `datum.__running_total - datum["${value}"]`, as: '__previous_total' },
+          { calculate: `datum.__running_total - datum["${vegaField(value)}"]`, as: '__previous_total' },
           { calculate: 'min(datum.__previous_total, datum.__running_total)', as: '__start' },
           { calculate: 'max(datum.__previous_total, datum.__running_total)', as: '__end' },
-          { calculate: `datum["${value}"] >= 0 ? "Increase" : "Decrease"`, as: '__direction' },
+          { calculate: `datum["${vegaField(value)}"] >= 0 ? "Increase" : "Decrease"`, as: '__direction' },
         ],
         layer: [
           {
@@ -176,7 +183,7 @@ export function registerAdvancedChartTools(server: McpServer) {
         title,
         data: { values: data },
         transform: [
-          { calculate: `toDate(datum["${date}"])`, as: '__date' },
+          { calculate: `toDate(datum["${vegaField(date)}"])`, as: '__date' },
           { calculate: `timeFormat(datum.__date, '%Y')`, as: '__year' },
           { calculate: `timeFormat(datum.__date, '%U')`, as: '__week' },
           { calculate: `timeFormat(datum.__date, '%a')`, as: '__day' },
@@ -285,7 +292,7 @@ export function registerAdvancedChartTools(server: McpServer) {
         title,
         data: { values: data },
         transform: [
-          { calculate: `datum["${close}"] >= datum["${open}"] ? "Up" : "Down"`, as: '__movement' },
+          { calculate: `datum["${vegaField(close)}"] >= datum["${vegaField(open)}"] ? "Up" : "Down"`, as: '__movement' },
         ],
         layer: [
           {

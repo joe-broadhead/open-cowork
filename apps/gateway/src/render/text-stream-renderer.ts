@@ -9,7 +9,7 @@ import {
   executeRenderOperation,
   normalizeChannelCapabilities,
 } from './operations.js'
-import type { GatewaySessionRenderState } from './state.js'
+import { setRenderStateEntry, type GatewaySessionRenderState } from './state.js'
 
 export type RenderAssistantStreamInput = {
   provider: ChannelProvider
@@ -56,7 +56,7 @@ export async function renderAssistantStream(input: RenderAssistantStreamInput): 
       text: nextText,
     })
     const providerMessageId = result.sentMessage?.messageId ?? null
-    input.state.assistantStreams.set(input.sourceMessageId, {
+    setRenderStateEntry(input.state.assistantStreams, input.sourceMessageId, {
       sourceMessageId: input.sourceMessageId,
       providerMessageId,
       renderedText: nextText,
@@ -66,7 +66,7 @@ export async function renderAssistantStream(input: RenderAssistantStreamInput): 
 
   const textToSend = existing ? streamingSuffix(existing.renderedText, nextText) : nextText
   const sent = await sendTextChunks(input.provider, input.target, textToSend)
-  input.state.assistantStreams.set(input.sourceMessageId, {
+  setRenderStateEntry(input.state.assistantStreams, input.sourceMessageId, {
     sourceMessageId: input.sourceMessageId,
     providerMessageId: sent?.messageId ?? existing?.providerMessageId ?? null,
     renderedText: nextText,

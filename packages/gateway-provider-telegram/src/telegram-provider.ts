@@ -11,9 +11,8 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
-import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 import { Bot, InlineKeyboard, InputFile, type Context } from "grammy";
-import { timingSafeEqual } from "node:crypto";
 import type { Update } from "grammy/types";
 import { withTelegramRetry, type TelegramRateLimitEvent } from "./telegram-retry.js";
 
@@ -84,6 +83,12 @@ export class TelegramProvider implements ChannelProvider {
   private readonly seenWebhookUpdateOrder: string[] = [];
 
   constructor(private readonly config: TelegramProviderConfig) {
+    if (!config.botToken.trim()) throw new Error("Telegram bot token is required.");
+    // Match the other providers: reject an empty webhook secret at construction rather
+    // than only failing closed at request time (a blank secret would be sent to setWebhook).
+    if (config.mode === "webhook" && !config.webhook?.secretToken?.trim()) {
+      throw new Error("Telegram webhook secret token is required.");
+    }
     this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
     this.capabilities = normalizeChannelCapabilities(this.baseCapabilities);
     this.bot = new Bot(config.botToken);
@@ -290,7 +295,7 @@ export class TelegramProvider implements ChannelProvider {
     const providedSecret =
       auth.secretToken ?? headerValue(auth.headers, "x-telegram-bot-api-secret-token");
     if (!constantTimeStringEqual(providedSecret, expectedSecret)) {
-      throw new Error("Telegram webhook secret verification failed");
+      throw new WebhookAuthError("Telegram webhook secret verification failed");
     }
   }
 
@@ -606,16 +611,4 @@ function headerValue(
     return Array.isArray(value) ? value[0] : value;
   }
   return undefined;
-}
-
-function constantTimeStringEqual(left: string | null | undefined, right: string): boolean {
-  if (typeof left !== "string") {
-    return false;
-  }
-  const leftBuffer = Buffer.from(left, "utf8");
-  const rightBuffer = Buffer.from(right, "utf8");
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(leftBuffer, rightBuffer);
 }

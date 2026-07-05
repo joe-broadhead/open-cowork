@@ -1,7 +1,6 @@
+import { recordRuntimeDoctorCheck, recordRuntimeReadinessPhase } from '@open-cowork/runtime-host/runtime-status'
 import type { BrowserWindow } from 'electron'
 import type { RuntimeLoadingPhase, RuntimeLoadingStatus } from '@open-cowork/shared'
-import { recordRuntimeDoctorCheck, recordRuntimeReadinessPhase } from './runtime-status.ts'
-
 type Deferred = {
   promise: Promise<RuntimeLoadingStatus>
   resolve: (status: RuntimeLoadingStatus) => void

@@ -99,8 +99,10 @@ allowed only where docs identify them as migration or bundle-id compatibility.
 Cloud Web branding must stay on the shared token contract. Public theme
 overrides may change color, semantic tones, shadows, and background imagery, but
 the structural token source remains `packages/shared/src/design-tokens.ts`.
-Downstream builds should not patch `apps/website/src/styles.ts` to create a
-separate Cloud Web visual language or bypass the Desktop/Cloud Web drift gates.
+Downstream builds should not fork the renderer's token/style sources under
+`packages/app/src/styles` to create a separate Cloud Web visual
+language or bypass the Desktop/Cloud Web drift gates. Cloud Web is the same
+renderer as Desktop, so there is no second visual language to fork.
 
 ## Extension Contracts
 
@@ -109,14 +111,14 @@ Downstream extension work must start in the layer that owns the concept.
 | Extension point | Owning modules or artifacts | Required boundary |
 | --- | --- | --- |
 | Gateway channel providers | `packages/gateway-channel`, `packages/gateway-provider-*`, `apps/gateway/src/provider-registry.ts`, `apps/gateway/src/provider-readiness.ts` | Providers normalize channel I/O only. No OpenCode SDK imports, no direct control-plane DB access, no runtime ownership. |
-| Billing adapters | `apps/desktop/src/main/cloud/billing-adapter.ts`, `stub-billing-adapter.ts`, `stripe-billing-adapter.ts` | Core services consume provider-neutral subscription and entitlement records. Provider SDK imports stay behind adapters. |
-| Object-store adapters | `apps/desktop/src/main/cloud/object-store.ts` and deployment object-store config | Callers use object-store interfaces. Artifact, snapshot, and checkpoint code must not branch on cloud vendor ids. |
-| Secret/KMS adapters | `apps/desktop/src/main/cloud/secret-adapter.ts`, `byok-secret-store.ts`, secret ref resolvers | Secrets are refs or encrypted envelopes. Plaintext reveal is limited to the owning runtime role. |
+| Billing adapters | `packages/cloud-server/src/billing-adapter.ts`, `stub-billing-adapter.ts`, `stripe-billing-adapter.ts` | Core services consume provider-neutral subscription and entitlement records. Provider SDK imports stay behind adapters. |
+| Object-store adapters | `packages/cloud-server/src/object-store.ts` and deployment object-store config | Callers use object-store interfaces. Artifact, snapshot, and checkpoint code must not branch on cloud vendor ids. |
+| Secret/KMS adapters | `packages/cloud-server/src/secret-adapter.ts`, `byok-secret-store.ts`, secret ref resolvers | Secrets are refs or encrypted envelopes. Plaintext reveal is limited to the owning runtime role. |
 | OIDC/header auth | `cloud.auth`, trusted-proxy header middleware, OIDC provider wiring | Auth modes stay config-driven. Header auth requires signed trusted-proxy headers; OIDC secrets stay behind refs or provider secret managers. |
 | Observability adapters | `telemetry`, `deploy/observability/`, health and diagnostics endpoints | Downstream collectors receive provider-neutral events and metrics. Public templates use placeholders and diagnostics must not reveal secrets. |
 | Runtime profiles and policy packs | `cloud.profiles`, `cloud.runtime`, `cloud-config.ts`, `runtime-config-builder.ts` | Cloud profiles force app-managed runtime config by default and must not enable machine config or arbitrary local stdio MCPs without explicit policy. |
 | Worker pool modes | `docs/managed-workers.md`, `managed-worker-types.ts`, `services/managed-worker-service.ts`, deployment manifests | Add modes only with trust-model docs, lifecycle tests, and deployment gates. Customer-hosted workers remain deferred unless separately designed. |
-| Cloud Web modules and admin panels | `apps/website/src`, `docs/cloud-web-workbench.md`, route/API metadata tests | Web remains a cloud API client. It must not import stores, runtime adapters, secret adapters, or provider-specific internals. |
+| Cloud Web modules and admin panels | `packages/app/src`, `packages/app/src/browser/cowork-api.ts`, `docs/cloud-web-workbench.md` | Cloud Web is the unified renderer in the browser over the cloud HTTP/SSE shim. It must not import stores, runtime adapters, secret adapters, or provider-specific internals. |
 | BYOK provider validation/injection | `byok-secret-store.ts`, `runtime-config-builder.ts`, `opencode-runtime-adapter.ts`, `cloud-config.ts` | Provider keys enter OpenCode runtime config as provider options, never process env, logs, renderer state, diagnostics, or cache. |
 | Deployment recipes | `deploy/`, `helm/`, `docker-compose*.yml`, deployment validators | Public recipes are provider-neutral templates. Real ids, domains, prices, credentials, signed URLs, and launch evidence stay private. |
 

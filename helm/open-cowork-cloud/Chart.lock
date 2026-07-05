@@ -1,0 +1,6 @@
+dependencies:
+- name: open-cowork-gateway
+  repository: file://../open-cowork-gateway
+  version: 0.1.0
+digest: sha256:e6ff48667be3c1b028d28f7ed12a6acb8aff6481d7eef5ed65e078dda468fe8c
+generated: "2026-06-24T22:57:32.320629+02:00"

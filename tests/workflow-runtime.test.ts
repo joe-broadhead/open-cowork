@@ -1,42 +1,21 @@
+import { ensureWorkflowToolBridge, getWorkflowToolBridgeEnvironment, stopWorkflowToolBridge } from '@open-cowork/runtime-host/workflow/workflow-tool-bridge'
+import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
+import { clearWorkflowStoreCache, createWorkflow, createWorkflowRun, getWorkflow } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { setRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
+import { runtimeState } from '@open-cowork/runtime-host/runtime-state'
+import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, isWorkflowWebhookLoopbackBindAddress, InMemoryWorkflowWebhookSecurityStore, resetWorkflowWebhookSecurityStateForTests, signWorkflowWebhookPayload, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth } from '@open-cowork/shared/node'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { runtimeState } from '../apps/desktop/src/main/runtime-state.ts'
-import { setRuntimeReady } from '../apps/desktop/src/main/runtime-status.ts'
-import {
-  clearWorkflowStoreCache,
-  createWorkflow,
-  createWorkflowRun,
-  getWorkflow,
-} from '../apps/desktop/src/main/workflow/workflow-store.ts'
 import {
   configureWorkflowService,
   runWorkflowSchedulerTick,
   startWorkflowService,
   stopWorkflowService,
 } from '../apps/desktop/src/main/workflow/workflow-service.ts'
-import {
-  configureWorkflowWebhookServer,
-  ensureWorkflowWebhookServer,
-  getWorkflowWebhookBaseUrl,
-  isWorkflowWebhookLoopbackBindAddress,
-  InMemoryWorkflowWebhookSecurityStore,
-  resetWorkflowWebhookSecurityStateForTests,
-  signWorkflowWebhookPayload,
-  stopWorkflowWebhookServer,
-  claimWorkflowWebhookSignatureOnce,
-  verifyWorkflowWebhookAuth,
-} from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
-import {
-  ensureWorkflowToolBridge,
-  getWorkflowToolBridgeEnvironment,
-  stopWorkflowToolBridge,
-} from '../apps/desktop/src/main/workflow/workflow-tool-bridge.ts'
-import { configureWorkflowToolActions } from '../apps/desktop/src/main/workflow/workflow-tool-actions.ts'
-
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-runtime-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 }

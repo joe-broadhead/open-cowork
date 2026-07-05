@@ -23,7 +23,7 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Six bundled MCPs and six bundled skills, used as worked examples below.
+Seven bundled MCPs and six bundled skills, used as worked examples below.
 When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
 uses `mcp__<server>__<tool>` form, for example
 `mcp__charts__bar_chart`. Source MCP code and tests may still refer to the
@@ -50,6 +50,19 @@ short tool name such as `bar_chart`.
     include `mcp__clock__current_time`, `mcp__clock__convert_time`,
     `mcp__clock__date_math`, `mcp__clock__date_range`, and
     `mcp__clock__duration_between`. Source: `mcps/clock/src/index.ts`.
+
+-   :material-timer-outline: **`time-keep` MCP** <span class="status-badge preview">preview</span>
+
+    ---
+
+    Deep time engine backed by the external
+    [time-keep](https://github.com/joe-broadhead/time-keep) CLI: IANA
+    timezone catalogs and DST detail, calendar queries, date arithmetic
+    and formatting, business-day counts, offline holiday lookups
+    (2000–2030), and local SQLite timers. Read and lookup tools are
+    auto-allowed; `timer_set`/`timer_delete` ask for approval. The tool
+    reports as not installed until the `time-keep` binary is on PATH —
+    the built-in `clock` MCP stays the zero-install fallback.
 
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 
@@ -94,6 +107,16 @@ short tool name such as `bar_chart`.
     `mcp__semantic-ui__ui_execute_action`. It does not expose DOM selectors,
     screenshots, hidden secrets, local MCP process details, or artifact bodies.
     Source: `mcps/semantic-ui/src/index.ts`.
+
+-   :material-book-edit: **`knowledge` MCP** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Lets a coworker propose knowledge-base (wiki) edits for human review through a
+    tokenized bridge (loopback `http://` on desktop, the cloud `https://` public
+    URL in cloud). Proposals stay `PENDING` until a Maintainer reviews them — the
+    agent can never publish directly. Runtime id:
+    `mcp__knowledge__propose_knowledge_edit`. Source: `mcps/knowledge/src/index.ts`.
 
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>
 
@@ -237,7 +260,7 @@ stdio MCPs) or holds an HTTP client (for HTTP MCPs).
 Bundled MCPs are looked up at:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
-2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/skills`, `mcps/workflows`)
+2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/knowledge`, `mcps/semantic-ui`, `mcps/skills`, `mcps/workflows`)
 
 User-added MCPs live under `mcps.user.*` in `settings.enc` and are added
 through Tools & Skills. They are validated by:

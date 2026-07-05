@@ -2,7 +2,7 @@
   "package": "mermaid",
   "packageVersion": "11.15.0",
   "packageDependency": "^11.15.0",
-  "source": "apps/desktop/node_modules/mermaid/dist/mermaid.esm.min.mjs",
+  "source": "packages/app/node_modules/mermaid/dist/mermaid.esm.min.mjs",
   "bundle": "docs/javascripts/vendor/mermaid.min.js",
   "generatedBy": "node scripts/build-docs-mermaid-vendor.mjs",
   "bundler": "esbuild",

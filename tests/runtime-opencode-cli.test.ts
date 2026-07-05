@@ -1,15 +1,8 @@
+import { applyBundledOpencodeCliEnvironment, getBundledOpencodeSdkVersion, getBundledOpencodeVersion, readBundledOpencodeCliVersion, resolveBundledOpencodeCliEnvironment } from '@open-cowork/runtime-host/runtime-opencode-cli'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, realpathSync } from 'fs'
 import { delimiter, dirname, join, resolve } from 'path'
-import {
-  applyBundledOpencodeCliEnvironment,
-  getBundledOpencodeSdkVersion,
-  getBundledOpencodeVersion,
-  readBundledOpencodeCliVersion,
-  resolveBundledOpencodeCliEnvironment,
-} from '../apps/desktop/src/main/runtime-opencode-cli.ts'
-
 function installedNativeBinaryPath(): string | null {
   const platform = process.platform === 'win32' ? 'windows' : process.platform
   const binary = process.platform === 'win32' ? 'opencode.exe' : 'opencode'

@@ -155,27 +155,29 @@
   ],
   "resolutionEvents": [
     {
-      "name": "permission-resolved",
+      "name": "permission-replied",
       "expectedTypes": ["permission.resolved"],
       "raw": {
         "payload": {
-          "type": "permission.resolved",
+          "type": "permission.replied",
           "properties": {
             "sessionID": "session-1",
-            "permission": { "id": "permission-1" }
+            "requestID": "permission-1",
+            "reply": "once"
           }
         }
       }
     },
     {
-      "name": "question-resolved",
+      "name": "question-replied",
       "expectedTypes": ["question.resolved"],
       "raw": {
         "payload": {
-          "type": "question.resolved",
+          "type": "question.replied",
           "properties": {
             "sessionID": "session-1",
-            "id": "question-1"
+            "requestID": "question-1",
+            "answers": [{ "value": "Yes" }]
           }
         }
       }

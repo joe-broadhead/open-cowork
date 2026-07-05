@@ -1,11 +1,10 @@
+import { touchSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { getClient } from '@open-cowork/runtime-host/runtime'
+import { normalizeRuntimeCommands } from '@open-cowork/runtime-host'
+import { shortSessionId } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { normalizeCommandName, normalizeSessionId } from './session-handler-validation.ts'
 import { trackParentSession } from '../event-task-state.ts'
-import { shortSessionId } from '../log-sanitizer.ts'
-import { normalizeRuntimeCommands } from '../opencode-adapter.ts'
-import { getClient } from '../runtime.ts'
-import { touchSessionRecord } from '../session-registry.ts'
-
 export function registerSessionCommandHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('command:list', async () => {
     const client = getClient()

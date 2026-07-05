@@ -19,20 +19,20 @@
         "eslint.a11y.config.mjs",
         "scripts/*.mjs",
         "scripts/**/*.ts",
-        ".github/scripts/*.mjs"
+        ".github/scripts/*.mjs",
+        "tests/**/*.{ts,mjs}"
       ],
       "project": [
         "scripts/**/*.{js,mjs,ts}",
         ".github/scripts/*.mjs",
-        "*.config.{js,mjs,ts}"
+        "*.config.{js,mjs,ts}",
+        "tests/**/*.{ts,mjs}"
       ]
     },
     "apps/desktop": {
       "entry": [
         "src/main/index.ts",
         "src/preload/index.ts",
-        "src/renderer/index.tsx",
-        "src/renderer/chart-frame.ts",
         "tests/*.smoke.test.ts",
         "tests/*.packaged.test.ts",
         "tests/screenshots.ts"
@@ -41,6 +41,9 @@
         "src/**/*.{ts,tsx}",
         "tests/**/*.{ts,tsx}"
       ],
+      "ignore": [
+        "src/main/permission-inheritance.ts"
+      ],
       "ignoreBinaries": [
         "electron"
       ],
@@ -48,13 +51,19 @@
         "opencode-ai"
       ]
     },
-    "apps/website": {
+    "packages/app": {
       "entry": [
-        "src/render.ts",
-        "src/*.test.ts"
+        "src/index.tsx",
+        "src/loading.ts",
+        "src/chart-frame.ts",
+        "src/browser/browser-main.tsx"
       ],
       "project": [
         "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "@fontsource-variable/mona-sans",
+        "@fontsource-variable/schibsted-grotesk"
       ]
     },
     "apps/gateway": {
@@ -84,6 +93,24 @@
         "src/**/*.ts"
       ]
     },
+    "packages/runtime-host": {
+      "entry": [
+        "src/index.ts",
+        "src/config.ts",
+        "src/runtime-managed-server-supervisor.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "ps",
+        "lsof",
+        "taskkill"
+      ],
+      "ignoreDependencies": [
+        "electron"
+      ]
+    },
     "packages/ui": {
       "entry": [
         "src/index.ts"
@@ -100,6 +127,15 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.mjs"
+      ]
+    },
+    "packages/cloud-server": {
+      "entry": [
+        "src/index.ts",
+        "src/app.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
       ]
     },
     "packages/gateway-channel": {
@@ -225,6 +261,14 @@
       ]
     },
     "mcps/workflows": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "mcps/knowledge": {
       "entry": [
         "src/index.ts"
       ],

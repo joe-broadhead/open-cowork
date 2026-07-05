@@ -9,7 +9,7 @@ import {
   cloudProjectSnapshotPathReason,
   GENERATED_PROJECT_PATH_REASON,
   SECRET_PROJECT_PATH_REASON,
-} from './cloud/project-source-service.ts'
+} from '@open-cowork/cloud-server/project-source-service'
 
 const DEFAULT_MAX_FILES = 2000
 const DEFAULT_MAX_BYTES = 25 * 1024 * 1024

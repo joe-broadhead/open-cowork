@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
 
 test('cloud path provider derives stable runtime, workspace, and artifact roots', () => {
   const provider = createCloudPathProvider('/srv/open-cowork-cloud')

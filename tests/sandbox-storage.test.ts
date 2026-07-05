@@ -1,10 +1,9 @@
+import { flushSessionRegistryWrites, removeSessionRecord, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanupSandboxStorage, cleanupSandboxWorkspaceForSession, getSandboxStorageStats } from '../apps/desktop/src/main/sandbox-storage.ts'
-import { flushSessionRegistryWrites, removeSessionRecord, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
-
 function uniqueSandboxRoot(name: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

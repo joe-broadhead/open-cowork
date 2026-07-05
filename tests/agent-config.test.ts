@@ -1,12 +1,11 @@
+import { clearSettingsCache } from '@open-cowork/runtime-host/settings'
+import { buildAgentPermission, buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { buildAgentPermission, buildOpenCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
 import { listBuiltInAgentDetails } from '../apps/desktop/src/main/built-in-agent-details.ts'
-import { clearSettingsCache } from '../apps/desktop/src/main/settings.ts'
-
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

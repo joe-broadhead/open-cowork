@@ -1,7 +1,6 @@
+import { normalizeProviderListResponse } from '@open-cowork/runtime-host/provider-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeProviderListResponse } from '../apps/desktop/src/main/provider-utils.ts'
-
 test('normalizeProviderListResponse handles v2 provider.list payloads', () => {
   const providers = normalizeProviderListResponse({
     all: [

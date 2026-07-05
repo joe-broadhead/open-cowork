@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { shouldHandleChartFrameMessage } from '../apps/desktop/src/renderer/components/chat/vega-chart-message-utils.ts'
+import { shouldHandleChartFrameMessage } from '../packages/app/src/components/chat/vega-chart-message-utils.ts'
 
 test('shouldHandleChartFrameMessage only accepts messages from the matching iframe window', () => {
   const owningFrame = {} as Window

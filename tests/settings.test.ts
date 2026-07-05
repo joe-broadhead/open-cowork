@@ -102,7 +102,9 @@ function writeCredentialDescriptorConfig(configDir: string) {
 }
 
 async function importFreshSettingsModule(label: string) {
-  return import(`../apps/desktop/src/main/settings.ts?${label}-${Date.now()}`)
+  // settings now lives in @open-cowork/runtime-host; a package specifier can't
+  // carry the cache-busting query, so reload the built dist module directly.
+  return import(`../packages/runtime-host/dist/settings.js?${label}-${Date.now()}`)
 }
 
 test('native permission ask defaults initialize fresh profiles with toggles enabled', async () => {

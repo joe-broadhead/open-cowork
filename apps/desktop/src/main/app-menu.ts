@@ -15,6 +15,7 @@ function toGithubIssuesUrl(helpUrl: string): string | null {
     const segments = parsed.pathname.split('/').filter(Boolean)
     if (segments.length < 2) return null
     const [owner, repoRaw] = segments
+    if (!owner || !repoRaw) return null
     const repo = repoRaw.replace(/\.git$/, '')
     return `https://github.com/${owner}/${repo}/issues/new/choose`
   } catch {

@@ -7,6 +7,10 @@ export type SegmentedControlOption = {
   label: string
   disabled?: boolean
   disabledReason?: string
+  // Visible helper text for the option. The ACTIVE option's description renders as
+  // a line below the control, so consequential choices (e.g. permission Off/Ask/
+  // Allow) explain themselves on-screen rather than via an invisible title tooltip.
+  description?: string
 }
 
 export type SegmentedControlProps = {
@@ -37,6 +41,7 @@ export function SegmentedControl({
   const emptyId = emptyReason ? `${id}-empty` : undefined
   const describedBy = [disabledId, emptyId].filter(Boolean).join(' ') || undefined
   const selectedIndex = options.findIndex((option) => option.value === value)
+  const activeDescription = options.find((option) => option.value === value)?.description
   const thumbStyle = {
     '--ui-segment-count': Math.max(1, options.length),
     '--ui-segment-index': Math.max(0, selectedIndex),
@@ -56,7 +61,7 @@ export function SegmentedControl({
   return (
     <span className={cn('ui-control-stack', className)}>
       <span
-        role="tablist"
+        role="radiogroup"
         aria-label={label}
         aria-describedby={describedBy}
         className="ui-segmented-control"
@@ -70,8 +75,8 @@ export function SegmentedControl({
               key={option.value}
               ref={(node) => { refs.current[index] = node }}
               type="button"
-              role="tab"
-              aria-selected={selected}
+              role="radio"
+              aria-checked={selected}
               tabIndex={selected ? 0 : -1}
               disabled={isDisabled || option.disabled}
               title={option.disabledReason}
@@ -99,6 +104,9 @@ export function SegmentedControl({
       </span>
       {disabledReason ? <DisabledHint id={disabledId!} reason={disabledReason} /> : null}
       {emptyReason ? <DisabledHint id={emptyId!} reason={emptyReason} /> : null}
+      {activeDescription ? (
+        <span className="ui-segmented-description">{activeDescription}</span>
+      ) : null}
     </span>
   )
 }

@@ -1,7 +1,6 @@
+import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { sdkErrorMessage } from '../apps/desktop/src/main/sdk-error.ts'
-
 test('sdkErrorMessage prefers nested SDK cause message', () => {
   assert.equal(
     sdkErrorMessage({

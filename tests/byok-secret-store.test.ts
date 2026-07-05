@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
+import { createByokSecretStore } from '@open-cowork/cloud-server/byok-secret-store'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 
 const FIRST_KEY = 'credential-sample-first-1234567890'
 const SECOND_KEY = 'credential-sample-second-abcdefghi'
@@ -340,4 +340,44 @@ test('BYOK KMS references reveal only through explicit worker-authorized paths',
     kmsPlaintext,
   )
   assert.equal(resolvedRef, 'gcp-sm://projects/acme/secrets/anthropic/versions/latest')
+})
+
+test('BYOK activateUnvalidatedProviders trusts a user key for a provider without a validator', async () => {
+  const store = seededStore()
+  let nextId = 0
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => `secret-${nextId += 1}` },
+    activateUnvalidatedProviders: true,
+  })
+  const saved = await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    plaintext: FIRST_KEY,
+    createdByAccountId: 'owner-1',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(saved.status, 'pending_validation')
+  const validated = await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
+  assert.equal(validated?.status, 'active')
+  assert.equal(validated?.validationError ?? null, null)
+  // The activated key is usable by the runtime (resolvable + revealable).
+  assert.equal(await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' }), FIRST_KEY)
+})
+
+test('BYOK strict mode keeps providers without a validator unsupported', async () => {
+  const store = seededStore()
+  let nextId = 0
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => `secret-${nextId += 1}` },
+    activateUnvalidatedProviders: false,
+  })
+  await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    plaintext: FIRST_KEY,
+    createdByAccountId: 'owner-1',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  const validated = await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
+  assert.equal(validated?.status, 'unsupported')
 })

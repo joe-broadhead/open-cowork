@@ -1,14 +1,8 @@
+import { isVisibleRuntimeToolId, listRuntimeToolsForResolvedContext, runtimeToolId, toRuntimeToolMetadata } from '@open-cowork/runtime-host/runtime-tools'
+import { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
+import { runtimeState } from '@open-cowork/runtime-host/runtime-state'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { invalidateRuntimeToolCache } from '../apps/desktop/src/main/runtime-tool-cache.ts'
-import { runtimeState } from '../apps/desktop/src/main/runtime-state.ts'
-import {
-  isVisibleRuntimeToolId,
-  listRuntimeToolsForResolvedContext,
-  runtimeToolId,
-  toRuntimeToolMetadata,
-} from '../apps/desktop/src/main/runtime-tools.ts'
-
 type RuntimeClient = Parameters<typeof runtimeState.setClient>[0]
 
 test('internal OpenCode runtime tools are hidden from Cowork tool catalogs', () => {

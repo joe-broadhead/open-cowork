@@ -1,10 +1,9 @@
+import type { RuntimeCustomAgent } from '@open-cowork/runtime-host/custom-agents-utils'
 import type {
   AgentCatalog,
   CapabilitySkill,
   CapabilityTool,
 } from '@open-cowork/shared'
-import type { RuntimeCustomAgent } from '../../apps/desktop/src/main/custom-agents-utils.ts'
-
 export const DOWNSTREAM_SKILL_COUNT = 60
 export const DOWNSTREAM_TOOL_COUNT = 18
 export const DOWNSTREAM_AGENT_COUNT = 12

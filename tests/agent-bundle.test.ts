@@ -8,7 +8,7 @@ import {
   defaultBundleFilename,
   encodeAgentBundle,
   stringifyAgentBundle,
-} from '../apps/desktop/src/renderer/helpers/agent-bundle.ts'
+} from '../packages/app/src/helpers/agent-bundle.ts'
 
 function makeSummary(overrides?: Partial<CustomAgentSummary>): CustomAgentSummary {
   return {

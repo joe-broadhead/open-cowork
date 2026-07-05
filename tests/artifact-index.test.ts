@@ -1,3 +1,6 @@
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import { createCoordinationProject, createCoordinationTask, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
+import { artifactLifecycleStorageKey, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -6,27 +9,6 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { SessionArtifact, SessionView } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import {
-  artifactLifecycleStorageKey,
-  isLocalArtifactFilePath,
-  listLocalArtifactIndex,
-  localArtifactFilename,
-  normalizeArtifactLifecycleEntry,
-  setArtifactLifecycleDatabaseForTests,
-  setArtifactIndexRuntimeDepsForTests,
-  type ArtifactLifecycleRecord,
-} from '../apps/desktop/src/main/artifact-index.ts'
-import {
-  createCoordinationProject,
-  createCoordinationTask,
-  setCoordinationDatabaseForTests,
-} from '../apps/desktop/src/main/coordination/coordination-store.ts'
-import {
-  clearSessionRegistryCache,
-  toSessionRecord,
-  upsertSessionRecord,
-} from '../apps/desktop/src/main/session-registry.ts'
-
 function sessionViewWithArtifacts(artifacts: SessionArtifact[]): SessionView {
   return {
     messages: [],

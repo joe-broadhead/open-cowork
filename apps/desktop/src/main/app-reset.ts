@@ -1,7 +1,7 @@
+import { getSandboxRootDir } from '@open-cowork/runtime-host/runtime-paths'
 import electron from 'electron'
 import { existsSync, rmSync } from 'fs'
 import { getAppDataDir } from './config-loader.ts'
-import { getSandboxRootDir } from './runtime-paths.ts'
 import { log } from './logger.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app

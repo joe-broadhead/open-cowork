@@ -1,6 +1,6 @@
+import { BRANDING_ASSET_PROTOCOL } from '@open-cowork/runtime-host'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { BRANDING_ASSET_PROTOCOL } from '../apps/desktop/src/main/branding-assets.ts'
 import { CHART_FRAME_ASSET_PROTOCOL } from '../apps/desktop/src/lib/chart-frame-assets.ts'
 import { APP_PROTOCOL_SCHEMES } from '../apps/desktop/src/main/app-protocol-schemes.ts'
 

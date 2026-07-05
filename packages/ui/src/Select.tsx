@@ -155,7 +155,7 @@ export type MenuItem = {
 
 export type MenuProps = {
   label: string
-  triggerLabel?: string
+  triggerLabel?: ReactNode
   items: MenuItem[]
   onSelect: (id: string) => void
   disabled?: boolean

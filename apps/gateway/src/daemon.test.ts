@@ -6,14 +6,33 @@ import {
   WebhookCircuitOpenError,
   WebhookDeliveryPolicyError,
 } from '@open-cowork/gateway-provider-webhook'
+import { FakeChannelProvider } from '@open-cowork/gateway-testing'
 import type { CloudGateway } from '../dist/index.js'
 import {
   createGatewayDaemon,
   createGatewayHttpServer,
   createGatewayProviderRegistry,
   createGatewayRuntime,
+  GatewayWebhookRateLimiter,
   resolveGatewayConfig as resolveGatewayConfigBase,
 } from '../dist/index.js'
+
+test('webhook rate limiter evicts non-blocking records under cap pressure, preserving active blocks', () => {
+  const limiter = new GatewayWebhookRateLimiter(2)
+  const windowMs = 1_000
+
+  // 'attacker' inserted first, then trips its limit → blocked until resetAt.
+  assert.equal(limiter.claim({ key: 'attacker', nowMs: 0, windowMs, maxRequests: 1 }).ok, true)
+  assert.equal(limiter.claim({ key: 'attacker', nowMs: 0, windowMs, maxRequests: 1 }).ok, false)
+  // 'idle' inserted second, not blocked.
+  assert.equal(limiter.claim({ key: 'idle', nowMs: 0, windowMs, maxRequests: 5 }).ok, true)
+  // A third key exceeds the cap of 2. FIFO-by-insertion would evict 'attacker' (oldest) and reset
+  // its block; evict-by-relevance must drop the non-blocking record instead.
+  assert.equal(limiter.claim({ key: 'fresh', nowMs: 0, windowMs, maxRequests: 5 }).ok, true)
+
+  // 'attacker' is still blocked — its block survived the eviction.
+  assert.equal(limiter.claim({ key: 'attacker', nowMs: 500, windowMs, maxRequests: 1 }).ok, false)
+})
 
 const cloudEnv = {
   OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
@@ -384,6 +403,42 @@ test('gateway runtime claims provider events before prompting and skips duplicat
     ])
     assert.equal(runtime.metrics.incomingMessages, 2)
     assert.equal(runtime.metrics.promptedMessages, 1)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime tells the channel when an inbound message is permanently dropped (P2-15)', async () => {
+  const completed: Array<{ status: string, retryable?: boolean }> = []
+  const cloud = {
+    async claimProviderEvent(input: { providerEventId: string, providerInstanceId: string, eventType: string, claimedBy: string }) {
+      return { event: providerEventRecord(input), claimed: true, duplicate: false }
+    },
+    // A non-cloud error → classified non-retryable → the message is dropped for good (not retried).
+    async resolveIdentity() { throw new Error('identity service is misconfigured') },
+    async completeProviderEvent(_eventId: string, input: { status: string, retryable?: boolean, claimedBy: string }) {
+      completed.push({ status: input.status, retryable: input.retryable })
+      return providerEventRecord({ provider: 'fake', providerInstanceId: 'fake', providerEventId: 'e', eventType: 'message', claimedBy: input.claimedBy, status: input.status })
+    },
+    subscribeDeliveries() { return { close() {} } },
+  } as unknown as CloudGateway
+  const config = resolveGatewayConfig({
+    providers: [{ id: 'fake', kind: 'fake', channelBindingId: 'fake-binding' }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  try {
+    await assert.rejects(() => runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it', chatId: 'chat-1', userId: 'user-1' }))
+
+    // The event is finalized as a NON-retryable failure (so it won't be re-attempted)...
+    assert.deepEqual(completed, [{ status: 'failed', retryable: false }])
+    // ...and the user gets an in-channel notice instead of a silent drop.
+    const provider = runtime.providers.get('fake')!.provider as FakeChannelProvider
+    assert.equal(provider.sent.some((entry) => entry.kind === 'text' && entry.text.includes('could not process')), true)
   } finally {
     await runtime.stop()
   }
@@ -2036,3 +2091,42 @@ async function readJson(response: Response) {
   assert.equal(response.headers.get('content-type')?.includes('application/json'), true)
   return JSON.parse(await response.text()) as Record<string, unknown>
 }
+
+test('gateway runtime is not ready when the cloud delivery subscription fails', async () => {
+  const handlers: { onError?: () => void } = {}
+  const cloud = {
+    subscribeDeliveries(input: { onError?: () => void }) {
+      handlers.onError = input.onError
+      return { close() {} }
+    },
+  } as unknown as CloudGateway
+  const config = resolveGatewayConfig({
+    server: { adminToken: 'admin-token' },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+      credentials: { apiKey: 'provider-api-key-1234567890' },
+      settings: {
+        callbackSecret: 'provider-callback-secret-1234567890',
+        deliveryUrl: 'https://example.test/deliver?token=provider-token-1234567890',
+        workspacePath: '/home/alice/acme-private',
+      },
+    }],
+  }, { OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token', OPEN_COWORK_GATEWAY_PORT: '0' })
+
+  const runtime = createGatewayRuntime(config, cloud)
+  await runtime.start()
+  try {
+    assert.equal(runtime.ready(), true)
+    // A broken cloud delivery pipe makes the gateway not-ready even with healthy providers.
+    handlers.onError?.()
+    assert.equal(runtime.ready(), false)
+    // Restarting re-establishes a clean subscription and readiness.
+    await runtime.stop()
+    await runtime.start()
+    assert.equal(runtime.ready(), true)
+  } finally {
+    await runtime.stop()
+  }
+})

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentPropsWithoutRef } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type ComponentPropsWithoutRef, type CSSProperties } from 'react'
 import {
   type ArtifactIndexEntry,
   type ArtifactKind,
@@ -9,7 +9,8 @@ import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
 import { Icon, type IconName } from './Icon.js'
 import { Input } from './Input.js'
-import { cn } from './utils.js'
+import { Skeleton } from './Skeleton.js'
+import { cn, entityChroma } from './utils.js'
 
 type ArtifactFilter = 'all' | ArtifactKind | ArtifactStatus
 type ArtifactActionAvailability = boolean | ((artifact: ArtifactIndexEntry) => boolean)
@@ -29,6 +30,25 @@ export type ArtifactsLibrarySurfaceProps = Omit<ComponentPropsWithoutRef<'sectio
   onOpenArtifact?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onExportArtifact?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onExportAll?: (artifacts: ArtifactIndexEntry[]) => Promise<unknown> | unknown
+  /** Advance an artifact through the draft → in-review → final review lifecycle. When provided, each non-final card shows an advance control. */
+  onAdvanceStatus?: (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => Promise<unknown> | unknown
+  /** Upload a file as a new artifact. When provided, the toolbar shows an Upload control; the picked file is read to base64 here so callers only POST it. */
+  onUploadArtifact?: (input: { filename: string, contentType: string, dataBase64: string }) => Promise<unknown> | unknown
+  canUploadArtifact?: boolean
+  uploadDisabledReason?: string
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error || new Error('Could not read the selected file.'))
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 const KIND_FILTERS: Array<{ id: ArtifactFilter; label: string }> = [
@@ -49,6 +69,15 @@ const STATUS_LABELS: Record<ArtifactStatus, string> = {
   draft: 'Draft',
   'in-review': 'In review',
   final: 'Final',
+}
+
+// The artifact review lifecycle, in order. `nextArtifactStatus` returns the
+// status an artifact advances to, or null when it is already final (terminal).
+const STATUS_ORDER: readonly ArtifactStatus[] = ['draft', 'in-review', 'final']
+
+function nextArtifactStatus(status: ArtifactStatus): ArtifactStatus | null {
+  const index = STATUS_ORDER.indexOf(status)
+  return index >= 0 && index < STATUS_ORDER.length - 1 ? STATUS_ORDER[index + 1]! : null
 }
 
 const KIND_LABELS: Record<ArtifactKind, string> = {
@@ -170,6 +199,7 @@ function ArtifactLibraryCard({
   onOpen,
   onExport,
   onInspect,
+  onAdvanceStatus,
 }: {
   artifact: ArtifactIndexEntry
   canOpen: boolean
@@ -178,15 +208,21 @@ function ArtifactLibraryCard({
   onOpen?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onExport?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
   onInspect?: (artifact: ArtifactIndexEntry) => Promise<unknown> | unknown
+  onAdvanceStatus?: (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => Promise<unknown> | unknown
 }) {
   const kind = artifact.kind || 'draft'
   const status = artifact.status || 'draft'
+  const advanceTo = nextArtifactStatus(status)
   const updated = dateLabel(artifact.updatedAt || artifact.createdAt)
 
   return (
     <article className="studio-artifact-card artifact-card" data-kind={kind} data-status={status} data-session-id={artifact.sessionId}>
       <div className="studio-artifact-card__head">
-        <span className="studio-artifact-card__icon" aria-hidden="true">
+        <span
+          className="studio-artifact-card__icon entity-tile"
+          style={{ '--entity-chroma': entityChroma(`${kind}:${artifact.filename}`) } as CSSProperties}
+          aria-hidden="true"
+        >
           <Icon name={KIND_ICONS[kind] || 'file'} size={20} />
         </span>
         <div className="studio-artifact-card__title">
@@ -205,6 +241,15 @@ function ArtifactLibraryCard({
         <div><dt>Updated</dt><dd>{updated || 'Unknown'}</dd></div>
       </dl>
       <div className="studio-artifact-card__actions">
+        {onAdvanceStatus && advanceTo ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onAdvanceStatus(artifact, advanceTo)}
+          >
+            {`Advance to ${STATUS_LABELS[advanceTo]}`}
+          </Button>
+        ) : null}
         {onInspect ? (
           <Button
             size="sm"
@@ -251,18 +296,31 @@ export function ArtifactsLibrarySurface({
   onOpenArtifact,
   onExportArtifact,
   onExportAll,
+  onAdvanceStatus,
+  onUploadArtifact,
+  canUploadArtifact = true,
+  uploadDisabledReason,
   className,
   ...props
 }: ArtifactsLibrarySurfaceProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ArtifactFilter>('all')
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const handleUploadChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = '' // allow re-selecting the same file
+    if (!file || !onUploadArtifact) return
+    await onUploadArtifact({
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      dataBase64: await fileToBase64(file),
+    })
+  }
   const filteredArtifacts = useMemo(() => filterArtifacts(artifacts, query, filter), [artifacts, filter, query])
   const exportableArtifacts = useMemo(
     () => filteredArtifacts.filter((artifact) => canExportArtifact !== false && actionAvailable(canExportArtifact, artifact)),
     [canExportArtifact, filteredArtifacts],
   )
-  const inReviewCount = artifacts.filter((artifact) => artifact.status === 'in-review').length
-  const finalCount = artifacts.filter((artifact) => artifact.status === 'final').length
   const knownTotal = total ?? artifacts.length
   const filterOptions = [...KIND_FILTERS, ...STATUS_FILTERS]
   const emptyTitle = truncated ? 'No loaded artifacts found' : 'No artifacts found'
@@ -272,11 +330,6 @@ export function ArtifactsLibrarySurface({
 
   return (
     <section {...props} className={cn('studio-artifacts-library', loading && 'studio-artifacts-library--loading', className)} aria-label="Artifact library">
-      <div className="studio-artifacts-summary" aria-label="Artifacts summary">
-        <div><span>Total</span><strong>{knownTotal}</strong></div>
-        <div><span>In review</span><strong>{inReviewCount}</strong></div>
-        <div><span>Final</span><strong>{finalCount}</strong></div>
-      </div>
       <div className="studio-artifacts-toolbar">
         <Input
           value={query}
@@ -312,6 +365,28 @@ export function ArtifactsLibrarySurface({
               {truncated ? 'Export visible' : 'Export all'}
             </Button>
           ) : null}
+          {onUploadArtifact ? (
+            <>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                hidden
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={handleUploadChange}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon="arrow-up"
+                disabled={canUploadArtifact === false}
+                disabledReason={canUploadArtifact === false ? (uploadDisabledReason || 'Open a chat to upload an artifact to it.') : undefined}
+                onClick={() => uploadInputRef.current?.click()}
+              >
+                Upload
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
       {error ? <p className="studio-artifacts-notice" data-tone="danger">{error}</p> : null}
@@ -328,14 +403,21 @@ export function ArtifactsLibrarySurface({
               onInspect={onInspectArtifact}
               onOpen={onOpenArtifact}
               onExport={onExportArtifact}
+              onAdvanceStatus={onAdvanceStatus}
             />
+          ))}
+        </div>
+      ) : loading ? (
+        <div className="studio-artifacts-grid" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={index} variant="card" className="studio-artifact-card" />
           ))}
         </div>
       ) : (
         <EmptyState
           icon="file"
-          title={loading ? 'Loading artifacts' : emptyTitle}
-          body={loading ? 'The artifact library is loading across projects and chats.' : emptyBody}
+          title={emptyTitle}
+          body={emptyBody}
         />
       )}
     </section>

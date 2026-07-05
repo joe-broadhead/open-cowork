@@ -1,5 +1,11 @@
-import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
-import { startCloudApp } from '../apps/desktop/src/main/cloud/app.ts'
+import { setLogStorage } from '@open-cowork/shared/node'
+import { getAppConfig, getAppDataDir, getLogFilePrefix } from '@open-cowork/runtime-host/config'
+import { startCloudApp } from '../packages/cloud-server/src/app.ts'
+
+// The cloud has no Electron host wiring; point the shared logger at the cloud data
+// directory (resolved by the Electron-free config core from OPEN_COWORK_* env) so
+// logs land beside the cloud root instead of the unconfigured temp-dir fallback.
+setLogStorage(() => ({ directory: getAppDataDir(), filePrefix: getLogFilePrefix() }))
 
 const app = await startCloudApp({ config: getAppConfig() })
 

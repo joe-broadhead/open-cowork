@@ -1,10 +1,7 @@
+import { RuntimeState } from '@open-cowork/runtime-host/runtime-state'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { OpencodeClient as V2OpencodeClient } from '@opencode-ai/sdk/v2'
-import {
-  RuntimeState,
-} from '../apps/desktop/src/main/runtime-state.ts'
-
 function fakeClient(id: string) {
   return { id } as unknown as V2OpencodeClient
 }

@@ -1,5 +1,9 @@
 # Production Readiness Audit
 
+> **Superseded by [`design/repo-deep-audit-2026-06.md`](design/repo-deep-audit-2026-06.md)**
+> (2026-06-24, whole-repo). Kept for history. (Distinct from the broader
+> `design/production-readiness-audit.md`, 2026-06-16.)
+
 Last updated: 2026-06-02.
 
 This audit records the current delta between the repository and a polished

@@ -1,7 +1,7 @@
+import { buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildOpenCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
 import {
   buildAgentPermissionMatrix,
   findPermissionInheritanceIssues,

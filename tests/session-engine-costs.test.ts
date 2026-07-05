@@ -1,11 +1,7 @@
+import { applyCostEventToSessionState } from '@open-cowork/runtime-host/session-engine-costs'
+import { createEmptySessionViewState, createEmptyTaskRun } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-
-import {
-  createEmptySessionViewState,
-  createEmptyTaskRun,
-} from '../apps/desktop/src/lib/session-view-model.ts'
-import { applyCostEventToSessionState } from '../apps/desktop/src/main/session-engine-costs.ts'
 
 test('applyCostEventToSessionState updates root session cost and measured context', () => {
   const current = createEmptySessionViewState({

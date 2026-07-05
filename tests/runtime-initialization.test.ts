@@ -1,3 +1,4 @@
+import { getRuntimeStatus, resetRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -6,11 +7,6 @@ import {
   resolveRuntimeInitializationError,
   setRuntimeInitializationPhase,
 } from '../apps/desktop/src/main/runtime-initialization.ts'
-import {
-  getRuntimeStatus,
-  resetRuntimeStatus,
-} from '../apps/desktop/src/main/runtime-status.ts'
-
 test('runtime initialization errors record phase-specific readiness failure checks', () => {
   resetRuntimeStatus()
   setRuntimeInitializationPhase('managed-server', 'Starting managed OpenCode server.')

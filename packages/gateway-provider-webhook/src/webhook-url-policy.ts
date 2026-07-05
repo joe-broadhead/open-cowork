@@ -42,6 +42,10 @@ export function validateWebhookDeliveryUrl(value: string, policy: WebhookDeliver
   if (!local && !isHostnameAllowed(hostname, policy.allowedHosts)) {
     throw new Error("Webhook delivery URL host is not allowed");
   }
+  // Cloud metadata is blocked unconditionally — never gated by allowPrivateDelivery.
+  if (!local && isCloudMetadataHost(hostname)) {
+    throw new Error("Webhook delivery URL must not target a cloud metadata endpoint");
+  }
   if (!local && !policy.allowPrivateDelivery && isPrivateOrReservedIpAddress(hostname)) {
     throw new Error("Webhook delivery URL must not target a private or reserved IP literal");
   }
@@ -101,6 +105,25 @@ export function isPrivateOrReservedIpAddress(value: string): boolean {
   return isPrivateOrReservedIpv4(normalized);
 }
 
+// Cloud instance-metadata (IMDS) endpoints. These MUST be blocked even when
+// allowPrivateDelivery is enabled — an operator opting into internal webhook
+// delivery never legitimately targets the metadata service, and reaching it
+// from a server-side fetch is the classic credential-exfil SSRF. Mirrors the
+// always-blocked cloud-metadata class in mcp-url-policy.
+const CLOUD_METADATA_HOSTNAMES = new Set(["metadata.google.internal", "metadata"]);
+const CLOUD_METADATA_IPS = new Set([
+  "169.254.169.254", // AWS / GCP / Azure / OpenStack IMDS (IPv4 link-local)
+  "fd00:ec2::254", // AWS IMDSv6
+]);
+
+export function isCloudMetadataHost(value: string): boolean {
+  const normalized = normalizePolicyHostname(value);
+  if (CLOUD_METADATA_HOSTNAMES.has(normalized)) return true;
+  if (CLOUD_METADATA_IPS.has(normalized)) return true;
+  const embedded = ipv4FromMappedIpv6(normalized) ?? ipv4FromNat64(normalized);
+  return embedded !== null && CLOUD_METADATA_IPS.has(embedded);
+}
+
 function normalizePolicyHostname(value: string): string {
   return value.trim().replace(/^\[/u, "").replace(/\]$/u, "").toLowerCase();
 }
@@ -113,6 +136,9 @@ async function resolveHostAddresses(
 ): Promise<ResolvedWebhookAddress[]> {
   const literalFamily = isIP(hostname);
   if (literalFamily) {
+    if (isCloudMetadataHost(hostname)) {
+      throw new Error(`${label} targets a cloud metadata endpoint`);
+    }
     if (!options.allowPrivate && isPrivateOrReservedIpAddress(hostname)) {
       throw new Error(`${label} resolved to a private or reserved address`);
     }
@@ -135,6 +161,9 @@ async function resolveHostAddresses(
     const family = typeof record === "string" ? isIP(record) : record.family ?? isIP(record.address);
     if (!address || !family) throw new Error(`${label} host cannot be resolved`);
     const normalizedAddress = normalizePolicyHostname(address);
+    if (isCloudMetadataHost(normalizedAddress)) {
+      throw new Error(`${label} resolved to a cloud metadata endpoint`);
+    }
     if (!options.allowPrivate && isPrivateOrReservedIpAddress(normalizedAddress)) {
       throw new Error(`${label} resolved to a private or reserved address`);
     }
@@ -173,6 +202,10 @@ function isPrivateOrReservedIpv6(value: string): boolean {
   if (normalized === "::" || normalized === "::1") return true;
   const mappedIpv4 = ipv4FromMappedIpv6(normalized);
   if (mappedIpv4) return isPrivateOrReservedIpv4(mappedIpv4);
+  // NAT64 (64:ff9b::/96) embeds an IPv4 address that a NAT64 gateway translates to —
+  // recheck the embedded IPv4 so a private/metadata target can't tunnel through.
+  const nat64Ipv4 = ipv4FromNat64(normalized);
+  if (nat64Ipv4) return isPrivateOrReservedIpv4(nat64Ipv4);
   if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
   if (normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true;
   if (normalized.startsWith("ff")) return true;
@@ -195,6 +228,19 @@ function ipv4FromMappedIpv6(value: string): string | null {
     (low >> 8) & 0xff,
     low & 0xff
   ].join(".");
+}
+
+function ipv4FromNat64(value: string): string | null {
+  const prefix = "64:ff9b::";
+  if (!value.startsWith(prefix)) return null;
+  const suffix = value.slice(prefix.length);
+  if (suffix.includes(".")) return suffix; // dotted form, e.g. 64:ff9b::169.254.169.254
+  const parts = suffix.split(":");
+  if (parts.length !== 2) return null;
+  const high = parseIpv6MappedPart(parts[0]);
+  const low = parseIpv6MappedPart(parts[1]);
+  if (high === null || low === null) return null;
+  return [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join(".");
 }
 
 function parseIpv6MappedPart(value: string | undefined): number | null {
