@@ -31,8 +31,11 @@ export function timingFromChild(child: ChildSessionRecord | null, status: TaskSt
 }
 
 export function bindingHintsForSubtask(part: NormalizedMessagePart): BindingHints {
+  // Agent identity is OpenCode-owned: derive it from structured/labeled fields only,
+  // never from user prompt/raw content (which can carry a stray "@name"). Prompt/raw
+  // still feed the human-readable title below.
   const agent = normalizeAgentName(part.agent)
-    || extractAgentName(part.description, part.title, part.prompt, part.raw)
+    || extractAgentName(part.description, part.title)
     || null
   return {
     agent,

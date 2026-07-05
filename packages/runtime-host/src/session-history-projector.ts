@@ -114,6 +114,20 @@ function taskToolDescriptor(part: NormalizedMessagePart, child?: ChildSessionRec
   const argsTitle = stringField(part.state.args, 'title')
   const inputPrompt = stringField(part.state.input, 'prompt')
   const argsPrompt = stringField(part.state.args, 'prompt')
+  // Agent IDENTITY is an execution fact OpenCode owns: derive it only from structured
+  // fields and OpenCode's own task description/title labels — never from user-supplied
+  // prompt/raw content, where a stray "@name" mention would be mis-attributed as the
+  // executing agent. Prompt/raw text remains fair game for the human-readable TITLE.
+  const agentCandidates = [
+    part.description,
+    inputDescription,
+    argsDescription,
+    part.title,
+    part.state.title,
+    inputTitle,
+    argsTitle,
+    child?.title,
+  ]
   const titleCandidates = [
     part.description,
     inputDescription,
@@ -133,7 +147,7 @@ function taskToolDescriptor(part: NormalizedMessagePart, child?: ChildSessionRec
     || normalizeAgentName(inputAgent)
     || normalizeAgentName(argsAgent)
     || normalizeAgentName(metadataAgent)
-    || extractAgentName(...titleCandidates)
+    || extractAgentName(...agentCandidates)
     || null
 
   return { agent, titleCandidates }
@@ -544,14 +558,15 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         const taskItem = addTaskRun({
           id: taskId,
           title: chooseTaskTitle(
-            normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, part.prompt, part.raw, child?.title) || null,
+            normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, child?.title) || null,
             part.description,
             part.title,
             part.prompt,
             part.raw,
             child?.title,
           ),
-          agent: normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, part.prompt, part.raw, child?.title) || null,
+          // Agent identity from structured/labeled fields only, not user prompt/raw content.
+          agent: normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, child?.title) || null,
           status: childStatus,
           sourceSessionId: child?.id || null,
           // Subtasks attached to root messages are always direct children
