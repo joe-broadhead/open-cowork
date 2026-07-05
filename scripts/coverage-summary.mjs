@@ -7,6 +7,14 @@ const NODE_SOURCE_INVENTORY = {
     { path: 'apps/desktop/src/main', extensions: ['.ts', '.tsx'] },
     { path: 'apps/desktop/src/lib', extensions: ['.ts', '.tsx'] },
     { path: 'packages/shared/dist', extensions: ['.js', '.mjs'] },
+    // The two most security-critical server packages (auth resolvers, secret adapter,
+    // permission config, runtime boundary). node:test lcov only lists loaded files, so
+    // a new untested module in either would otherwise be invisible to every ratchet.
+    // runtime-host is consumed as built dist; cloud-server is loaded from src via
+    // --experimental-strip-types. The remaining gap is type-only control-plane
+    // record/input/enum/schema modules that carry no executable coverage.
+    { path: 'packages/runtime-host/dist', extensions: ['.js', '.mjs'] },
+    { path: 'packages/cloud-server/src', extensions: ['.ts', '.tsx'] },
   ],
 }
 
@@ -82,12 +90,27 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
     'packages/gateway-testing/dist/',
   ],
   sourceInventory: WORKSPACE_SOURCE_INVENTORY,
-  // Nudged down 1pt after gateway hardening (STARTTLS, typed webhook errors, dedup)
-  // added code ahead of its tests; backfill in the gateway follow-up.
+  // This is a COMBINED floor across every shipped workspace package. It reads low
+  // because it is dominated by the standalone-gateway appliance and the bundled MCPs,
+  // whose contract tests spawn `dist/index.js` as a subprocess — their in-process line
+  // coverage is ~0 by design, not because the code is untested. The internet-facing
+  // gateway delivery path is NOT what holds this number down: it is enforced separately
+  // and at a high bar by GATEWAY_COVERAGE_INPUT below (~94% lines). Do not raise this
+  // combined floor without first backfilling standalone-gateway/MCP in-process tests.
   thresholds: { lines: 38, functions: 28, branches: 68 },
 }
+// Dedicated ratchet for the internet-facing gateway delivery path (webhook ingress auth,
+// SMTP client, delivery retry/dedupe, dispatcher fairness). The combined workspace floor
+// above cannot enforce this path on its own, so pin it directly just under measured
+// coverage so a regression in the gateway relay trips the gate.
+export const GATEWAY_COVERAGE_INPUT = {
+  name: 'Gateway',
+  path: 'coverage/workspace/lcov.info',
+  includePathPrefixes: ['apps/gateway/dist/'],
+  thresholds: { lines: 90, functions: 88, branches: 72 },
+}
 export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 58 } }
-export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
+export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, GATEWAY_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
 
 function normalizeCoveragePath(path, includePathPrefixes = []) {
   const normalized = path.replace(/\\/g, '/')

@@ -234,6 +234,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     maxConnections: 4096,
     ssePollIntervalMs: 250,
     ssePgNotifyEnabled: true,
+    sseNotifyBackstopPollMs: 15000,
     corsOrigin: null,
     autoProcessCommands: false,
     checkpointsEnabled: true,

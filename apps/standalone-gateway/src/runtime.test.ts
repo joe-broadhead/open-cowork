@@ -66,18 +66,152 @@ test("standalone runtime prompts private OpenCode and persists projected events"
   assert.equal(snapshot.audits[0]?.action, "standalone.prompt");
 });
 
+test("standalone runtime replies in-channel with the assistant output", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await runtime.handleMessage(provider, providerConfig, message("message-1", "build the thing"));
+
+  assert.equal(provider.sent.length, 1);
+  assert.equal(provider.sent[0]?.kind, "text");
+  assert.equal(provider.sent[0]?.text, "Standalone response: build the thing");
+  assert.equal(provider.sent[0]?.target.chatId, "chat-1");
+  assert.ok(provider.sent[0]?.options?.deliveryId);
+});
+
+test("standalone runtime chunks long replies to the provider text limit", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
+  const longText = "word ".repeat(80).trim();
+  const opencode: StandaloneOpenCodeAdapter = {
+    async createSession() {
+      return { opencodeSessionId: "oc-long" };
+    },
+    async prompt(input) {
+      await input.onEvent({ type: "assistant.message", payload: { text: longText } });
+    },
+    async health() {
+      return { ok: true, detail: "ready" };
+    },
+  };
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone", capabilities: { maxTextLength: 100 } });
+
+  await runtime.handleMessage(provider, providerConfig, message("message-1", "write a lot"));
+
+  assert.ok(provider.sent.length > 1);
+  for (const entry of provider.sent) {
+    assert.ok((entry.text || "").length <= 100);
+  }
+  const deliveryIds = provider.sent.map((entry) => entry.options?.deliveryId);
+  assert.equal(new Set(deliveryIds).size, deliveryIds.length);
+});
+
+test("standalone runtime coalesces streamed assistant snapshots into one reply", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
+  const opencode: StandaloneOpenCodeAdapter = {
+    async createSession() {
+      return { opencodeSessionId: "oc-stream" };
+    },
+    async prompt(input) {
+      await input.onEvent({ type: "assistant.message", payload: { text: "Working on" } });
+      await input.onEvent({ type: "assistant.message", payload: { text: "Working on it. Done." } });
+      await input.onEvent({ type: "assistant.message", payload: { text: "Done." } });
+    },
+    async health() {
+      return { ok: true, detail: "ready" };
+    },
+  };
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await runtime.handleMessage(provider, providerConfig, message("message-1", "stream it"));
+
+  assert.equal(provider.sent.length, 1);
+  assert.equal(provider.sent[0]?.text, "Working on it. Done.");
+});
+
+test("standalone runtime audits reply delivery failures without failing the prompt", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+  provider.sendText = async () => {
+    throw new Error("provider offline");
+  };
+
+  await runtime.handleMessage(provider, providerConfig, message("message-1", "build the thing"));
+
+  const snapshot = await repository.dashboardSnapshot();
+  assert.equal(snapshot.sessions[0]?.status, "idle");
+  assert.equal(snapshot.audits[0]?.action, "standalone.prompt");
+  const replyAudit = snapshot.audits.find((audit) => audit.action === "standalone.reply.failed");
+  assert.equal(replyAudit?.metadata.error, "provider offline");
+});
+
 test("standalone runtime stops claiming jobs the instant the lease is inactive", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const runtime = createStandaloneGatewayRuntime({ repository, opencode });
-  await repository.enqueueJob({ kind: "prompt", payload: {} });
-  await repository.enqueueJob({ kind: "prompt", payload: {} });
+  await repository.enqueueJob({ kind: "prompt", payload: { text: "job one" } });
+  await repository.enqueueJob({ kind: "prompt", payload: { text: "job two" } });
 
   // isActive() === false (lease lost) → the claim loop breaks before touching the queue.
   assert.equal(await runtime.runDueJobs("worker-1", { isActive: () => false }), 0);
   // With the lease active the same backlog drains normally.
   assert.equal(await runtime.runDueJobs("worker-1", { isActive: () => true }), 2);
 });
+
+test("standalone runtime executes prompt jobs against OpenCode before completing them", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  await repository.enqueueJob({ kind: "prompt", payload: { text: "run the report", opencodeSessionId: "oc-existing" } });
+
+  assert.equal(await runtime.runDueJobs("worker-1"), 1);
+
+  assert.deepEqual(opencode.prompts, [{ opencodeSessionId: "oc-existing", text: "run the report" }]);
+  const snapshot = await repository.dashboardSnapshot();
+  assert.equal(snapshot.jobs[0]?.status, "completed");
+  assert.equal(snapshot.jobs[0]?.lastError, null);
+});
+
+test("standalone runtime fails prompt jobs that carry no prompt text", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  await repository.enqueueJob({ kind: "prompt", payload: {} });
+
+  assert.equal(await runtime.runDueJobs("worker-1"), 1);
+
+  assert.equal(opencode.prompts.length, 0);
+  const snapshot = await repository.dashboardSnapshot();
+  assert.equal(snapshot.jobs[0]?.status, "failed");
+  assert.match(snapshot.jobs[0]?.lastError || "", /missing a non-empty "text"/);
+});
+
+for (const kind of ["workflow", "watch", "team_task"] as const) {
+  test(`standalone runtime fails unsupported ${kind} jobs instead of faking success`, async () => {
+    const repository = new InMemoryStandaloneGatewayRepository();
+    const opencode = new FakeStandaloneOpenCodeAdapter();
+    const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+    await repository.enqueueJob({ kind, payload: { anything: true } });
+
+    assert.equal(await runtime.runDueJobs("worker-1"), 1);
+
+    assert.equal(opencode.prompts.length, 0);
+    const snapshot = await repository.dashboardSnapshot();
+    assert.equal(snapshot.jobs[0]?.status, "failed");
+    assert.match(snapshot.jobs[0]?.lastError || "", /not implemented in the standalone gateway/);
+    assert.equal(snapshot.audits[0]?.action, "standalone.job.unsupported");
+    assert.equal(snapshot.audits[0]?.metadata.kind, kind);
+  });
+}
 
 test("standalone runtime serializes concurrent work for one channel session", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();

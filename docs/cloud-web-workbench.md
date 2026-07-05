@@ -160,8 +160,9 @@ SSE, so no feature code branches on environment. Electron-only methods (native
 dialogs, runtime restart, desktop pairing, local FS imports, app reset) have no
 cloud equivalent and the shim implements them as signature-satisfying stubs
 that no-op or reject with a clear "unavailable in the browser build" message.
-New feature work uses the shared `CoworkAPI`/AppAPI contract through
-`packages/app/src/app-api.ts` rather than direct `fetch`,
+New feature work uses the shared `CoworkAPI` contract (defined in
+`packages/shared/src`) through the browser client
+`packages/app/src/browser/cowork-api.ts` rather than direct `fetch`,
 `EventSource`, or `window.coworkApi` access.
 
 `/api/sessions` cursors are opaque, scoped to the authenticated tenant, user,

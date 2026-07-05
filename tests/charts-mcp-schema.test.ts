@@ -76,6 +76,40 @@ test('chart MCP bar encoding accepts natural horizontal x=value y=category calls
   })
 })
 
+test('chart MCP bar encoding keeps the requested y field when x and y are both numeric', () => {
+  const encoding = inferBarChartEncoding(
+    [
+      { year: 2024, revenue: 1_066_999 },
+      { year: 2025, revenue: 504_386 },
+    ],
+    'year',
+    'revenue',
+    false,
+  )
+
+  assert.deepEqual(encoding, {
+    x: { field: 'year', type: 'nominal', sort: '-y', axis: { labelAngle: -45 } },
+    y: { field: 'revenue', type: 'quantitative' },
+  })
+})
+
+test('chart MCP bar encoding keeps the requested y field when neither x nor y is numeric', () => {
+  const encoding = inferBarChartEncoding(
+    [
+      { game: 'Counter-Strike 2', current_players: '1066999' },
+      { game: 'Dota 2', current_players: '504386' },
+    ],
+    'game',
+    'current_players',
+    false,
+  )
+
+  assert.deepEqual(encoding, {
+    x: { field: 'game', type: 'nominal', sort: '-y', axis: { labelAngle: -45 } },
+    y: { field: 'current_players', type: 'quantitative' },
+  })
+})
+
 test('chart MCP bar encoding preserves legacy horizontal x=category y=value calls', () => {
   const encoding = inferBarChartEncoding(
     [

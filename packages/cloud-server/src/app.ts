@@ -362,6 +362,11 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     ssePollIntervalMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS'), 1000),
     // Opt-in Postgres LISTEN/NOTIFY accelerator (default OFF). See SSE_PG_NOTIFY_ENV.
     ssePgNotifyEnabled: parseBoolean(envValue(env, SSE_PG_NOTIFY_ENV), false),
+    // Steady-state poll cadence for NOTIFY-addressable SSE topics WHILE the LISTEN/NOTIFY
+    // accelerator is active: NOTIFY drives low-latency wakes, so the interval poll only
+    // backstops missed notifications (cutting per-topic query load ~15x at the default).
+    // Ignored when the accelerator is off — topics then poll at ssePollIntervalMs as before.
+    sseNotifyBackstopPollMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS'), 15_000),
     corsOrigin: envValue(env, 'OPEN_COWORK_CLOUD_CORS_ORIGIN'),
     autoProcessCommands: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS'), true),
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
@@ -597,6 +602,11 @@ export function createCompositeCloudAuthResolver(...resolvers: CloudAuthResolver
       try {
         return await resolver(req)
       } catch (error) {
+        // Only a clean "credential not recognized" signal (CloudHttpError 401) may fall
+        // through to the next resolver. Anything else — a DB timeout, a provider outage,
+        // a programming error — is an infrastructure failure; masking it as 401 would
+        // silently degrade authentication to a laxer resolver, so surface it instead.
+        if (!(error instanceof CloudHttpError) || error.status !== 401) throw error
         lastError = error
       }
     }
@@ -922,6 +932,36 @@ async function routeRuntimeEvent(
   await worker.appendRuntimeEvent(session.tenantId, session.sessionId, event)
 }
 
+// Per-session serialization for runtime-event routing (issue #855). routeRuntimeEvent →
+// worker.appendRuntimeEvent crosses multiple awaits with no per-session locking, and the
+// store assigns the durable sequence at append time — so two overlapping route() calls
+// for the SAME session can interleave and persist out of arrival order (e.g. a boundary
+// tool/idle event landing before the delta the coalescer flushed ahead of it), and can
+// race the projection read-modify-write into the 'Projection sequence must be monotonic'
+// guard. This wrapper chains every call for a session onto a per-session promise tail:
+// enqueueing is synchronous, so CALL order (which the coalescer issues in transcript
+// order) is exactly the order appends run and persist. Distinct sessions stay concurrent.
+export function createSessionSerializedRuntimeEventRouter(
+  route: (event: CloudRuntimeEvent) => Promise<void>,
+): (event: CloudRuntimeEvent) => Promise<void> {
+  const tailBySession = new Map<string, Promise<void>>()
+  return (event) => {
+    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
+    if (!sessionId) return route(event)
+    const tail = tailBySession.get(sessionId) ?? Promise.resolve()
+    const next = tail.then(() => route(event))
+    // The stored tail must never reject, or one failed route would wedge every later
+    // event on the session. Callers awaiting `next` still observe the route's rejection.
+    const guarded = next.then(() => {}, () => {})
+    tailBySession.set(sessionId, guarded)
+    void guarded.then(() => {
+      // Drop the tail once idle so the map does not grow with every session ever seen.
+      if (tailBySession.get(sessionId) === guarded) tailBySession.delete(sessionId)
+    })
+    return next
+  }
+}
+
 // Token-granular `assistant.message` append deltas (projected from the SDK
 // `message.part.delta`) arrive one per token. Materializing each one rewrites the WHOLE
 // session projection (+ ~5 DB round-trips per event), so M streamed tokens cost O(M²)
@@ -933,7 +973,10 @@ async function routeRuntimeEvent(
 // Correctness: the projection reducer appends each delta onto the same message, so
 // `existing + (d1 + d2 + … + dN)` is byte-identical to `((existing + d1) + d2) … + dN`.
 // Non-append events flush the session's pending delta FIRST so transcript order is
-// preserved (deltas land before the snapshot/tool/idle that follows them). Pending deltas
+// preserved (deltas land before the snapshot/tool/idle that follows them). The coalescer
+// invokes route() synchronously in transcript order; the production route is additionally
+// wrapped in createSessionSerializedRuntimeEventRouter so the multi-await append path
+// cannot re-order those calls durably (issue #855). Pending deltas
 // are flushed when the session goes idle (a boundary), and `flushAll` flushes any tail on
 // shutdown, so no token is lost. Sequence ordering is preserved: coalescing only reduces
 // the number of appended events; the survivors stay monotonic and in arrival order.
@@ -1014,7 +1057,10 @@ export function createRuntimeDeltaCoalescer(options: {
     }
 
     // Boundary event: flush this session's pending deltas before routing it so the
-    // transcript order (deltas → snapshot/tool/idle) is preserved.
+    // transcript order (deltas → snapshot/tool/idle) is preserved. Both route() calls are
+    // issued synchronously in transcript order; DURABLE ordering additionally requires the
+    // route itself to serialize per session (the production wiring wraps routeRuntimeEvent
+    // in createSessionSerializedRuntimeEventRouter — issue #855).
     if (sessionId) void flushSession(sessionId)
     void options.route(event)
   }
@@ -1544,12 +1590,15 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   // materialize+persist per ~flush window instead of one per token.
   const runtimeDeltaCoalescer = worker && runtime.subscribeEvents
     ? createRuntimeDeltaCoalescer({
-        route: (event) => routeRuntimeEvent(store, worker, event).catch((error) => recordLoopError(
+        // Serialized per session (issue #855): the coalescer issues route() calls
+        // synchronously in transcript order (flushed delta, then boundary); the wrapper
+        // guarantees those appends persist in exactly that order.
+        route: createSessionSerializedRuntimeEventRouter((event) => routeRuntimeEvent(store, worker, event).catch((error) => recordLoopError(
           observability,
           'cloud.worker.runtime_event.error',
           error,
           { event_type: event.type },
-        )),
+        ))),
       })
     : null
   const runtimeUnsubscribe = runtimeDeltaCoalescer && runtime.subscribeEvents
@@ -1614,7 +1663,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const ssePgNotifyEnabled = envOptions.ssePgNotifyEnabled
     && shouldRunCloudWeb(policy.role)
     && Boolean(knowledgeControlPlaneUrl)
-  const sseReplayHub = ssePgNotifyEnabled ? new CloudSseReplayHub() : null
+  // With the accelerator on, wake-addressable topics poll at the long backstop cadence
+  // (NOTIFY delivers low latency; polling only catches missed notifications). Off ⇒ the
+  // HTTP server builds its own default hub and every topic polls at ssePollMs as before.
+  const sseReplayHub = ssePgNotifyEnabled
+    ? new CloudSseReplayHub({ wakeBackstopPollMs: envOptions.sseNotifyBackstopPollMs })
+    : null
   const server = shouldRunCloudWeb(policy.role)
       ? createCloudHttpServer({
         sseReplayHub: sseReplayHub ?? undefined,

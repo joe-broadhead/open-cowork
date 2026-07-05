@@ -1,87 +1,19 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { createBridge } from '../../shared/bridge.js'
 
 const server = new McpServer({
   name: 'semantic-ui',
   version: '1.0.0',
 })
 
-const BRIDGE_REQUEST_TIMEOUT_MS = 5_000
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
-
-function bridgeUrl() {
-  const value = process.env.OPEN_COWORK_SEMANTIC_UI_URL?.trim()
-  if (!value) throw new Error('OPEN_COWORK_SEMANTIC_UI_URL is not configured.')
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error('OPEN_COWORK_SEMANTIC_UI_URL must be a valid URL.')
-  }
-  if (url.protocol !== 'http:') {
-    throw new Error('OPEN_COWORK_SEMANTIC_UI_URL must use http:// for the local bridge.')
-  }
-  if (!LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error('OPEN_COWORK_SEMANTIC_UI_URL must point at the local semantic UI bridge.')
-  }
-  if (url.username || url.password) {
-    throw new Error('OPEN_COWORK_SEMANTIC_UI_URL must not include URL credentials.')
-  }
-  url.pathname = url.pathname.replace(/\/+$/, '')
-  url.search = ''
-  url.hash = ''
-  return url.toString().replace(/\/+$/, '')
-}
-
-function bridgeToken() {
-  const value = process.env.OPEN_COWORK_SEMANTIC_UI_TOKEN?.trim()
-  if (!value) throw new Error('OPEN_COWORK_SEMANTIC_UI_TOKEN is not configured.')
-  if (value.length < 32) throw new Error('OPEN_COWORK_SEMANTIC_UI_TOKEN is invalid.')
-  return value
-}
-
-async function postToBridge(
-  path: '/status' | '/snapshot' | '/actions/list' | '/actions/execute',
-  body: Record<string, unknown> = {},
-) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), BRIDGE_REQUEST_TIMEOUT_MS)
-  let response: Response
-  try {
-    response = await fetch(`${bridgeUrl()}${path}`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${bridgeToken()}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Semantic UI bridge request timed out.', { cause: error })
-    }
-    throw error
-  } finally {
-    clearTimeout(timeout)
-  }
-
-  const text = await response.text()
-  let parsed: unknown
-  try {
-    parsed = text ? JSON.parse(text) : null
-  } catch {
-    parsed = { ok: false, error: text || 'Semantic UI bridge returned invalid JSON.' }
-  }
-  if (!response.ok) {
-    const error = parsed && typeof parsed === 'object' && 'error' in parsed
-      ? String((parsed as { error?: unknown }).error)
-      : `Semantic UI bridge returned HTTP ${response.status}.`
-    throw new Error(error)
-  }
-  return parsed
-}
+const { postToBridge } = createBridge<'/status' | '/snapshot' | '/actions/list' | '/actions/execute'>({
+  urlEnvVar: 'OPEN_COWORK_SEMANTIC_UI_URL',
+  tokenEnvVar: 'OPEN_COWORK_SEMANTIC_UI_TOKEN',
+  bridgeName: 'semantic UI bridge',
+  bridgeLabel: 'Semantic UI bridge',
+})
 
 function textResult(value: unknown) {
   return {

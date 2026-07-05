@@ -89,12 +89,15 @@ function resolutionForParsedToken(parsed: ReturnType<typeof parseGatewayInteract
     case 'reject':
       return { reject: true }
     case 'default':
-      return { response: { allowed: true } }
+      // Fail closed (audit #874): parseGatewayInteractionToken returns 'default' for any token
+      // without a recognized apv:/den:/ans:/rej: prefix, so an unrecognized or malformed
+      // interaction token must resolve as a denial — never an implicit approval.
+      return { response: { allowed: false } }
   }
 }
 
 function acknowledgementFor(action: ReturnType<typeof parseGatewayInteractionToken>['action'] | FallbackCommand['action']) {
-  return action === 'deny'
+  return action === 'deny' || action === 'default'
     ? 'Denied'
     : action === 'reject'
       ? 'Rejected'

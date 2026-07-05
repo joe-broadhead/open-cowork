@@ -1,9 +1,9 @@
 # Design Refinement + Cloud Web → React Proposal
 
-> **⚠️ Superseded (2026-06-24).** The Studio design pass reversed two premises here: Open
-> Cowork now ships a **single Mercury identity** (Mercury dark / Day light) — the multi-preset
-> theme list and the ambient radial glow were removed. Read this as a historical proposal;
-> current state is in `theme-presets.ts` (`USER_FACING_THEME_IDS`) and
+> **⚠️ Superseded (2026-06-24).** The Studio design pass reversed premises here: the ambient
+> radial glow was removed, and the theme list was rebuilt as a curated set of user-facing
+> presets (Mercury remains the default) rather than dropped for a single identity. Read this as
+> a historical proposal; current state is in `theme-presets.ts` (`USER_FACING_THEME_IDS`) and
 > [`design/repo-deep-audit-2026-06.md`](design/repo-deep-audit-2026-06.md).
 >
 > The "Cloud Web → React" migration proposed below was also overtaken: Cloud Web is no

@@ -9,6 +9,7 @@ const DEFAULT_REQUIRED_CHECKS = [
   'coverage',
   'analyze (javascript-typescript)',
 ]
+const TRUSTED_CHECK_APP_SLUG = 'github-actions'
 const CHECK_RUNS_PAGE_SIZE = 100
 const MAX_CHECK_RUN_PAGES = 20
 
@@ -50,12 +51,13 @@ export function validateRequiredReleaseChecks(input) {
   const successful = new Set(
     checkRuns
       .filter((run) => run?.status === 'completed' && run?.conclusion === 'success')
+      .filter((run) => run?.app?.slug === TRUSTED_CHECK_APP_SLUG)
       .map((run) => String(run.name || '').trim())
       .filter(Boolean),
   )
   const missing = requiredChecks.filter((name) => !successful.has(name))
   if (missing.length > 0) {
-    throw new Error(`Release commit is missing successful required checks: ${missing.join(', ')}.`)
+    throw new Error(`Release commit is missing successful required checks from the ${TRUSTED_CHECK_APP_SLUG} app: ${missing.join(', ')}.`)
   }
   return { requiredChecks, successfulChecks: Array.from(successful).sort() }
 }

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_INPUTS, NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovFilePaths, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
+import { DEFAULT_INPUTS, GATEWAY_COVERAGE_INPUT, NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovFilePaths, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
 
 test('coverage summary parses lcov totals and renders a PR-safe table', () => {
   const totals = parseLcovInfo([
@@ -264,6 +264,8 @@ test('coverage summary reports the enforced node source inventory ratchet', () =
     'apps/desktop/src/main',
     'apps/desktop/src/lib',
     'packages/shared/dist',
+    'packages/runtime-host/dist',
+    'packages/cloud-server/src',
   ]) {
     assert.ok(
       NODE_COVERAGE_INPUT.sourceInventory.roots.some((root) => root.path === expectedRoot),
@@ -281,6 +283,19 @@ test('coverage summary reports the enforced shared-package ratchet', () => {
   assert.deepEqual(SHARED_COVERAGE_INPUT.includePathPrefixes, ['packages/shared/'])
   assert.equal(SHARED_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
   assert.deepEqual(SHARED_COVERAGE_INPUT.sourceInventory.roots.map((root) => root.path), ['packages/shared/dist'])
+})
+
+test('coverage summary enforces a dedicated high-bar ratchet for the gateway delivery path', () => {
+  assert.ok(DEFAULT_INPUTS.includes(GATEWAY_COVERAGE_INPUT))
+  assert.deepEqual(GATEWAY_COVERAGE_INPUT.includePathPrefixes, ['apps/gateway/dist/'])
+  assert.equal(GATEWAY_COVERAGE_INPUT.path, 'coverage/workspace/lcov.info')
+  // The internet-facing gateway relay must stay well-exercised even though the combined
+  // workspace floor reads low (subprocess-tested MCPs + the standalone appliance).
+  assert.deepEqual(GATEWAY_COVERAGE_INPUT.thresholds, {
+    lines: 90,
+    functions: 88,
+    branches: 72,
+  })
 })
 
 test('coverage summary reports the enforced shipped workspace ratchet', () => {

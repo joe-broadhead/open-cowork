@@ -118,7 +118,22 @@ export class CloudSseReplayHub {
   // which for sessions can be multiple per-subscriber topics. Pure index over the topics
   // map; the topic's own key still owns delivery.
   private readonly wakeIndex = new Map<string, Set<string>>()
+  // When set (> 0), NOTIFY-addressable topics (those registered with a wakeKey) poll at
+  // this longer backstop cadence instead of their requested pollMs: the LISTEN/NOTIFY
+  // accelerator's wake() drives low-latency delivery, so the interval poll only has to
+  // catch missed notifications. Topics WITHOUT a wakeKey have no other trigger and keep
+  // their requested pollMs. null (the default constructor, and every hub built when the
+  // accelerator is off) leaves all topics on their requested pollMs — unchanged behaviour.
+  private readonly wakeBackstopPollMs: number | null
   private closed = false
+
+  constructor(options: { wakeBackstopPollMs?: number } = {}) {
+    this.wakeBackstopPollMs = typeof options.wakeBackstopPollMs === 'number'
+      && Number.isFinite(options.wakeBackstopPollMs)
+      && options.wakeBackstopPollMs > 0
+      ? options.wakeBackstopPollMs
+      : null
+  }
 
   subscribe(
     input: {
@@ -138,6 +153,12 @@ export class CloudSseReplayHub {
     if (this.closed) return () => {}
     let topic = this.topics.get(input.key)
     if (!topic) {
+      const wakeKey = input.wakeKey ?? null
+      // NOTIFY-accelerated hubs stretch wake-addressable topics to the backstop cadence.
+      // Math.max so an operator-requested interval longer than the backstop is never shortened.
+      const pollMs = wakeKey && this.wakeBackstopPollMs !== null
+        ? Math.max(input.pollMs, this.wakeBackstopPollMs)
+        : input.pollMs
       topic = {
         subscribers: new Set(),
         loadEvents: input.loadEvents,
@@ -147,8 +168,8 @@ export class CloudSseReplayHub {
         batchSize: Number.isInteger(input.batchSize) && (input.batchSize as number) > 0 ? (input.batchSize as number) : 0,
         timer: setInterval(() => {
           this.requestPoll(input.key)
-        }, input.pollMs),
-        wakeKey: input.wakeKey ?? null,
+        }, pollMs),
+        wakeKey,
       }
       this.topics.set(input.key, topic)
       if (topic.wakeKey) {

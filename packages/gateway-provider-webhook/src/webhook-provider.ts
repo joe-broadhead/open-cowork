@@ -51,6 +51,7 @@ export interface WebhookProviderConfig {
   capabilities?: Partial<ChannelCapabilities>;
   maxSignatureAgeMs?: number;
   maxAttachmentBytes?: number;
+  /** Test seam only. The pinned delivery URL replaces the hostname with a resolved IP, so a real fetch cannot perform hostname TLS verification over HTTPS; production deliveries must use the default Node path, which pins the IP via a custom lookup while preserving hostname TLS. */
   fetch?: typeof globalThis.fetch;
   deliveryRequestForTests?: NodeRequestFactory;
   resolveDeliveryHostname?: ResolveWebhookHostname;

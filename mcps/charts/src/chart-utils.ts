@@ -159,8 +159,9 @@ export function inferBarChartEncoding(
 ): VegaEncoding {
   const xIsNumeric = isFiniteNumericField(data, x)
   const yIsNumeric = isFiniteNumericField(data, y)
-  const categoryField = xIsNumeric && !yIsNumeric ? y : x
-  const valueField = yIsNumeric && !xIsNumeric ? y : x
+  const axesAreSwapped = xIsNumeric && !yIsNumeric
+  const categoryField = axesAreSwapped ? y : x
+  const valueField = axesAreSwapped ? x : y
 
   if (horizontal) {
     return {

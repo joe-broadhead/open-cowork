@@ -251,6 +251,28 @@ test('charts MCP preserves chronological order for date-only bar charts', async 
   })
 })
 
+test('charts MCP keeps the requested y field for bar charts with numeric x and numeric y', async () => {
+  await withChartsClient(async (client) => {
+    const parsed = parseTextResult(await client.callTool({
+      name: 'bar_chart',
+      arguments: {
+        data: [
+          { year: 2024, revenue: 157_900 },
+          { year: 2025, revenue: 173_400 },
+          { year: 2026, revenue: 136_100 },
+        ],
+        x: 'year',
+        y: 'revenue',
+        title: 'Revenue by Year',
+      },
+    }))
+    const spec = getVegaLiteSpec(parsed)
+    assert.equal(spec.encoding.x.field, 'year')
+    assert.equal(spec.encoding.y.field, 'revenue')
+    assert.equal(spec.encoding.y.type, 'quantitative')
+  })
+})
+
 test('custom Vega-Lite specs get date-only temporal axis polish', async () => {
   await withChartsClient(async (client) => {
     const parsed = parseTextResult(await client.callTool({

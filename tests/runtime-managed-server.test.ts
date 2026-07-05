@@ -1,10 +1,10 @@
-import { buildManagedOpencodeClientConfig, getNativeOpencodeAuthPath, getRuntimeOpencodeAuthPath, getActiveProjectOverlayDirectory, getClient, getModelInfo, getModelInfoAsync, getServerUrl, reconcileProviderAuthBridge, shouldEnableNativeWebSearch, stopRuntime } from '@open-cowork/runtime-host/runtime'
+import { buildManagedOpencodeClientConfig, ensureIsolatedProviderAuthStore, getRuntimeOpencodeAuthPath, getActiveProjectOverlayDirectory, getClient, getModelInfo, getModelInfoAsync, getServerUrl, shouldEnableNativeWebSearch, stopRuntime } from '@open-cowork/runtime-host/runtime'
 import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
 import { buildManagedOpencodeAuthorizationHeader, createManagedOpencodeServer, type ManagedOpencodeSupervisorFork } from '@open-cowork/runtime-host/runtime-managed-server'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { fork, type ChildProcess } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
@@ -228,6 +228,39 @@ exit 7
   }
 })
 
+test('managed opencode server removes the spilled temp config dir on close', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-config-spill-'))
+  const configPathFile = join(root, 'config-path')
+  const executable = writeExecutable(root, 'config-opencode', `
+printf '%s' "$OPENCODE_CONFIG" > ${JSON.stringify(configPathFile)}
+printf '%s\\n' 'opencode server listening on http://127.0.0.1:43212'
+while true; do sleep 1; done
+`)
+
+  // Oversized config spills to a credential-class temp file via OPENCODE_CONFIG.
+  const server = await createManagedOpencodeServer({
+    env: { PATH: process.env.PATH || '' },
+    forkUtilityProcess: forkTestSupervisor,
+    hostname: '127.0.0.1',
+    config: { instructions: ['x'.repeat(150_000)] },
+    opencodeBinPath: executable,
+    port: 0,
+    timeout: MANAGED_RUNTIME_TEST_TIMEOUT_MS,
+  })
+
+  try {
+    const configPath = readFileSync(configPathFile, 'utf8').trim()
+    assert.match(configPath, /open-cowork-opencode-config-/)
+    assert.equal(existsSync(configPath), true)
+    server.close()
+    assert.equal(existsSync(configPath), false)
+    assert.equal(existsSync(dirname(configPath)), false)
+  } finally {
+    server.close()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('runtime accessors remain inert before startup and after stop', async () => {
   await stopRuntime()
 
@@ -265,37 +298,35 @@ test('managed OpenCode client config includes Basic auth for root and directory-
   })
 })
 
-test('provider auth bridge is opt-in and leaves isolated runtime auth app-owned by default', () => {
+test('isolated provider auth store clears stale native-store symlinks and keeps app-owned auth', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-auth-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
-  const previousXdgDataHome = process.env.XDG_DATA_HOME
 
   process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'app-data')
-  process.env.XDG_DATA_HOME = join(root, 'native-data')
   clearConfigCaches()
 
   try {
     const runtimeAuth = getRuntimeOpencodeAuthPath()
-    const nativeAuth = getNativeOpencodeAuthPath()
+    const nativeAuth = join(root, 'native-data', 'opencode', 'auth.json')
     mkdirSync(dirname(nativeAuth), { recursive: true })
     writeFileSync(nativeAuth, '{"provider":{}}\n')
 
-    reconcileProviderAuthBridge(true)
+    // A leftover symlink from an older build that bridged the native auth
+    // store is removed; the native file itself stays untouched.
+    mkdirSync(dirname(runtimeAuth), { recursive: true })
+    symlinkSync(nativeAuth, runtimeAuth)
     assert.equal(resolve(dirname(runtimeAuth), readlinkSync(runtimeAuth)), resolve(nativeAuth))
-
-    reconcileProviderAuthBridge(false)
+    ensureIsolatedProviderAuthStore()
     assert.throws(() => readlinkSync(runtimeAuth), { code: 'ENOENT' })
     assert.equal(readFileSync(nativeAuth, 'utf8'), '{"provider":{}}\n')
 
-    mkdirSync(dirname(runtimeAuth), { recursive: true })
+    // A regular app-owned runtime auth file is left in place.
     writeFileSync(runtimeAuth, '{"isolated":true}\n')
-    reconcileProviderAuthBridge(false)
+    ensureIsolatedProviderAuthStore()
     assert.equal(readFileSync(runtimeAuth, 'utf8'), '{"isolated":true}\n')
   } finally {
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
-    if (previousXdgDataHome === undefined) delete process.env.XDG_DATA_HOME
-    else process.env.XDG_DATA_HOME = previousXdgDataHome
     clearConfigCaches()
     rmSync(root, { recursive: true, force: true })
   }

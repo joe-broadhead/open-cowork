@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { expect } from "../../../tests/gateway-test-expect.ts";
-import { EmailProvider, type EmailMessage, type EmailTransport } from "@open-cowork/gateway-provider-email";
+import { EmailProvider, SmtpEmailTransport, type EmailMessage, type EmailTransport } from "@open-cowork/gateway-provider-email";
 import type { IncomingChannelMessage } from "@open-cowork/gateway-channel";
 
 describe("EmailProvider", () => {
@@ -174,6 +175,44 @@ describe("EmailProvider", () => {
     await provider.sendText({ provider: "email", chatId: "alice@example.test" }, "hello");
 
     expect(sent[0]?.subject).toBe("Northwind Assistant");
+  });
+});
+
+describe("SmtpEmailTransport CRLF injection guard", () => {
+  it("rejects a from/to value containing CR or LF before it reaches the socket", async () => {
+    const received: string[] = [];
+    const server = createServer((socket: Socket) => {
+      let buffer = "";
+      socket.write("220 test-smtp ready\r\n");
+      socket.on("data", (chunk) => {
+        buffer += chunk.toString("utf8");
+        let index = buffer.indexOf("\n");
+        while (index >= 0) {
+          const line = buffer.slice(0, index).replace(/\r$/, "");
+          buffer = buffer.slice(index + 1);
+          received.push(line);
+          if (line.startsWith("EHLO")) socket.write("250 OK\r\n");
+          index = buffer.indexOf("\n");
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const transport = new SmtpEmailTransport({ host: "127.0.0.1", port, timeoutMs: 2000 });
+      await expect(transport.send({
+        from: "agent@example.test\r\nRCPT TO:<victim@example.test>",
+        to: "alice@example.test",
+        subject: "hi",
+        text: "hello",
+        messageId: "<inject@example.test>",
+      })).rejects.toThrow("must not contain CR or LF");
+      // The tainted MAIL FROM line must never have been written to the socket.
+      expect(received.some((line) => line.includes("victim@example.test"))).toBe(false);
+      expect(received.some((line) => line.startsWith("MAIL FROM"))).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 

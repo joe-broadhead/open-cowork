@@ -13,7 +13,8 @@ Key paths:
 - `src/main/` — Electron main process, OpenCode runtime composition, IPC
   handlers, storage, auth, workflow control plane
 - `src/preload/` — typed `window.coworkApi` bridge
-- `src/renderer/` — React renderer and app UI
+- renderer UI — lives in the shared `@open-cowork/app` package
+  (`packages/app`), consumed here via a Vite alias
 - `runtime-config/` — generated runtime instructions and runtime-facing
   defaults
 - `tests/` — Electron and packaged-app smoke tests
