@@ -8,6 +8,13 @@ updates:
     # Fold minor + patch dep bumps into grouped PRs so the review queue
     # stays sane; major bumps still land individually because they need
     # deliberate review.
+    # The OpenCode engine pair is exact-pinned and upgraded deliberately:
+    # bumps must re-verify the compatibility registry and the runtime
+    # contract fixture (tests/fixtures/opencode-runtime-contract.json)
+    # across every workspace that pins it, so Dependabot must not touch it.
+    ignore:
+      - dependency-name: "opencode-ai"
+      - dependency-name: "@opencode-ai/sdk"
     groups:
       vite-major:
         patterns:
