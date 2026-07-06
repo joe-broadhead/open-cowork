@@ -1,7 +1,7 @@
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
 import {
   applyInferenceOverrides,
@@ -18,7 +18,7 @@ import {
   type PermissionAction,
   type PermissionRuleMap,
 } from './permission-config.js'
-import { getAppConfig, getBrandName } from '@open-cowork/runtime-host/config'
+import { getAppConfig, getBrandName } from './config-loader-core.js'
 import {
   configuredAgentAllowPatterns,
   configuredAgentAskPatterns,

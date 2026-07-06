@@ -1,6 +1,6 @@
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
-import type { ConfiguredAgent } from '@open-cowork/runtime-host/config'
-import { getBrandName } from '@open-cowork/runtime-host/config'
+import type { ConfiguredAgent } from './config-loader-core.js'
+import { getBrandName } from './config-loader-core.js'
 
 // Fields a caller (built-in template, configured agent, or custom agent) can
 // forward to the SDK AgentConfig beyond prompt/permission/mode/color. All

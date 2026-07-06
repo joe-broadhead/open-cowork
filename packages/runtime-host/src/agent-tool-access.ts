@@ -6,7 +6,7 @@ import {
   getConfiguredToolById,
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import { configuredToolLabels } from './capability-catalog.js'
 import { getEffectiveSettings } from './settings.js'
 

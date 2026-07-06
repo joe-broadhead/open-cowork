@@ -1,5 +1,5 @@
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
-import { getConfiguredSkillsFromConfig } from '@open-cowork/runtime-host/config'
+import { getConfiguredSkillsFromConfig } from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 import { sdkErrorMessage } from './sdk-error.js'
 

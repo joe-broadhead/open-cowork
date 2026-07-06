@@ -1,4 +1,4 @@
-import { resolveExistingJsonConfigPath } from '@open-cowork/runtime-host'
+import { resolveExistingJsonConfigPath } from './jsonc.js'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
 import type { NativeConfigScope } from './runtime-paths.js'

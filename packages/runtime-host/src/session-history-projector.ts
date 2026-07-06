@@ -1,4 +1,4 @@
-import { normalizeTodoItems, normalizeSessionMessages, normalizeSessionStatuses, type NormalizedMessagePart } from '@open-cowork/runtime-host'
+import { normalizeTodoItems, normalizeSessionMessages, normalizeSessionStatuses, type NormalizedMessagePart } from './opencode-adapter.js'
 import { isInternalCoworkMessage } from './internal-message-utils.js'
 import type { TodoItem } from '@open-cowork/shared'
 import { deriveToolStatus } from '@open-cowork/shared'

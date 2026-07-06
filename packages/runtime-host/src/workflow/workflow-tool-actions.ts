@@ -15,7 +15,7 @@ import {
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
   getConfiguredToolsFromConfig,
-} from '@open-cowork/runtime-host/config'
+} from '../config-loader-core.js'
 import { getBuiltInAgentOverride } from '../built-in-agent-overrides.js'
 import { getRuntimeCatalogSnapshot } from '../runtime-catalog-snapshot.js'
 import { log } from '@open-cowork/shared/node'

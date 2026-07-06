@@ -11,7 +11,7 @@ import {
   getConfiguredToolById,
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import { getEffectiveSkillBundle } from './effective-skills.js'
 import { getEffectiveSettings, getIntegrationCredentialValue } from './settings.js'
 import { getRuntimeCatalogSnapshot } from './runtime-catalog-snapshot.js'

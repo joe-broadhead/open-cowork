@@ -40,7 +40,7 @@ import {
   isCoordinationWatchTarget,
   isCoordinationWatchVerbosity,
 } from '@open-cowork/shared'
-import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { getAppDataDir } from '../config-loader-core.js'
 
 const COORDINATION_DB_SCHEMA_VERSION = 2
 const COORDINATION_SCHEMA_VERSION_KEY = 'schema_version'

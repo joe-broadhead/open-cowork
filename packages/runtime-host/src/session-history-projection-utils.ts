@@ -1,4 +1,4 @@
-import type { NormalizedMessagePart, NormalizedSessionMessage } from '@open-cowork/runtime-host'
+import type { NormalizedMessagePart, NormalizedSessionMessage } from './opencode-adapter.js'
 import { resolveDisplayCostForModel } from './pricing-core.js'
 export const toHistorySortTime = (value?: number, fallback = 0) => {
   const raw = typeof value === 'number' && Number.isFinite(value) ? value : fallback
