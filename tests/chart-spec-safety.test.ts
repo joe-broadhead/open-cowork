@@ -302,3 +302,35 @@ test('renderChartSpecToSvg still renders bounded sequence specs', async () => {
   })
   assert.match(svg, /<svg[\s>]/)
 })
+
+test('assertBoundedVegaSpecCardinality rejects unknown/non-standard transform types (fail closed)', () => {
+  const specWith = (type: string) => ({
+    data: [{ name: 'source_0', values: [{ a: 1 }], transform: [{ type }] }],
+  })
+  // A made-up transform whose cardinality behavior we cannot vouch for is rejected.
+  assert.throws(() => assertBoundedVegaSpecCardinality(specWith('quantumexplode')), /unrecognized transform type/)
+  assert.throws(() => assertBoundedVegaSpecCardinality(specWith('supersize')), /unrecognized transform type/)
+})
+
+test('assertBoundedVegaSpecCardinality allows every documented row-safe transform', () => {
+  const safe = [
+    'aggregate', 'bin', 'collect', 'countpattern', 'dotbin', 'extent', 'filter',
+    'formula', 'identifier', 'joinaggregate', 'lookup', 'pivot', 'project',
+    'sample', 'stack', 'timeunit', 'window', 'loess', 'regression',
+    'crossfilter', 'resolvefilter', 'nest', 'stratify', 'treemap', 'partition',
+    'tree', 'treelinks', 'pack', 'force', 'label', 'linkpath', 'pie', 'voronoi',
+    'geojson', 'geopath', 'geopoint', 'geoshape',
+  ]
+  for (const type of safe) {
+    assert.doesNotThrow(
+      () => assertBoundedVegaSpecCardinality({ data: [{ name: 'source_0', values: [{ a: 1 }], transform: [{ type }] }] }),
+      `row-safe transform "${type}" must not be rejected`,
+    )
+  }
+})
+
+test('assertBoundedVegaSpecCardinality ignores transform entries without a type', () => {
+  assert.doesNotThrow(() => assertBoundedVegaSpecCardinality({
+    data: [{ name: 'source_0', values: [{ a: 1 }], transform: [{ as: 'b', calculate: 'datum.a' }] }],
+  }))
+})

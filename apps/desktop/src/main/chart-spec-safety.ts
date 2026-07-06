@@ -38,6 +38,28 @@ export const MAX_CHART_ESTIMATED_ROWS = 250_000
 // rejecting grids whose per-cell work would block the event loop.
 export const MAX_CHART_GRID_CELLS = 4_000_000
 
+// Defense-in-depth allowlist: every documented Vega data transform whose output
+// row count is bounded by (or smaller than) its input — none of these can drive
+// the multiplicative blow-up the amplifying transforms above can. The switch
+// handles the amplifiers explicitly; any transform type that is neither an
+// explicit amplifier nor in this allowlist is UNKNOWN (a non-standard or
+// future transform whose cardinality behavior we cannot vouch for) and is
+// rejected fail-closed. This list intentionally covers the full documented
+// transform surface so no legitimate chart is newly rejected — it only closes
+// the "unrecognized type slips through the default branch" gap.
+export const ROW_SAFE_CHART_TRANSFORMS: ReadonlySet<string> = new Set([
+  // Data shaping / reduction (row-neutral or row-reducing)
+  'aggregate', 'bin', 'collect', 'countpattern', 'dotbin', 'extent', 'filter',
+  'formula', 'identifier', 'joinaggregate', 'lookup', 'pivot', 'project',
+  'sample', 'stack', 'timeunit', 'window', 'loess', 'regression',
+  'crossfilter', 'resolvefilter',
+  // Hierarchy / layout (bounded by input node count)
+  'nest', 'stratify', 'treemap', 'partition', 'tree', 'treelinks', 'pack',
+  'force', 'label', 'linkpath', 'pie', 'voronoi',
+  // Geo shaping (bounded by input feature count; url loads are blocked separately)
+  'geojson', 'geopath', 'geopoint', 'geoshape',
+])
+
 function blockedRenderError(detail: string) {
   return new Error(`Chart rendering rejected an unsafe or oversized spec: ${detail}`)
 }
@@ -228,9 +250,20 @@ function estimateDataPipeline(
       case 'heatmap':
         assertBoundedGridSize(type, transform)
         break
+      case '':
+        // A transform entry with no string `type`: nothing to bound, and Vega
+        // itself ignores it. Leave the estimate unchanged (matches prior behavior).
+        break
       default:
-        // Remaining transforms (filter, aggregate, stack, formula, ...) do not
-        // increase row counts beyond what is already estimated.
+        // Fail closed on any transform type that is neither an explicit amplifier
+        // above nor a documented row-safe transform: an unrecognized type could be
+        // a non-standard or future transform with unbounded output we cannot
+        // estimate, so reject rather than let it slip through with a 1:1 estimate.
+        if (!ROW_SAFE_CHART_TRANSFORMS.has(type)) {
+          throw blockedRenderError(`unrecognized transform type "${type}" is not allowed`)
+        }
+        // Documented row-safe transforms do not increase row counts beyond what
+        // is already estimated.
         break
     }
 
