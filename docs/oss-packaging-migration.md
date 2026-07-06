@@ -61,7 +61,7 @@ Historical names may remain only as explicit compatibility aliases:
 | Historical name | Policy |
 | --- | --- |
 | `opencode-agent-gateway` repository | Historical prototype source. New users should use this `open-cowork` repo. |
-| `opencode-gateway` npm package | Legacy name. If republished, it must be a thin compatibility wrapper that points to Open Cowork Gateway or Standalone Gateway and warns clearly. |
+| `opencode-gateway` npm package | Distinct upstream tool, not a legacy alias. [`opencode-gateway`](https://github.com/joe-broadhead/opencode-gateway) is an independently maintained OpenCode durable work coordinator (Initiatives/Issues, scheduler, human gates, Mission Control) that Open Cowork integrates as an optional local MCP (`opencode-gateway mcp --tools operate`, tools exposed as `gateway_*`). It is separate from **Open Cowork Gateway** / **Standalone Gateway** (the channel adapters) despite the name overlap; do not treat the two as the same product. |
 | `ghcr.io/<owner>/opencode-gateway` image | Legacy image name. Do not publish new primary releases there unless it is an explicit alias to the matching Open Cowork image digest. |
 | `gateway.config.yaml` | Legacy standalone config name. Keep readable in migration docs, but new Open Cowork deployments should use `open-cowork.config.json` plus environment or secret-manager values. |
 | legacy unhyphenated Open Cowork spelling | Back-compat only for existing app ids, on-disk namespaces, or migration notes. New public docs should use `open-cowork`. |

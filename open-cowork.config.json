@@ -225,23 +225,23 @@
       "writeAccess": true,
       "patterns": ["mcp__opencode-gateway__*"],
       "allowPatterns": [
-        "mcp__opencode-gateway__dashboard", "mcp__opencode-gateway__briefing", "mcp__opencode-gateway__attention",
-        "mcp__opencode-gateway__alerts", "mcp__opencode-gateway__health", "mcp__opencode-gateway__readiness",
-        "mcp__opencode-gateway__governance", "mcp__opencode-gateway__observability", "mcp__opencode-gateway__work_events",
-        "mcp__opencode-gateway__task_list", "mcp__opencode-gateway__task_get", "mcp__opencode-gateway__roadmap_list",
-        "mcp__opencode-gateway__roadmap_get", "mcp__opencode-gateway__roadmap_memory", "mcp__opencode-gateway__run_list",
-        "mcp__opencode-gateway__run_get", "mcp__opencode-gateway__scheduler_status", "mcp__opencode-gateway__project_status",
-        "mcp__opencode-gateway__project_digest", "mcp__opencode-gateway__agent_catalog_list", "mcp__opencode-gateway__profile_list",
-        "mcp__opencode-gateway__permission_list", "mcp__opencode-gateway__question_list", "mcp__opencode-gateway__opencode_session_list"
+        "mcp__opencode-gateway__gateway_dashboard", "mcp__opencode-gateway__gateway_briefing", "mcp__opencode-gateway__gateway_attention",
+        "mcp__opencode-gateway__gateway_alerts", "mcp__opencode-gateway__gateway_health", "mcp__opencode-gateway__gateway_readiness",
+        "mcp__opencode-gateway__gateway_governance", "mcp__opencode-gateway__gateway_observability", "mcp__opencode-gateway__gateway_work_events",
+        "mcp__opencode-gateway__gateway_task_list", "mcp__opencode-gateway__gateway_task_get", "mcp__opencode-gateway__gateway_roadmap_list",
+        "mcp__opencode-gateway__gateway_roadmap_get", "mcp__opencode-gateway__gateway_roadmap_memory", "mcp__opencode-gateway__gateway_run_list",
+        "mcp__opencode-gateway__gateway_run_get", "mcp__opencode-gateway__gateway_scheduler_status", "mcp__opencode-gateway__gateway_project_status",
+        "mcp__opencode-gateway__gateway_project_digest", "mcp__opencode-gateway__gateway_agent_catalog_list", "mcp__opencode-gateway__gateway_profile_list",
+        "mcp__opencode-gateway__gateway_permission_list", "mcp__opencode-gateway__gateway_question_list", "mcp__opencode-gateway__gateway_opencode_session_list"
       ],
       "askPatterns": [
-        "mcp__opencode-gateway__task_create", "mcp__opencode-gateway__task_update", "mcp__opencode-gateway__task_bulk_create",
-        "mcp__opencode-gateway__task_bulk_update", "mcp__opencode-gateway__roadmap_create", "mcp__opencode-gateway__roadmap_create_with_tasks",
-        "mcp__opencode-gateway__delegation_submit", "mcp__opencode-gateway__channel_send", "mcp__opencode-gateway__channel_send_to_task",
-        "mcp__opencode-gateway__channel_send_to_roadmap", "mcp__opencode-gateway__human_gate_decide", "mcp__opencode-gateway__permission_reply",
-        "mcp__opencode-gateway__question_reply", "mcp__opencode-gateway__question_reject", "mcp__opencode-gateway__scheduler_pause",
-        "mcp__opencode-gateway__scheduler_resume", "mcp__opencode-gateway__scheduler_run_once", "mcp__opencode-gateway__active_run_control",
-        "mcp__opencode-gateway__backup_create"
+        "mcp__opencode-gateway__gateway_task_create", "mcp__opencode-gateway__gateway_task_update", "mcp__opencode-gateway__gateway_task_bulk_create",
+        "mcp__opencode-gateway__gateway_task_bulk_update", "mcp__opencode-gateway__gateway_roadmap_create", "mcp__opencode-gateway__gateway_roadmap_create_with_tasks",
+        "mcp__opencode-gateway__gateway_delegation_submit", "mcp__opencode-gateway__gateway_channel_send", "mcp__opencode-gateway__gateway_channel_send_to_task",
+        "mcp__opencode-gateway__gateway_channel_send_to_roadmap", "mcp__opencode-gateway__gateway_human_gate_decide", "mcp__opencode-gateway__gateway_permission_reply",
+        "mcp__opencode-gateway__gateway_question_reply", "mcp__opencode-gateway__gateway_question_reject", "mcp__opencode-gateway__gateway_scheduler_pause",
+        "mcp__opencode-gateway__gateway_scheduler_resume", "mcp__opencode-gateway__gateway_scheduler_run_once", "mcp__opencode-gateway__gateway_active_run_control",
+        "mcp__opencode-gateway__gateway_backup_create"
       ]
     }
   ],
