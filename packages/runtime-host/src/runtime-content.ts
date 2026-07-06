@@ -1,7 +1,7 @@
 import { getAppPathHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { getConfiguredSkillsFromConfig } from '@open-cowork/runtime-host/config'
+import { getConfiguredSkillsFromConfig } from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.js'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.js'

@@ -1,4 +1,4 @@
-import { buildModelInfoSnapshot } from '@open-cowork/runtime-host'
+import { buildModelInfoSnapshot } from './model-info-utils.js'
 import { asRecord, readString } from '@open-cowork/shared'
 import {
   createOpencodeClient,
@@ -13,7 +13,7 @@ import {
   getAppConfig,
   getAppDataDir,
   getConfiguredModelFallbacks,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.js'
 import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/workflow-tool-bridge.js'

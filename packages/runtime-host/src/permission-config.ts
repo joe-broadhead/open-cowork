@@ -5,7 +5,7 @@ import type {
   PermissionRuleConfig,
 } from '@opencode-ai/sdk/v2'
 import { resolve, join } from 'node:path'
-import { getProjectOverlayDirName } from '@open-cowork/runtime-host/config'
+import { getProjectOverlayDirName } from './config-loader-core.js'
 import {
   getMachineSkillsDir,
   getRuntimeHomeDir,

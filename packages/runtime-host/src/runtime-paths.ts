@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { getAppDataDir, getBrandName, getProjectOverlayDirName } from '@open-cowork/runtime-host/config'
+import { getAppDataDir, getBrandName, getProjectOverlayDirName } from './config-loader-core.js'
 
 export type NativeConfigScope = 'machine' | 'project'
 export type RuntimeConfigSource = 'app' | 'machine'

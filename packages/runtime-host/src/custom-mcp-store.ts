@@ -1,4 +1,4 @@
-import { readJsoncFile, writeJsonFile, writeTopLevelObjectPropertyFile } from '@open-cowork/runtime-host'
+import { readJsoncFile, writeJsonFile, writeTopLevelObjectPropertyFile } from './jsonc.js'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type {

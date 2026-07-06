@@ -10,7 +10,7 @@ import {
   getRuntimeEnvPaths,
   getRuntimeHomeDir,
 } from './runtime-paths.js'
-import { getProjectNamespace, getSidecarJsonSuffix } from '@open-cowork/runtime-host/config'
+import { getProjectNamespace, getSidecarJsonSuffix } from './config-loader-core.js'
 function agentOverlayFileSuffixes() {
   return ['.md', '.disabled.md', getSidecarJsonSuffix()]
 }

@@ -1,4 +1,4 @@
-import { createManagedOpencodeServerWithSupervisor, type ManagedOpencodeServerUnexpectedExit, type ManagedOpencodeServerLogLevel, type ManagedOpencodeSupervisorFork, type ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
+import { createManagedOpencodeServerWithSupervisor, type ManagedOpencodeServerUnexpectedExit, type ManagedOpencodeServerLogLevel, type ManagedOpencodeSupervisorFork, type ManagedOpencodeSupervisorProcess } from './runtime-managed-server-core.js'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,13 +14,13 @@ export {
   type ManagedOpencodeServerUnexpectedExit,
   type ManagedOpencodeSupervisorFork,
   type ManagedOpencodeSupervisorProcess,
-} from '@open-cowork/runtime-host'
+} from './runtime-managed-server-core.js'
 export {
   drainManagedOpencodeProcessOutput,
   parseManagedOpencodeServerStdoutChunk,
   type ManagedOpencodeServerStdoutParseResult,
   type ManagedProcessOutputStreams,
-} from '@open-cowork/runtime-host'
+} from './runtime-managed-server-output.js'
 
 const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
   ? __filename

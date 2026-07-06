@@ -19,7 +19,7 @@ import {
   isArtifactKind,
   isArtifactStatus,
 } from '@open-cowork/shared'
-import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { getAppDataDir } from './config-loader-core.js'
 import { listCoordinationTasks } from './coordination/coordination-service.js'
 import { sessionEngine } from './session-engine.js'
 import { listSessionRecords, type SessionRecord } from './session-registry.js'

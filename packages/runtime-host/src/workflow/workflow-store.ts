@@ -20,7 +20,7 @@ import {
   createCloudProjectionFenceToken,
   normalizeWorkflowSteps,
 } from '@open-cowork/shared'
-import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { getAppDataDir } from '../config-loader-core.js'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,

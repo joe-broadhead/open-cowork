@@ -1,5 +1,11 @@
+// This module is forked as a standalone entrypoint — as compiled dist in
+// production and as raw TypeScript source (via --experimental-strip-types) in
+// tests. A relative './*.js' value specifier resolves against dist but not
+// against the '.ts' source, so this runtime import must go through the package
+// name, which resolves via the export map in both contexts. The type-only
+// import below is erased by type-stripping, so it may use a relative specifier.
 import { appendManagedOpencodeOutputTail, drainManagedOpencodeProcessOutput, parseManagedOpencodeServerStdoutChunk } from '@open-cowork/runtime-host'
-import type { ManagedOpencodeServerParentMessage, ManagedOpencodeServerSupervisorMessage } from '@open-cowork/runtime-host'
+import type { ManagedOpencodeServerParentMessage, ManagedOpencodeServerSupervisorMessage } from './runtime-managed-server-protocol.js'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'

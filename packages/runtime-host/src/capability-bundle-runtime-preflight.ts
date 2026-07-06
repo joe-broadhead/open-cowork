@@ -10,7 +10,7 @@ import {
   validateCapabilityBundleRuntimeSupport,
 } from './capability-bundle-engine.js'
 import { getInstalledCapabilityBundleManifests } from './capability-bundle-store.js'
-import { getConfiguredCapabilityBundlesFromConfig } from '@open-cowork/runtime-host/config'
+import { getConfiguredCapabilityBundlesFromConfig } from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 
 export class CapabilityBundleRuntimePreflightError extends Error {

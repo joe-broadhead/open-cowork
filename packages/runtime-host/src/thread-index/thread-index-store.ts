@@ -23,7 +23,7 @@ import {
   THREAD_SEARCH_DEFAULT_LIMIT,
   THREAD_SUGGESTION_LABEL_MAX_LENGTH,
 } from '@open-cowork/shared'
-import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { getAppDataDir } from '../config-loader-core.js'
 import { migrateThreadIndexDb, THREAD_INDEX_SCHEMA_VERSION } from './thread-index-schema.js'
 
 import {
