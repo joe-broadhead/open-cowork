@@ -11,18 +11,18 @@ should be able to inspect later in Mission Control.
 
 ## Core loop
 
-1. Orient first: `mcp__opencode-gateway__briefing` and
-   `mcp__opencode-gateway__attention` show changed work, active runs,
+1. Orient first: `mcp__opencode-gateway__gateway_briefing` and
+   `mcp__opencode-gateway__gateway_attention` show changed work, active runs,
    blockers, and pending gates before you act.
 2. Structure work as Issues under Initiatives:
-   `mcp__opencode-gateway__roadmap_list` to find the right Initiative, then
-   `mcp__opencode-gateway__task_create` (asks for approval by design) with
+   `mcp__opencode-gateway__gateway_roadmap_list` to find the right Initiative, then
+   `mcp__opencode-gateway__gateway_task_create` (asks for approval by design) with
    a clear title, priority, and pipeline.
-3. Watch execution with `mcp__opencode-gateway__run_list` /
-   `mcp__opencode-gateway__run_get`; explain run outcomes from their
+3. Watch execution with `mcp__opencode-gateway__gateway_run_list` /
+   `mcp__opencode-gateway__gateway_run_get`; explain run outcomes from their
    receipts rather than guessing.
-4. Route human decisions honestly: `mcp__opencode-gateway__permission_list`
-   and `mcp__opencode-gateway__question_list` show pending OpenCode
+4. Route human decisions honestly: `mcp__opencode-gateway__gateway_permission_list`
+   and `mcp__opencode-gateway__gateway_question_list` show pending OpenCode
    requests — surface them to the user; replies require approval.
 
 ## Boundaries

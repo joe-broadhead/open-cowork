@@ -43,8 +43,9 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!).includes('mcp__time-keep__timer_set'), true)
   assert.equal(tools.find((tool) => tool.id === 'time-keep')?.allowPatterns?.includes('mcp__time-keep__business_days'), true)
   // opencode-gateway: inspection tools auto-allowed; durable-work mutations ask.
-  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'opencode-gateway')!).includes('mcp__opencode-gateway__task_create'), true)
-  assert.equal(tools.find((tool) => tool.id === 'opencode-gateway')?.allowPatterns?.includes('mcp__opencode-gateway__briefing'), true)
+  // Tools are exposed to OpenCode with the `gateway_` prefix (opencode-gateway >= 1.x).
+  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'opencode-gateway')!).includes('mcp__opencode-gateway__gateway_task_create'), true)
+  assert.equal(tools.find((tool) => tool.id === 'opencode-gateway')?.allowPatterns?.includes('mcp__opencode-gateway__gateway_briefing'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'clock')!).length, 0)
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()
