@@ -1,4 +1,4 @@
-import { createManagedOpencodeServerWithSupervisor, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit, type ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
+import { createManagedOpencodeServerWithSupervisor, type ManagedOpencodeServerLogLevel, type ManagedOpencodeServerUnexpectedExit, type ManagedOpencodeSupervisorProcess } from './runtime-managed-server-core.js'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { fork, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'

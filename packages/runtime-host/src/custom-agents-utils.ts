@@ -8,7 +8,7 @@ import {
   expandMcpToolPermissionPatterns,
   type ConfiguredSkill,
   type ConfiguredTool,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import {
   validateCustomAgentDraft,
   type AgentColor,

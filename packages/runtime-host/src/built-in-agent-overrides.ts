@@ -1,4 +1,4 @@
-import { getAppConfig, type BuiltInAgentOverrideConfig } from '@open-cowork/runtime-host/config'
+import { getAppConfig, type BuiltInAgentOverrideConfig } from './config-loader-core.js'
 
 export type BuiltInAgentName = 'build' | 'plan' | 'general' | 'explore' | 'chief-of-staff' | 'executive-assistant' | 'autoresearch'
 type OverridableBuiltInAgentName = Exclude<BuiltInAgentName, 'chief-of-staff' | 'executive-assistant' | 'autoresearch'>

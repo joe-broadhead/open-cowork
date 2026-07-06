@@ -42,7 +42,7 @@ import {
   type KnowledgeDbRow,
   type KnowledgeWriteOptions,
 } from '@open-cowork/shared/node'
-import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { getAppDataDir } from '../config-loader-core.js'
 const KNOWLEDGE_DB_SCHEMA_VERSION = 1
 const KNOWLEDGE_SCHEMA_VERSION_KEY = 'schema_version'
 // Local aliases so the SQLite store body reads unchanged after the helper move.

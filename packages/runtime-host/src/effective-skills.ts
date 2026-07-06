@@ -5,7 +5,7 @@ import {
   type CapabilitySkillBundle,
   type RuntimeContextOptions,
 } from '@open-cowork/shared'
-import { getConfiguredSkillsFromConfig } from '@open-cowork/runtime-host/config'
+import { getConfiguredSkillsFromConfig } from './config-loader-core.js'
 import { getCustomSkill, listCustomSkills } from './native-customizations.js'
 import type { NativeConfigScope } from './runtime-paths.js'
 import { getBundledSkillRoots } from './runtime-content.js'

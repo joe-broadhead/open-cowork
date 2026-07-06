@@ -9,7 +9,7 @@ import {
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
   expandMcpToolPermissionPatterns,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import type { ConfiguredProviderDescriptor } from '@open-cowork/shared'
 import { getEffectiveSettings, getProviderCredentialValue, type CoworkSettings } from './settings.js'
 import { log } from '@open-cowork/shared/node'

@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from '@open-cowork/shared/node'
 import { getUsableAccessToken } from './auth-utils.js'
-import { getAppConfig, getAppDataDir, getBrandName } from '@open-cowork/runtime-host/config'
+import { getAppConfig, getAppDataDir, getBrandName } from './config-loader-core.js'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,

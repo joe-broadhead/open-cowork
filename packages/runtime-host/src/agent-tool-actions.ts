@@ -1,5 +1,5 @@
 import type { CustomAgentConfig, ScopedArtifactRef } from '@open-cowork/shared'
-import { getBrandName } from '@open-cowork/runtime-host/config'
+import { getBrandName } from './config-loader-core.js'
 import { getCustomAgentCatalog, invalidateCustomAgentCatalogCache } from './custom-agents.js'
 import {
   buildCustomAgentPermissionFromCatalog,

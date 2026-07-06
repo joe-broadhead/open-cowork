@@ -1,4 +1,4 @@
-import type { NormalizedMessagePart } from '@open-cowork/runtime-host'
+import type { NormalizedMessagePart } from './opencode-adapter.js'
 import type { BindingHints } from './task-binding-policy.js'
 import {
   chooseTaskTitle,

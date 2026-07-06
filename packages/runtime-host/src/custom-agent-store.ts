@@ -1,4 +1,4 @@
-import { readJsoncFile, writeJsonFile } from '@open-cowork/runtime-host'
+import { readJsoncFile, writeJsonFile } from './jsonc.js'
 import { writeFileAtomic, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import {
   basename,
@@ -17,7 +17,7 @@ import {
   type RuntimeContextOptions,
   type ScopedArtifactRef,
 } from '@open-cowork/shared'
-import { getConfiguredToolPatterns, getConfiguredToolsFromConfig, getSidecarJsonSuffix } from '@open-cowork/runtime-host/config'
+import { getConfiguredToolPatterns, getConfiguredToolsFromConfig, getSidecarJsonSuffix } from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 import {
   resolveProjectDirectory,

@@ -1,7 +1,7 @@
 import { sanitizeForExport } from '@open-cowork/shared'
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { getAppDataDir, getTelemetryConfig } from '@open-cowork/runtime-host/config'
+import { getAppDataDir, getTelemetryConfig } from './config-loader-core.js'
 let telemetryPath: string | null = null
 const TELEMETRY_RETENTION_DAYS = 14
 

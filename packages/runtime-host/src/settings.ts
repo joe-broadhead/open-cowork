@@ -16,7 +16,7 @@ import {
   getProviderDescriptor,
   getPublicAppConfig,
   normalizeProviderModelId,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 import {
   readSafeStorageBackendForPolicy,

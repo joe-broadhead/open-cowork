@@ -3,7 +3,7 @@ import {
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
   getConfiguredToolsFromConfig,
-} from '@open-cowork/runtime-host/config'
+} from './config-loader-core.js'
 import { summarizeCustomAgents, type CustomAgentCatalogSkill, type CustomAgentSummary } from './custom-agents-utils.js'
 import { listEffectiveSkills } from './effective-skills.js'
 import { measureAsyncPerf } from './perf-metrics.js'
