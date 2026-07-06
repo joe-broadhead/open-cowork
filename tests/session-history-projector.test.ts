@@ -1943,3 +1943,55 @@ test('history projector accepts deterministic fallback id generation', async () 
     ],
   )
 })
+
+test('history projector does not mine agent identity from user prompt/raw content', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-attr',
+    cachedModelId: 'databricks-claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-attr-msg', role: 'assistant', time: { created: 1 } },
+        parts: [
+          {
+            id: 'root-attr-task',
+            type: 'tool',
+            tool: 'task',
+            callID: 'attr-call',
+            state: {
+              status: 'completed',
+              // No structured `agent`/`subagent_type`; the only "@name" token lives in the
+              // user-supplied prompt, which must NOT be attributed as the executing agent.
+              input: { description: 'Investigate the outage', prompt: 'Please ask @spurious for the runbook' },
+              output: 'started',
+              metadata: {},
+            },
+          },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [
+      { id: 'child-attr', title: 'Investigate the outage', parentSessionId: 'root-attr', time: { created: 2, updated: 3 } },
+    ],
+    statuses: { 'root-attr': { type: 'idle' }, 'child-attr': { type: 'idle' } },
+    loadChildSnapshot: async () => ({
+      messages: [{
+        info: { id: 'child-attr-msg', role: 'assistant', time: { created: 4 } },
+        parts: [
+          { id: 'child-attr-text', type: 'text', text: 'done' },
+          { id: 'child-attr-finish', type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')
+  assert.ok(taskRun, 'expected a task run')
+  // Agent identity must come from structured/labeled fields only — a stray "@spurious"
+  // in the prompt is not the executing agent.
+  assert.notEqual(taskRun.taskRun?.agent, 'spurious')
+  assert.equal(taskRun.taskRun?.agent, null)
+  // The human-readable title may still draw on the description text.
+  assert.equal(taskRun.taskRun?.title, 'Investigate the outage')
+})
