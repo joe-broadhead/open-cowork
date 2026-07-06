@@ -22,7 +22,7 @@ Workspace authority and sync boundaries remain governed by the
 | Workflow | Saved repeatable automation definition. | Existing workflow store/control plane. |
 | Run | Authority-scoped execution attempt for a workflow, task, background prompt, delegation, schedule, or watch trigger. | Owning workspace authority. |
 | Schedule | Time trigger that starts a run. | Owning workspace authority. |
-| Watch | Delivery subscription for progress from a conversation, project, task, workflow, run, or session. | Owning workspace authority or Cloud delivery records. |
+| Watch | Delivery subscription for progress from a conversation, playbook, project, task, workflow, run, or session. | Owning workspace authority or Cloud delivery records. |
 | Delegation | Product-layer relationship from parent work to an OpenCode-native child session or explicit managed delegate session. | Owning workspace authority. |
 | Artifact | Durable output or input object linked to a project, task, workflow, run, or session. | Workspace artifact owner. |
 | Question | Human clarification request from OpenCode or product coordination tools. | Workspace question owner. |

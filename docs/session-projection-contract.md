@@ -66,6 +66,7 @@ Projected events update durable session state:
 - `todos.updated`
 - `cost.updated`
 - `artifact.created`
+- `artifact.updated`
 - `session.status`
 - `session.idle`
 - `session.aborted`

@@ -374,7 +374,7 @@ Gateway, Standalone Team Gateway, and Paired Desktop:
 | Workflow | Saved repeatable automation definition. |
 | Run | Authority-scoped execution attempt for a workflow, task, background prompt, delegation, schedule, or watch trigger. |
 | Schedule | Time trigger that starts runs. |
-| Watch | Delivery subscription for progress from a conversation, project, task, workflow, run, or session. |
+| Watch | Delivery subscription for progress from a conversation, playbook, project, task, workflow, run, or session. |
 | Delegation | Product-layer relationship from parent work to OpenCode-native child sessions or explicit managed delegate sessions. |
 | Artifact | Durable output or input linked to project, task, workflow, run, or session. |
 | Question | Human clarification request from OpenCode or product coordination tools. |
@@ -384,7 +384,7 @@ Support is capability-scoped by authority:
 
 | Authority | Projects | Tasks | Workflows | Runs | Schedules | Watches | Delegation |
 |---|---|---|---|---|---|---|---|
-| Desktop Local | `deferred` | `deferred` | `supported` | `supported` | `supported` | `not_supported` | `supported` |
+| Desktop Local | `supported` | `supported` | `supported` | `supported` | `supported` | `supported` | `supported` |
 | Cloud Worker | `deferred` | `deferred` | `supported` | `supported` | `supported` | `deferred` | `deferred` |
 | Cloud Channel Gateway | `deferred` | `deferred` | `supported` | `supported` | `read_only` | `supported` | `deferred` |
 | Standalone Team Gateway | `supported` | `supported` | `supported` | `supported` | `supported` | `supported` | `supported` |

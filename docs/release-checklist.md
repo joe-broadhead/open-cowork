@@ -125,7 +125,7 @@ and linked from the release Go/No-Go report.
 - [ ] if `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` was enabled for an unsigned preview tag, the repository variable is scheduled to be unset immediately after the GitHub Release publishes
 - [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
 - [ ] Linux artifacts are either covered by a detached `SHA256SUMS.txt.asc` signature (`OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`, optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) or explicitly documented as unsigned `v0.x` artifacts verified through `SHA256SUMS.txt` plus GitHub provenance
-- [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
+- [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES.tar.gz`, SBOMs, and provenance attestation
 - [ ] GHCR Cloud and Gateway images have immutable digest metadata, Cosign
       signatures, image SBOMs, image vulnerability scan JSON, and registry
       provenance/SBOM attestations.
@@ -227,6 +227,8 @@ git push origin vX.Y.Z
    - Linux deb artifacts
    - `SHA256SUMS.txt`
    - `SHA256SUMS.txt.asc` when checksum signing is configured
+   - `THIRD_PARTY_NOTICES.md`
+   - `THIRD_PARTY_LICENSES.tar.gz`
    - `sbom.cdx.json` and `sbom.spdx.json`
    - `open-cowork-cloud.image.json`
    - `open-cowork-cloud.image.sbom.cdx.json`

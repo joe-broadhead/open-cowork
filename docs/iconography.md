@@ -11,8 +11,9 @@ toolbars, menus, and shared primitives:
 <IconButton icon="settings-2" label="Open settings" />
 ```
 
-The wrapper sets `currentColor`, a 24px Lucide grid, and a default
-`strokeWidth` of `1.5`. Icons are decorative by default with
+The wrapper sets `currentColor`, a 24px Lucide grid, and a size-aware default
+`strokeWidth` (1.75 at 16px, 1.5 at 20px, 1.25 at 24px), overridable via the
+`strokeWidth` prop. Icons are decorative by default with
 `aria-hidden="true"`; interactive labels belong on the button or menu item
 that contains the icon.
 

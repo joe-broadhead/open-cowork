@@ -1,3 +1,8 @@
+---
+title: Cloud Web Studio
+description: Release contract for the browser build of the Open Cowork Studio renderer served by Open Cowork Cloud.
+---
+
 # Cloud Web Studio
 
 Cloud Web is the Open Cowork Studio running in the browser for cloud
@@ -143,9 +148,10 @@ in Cloud because the browser shim reports them as unsupported through
 ## Unified Renderer
 
 Cloud Web is the browser build of the desktop renderer
-(`packages/app/src`). `pnpm cloud:build` runs
-`pnpm --filter @open-cowork/desktop build:browser` to emit the renderer's
-browser bundle (`apps/desktop/dist-browser`), and the cloud server serves it at
+(`packages/app/src`). `pnpm cloud:build` (via `scripts/build-cloud.mjs`) runs
+`pnpm --filter @open-cowork/app build:browser` to emit the renderer's
+browser bundle (`packages/app/dist-browser`), which the build then copies to
+`apps/desktop/dist/cloud/browser-renderer`, and the cloud server serves it at
 `GET /` through `packages/cloud-server/src/browser-renderer-app.ts`. The entry
 document loads hashed module/asset scripts and installs the browser
 `CoworkAPI` shim (`packages/app/src/browser/cowork-api.ts`), which

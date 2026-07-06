@@ -74,9 +74,11 @@ persisted sessions, because only a dozen are live at any moment.
 ## Live session events
 
 Chat subscribes to `session:patch` / `sessionUpdated` /
-`sessionDeleted` events with an 800ms debounce. Bursts (a single
-assistant turn fires many patches) coalesce into
-one refresh; intermittent events refresh within a second.
+`sessionDeleted` events. Streamed `session:patch` text is buffered and
+flushed on an animation frame at a minimum `STREAM_FLUSH_INTERVAL_MS`
+(~32ms) interval, while certain patches commit immediately. Bursts (a
+single assistant turn fires many patches) coalesce into frame-aligned
+refreshes rather than an 800ms debounce.
 
 ## Cloud API query guardrails
 
@@ -140,8 +142,10 @@ regression is accepted.
 
 - **Server-side chart rendering** — charts render client-side today,
   so large datasets block the renderer briefly during the initial
-  paint. Server-side SVG rendering is supported via
-  `chart-renderer.ts` but not plumbed as an option.
+  paint. A main-process `chart:render-svg` IPC (`chart-renderer.ts`)
+  already exists and backs the sandboxed render path; what is not yet
+  optimized is defaulting large-dataset display to server-side
+  rendering.
 - **Session registry indexing** — 10k sessions on disk read linearly
   on every boot. Needs a lightweight index (SQLite or a sidecar
   B-tree) before the app targets long-term heavy users.

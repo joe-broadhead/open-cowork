@@ -1,3 +1,8 @@
+---
+title: Desktop Outbound Pairing
+description: Let a remote gateway or mobile surface send commands to an explicitly paired Desktop Local workspace without exposing Desktop or the local OpenCode server on the network.
+---
+
 # Desktop Outbound Pairing
 
 Desktop outbound pairing lets a remote gateway or mobile surface send commands

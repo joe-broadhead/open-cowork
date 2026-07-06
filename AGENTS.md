@@ -137,7 +137,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:e2e
-uv run mkdocs build --strict
+pnpm docs:build
 git diff --check
 ```
 

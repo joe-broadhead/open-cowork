@@ -1,3 +1,8 @@
+---
+title: Custom MCPs
+description: Add local stdio, remote HTTP/SSE, or downstream MCPs to Open Cowork.
+---
+
 # Custom MCPs
 
 Custom MCPs let users add tools to Open Cowork without changing the

@@ -31,7 +31,7 @@ Expected saved workflow:
 | Skills/tools | Git or GitHub tools if available |
 | Output | Digest in the run thread |
 
-Daily runs appear on the Workflows page. Open the latest run to inspect the
+Daily runs appear on the Playbooks page. Open the latest run to inspect the
 full transcript and tool calls.
 
 ## PR Triage
@@ -91,7 +91,7 @@ ticket with related context, draft a response, and return the result in the
 run thread. It should not send the response automatically.
 ```
 
-After saving, copy the webhook curl example from the workflow card and POST
+After saving, copy the webhook curl example from the playbook card and POST
 JSON with the generated secret in an authorization header:
 
 ```bash

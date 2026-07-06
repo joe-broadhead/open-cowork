@@ -16,7 +16,7 @@ hide:
 <div class="cowork-stats" markdown>
 
 <div class="stat" markdown>
-  <div class="stat-value">5 MCPs · 6 skills</div>
+  <div class="stat-value">7 MCPs · 11 skills</div>
   <div class="stat-label">Bundled capabilities</div>
 </div>
 
@@ -88,8 +88,8 @@ own branding, providers, skills, and workflows.
 
     ---
 
-    Ships with `agents`, `charts`, `clock`, `skills`, and `workflows` MCPs for agent authoring,
-    visuals, time-aware reasoning, skill-bundle management, and repeatable workflow setup. Add your own
+    Ships with `agents`, `charts`, `clock`, `knowledge`, `semantic-ui`, `skills`, and `workflows` MCPs for agent authoring,
+    visuals, time-aware reasoning, knowledge-wiki proposals, approval-gated UI actions, skill-bundle management, and repeatable workflow setup. Add your own
     stdio or HTTP MCPs from Settings, with SSRF and shell-metacharacter
     policies enforced at save time.
 
