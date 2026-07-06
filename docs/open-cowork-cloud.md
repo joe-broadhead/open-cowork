@@ -50,7 +50,7 @@ The full cross-surface contract is documented in
 side of that contract.
 
 The browser release contract and route/API matrix are documented in
-[Cloud Web Studio](cloud-web-workbench.md).
+[Cloud Web Workbench](cloud-web-workbench.md).
 
 Cloud is the source of truth only for cloud workspaces. A user can start a
 cloud thread in desktop, continue it in the browser, and interact with the same
@@ -204,9 +204,9 @@ The workspace `@open-cowork/cloud-client` package provides the typed
 `createHttpSseCloudTransportAdapter` for clients built from this repo that need
 HTTP/SSE Cloud transport without Electron IPC.
 
-## Cloud Web Studio
+## Cloud Web Workbench
 
-The cloud web role serves the Cloud Web Studio at `/`. The workbench is an
+The cloud web role serves the Cloud Web Workbench at `/`. The workbench is an
 API client for the same cloud control plane used by desktop sync and gateway
 clients; it does not access Postgres or secret storage directly.
 
@@ -300,7 +300,7 @@ gateway channel is just a cloud session and can be opened in the browser; a
 thread created in the browser appears to desktop and gateway clients through the
 same session list, projection, and SSE contracts.
 
-### Cloud Web Studio readiness gates
+### Cloud Web Workbench readiness gates
 
 The browser workbench has its own release gates because `/healthz` only proves
 the server is alive. Cloud Web is the browser build of the desktop renderer, so
@@ -667,7 +667,7 @@ windows, concurrent session caps, and active worker caps when
 
 CI runs the same cloud gates in the `cloud-gates` job: OpenCode portability
 proof, real Postgres concurrency tests, Compose config validation, cloud OCI
-image build, Cloud Web Studio readiness gates, split-role Compose
+image build, Cloud Web Workbench readiness gates, split-role Compose
 workbench/API smoke, and Helm lint/render validation.
 
 ## Configuration

@@ -167,7 +167,7 @@ provider control plane.
   Gateway diagnostics. Enable private/internal delivery only in explicitly
   risk-accepted deployments.
 
-### Cloud Web Studio
+### Cloud Web Workbench
 
 - Treat the browser workbench as a release-critical client, not only as an
   admin convenience UI.
@@ -574,7 +574,7 @@ OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
 pnpm deploy:smoke
 ```
 
-The smoke script validates cloud `/healthz`/`/livez`, the Cloud Web Studio at `GET /`,
+The smoke script validates cloud `/healthz`/`/livez`, the Cloud Web Workbench at `GET /`,
 workbench CSP/bootstrap markers, cloud API bootstrap endpoint reachability,
 gateway `/health`, and gateway `/ready`. Operator mode also checks cloud
 runtime/heartbeat/metrics endpoints and gateway metrics, and now fails closed

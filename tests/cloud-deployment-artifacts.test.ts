@@ -134,7 +134,7 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /GET \/api\/workers\/heartbeats/)
   assert.match(docs, /GET \/api\/metrics/)
   assert.match(docs, /web app at `\/`/)
-  assert.match(docs, /Cloud Web Studio readiness gates/)
+  assert.match(docs, /Cloud Web Workbench readiness gates/)
   assert.match(docs, /createHttpSseCloudTransportAdapter/)
   assert.match(docs, /Generic Docker: Cloud \+ Gateway/)
   assert.match(docs, /docker-compose\.cloud-gateway\.yml/)
@@ -888,7 +888,7 @@ test('deployment readiness checklist and managed BYOK runbook cover production g
     'cloudDesktop',
     'gateway.providers',
     'cloud.billing.provider=none',
-    'Cloud Web Studio',
+    'Cloud Web Workbench',
     'browser E2E',
     'accessibility',
     'performance and scale',
