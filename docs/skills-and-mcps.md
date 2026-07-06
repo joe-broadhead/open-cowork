@@ -23,7 +23,11 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Seven bundled MCPs and six bundled skills, used as worked examples below.
+Open Cowork ships seven bundled MCP servers (`agents`, `charts`, `clock`,
+`knowledge`, `semantic-ui`, `skills`, `workflows`) plus three external-CLI
+MCPs configured out of the box (`openwiki` — see [OpenWiki](openwiki.md) —
+`time-keep`, and `opencode-gateway`), and eleven bundled skills. The cards
+below cover the most useful examples.
 When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
 uses `mcp__<server>__<tool>` form, for example
 `mcp__charts__bar_chart`. Source MCP code and tests may still refer to the

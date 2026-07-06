@@ -216,12 +216,13 @@ typed `CoworkAPI` shim (`packages/app/src/browser/cowork-api.ts`)
 backed by the cloud HTTP + SSE API, and is served as a hashed-asset SPA under
 the server's CSP nonce and cookie-auth path. There is no separate Cloud Web
 codebase: the cloud serves the renderer's browser build
-(`apps/desktop/dist-browser`, produced by `pnpm cloud:build`), so Desktop and
+(`packages/app/dist-browser`, produced by `pnpm cloud:build` and served from
+`apps/desktop/dist/cloud/browser-renderer`), so Desktop and
 Cloud Web cannot drift.
 
 The information architecture is split into two surfaces:
 
-- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, Channels, and Artifacts.
+- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, Knowledge, Channels, and Artifacts.
 - Admin: Org, Members, Profiles & Policy, BYOK, Connections, Billing, Gateway,
   Audit, Usage, and Diagnostics.
 

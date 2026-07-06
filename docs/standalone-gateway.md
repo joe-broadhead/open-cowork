@@ -225,6 +225,14 @@ pnpm --filter @open-cowork/standalone-gateway identity -- \
   --role member
 ```
 
+In this product mode Standalone Gateway only registers the `telegram` and
+signed `webhook` providers (`apps/standalone-gateway/src/provider-registry.ts`).
+Channels such as Slack teams or Discord guilds reach it only when bridged in
+through the signed `webhook` provider, so the `--provider <id>` value in an
+identity must match the provider instance that actually delivers the message
+(`telegram` or the `webhook`/bridge instance id) rather than a channel name
+that no live provider serves.
+
 An unscoped identity only authorizes provider messages that do not include a
 provider workspace id. It is not a global fallback for every workspace on the
 same provider.

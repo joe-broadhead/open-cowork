@@ -25,7 +25,7 @@ tokens are theme invariant and should not be forked by downstream deployments.
 | `--text-2xs` | 11px | 14px | badges, keyboard hints, dense metadata |
 | `--text-xs` | 12px | 16px | secondary labels and compact controls |
 | `--text-sm` | 13px | 18px | dense UI default |
-| `--text-md` | 14px | 21px | body copy and chat messages |
+| `--text-md` | 14px | 20px | body copy and chat messages |
 | `--text-lg` | 16px | 24px | card titles |
 | `--text-xl` | 19px | 26px | section headers |
 | `--text-2xl` | 24px | 30px | page titles |
@@ -76,11 +76,11 @@ active theme palette:
 | Token | Role |
 | --- | --- |
 | `--specular` / `--specular-strong` | 1px inset light lines for elevated or active material surfaces |
-| `--shadow-1` | tight contact shadow for small lifted controls |
+| `--shadow-1` | currently `none`: resting cards and rows are shadowless, so depth comes from the raised hairline rather than a contact shadow |
 | `--shadow-2` | alias to the per-theme `--shadow-card` ramp |
 | `--shadow-3` | alias to the per-theme `--shadow-elevated` ramp |
 | `--glass-bg`, `--glass-blur`, `--glass-border` | floating-surface glass treatment for dialogs, menus, palettes, tooltips, and toasts |
-| `--glow-accent`, `--glow-soft` | accent-derived glow for active, streaming, and focus moments |
+| `--glow-accent`, `--glow-soft` | `--glow-accent` is a crisp 1px accent ring (not a bloom) for active, streaming, and focus moments; `--glow-soft` is currently `none` |
 
 `--shadow-card` and `--shadow-elevated` remain the canonical per-theme shadow
 sources. The `--shadow-2` and `--shadow-3` aliases preserve the character of
@@ -94,16 +94,19 @@ Display type uses small negative tracking instead of oversized weight:
 | --- | ---: | --- |
 | `--tracking-tight` | -0.01em | `xl` and `2xl` headings |
 | `--tracking-display` | -0.02em | `3xl` and hero headings |
+| `--tracking-eyebrow` | 0.06em | eyebrow and overline labels |
 
 ## Shape
 
 | Token | Value | Role |
 | --- | ---: | --- |
-| `--radius-xs` | 6px | small chips and tight controls |
-| `--radius-sm` | 8px | standard buttons and inputs |
-| `--radius-md` | 10px | grouped controls |
-| `--radius-lg` | 14px | cards and panels |
-| `--radius-xl` | 18px | dialogs and hero composer surfaces |
+| `--radius-xs` | 5px | small chips and tight controls |
+| `--radius-sm` | 7px | standard buttons and inputs |
+| `--radius-md` | 9px | grouped controls |
+| `--radius-lg` | 12px | cards and panels |
+| `--radius-xl` | 16px | dialogs and hero composer surfaces |
+| `--radius-2xl` | 16px | large surfaces and hero composer shells |
+| `--radius-3xl` | 22px | oversized feature and empty-state surfaces |
 | `--radius-full` | 9999px | pills and circular affordances |
 
 ## Motion
@@ -132,8 +135,9 @@ Z-index tokens reserve predictable stacking slots:
 | `--z-command` | 80 | command palette |
 | `--z-tooltip` | 90 | tooltips |
 
-Control heights are `--control-h-sm` at 28px, `--control-h-md` at 32px, and
-`--control-h-lg` at 40px.
+Control heights are `--control-h-xs` at 24px, `--control-h-sm` at 28px,
+`--control-h-md` at 32px, `--control-h-lg` at 40px, and `--control-h-xl` at
+48px.
 
 ## Studio Semantics
 

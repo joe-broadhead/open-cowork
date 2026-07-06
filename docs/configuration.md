@@ -15,6 +15,7 @@ The default upstream config is organized into:
 - `branding`
 - `auth`
 - `providers`
+- `updates`
 - `tools`
 - `skills`
 - `mcps`
@@ -637,7 +638,7 @@ Each skill entry can map to:
 
 `mcps` defines bundled MCP servers shipped by the app.
 
-The upstream core ships:
+The upstream core ships these packaged-source MCPs:
 - `agents`
 - `charts`
 - `clock`
@@ -645,6 +646,15 @@ The upstream core ships:
 - `semantic-ui`
 - `skills`
 - `workflows`
+
+It also ships three command-launched bundled MCPs (`type: local` with a
+`command` launcher rather than a packaged `packageName`):
+- `openwiki` — OpenWiki knowledge base: fusion search, cited reads, claim
+  tracing, graph queries (see [OpenWiki](openwiki.md))
+- `time-keep` — local-first agent clock: IANA timezone operations, calendar
+  queries
+- `opencode-gateway` — durable work coordination: persistent
+  Initiatives/Issues, scheduler runs
 
 User-added MCPs are stored separately from the shipped config.
 

@@ -47,7 +47,7 @@ Postgres:
 ```bash
 # Managed providers should use PITR first. This logical dump is the portable
 # break-glass backup and local drill input.
-pg_dump "$OPEN_COWORK_DATABASE_URL" \
+pg_dump "$OPEN_COWORK_CLOUD_DATABASE_URL" \
   --format=custom \
   --no-owner \
   --no-acl \

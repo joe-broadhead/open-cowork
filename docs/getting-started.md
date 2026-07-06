@@ -178,8 +178,8 @@ images that only exercise local tooling.
 - **Shell environment unavailable** — the app tries to load your login
   shell's PATH on startup. On macOS/Linux it falls back to a safe default
   PATH if your shell is not on its allowlist. Open Cowork writes logs to
-  `~/Library/Logs/<app name>` on macOS and `~/.config/<app name>/logs` on
-  Linux. A `"Shell environment unavailable; using fallback PATH entries"`
+  `~/Library/Application Support/<app name>/logs` on macOS and
+  `~/.config/<app name>/logs` on Linux. A `"Shell environment unavailable; using fallback PATH entries"`
   line there is informational, not a failure.
 
 ## Thread types

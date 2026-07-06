@@ -332,6 +332,17 @@ renderer:
   (`url`, `href`, `src`), image marks, oversized specs, excessive array
   items, and excessive object depth so specs can only reference bounded
   inline values the caller already had.
+- Compiled Vega specs additionally pass through
+  `assertBoundedVegaSpecCardinality`
+  (`apps/desktop/src/main/chart-spec-safety.ts`), called from
+  `chart-renderer.ts` before `vega.parse`. It statically bounds each data
+  pipeline's estimated output row count and allowlists transforms: amplifying
+  transforms like `cross` and `graticule` are rejected outright, generators
+  (`sequence`, `density`, `kde`, `quantile`, and contour/heatmap grids) are
+  capped, and any transform type that is neither an explicit amplifier nor in
+  `ROW_SAFE_CHART_TRANSFORMS` is rejected fail-closed. This keeps a tiny spec
+  from expanding into millions of rows and blocking the synchronous,
+  uninterruptible Vega evaluation on the main-process event loop.
 - The parent's `postMessage` handler checks both `event.origin` and
   `event.source === iframe.contentWindow` before trusting the payload
   (see `packages/app/src/components/chat/VegaChart.tsx`).
@@ -424,13 +435,17 @@ credential-bearing signed artifact URLs.
 ## Dependency posture
 
 - `pnpm audit --prod --audit-level moderate` runs as part of the CI gate.
-- Root `pnpm.overrides` entries are intentional:
+- Root `pnpm.overrides` entries are intentional. The full set lives in
+  `pnpm.overrides` in the root `package.json`; representative examples are:
   - `ip-address@<=10.1.0` is forced to `>=10.1.1` to keep Electron
     Builder's transitive `socks` stack above GHSA-v2v4-37r5-5v8g.
   - `mermaid>uuid` is pinned to `^14.0.0` so Mermaid's transitive UUID
     dependency stays on the current major used by the rest of the bundle.
   - `electron-builder-squirrel-windows` is pinned while the package graph
     contains mixed Electron Builder helper versions.
+  - Several CVE forces raise transitive dependencies past their patched
+    versions (for example `dompurify`, `form-data`, `hono`, `js-yaml`, `qs`,
+    `tar`, `tmp`, `undici`, and `vite`).
 - Audit-gate exceptions: when an advisory that trips the CI audit gate has
   no fixed release yet, add its identifier to `pnpm.auditConfig.ignoreCves`
   (or `pnpm.auditConfig.ignoreGhsas`) in the root `package.json` with a

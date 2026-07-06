@@ -179,25 +179,32 @@ in the compatibility store facade. HTTP routes live under `http-routes/`, and th
 `@open-cowork/cloud-client` package exposes both the backward-compatible
 top-level barrel and domain barrels under `src/domains/`.
 
-Cloud source files should stay below 2,000 lines. Current documented
-exceptions have explicit budgets and are implementation backlogs, not target
-architecture:
+Cloud source files should stay below 2,000 lines. A handful of former facades
+carry explicit line budgets that are ratcheted to just above their current size
+so a decomposed file cannot silently re-grow. Most now sit under the 2,000-line
+limit; only `postgres-control-plane-store.ts` still exceeds it today. These
+budgets are implementation backlogs, not target architecture:
 
-- `in-memory-control-plane-store.ts` (budget 4,300 lines): compatibility
-  implementation for the full domain store contract, including managed work
-  claim fencing until the store contract is split further.
-- `http-server.ts` (budget 2,100 lines): compatibility Cloud HTTP/SSE entry
-  point that wires shared route modules, HTML/CSP serving, pre-auth health,
-  and streaming lifecycles while route handlers continue moving into
-  `http-routes/`.
-- `postgres-control-plane-store.ts` (budget 4,500 lines): compatibility
-  implementation for the full Postgres-backed store plus webhook security
-  store and managed work claim fencing. Domain row mappers belong in
-  `postgres-domains/`.
-- `session-service.ts` (budget 4,200 lines): compatibility orchestration
-  facade around runtime execution, workflows, quotas, channel coordination,
-  BYOK, billing, projection services, and the focused command payload service
-  under `services/session-command-service.ts`.
+- `postgres-control-plane-store.ts` (budget 2,600 lines): the only file still
+  above the 2,000-line limit. Compatibility implementation for the full
+  Postgres-backed store plus webhook security store and managed work claim
+  fencing. Domain row mappers belong in `postgres-domains/`.
+- `in-memory-control-plane-store.ts` (budget 1,750 lines): decomposed below the
+  2,000-line limit and ratcheted. Compatibility implementation for the full
+  domain store contract, including managed work claim fencing until the store
+  contract is split further.
+- `http-server.ts` (budget 1,800 lines): decomposed below the 2,000-line limit
+  and ratcheted. Compatibility Cloud HTTP/SSE entry point that wires shared
+  route modules, HTML/CSP serving, pre-auth health, and streaming lifecycles
+  while route handlers continue moving into `http-routes/`.
+- `session-service.ts` (budget 2,720 lines): decomposed below the 2,000-line
+  limit into a lean orchestration facade (~1,600 lines, down from 2,718). It
+  delegates to `session-service-types.ts`, `session-coordination-dispatch.ts`,
+  `session-execution-operations.ts`, `services/principal-service.ts`,
+  `services/session-import-service.ts`, and the focused command payload service
+  under `services/session-command-service.ts`, coordinating runtime execution,
+  workflows, quotas, channel coordination, BYOK, billing, and projection
+  services.
 
 New cloud domains should not be added to those exception files. Add a domain
 contract, service, route module, or client domain module first, then wire the

@@ -23,7 +23,7 @@ color without forking layout. Borders use three tiers:
 and `--color-border-strong` for focused, active, or elevated containers.
 The Studio material layer extends the same token source with material and
 motion primitives: `--specular`, `--shadow-1` / `--shadow-2` / `--shadow-3`,
-`--glass-*`, `--glow-*`, the glowing `--ring-focus`, and `--dur-4`. It also
+`--glass-*`, `--glow-*`, the solid 2px accent `--ring-focus`, and `--dur-4`. It also
 defines shared Studio semantics such as `--studio-shell-*`, `--density-*`,
 `--coworker-*`, `--lane-*`, and `--review-*`. These tokens are derived from the
 active theme and must be consumed from shared CSS variables rather than

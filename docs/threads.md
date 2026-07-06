@@ -29,7 +29,7 @@ provider credentials.
 
 ## Search And Facets
 
-The Threads page calls the `threads.search` IPC namespace with bounded,
+The Threads page calls the `threads:search` IPC channel with bounded,
 cursor-based queries. Results default to 50 rows and are capped at 100 rows per
 request. Search covers thread titles and indexed metadata such as project label,
 provider/model, agents, tools, tags, and suggestions.
@@ -76,5 +76,5 @@ other durable app data. The database, WAL, and SHM sidecars are chmodded to
 `0o600` on platforms that support POSIX modes.
 
 If the index is stale or corrupt, use the Threads page refresh path or the
-main-process `threads.reindex` diagnostics IPC to rebuild rows from the current
+main-process `threads:reindex` diagnostics IPC to rebuild rows from the current
 session registry.
