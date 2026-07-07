@@ -1503,6 +1503,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     cookieSecret,
     options.emailSender ?? null,
     entitlementResolver,
+    observability,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const sessionCookies = shouldRunCloudWeb(policy.role)

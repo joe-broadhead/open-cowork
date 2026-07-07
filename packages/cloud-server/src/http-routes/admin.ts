@@ -1,5 +1,30 @@
-import type { ControlPlaneMembershipStatus, ControlPlaneRole, ManagedWorkerStatus } from '../control-plane-store.ts'
+import type { AuditActorType, ControlPlaneMembershipStatus, ControlPlaneRole, ManagedWorkerStatus } from '../control-plane-store.ts'
+import { writeCorsHeaders } from '../http-response-writers.ts'
+import type { AuditExportOptions, AuditQueryFilters } from '../services/audit-service.ts'
 import type { CloudApiRouteInput } from './types.ts'
+
+function auditActorType(value: unknown): AuditActorType | null {
+  return value === 'user' || value === 'api_token' || value === 'system' ? value : null
+}
+
+function optionalIsoDate(value: string | null): Date | null {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function auditQueryFilters(url: URL): AuditQueryFilters {
+  return {
+    actorId: url.searchParams.get('actorId'),
+    actorType: auditActorType(url.searchParams.get('actorType')),
+    eventTypePrefix: url.searchParams.get('action'),
+    targetType: url.searchParams.get('targetType'),
+    targetId: url.searchParams.get('targetId'),
+    result: url.searchParams.get('result'),
+    from: optionalIsoDate(url.searchParams.get('from')),
+    to: optionalIsoDate(url.searchParams.get('to')),
+  }
+}
 
 function memberRole(value: unknown): ControlPlaneRole | null {
   return value === 'owner' || value === 'admin' || value === 'member' ? value : null
@@ -94,11 +119,35 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   }
 
   if (itemId === 'audit' && !action && req.method === 'GET') {
-    tools.writeJson(res, 200, {
-      events: await options.service.listAuditEvents(context.principal, {
-        limit: tools.parseLimit(context.url),
-      }),
-    }, options.corsOrigin)
+    const page = await options.service.queryAuditEvents(context.principal, {
+      ...auditQueryFilters(context.url),
+      limit: tools.parseLimit(context.url),
+      cursor: context.url.searchParams.get('cursor'),
+    })
+    tools.writeJson(res, 200, { events: page.events, nextCursor: page.nextCursor }, options.corsOrigin)
+    return true
+  }
+
+  if (itemId === 'audit' && action === 'export' && req.method === 'GET') {
+    const format = context.url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
+    const exportOptions: AuditExportOptions = {
+      ...auditQueryFilters(context.url),
+      format,
+      unredacted: context.url.searchParams.get('unredacted') === 'true',
+    }
+    const stream = await options.service.exportAuditEvents(context.principal, exportOptions)
+    writeCorsHeaders(res, options.corsOrigin)
+    res.writeHead(200, {
+      'content-type': stream.contentType,
+      'cache-control': 'no-store',
+      'content-disposition': `attachment; filename="${stream.filename}"`,
+    })
+    for await (const chunk of stream.chunks) {
+      if (!res.write(chunk)) {
+        await new Promise<void>((resolve) => res.once('drain', () => resolve()))
+      }
+    }
+    res.end()
     return true
   }
 

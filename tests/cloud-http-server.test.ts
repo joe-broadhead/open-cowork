@@ -8230,3 +8230,47 @@ test('cloud HTTP returns policy verdicts when artifacts are disabled', async () 
     await fixture.server.close()
   }
 })
+
+test('cloud HTTP admin audit log is queryable, filterable, and exportable (JSON + CSV)', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Creating a session emits a fire-and-forget session.created data-plane audit event.
+    const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(createdResponse.status, 201)
+
+    // Poll the query endpoint until the async emission lands (best-effort, non-blocking).
+    let events: Array<Record<string, unknown>> = []
+    for (let attempt = 0; attempt < 200 && events.length === 0; attempt += 1) {
+      const page = await readJson(await fetch(`${baseUrl}/api/admin/audit?action=session.`))
+      events = asArray(page.events) as Array<Record<string, unknown>>
+      if (events.length === 0) await new Promise((resolve) => setImmediate(resolve))
+    }
+    assert.ok(events.some((event) => event.eventType === 'session.created'), 'session.created is queryable')
+
+    // The paginated query shape carries a nextCursor (null when the page is the last).
+    const firstPage = await readJson(await fetch(`${baseUrl}/api/admin/audit?limit=100`))
+    assert.ok('nextCursor' in firstPage)
+
+    // JSON export streams an attachment with the redacted event set.
+    const jsonExport = await fetch(`${baseUrl}/api/admin/audit/export?format=json&action=session.`)
+    assert.equal(jsonExport.status, 200)
+    assert.match(jsonExport.headers.get('content-type') || '', /application\/json/)
+    assert.match(jsonExport.headers.get('content-disposition') || '', /attachment; filename=/)
+    const exportBody = JSON.parse(await jsonExport.text()) as { events: Array<Record<string, unknown>> }
+    assert.ok(exportBody.events.some((event) => event.eventType === 'session.created'))
+
+    // CSV export streams a header row + one row per event.
+    const csvExport = await fetch(`${baseUrl}/api/admin/audit/export?format=csv`)
+    assert.equal(csvExport.status, 200)
+    assert.match(csvExport.headers.get('content-type') || '', /text\/csv/)
+    const csv = await csvExport.text()
+    assert.ok(csv.startsWith('eventId,createdAt,orgId,'))
+  } finally {
+    await fixture.server.close()
+  }
+})

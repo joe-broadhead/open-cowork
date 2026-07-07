@@ -5,6 +5,16 @@ export {
 } from './session-page-cursor.ts'
 export type { SessionPageCursorScope } from './session-page-cursor.ts'
 export {
+  decodeAuditQueryCursor,
+  encodeAuditQueryCursor,
+  InvalidAuditQueryCursorError,
+} from './audit-query-cursor.ts'
+export type { AuditQueryCursorScope } from './audit-query-cursor.ts'
+export {
+  MAX_AUDIT_QUERY_LIMIT,
+  normalizeAuditQueryLimit,
+} from './audit-query.ts'
+export {
   ControlPlaneQuotaExceededError,
   publicQuotaMessage,
   quotaExceeded,

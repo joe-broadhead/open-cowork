@@ -152,6 +152,8 @@ import type {
   GrantApiTokenChannelBindingInput,
   IssueApiTokenInput,
   ListApiTokenChannelBindingGrantsInput,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
   RevokeApiTokenInput,
@@ -575,6 +577,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listAuditEvents(orgId: string, limit = 100): AuditEventRecord[] {
     return this.auditDomain.listAuditEvents(orgId, limit)
+  }
+
+  queryAuditEvents(input: QueryAuditEventsInput): QueryAuditEventsResult {
+    return this.auditDomain.queryAuditEvents(input)
   }
 
   consumeUsageQuota(input: ConsumeUsageQuotaInput): QuotaConsumptionRecord {

@@ -1,7 +1,19 @@
 import { createHash } from 'node:crypto'
 import { clone, nowIso, pruneOldestByCreatedAt } from './store-helpers.ts'
 import { redactAuditMetadata } from '../audit-redaction.ts'
-import type { AuditEventRecord, RecordAuditEventInput } from '../control-plane-store.ts'
+import {
+  auditEventMatchesQuery,
+  compareAuditEventsDescending,
+  isAuditEventAfterCursor,
+  normalizeAuditQueryLimit,
+  paginateAuditEvents,
+} from '../audit-query.ts'
+import type {
+  AuditEventRecord,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
+  RecordAuditEventInput,
+} from '../control-plane-store.ts'
 
 // Audit-event log extracted from in-memory-control-plane-store.ts. Owns the audit
 // records and the record (with metadata redaction) / list-by-org lifecycle. Org
@@ -50,6 +62,22 @@ export class InMemoryAuditDomain {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  // Filterable, keyset-paginated query — the in-memory peer of the Postgres SQL
+  // query. Filter → descending sort → cursor filter → slice(limit + 1), then
+  // derive the next cursor from the extra row. Shares the pure predicates with
+  // the SQL store so parity is structural, not coincidental.
+  queryAuditEvents(input: QueryAuditEventsInput): QueryAuditEventsResult {
+    if (!this.host.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const limit = normalizeAuditQueryLimit(input.limit)
+    const ordered = Array.from(this.auditEvents.values())
+      .filter((event) => event.orgId === input.orgId && auditEventMatchesQuery(event, input))
+      .filter((event) => !input.cursor || isAuditEventAfterCursor(event, input.cursor))
+      .sort(compareAuditEventsDescending)
+      .slice(0, limit + 1)
+      .map((event) => clone(event))
+    return paginateAuditEvents(ordered, limit)
   }
 
   // Opt-in retention (P1-C3): delete the oldest audit records created before the cutoff, bounded.

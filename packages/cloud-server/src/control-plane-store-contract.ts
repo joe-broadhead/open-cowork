@@ -114,6 +114,8 @@ import type {
   GrantApiTokenChannelBindingInput,
   IssueApiTokenInput,
   ListApiTokenChannelBindingGrantsInput,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
   RevokeApiTokenInput,
@@ -235,6 +237,7 @@ export type ControlPlaneStore = {
   listManagedWorkerHeartbeats(orgId: string, input?: { workerId?: string | null, limit?: number | null }): MaybePromise<ManagedWorkerHeartbeatRecord[]>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
+  queryAuditEvents(input: QueryAuditEventsInput): MaybePromise<QueryAuditEventsResult>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
   listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>

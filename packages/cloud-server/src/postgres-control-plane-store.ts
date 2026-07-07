@@ -25,6 +25,7 @@ import {
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
+import { normalizeAuditQueryLimit, paginateAuditEvents } from './audit-query.ts'
 import type {
   CoordinationWatch,
 } from '@open-cowork/shared'
@@ -84,6 +85,8 @@ import type {
   ManagedWorkerStatus,
   ListChannelDeliveriesInput,
   PrincipalMembershipRecord,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
   RecordManagedWorkerHeartbeatInput,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
@@ -550,6 +553,37 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [orgId, Math.max(1, Math.min(limit, 500))],
     )
     return result.rows.map(auditEventFromRow)
+  }
+
+  async queryAuditEvents(input: QueryAuditEventsInput): Promise<QueryAuditEventsResult> {
+    const limit = normalizeAuditQueryLimit(input.limit)
+    const conditions: string[] = ['org_id = $1']
+    const values: unknown[] = [input.orgId]
+    const bind = (value: unknown) => {
+      values.push(value)
+      return `$${values.length}`
+    }
+    if (input.actorId) conditions.push(`actor_id = ${bind(input.actorId)}`)
+    if (input.actorType) conditions.push(`actor_type = ${bind(input.actorType)}`)
+    // Anchored LIKE on the escaped prefix keeps "session." matching session.* only.
+    if (input.eventTypePrefix) conditions.push(`event_type LIKE ${bind(`${likePrefixEscape(input.eventTypePrefix)}%`)} ESCAPE '\\'`)
+    if (input.targetType) conditions.push(`target_type = ${bind(input.targetType)}`)
+    if (input.targetId) conditions.push(`target_id = ${bind(input.targetId)}`)
+    if (input.result) conditions.push(`metadata->>'result' = ${bind(input.result)}`)
+    if (input.from) conditions.push(`created_at >= ${bind(input.from.toISOString())}`)
+    if (input.to) conditions.push(`created_at <= ${bind(input.to.toISOString())}`)
+    if (input.cursor) {
+      // Keyset: rows strictly AFTER the cursor in (created_at DESC, event_id DESC) order.
+      conditions.push(`(created_at, event_id) < (${bind(input.cursor.createdAt)}, ${bind(input.cursor.eventId)})`)
+    }
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_audit_events
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at DESC, event_id DESC
+       LIMIT ${bind(limit + 1)}`,
+      values,
+    )
+    return paginateAuditEvents(result.rows.map(auditEventFromRow), limit)
   }
 
   async consumeUsageQuota(input: ConsumeUsageQuotaInput) {
@@ -2667,6 +2701,13 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
 function randomRecordId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${randomBytes(8).toString('base64url')}`
+}
+
+// Escape LIKE metacharacters in a caller-supplied prefix so an action filter like
+// "session_" matches the literal underscore, not any character. Paired with
+// ESCAPE '\\' in the query.
+function likePrefixEscape(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 
 export async function createPostgresControlPlaneStore(options: PostgresControlPlaneStoreOptions) {

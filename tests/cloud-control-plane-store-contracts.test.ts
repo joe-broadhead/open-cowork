@@ -624,6 +624,37 @@ function runControlPlaneDomainContracts(
       assert.equal(await store.pruneExpiredUsageEvents(noopCutoff), 0)
       assert.equal(await store.pruneExpiredWorkspaceEvents(noopCutoff), 0)
 
+      // Queryable audit log (#899) — filter + keyset-cursor parity. Seed a small, ordered set
+      // and assert both stores return identical filtered/paged results.
+      const auditSeeds = [
+        { eventType: 'session.created', actorId: 'actor-a', result: 'success', createdAt: new Date('2026-04-01T00:00:00.000Z') },
+        { eventType: 'session.imported', actorId: 'actor-a', result: 'success', createdAt: new Date('2026-04-02T00:00:00.000Z') },
+        { eventType: 'command.prompt', actorId: 'actor-b', result: 'failure', createdAt: new Date('2026-04-03T00:00:00.000Z') },
+        { eventType: 'command.aborted', actorId: 'actor-b', result: 'success', createdAt: new Date('2026-04-04T00:00:00.000Z') },
+      ]
+      for (const seed of auditSeeds) {
+        await store.recordAuditEvent({
+          orgId: org.orgId, actorType: 'user', actorId: seed.actorId,
+          eventType: seed.eventType, targetType: 'session', targetId: sessionId,
+          metadata: { result: seed.result }, createdAt: seed.createdAt,
+        })
+      }
+      // Prefix + actor + result filters (newest first).
+      const sessionQuery = await store.queryAuditEvents({ orgId: org.orgId, eventTypePrefix: 'session.' })
+      assert.deepEqual(sessionQuery.events.map((row) => row.eventType), ['session.imported', 'session.created'])
+      assert.equal(sessionQuery.nextCursor, null)
+      const failures = await store.queryAuditEvents({ orgId: org.orgId, result: 'failure' })
+      assert.deepEqual(failures.events.map((row) => row.eventType), ['command.prompt'])
+      const byActor = await store.queryAuditEvents({ orgId: org.orgId, actorId: 'actor-b' })
+      assert.deepEqual(byActor.events.map((row) => row.actorId), ['actor-b', 'actor-b'])
+      // Keyset paging: page size 1 across the "command." family walks both rows with a stable cursor.
+      const firstCommand = await store.queryAuditEvents({ orgId: org.orgId, eventTypePrefix: 'command.', limit: 1 })
+      assert.deepEqual(firstCommand.events.map((row) => row.eventType), ['command.aborted'])
+      assert.ok(firstCommand.nextCursor)
+      const secondCommand = await store.queryAuditEvents({ orgId: org.orgId, eventTypePrefix: 'command.', limit: 1, cursor: firstCommand.nextCursor })
+      assert.deepEqual(secondCommand.events.map((row) => row.eventType), ['command.prompt'])
+      assert.equal(secondCommand.nextCursor, null)
+
       // Worker heartbeats — upsert by worker id (active session ids deduped), then list.
       await store.recordWorkerHeartbeat({ workerId: `${prefix}-hb-worker`, role: 'worker', activeSessionIds: [sessionId, sessionId] })
       const workerHeartbeat = (await store.listWorkerHeartbeats()).find((entry) => entry.workerId === `${prefix}-hb-worker`)

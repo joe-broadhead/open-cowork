@@ -75,6 +75,7 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimeEvent,
 } from './runtime-adapter.ts'
+import type { CloudObservabilityAdapter } from './observability.ts'
 import {
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
@@ -120,6 +121,14 @@ import {
   type CloudAdminPolicyOverview,
   type CloudWorkspaceOverview,
 } from './services/overview-service.ts'
+import {
+  CloudAuditService,
+  type AuditExportOptions,
+  type AuditExportStream,
+  type AuditQueryFilters,
+  type AuditQueryPage,
+  type DataPlaneAuditInput,
+} from './services/audit-service.ts'
 import { CloudProjectSourceService } from './services/project-source-service.ts'
 import {
   type PermissionRespondPayload,
@@ -246,6 +255,7 @@ export class CloudSessionService {
   private readonly sessionImportService: CloudSessionImportService
   private readonly coordinationDispatch: CloudCoordinationDispatchService
   private readonly sessionExecution: CloudSessionExecutionService
+  private readonly auditService: CloudAuditService
 
   constructor(
     store: ControlPlaneStore,
@@ -266,6 +276,9 @@ export class CloudSessionService {
     // Optional, pluggable monetization (#897). Defaults to the unlimited resolver
     // so billing never gates a deployment that has not opted in.
     entitlementResolver: EntitlementResolver = new UnlimitedEntitlementResolver(),
+    // Optional telemetry sink (#899). When present, data-plane audit events also
+    // fan out to the metric pipeline so operators can alert on audit volume.
+    observability: CloudObservabilityAdapter | null = null,
   ) {
     this.store = store
     this.runtime = runtime
@@ -440,6 +453,15 @@ export class CloudSessionService {
       assertBillingAllowed: (input) => this.assertBillingAllowed(input),
       assertRemoteInteractionAllowed: (principal, input) => this.assertRemoteInteractionAllowed(principal, input),
     })
+    this.auditService = new CloudAuditService({
+      store,
+      observability,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
   }
 
   get eventBus() {
@@ -584,6 +606,45 @@ export class CloudSessionService {
     return this.overviewService.listAuditEvents(principal, input)
   }
 
+  // Filterable, keyset-paginated audit query (#899). Gated on audit:read.
+  queryAuditEvents(principal: CloudPrincipal, filters: AuditQueryFilters = {}): Promise<AuditQueryPage> {
+    return this.auditService.queryAuditEvents(principal, filters)
+  }
+
+  // Streamed, redacted-by-default JSON/CSV export (#899). Unredacted mode is
+  // org-admin-only and records its own audit event.
+  exportAuditEvents(principal: CloudPrincipal, options: AuditExportOptions = {}): Promise<AuditExportStream> {
+    return this.auditService.exportAuditEvents(principal, options)
+  }
+
+  // Fire-and-forget data-plane audit emission for callers outside this service
+  // (e.g. the artifact service, which already holds a session-service handle).
+  // Best-effort by construction: emitDataPlaneEvent never rejects on a write error.
+  emitDataPlaneAuditEvent(input: DataPlaneAuditInput): void {
+    void this.auditService.emitDataPlaneEvent(input)
+  }
+
+  // Build a data-plane audit input for a principal-driven action, resolving the
+  // actor + org from the principal so call sites stay one line. Public so callers
+  // that already hold a session-service handle (e.g. the artifact service) can
+  // audit their own data-plane actions without re-plumbing the actor/org.
+  auditPrincipalAction(
+    principal: CloudPrincipal,
+    event: {
+      eventType: string
+      targetType?: string | null
+      targetId?: string | null
+      result?: 'success' | 'failure' | 'denied'
+      metadata?: Record<string, unknown>
+    },
+  ): void {
+    this.emitDataPlaneAuditEvent({
+      orgId: this.principalOrgId(principal),
+      actor: this.auditActor(principal),
+      ...event,
+    })
+  }
+
   createManagedWorkerPool(principal: CloudPrincipal, input: CreateManagedWorkerPoolRequest) {
     return this.managedWorkerService.createPool(principal, input)
   }
@@ -658,11 +719,24 @@ export class CloudSessionService {
       deferRuntime: Boolean(projectSource),
     })
     if (projectSource) await this.bindSessionProjectSource(principal.tenantId, session.sessionId, projectSource)
+    this.auditPrincipalAction(principal, {
+      eventType: 'session.created',
+      targetType: 'session',
+      targetId: session.sessionId,
+      metadata: { profileName, hasProjectSource: Boolean(projectSource) },
+    })
     return this.getSessionView(principal, session.sessionId)
   }
 
   async createImportedSession(principal: CloudPrincipal, input: SessionImportRequest): Promise<CloudSessionView> {
-    return this.sessionImportService.createImportedSession(principal, input)
+    const view = await this.sessionImportService.createImportedSession(principal, input)
+    this.auditPrincipalAction(principal, {
+      eventType: 'session.imported',
+      targetType: 'session',
+      targetId: view.session.sessionId,
+      metadata: { profileName: view.session.profileName },
+    })
+    return view
   }
 
   async completeSessionImport(
@@ -1347,7 +1421,23 @@ export class CloudSessionService {
     workerId: string
     leaseToken: string
   }) {
-    return this.usageGovernance.recordManagedWorkClaimed(input)
+    const result = await this.usageGovernance.recordManagedWorkClaimed(input)
+    // Worker lease claim (data-plane). Actor is the system/worker, not a principal;
+    // resolve the org from the tenant. Best-effort — never blocks the claim.
+    try {
+      const orgId = await this.resolveOrgIdForTenant(input.tenantId)
+      this.emitDataPlaneAuditEvent({
+        orgId,
+        actor: { actorType: 'system', actorId: input.workerId },
+        eventType: 'worker.lease_claimed',
+        targetType: 'session',
+        targetId: input.sessionId,
+        metadata: { result: 'success', workerId: input.workerId },
+      })
+    } catch {
+      // Org resolution can fail for an orphaned tenant; the claim itself still stands.
+    }
+    return result
   }
 
   async recordManagedExecutionEvent(input: {
@@ -1487,11 +1577,25 @@ export class CloudSessionService {
     sessionId: string,
     input: { text: string, agent?: string | null },
   ): Promise<SessionCommandRecord> {
-    return this.sessionExecution.enqueuePrompt(principal, sessionId, input)
+    const command = await this.sessionExecution.enqueuePrompt(principal, sessionId, input)
+    this.auditPrincipalAction(principal, {
+      eventType: 'command.prompt',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: { commandId: command.commandId, agent: input.agent || null },
+    })
+    return command
   }
 
   async enqueueAbort(principal: CloudPrincipal, sessionId: string): Promise<SessionCommandRecord> {
-    return this.sessionExecution.enqueueAbort(principal, sessionId)
+    const command = await this.sessionExecution.enqueueAbort(principal, sessionId)
+    this.auditPrincipalAction(principal, {
+      eventType: 'command.aborted',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: { commandId: command.commandId },
+    })
+    return command
   }
 
   async enqueueQuestionReply(
@@ -1515,7 +1619,14 @@ export class CloudSessionService {
     sessionId: string,
     payload: PermissionRespondPayload,
   ): Promise<SessionCommandRecord> {
-    return this.sessionExecution.enqueuePermissionResponse(principal, sessionId, payload)
+    const command = await this.sessionExecution.enqueuePermissionResponse(principal, sessionId, payload)
+    this.auditPrincipalAction(principal, {
+      eventType: 'command.permission_responded',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: { commandId: command.commandId, permissionId: payload.permissionId },
+    })
+    return command
   }
 
   async executeCommand(

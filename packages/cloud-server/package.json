@@ -25,6 +25,7 @@
     "./observability": "./src/observability.ts",
     "./app": "./src/app.ts",
     "./control-plane-store": "./src/control-plane-store.ts",
+    "./audit-query": "./src/audit-query.ts",
     "./object-store": "./src/object-store.ts",
     "./http-server": "./src/http-server.ts",
     "./runtime-portability": "./src/runtime-portability.ts",

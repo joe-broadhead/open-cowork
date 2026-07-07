@@ -340,8 +340,22 @@ paths. Admin panels expose:
   requiring explicit confirmation,
 - runtime profile, feature, project-source, signup-mode, and gateway policy
   visibility through `/api/admin/policy`,
-- redacted audit events through `/api/admin/audit`, with browser-side search
-  and export over the already redacted event payload,
+- a queryable, exportable audit log through `/api/admin/audit`, gated on the
+  `audit:read` permission (owner/admin by default). The control plane audits both
+  control-plane actions (members, roles, policy, worker credentials) and
+  data-plane actions (session create/import/abort, command prompt/abort/
+  permission-respond, artifact upload/download, and worker lease claims). The
+  query accepts `actorId`, `actorType`, `action` (event-type prefix),
+  `targetType`, `targetId`, `result`, `from`/`to`, and a stable keyset `cursor`
+  (page sizes are bounded). `/api/admin/audit/export?format=json|csv` streams a
+  deterministic, redacted-by-default export (secrets are scrubbed at write time;
+  local filesystem paths are scrubbed at export time); `unredacted=true` is an
+  org-admin-only mode whose disclosure is itself recorded as an `audit.exported`
+  event. Audit events also emit an `open_cowork_cloud_audit_events_total` metric
+  so operators can alert on audit volume without scraping logs. Retention reuses
+  the event-retention scheduler and is off by default
+  (`OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS`), so no event is ever dropped
+  before an explicitly configured window,
 - BYOK provider status, plaintext key rotation, and KMS reference submission
   through metadata-only BYOK APIs,
 - one-time API token issuance and revocation for desktop and gateway clients,

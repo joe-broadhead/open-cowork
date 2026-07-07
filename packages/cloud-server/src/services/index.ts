@@ -59,6 +59,17 @@ export type {
   CloudOverviewServiceOptions,
   CloudWorkspaceOverview,
 } from './overview-service.ts'
+export { CloudAuditService } from './audit-service.ts'
+export type {
+  AuditActor,
+  AuditExportFormat,
+  AuditExportOptions,
+  AuditExportStream,
+  AuditQueryFilters,
+  AuditQueryPage,
+  CloudAuditServiceOptions,
+  DataPlaneAuditInput,
+} from './audit-service.ts'
 export { CloudProjectSourceService } from './project-source-service.ts'
 export type { CloudProjectSourceServiceOptions } from './project-source-service.ts'
 export { CloudManagedWorkerService } from './managed-worker-service.ts'
