@@ -227,6 +227,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'custom:select-skill-directory',
   'custom:import-skill-directory',
   'custom:remove-skill',
+  'custom:export-setup-bundle',
+  'custom:import-setup-bundle',
   'capabilities:tools',
   'capabilities:tool',
   'capabilities:skills',
@@ -592,6 +594,8 @@ const api: CoworkAPI = {
     selectSkillDirectoryImport: () => invoke('custom:select-skill-directory'),
     importSkillDirectory: (selectionToken, target) => invoke('custom:import-skill-directory', selectionToken, target),
     removeSkill: (target, confirmationToken) => invoke('custom:remove-skill', target, confirmationToken),
+    exportSetupBundle: (options) => invoke('custom:export-setup-bundle', options),
+    importSetupBundle: (bundle, options) => invoke('custom:import-setup-bundle', bundle, options),
   },
   capabilities: {
     tools: (options) => invoke('capabilities:tools', options),

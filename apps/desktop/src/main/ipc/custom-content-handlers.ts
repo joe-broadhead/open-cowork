@@ -4,11 +4,13 @@ import { listCustomMcps, listCustomSkills, readSkillBundleDirectory, removeCusto
 import { validateCustomMcpStdioCommand } from '@open-cowork/runtime-host/mcp-stdio-policy'
 import { assertCustomMcpContentLimits, assertCustomSkillContent } from '@open-cowork/runtime-host/custom-content-limits'
 import { invalidateCustomAgentCatalogCache } from '@open-cowork/runtime-host/custom-agents'
+import { exportSetupBundle, importSetupBundle } from '@open-cowork/runtime-host/setup-bundle-store'
 import { randomUUID } from 'crypto'
 import { resolve } from 'path'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig, RuntimeContextOptions, ScopedArtifactRef } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import {
+  objectAndOptionalObjectArgs,
   objectAndOptionalStringArgs,
   objectArg,
   optionalObjectArg,
@@ -16,6 +18,7 @@ import {
   stringAndObjectArgs,
 } from './schema.ts'
 import { validateCustomMcpConfig, validateCustomSkillConfig, validateRuntimeContextOptions, validateScopedArtifactRef } from './object-validators.ts'
+import type { SetupBundleImportOptions } from '@open-cowork/shared'
 import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
 import { computeCustomSkillBundleDigest } from '../custom-skill-integrity.ts'
@@ -327,5 +330,39 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       context.logHandlerError(`custom:remove-skill ${resolvedTarget.name}`, err)
       return false
     }
+  })
+
+  registerIpcInvoke(context, 'custom:export-setup-bundle', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      throw new Error('Exporting a setup bundle is only supported for the Local workspace.')
+    }
+    return exportSetupBundle({ context: resolveCustomContext(context, options), exportedBy: getBrandName() })
+  })
+
+  registerIpcInvoke(context, 'custom:import-setup-bundle', objectAndOptionalObjectArgs<Record<string, unknown>, SetupBundleImportOptions>('setup bundle', 'import options'), async (_event, bundle, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      throw new Error('Importing a setup bundle is only supported for the Local workspace.')
+    }
+    const requestedTarget = options?.target
+    const target = requestedTarget?.scope === 'project'
+      ? { scope: 'project' as const, directory: context.resolveContextDirectory({ directory: requestedTarget.directory ?? null }) }
+      : { scope: 'machine' as const, directory: null }
+    if (target.scope === 'project' && !target.directory) {
+      throw new Error('Importing a setup bundle into project scope requires an active project directory.')
+    }
+    const result = await importSetupBundle(bundle, {
+      target,
+      secretValues: options?.secretValues,
+      overwrite: options?.overwrite,
+    })
+    if (result.appliedCount > 0) {
+      invalidateCustomAgentCatalogCache()
+      log('custom', `Imported setup bundle: ${result.appliedCount} applied, ${result.needsSecretCount} need secrets, ${result.skippedCount} skipped.`)
+      const { rebootRuntime } = await import('../index.ts')
+      await rebootRuntime()
+    }
+    return result
   })
 }

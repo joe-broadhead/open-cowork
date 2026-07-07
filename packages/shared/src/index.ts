@@ -87,6 +87,11 @@ import type {
   ScopedArtifactRef,
 } from './custom-content.js'
 import type {
+  SetupBundle,
+  SetupBundleImportOptions,
+  SetupBundleImportResult,
+} from './setup-bundle.js'
+import type {
   DestructiveConfirmationGrant,
   DestructiveConfirmationRequest,
 } from './destructive-actions.js'
@@ -212,6 +217,7 @@ export * from './destructive-actions.js'
 export * from './desktop-pairing.js'
 export * from './events.js'
 export * from './explorer.js'
+export * from './extension-descriptor.js'
 export * from './http-client-source.js'
 export * from './jsonc.js'
 export * from './knowledge.js'
@@ -228,6 +234,7 @@ export * from './runtime-event-normalizers.js'
 export * from './semantic-ui.js'
 export * from './session.js'
 export * from './session-import.js'
+export * from './setup-bundle.js'
 export * from './session-view-tokens.js'
 export * from './session-view-order.js'
 export * from './session-view-streaming-state.js'
@@ -578,6 +585,12 @@ export interface CoworkAPI {
     selectSkillDirectoryImport: () => Promise<SkillImportSelection | null>
     importSkillDirectory: (selectionToken: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig | null>
     removeSkill: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
+    // Shareable setup bundle: export the installed skills + custom MCPs +
+    // custom agents as a portable, secret-redacted bundle, and import one back
+    // (installing via the existing per-type stores, never overwriting a secret
+    // it can't supply).
+    exportSetupBundle: (options?: RuntimeContextOptions) => Promise<SetupBundle>
+    importSetupBundle: (bundle: unknown, options?: SetupBundleImportOptions) => Promise<SetupBundleImportResult>
   }
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => () => void

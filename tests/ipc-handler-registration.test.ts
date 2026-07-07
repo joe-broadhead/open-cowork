@@ -160,6 +160,8 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('capabilities:tools'), true)
   assert.equal(handlers.has('custom:add-mcp'), true)
   assert.equal(handlers.has('custom:import-skill-directory'), true)
+  assert.equal(handlers.has('custom:export-setup-bundle'), true)
+  assert.equal(handlers.has('custom:import-setup-bundle'), true)
   assert.equal(handlers.has('threads:search'), true)
   assert.equal(handlers.has('workflows:list'), true)
   assert.equal(handlers.has('workflows:start-draft'), true)

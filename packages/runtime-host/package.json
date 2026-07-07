@@ -158,6 +158,10 @@
       "types": "./dist/perf-metrics.d.ts",
       "import": "./dist/perf-metrics.js"
     },
+    "./setup-bundle-store": {
+      "types": "./dist/setup-bundle-store.d.ts",
+      "import": "./dist/setup-bundle-store.js"
+    },
     "./permission-config": {
       "types": "./dist/permission-config.d.ts",
       "import": "./dist/permission-config.js"

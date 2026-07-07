@@ -1419,6 +1419,8 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       selectSkillDirectoryImport: async () => null,
       importSkillDirectory: async () => null,
       removeSkill: () => browserUnavailable('custom.removeSkill'),
+      exportSetupBundle: () => browserUnavailable('custom.exportSetupBundle'),
+      importSetupBundle: () => browserUnavailable('custom.importSetupBundle'),
     },
 
     // -- on.* (SSE demux) --------------------------------------------------
