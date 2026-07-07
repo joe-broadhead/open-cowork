@@ -118,6 +118,47 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     }
   }
 
+  // Enterprise SSO config CRUD (#895), gated on sso:manage inside the service.
+  if (itemId === 'sso') {
+    if (!action && req.method === 'GET') {
+      tools.writeJson(res, 200, { sso: await options.service.getSsoConfig(context.principal) }, options.corsOrigin)
+      return true
+    }
+    if (!action && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const protocol = body.protocol === 'saml' || body.protocol === 'oidc' ? body.protocol : undefined
+      tools.writeJson(res, 200, {
+        sso: await options.service.upsertSsoConfig(context.principal, {
+          protocol,
+          enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+          enforced: typeof body.enforced === 'boolean' ? body.enforced : undefined,
+          displayName: Object.prototype.hasOwnProperty.call(body, 'displayName') ? tools.readString(body.displayName) : undefined,
+          verifiedDomains: tools.readStringArray(body.verifiedDomains) ?? undefined,
+          oidcIssuer: Object.prototype.hasOwnProperty.call(body, 'oidcIssuer') ? tools.readString(body.oidcIssuer) : undefined,
+          oidcClientId: Object.prototype.hasOwnProperty.call(body, 'oidcClientId') ? tools.readString(body.oidcClientId) : undefined,
+          oidcClientSecret: Object.prototype.hasOwnProperty.call(body, 'oidcClientSecret') ? tools.readString(body.oidcClientSecret) : undefined,
+          samlEntityId: Object.prototype.hasOwnProperty.call(body, 'samlEntityId') ? tools.readString(body.samlEntityId) : undefined,
+          samlAcsUrl: Object.prototype.hasOwnProperty.call(body, 'samlAcsUrl') ? tools.readString(body.samlAcsUrl) : undefined,
+          samlSloUrl: Object.prototype.hasOwnProperty.call(body, 'samlSloUrl') ? tools.readString(body.samlSloUrl) : undefined,
+          samlIdpEntityId: Object.prototype.hasOwnProperty.call(body, 'samlIdpEntityId') ? tools.readString(body.samlIdpEntityId) : undefined,
+          samlIdpSsoUrl: Object.prototype.hasOwnProperty.call(body, 'samlIdpSsoUrl') ? tools.readString(body.samlIdpSsoUrl) : undefined,
+          samlIdpMetadataUrl: Object.prototype.hasOwnProperty.call(body, 'samlIdpMetadataUrl') ? tools.readString(body.samlIdpMetadataUrl) : undefined,
+          samlIdpCertificate: Object.prototype.hasOwnProperty.call(body, 'samlIdpCertificate') ? tools.readString(body.samlIdpCertificate) : undefined,
+          scimEnabled: typeof body.scimEnabled === 'boolean' ? body.scimEnabled : undefined,
+        }),
+      }, options.corsOrigin)
+      return true
+    }
+    if (action === 'scim-token' && req.method === 'POST') {
+      tools.writeJson(res, 201, await options.service.rotateScimToken(context.principal), options.corsOrigin)
+      return true
+    }
+    if (!action && req.method === 'DELETE') {
+      tools.writeJson(res, 200, { deleted: await options.service.deleteSsoConfig(context.principal) }, options.corsOrigin)
+      return true
+    }
+  }
+
   if (itemId === 'audit' && !action && req.method === 'GET') {
     const page = await options.service.queryAuditEvents(context.principal, {
       ...auditQueryFilters(context.url),

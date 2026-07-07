@@ -15,6 +15,7 @@ export type ControlPlanePermission =
   | 'members:read'
   | 'members:manage'
   | 'roles:manage'
+  | 'sso:manage'
   | 'api_tokens:read'
   | 'api_tokens:manage'
   | 'billing:manage'
@@ -34,6 +35,7 @@ export const CONTROL_PLANE_PERMISSIONS: readonly ControlPlanePermission[] = [
   'members:read',
   'members:manage',
   'roles:manage',
+  'sso:manage',
   'api_tokens:read',
   'api_tokens:manage',
   'billing:manage',

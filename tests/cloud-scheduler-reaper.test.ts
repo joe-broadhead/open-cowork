@@ -62,6 +62,7 @@ test('cloud scheduler reaps expired workflow claims in bounded batches and repor
   }
 
   const service = {
+    drainScimSyncQueue: async () => ({ processed: 0, succeeded: 0, failed: 0 }),
     async claimAndStartDueWorkflow() {
       return null
     },
@@ -96,6 +97,7 @@ test('cloud scheduler runs retention in bounded batches, throttled by interval',
     },
   } as unknown as InMemoryControlPlaneStore
   const service = {
+    drainScimSyncQueue: async () => ({ processed: 0, succeeded: 0, failed: 0 }),
     async claimAndStartDueWorkflow() { return null },
   } as unknown as CloudSessionService
   const observability = new RecordingObservability()
@@ -145,6 +147,7 @@ test('cloud scheduler prunes only the opt-in event logs whose window is configur
     async pruneExpiredWorkspaceEvents() { calls.workspace += 1; return 0 },
   } as unknown as InMemoryControlPlaneStore
   const service = {
+    drainScimSyncQueue: async () => ({ processed: 0, succeeded: 0, failed: 0 }),
     async claimAndStartDueWorkflow() { return null },
   } as unknown as CloudSessionService
   const scheduler = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability(), {
@@ -177,6 +180,7 @@ test('cloud scheduler reconciles concurrency counters only when an interval is c
     async reconcileConcurrencyCounters() { reconciles += 1; return 3 },
   } as unknown as InMemoryControlPlaneStore
   const service = {
+    drainScimSyncQueue: async () => ({ processed: 0, succeeded: 0, failed: 0 }),
     async claimAndStartDueWorkflow() { return null },
   } as unknown as CloudSessionService
 
@@ -205,6 +209,7 @@ test('cloud scheduler skips retention entirely when no window is configured', as
     async pruneExpiredChannelInteractions() { pruneCalls += 1; return 0 },
   } as unknown as InMemoryControlPlaneStore
   const service = {
+    drainScimSyncQueue: async () => ({ processed: 0, succeeded: 0, failed: 0 }),
     async claimAndStartDueWorkflow() { return null },
   } as unknown as CloudSessionService
   const scheduler = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability())
@@ -225,6 +230,7 @@ test('cloud scheduler caps claims per loop and throttles the heartbeat', async (
   let serviceCalls = 0
   const service = {
     // Always returns a workflow so the loop would run forever without the cap.
+    drainScimSyncQueue: async () => ({ processed: 0, succeeded: 0, failed: 0 }),
     async claimAndStartDueWorkflow() { serviceCalls += 1; return { sessionId: `s-${serviceCalls}` } },
   } as unknown as CloudSessionService
   const scheduler = new CloudScheduler(store, service, 'scheduler-1', new RecordingObservability())

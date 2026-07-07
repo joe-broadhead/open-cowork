@@ -169,7 +169,17 @@ import { PostgresChannelIdentitiesRepository } from './postgres-store-domains/ch
 import { PostgresIdentityRepository } from './postgres-store-domains/identity.ts'
 import { PostgresRolesRepository } from './postgres-store-domains/roles.ts'
 import { PostgresManagedPolicyRepository } from './postgres-store-domains/policy.ts'
+import { PostgresSsoRepository } from './postgres-store-domains/sso.ts'
 import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
+import type { OrgSsoConfigRecord, UpsertOrgSsoConfigInput } from './control-plane-sso.ts'
+import type {
+  ClaimScimSyncEventsInput,
+  CompleteScimSyncEventInput,
+  EnqueueScimSyncEventInput,
+  FailScimSyncEventInput,
+  ListScimSyncEventsInput,
+  ScimSyncEventRecord,
+} from './control-plane-scim.ts'
 import { membershipFromRow } from './postgres-domains/identity.ts'
 import { resolveEffectivePermissions } from './control-plane-permissions.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
@@ -220,6 +230,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly identity: PostgresIdentityRepository
   private readonly roles: PostgresRolesRepository
   private readonly managedPolicy: PostgresManagedPolicyRepository
+  private readonly sso: PostgresSsoRepository
   private readonly apiTokens: PostgresApiTokensRepository
   private readonly rateLimits: PostgresRateLimitsRepository
   private readonly authBackoff: PostgresAuthBackoffRepository
@@ -258,6 +269,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
     })
     this.managedPolicy = new PostgresManagedPolicyRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.sso = new PostgresSsoRepository({
       pool: this.pool,
       withTransaction: (fn) => this.withTransaction(fn),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
@@ -435,6 +451,50 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
     if (!org) throw new Error(`Unknown org ${input.orgId}.`)
     return this.managedPolicy.setManagedPolicy(input)
+  }
+
+  async getOrgSsoConfig(orgId: string): Promise<OrgSsoConfigRecord | null> {
+    return this.sso.getOrgSsoConfig(orgId)
+  }
+
+  async upsertOrgSsoConfig(input: UpsertOrgSsoConfigInput): Promise<OrgSsoConfigRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.sso.upsertOrgSsoConfig(input)
+  }
+
+  async deleteOrgSsoConfig(orgId: string): Promise<boolean> {
+    return this.sso.deleteOrgSsoConfig(orgId)
+  }
+
+  async findOrgSsoConfigByScimToken(plaintext: string): Promise<OrgSsoConfigRecord | null> {
+    return this.sso.findOrgSsoConfigByScimToken(plaintext)
+  }
+
+  async findOrgSsoConfigByDomain(domain: string): Promise<OrgSsoConfigRecord | null> {
+    return this.sso.findOrgSsoConfigByDomain(domain)
+  }
+
+  async enqueueScimSyncEvent(input: EnqueueScimSyncEventInput): Promise<ScimSyncEventRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.sso.enqueueScimSyncEvent(input)
+  }
+
+  async claimNextScimSyncEvents(input: ClaimScimSyncEventsInput = {}): Promise<ScimSyncEventRecord[]> {
+    return this.sso.claimNextScimSyncEvents(input)
+  }
+
+  async completeScimSyncEvent(input: CompleteScimSyncEventInput): Promise<ScimSyncEventRecord | null> {
+    return this.sso.completeScimSyncEvent(input)
+  }
+
+  async failScimSyncEvent(input: FailScimSyncEventInput): Promise<ScimSyncEventRecord | null> {
+    return this.sso.failScimSyncEvent(input)
+  }
+
+  async listScimSyncEvents(input: ListScimSyncEventsInput): Promise<ScimSyncEventRecord[]> {
+    return this.sso.listScimSyncEvents(input)
   }
 
   // Effective permissions for a member: its custom role's permission map when one

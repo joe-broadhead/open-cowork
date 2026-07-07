@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import {
   ControlPlaneQuotaExceededError,
+  hashScimToken,
   type ControlPlaneStore,
 } from '@open-cowork/cloud-server/control-plane-store'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
@@ -568,6 +569,63 @@ function runControlPlaneDomainContracts(
       assert.equal(mergedPolicy.keyManagement, 'byok_required')
       assert.equal(mergedPolicy.createdAt, firstPolicy.createdAt)
       assert.deepEqual((await store.getManagedPolicy(org.orgId))?.permissionCeilings.bash, 'deny')
+
+      // Enterprise SSO config + SCIM sync queue (#895). Upsert MERGES a partial patch;
+      // secrets are opaque ciphertext to the store; lookups by SCIM token + verified
+      // domain; the durable queue claims due events, completes, and retries with backoff.
+      assert.equal(await store.getOrgSsoConfig(org.orgId), null)
+      const sso = await store.upsertOrgSsoConfig({
+        orgId: org.orgId,
+        protocol: 'oidc',
+        enabled: true,
+        enforced: true,
+        verifiedDomains: ['Example.test', 'example.test'],
+        oidcIssuer: 'https://idp.example.test',
+        oidcClientSecretCiphertext: 'enc:v1:opaque',
+        scimEnabled: true,
+        scimTokenHash: hashScimToken('scim-secret-token'),
+      })
+      assert.deepEqual(sso.verifiedDomains, ['example.test'])
+      assert.equal(sso.enforced, true)
+      assert.equal(sso.oidcIssuer, 'https://idp.example.test/')
+      // A partial upsert preserves omitted fields (issuer stays; only enforced flips).
+      const ssoMerged = await store.upsertOrgSsoConfig({ orgId: org.orgId, enforced: false })
+      assert.equal(ssoMerged.enforced, false)
+      assert.equal(ssoMerged.oidcIssuer, 'https://idp.example.test/')
+      assert.equal(ssoMerged.oidcClientSecretCiphertext, 'enc:v1:opaque')
+      assert.equal((await store.findOrgSsoConfigByScimToken('scim-secret-token'))?.orgId, org.orgId)
+      assert.equal(await store.findOrgSsoConfigByScimToken('wrong-token'), null)
+      // Domain lookup requires enabled; enforced=false still resolves for enforcement checks.
+      assert.equal((await store.findOrgSsoConfigByDomain('example.test'))?.orgId, org.orgId)
+      assert.equal(await store.findOrgSsoConfigByDomain('unverified.test'), null)
+      // Durable SCIM sync queue: enqueue → claim (marks processing, +1 attempt) → fail
+      // reschedules pending with backoff → claim again → complete.
+      const claimTime = new Date('2026-04-01T00:00:00.000Z')
+      const scimEvent = await store.enqueueScimSyncEvent({
+        orgId: org.orgId,
+        operation: 'user.provision',
+        externalId: 'idp-user-1',
+        payload: { accountId: account.accountId, status: 'active' },
+        createdAt: claimTime,
+      })
+      assert.equal(scimEvent.status, 'pending')
+      const claimed = await store.claimNextScimSyncEvents({ orgId: org.orgId, now: claimTime })
+      assert.deepEqual(claimed.map((entry) => entry.eventId), [scimEvent.eventId])
+      assert.equal(claimed[0]?.status, 'processing')
+      assert.equal(claimed[0]?.attempts, 1)
+      const failed = await store.failScimSyncEvent({ orgId: org.orgId, eventId: scimEvent.eventId, error: 'transient', now: claimTime })
+      assert.equal(failed?.status, 'pending')
+      assert.ok(new Date(failed!.nextAttemptAt).getTime() > claimTime.getTime())
+      // Not yet due at claim time (backoff), due after the delay.
+      assert.deepEqual(await store.claimNextScimSyncEvents({ orgId: org.orgId, now: claimTime }), [])
+      const reclaimed = await store.claimNextScimSyncEvents({ orgId: org.orgId, now: new Date(claimTime.getTime() + 60_000) })
+      assert.equal(reclaimed.length, 1)
+      assert.equal(reclaimed[0]?.attempts, 2)
+      const completed = await store.completeScimSyncEvent({ orgId: org.orgId, eventId: scimEvent.eventId })
+      assert.equal(completed?.status, 'succeeded')
+      assert.deepEqual((await store.listScimSyncEvents({ orgId: org.orgId, status: 'succeeded' })).map((entry) => entry.eventId), [scimEvent.eventId])
+      assert.equal(await store.deleteOrgSsoConfig(org.orgId), true)
+      assert.equal(await store.getOrgSsoConfig(org.orgId), null)
 
       // Setting metadata — tenant-scoped vs user-scoped upsert/get/list stay isolated.
       await store.setSettingMetadata({ tenantId, key: 'appearance', value: { theme: 'dark' } })

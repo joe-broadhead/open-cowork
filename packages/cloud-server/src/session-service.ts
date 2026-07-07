@@ -111,6 +111,16 @@ import {
   CloudPolicyService,
   type SetManagedPolicyRequest,
 } from './services/policy-service.ts'
+import {
+  CloudSsoService,
+  type UpsertSsoConfigRequest,
+} from './services/sso-service.ts'
+import { CloudScimService } from './services/scim-service.ts'
+import { CloudScimReconciler } from './scim-reconciler.ts'
+import { createSsoVerifierRegistry, type SsoAssertionVerifier } from './sso-assertion.ts'
+import type { SecretAdapter } from './secret-adapter.ts'
+import type { SsoProtocol } from './control-plane-sso.ts'
+import type { ScimGroupInput, ScimUserInput, ScimUserPatch } from './scim-schema.ts'
 import { CloudSessionImportService } from './services/session-import-service.ts'
 import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
 import { CloudSessionExecutionService } from './session-execution-operations.ts'
@@ -240,6 +250,9 @@ export class CloudSessionService {
   private readonly memberService: CloudMemberService
   private readonly roleService: CloudRoleService
   private readonly policyService: CloudPolicyService
+  private readonly ssoService: CloudSsoService
+  private readonly scimService: CloudScimService
+  private readonly scimReconciler: CloudScimReconciler
   private readonly coordinationService: CloudCoordinationService
   private readonly capabilityService: CloudCapabilityService
   private readonly settingMetadataService: CloudSettingMetadataService
@@ -279,6 +292,12 @@ export class CloudSessionService {
     // Optional telemetry sink (#899). When present, data-plane audit events also
     // fan out to the metric pipeline so operators can alert on audit volume.
     observability: CloudObservabilityAdapter | null = null,
+    // Envelope-encryption adapter used to seal enterprise SSO IdP secrets (#895).
+    // Null ⇒ SSO config CRUD that stores a secret fails closed with a clear error.
+    secretAdapter: SecretAdapter | null = null,
+    // Optional operator-supplied SSO assertion verifiers (#895). The SAML default is a
+    // fail-closed seam; an operator plugs in a real SAML response validator here.
+    ssoVerifiers: Partial<Record<SsoProtocol, SsoAssertionVerifier>> = {},
   ) {
     this.store = store
     this.runtime = runtime
@@ -364,6 +383,17 @@ export class CloudSessionService {
       principalOrgId: (principal) => this.principalOrgId(principal),
       auditActor: (principal) => this.auditActor(principal),
     })
+    this.ssoService = new CloudSsoService({
+      store,
+      secretAdapter,
+      verifiers: createSsoVerifierRegistry(ssoVerifiers),
+      ensurePrincipal: (principal) => this.principalService.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
+    this.scimReconciler = new CloudScimReconciler({ store })
+    this.scimService = new CloudScimService({ store, reconciler: this.scimReconciler })
     this.coordinationService = new CloudCoordinationService({
       store,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
@@ -508,7 +538,75 @@ export class CloudSessionService {
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
+    // SSO-only enforcement (#895): reject a non-SSO login on a domain an org has enforced
+    // SSO for, BEFORE bootstrapping. Local/self-host and SSO-verified principals are exempt.
+    await this.ssoService.assertNonSsoLoginAllowed(principal)
     return this.principalService.ensurePrincipal(principal)
+  }
+
+  // --- Enterprise SSO configuration (#895), gated on sso:manage ---
+  getSsoConfig(principal: CloudPrincipal) {
+    return this.ssoService.getSsoConfig(principal)
+  }
+
+  upsertSsoConfig(principal: CloudPrincipal, input: UpsertSsoConfigRequest) {
+    return this.ssoService.upsertSsoConfig(principal, input)
+  }
+
+  deleteSsoConfig(principal: CloudPrincipal) {
+    return this.ssoService.deleteSsoConfig(principal)
+  }
+
+  rotateScimToken(principal: CloudPrincipal) {
+    return this.ssoService.rotateScimToken(principal)
+  }
+
+  // The SSO login binding: verify a raw IdP assertion → bootstrapped principal.
+  authenticateSso(input: { orgId: string, rawAssertion: string }) {
+    return this.ssoService.authenticateSso(input)
+  }
+
+  // --- SCIM 2.0 provisioning (#895), authenticated by the per-org SCIM bearer token ---
+  authenticateScim(bearerToken: string | null) {
+    return this.scimService.authenticate(bearerToken)
+  }
+
+  listScimMembers(orgId: string, filter: { email?: string | null } = {}) {
+    return this.scimService.listMembers(orgId, filter)
+  }
+
+  getScimMember(orgId: string, accountId: string) {
+    return this.scimService.getMember(orgId, accountId)
+  }
+
+  createScimUser(orgId: string, input: ScimUserInput) {
+    return this.scimService.createUser(orgId, input)
+  }
+
+  replaceScimUser(orgId: string, accountId: string, input: ScimUserInput) {
+    return this.scimService.replaceUser(orgId, accountId, input)
+  }
+
+  patchScimUser(orgId: string, accountId: string, patch: ScimUserPatch) {
+    return this.scimService.patchUser(orgId, accountId, patch)
+  }
+
+  deprovisionScimUser(orgId: string, accountId: string) {
+    return this.scimService.deprovisionUser(orgId, accountId)
+  }
+
+  syncScimGroup(orgId: string, input: ScimGroupInput) {
+    return this.scimService.syncGroup(orgId, input)
+  }
+
+  // Drain the durable SCIM sync-event queue (retry with backoff); run periodically by the
+  // scheduler and directly by tests. Returns processed/succeeded/failed counts.
+  drainScimSyncQueue(input: { orgId?: string | null, limit?: number } = {}) {
+    return this.scimReconciler.drain(input)
+  }
+
+  enqueueScimReconcile(orgId: string) {
+    return this.scimReconciler.enqueueReconcile(orgId)
   }
 
   async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {

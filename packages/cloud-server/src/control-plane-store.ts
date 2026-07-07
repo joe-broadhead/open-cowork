@@ -25,9 +25,11 @@ export {
   generateCloudApiToken,
   hashChannelInteractionToken,
   hashCloudApiToken,
+  hashScimToken,
   plaintextMatchesCloudApiTokenId,
   verifyChannelInteractionTokenHash,
   verifyCloudApiTokenHash,
+  verifyScimTokenHash,
 } from './control-plane-tokens.ts'
 export {
   generateManagedWorkerCredential,
@@ -49,6 +51,24 @@ export {
   managedPolicyDisabledControls,
   toManagedDesktopPolicyView,
 } from './control-plane-policy.ts'
+export type * from './control-plane-sso.ts'
+export {
+  defaultOrgSsoConfig,
+  emailDomain as ssoEmailDomain,
+  generateDomainVerificationToken,
+  isSsoProtocol,
+  mergeOrgSsoConfig,
+  normalizeSsoProtocol,
+  normalizeVerifiedDomains,
+  toPublicOrgSsoConfig,
+} from './control-plane-sso.ts'
+export type * from './control-plane-scim.ts'
+export {
+  isScimSyncOperation,
+  normalizeScimSyncOperation,
+  scimRetryDelayMs,
+  SCIM_SYNC_DEFAULT_MAX_ATTEMPTS,
+} from './control-plane-scim.ts'
 export {
   BUILTIN_ROLE_PERMISSIONS,
   CONTROL_PLANE_PERMISSIONS,

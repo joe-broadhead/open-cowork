@@ -53,6 +53,18 @@ import type {
   SetManagedPolicyInput,
 } from './control-plane-policy.ts'
 import type {
+  OrgSsoConfigRecord,
+  UpsertOrgSsoConfigInput,
+} from './control-plane-sso.ts'
+import type {
+  ClaimScimSyncEventsInput,
+  CompleteScimSyncEventInput,
+  EnqueueScimSyncEventInput,
+  FailScimSyncEventInput,
+  ListScimSyncEventsInput,
+  ScimSyncEventRecord,
+} from './control-plane-scim.ts'
+import type {
   BillingSubscriptionRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -207,6 +219,22 @@ export type ControlPlaneStore = {
   // merges a partial input onto the current record (or the unrestricted defaults).
   getManagedPolicy(orgId: string): MaybePromise<ManagedPolicyRecord | null>
   setManagedPolicy(input: SetManagedPolicyInput): MaybePromise<ManagedPolicyRecord>
+  // Per-org enterprise SSO config (#895): a single record per org (SAML 2.0 + OIDC,
+  // domain verification, SSO-only enforcement, SCIM enablement). Secrets are stored
+  // as `enc:vN:` ciphertext / salted-hash — the store never sees plaintext. Lookups
+  // by SCIM bearer token (route auth) and by verified email domain (login enforcement).
+  getOrgSsoConfig(orgId: string): MaybePromise<OrgSsoConfigRecord | null>
+  upsertOrgSsoConfig(input: UpsertOrgSsoConfigInput): MaybePromise<OrgSsoConfigRecord>
+  deleteOrgSsoConfig(orgId: string): MaybePromise<boolean>
+  findOrgSsoConfigByScimToken(plaintext: string): MaybePromise<OrgSsoConfigRecord | null>
+  findOrgSsoConfigByDomain(domain: string): MaybePromise<OrgSsoConfigRecord | null>
+  // The durable SCIM sync-event queue (#895): enqueue on every provisioning write,
+  // claim-with-backoff for the reconciler, complete/fail with exponential retry.
+  enqueueScimSyncEvent(input: EnqueueScimSyncEventInput): MaybePromise<ScimSyncEventRecord>
+  claimNextScimSyncEvents(input?: ClaimScimSyncEventsInput): MaybePromise<ScimSyncEventRecord[]>
+  completeScimSyncEvent(input: CompleteScimSyncEventInput): MaybePromise<ScimSyncEventRecord | null>
+  failScimSyncEvent(input: FailScimSyncEventInput): MaybePromise<ScimSyncEventRecord | null>
+  listScimSyncEvents(input: ListScimSyncEventsInput): MaybePromise<ScimSyncEventRecord[]>
   resolveMemberPermissions(orgId: string, accountId: string): MaybePromise<MemberPermissionResolution | null>
   issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
   listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>

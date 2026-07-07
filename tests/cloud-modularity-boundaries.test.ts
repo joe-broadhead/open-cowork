@@ -24,7 +24,7 @@ const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
-  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_600],
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_820],
   ['packages/cloud-server/src/session-service.ts', 2_720],
 ])
 

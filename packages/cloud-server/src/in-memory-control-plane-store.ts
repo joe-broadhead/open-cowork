@@ -42,7 +42,17 @@ import { InMemoryIdentityDomain } from './in-memory-domains/identity.ts'
 import { InMemoryApiTokensDomain } from './in-memory-domains/api-tokens.ts'
 import { InMemoryRolesDomain } from './in-memory-domains/roles.ts'
 import { InMemoryManagedPolicyDomain } from './in-memory-domains/policy.ts'
+import { InMemorySsoDomain } from './in-memory-domains/sso.ts'
 import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
+import type { OrgSsoConfigRecord, UpsertOrgSsoConfigInput } from './control-plane-sso.ts'
+import type {
+  ClaimScimSyncEventsInput,
+  CompleteScimSyncEventInput,
+  EnqueueScimSyncEventInput,
+  FailScimSyncEventInput,
+  ListScimSyncEventsInput,
+  ScimSyncEventRecord,
+} from './control-plane-scim.ts'
 import { resolveEffectivePermissions } from './control-plane-permissions.ts'
 import type {
   CreateCustomRoleInput,
@@ -330,6 +340,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     orgExists: (orgId) => this.orgExists(orgId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
+  private readonly ssoDomain = new InMemorySsoDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
   private readonly channelBindingsDomain = new InMemoryChannelBindingsDomain({
     getHeadlessAgent: (orgId, agentId) => this.getHeadlessAgent(orgId, agentId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
@@ -442,6 +456,46 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   setManagedPolicy(input: SetManagedPolicyInput): ManagedPolicyRecord {
     return this.managedPolicyDomain.setManagedPolicy(input)
+  }
+
+  getOrgSsoConfig(orgId: string): OrgSsoConfigRecord | null {
+    return this.ssoDomain.getOrgSsoConfig(orgId)
+  }
+
+  upsertOrgSsoConfig(input: UpsertOrgSsoConfigInput): OrgSsoConfigRecord {
+    return this.ssoDomain.upsertOrgSsoConfig(input)
+  }
+
+  deleteOrgSsoConfig(orgId: string): boolean {
+    return this.ssoDomain.deleteOrgSsoConfig(orgId)
+  }
+
+  findOrgSsoConfigByScimToken(plaintext: string): OrgSsoConfigRecord | null {
+    return this.ssoDomain.findOrgSsoConfigByScimToken(plaintext)
+  }
+
+  findOrgSsoConfigByDomain(domain: string): OrgSsoConfigRecord | null {
+    return this.ssoDomain.findOrgSsoConfigByDomain(domain)
+  }
+
+  enqueueScimSyncEvent(input: EnqueueScimSyncEventInput): ScimSyncEventRecord {
+    return this.ssoDomain.enqueueScimSyncEvent(input)
+  }
+
+  claimNextScimSyncEvents(input: ClaimScimSyncEventsInput = {}): ScimSyncEventRecord[] {
+    return this.ssoDomain.claimNextScimSyncEvents(input)
+  }
+
+  completeScimSyncEvent(input: CompleteScimSyncEventInput): ScimSyncEventRecord | null {
+    return this.ssoDomain.completeScimSyncEvent(input)
+  }
+
+  failScimSyncEvent(input: FailScimSyncEventInput): ScimSyncEventRecord | null {
+    return this.ssoDomain.failScimSyncEvent(input)
+  }
+
+  listScimSyncEvents(input: ListScimSyncEventsInput): ScimSyncEventRecord[] {
+    return this.ssoDomain.listScimSyncEvents(input)
   }
 
   // Effective permissions for a member: its custom role's permission map when one

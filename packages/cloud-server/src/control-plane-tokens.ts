@@ -44,6 +44,17 @@ export function hashChannelInteractionToken(plaintext: string) {
   return hashSecretWithRandomSalt(plaintext)
 }
 
+// SCIM bearer token (issue #895): a new credential family, so it has no legacy hash —
+// the store only ever compares a v2 salted hash. The empty-string legacy fallback can
+// never match a real token, so a non-v2 stored hash simply fails closed.
+export function hashScimToken(plaintext: string) {
+  return hashSecretWithRandomSalt(plaintext)
+}
+
+export function verifyScimTokenHash(plaintext: string, tokenHash: string) {
+  return verifySecretHash(plaintext, tokenHash, () => '')
+}
+
 export function verifyChannelInteractionTokenHash(plaintext: string, tokenHash: string) {
   return verifySecretHash(plaintext, tokenHash, legacyChannelInteractionTokenHash)
 }

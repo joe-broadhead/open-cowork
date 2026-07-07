@@ -1504,6 +1504,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     options.emailSender ?? null,
     entitlementResolver,
     observability,
+    // Envelope-encryption adapter for enterprise SSO IdP secrets (#895).
+    secretAdapter,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const sessionCookies = shouldRunCloudWeb(policy.role)

@@ -41,6 +41,10 @@ export type {
   CloudPolicyServiceOptions,
   SetManagedPolicyRequest,
 } from './policy-service.ts'
+export { CloudSsoService } from './sso-service.ts'
+export type { CloudSsoServiceOptions, UpsertSsoConfigRequest } from './sso-service.ts'
+export { CloudScimService } from './scim-service.ts'
+export type { CloudScimServiceOptions, ScimAuthContext } from './scim-service.ts'
 export {
   DEFAULT_SINGLE_ORG_ID,
   DEFAULT_SINGLE_ORG_NAME,

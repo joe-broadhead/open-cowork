@@ -356,6 +356,18 @@ paths. Admin panels expose:
   the event-retention scheduler and is off by default
   (`OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS`), so no event is ever dropped
   before an explicitly configured window,
+- per-org enterprise SSO (SAML 2.0 + OIDC) and SCIM 2.0 provisioning through
+  `/api/admin/sso` (config CRUD gated on the `sso:manage` permission) and the
+  `/scim/v2` endpoints (authenticated by a per-org SCIM bearer token). IdP secrets
+  (SAML certificate, OIDC client secret) and the SCIM token are stored encrypted
+  with the existing envelope key (`OPEN_COWORK_CLOUD_SECRET_KEY`) — never plaintext.
+  SSO config supports an SSO-only enforcement toggle, and SCIM deprovisioning
+  suspends the membership and revokes the member's credentials immediately. A
+  durable, store-backed sync-event queue retries with backoff and periodically
+  reconciles directory ↔ membership drift. This feature adds **no new environment
+  variables** — it is configured entirely per-org through the admin API. See the
+  [SSO and SCIM setup runbook](runbooks/sso-scim-setup.md) for IdP-specific wiring
+  (Okta, Microsoft Entra ID, Google Workspace),
 - BYOK provider status, plaintext key rotation, and KMS reference submission
   through metadata-only BYOK APIs,
 - one-time API token issuance and revocation for desktop and gateway clients,
