@@ -614,7 +614,7 @@ export function wikiSurfaceCss(): string {
     }
     .studio-wiki-propose__error {
       margin: 0;
-      color: var(--color-danger, #c46a72);
+      color: var(--color-danger, var(--color-red));
       font-size: var(--text-sm);
     }`
 }

@@ -192,3 +192,50 @@ Downstream builders should override only the color/brand keys they own and let
 the shared structural tokens continue to define layout density, control heights,
 radii, typography scale, shadows, glass, glow, and motion. Do not reintroduce
 Cloud Web-only spacing or typography scales.
+
+## Retint In 5 Minutes
+
+A downstream fork retints the whole product by overriding **primitive / brand
+tokens only**. Because every component consumes semantic tokens (enforced by
+`scripts/check-design-token-usage.mjs`; see the tier model in
+[Design System → Token Tiers](design-system.md#token-tiers)), no component,
+stylesheet, or JSX file changes. There are three override surfaces, smallest
+blast radius first:
+
+1. **Accent only (one line).** Pick a shipped signature accent by id — `azure`,
+   `indigo`, `plum`, `teal`, `amber`, or `rose` from `DESIGN_ACCENT_PRESETS` —
+   or set your own. In code, `applyDesignAccentTokens(theme, 'plum')` returns a
+   brand theme with the accent, hover, foreground, soft, and line tokens derived
+   for you (foreground contrast is computed to clear WCAG AA). At runtime, set
+   `cloud.publicBranding.theme.accent` (and optionally `accent2`); the derivation
+   helpers fill `accentSoft`, `accentLine`, `accentHover`, and
+   `accentForeground` automatically via `derivePublicBrandingThemeTokens()`.
+
+2. **Full brand palette (config-only, no rebuild).** Override the neutrals, ink,
+   status hues, shadows, and logo through `cloud.publicBranding.theme` using the
+   [Public Branding Theme Keys](#public-branding-theme-keys) above —
+   `background`, `surface`, `mutedSurface`, `elevated`, `border`, `borderSubtle`,
+   `borderStrong`, `text`, `mutedText`, `textSecondary`, `accent`, `accent2`,
+   `warn`/`danger`/`ok` (status), `shadowCard`, `shadowElevated`, and `bgImage`
+   (brand background/logo art). This is a pure config override served by the
+   cloud bootstrap and layered on the shared `:root` tokens at load time — no
+   fork of the token source and no rebuild. Set three or four surface hexes plus
+   one accent and the entire product — Desktop and Cloud Web — reskins, because
+   the coworker/lane/review/glass/glow/focus tokens are all derived from
+   `--color-*`.
+
+3. **Radius personality and other structural primitives (token override
+   layer).** Radius, spacing, and control heights are theme-invariant structure,
+   not brand color, so they are intentionally outside `publicBranding`. A fork
+   that wants a rounder or sharper personality ships a tiny CSS layer that
+   re-declares only those primitive-derived variables **after** the generated
+   `design-tokens.css` import — e.g. a `brand-overrides.css` with
+   `:root { --radius-sm: 10px; --radius-lg: 18px; --radius-xl: 22px; }`. This is
+   still token-only (it overrides the semantic variables, not any component), so
+   it survives upgrades and keeps `pnpm design-tokens:check` green because the
+   generated file is untouched. For a permanent fork, edit `DESIGN_TOKENS.radius`
+   in `packages/shared/src/design-tokens.ts` and run `pnpm design-tokens:build`.
+
+What you must **not** touch to retint: `packages/ui/src` components, the renderer
+classes in `globals.css`, or the semantic token names. If a retint tempts you to
+edit a component color, that color is missing a token — add the token instead.
