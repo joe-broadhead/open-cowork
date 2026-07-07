@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Page } from 'playwright-core'
 import { repoRoot, waitForAppShell } from './smoke-helpers.ts'
@@ -98,13 +98,25 @@ export async function compareToBaseline(
 
   const currentBuffer = await page.screenshot({ fullPage: false })
 
-  if (!existsSync(baselinePath) || shouldUpdateBaselines()) {
+  const seedBaseline = (): VisualComparison => {
     writeFileSync(baselinePath, currentBuffer)
     process.stdout.write(`[eval] seeded visual baseline ${name}.png (maintainer must review + commit)\n`)
     return { name, seeded: true, diffRatio: 0, threshold, passed: true }
   }
 
-  const baselineBase64 = readFileSync(baselinePath).toString('base64')
+  if (shouldUpdateBaselines()) return seedBaseline()
+
+  // Read the baseline directly rather than existsSync-then-read (a check-then-use
+  // race); a missing baseline is the seed path.
+  let baselineBuffer: Buffer
+  try {
+    baselineBuffer = readFileSync(baselinePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return seedBaseline()
+    throw error
+  }
+
+  const baselineBase64 = baselineBuffer.toString('base64')
   const currentBase64 = currentBuffer.toString('base64')
 
   const diffRatio = await page.evaluate(

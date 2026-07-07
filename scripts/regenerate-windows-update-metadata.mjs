@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -59,22 +59,32 @@ export function regenerateWindowsUpdateMetadataText(yamlText, resolveFile) {
 
 export function regenerateWindowsUpdateMetadata({ dir, yamlName = 'latest.yml' } = {}) {
   const yamlPath = join(dir, yamlName)
-  if (!existsSync(yamlPath)) {
-    return { updated: false, yamlPath, removedBlockmaps: [] }
-  }
   const cache = new Map()
   const resolveFile = (name) => {
     const safeName = basename(name)
     if (cache.has(safeName)) return cache.get(safeName)
     const filePath = join(dir, safeName)
-    const resolved = existsSync(filePath) && statSync(filePath).isFile()
-      ? { sha512: sha512Base64(filePath), size: statSync(filePath).size }
-      : null
+    // Read the installer once and derive hash + size from the same buffer:
+    // an existsSync/statSync guard here is a check-then-use race, and reading
+    // once also avoids hashing a file that changed between the two syscalls.
+    let resolved = null
+    try {
+      const buffer = readFileSync(filePath)
+      resolved = { sha512: createHash('sha512').update(buffer).digest('base64'), size: buffer.length }
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error
+    }
     cache.set(safeName, resolved)
     return resolved
   }
 
-  const original = readFileSync(yamlPath, 'utf8')
+  let original
+  try {
+    original = readFileSync(yamlPath, 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') return { updated: false, yamlPath, removedBlockmaps: [] }
+    throw error
+  }
   const rewritten = regenerateWindowsUpdateMetadataText(original, resolveFile)
   writeFileSync(yamlPath, rewritten)
 

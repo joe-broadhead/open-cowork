@@ -11,7 +11,11 @@ export const SCIM_LIST_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:ListRespo
 export const SCIM_PATCH_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:PatchOp'
 export const SCIM_ERROR_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:Error'
 
-const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+// Linear-time email shape check. The domain is matched as dot-separated labels
+// where each label excludes '.', so there is exactly one way to place the dots —
+// no ambiguous overlap between the character classes and the literal '.', which
+// is what makes the naive `[^@\s]+\.[^@\s]+` form quadratic (polynomial ReDoS).
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
