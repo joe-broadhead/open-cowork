@@ -79,6 +79,78 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     return true
   }
 
+  // The caller's own effective access (#896) — the Admin surface reads this to gate
+  // every section/action. Open to any authenticated member: it only ever reflects
+  // the requester's own resolved permission set.
+  if (itemId === 'access' && !action && req.method === 'GET') {
+    const principal = context.principal
+    tools.writeJson(res, 200, {
+      access: {
+        role: principal.role ?? null,
+        customRoleKey: principal.customRoleKey ?? null,
+        permissions: principal.permissions ?? [],
+        email: principal.email ?? null,
+        ssoVerified: principal.ssoVerified ?? false,
+      },
+    }, options.corsOrigin)
+    return true
+  }
+
+  // The assignable permission catalog custom-role editors render against (#896).
+  if (itemId === 'permission-catalog' && !action && req.method === 'GET') {
+    tools.writeJson(res, 200, {
+      permissions: options.service.listPermissionCatalog(),
+    }, options.corsOrigin)
+    return true
+  }
+
+  // Custom-role CRUD (#896), gated on roles:manage inside the service layer.
+  if (itemId === 'roles') {
+    if (!action && req.method === 'GET') {
+      tools.writeJson(res, 200, {
+        roles: await options.service.listCustomRoles(context.principal),
+      }, options.corsOrigin)
+      return true
+    }
+    if (!action && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const roleKey = tools.readString(body.roleKey)
+      const name = tools.readString(body.name)
+      if (!roleKey || !name) {
+        tools.writeError(res, 400, 'Custom role requires a roleKey and name.', options.corsOrigin)
+        return true
+      }
+      tools.writeJson(res, 201, {
+        role: await options.service.createCustomRole(context.principal, {
+          roleKey,
+          name,
+          description: tools.readString(body.description),
+          baseRole: memberRole(body.baseRole),
+          permissions: tools.readStringArray(body.permissions) ?? [],
+        }),
+      }, options.corsOrigin)
+      return true
+    }
+    if (action && artifactId === 'update' && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      tools.writeJson(res, 200, {
+        role: await options.service.updateCustomRole(context.principal, action, {
+          name: Object.prototype.hasOwnProperty.call(body, 'name') ? tools.readString(body.name) : undefined,
+          description: Object.prototype.hasOwnProperty.call(body, 'description') ? tools.readString(body.description) : undefined,
+          baseRole: Object.prototype.hasOwnProperty.call(body, 'baseRole') ? memberRole(body.baseRole) : undefined,
+          permissions: Object.prototype.hasOwnProperty.call(body, 'permissions') ? (tools.readStringArray(body.permissions) ?? undefined) : undefined,
+        }),
+      }, options.corsOrigin)
+      return true
+    }
+    if (action && !artifactId && req.method === 'DELETE') {
+      tools.writeJson(res, 200, {
+        deleted: await options.service.deleteCustomRole(context.principal, action),
+      }, options.corsOrigin)
+      return true
+    }
+  }
+
   if (itemId === 'members') {
     if (!action && req.method === 'GET') {
       tools.writeJson(res, 200, {
@@ -113,6 +185,17 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
           status: memberStatus(body.status),
           confirm: tools.readString(body.confirm),
         }),
+      }, options.corsOrigin)
+      return true
+    }
+    // Assign or clear a member's custom role (#896), gated members:manage in the
+    // service. Returns the fresh member record (its customRoleKey now updated).
+    if (action && input.artifactId === 'role' && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const roleKey = body.roleKey === null ? null : tools.readString(body.roleKey)
+      await options.service.assignMemberRole(context.principal, action, { roleKey })
+      tools.writeJson(res, 200, {
+        member: await options.service.updateOrgMember(context.principal, action, {}),
       }, options.corsOrigin)
       return true
     }

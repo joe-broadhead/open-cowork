@@ -16,6 +16,7 @@ import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
+import { registerAdminHandlers } from '../apps/desktop/src/main/ipc/admin-handlers.ts'
 import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
 import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coordination-handlers.ts'
@@ -117,6 +118,7 @@ test('IPC handler modules register their core channels', () => {
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
   registerThreadHandlers(context)
+  registerAdminHandlers(context)
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   // One-way fire-and-forget channels (renderer uses `send`) must also
@@ -198,6 +200,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
   registerThreadHandlers(context)
+  registerAdminHandlers(context)
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')

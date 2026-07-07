@@ -80,6 +80,7 @@ import {
   type WorkspaceInfo,
   type WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
+import { createBrowserAdminApi } from './cowork-api-admin'
 
 // ---------------------------------------------------------------------------
 // Bootstrap + transport
@@ -1366,8 +1367,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       },
       reindex: async () => false,
     },
-
-    // -- agents (read via capabilities catalog; mutations Electron-only) ---
+    admin: createBrowserAdminApi(request), // admin control plane (#896)
     agents: {
       catalog: async (): Promise<AgentCatalog> => {
         const catalog = await request<Partial<AgentCatalog>>(endpoint('capabilitiesCatalog'))

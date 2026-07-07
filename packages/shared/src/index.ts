@@ -167,7 +167,32 @@ import type {
   KnowledgeSpace,
   KnowledgeSpaceInput,
 } from './knowledge.js'
+import type {
+  AdminAccess,
+  AdminAuditExport,
+  AdminAuditExportInput,
+  AdminAuditPage,
+  AdminAuditQuery,
+  AdminByokSecret,
+  AdminCreateRoleInput,
+  AdminCustomRole,
+  AdminEntitlements,
+  AdminManagedPolicyResult,
+  AdminMember,
+  AdminMemberInviteInput,
+  AdminMemberInviteResult,
+  AdminMemberListInput,
+  AdminMemberUpdateInput,
+  AdminOverview,
+  AdminSetByokInput,
+  AdminSetPolicyInput,
+  AdminSsoConfig,
+  AdminUpdateRoleInput,
+  AdminUsageSummary,
+  ControlPlanePermission,
+} from './admin.js'
 
+export * from './admin.js'
 export * from './app-config.js'
 export * from './config-types.js'
 export * from './log-sanitizer.js'
@@ -488,6 +513,45 @@ export interface CoworkAPI {
     create: (agent: CustomAgentConfig) => Promise<boolean>
     update: (target: ScopedArtifactRef, agent: CustomAgentConfig) => Promise<boolean>
     remove: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
+  }
+  // Admin control plane (#896). Cloud-only: every method resolves against the
+  // signed-in cloud workspace's org. RBAC gating and conditional billing are driven
+  // by `admin.access()` (effective permissions) and `admin.entitlements()`.
+  admin: {
+    // The caller's own effective permissions — the source of truth for gating.
+    access: () => Promise<AdminAccess>
+    // Read-only entitlement/plan status; `billingEnabled` conditionally renders Billing.
+    entitlements: () => Promise<AdminEntitlements>
+    // Org/deployment overview for the Deployment section.
+    overview: () => Promise<AdminOverview>
+    members: {
+      list: (input?: AdminMemberListInput) => Promise<AdminMember[]>
+      invite: (input: AdminMemberInviteInput) => Promise<AdminMemberInviteResult>
+      update: (accountId: string, input: AdminMemberUpdateInput) => Promise<AdminMember>
+      assignRole: (accountId: string, roleKey: string | null) => Promise<AdminMember>
+    }
+    roles: {
+      catalog: () => Promise<ControlPlanePermission[]>
+      list: () => Promise<AdminCustomRole[]>
+      create: (input: AdminCreateRoleInput) => Promise<AdminCustomRole>
+      update: (roleKey: string, input: AdminUpdateRoleInput) => Promise<AdminCustomRole>
+      delete: (roleKey: string) => Promise<boolean>
+    }
+    policy: {
+      get: () => Promise<AdminManagedPolicyResult>
+      set: (input: AdminSetPolicyInput) => Promise<AdminManagedPolicyResult>
+    }
+    providers: {
+      listKeys: () => Promise<AdminByokSecret[]>
+      setKey: (providerId: string, input: AdminSetByokInput) => Promise<AdminByokSecret>
+      deleteKey: (providerId: string) => Promise<boolean>
+      sso: () => Promise<AdminSsoConfig | null>
+    }
+    usage: (limit?: number) => Promise<AdminUsageSummary>
+    audit: {
+      query: (filters?: AdminAuditQuery) => Promise<AdminAuditPage>
+      export: (input?: AdminAuditExportInput) => Promise<AdminAuditExport>
+    }
   }
   capabilities: {
     tools: (options?: ToolListOptions) => Promise<CapabilityTool[]>

@@ -34,6 +34,28 @@ import type {
   WorkflowRun,
   WorkflowTriggerType,
   ManagedDesktopPolicyView,
+  AdminAccess,
+  AdminAuditExport,
+  AdminAuditExportInput,
+  AdminAuditPage,
+  AdminAuditQuery,
+  AdminByokSecret,
+  AdminCreateRoleInput,
+  AdminCustomRole,
+  AdminEntitlements,
+  AdminManagedPolicyResult,
+  AdminMember,
+  AdminMemberInviteInput,
+  AdminMemberInviteResult,
+  AdminMemberListInput,
+  AdminMemberUpdateInput,
+  AdminOverview,
+  AdminSetByokInput,
+  AdminSetPolicyInput,
+  AdminSsoConfig,
+  AdminUpdateRoleInput,
+  AdminUsageSummary,
+  ControlPlanePermission,
 } from '@open-cowork/shared'
 
 export type {
@@ -714,6 +736,28 @@ export type CloudTransportAdapter = {
     cancelUrl?: string | null
   }): Promise<CloudBillingCheckoutResult>
   createBillingPortal?(input?: { returnUrl?: string | null }): Promise<CloudBillingPortalResult>
+  // Admin control plane (#896).
+  getAdminAccess?(): Promise<AdminAccess>
+  getEntitlements?(): Promise<AdminEntitlements>
+  getAdminOverview?(): Promise<AdminOverview>
+  listAdminMembers?(input?: AdminMemberListInput): Promise<AdminMember[]>
+  inviteAdminMember?(input: AdminMemberInviteInput): Promise<AdminMemberInviteResult>
+  updateAdminMember?(accountId: string, input: AdminMemberUpdateInput): Promise<AdminMember>
+  assignAdminMemberRole?(accountId: string, roleKey: string | null): Promise<AdminMember>
+  listPermissionCatalog?(): Promise<ControlPlanePermission[]>
+  listCustomRoles?(): Promise<AdminCustomRole[]>
+  createCustomRole?(input: AdminCreateRoleInput): Promise<AdminCustomRole>
+  updateCustomRole?(roleKey: string, input: AdminUpdateRoleInput): Promise<AdminCustomRole>
+  deleteCustomRole?(roleKey: string): Promise<boolean>
+  getManagedPolicy?(): Promise<AdminManagedPolicyResult>
+  setManagedPolicy?(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult>
+  listByokKeys?(): Promise<AdminByokSecret[]>
+  setByokKey?(providerId: string, input: AdminSetByokInput): Promise<AdminByokSecret>
+  deleteByokKey?(providerId: string): Promise<boolean>
+  getSsoConfig?(): Promise<AdminSsoConfig | null>
+  getAdminUsageSummary?(limit?: number): Promise<AdminUsageSummary>
+  queryAudit?(filters?: AdminAuditQuery): Promise<AdminAuditPage>
+  exportAudit?(input?: AdminAuditExportInput): Promise<AdminAuditExport>
   listHeadlessAgents?(): Promise<HeadlessAgentRecord[]>
   createHeadlessAgent?(input: {
     name: string

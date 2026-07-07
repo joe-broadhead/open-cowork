@@ -259,6 +259,27 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       login: vi.fn(async () => ({ authenticated: false, email: null })),
       logout: vi.fn(async () => ({ authenticated: false, email: null })),
     },
+    // Admin control plane (#896). Defaults to a no-permission principal so the
+    // Admin entry stays hidden and shells that render App never crash on
+    // window.coworkApi.admin.access(). Admin tests override this group.
+    admin: {
+      access: vi.fn(async () => ({ role: 'member', customRoleKey: null, permissions: [], email: null, ssoVerified: false })),
+      entitlements: vi.fn(async () => ({ provider: 'metadata', gatingEnabled: false, billingEnabled: false, planKey: null, planLabel: null, subscriptionStatus: null, seats: null, features: {}, limits: {} })),
+      overview: vi.fn(async () => ({
+        org: { orgId: 'o', tenantId: 't', name: 'Org', planKey: null, status: 'active' },
+        signup: { mode: 'invite', allowSelfServiceSignup: false, allowedEmailDomains: [], invitesEnabled: true },
+        profile: { name: 'default', label: null, description: null },
+        features: {}, allowedAgents: null, allowedTools: null, allowedMcps: null,
+        runtime: { configSource: 'app', machineRuntimeConfig: 'disabled', localStdioMcps: 'disabled', hostProjectDirectories: 'disabled' },
+        gateway: { channelsEnabled: false, webhooksEnabled: false },
+      })),
+      members: { list: vi.fn(async () => []), invite: vi.fn(), update: vi.fn(), assignRole: vi.fn() },
+      roles: { catalog: vi.fn(async () => []), list: vi.fn(async () => []), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      policy: { get: vi.fn(async () => ({ policy: null, view: {} })), set: vi.fn() },
+      providers: { listKeys: vi.fn(async () => []), setKey: vi.fn(), deleteKey: vi.fn(), sso: vi.fn(async () => null) },
+      usage: vi.fn(async () => ({ enabled: false, generatedAt: '', events: [], totals: [], quotas: [] })),
+      audit: { query: vi.fn(async () => ({ events: [], nextCursor: null })), export: vi.fn() },
+    },
     agents: {
       list: vi.fn(async () => []),
       runtime: vi.fn(async () => []),

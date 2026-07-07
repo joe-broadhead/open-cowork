@@ -38,6 +38,7 @@ import { registerWorkflowHandlers } from './ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
+import { registerAdminHandlers } from './ipc/admin-handlers.ts'
 import { registerWorkspaceHandlers } from './ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from './ipc/desktop-pairing-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
@@ -404,6 +405,7 @@ export function setupIpcHandlers(
   registerWorkflowHandlers(context)
 
   registerThreadHandlers(context)
+  registerAdminHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

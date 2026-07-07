@@ -1,3 +1,5 @@
+import { createCloudAdminClient } from './domains/admin.js'
+import { createCloudAdminGovernanceClient } from './domains/admin-governance.js'
 import { createCloudArtifactsClient } from './domains/artifacts.js'
 import { createCloudBillingClient } from './domains/billing.js'
 import { createCloudByokClient } from './domains/byok.js'
@@ -246,6 +248,36 @@ export function createHttpSseCloudTransportAdapter(
     }
   }
 
+  // Raw-text reader for streamed downloads (audit export JSON/CSV): unlike
+  // `request`, it does not JSON-parse the body and preserves the content-type +
+  // content-disposition filename the server attaches.
+  async function requestText(path: string) {
+    const requestUrl = cloudApiRequestUrl(baseUrl, path)
+    // lgtm[js/file-access-to-http]
+    const response = await fetcher(requestUrl, {
+      method: 'GET',
+      headers: { ...headers },
+      credentials: options.credentials,
+    })
+    const content = await response.text()
+    if (!response.ok) {
+      throw new CloudTransportError({
+        kind: cloudTransportErrorKindForStatus(response.status),
+        message: apiErrorMessage(parseApiErrorPayload(content), `Cloud transport request failed with HTTP ${response.status}: GET ${requestUrl}`),
+        method: 'GET',
+        url: requestUrl,
+        status: response.status,
+      })
+    }
+    const disposition = responseHeader(response, 'content-disposition') || ''
+    const match = /filename="?([^"]+)"?/.exec(disposition)
+    return {
+      content,
+      contentType: responseHeader(response, 'content-type') || '',
+      filename: match ? match[1]! : null,
+    }
+  }
+
   const domainContext = { request }
   const sseContext = {
     baseUrl,
@@ -268,6 +300,8 @@ export function createHttpSseCloudTransportAdapter(
     ...createCloudByokClient(domainContext),
     ...createCloudBillingClient(domainContext),
     ...createCloudIdentityClient(domainContext),
+    ...createCloudAdminClient(domainContext),
+    ...createCloudAdminGovernanceClient({ ...domainContext, requestText }),
     ...createCloudChannelsClient({
       ...domainContext,
       ...sseContext,

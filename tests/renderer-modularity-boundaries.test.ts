@@ -26,8 +26,9 @@ const documentedLargeFileBudgets = new Map([
   // quick-actions, and hero sections into feature components.
   ['packages/app/src/components/HomePage.tsx', 1_208],
   // components/layout/Sidebar.tsx — the primary nav shell. Backlog: extract the
-  // per-section nav groups into dedicated components.
-  ['packages/app/src/components/layout/Sidebar.tsx', 954],
+  // per-section nav groups into dedicated components. Grew by the RBAC-gated Admin
+  // control-plane nav entry (#896); still a decomposition backlog.
+  ['packages/app/src/components/layout/Sidebar.tsx', 960],
 ])
 
 function productionSourceFiles(directory: string): string[] {
