@@ -24,6 +24,13 @@ import {
   normalizeWorkspaceId,
   sessionWorkspaceKey,
 } from './session-workspace-keys.ts'
+import { permissionSignature, type RunawaySample } from '../components/chat/permission-approval-model.ts'
+
+// How many recent permission signatures we retain per store for runaway
+// ("doom-loop") detection. Bounded so a long-running session can't grow the
+// buffer without limit; a burst that repeats far more than this is still
+// clearly a loop.
+const RECENT_APPROVAL_LIMIT = 60
 
 export type {
   CompactionNotice,
@@ -85,6 +92,10 @@ export interface SessionStore {
   currentSessionId: string | null
   currentView: SessionView
   globalErrors: SessionError[]
+  // Rolling history of recent permission-request signatures + timestamps,
+  // used by the approval surface to detect runaway ("doom-loop") requests
+  // even after each individual request has been resolved.
+  recentApprovals: RunawaySample[]
   setActiveWorkspace: (workspaceId: string) => void
   setSessions: (sessions: Session[]) => void
   setCurrentSession: (id: string | null) => void
@@ -144,6 +155,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   currentSessionId: null,
   currentView: deriveVisibleSessionPatch(createEmptySessionViewState({}, sessionViewTiming()), null, new Set<string>(), new Set<string>(), sessionViewTiming()),
   globalErrors: [],
+  recentApprovals: [],
   setActiveWorkspace: (workspaceId) => set((state) => {
     const nextWorkspaceId = normalizeWorkspaceId(workspaceId)
     if (nextWorkspaceId === normalizeWorkspaceId(state.activeWorkspaceId)) return {}
@@ -416,6 +428,12 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const busySessions = new Set(state.busySessions)
     busySessions.add(sessionKey)
 
+    const approvalAt = sessionViewTiming().nowMs
+    const recentApprovals = [
+      ...state.recentApprovals.filter((entry) => entry.id !== approval.id),
+      { id: approval.id, signature: permissionSignature(approval), at: approvalAt },
+    ].slice(-RECENT_APPROVAL_LIMIT)
+
     const patch = updateSessionState(
       {
         ...state,
@@ -440,6 +458,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       ...patch,
       awaitingPermissionSessions,
       busySessions,
+      recentApprovals,
     }
   }),
 

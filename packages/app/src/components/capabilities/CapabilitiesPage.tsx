@@ -13,7 +13,7 @@ import type {
 } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
-import { Button, Card, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '../ui'
+import { Button, Card, ErrorState, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '../ui'
 import { useSessionStore } from '../../stores/session'
 import { useEscape } from '../../hooks/useEscape'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
@@ -69,6 +69,7 @@ export function CapabilitiesPage({
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const relationshipEnabled = isCapabilityRelationshipGraphEnabled()
 
   const currentProjectDirectory = useMemo(
@@ -86,6 +87,7 @@ export function CapabilitiesPage({
 
   const loadAll = useCallback(() => {
     setLoading(true)
+    setLoadError(null)
     const base = Promise.all([
       window.coworkApi.capabilities.tools(toolOptions),
       window.coworkApi.capabilities.skills(contextOptions),
@@ -114,7 +116,12 @@ export function CapabilitiesPage({
           setBuiltInAgents([])
           setWorkflowList(null)
         })
-    void Promise.all([base, relationships]).finally(() => setLoading(false))
+    // A failed inventory load must not masquerade as an empty grid — capture
+    // the error so the surface can show a designed, recoverable error state
+    // instead of "No tools discovered yet".
+    void Promise.all([base, relationships])
+      .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false))
   }, [contextOptions, relationshipEnabled, toolOptions])
 
   useEffect(() => {
@@ -414,6 +421,14 @@ export function CapabilitiesPage({
               <Skeleton key={index} variant="card" className="h-36" />
             ))}
           </div>
+        ) : loadError && tools.length === 0 && skills.length === 0 ? (
+          <ErrorState
+            title={t('capabilities.loadErrorTitle', 'Couldn’t load capabilities')}
+            message={t('capabilities.loadErrorBody', 'We couldn’t reach the runtime to list your tools and skills.')}
+            hint={t('capabilities.loadErrorHint', 'Check that the runtime is running, then reload. Your custom tools and skills are still saved.')}
+            onRetry={loadAll}
+            retryLabel={t('capabilities.reload', 'Reload')}
+          />
         ) : tab === 'relationships' && relationshipEnabled ? (
           <CapabilityRelationshipView
             rows={relationshipRows}

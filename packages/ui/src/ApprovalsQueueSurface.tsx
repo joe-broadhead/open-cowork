@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Badge } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
+import { ErrorState } from './ErrorState.js'
 import { Textarea } from './Input.js'
 import { Skeleton } from './Skeleton.js'
 import { ApprovalCard, CoworkerAvatar, type StudioAction, type StudioTone } from './StudioPrimitives.js'
@@ -55,8 +56,12 @@ export type ApprovalsQueueSurfaceProps = {
   items: ApprovalsQueueItem[]
   loading?: boolean
   error?: string | null
+  errorTitle?: string
+  errorHint?: string
   emptyTitle?: string
   emptyBody?: string
+  onReload?: () => void
+  reloadLabel?: string
   onOpenSession?: (item: ApprovalsQueueItem) => void
   onAllowOnce?: (item: ApprovalsQueuePermissionItem) => void
   onAlwaysAllow?: (item: ApprovalsQueuePermissionItem) => void
@@ -333,8 +338,12 @@ export function ApprovalsQueueSurface({
   items,
   loading = false,
   error = null,
+  errorTitle = 'Couldn’t load approvals',
+  errorHint = 'Your pending decisions are safe — nothing was auto-approved. Reload to reconnect to the runtime.',
   emptyTitle = 'No approvals waiting',
   emptyBody = 'OpenCode permission requests and questions appear here when a chat needs your input.',
+  onReload,
+  reloadLabel = 'Reload',
   onOpenSession,
   onAllowOnce,
   onAlwaysAllow,
@@ -346,7 +355,15 @@ export function ApprovalsQueueSurface({
 
   return (
     <section className={cn('studio-approvals-surface', loading && 'studio-approvals-surface--loading')} aria-label="Approvals queue">
-      {error ? <p className="notice" data-kind="error">{error}</p> : null}
+      {error ? (
+        <ErrorState
+          title={errorTitle}
+          message={error}
+          hint={errorHint}
+          onRetry={onReload}
+          retryLabel={reloadLabel}
+        />
+      ) : null}
       {sortedItems.length ? (
         <div className="studio-approvals-list">
           {sortedItems.map((item) => item.kind === 'permission'

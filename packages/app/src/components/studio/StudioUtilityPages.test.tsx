@@ -84,7 +84,7 @@ describe('StudioApprovalsPage', () => {
 
     render(<StudioApprovalsPage onOpenChat={vi.fn()} onOpenHome={vi.fn()} />)
 
-    expect(screen.getByText('Run command')).toBeInTheDocument()
+    expect(screen.getByText('Run a terminal command')).toBeInTheDocument()
     expect(screen.getAllByText('Continue?').length).toBeGreaterThan(0)
     expect(screen.queryByText('Other workspace command')).toBeNull()
   })

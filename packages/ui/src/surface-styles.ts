@@ -614,7 +614,7 @@ export function wikiSurfaceCss(): string {
     }
     .studio-wiki-propose__error {
       margin: 0;
-      color: var(--color-danger, var(--color-red));
+      color: var(--color-red, var(--color-red));
       font-size: var(--text-sm);
     }`
 }
@@ -1910,13 +1910,13 @@ export function primitivesSurfaceCss(): string {
   return `
 /* Cooled warm semantics: the warning/danger hues lean toward the cool palette so
    amber/pink chips stop screaming against the indigo surfaces. These chip tokens
-   (and the --color-warning/--color-danger aliases routed through them) back the
+   (and the --color-warning/--color-red aliases routed through them) back the
    tonal badge recipe below and the semantic status pills consumed by components. */
 :root {
   --chip-warning: color-mix(in srgb, var(--color-amber) 70%, var(--color-info));
   --chip-danger: color-mix(in srgb, var(--color-red) 80%, var(--color-info));
   --color-warning: var(--chip-warning);
-  --color-danger: var(--chip-danger);
+  --color-red: var(--chip-danger);
 }
 
 /* Badge / chip — small inline status pill. Padding 0 var(--space-2), label
@@ -2224,6 +2224,63 @@ export function primitivesSurfaceCss(): string {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   line-height: var(--lh-sm);
+}
+
+.ui-error-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-3);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-red) 30%, var(--color-border-subtle));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-red) 12%, transparent), transparent 60%),
+    color-mix(in srgb, var(--color-surface) 72%, transparent);
+  box-shadow: var(--shadow-1), var(--specular);
+  color: var(--color-text-secondary);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.ui-error-state__icon {
+  display: grid;
+  place-items: center;
+  width: var(--control-h-xl);
+  height: var(--control-h-xl);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+  color: var(--color-red);
+  box-shadow: var(--specular);
+}
+
+.ui-error-state__title {
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-lg);
+}
+
+.ui-error-state__body {
+  max-width: 46ch;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.ui-error-state__hint {
+  margin-top: var(--space-2);
+  max-width: 46ch;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-sm);
+}
+
+.ui-error-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
 }
 
 .ui-skeleton {

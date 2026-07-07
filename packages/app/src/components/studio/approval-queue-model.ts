@@ -7,6 +7,8 @@ import {
   parseSessionWorkspaceKey,
   sessionWorkspaceKey,
 } from '../../stores/session-workspace-keys'
+import { describePermission } from '../chat/permission-approval-model'
+import { t } from '../../helpers/i18n'
 
 type QueueStateInput = {
   activeWorkspaceId: string
@@ -69,6 +71,10 @@ function permissionItem(
   const alwaysAllowDisabledReason = isLocal
     ? 'Persistent allow rules must be changed in Settings so the runtime can restart safely.'
     : 'Always allow is managed by workspace policy for remote or cloud approvals.'
+  // Use the typed descriptor so the queue shows a contextual title (e.g.
+  // "Run a terminal command") rather than a bare tool id or a terse runtime
+  // description, matching the in-chat approval card.
+  const descriptor = describePermission(approval, t)
   const item: ApprovalsQueueItem = {
     kind: 'permission',
     id: approval.id,
@@ -84,7 +90,7 @@ function permissionItem(
     sortOrder: approval.order,
     pending: pendingAction === approvalQueueActionKey({ kind: 'permission', sessionId: approval.sessionId, id: approval.id }),
     tool: approval.tool,
-    description: approval.description,
+    description: descriptor.title,
     input: approval.input,
     canAlwaysAllow: false,
     alwaysAllowDisabledReason,
