@@ -169,14 +169,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} восстановил остальную часть приложения. Вернитесь на главную и повторите.',
   'error.backToHome': 'Вернуться на главную',
 
-  'approval.sendEmail': 'Отправить письмо',
-  'approval.createSpreadsheet': 'Создать таблицу',
-  'approval.createDocument': 'Создать документ',
-  'approval.createPresentation': 'Создать презентацию',
-  'approval.delete': 'Удалить',
-  'approval.shareFile': 'Поделиться файлом',
-  'approval.createEvent': 'Создать событие',
-  'approval.allowAction': 'Разрешить действие',
   'approval.deny': 'Отклонить',
   'approval.approve': 'Одобрить',
 

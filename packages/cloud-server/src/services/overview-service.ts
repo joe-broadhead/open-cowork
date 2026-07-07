@@ -64,7 +64,7 @@ export type CloudAdminPolicyOverview = {
     channelsEnabled: boolean
     webhooksEnabled: boolean
   }
-  byok: {
+  providerKeys: {
     allowedProviderIds: string[] | null
     kmsRefsEnabled: boolean
     kmsRefPrefixesConfigured: boolean
@@ -180,7 +180,7 @@ export class CloudOverviewService {
         channelsEnabled: this.policy.features.agents !== false,
         webhooksEnabled: this.policy.features.webhooks !== false,
       },
-      byok: this.byokPolicyOverview(),
+      providerKeys: this.byokPolicyOverview(),
     }
   }
 

@@ -35,7 +35,6 @@ import type {
   AdminAuditExportInput,
   AdminAuditPage,
   AdminAuditQuery,
-  AdminByokSecret,
   AdminCreateRoleInput,
   AdminCustomRole,
   AdminEntitlements,
@@ -46,8 +45,9 @@ import type {
   AdminMemberListInput,
   AdminMemberUpdateInput,
   AdminOverview,
-  AdminSetByokInput,
+  AdminProviderKeySecret,
   AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
   AdminSsoConfig,
   AdminUpdateRoleInput,
   AdminUsageSummary,
@@ -141,9 +141,9 @@ export type CloudWorkspaceSessionAdapter = {
   deleteCustomRole?(roleKey: string): Promise<boolean>
   getManagedPolicy?(): Promise<AdminManagedPolicyResult>
   setManagedPolicy?(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult>
-  listByokKeys?(): Promise<AdminByokSecret[]>
-  setByokKey?(providerId: string, input: AdminSetByokInput): Promise<AdminByokSecret>
-  deleteByokKey?(providerId: string): Promise<boolean>
+  listProviderKeys?(): Promise<AdminProviderKeySecret[]>
+  setProviderKey?(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret>
+  deleteProviderKey?(providerId: string): Promise<boolean>
   getSsoConfig?(): Promise<AdminSsoConfig | null>
   getAdminUsageSummary?(limit?: number): Promise<AdminUsageSummary>
   queryAudit?(filters?: AdminAuditQuery): Promise<AdminAuditPage>
@@ -591,19 +591,19 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     return this.transport.setManagedPolicy(input)
   }
 
-  async listByokKeys(): Promise<AdminByokSecret[]> {
-    if (!this.transport.listByokKeys) throw new Error('Cloud BYOK administration is not supported by this workspace.')
-    return this.transport.listByokKeys()
+  async listProviderKeys(): Promise<AdminProviderKeySecret[]> {
+    if (!this.transport.listProviderKeys) throw new Error('Cloud provider-key administration is not supported by this workspace.')
+    return this.transport.listProviderKeys()
   }
 
-  async setByokKey(providerId: string, input: AdminSetByokInput): Promise<AdminByokSecret> {
-    if (!this.transport.setByokKey) throw new Error('Cloud BYOK administration is not supported by this workspace.')
-    return this.transport.setByokKey(providerId, input)
+  async setProviderKey(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret> {
+    if (!this.transport.setProviderKey) throw new Error('Cloud provider-key administration is not supported by this workspace.')
+    return this.transport.setProviderKey(providerId, input)
   }
 
-  async deleteByokKey(providerId: string): Promise<boolean> {
-    if (!this.transport.deleteByokKey) throw new Error('Cloud BYOK administration is not supported by this workspace.')
-    return this.transport.deleteByokKey(providerId)
+  async deleteProviderKey(providerId: string): Promise<boolean> {
+    if (!this.transport.deleteProviderKey) throw new Error('Cloud provider-key administration is not supported by this workspace.')
+    return this.transport.deleteProviderKey(providerId)
   }
 
   async getSsoConfig(): Promise<AdminSsoConfig | null> {

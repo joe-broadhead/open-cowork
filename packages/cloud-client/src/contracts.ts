@@ -39,7 +39,6 @@ import type {
   AdminAuditExportInput,
   AdminAuditPage,
   AdminAuditQuery,
-  AdminByokSecret,
   AdminCreateRoleInput,
   AdminCustomRole,
   AdminEntitlements,
@@ -50,8 +49,9 @@ import type {
   AdminMemberListInput,
   AdminMemberUpdateInput,
   AdminOverview,
-  AdminSetByokInput,
+  AdminProviderKeySecret,
   AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
   AdminSsoConfig,
   AdminUpdateRoleInput,
   AdminUsageSummary,
@@ -457,7 +457,7 @@ export type CloudAdminPolicyOverview = {
     channelsEnabled: boolean
     webhooksEnabled: boolean
   }
-  byok?: {
+  providerKeys?: {
     allowedProviderIds: string[] | null
     kmsRefsEnabled: boolean
     kmsRefPrefixesConfigured: boolean
@@ -751,9 +751,9 @@ export type CloudTransportAdapter = {
   deleteCustomRole?(roleKey: string): Promise<boolean>
   getManagedPolicy?(): Promise<AdminManagedPolicyResult>
   setManagedPolicy?(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult>
-  listByokKeys?(): Promise<AdminByokSecret[]>
-  setByokKey?(providerId: string, input: AdminSetByokInput): Promise<AdminByokSecret>
-  deleteByokKey?(providerId: string): Promise<boolean>
+  listProviderKeys?(): Promise<AdminProviderKeySecret[]>
+  setProviderKey?(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret>
+  deleteProviderKey?(providerId: string): Promise<boolean>
   getSsoConfig?(): Promise<AdminSsoConfig | null>
   getAdminUsageSummary?(limit?: number): Promise<AdminUsageSummary>
   queryAudit?(filters?: AdminAuditQuery): Promise<AdminAuditPage>

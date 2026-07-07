@@ -5,7 +5,7 @@
 // bridge, the desktop cloud adapter/transport, and the browser HTTP client all
 // speak these types, so the admin control plane is byte-identical across surfaces.
 //
-// Secrets are NEVER carried here: BYOK keys expose only metadata (last4 +
+// Secrets are NEVER carried here: provider keys expose only metadata (last4 +
 // fingerprint), and the SSO config exposes only "has secret" booleans. Effective
 // permissions drive every gate — sections and destructive actions are shown/enabled
 // strictly from the caller's resolved `AdminAccess.permissions`.
@@ -172,9 +172,9 @@ export type AdminSetPolicyInput = {
   updateChannel?: string | null
 }
 
-// -- Providers / BYOK --------------------------------------------------------
+// -- Providers / provider keys -----------------------------------------------
 
-export type AdminByokSecretStatus =
+export type AdminProviderKeyStatus =
   | 'pending_validation'
   | 'active'
   | 'disabled'
@@ -182,10 +182,10 @@ export type AdminByokSecretStatus =
   | 'invalid'
   | 'unsupported'
 
-export type AdminByokSecret = {
+export type AdminProviderKeySecret = {
   secretId: string
   providerId: string
-  status: AdminByokSecretStatus
+  status: AdminProviderKeyStatus
   credentialKind: 'plaintext' | 'kms_ref'
   // Only the last four characters are ever surfaced — the key itself never leaves
   // the control plane.
@@ -197,7 +197,7 @@ export type AdminByokSecret = {
   updatedAt: string
 }
 
-export type AdminSetByokInput = {
+export type AdminSetProviderKeyInput = {
   apiKey?: string | null
   kmsRef?: string | null
   credentialKind?: 'plaintext' | 'kms_ref' | null
@@ -370,7 +370,7 @@ export type AdminOverview = {
     channelsEnabled: boolean
     webhooksEnabled: boolean
   }
-  byok?: {
+  providerKeys?: {
     allowedProviderIds: string[] | null
     kmsRefsEnabled: boolean
     kmsRefPrefixesConfigured: boolean

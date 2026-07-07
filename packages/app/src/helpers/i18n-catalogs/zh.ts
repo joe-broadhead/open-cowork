@@ -172,14 +172,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} 已恢复应用的其余部分。返回主页并重试。',
   'error.backToHome': '返回主页',
 
-  'approval.sendEmail': '发送邮件',
-  'approval.createSpreadsheet': '创建电子表格',
-  'approval.createDocument': '创建文档',
-  'approval.createPresentation': '创建演示文稿',
-  'approval.delete': '删除',
-  'approval.shareFile': '分享文件',
-  'approval.createEvent': '创建事件',
-  'approval.allowAction': '允许操作',
   'approval.deny': '拒绝',
   'approval.approve': '批准',
 

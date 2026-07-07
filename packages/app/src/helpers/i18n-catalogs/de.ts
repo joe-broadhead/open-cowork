@@ -169,14 +169,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} hat den Rest der App wiederhergestellt. Gehe zurück zum Start und versuche es erneut.',
   'error.backToHome': 'Zurück zum Start',
 
-  'approval.sendEmail': 'E-Mail senden',
-  'approval.createSpreadsheet': 'Tabelle erstellen',
-  'approval.createDocument': 'Dokument erstellen',
-  'approval.createPresentation': 'Präsentation erstellen',
-  'approval.delete': 'Löschen',
-  'approval.shareFile': 'Datei teilen',
-  'approval.createEvent': 'Ereignis erstellen',
-  'approval.allowAction': 'Aktion zulassen',
   'approval.deny': 'Ablehnen',
   'approval.approve': 'Zulassen',
 

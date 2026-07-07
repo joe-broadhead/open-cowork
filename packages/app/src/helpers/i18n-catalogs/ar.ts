@@ -173,14 +173,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': 'استعاد {{brandName}} بقية التطبيق. عُد إلى الرئيسية وأعد المحاولة.',
   'error.backToHome': 'العودة إلى الرئيسية',
 
-  'approval.sendEmail': 'إرسال بريد',
-  'approval.createSpreadsheet': 'إنشاء جدول',
-  'approval.createDocument': 'إنشاء مستند',
-  'approval.createPresentation': 'إنشاء عرض',
-  'approval.delete': 'حذف',
-  'approval.shareFile': 'مشاركة ملف',
-  'approval.createEvent': 'إنشاء حدث',
-  'approval.allowAction': 'السماح بالإجراء',
   'approval.deny': 'رفض',
   'approval.approve': 'موافقة',
 

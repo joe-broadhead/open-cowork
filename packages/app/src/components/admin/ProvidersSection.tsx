@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { AdminByokSecret } from '@open-cowork/shared'
+import type { AdminProviderKeySecret } from '@open-cowork/shared'
 import { Badge, Button, Dialog, Input, toast } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { t } from '../../helpers/i18n'
@@ -7,7 +7,7 @@ import { AdminSectionHeader, AdminStateBlock, AdminTable } from './AdminPrimitiv
 import { useAdminResource } from './useAdminResource'
 import { formatDateTime } from './admin-support'
 
-function keyTone(status: AdminByokSecret['status']) {
+function keyTone(status: AdminProviderKeySecret['status']) {
   if (status === 'active') return 'success' as const
   if (status === 'pending_validation') return 'info' as const
   if (status === 'invalid' || status === 'expired') return 'danger' as const
@@ -25,7 +25,7 @@ export function ProvidersSection({ canManageKeys, canViewSso }: { canManageKeys:
   const [apiKey, setApiKey] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [deleting, setDeleting] = useState<AdminByokSecret | null>(null)
+  const [deleting, setDeleting] = useState<AdminProviderKeySecret | null>(null)
 
   const submit = useCallback(async () => {
     if (!provider.trim() || !apiKey.trim()) {
@@ -48,7 +48,7 @@ export function ProvidersSection({ canManageKeys, canViewSso }: { canManageKeys:
     }
   }, [apiKey, provider, keys])
 
-  const remove = useCallback(async (secret: AdminByokSecret) => {
+  const remove = useCallback(async (secret: AdminProviderKeySecret) => {
     try {
       await window.coworkApi.admin.providers.deleteKey(secret.providerId)
       toast({ message: t('admin.providers.keyDeleted', 'Key removed.'), tone: 'success' })
@@ -68,8 +68,8 @@ export function ProvidersSection({ canManageKeys, canViewSso }: { canManageKeys:
         actions={canManageKeys ? <Button size="sm" onClick={() => setAddOpen(true)}>{t('admin.providers.addKey', 'Add key')}</Button> : null}
       />
 
-      <section aria-labelledby="admin-byok-heading" className="space-y-3">
-        <h3 id="admin-byok-heading" className="text-sm font-semibold text-text">{t('admin.providers.byok', 'BYOK keys')}</h3>
+      <section aria-labelledby="admin-provider-keys-heading" className="space-y-3">
+        <h3 id="admin-provider-keys-heading" className="text-sm font-semibold text-text">{t('admin.providers.keys', 'BYOK keys')}</h3>
         <AdminStateBlock
           state={keys}
           loadingRows={3}
@@ -81,7 +81,7 @@ export function ProvidersSection({ canManageKeys, canViewSso }: { canManageKeys:
         >
           {(data) => (
             <AdminTable
-              caption={t('admin.providers.byok', 'BYOK keys')}
+              caption={t('admin.providers.keys', 'BYOK keys')}
               columns={[
                 t('admin.providers.provider', 'Provider'),
                 t('admin.providers.key', 'Key'),

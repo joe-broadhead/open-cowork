@@ -5,8 +5,8 @@ import type {
   AdminMemberInviteInput,
   AdminMemberListInput,
   AdminMemberUpdateInput,
-  AdminSetByokInput,
   AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
   AdminUpdateRoleInput,
 } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
@@ -99,16 +99,16 @@ export function registerAdminHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('admin:policy:set', async (event, input: unknown) =>
     (await admin(event)).setManagedPolicy!(optionalRecord(input, 'policy input') as AdminSetPolicyInput))
 
-  context.ipcMain.handle('admin:providers:list-keys', async (event) => (await admin(event)).listByokKeys!())
+  context.ipcMain.handle('admin:providers:list-keys', async (event) => (await admin(event)).listProviderKeys!())
 
   context.ipcMain.handle('admin:providers:set-key', async (event, providerId: unknown, input: unknown) => {
     const id = requireString(providerId, 'providerId')
-    return (await admin(event)).setByokKey!(id, optionalRecord(input, 'byok input') as AdminSetByokInput)
+    return (await admin(event)).setProviderKey!(id, optionalRecord(input, 'provider key input') as AdminSetProviderKeyInput)
   })
 
   context.ipcMain.handle('admin:providers:delete-key', async (event, providerId: unknown) => {
     const id = requireString(providerId, 'providerId')
-    return (await admin(event)).deleteByokKey!(id)
+    return (await admin(event)).deleteProviderKey!(id)
   })
 
   context.ipcMain.handle('admin:providers:sso', async (event) => (await admin(event)).getSsoConfig!())

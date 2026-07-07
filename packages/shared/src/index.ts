@@ -178,7 +178,6 @@ import type {
   AdminAuditExportInput,
   AdminAuditPage,
   AdminAuditQuery,
-  AdminByokSecret,
   AdminCreateRoleInput,
   AdminCustomRole,
   AdminEntitlements,
@@ -189,8 +188,9 @@ import type {
   AdminMemberListInput,
   AdminMemberUpdateInput,
   AdminOverview,
-  AdminSetByokInput,
+  AdminProviderKeySecret,
   AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
   AdminSsoConfig,
   AdminUpdateRoleInput,
   AdminUsageSummary,
@@ -549,8 +549,8 @@ export interface CoworkAPI {
       set: (input: AdminSetPolicyInput) => Promise<AdminManagedPolicyResult>
     }
     providers: {
-      listKeys: () => Promise<AdminByokSecret[]>
-      setKey: (providerId: string, input: AdminSetByokInput) => Promise<AdminByokSecret>
+      listKeys: () => Promise<AdminProviderKeySecret[]>
+      setKey: (providerId: string, input: AdminSetProviderKeyInput) => Promise<AdminProviderKeySecret>
       deleteKey: (providerId: string) => Promise<boolean>
       sso: () => Promise<AdminSsoConfig | null>
     }

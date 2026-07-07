@@ -169,14 +169,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} はアプリの他の部分を復元しました。ホームに戻って再試行してください。',
   'error.backToHome': 'ホームに戻る',
 
-  'approval.sendEmail': 'メール送信',
-  'approval.createSpreadsheet': 'スプレッドシート作成',
-  'approval.createDocument': 'ドキュメント作成',
-  'approval.createPresentation': 'プレゼンテーション作成',
-  'approval.delete': '削除',
-  'approval.shareFile': 'ファイル共有',
-  'approval.createEvent': 'イベント作成',
-  'approval.allowAction': 'アクションを許可',
   'approval.deny': '拒否',
   'approval.approve': '承認',
 

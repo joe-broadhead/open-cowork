@@ -81,6 +81,7 @@ import {
   type WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
 import { createBrowserAdminApi } from './cowork-api-admin'
+import { createBrowserCustomApi } from './cowork-api-custom'
 
 // ---------------------------------------------------------------------------
 // Bootstrap + transport
@@ -1409,19 +1410,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
     },
 
     // -- custom (local FS imports + custom content mutations) --------------
-    custom: {
-      listMcps: async () => [],
-      addMcp: () => browserUnavailable('custom.addMcp'),
-      removeMcp: () => browserUnavailable('custom.removeMcp'),
-      testMcp: () => browserUnavailable('custom.testMcp'),
-      listSkills: async () => [],
-      addSkill: () => browserUnavailable('custom.addSkill'),
-      selectSkillDirectoryImport: async () => null,
-      importSkillDirectory: async () => null,
-      removeSkill: () => browserUnavailable('custom.removeSkill'),
-      exportSetupBundle: () => browserUnavailable('custom.exportSetupBundle'),
-      importSetupBundle: () => browserUnavailable('custom.importSetupBundle'),
-    },
+    custom: createBrowserCustomApi(),
 
     // -- on.* (SSE demux) --------------------------------------------------
     on: {

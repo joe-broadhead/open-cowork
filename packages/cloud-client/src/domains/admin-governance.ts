@@ -3,10 +3,10 @@ import type {
   AdminAuditExportInput,
   AdminAuditPage,
   AdminAuditQuery,
-  AdminByokSecret,
   AdminManagedPolicyResult,
-  AdminSetByokInput,
+  AdminProviderKeySecret,
   AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
   AdminSsoConfig,
   AdminUsageSummary,
 } from '@open-cowork/shared'
@@ -29,7 +29,7 @@ function auditQuery(input: AdminAuditQuery = {}) {
 }
 
 // Admin control-plane client — governance half (#896): managed policy, org
-// providers/BYOK (metadata only), SSO status, usage analytics, and audit query +
+// providers/provider keys (metadata only), SSO status, usage analytics, and audit query +
 // export. Spread into the transport adapter alongside the identity half.
 export function createCloudAdminGovernanceClient({ request, requestText }: CloudAdminDomainContext) {
   return {
@@ -39,17 +39,17 @@ export function createCloudAdminGovernanceClient({ request, requestText }: Cloud
     setManagedPolicy(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult> {
       return request<AdminManagedPolicyResult>('/api/policy', { method: 'PUT', body: input })
     },
-    async listByokKeys(): Promise<AdminByokSecret[]> {
-      return (await request<{ secrets: AdminByokSecret[] }>('/api/byok')).secrets
+    async listProviderKeys(): Promise<AdminProviderKeySecret[]> {
+      return (await request<{ secrets: AdminProviderKeySecret[] }>('/api/byok')).secrets
     },
-    async setByokKey(providerId: string, input: AdminSetByokInput): Promise<AdminByokSecret> {
-      return (await request<{ secret: AdminByokSecret }>(`/api/byok/${encodePath(providerId)}`, {
+    async setProviderKey(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret> {
+      return (await request<{ secret: AdminProviderKeySecret }>(`/api/byok/${encodePath(providerId)}`, {
         method: 'POST',
         body: input,
       })).secret
     },
-    async deleteByokKey(providerId: string): Promise<boolean> {
-      const { secret } = await request<{ secret: AdminByokSecret | null }>(`/api/byok/${encodePath(providerId)}`, {
+    async deleteProviderKey(providerId: string): Promise<boolean> {
+      const { secret } = await request<{ secret: AdminProviderKeySecret | null }>(`/api/byok/${encodePath(providerId)}`, {
         method: 'DELETE',
       })
       return secret !== undefined
