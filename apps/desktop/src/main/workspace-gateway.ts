@@ -670,6 +670,17 @@ export class WorkspaceGateway {
     }
   }
 
+  // Admin control plane (#896). Resolve the active cloud workspace's adapter so the
+  // admin IPC handlers can call the admin surface. Admin is cloud-only: a local or
+  // gateway workspace has no control plane to administer, so this fails clearly.
+  async cloudAdmin(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<CloudWorkspaceSessionAdapter> {
+    const workspace = this.resolveWorkspace(event, workspaceIdInput)
+    if (workspace.kind !== 'cloud') {
+      throw new Error('Admin controls are only available in a cloud workspace.')
+    }
+    return this.requireCloudAdapter(workspace)
+  }
+
   async supportMatrix(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkspaceApiSupport[]> {
     const workspace = this.resolveWorkspace(event, workspaceIdInput)
     if (workspace.kind === 'local') {

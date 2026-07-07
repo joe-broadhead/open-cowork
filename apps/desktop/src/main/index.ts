@@ -4,6 +4,7 @@
 // it and uses the Electron-free fallbacks. (Hosts are read lazily, so placement
 // here at the entry is in time for every consumer.)
 import { telemetry } from '@open-cowork/runtime-host/telemetry'
+import { adoptionTelemetry } from '@open-cowork/runtime-host/adoption-telemetry'
 import { primeShellEnvironment } from '@open-cowork/runtime-host/shell-env'
 import { applySettingsSideEffects, isSetupComplete } from '@open-cowork/runtime-host/settings'
 import { flushSessionRegistryWrites } from '@open-cowork/runtime-host/session-registry'
@@ -313,6 +314,10 @@ async function runBootRuntime(projectDirectory?: string | null) {
     setRuntimeReady(true)
     log('main', 'OpenCode runtime started')
     telemetry.appLaunched()
+    // Opt-in, content-free adoption signal (default off). Only coarse
+    // platform + version facts are ever sent, and only when a downstream
+    // has enabled `telemetry.adoption`. See docs/privacy.md.
+    adoptionTelemetry.appLaunched({ platform: process.platform, appVersion: app.getVersion() })
     log('main', `Log file: ${getLogFilePath()}`)
 
     // Tell renderer the runtime is ready so it can load sessions

@@ -6,11 +6,14 @@ import { dirname, join } from 'node:path'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// CI-enforced eager bundle budget (audit BUNDLE-3). The script builds the browser
-// renderer if dist-browser is missing, sums the gzipped EAGER startup graph (entry
-// + its static/preload closure + the always-run bootstrap, excluding lazy route
-// views and chart vendors), and exits non-zero if it exceeds the documented budget.
-test('cloud browser renderer eager startup bundle stays within budget', () => {
+// CI-enforced bundle budgets (audit BUNDLE-3 + issue #900). The script builds the
+// browser renderer if dist-browser is missing, then enforces THREE hard gates and
+// exits non-zero if any is exceeded:
+//   1. the gzipped EAGER startup graph (entry + static/preload closure + the
+//      always-run bootstrap, excluding lazy route views and chart vendors),
+//   2. per-route budgets on each lazily-loaded feature page's own chunk, and
+//   3. ceilings on the heavyweight lazy chart/diagram vendors.
+test('cloud browser renderer bundle stays within eager, per-route, and vendor budgets', () => {
   const result = spawnSync('node', ['scripts/check-bundle-size.mjs'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -19,5 +22,10 @@ test('cloud browser renderer eager startup bundle stays within budget', () => {
   })
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
   assert.equal(result.status, 0, `bundle-size budget check failed:\n${output}`)
-  assert.match(output, /within budget/)
+  // All three gates must have actually run — a silently-skipped gate is a broken
+  // budget. Assert each section is present and the run reports overall success.
+  assert.match(output, /eager browser-renderer startup graph/)
+  assert.match(output, /per-route lazy chunk budgets/)
+  assert.match(output, /heavyweight lazy vendor ceilings/)
+  assert.match(output, /eager, per-route, and vendor budgets all within limits/)
 })

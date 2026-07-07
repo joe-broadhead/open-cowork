@@ -1,5 +1,8 @@
 # Build
 node_modules/
+# Nightly eval evidence (screenshots/video). Visual baselines under
+# apps/desktop/tests/visual-baselines/ are committed and NOT ignored.
+apps/desktop/test-artifacts/
 .pnpm-store/
 dist/
 out/

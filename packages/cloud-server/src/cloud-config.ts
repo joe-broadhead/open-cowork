@@ -12,6 +12,8 @@ import type {
   CloudAbuseConfig,
   CloudAuthConfig,
   CloudBillingConfig,
+  CloudEntitlementsConfig,
+  CloudEntitlementsProvider,
   CloudFeatureConfig,
   CloudProfileConfig,
   CloudProjectSourcePolicyConfig,
@@ -407,6 +409,25 @@ export function resolveCloudBillingConfig(config: Pick<OpenCoworkConfig, 'cloud'
       cancelUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL') || defaults.stripe?.cancelUrl,
       portalReturnUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL') || defaults.stripe?.portalReturnUrl,
     },
+  }
+}
+
+// Optional, pluggable monetization (#897). Provider + kill switch resolved from
+// config defaults + env overrides. Both stay OFF/unlimited unless an operator
+// explicitly opts in, so billing never gates a deployment by default.
+export function resolveCloudEntitlementsConfig(
+  config: Pick<OpenCoworkConfig, 'cloud'>,
+  env: Env = process.env,
+): CloudEntitlementsConfig {
+  const defaults: CloudEntitlementsConfig = config.cloud.entitlements || { enabled: false, provider: 'none' }
+  const requestedProvider = envValue(env, 'OPEN_COWORK_CLOUD_ENTITLEMENTS_PROVIDER')
+  const provider: CloudEntitlementsProvider =
+    requestedProvider === 'none' || requestedProvider === 'stripe' || requestedProvider === 'custom'
+      ? requestedProvider
+      : defaults.provider
+  return {
+    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_ENTITLEMENTS_ENABLED'), defaults.enabled),
+    provider,
   }
 }
 

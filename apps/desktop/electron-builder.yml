@@ -1,10 +1,17 @@
-# Auto-updates are INTENTIONALLY not configured here. Users download a
-# new release from the GitHub Releases page when they want to update.
-# Downstream distributions that want auto-update can add a `publish:`
-# section pointing at their own feed (GitHub, S3, generic HTTP), wire
-# up code signing / notarization certificates, and flip the feed on.
-# Public GitHub Releases are expected to be signed/notarized; unsigned
-# preview builds stay as workflow artifacts or local outputs.
+# No static `publish:` feed is baked into the packaged app. The update
+# feed is resolved at runtime from `updates.releaseSource` in the app
+# config (see apps/desktop/src/main/update/update-release-source.ts), so
+# a downstream fork points auto-update at its own infra through config
+# alone — no rebuild of this file. electron-builder still emits the
+# electron-updater feed metadata (`latest-mac.yml`, `latest.yml`,
+# `*.blockmap`) for every signed target so the runtime updater can
+# verify and apply updates. Signature verification is inherent: macOS
+# in-app installs are gated on notarized/hardened-runtime builds, and
+# Windows NSIS updates are verified against the code-signing publisher
+# plus the sha512 in `latest.yml`. Public GitHub Releases are expected
+# to be signed/notarized (macOS) and Authenticode-signed (Windows);
+# unsigned preview builds stay as workflow artifacts or local outputs
+# and intentionally omit the signed update feed metadata.
 
 # Brand identity is template-driven so downstream forks can rebrand the
 # packaged app without editing this file. The `dist:*` scripts resolve
@@ -139,6 +146,40 @@ linux:
   # scoped to the Linux packaging concern and downstream forks can
   # override it via their own electron-builder config.
   maintainer: ${env.APP_MAINTAINER}
+
+win:
+  icon: ${env.APP_ICON_WIN}
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}-setup.${ext}
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # electron-builder Authenticode-signs the installer and app during
+  # packaging when a certificate is provided via WIN_CSC_LINK /
+  # WIN_CSC_KEY_PASSWORD. Signing during (not after) packaging is what
+  # keeps the sha512 in latest.yml matching the shipped, signed binary
+  # so electron-updater can verify it. When the cert secrets are absent
+  # electron-builder emits an unsigned installer instead of failing, so
+  # PR/preview CI still produces an artifact. Public v1.0+ Windows
+  # releases must provide the cert secrets. See docs for the SignPath
+  # Foundation (free-for-OSS) post-build alternative and the required
+  # `latest.yml` regeneration step it needs.
+  signtoolOptions:
+    signingHashAlgorithms:
+      - sha256
+
+nsis:
+  # A normal wizard installer (not one-click) so users can pick the
+  # install location and so per-user installs work without elevation.
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  # Emit the *.blockmap alongside the installer so electron-updater can
+  # do differential (delta) downloads; a stale/missing blockmap falls
+  # back to a verified full download.
+  differentialPackage: true
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}-setup.${ext}
 
 dmg:
   artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}

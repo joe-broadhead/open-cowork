@@ -1179,6 +1179,95 @@ const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS = [
     ON cloud_channel_interactions (org_id, expires_at) WHERE status = 'pending'`,
 ] as const
 
+// Org custom roles (named permission maps) + the membership pointer that assigns
+// one to a member. Built-in roles keep working: custom_role_key is nullable and
+// only overrides the effective permission set when set. RBAC foundation (#894).
+export const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID = '026_org_custom_roles'
+const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_custom_roles (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    role_key text NOT NULL,
+    name text NOT NULL,
+    description text,
+    base_role text NOT NULL,
+    permissions jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, role_key)
+  )`,
+  `ALTER TABLE cloud_memberships ADD COLUMN IF NOT EXISTS custom_role_key text`,
+] as const
+
+// Org-managed workspace & desktop policy (#898): one policy record per org that clamps
+// permission maxima, allow/deny-lists providers/models, gates extension classes, pins
+// the update channel, and sets the key-management requirement. Nullable allow-lists are
+// SQL NULL (unrestricted); deny-lists default to an empty jsonb array.
+export const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_MIGRATION_ID = '027_managed_policies'
+const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_managed_policies (
+    org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    allowed_providers jsonb,
+    denied_providers jsonb NOT NULL DEFAULT '[]'::jsonb,
+    allowed_models jsonb,
+    denied_models jsonb NOT NULL DEFAULT '[]'::jsonb,
+    key_management text NOT NULL DEFAULT 'any',
+    extensions jsonb NOT NULL DEFAULT '{}'::jsonb,
+    features jsonb NOT NULL DEFAULT '{}'::jsonb,
+    permission_ceilings jsonb NOT NULL DEFAULT '{}'::jsonb,
+    update_channel text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+] as const
+
+// Enterprise identity (#895): the per-org SSO configuration record (SAML 2.0 + OIDC,
+// domain verification, SSO-only enforcement toggle, SCIM enablement) and the durable
+// SCIM sync-event queue with retry/backoff. IdP secrets (SAML cert, OIDC client secret)
+// and the SCIM bearer token are stored ONLY as `enc:vN:` envelope ciphertext / salted
+// hash — never plaintext (the *_ciphertext / *_hash columns).
+export const CLOUD_CONTROL_PLANE_SSO_SCIM_MIGRATION_ID = '028_org_sso_scim'
+const CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_org_sso_configs (
+    org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    protocol text NOT NULL,
+    enabled boolean NOT NULL DEFAULT false,
+    enforced boolean NOT NULL DEFAULT false,
+    display_name text,
+    verified_domains jsonb NOT NULL DEFAULT '[]'::jsonb,
+    domain_verification_token text NOT NULL,
+    oidc_issuer text,
+    oidc_client_id text,
+    oidc_client_secret_ciphertext text,
+    saml_entity_id text,
+    saml_acs_url text,
+    saml_slo_url text,
+    saml_idp_entity_id text,
+    saml_idp_sso_url text,
+    saml_idp_metadata_url text,
+    saml_idp_certificate_ciphertext text,
+    scim_enabled boolean NOT NULL DEFAULT false,
+    scim_token_hash text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_scim_sync_events (
+    event_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    operation text NOT NULL,
+    external_id text,
+    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+    status text NOT NULL DEFAULT 'pending',
+    attempts integer NOT NULL DEFAULT 0,
+    max_attempts integer NOT NULL DEFAULT 8,
+    next_attempt_at timestamptz NOT NULL,
+    last_error text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_scim_sync_events_due_idx
+     ON cloud_scim_sync_events (status, next_attempt_at)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1295,5 +1384,17 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     statements: CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS,
     concurrentIndexes: ['cloud_workspace_events_created_idx', 'cloud_channel_interactions_pending_idx'],
     transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_MANAGED_POLICIES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_SSO_SCIM_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS,
   },
 ] as const

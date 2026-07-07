@@ -221,6 +221,9 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS: '127.0.0.0/8, ::1',
     OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'private_beta',
   }), {
+    orgMode: 'multi-org',
+    singleOrgId: undefined,
+    singleOrgName: undefined,
     deploymentTier: 'private_beta',
     root: '/tmp/open-cowork-cloud',
     hostname: '127.0.0.1',

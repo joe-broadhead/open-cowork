@@ -194,14 +194,6 @@ const strings: Record<string, string> = {
   'error.backToHome': 'Volver al inicio',
 
   // Chat — approval
-  'approval.sendEmail': 'Enviar correo',
-  'approval.createSpreadsheet': 'Crear hoja de cálculo',
-  'approval.createDocument': 'Crear documento',
-  'approval.createPresentation': 'Crear presentación',
-  'approval.delete': 'Eliminar',
-  'approval.shareFile': 'Compartir archivo',
-  'approval.createEvent': 'Crear evento',
-  'approval.allowAction': 'Permitir acción',
   'approval.deny': 'Denegar',
   'approval.approve': 'Aprobar',
 

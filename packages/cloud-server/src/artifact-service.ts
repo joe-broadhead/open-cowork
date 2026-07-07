@@ -511,6 +511,12 @@ export class CloudArtifactService {
       payload: record,
     })
     await this.sessionService.recordArtifactUploaded(principal, sessionId, fields.artifactId, fields.size)
+    this.sessionService.auditPrincipalAction(principal, {
+      eventType: 'artifact.uploaded',
+      targetType: 'artifact',
+      targetId: fields.artifactId,
+      metadata: { sessionId, size: fields.size, contentType: fields.contentType, kind: fields.kind },
+    })
     return record
   }
 
@@ -648,6 +654,12 @@ export class CloudArtifactService {
     const object = await this.objectStore.getObject(artifact.key)
     if (!object) throw new CloudServiceError(404, 'Cloud artifact object was not found.')
     await this.sessionService.recordArtifactDownloaded(principal, sessionId, artifactId, object.body.byteLength)
+    this.sessionService.auditPrincipalAction(principal, {
+      eventType: 'artifact.downloaded',
+      targetType: 'artifact',
+      targetId: artifactId,
+      metadata: { sessionId, size: object.body.byteLength, mode: 'buffered' },
+    })
     return {
       ...artifact,
       contentType: object.contentType || artifact.contentType,
@@ -674,6 +686,12 @@ export class CloudArtifactService {
     const presigned = await this.objectStore.presignGet(artifact.key, options)
     if (!presigned) return null
     await this.sessionService.recordArtifactDownloaded(principal, sessionId, artifactId, artifact.size)
+    this.sessionService.auditPrincipalAction(principal, {
+      eventType: 'artifact.downloaded',
+      targetType: 'artifact',
+      targetId: artifactId,
+      metadata: { sessionId, size: artifact.size, mode: 'presigned' },
+    })
     return { artifact, presigned }
   }
 

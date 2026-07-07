@@ -80,6 +80,8 @@ import {
   type WorkspaceInfo,
   type WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
+import { createBrowserAdminApi } from './cowork-api-admin'
+import { createBrowserCustomApi } from './cowork-api-custom'
 
 // ---------------------------------------------------------------------------
 // Bootstrap + transport
@@ -1366,8 +1368,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       },
       reindex: async () => false,
     },
-
-    // -- agents (read via capabilities catalog; mutations Electron-only) ---
+    admin: createBrowserAdminApi(request), // admin control plane (#896)
     agents: {
       catalog: async (): Promise<AgentCatalog> => {
         const catalog = await request<Partial<AgentCatalog>>(endpoint('capabilitiesCatalog'))
@@ -1409,17 +1410,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
     },
 
     // -- custom (local FS imports + custom content mutations) --------------
-    custom: {
-      listMcps: async () => [],
-      addMcp: () => browserUnavailable('custom.addMcp'),
-      removeMcp: () => browserUnavailable('custom.removeMcp'),
-      testMcp: () => browserUnavailable('custom.testMcp'),
-      listSkills: async () => [],
-      addSkill: () => browserUnavailable('custom.addSkill'),
-      selectSkillDirectoryImport: async () => null,
-      importSkillDirectory: async () => null,
-      removeSkill: () => browserUnavailable('custom.removeSkill'),
-    },
+    custom: createBrowserCustomApi(),
 
     // -- on.* (SSE demux) --------------------------------------------------
     on: {

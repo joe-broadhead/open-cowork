@@ -24,6 +24,7 @@ const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 const HealthCenterPage = lazy(() => import('./components/health/HealthCenterPage').then((m) => ({ default: m.HealthCenterPage })))
+const AdminPage = lazy(() => import('./components/admin/AdminPage').then((m) => ({ default: m.AdminPage })))
 const StudioApprovalsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioApprovalsPage })))
 const StudioArtifactsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioArtifactsPage })))
 const StudioChannelsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioChannelsPage })))
@@ -34,6 +35,7 @@ import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { useAppGlobalEvents } from './hooks/useAppGlobalEvents'
 import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
 import { useRuntimeHealth } from './hooks/useRuntimeHealth'
+import { useAdminAccessible } from './hooks/useAdminAccessible'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 import { setBrandName, setDocsBaseUrl } from './helpers/brand'
 import { configureI18n, subscribeLocale, t } from './helpers/i18n'
@@ -611,15 +613,12 @@ export function App() {
     void refreshRuntimeState()
   }, [authChecked, authenticated, config, needsSetup, refreshRuntimeState])
 
-  const loadingStage = !authChecked
-    ? 'boot'
-    : !config
-      ? 'config'
-      : (config.auth.enabled && !authenticated)
-        ? null
-        : needsSetup
-          ? null
-          : null
+  const authReady = authChecked && !!config && !(config.auth.enabled && !authenticated) && !needsSetup
+  const adminAccessible = useAdminAccessible(authReady)
+
+  // Post-auth/config states (unauthenticated, needs-setup) render dedicated screens
+  // below, so they resolve to null here — only the boot/config stages gate the shell.
+  const loadingStage = !authChecked ? 'boot' : !config ? 'config' : null
 
   if (!authChecked || !config || loadingStage) {
     return (
@@ -775,6 +774,7 @@ export function App() {
           settingsRequestNonce={sidebarSettingsNonce}
           branding={config.branding.sidebar}
           features={config.features}
+          showAdmin={adminAccessible}
           collapsed={sidebarCollapsed}
           onExpandSidebar={ensureSidebarVisible}
         />
@@ -850,6 +850,11 @@ export function App() {
             {view === 'health' && (
               <Suspense fallback={null}>
                 <HealthCenterPage />
+              </Suspense>
+            )}
+            {view === 'admin' && (
+              <Suspense fallback={null}>
+                <AdminPage />
               </Suspense>
             )}
             {view === 'ui-primitives' && (

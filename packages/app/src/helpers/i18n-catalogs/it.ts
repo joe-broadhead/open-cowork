@@ -169,14 +169,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} ha recuperato il resto dell\u2019app. Torna alla home e riprova.',
   'error.backToHome': 'Torna alla home',
 
-  'approval.sendEmail': 'Invia email',
-  'approval.createSpreadsheet': 'Crea foglio',
-  'approval.createDocument': 'Crea documento',
-  'approval.createPresentation': 'Crea presentazione',
-  'approval.delete': 'Elimina',
-  'approval.shareFile': 'Condividi file',
-  'approval.createEvent': 'Crea evento',
-  'approval.allowAction': 'Consenti azione',
   'approval.deny': 'Nega',
   'approval.approve': 'Approva',
 

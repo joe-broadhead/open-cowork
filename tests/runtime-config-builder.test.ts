@@ -9,6 +9,12 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
+import {
+  setActiveManagedPolicy,
+  resetActiveManagedPolicyCache,
+  EMPTY_MANAGED_POLICY,
+} from '@open-cowork/runtime-host/managed-policy'
+import type { ManagedDesktopPolicy } from '@open-cowork/shared'
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })
@@ -156,6 +162,58 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     if (previousBaseUrl === undefined) delete process.env.TEST_RUNTIME_BASE_URL
     else process.env.TEST_RUNTIME_BASE_URL = previousBaseUrl
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig applies the org managed policy: tightens permissions and disables extension classes', () => {
+  const tempRoot = testTempDir('opencowork-runtime-policy-')
+  const configDir = join(tempRoot, 'downstream')
+  const projectRoot = join(tempRoot, 'project')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(projectRoot, { recursive: true })
+  // App-config ceiling leaves bash + custom extensions fully enabled.
+  writeFileSync(join(configDir, 'config.jsonc'), `{
+  "providers": { "available": ["openrouter"], "defaultProvider": "openrouter", "defaultModel": "auto" },
+  "permissions": { "bash": "allow", "fileWrite": "allow", "task": "allow", "web": "allow", "webSearch": true }
+}
+`)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  clearConfigCaches()
+  saveSettings({ selectedProviderId: 'openrouter', selectedModelId: 'auto', bashPermission: 'allow', enableBash: true })
+  saveCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse', type: 'http', url: 'https://warehouse.example.test/mcp' })
+  try {
+    // Baseline (no policy): bash allowed, the custom MCP is registered.
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
+    const baseline = buildRuntimeConfig(projectRoot) as Record<string, any>
+    assert.equal(baseline.permission.bash, 'allow')
+    assert.equal(baseline.mcp.warehouse?.url, 'https://warehouse.example.test/mcp')
+
+    // Org policy TIGHTENS bash to deny (never loosens) and disables custom MCPs.
+    const policy: ManagedDesktopPolicy = {
+      ...EMPTY_MANAGED_POLICY,
+      allowedProviders: ['openrouter'],
+      extensions: { customProviders: true, customMcps: false, customSkills: true },
+      permissionCeilings: { ...EMPTY_MANAGED_POLICY.permissionCeilings, bash: 'deny' },
+    }
+    setActiveManagedPolicy(policy)
+    const governed = buildRuntimeConfig(projectRoot) as Record<string, any>
+    assert.equal(governed.permission.bash, 'deny')
+    // The custom MCP is dropped entirely by the extension-class gate.
+    assert.equal(governed.mcp.warehouse, undefined)
+    // The provider allow-list still permits the configured provider.
+    assert.deepEqual(governed.enabled_providers, ['openrouter'])
+  } finally {
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
+    removeCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse' })
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }

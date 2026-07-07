@@ -340,8 +340,34 @@ paths. Admin panels expose:
   requiring explicit confirmation,
 - runtime profile, feature, project-source, signup-mode, and gateway policy
   visibility through `/api/admin/policy`,
-- redacted audit events through `/api/admin/audit`, with browser-side search
-  and export over the already redacted event payload,
+- a queryable, exportable audit log through `/api/admin/audit`, gated on the
+  `audit:read` permission (owner/admin by default). The control plane audits both
+  control-plane actions (members, roles, policy, worker credentials) and
+  data-plane actions (session create/import/abort, command prompt/abort/
+  permission-respond, artifact upload/download, and worker lease claims). The
+  query accepts `actorId`, `actorType`, `action` (event-type prefix),
+  `targetType`, `targetId`, `result`, `from`/`to`, and a stable keyset `cursor`
+  (page sizes are bounded). `/api/admin/audit/export?format=json|csv` streams a
+  deterministic, redacted-by-default export (secrets are scrubbed at write time;
+  local filesystem paths are scrubbed at export time); `unredacted=true` is an
+  org-admin-only mode whose disclosure is itself recorded as an `audit.exported`
+  event. Audit events also emit an `open_cowork_cloud_audit_events_total` metric
+  so operators can alert on audit volume without scraping logs. Retention reuses
+  the event-retention scheduler and is off by default
+  (`OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS`), so no event is ever dropped
+  before an explicitly configured window,
+- per-org enterprise SSO (SAML 2.0 + OIDC) and SCIM 2.0 provisioning through
+  `/api/admin/sso` (config CRUD gated on the `sso:manage` permission) and the
+  `/scim/v2` endpoints (authenticated by a per-org SCIM bearer token). IdP secrets
+  (SAML certificate, OIDC client secret) and the SCIM token are stored encrypted
+  with the existing envelope key (`OPEN_COWORK_CLOUD_SECRET_KEY`) — never plaintext.
+  SSO config supports an SSO-only enforcement toggle, and SCIM deprovisioning
+  suspends the membership and revokes the member's credentials immediately. A
+  durable, store-backed sync-event queue retries with backoff and periodically
+  reconciles directory ↔ membership drift. This feature adds **no new environment
+  variables** — it is configured entirely per-org through the admin API. See the
+  [SSO and SCIM setup runbook](runbooks/sso-scim-setup.md) for IdP-specific wiring
+  (Okta, Microsoft Entra ID, Google Workspace),
 - BYOK provider status, plaintext key rotation, and KMS reference submission
   through metadata-only BYOK APIs,
 - one-time API token issuance and revocation for desktop and gateway clients,
@@ -714,6 +740,9 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
 | `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `closed` remains a backward-compatible alias for `disabled`; `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
+| `OPEN_COWORK_CLOUD_ORG_MODE` | Deployment topology: `multi-org` (default) preserves multi-tenant behaviour; `single-org` funnels every principal into one auto-bootstrapped org and skips tenant switching, for single-tenant self-host installs. |
+| `OPEN_COWORK_CLOUD_SINGLE_ORG_ID` | Org/tenant id used as the single org when `OPEN_COWORK_CLOUD_ORG_MODE=single-org` (default `default`). Ignored in `multi-org` mode. |
+| `OPEN_COWORK_CLOUD_SINGLE_ORG_NAME` | Display name for the single org in `single-org` mode (default `Default Organization`). Ignored in `multi-org` mode. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` / `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF` | Required for public `header` auth; trusted proxies must provide the same value in `x-open-cowork-header-auth-secret`. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED` | Local/demo escape hatch only. Public and `public_production` trusted-header deployments require signed headers. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS` | Maximum accepted trusted-header signature age. Defaults to five minutes. |
@@ -761,6 +790,39 @@ Managed billing variables:
 | `OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET` / `OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF` | Stripe webhook signing secret. Required for Stripe webhook handling. |
 | `OPEN_COWORK_CLOUD_STRIPE_PRICE_ID` | Default Stripe price id for the default plan. |
 | `OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL` / `OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL` / `OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL` | Public URLs used by Stripe hosted checkout and portal flows. |
+
+### Optional, pluggable monetization (entitlements engine)
+
+Billing is optional and **must never gate administration or reads**. An
+`EntitlementResolver` is the single typed seam the app consults for feature
+access and quotas (`canUse(feature)`, `checkQuota(resource, amount)`,
+`describeEntitlements(org)`). Feature/quota code asks the resolver — it never
+calls a payment provider directly. The payment-provider sync boundary
+(checkout/portal/webhook) stays behind the separate billing adapter.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_ENTITLEMENTS_ENABLED` | Global kill switch for entitlement gating. Default `false`. When `false`, **no** gating is applied regardless of provider — reads, writes, and admin all pass. Existing orgs are grandfathered because gating is off until an operator opts in; flip back to `false` to instantly disable all gating during a rollout. |
+| `OPEN_COWORK_CLOUD_ENTITLEMENTS_PROVIDER` | Which resolver backs feature/quota decisions: `none` (default) → the unlimited resolver (complete, ungated product, no Billing UI signal); `stripe` → the plan/subscription **metadata** resolver, which decides purely from stored plan tiers + `cloud_billing_subscriptions` state (no live provider calls) and returns structured `402` denials on gated **writes**; `custom` → a downstream-registered resolver (see below). |
+
+Gating discipline (enforced and tested): entitlement checks may gate
+**writes/creation only** (session/prompt/worker/workflow/artifact/BYOK/channel
+create paths, via `assertEntitled`) — never reads, exports, deletes, or any
+admin/org/RBAC/policy/audit action. With a lapsed or free plan, reads/exports
+and every admin action still succeed while a gated create is denied; with
+`provider: none` (or the kill switch off) nothing is ever denied.
+
+The read-only `GET /api/billing/entitlements` endpoint returns the current plan
+status (`provider`, `gatingEnabled`, `billingEnabled`, `planKey`, `features`,
+`limits`). The admin plane reads `billingEnabled` to decide whether to surface a
+Billing section; it is never gated and carries no secrets.
+
+Custom adapter seam: a downstream fork wires its own resolver with a small
+module — implement `EntitlementResolver` (exported from `@open-cowork/cloud-server`),
+call `registerEntitlementResolverProvider('custom', factory)` at startup, then set
+`OPEN_COWORK_CLOUD_ENTITLEMENTS_PROVIDER=custom`. No entitlement plan/subscription
+migration is required: state persists in the existing `cloud_billing_subscriptions`
+store, and the kill switch defaults off so no existing org breaks.
 
 BYOK provider keys are never supplied through environment variables. Users add
 them through `/api/byok`; records remain `pending_validation` until a provider

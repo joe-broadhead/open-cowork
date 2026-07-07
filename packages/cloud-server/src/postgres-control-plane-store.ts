@@ -25,6 +25,7 @@ import {
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
+import { normalizeAuditQueryLimit, paginateAuditEvents } from './audit-query.ts'
 import type {
   CoordinationWatch,
 } from '@open-cowork/shared'
@@ -47,6 +48,11 @@ import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
+  CreateCustomRoleInput,
+  CustomRoleRecord,
+  MemberPermissionResolution,
+  RevokeApiTokensForAccountInput,
+  UpdateCustomRoleInput,
   CreateChannelBindingInput,
   CreateChannelDeliveryInput,
   CreateChannelInteractionInput,
@@ -79,6 +85,8 @@ import type {
   ManagedWorkerStatus,
   ListChannelDeliveriesInput,
   PrincipalMembershipRecord,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
   RecordManagedWorkerHeartbeatInput,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
@@ -159,6 +167,21 @@ import { PostgresChannelBindingsRepository } from './postgres-store-domains/chan
 import { PostgresHeadlessAgentsRepository } from './postgres-store-domains/headless-agents.ts'
 import { PostgresChannelIdentitiesRepository } from './postgres-store-domains/channel-identities.ts'
 import { PostgresIdentityRepository } from './postgres-store-domains/identity.ts'
+import { PostgresRolesRepository } from './postgres-store-domains/roles.ts'
+import { PostgresManagedPolicyRepository } from './postgres-store-domains/policy.ts'
+import { PostgresSsoRepository } from './postgres-store-domains/sso.ts'
+import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
+import type { OrgSsoConfigRecord, UpsertOrgSsoConfigInput } from './control-plane-sso.ts'
+import type {
+  ClaimScimSyncEventsInput,
+  CompleteScimSyncEventInput,
+  EnqueueScimSyncEventInput,
+  FailScimSyncEventInput,
+  ListScimSyncEventsInput,
+  ScimSyncEventRecord,
+} from './control-plane-scim.ts'
+import { membershipFromRow } from './postgres-domains/identity.ts'
+import { resolveEffectivePermissions } from './control-plane-permissions.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
 import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/channel-deliveries.ts'
@@ -205,6 +228,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   // Set by connect() from PostgresControlPlaneStoreOptions.ssePgNotify (default off).
   private ssePgNotifyEnabled = false
   private readonly identity: PostgresIdentityRepository
+  private readonly roles: PostgresRolesRepository
+  private readonly managedPolicy: PostgresManagedPolicyRepository
+  private readonly sso: PostgresSsoRepository
   private readonly apiTokens: PostgresApiTokensRepository
   private readonly rateLimits: PostgresRateLimitsRepository
   private readonly authBackoff: PostgresAuthBackoffRepository
@@ -236,6 +262,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
       requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+    })
+    this.roles = new PostgresRolesRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.managedPolicy = new PostgresManagedPolicyRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.sso = new PostgresSsoRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
     })
     this.apiTokens = new PostgresApiTokensRepository({
       pool: this.pool,
@@ -380,6 +421,101 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.identity.resolvePrincipalMembership(input)
   }
 
+  async createCustomRole(input: CreateCustomRoleInput): Promise<CustomRoleRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.roles.createCustomRole(input)
+  }
+
+  async listCustomRoles(orgId: string): Promise<CustomRoleRecord[]> {
+    return this.roles.listCustomRoles(orgId)
+  }
+
+  async getCustomRole(orgId: string, roleKey: string): Promise<CustomRoleRecord | null> {
+    return this.roles.getCustomRole(orgId, roleKey)
+  }
+
+  async updateCustomRole(input: UpdateCustomRoleInput): Promise<CustomRoleRecord | null> {
+    return this.roles.updateCustomRole(input)
+  }
+
+  async deleteCustomRole(orgId: string, roleKey: string): Promise<boolean> {
+    return this.roles.deleteCustomRole(orgId, roleKey)
+  }
+
+  async getManagedPolicy(orgId: string): Promise<ManagedPolicyRecord | null> {
+    return this.managedPolicy.getManagedPolicy(orgId)
+  }
+
+  async setManagedPolicy(input: SetManagedPolicyInput): Promise<ManagedPolicyRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.managedPolicy.setManagedPolicy(input)
+  }
+
+  async getOrgSsoConfig(orgId: string): Promise<OrgSsoConfigRecord | null> {
+    return this.sso.getOrgSsoConfig(orgId)
+  }
+
+  async upsertOrgSsoConfig(input: UpsertOrgSsoConfigInput): Promise<OrgSsoConfigRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.sso.upsertOrgSsoConfig(input)
+  }
+
+  async deleteOrgSsoConfig(orgId: string): Promise<boolean> {
+    return this.sso.deleteOrgSsoConfig(orgId)
+  }
+
+  async findOrgSsoConfigByScimToken(plaintext: string): Promise<OrgSsoConfigRecord | null> {
+    return this.sso.findOrgSsoConfigByScimToken(plaintext)
+  }
+
+  async findOrgSsoConfigByDomain(domain: string): Promise<OrgSsoConfigRecord | null> {
+    return this.sso.findOrgSsoConfigByDomain(domain)
+  }
+
+  async enqueueScimSyncEvent(input: EnqueueScimSyncEventInput): Promise<ScimSyncEventRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.sso.enqueueScimSyncEvent(input)
+  }
+
+  async claimNextScimSyncEvents(input: ClaimScimSyncEventsInput = {}): Promise<ScimSyncEventRecord[]> {
+    return this.sso.claimNextScimSyncEvents(input)
+  }
+
+  async completeScimSyncEvent(input: CompleteScimSyncEventInput): Promise<ScimSyncEventRecord | null> {
+    return this.sso.completeScimSyncEvent(input)
+  }
+
+  async failScimSyncEvent(input: FailScimSyncEventInput): Promise<ScimSyncEventRecord | null> {
+    return this.sso.failScimSyncEvent(input)
+  }
+
+  async listScimSyncEvents(input: ListScimSyncEventsInput): Promise<ScimSyncEventRecord[]> {
+    return this.sso.listScimSyncEvents(input)
+  }
+
+  // Effective permissions for a member: its custom role's permission map when one
+  // is assigned (and still exists), otherwise the built-in role's map.
+  async resolveMemberPermissions(orgId: string, accountId: string): Promise<MemberPermissionResolution | null> {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_memberships WHERE org_id = $1 AND account_id = $2`,
+      [orgId, accountId],
+    )
+    if (!row) return null
+    const membership = membershipFromRow(row)
+    const customRole = membership.customRoleKey ? await this.roles.getCustomRole(orgId, membership.customRoleKey) : null
+    return {
+      orgId,
+      accountId,
+      role: membership.role,
+      customRoleKey: customRole ? membership.customRoleKey : null,
+      permissions: resolveEffectivePermissions({ role: membership.role, customRole }),
+    }
+  }
+
   async issueApiToken(input: IssueApiTokenInput): Promise<IssuedApiTokenRecord> {
     return this.apiTokens.issueApiToken(input)
   }
@@ -394,6 +530,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async revokeApiToken(input: RevokeApiTokenInput) {
     return this.apiTokens.revokeApiToken(input)
+  }
+
+  async revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput) {
+    return this.apiTokens.revokeApiTokensForAccount(input)
   }
 
   async grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): Promise<ApiTokenChannelBindingGrantRecord> {
@@ -473,6 +613,37 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [orgId, Math.max(1, Math.min(limit, 500))],
     )
     return result.rows.map(auditEventFromRow)
+  }
+
+  async queryAuditEvents(input: QueryAuditEventsInput): Promise<QueryAuditEventsResult> {
+    const limit = normalizeAuditQueryLimit(input.limit)
+    const conditions: string[] = ['org_id = $1']
+    const values: unknown[] = [input.orgId]
+    const bind = (value: unknown) => {
+      values.push(value)
+      return `$${values.length}`
+    }
+    if (input.actorId) conditions.push(`actor_id = ${bind(input.actorId)}`)
+    if (input.actorType) conditions.push(`actor_type = ${bind(input.actorType)}`)
+    // Anchored LIKE on the escaped prefix keeps "session." matching session.* only.
+    if (input.eventTypePrefix) conditions.push(`event_type LIKE ${bind(`${likePrefixEscape(input.eventTypePrefix)}%`)} ESCAPE '\\'`)
+    if (input.targetType) conditions.push(`target_type = ${bind(input.targetType)}`)
+    if (input.targetId) conditions.push(`target_id = ${bind(input.targetId)}`)
+    if (input.result) conditions.push(`metadata->>'result' = ${bind(input.result)}`)
+    if (input.from) conditions.push(`created_at >= ${bind(input.from.toISOString())}`)
+    if (input.to) conditions.push(`created_at <= ${bind(input.to.toISOString())}`)
+    if (input.cursor) {
+      // Keyset: rows strictly AFTER the cursor in (created_at DESC, event_id DESC) order.
+      conditions.push(`(created_at, event_id) < (${bind(input.cursor.createdAt)}, ${bind(input.cursor.eventId)})`)
+    }
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_audit_events
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at DESC, event_id DESC
+       LIMIT ${bind(limit + 1)}`,
+      values,
+    )
+    return paginateAuditEvents(result.rows.map(auditEventFromRow), limit)
   }
 
   async consumeUsageQuota(input: ConsumeUsageQuotaInput) {
@@ -2590,6 +2761,13 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
 function randomRecordId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${randomBytes(8).toString('base64url')}`
+}
+
+// Escape LIKE metacharacters in a caller-supplied prefix so an action filter like
+// "session_" matches the literal underscore, not any character. Paired with
+// ESCAPE '\\' in the query.
+function likePrefixEscape(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 
 export async function createPostgresControlPlaneStore(options: PostgresControlPlaneStoreOptions) {

@@ -3,6 +3,7 @@ import type {
   ApiTokenScope,
   BillingSubscriptionRecord,
   ChannelProviderId,
+  ControlPlanePermission,
   SessionCommandRecord,
   SessionProjectionRecord,
   SessionRecord,
@@ -21,7 +22,19 @@ export type CloudPrincipal = {
   orgId?: string
   accountId?: string
   role?: 'owner' | 'admin' | 'member'
+  // Resolved during ensurePrincipal from the member's effective permission set
+  // (custom-role map when assigned, else the built-in role map). Authoritative for
+  // permission-based authorization once populated.
+  permissions?: ControlPlanePermission[]
+  // The custom role assigned to this member, if any. When set, `permissions` is the
+  // custom role's map (a possible downgrade of the built-in role).
+  customRoleKey?: string | null
   authSource?: 'user' | 'api_token' | 'local' | 'header' | 'worker'
+  // Set true when this principal was minted by the enterprise SSO login binding
+  // (#895) after a verified IdP assertion. An org with SSO-only enforcement rejects a
+  // non-SSO (local / OIDC-end-user) login for its verified domains; an SSO-verified
+  // principal bypasses that gate. Absent/false ⇒ authenticated via a non-SSO path.
+  ssoVerified?: boolean
   tokenId?: string
   tokenScopes?: ApiTokenScope[]
   workerId?: string

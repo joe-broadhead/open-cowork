@@ -22,23 +22,63 @@ function writeArtifact(root: string, relativePath: string, body = 'artifact\n') 
   writeFileSync(path, body)
 }
 
-function writeExpectedArtifacts(root: string, version: string, options: { latestMac?: boolean } = {}) {
+function writeExpectedArtifacts(
+  root: string,
+  version: string,
+  options: { latestMac?: boolean; latestWin?: boolean } = {},
+) {
   const expected = expectedReleaseArtifacts(version)
   for (const artifact of expected.macos) writeArtifact(root, join('release-macos', artifact))
   for (const artifact of expected.linux) writeArtifact(root, join('release-linux', artifact))
+  for (const artifact of expected.windows) writeArtifact(root, join('release-windows', artifact))
   if (options.latestMac) writeArtifact(root, join('release-macos', 'latest-mac.yml'))
+  if (options.latestWin) writeArtifact(root, join('release-windows', 'latest.yml'))
 }
 
 test('release artifact matrix accepts the documented signed desktop artifact set', () => {
   const root = tempRoot('signed')
   try {
-    writeExpectedArtifacts(root, '0.0.0', { latestMac: true })
+    writeExpectedArtifacts(root, '0.0.0', { latestMac: true, latestWin: true })
 
     assert.doesNotThrow(() => verifyReleaseArtifactMatrix({
       root,
       version: '0.0.0',
       signingMode: 'signed',
+      windowsSigningMode: 'signed',
     }))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('release artifact matrix requires the Windows installer for every release', () => {
+  const root = tempRoot('missing-windows')
+  try {
+    writeExpectedArtifacts(root, '0.0.0', { latestMac: true, latestWin: true })
+    rmSync(join(root, 'release-windows', 'Open-Cowork-0.0.0-x64-setup.exe'))
+
+    assert.throws(() => verifyReleaseArtifactMatrix({
+      root,
+      version: '0.0.0',
+      signingMode: 'signed',
+      windowsSigningMode: 'signed',
+    }), /Missing release artifact: .*Open-Cowork-0\.0\.0-x64-setup\.exe/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('release artifact matrix rejects unsigned Windows feed metadata', () => {
+  const root = tempRoot('unsigned-windows-feed')
+  try {
+    writeExpectedArtifacts(root, '0.0.0', { latestMac: true, latestWin: true })
+
+    assert.throws(() => verifyReleaseArtifactMatrix({
+      root,
+      version: '0.0.0',
+      signingMode: 'signed',
+      windowsSigningMode: 'unsigned',
+    }), /Unsigned Windows preview artifacts must not publish latest\.yml/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

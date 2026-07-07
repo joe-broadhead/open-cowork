@@ -53,6 +53,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       onSessionPatch: 'function',
     })
     assert.deepEqual(surface.groups, [
+      'admin',
       'agents',
       'app',
       'artifact',

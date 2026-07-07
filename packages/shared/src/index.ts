@@ -87,6 +87,11 @@ import type {
   ScopedArtifactRef,
 } from './custom-content.js'
 import type {
+  SetupBundle,
+  SetupBundleImportOptions,
+  SetupBundleImportResult,
+} from './setup-bundle.js'
+import type {
   DestructiveConfirmationGrant,
   DestructiveConfirmationRequest,
 } from './destructive-actions.js'
@@ -167,7 +172,32 @@ import type {
   KnowledgeSpace,
   KnowledgeSpaceInput,
 } from './knowledge.js'
+import type {
+  AdminAccess,
+  AdminAuditExport,
+  AdminAuditExportInput,
+  AdminAuditPage,
+  AdminAuditQuery,
+  AdminCreateRoleInput,
+  AdminCustomRole,
+  AdminEntitlements,
+  AdminManagedPolicyResult,
+  AdminMember,
+  AdminMemberInviteInput,
+  AdminMemberInviteResult,
+  AdminMemberListInput,
+  AdminMemberUpdateInput,
+  AdminOverview,
+  AdminProviderKeySecret,
+  AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
+  AdminSsoConfig,
+  AdminUpdateRoleInput,
+  AdminUsageSummary,
+  ControlPlanePermission,
+} from './admin.js'
 
+export * from './admin.js'
 export * from './app-config.js'
 export * from './config-types.js'
 export * from './log-sanitizer.js'
@@ -187,6 +217,7 @@ export * from './destructive-actions.js'
 export * from './desktop-pairing.js'
 export * from './events.js'
 export * from './explorer.js'
+export * from './extension-descriptor.js'
 export * from './http-client-source.js'
 export * from './jsonc.js'
 export * from './knowledge.js'
@@ -203,6 +234,7 @@ export * from './runtime-event-normalizers.js'
 export * from './semantic-ui.js'
 export * from './session.js'
 export * from './session-import.js'
+export * from './setup-bundle.js'
 export * from './session-view-tokens.js'
 export * from './session-view-order.js'
 export * from './session-view-streaming-state.js'
@@ -489,6 +521,45 @@ export interface CoworkAPI {
     update: (target: ScopedArtifactRef, agent: CustomAgentConfig) => Promise<boolean>
     remove: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
   }
+  // Admin control plane (#896). Cloud-only: every method resolves against the
+  // signed-in cloud workspace's org. RBAC gating and conditional billing are driven
+  // by `admin.access()` (effective permissions) and `admin.entitlements()`.
+  admin: {
+    // The caller's own effective permissions — the source of truth for gating.
+    access: () => Promise<AdminAccess>
+    // Read-only entitlement/plan status; `billingEnabled` conditionally renders Billing.
+    entitlements: () => Promise<AdminEntitlements>
+    // Org/deployment overview for the Deployment section.
+    overview: () => Promise<AdminOverview>
+    members: {
+      list: (input?: AdminMemberListInput) => Promise<AdminMember[]>
+      invite: (input: AdminMemberInviteInput) => Promise<AdminMemberInviteResult>
+      update: (accountId: string, input: AdminMemberUpdateInput) => Promise<AdminMember>
+      assignRole: (accountId: string, roleKey: string | null) => Promise<AdminMember>
+    }
+    roles: {
+      catalog: () => Promise<ControlPlanePermission[]>
+      list: () => Promise<AdminCustomRole[]>
+      create: (input: AdminCreateRoleInput) => Promise<AdminCustomRole>
+      update: (roleKey: string, input: AdminUpdateRoleInput) => Promise<AdminCustomRole>
+      delete: (roleKey: string) => Promise<boolean>
+    }
+    policy: {
+      get: () => Promise<AdminManagedPolicyResult>
+      set: (input: AdminSetPolicyInput) => Promise<AdminManagedPolicyResult>
+    }
+    providers: {
+      listKeys: () => Promise<AdminProviderKeySecret[]>
+      setKey: (providerId: string, input: AdminSetProviderKeyInput) => Promise<AdminProviderKeySecret>
+      deleteKey: (providerId: string) => Promise<boolean>
+      sso: () => Promise<AdminSsoConfig | null>
+    }
+    usage: (limit?: number) => Promise<AdminUsageSummary>
+    audit: {
+      query: (filters?: AdminAuditQuery) => Promise<AdminAuditPage>
+      export: (input?: AdminAuditExportInput) => Promise<AdminAuditExport>
+    }
+  }
   capabilities: {
     tools: (options?: ToolListOptions) => Promise<CapabilityTool[]>
     tool: (id: string, options?: ToolListOptions) => Promise<CapabilityTool | null>
@@ -514,6 +585,12 @@ export interface CoworkAPI {
     selectSkillDirectoryImport: () => Promise<SkillImportSelection | null>
     importSkillDirectory: (selectionToken: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig | null>
     removeSkill: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
+    // Shareable setup bundle: export the installed skills + custom MCPs +
+    // custom agents as a portable, secret-redacted bundle, and import one back
+    // (installing via the existing per-type stores, never overwriting a secret
+    // it can't supply).
+    exportSetupBundle: (options?: RuntimeContextOptions) => Promise<SetupBundle>
+    importSetupBundle: (bundle: unknown, options?: SetupBundleImportOptions) => Promise<SetupBundleImportResult>
   }
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => () => void

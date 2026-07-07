@@ -22,6 +22,10 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
     },
+    "./adoption-telemetry": {
+      "types": "./dist/adoption-telemetry.d.ts",
+      "import": "./dist/adoption-telemetry.js"
+    },
     "./agent-config": {
       "types": "./dist/agent-config.d.ts",
       "import": "./dist/agent-config.js"
@@ -142,6 +146,10 @@
       "types": "./dist/mcp-stdio-policy.d.ts",
       "import": "./dist/mcp-stdio-policy.js"
     },
+    "./managed-policy": {
+      "types": "./dist/managed-policy.d.ts",
+      "import": "./dist/managed-policy.js"
+    },
     "./mcp-url-policy": {
       "types": "./dist/mcp-url-policy.d.ts",
       "import": "./dist/mcp-url-policy.js"
@@ -153,6 +161,10 @@
     "./perf-metrics": {
       "types": "./dist/perf-metrics.d.ts",
       "import": "./dist/perf-metrics.js"
+    },
+    "./setup-bundle-store": {
+      "types": "./dist/setup-bundle-store.d.ts",
+      "import": "./dist/setup-bundle-store.js"
     },
     "./permission-config": {
       "types": "./dist/permission-config.d.ts",

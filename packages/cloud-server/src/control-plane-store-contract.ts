@@ -42,6 +42,29 @@ import type {
   UserRecord,
 } from './control-plane-records.ts'
 import type {
+  CreateCustomRoleInput,
+  CustomRoleRecord,
+  MemberPermissionResolution,
+  RevokeApiTokensForAccountInput,
+  UpdateCustomRoleInput,
+} from './control-plane-permissions.ts'
+import type {
+  ManagedPolicyRecord,
+  SetManagedPolicyInput,
+} from './control-plane-policy.ts'
+import type {
+  OrgSsoConfigRecord,
+  UpsertOrgSsoConfigInput,
+} from './control-plane-sso.ts'
+import type {
+  ClaimScimSyncEventsInput,
+  CompleteScimSyncEventInput,
+  EnqueueScimSyncEventInput,
+  FailScimSyncEventInput,
+  ListScimSyncEventsInput,
+  ScimSyncEventRecord,
+} from './control-plane-scim.ts'
+import type {
   BillingSubscriptionRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -103,6 +126,8 @@ import type {
   GrantApiTokenChannelBindingInput,
   IssueApiTokenInput,
   ListApiTokenChannelBindingGrantsInput,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
   RevokeApiTokenInput,
@@ -183,10 +208,41 @@ export type ControlPlaneStore = {
   listOrgMembers(orgId: string, input?: { query?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
   listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
+  // Custom roles (org-defined named permission maps). CRUD plus effective-permission
+  // resolution for a member; built-in roles keep working when no custom role applies.
+  createCustomRole(input: CreateCustomRoleInput): MaybePromise<CustomRoleRecord>
+  listCustomRoles(orgId: string): MaybePromise<CustomRoleRecord[]>
+  getCustomRole(orgId: string, roleKey: string): MaybePromise<CustomRoleRecord | null>
+  updateCustomRole(input: UpdateCustomRoleInput): MaybePromise<CustomRoleRecord | null>
+  deleteCustomRole(orgId: string, roleKey: string): MaybePromise<boolean>
+  // Org-managed workspace & desktop policy (#898). A single record per org; a set
+  // merges a partial input onto the current record (or the unrestricted defaults).
+  getManagedPolicy(orgId: string): MaybePromise<ManagedPolicyRecord | null>
+  setManagedPolicy(input: SetManagedPolicyInput): MaybePromise<ManagedPolicyRecord>
+  // Per-org enterprise SSO config (#895): a single record per org (SAML 2.0 + OIDC,
+  // domain verification, SSO-only enforcement, SCIM enablement). Secrets are stored
+  // as `enc:vN:` ciphertext / salted-hash — the store never sees plaintext. Lookups
+  // by SCIM bearer token (route auth) and by verified email domain (login enforcement).
+  getOrgSsoConfig(orgId: string): MaybePromise<OrgSsoConfigRecord | null>
+  upsertOrgSsoConfig(input: UpsertOrgSsoConfigInput): MaybePromise<OrgSsoConfigRecord>
+  deleteOrgSsoConfig(orgId: string): MaybePromise<boolean>
+  findOrgSsoConfigByScimToken(plaintext: string): MaybePromise<OrgSsoConfigRecord | null>
+  findOrgSsoConfigByDomain(domain: string): MaybePromise<OrgSsoConfigRecord | null>
+  // The durable SCIM sync-event queue (#895): enqueue on every provisioning write,
+  // claim-with-backoff for the reconciler, complete/fail with exponential retry.
+  enqueueScimSyncEvent(input: EnqueueScimSyncEventInput): MaybePromise<ScimSyncEventRecord>
+  claimNextScimSyncEvents(input?: ClaimScimSyncEventsInput): MaybePromise<ScimSyncEventRecord[]>
+  completeScimSyncEvent(input: CompleteScimSyncEventInput): MaybePromise<ScimSyncEventRecord | null>
+  failScimSyncEvent(input: FailScimSyncEventInput): MaybePromise<ScimSyncEventRecord | null>
+  listScimSyncEvents(input: ListScimSyncEventsInput): MaybePromise<ScimSyncEventRecord[]>
+  resolveMemberPermissions(orgId: string, accountId: string): MaybePromise<MemberPermissionResolution | null>
   issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
   listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>
   findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
+  // Revoke every live API token issued to one member (credential revocation on a
+  // permission downgrade / deprovision). Returns the count revoked.
+  revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput): MaybePromise<number>
   grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): MaybePromise<ApiTokenChannelBindingGrantRecord>
   listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): MaybePromise<ApiTokenChannelBindingGrantRecord[]>
   createManagedWorkerPool(input: CreateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord>
@@ -209,6 +265,7 @@ export type ControlPlaneStore = {
   listManagedWorkerHeartbeats(orgId: string, input?: { workerId?: string | null, limit?: number | null }): MaybePromise<ManagedWorkerHeartbeatRecord[]>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
+  queryAuditEvents(input: QueryAuditEventsInput): MaybePromise<QueryAuditEventsResult>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
   listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>

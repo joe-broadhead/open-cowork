@@ -40,6 +40,27 @@ import { InMemoryAuditDomain } from './in-memory-domains/audit.ts'
 import { InMemoryChannelBindingsDomain } from './in-memory-domains/channel-bindings.ts'
 import { InMemoryIdentityDomain } from './in-memory-domains/identity.ts'
 import { InMemoryApiTokensDomain } from './in-memory-domains/api-tokens.ts'
+import { InMemoryRolesDomain } from './in-memory-domains/roles.ts'
+import { InMemoryManagedPolicyDomain } from './in-memory-domains/policy.ts'
+import { InMemorySsoDomain } from './in-memory-domains/sso.ts'
+import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
+import type { OrgSsoConfigRecord, UpsertOrgSsoConfigInput } from './control-plane-sso.ts'
+import type {
+  ClaimScimSyncEventsInput,
+  CompleteScimSyncEventInput,
+  EnqueueScimSyncEventInput,
+  FailScimSyncEventInput,
+  ListScimSyncEventsInput,
+  ScimSyncEventRecord,
+} from './control-plane-scim.ts'
+import { resolveEffectivePermissions } from './control-plane-permissions.ts'
+import type {
+  CreateCustomRoleInput,
+  CustomRoleRecord,
+  MemberPermissionResolution,
+  RevokeApiTokensForAccountInput,
+  UpdateCustomRoleInput,
+} from './control-plane-permissions.ts'
 import { InMemorySettingsDomain } from './in-memory-domains/settings.ts'
 import { InMemoryWorkflowsDomain } from './in-memory-domains/workflows.ts'
 import {
@@ -141,6 +162,8 @@ import type {
   GrantApiTokenChannelBindingInput,
   IssueApiTokenInput,
   ListApiTokenChannelBindingGrantsInput,
+  QueryAuditEventsInput,
+  QueryAuditEventsResult,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
   RevokeApiTokenInput,
@@ -309,6 +332,18 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly identityDomain = new InMemoryIdentityDomain({
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
+  private readonly rolesDomain = new InMemoryRolesDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly managedPolicyDomain = new InMemoryManagedPolicyDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
+  private readonly ssoDomain = new InMemorySsoDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
   private readonly channelBindingsDomain = new InMemoryChannelBindingsDomain({
     getHeadlessAgent: (orgId, agentId) => this.getHeadlessAgent(orgId, agentId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
@@ -393,6 +428,93 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): PrincipalMembershipRecord | null {
     return this.identityDomain.resolvePrincipalMembership(input)
+  }
+
+  createCustomRole(input: CreateCustomRoleInput): CustomRoleRecord {
+    return this.rolesDomain.createCustomRole(input)
+  }
+
+  listCustomRoles(orgId: string): CustomRoleRecord[] {
+    return this.rolesDomain.listCustomRoles(orgId)
+  }
+
+  getCustomRole(orgId: string, roleKey: string): CustomRoleRecord | null {
+    return this.rolesDomain.getCustomRole(orgId, roleKey)
+  }
+
+  updateCustomRole(input: UpdateCustomRoleInput): CustomRoleRecord | null {
+    return this.rolesDomain.updateCustomRole(input)
+  }
+
+  deleteCustomRole(orgId: string, roleKey: string): boolean {
+    return this.rolesDomain.deleteCustomRole(orgId, roleKey)
+  }
+
+  getManagedPolicy(orgId: string): ManagedPolicyRecord | null {
+    return this.managedPolicyDomain.getManagedPolicy(orgId)
+  }
+
+  setManagedPolicy(input: SetManagedPolicyInput): ManagedPolicyRecord {
+    return this.managedPolicyDomain.setManagedPolicy(input)
+  }
+
+  getOrgSsoConfig(orgId: string): OrgSsoConfigRecord | null {
+    return this.ssoDomain.getOrgSsoConfig(orgId)
+  }
+
+  upsertOrgSsoConfig(input: UpsertOrgSsoConfigInput): OrgSsoConfigRecord {
+    return this.ssoDomain.upsertOrgSsoConfig(input)
+  }
+
+  deleteOrgSsoConfig(orgId: string): boolean {
+    return this.ssoDomain.deleteOrgSsoConfig(orgId)
+  }
+
+  findOrgSsoConfigByScimToken(plaintext: string): OrgSsoConfigRecord | null {
+    return this.ssoDomain.findOrgSsoConfigByScimToken(plaintext)
+  }
+
+  findOrgSsoConfigByDomain(domain: string): OrgSsoConfigRecord | null {
+    return this.ssoDomain.findOrgSsoConfigByDomain(domain)
+  }
+
+  enqueueScimSyncEvent(input: EnqueueScimSyncEventInput): ScimSyncEventRecord {
+    return this.ssoDomain.enqueueScimSyncEvent(input)
+  }
+
+  claimNextScimSyncEvents(input: ClaimScimSyncEventsInput = {}): ScimSyncEventRecord[] {
+    return this.ssoDomain.claimNextScimSyncEvents(input)
+  }
+
+  completeScimSyncEvent(input: CompleteScimSyncEventInput): ScimSyncEventRecord | null {
+    return this.ssoDomain.completeScimSyncEvent(input)
+  }
+
+  failScimSyncEvent(input: FailScimSyncEventInput): ScimSyncEventRecord | null {
+    return this.ssoDomain.failScimSyncEvent(input)
+  }
+
+  listScimSyncEvents(input: ListScimSyncEventsInput): ScimSyncEventRecord[] {
+    return this.ssoDomain.listScimSyncEvents(input)
+  }
+
+  // Effective permissions for a member: its custom role's permission map when one
+  // is assigned (and still exists), otherwise the built-in role's map.
+  resolveMemberPermissions(orgId: string, accountId: string): MemberPermissionResolution | null {
+    const membership = this.identityDomain.listMembershipsForAccount(accountId).find((entry) => entry.orgId === orgId)
+    if (!membership) return null
+    const customRole = membership.customRoleKey ? this.rolesDomain.getCustomRole(orgId, membership.customRoleKey) : null
+    return {
+      orgId,
+      accountId,
+      role: membership.role,
+      customRoleKey: customRole ? membership.customRoleKey : null,
+      permissions: resolveEffectivePermissions({ role: membership.role, customRole }),
+    }
+  }
+
+  revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput): number {
+    return this.apiTokensDomain.revokeApiTokensForAccount(input)
   }
 
   orgExists(orgId: string): boolean {
@@ -509,6 +631,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listAuditEvents(orgId: string, limit = 100): AuditEventRecord[] {
     return this.auditDomain.listAuditEvents(orgId, limit)
+  }
+
+  queryAuditEvents(input: QueryAuditEventsInput): QueryAuditEventsResult {
+    return this.auditDomain.queryAuditEvents(input)
   }
 
   consumeUsageQuota(input: ConsumeUsageQuotaInput): QuotaConsumptionRecord {

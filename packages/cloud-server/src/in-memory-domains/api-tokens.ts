@@ -21,6 +21,7 @@ import type {
   ListApiTokenChannelBindingGrantsInput,
   RecordAuditEventInput,
   RevokeApiTokenInput,
+  RevokeApiTokensForAccountInput,
 } from '../control-plane-store.ts'
 
 // API-token domain extracted from in-memory-control-plane-store.ts. Owns the token
@@ -119,6 +120,32 @@ export class InMemoryApiTokensDomain {
       createdAt: input.revokedAt,
     })
     return clone(existing)
+  }
+
+  // Revoke every live token issued to one member — the credential-invalidation
+  // primitive behind permission-downgrade and deprovision. Returns the count revoked.
+  revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput): number {
+    const revokedAt = nowIso(input.revokedAt)
+    let revoked = 0
+    for (const token of this.apiTokens.values()) {
+      if (token.orgId !== input.orgId || token.accountId !== input.accountId) continue
+      if (token.revokedAt) continue
+      token.revokedAt = revokedAt
+      token.updatedAt = revokedAt
+      revoked += 1
+      this.host.recordAuditEvent({
+        orgId: token.orgId,
+        accountId: token.accountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'api_token.revoked',
+        targetType: 'api_token',
+        targetId: token.tokenId,
+        metadata: { name: token.name, scopes: token.scopes, last4: token.last4, reason: input.reason || 'account_revocation' },
+        createdAt: input.revokedAt,
+      })
+    }
+    return revoked
   }
 
   grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): ApiTokenChannelBindingGrantRecord {

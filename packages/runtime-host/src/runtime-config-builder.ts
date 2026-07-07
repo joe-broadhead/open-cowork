@@ -28,6 +28,12 @@ import {
 import { listEffectiveSkillsSync } from './effective-skills.js'
 import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.js'
 import type { PermissionAction } from './permission-config.js'
+import {
+  clampManagedPolicyDimension,
+  filterProvidersByManagedPolicy,
+  getActiveManagedPolicy,
+  isManagedPolicyExtensionClassEnabled,
+} from './managed-policy.js'
 import { getRuntimeSkillCatalogDir } from './runtime-paths.js'
 
 type PlaceholderResolveOptions = {
@@ -344,13 +350,27 @@ function buildRuntimeConfigWithCustomMcpsResult(
   const settings = getEffectiveSettings()
   const appConfig = getAppConfig()
   const appPermissions = appConfig.permissions
-  const bashPolicy = applyUserPermissionPolicy(appPermissions.bash, settings.bashPermission, settings.enableBash)
-  const fileWritePolicy = applyUserPermissionPolicy(appPermissions.fileWrite, settings.fileWritePermission, settings.enableFileWrite)
-  const webPolicy = applyUserPermissionPolicy(appPermissions.web, settings.webPermission, true)
-  const effectiveWebSearchPolicy = webSearchPolicy(webPolicy, settings.webSearchEnabled && appPermissions.webSearch)
-  const taskPolicy = applyUserPermissionPolicy(appPermissions.task, settings.taskPermission, true)
-  const externalDirectoryPolicy = applyUserPermissionPolicy('allow', settings.externalDirectoryPermission, true)
-  const mcpPolicy = applyUserPermissionPolicy('allow', settings.mcpPermission, true)
+  // Precedence: downstream-config defaults → user preference → org managed policy.
+  // The org policy is applied last as a TIGHTENING clamp (deny < ask < allow): it can
+  // only make a permission stricter than the app-config ceiling already allows, never
+  // more permissive. With no active policy the clamp is a no-op, so an individual with
+  // no org sees identical behaviour. Enforcement is offline-safe: getActiveManagedPolicy
+  // returns the last-known persisted policy when the cloud is unreachable.
+  const managedPolicy = getActiveManagedPolicy()
+  const bashPolicy = clampManagedPolicyDimension(
+    applyUserPermissionPolicy(appPermissions.bash, settings.bashPermission, settings.enableBash), 'bash', managedPolicy)
+  const fileWritePolicy = clampManagedPolicyDimension(
+    applyUserPermissionPolicy(appPermissions.fileWrite, settings.fileWritePermission, settings.enableFileWrite), 'fileWrite', managedPolicy)
+  const webPolicy = clampManagedPolicyDimension(
+    applyUserPermissionPolicy(appPermissions.web, settings.webPermission, true), 'web', managedPolicy)
+  const effectiveWebSearchPolicy = clampManagedPolicyDimension(
+    webSearchPolicy(webPolicy, settings.webSearchEnabled && appPermissions.webSearch), 'webSearch', managedPolicy)
+  const taskPolicy = clampManagedPolicyDimension(
+    applyUserPermissionPolicy(appPermissions.task, settings.taskPermission, true), 'task', managedPolicy)
+  const externalDirectoryPolicy = clampManagedPolicyDimension(
+    applyUserPermissionPolicy('allow', settings.externalDirectoryPermission, true), 'externalDirectory', managedPolicy)
+  const mcpPolicy = clampManagedPolicyDimension(
+    applyUserPermissionPolicy('allow', settings.mcpPermission, true), 'mcp', managedPolicy)
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
   const configModel = settings.effectiveModel
     || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
@@ -372,7 +392,12 @@ function buildRuntimeConfigWithCustomMcpsResult(
   // was the only thing scoping providers. Passing the allow-list through makes
   // the runtime itself reject providers outside it. Only set it when non-empty
   // — an empty array would disable every provider at runtime.
-  const enabledProviders = Array.from(new Set(appConfig.providers.available))
+  // Scope the runtime provider allow-list to the org policy (drops denied ids and
+  // intersects the policy allow-list). When the policy leaves no overlap we keep the
+  // app-config list rather than silently unrestricting every provider.
+  const configuredProviders = Array.from(new Set(appConfig.providers.available))
+  const policyScopedProviders = filterProvidersByManagedPolicy(configuredProviders, managedPolicy)
+  const enabledProviders = policyScopedProviders.length > 0 ? policyScopedProviders : configuredProviders
   const config: Config = {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
@@ -391,12 +416,19 @@ function buildRuntimeConfigWithCustomMcpsResult(
     mcp: mcpConfig,
   }
 
+  // Extension-class gating (#898): an org policy can disable whole classes of
+  // user-authored extensions. When custom providers are disabled we skip registering
+  // the custom provider configs (built-in providers still work). The default policy
+  // leaves every class enabled, so individuals with no org see no change.
+  const allowCustomProviders = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customProviders')
   const providerConfigEntries: Record<string, ProviderConfig> = {}
-  for (const [id, provider] of Object.entries(getAppConfig().providers.custom || {})) {
-    if (isBuiltinRuntimeProvider(id)) continue
-    const result = buildProviderRuntimeConfigResult(id, provider, settings, providerId)
-    providerConfigEntries[id] = result.config
-    diagnostics.push(...result.diagnostics)
+  if (allowCustomProviders) {
+    for (const [id, provider] of Object.entries(getAppConfig().providers.custom || {})) {
+      if (isBuiltinRuntimeProvider(id)) continue
+      const result = buildProviderRuntimeConfigResult(id, provider, settings, providerId)
+      providerConfigEntries[id] = result.config
+      diagnostics.push(...result.diagnostics)
+    }
   }
   if (providerId && !providerConfigEntries[providerId]) {
     const selectedProviderConfig = buildEffectiveProviderRuntimeConfigResult(providerId, settings, providerId)
@@ -410,7 +442,13 @@ function buildRuntimeConfigWithCustomMcpsResult(
   }
 
   const contextOptions = { directory: projectDirectory || null }
-  const customSkills = listCustomSkills(contextOptions)
+  // Extension-class gating (#898): drop custom MCPs / skills entirely when the org
+  // policy disables their class. Emptying these lists removes them from MCP
+  // registration, delegation-agent descriptors, and permission patterns alike.
+  const scopedCustomMcps = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customMcps') ? customMcps : []
+  const customSkills = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customSkills')
+    ? listCustomSkills(contextOptions)
+    : []
   const customAgentsRaw = listCustomAgents(contextOptions)
   const availableSkills = listEffectiveSkillsSync(contextOptions).map((skill) => ({
     name: skill.name,
@@ -451,7 +489,7 @@ function buildRuntimeConfigWithCustomMcpsResult(
     if (skipSummary) {
       diagnostics.push({ scope: 'mcp', message: `Skipping bundled MCPs — ${skipSummary}` })
     }
-    for (const customMcp of customMcps) {
+    for (const customMcp of scopedCustomMcps) {
       try {
         if (customMcp.type === 'stdio') {
           validateCustomMcpStdioCommand(customMcp)
@@ -482,7 +520,7 @@ function buildRuntimeConfigWithCustomMcpsResult(
   // primary agents can mention them and grant task delegation by name.
   const customDelegationAgents = buildRuntimeCustomAgents({
     state: {
-      customMcps,
+      customMcps: scopedCustomMcps,
       customSkills,
       customAgents: customAgentsRaw,
     },
@@ -494,10 +532,10 @@ function buildRuntimeConfigWithCustomMcpsResult(
     customMcp.name
       ? expandMcpToolPermissionPatterns([`mcp__${customMcp.name}__*`])
       : []
-  const trustedCustomMcpPatterns = customMcps
+  const trustedCustomMcpPatterns = scopedCustomMcps
     .filter((customMcp) => customMcp.permissionMode === 'allow')
     .flatMap(customMcpPermissionPatterns)
-  const approvalCustomMcpPatterns = customMcps
+  const approvalCustomMcpPatterns = scopedCustomMcps
     .filter((customMcp) => customMcp.permissionMode !== 'allow')
     .flatMap(customMcpPermissionPatterns)
   const customMcpPatterns = Array.from(new Set([

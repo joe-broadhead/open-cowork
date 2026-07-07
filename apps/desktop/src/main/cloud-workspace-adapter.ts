@@ -29,7 +29,31 @@ import type {
   WorkflowListPayload,
   WorkflowRun,
   WorkspacePolicy,
+  ManagedDesktopPolicyView,
+  AdminAccess,
+  AdminAuditExport,
+  AdminAuditExportInput,
+  AdminAuditPage,
+  AdminAuditQuery,
+  AdminCreateRoleInput,
+  AdminCustomRole,
+  AdminEntitlements,
+  AdminManagedPolicyResult,
+  AdminMember,
+  AdminMemberInviteInput,
+  AdminMemberInviteResult,
+  AdminMemberListInput,
+  AdminMemberUpdateInput,
+  AdminOverview,
+  AdminProviderKeySecret,
+  AdminSetPolicyInput,
+  AdminSetProviderKeyInput,
+  AdminSsoConfig,
+  AdminUpdateRoleInput,
+  AdminUsageSummary,
+  ControlPlanePermission,
 } from '@open-cowork/shared'
+import { setActiveManagedPolicy } from '@open-cowork/runtime-host/managed-policy'
 import type { SessionRecord } from '@open-cowork/cloud-server/control-plane-store'
 import { cloudSessionViewToSessionView } from '@open-cowork/cloud-server/session-view-contract'
 import {
@@ -102,6 +126,28 @@ export type CloudWorkspaceSessionAdapter = {
   listSettings?(): Promise<CloudTransportSettingMetadata[]>
   getSetting?(key: string): Promise<CloudTransportSettingMetadata | null>
   setSetting?(key: string, value: Record<string, unknown>): Promise<CloudTransportSettingMetadata>
+  // Admin control plane (#896).
+  getAdminAccess?(): Promise<AdminAccess>
+  getEntitlements?(): Promise<AdminEntitlements>
+  getAdminOverview?(): Promise<AdminOverview>
+  listAdminMembers?(input?: AdminMemberListInput): Promise<AdminMember[]>
+  inviteAdminMember?(input: AdminMemberInviteInput): Promise<AdminMemberInviteResult>
+  updateAdminMember?(accountId: string, input: AdminMemberUpdateInput): Promise<AdminMember>
+  assignAdminMemberRole?(accountId: string, roleKey: string | null): Promise<AdminMember>
+  listPermissionCatalog?(): Promise<ControlPlanePermission[]>
+  listCustomRoles?(): Promise<AdminCustomRole[]>
+  createCustomRole?(input: AdminCreateRoleInput): Promise<AdminCustomRole>
+  updateCustomRole?(roleKey: string, input: AdminUpdateRoleInput): Promise<AdminCustomRole>
+  deleteCustomRole?(roleKey: string): Promise<boolean>
+  getManagedPolicy?(): Promise<AdminManagedPolicyResult>
+  setManagedPolicy?(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult>
+  listProviderKeys?(): Promise<AdminProviderKeySecret[]>
+  setProviderKey?(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret>
+  deleteProviderKey?(providerId: string): Promise<boolean>
+  getSsoConfig?(): Promise<AdminSsoConfig | null>
+  getAdminUsageSummary?(limit?: number): Promise<AdminUsageSummary>
+  queryAudit?(filters?: AdminAuditQuery): Promise<AdminAuditPage>
+  exportAudit?(input?: AdminAuditExportInput): Promise<AdminAuditExport>
   subscribeWorkspaceEvents?(input: {
     afterSequence?: number
     onEvent: (event: CloudTransportWorkspaceEvent) => void
@@ -156,6 +202,22 @@ function policyFromConfig(config: CloudTransportConfig): WorkspacePolicy {
     localStdioMcps: 'disabled',
     machineRuntimeConfig: 'disabled',
   }
+}
+
+// Map the delivered policy view onto the enforcement shape (dropping the transparency
+// map) and hand it to the runtime-host singleton, which persists it for offline-safety.
+export function applyManagedPolicyFromConfig(view: ManagedDesktopPolicyView): void {
+  setActiveManagedPolicy({
+    allowedProviders: view.allowedProviders,
+    deniedProviders: view.deniedProviders,
+    allowedModels: view.allowedModels,
+    deniedModels: view.deniedModels,
+    keyManagement: view.keyManagement,
+    extensions: view.extensions,
+    features: view.features,
+    permissionCeilings: view.permissionCeilings,
+    updateChannel: view.updateChannel,
+  })
 }
 
 export function cloudWorkspaceCacheKey(connection: CloudWorkspaceConnectionRecord) {
@@ -225,7 +287,14 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   }
 
   async policy(): Promise<WorkspacePolicy> {
-    return policyFromConfig(await this.transport.getConfig())
+    const config = await this.transport.getConfig()
+    // Push the org-managed policy (#898) into the runtime-host enforcement singleton so
+    // the local runtime clamps its permission maxima and scopes providers/models to it.
+    // A server that predates the policy omits the field — leave the last-known (offline-
+    // safe) policy in place rather than clearing enforcement. When offline this call
+    // never runs (getConfig throws), so the persisted policy keeps enforcing.
+    if (config.managedPolicy) applyManagedPolicyFromConfig(config.managedPolicy)
+    return policyFromConfig(config)
   }
 
   async listSessions(): Promise<SessionInfo[]> {
@@ -447,6 +516,114 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   async archiveWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
     if (!this.transport.archiveWorkflow) throw new Error('Cloud workflow archive is not supported by this workspace.')
     return this.transport.archiveWorkflow(workflowId)
+  }
+
+  // -- Admin control plane (#896) --------------------------------------------
+  // Each delegates to the cloud transport, surfacing a clear error when the
+  // connected workspace's transport does not implement the admin surface.
+  async getAdminAccess(): Promise<AdminAccess> {
+    if (!this.transport.getAdminAccess) throw new Error('Cloud admin access is not supported by this workspace.')
+    return this.transport.getAdminAccess()
+  }
+
+  async getEntitlements(): Promise<AdminEntitlements> {
+    if (!this.transport.getEntitlements) throw new Error('Cloud entitlements are not supported by this workspace.')
+    return this.transport.getEntitlements()
+  }
+
+  async getAdminOverview(): Promise<AdminOverview> {
+    if (!this.transport.getAdminOverview) throw new Error('Cloud admin overview is not supported by this workspace.')
+    return this.transport.getAdminOverview()
+  }
+
+  async listAdminMembers(input?: AdminMemberListInput): Promise<AdminMember[]> {
+    if (!this.transport.listAdminMembers) throw new Error('Cloud member administration is not supported by this workspace.')
+    return this.transport.listAdminMembers(input)
+  }
+
+  async inviteAdminMember(input: AdminMemberInviteInput): Promise<AdminMemberInviteResult> {
+    if (!this.transport.inviteAdminMember) throw new Error('Cloud member administration is not supported by this workspace.')
+    return this.transport.inviteAdminMember(input)
+  }
+
+  async updateAdminMember(accountId: string, input: AdminMemberUpdateInput): Promise<AdminMember> {
+    if (!this.transport.updateAdminMember) throw new Error('Cloud member administration is not supported by this workspace.')
+    return this.transport.updateAdminMember(accountId, input)
+  }
+
+  async assignAdminMemberRole(accountId: string, roleKey: string | null): Promise<AdminMember> {
+    if (!this.transport.assignAdminMemberRole) throw new Error('Cloud role assignment is not supported by this workspace.')
+    return this.transport.assignAdminMemberRole(accountId, roleKey)
+  }
+
+  async listPermissionCatalog(): Promise<ControlPlanePermission[]> {
+    if (!this.transport.listPermissionCatalog) throw new Error('Cloud role administration is not supported by this workspace.')
+    return this.transport.listPermissionCatalog()
+  }
+
+  async listCustomRoles(): Promise<AdminCustomRole[]> {
+    if (!this.transport.listCustomRoles) throw new Error('Cloud role administration is not supported by this workspace.')
+    return this.transport.listCustomRoles()
+  }
+
+  async createCustomRole(input: AdminCreateRoleInput): Promise<AdminCustomRole> {
+    if (!this.transport.createCustomRole) throw new Error('Cloud role administration is not supported by this workspace.')
+    return this.transport.createCustomRole(input)
+  }
+
+  async updateCustomRole(roleKey: string, input: AdminUpdateRoleInput): Promise<AdminCustomRole> {
+    if (!this.transport.updateCustomRole) throw new Error('Cloud role administration is not supported by this workspace.')
+    return this.transport.updateCustomRole(roleKey, input)
+  }
+
+  async deleteCustomRole(roleKey: string): Promise<boolean> {
+    if (!this.transport.deleteCustomRole) throw new Error('Cloud role administration is not supported by this workspace.')
+    return this.transport.deleteCustomRole(roleKey)
+  }
+
+  async getManagedPolicy(): Promise<AdminManagedPolicyResult> {
+    if (!this.transport.getManagedPolicy) throw new Error('Cloud managed policy is not supported by this workspace.')
+    return this.transport.getManagedPolicy()
+  }
+
+  async setManagedPolicy(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult> {
+    if (!this.transport.setManagedPolicy) throw new Error('Cloud managed policy is not supported by this workspace.')
+    return this.transport.setManagedPolicy(input)
+  }
+
+  async listProviderKeys(): Promise<AdminProviderKeySecret[]> {
+    if (!this.transport.listProviderKeys) throw new Error('Cloud provider-key administration is not supported by this workspace.')
+    return this.transport.listProviderKeys()
+  }
+
+  async setProviderKey(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret> {
+    if (!this.transport.setProviderKey) throw new Error('Cloud provider-key administration is not supported by this workspace.')
+    return this.transport.setProviderKey(providerId, input)
+  }
+
+  async deleteProviderKey(providerId: string): Promise<boolean> {
+    if (!this.transport.deleteProviderKey) throw new Error('Cloud provider-key administration is not supported by this workspace.')
+    return this.transport.deleteProviderKey(providerId)
+  }
+
+  async getSsoConfig(): Promise<AdminSsoConfig | null> {
+    if (!this.transport.getSsoConfig) throw new Error('Cloud SSO administration is not supported by this workspace.')
+    return this.transport.getSsoConfig()
+  }
+
+  async getAdminUsageSummary(limit?: number): Promise<AdminUsageSummary> {
+    if (!this.transport.getAdminUsageSummary) throw new Error('Cloud usage analytics are not supported by this workspace.')
+    return this.transport.getAdminUsageSummary(limit)
+  }
+
+  async queryAudit(filters?: AdminAuditQuery): Promise<AdminAuditPage> {
+    if (!this.transport.queryAudit) throw new Error('Cloud audit log is not supported by this workspace.')
+    return this.transport.queryAudit(filters)
+  }
+
+  async exportAudit(input?: AdminAuditExportInput): Promise<AdminAuditExport> {
+    if (!this.transport.exportAudit) throw new Error('Cloud audit export is not supported by this workspace.')
+    return this.transport.exportAudit(input)
   }
 
   async searchThreads(query?: ThreadSearchQuery): Promise<ThreadSearchResult> {

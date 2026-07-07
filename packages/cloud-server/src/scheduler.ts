@@ -131,6 +131,7 @@ export class CloudScheduler {
     await this.maybeProcessRetention(now)
     await this.maybeReconcileConcurrency(now)
     await this.maybeEmitProjectionLag(now)
+    await this.maybeDrainScimSyncQueue()
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_loop_duration_ms',
       value: Date.now() - startedAt,
@@ -138,6 +139,21 @@ export class CloudScheduler {
       status: 'ok',
     })
     return claimed
+  }
+
+  // Drain the durable SCIM sync-event queue (#895) each loop: claim up to a bounded batch
+  // of DUE events (respecting per-event backoff) across all orgs, apply idempotently, and
+  // complete/retry. A no-op with no due events, so it is safe to run every tick.
+  private async maybeDrainScimSyncQueue() {
+    const result = await this.service.drainScimSyncQueue({ orgId: null, limit: this.maxClaimsPerLoop })
+    if (result.processed > 0) {
+      await recordCloudSchedulerMetric(this.observability, {
+        name: 'open_cowork_cloud_scheduler_scim_sync_processed_total',
+        value: result.processed,
+        schedulerId: this.schedulerId,
+        status: result.failed > 0 ? 'partial' : 'ok',
+      })
+    }
   }
 
   // Throttled data-retention sweep, run from the scheduler loop at most once per

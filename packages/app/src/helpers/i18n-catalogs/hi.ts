@@ -169,14 +169,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} ने शेष ऐप को पुनर्प्राप्त किया। होम पर जाएँ और पुनः प्रयास करें।',
   'error.backToHome': 'होम पर वापस',
 
-  'approval.sendEmail': 'ईमेल भेजें',
-  'approval.createSpreadsheet': 'स्प्रेडशीट बनाएँ',
-  'approval.createDocument': 'दस्तावेज़ बनाएँ',
-  'approval.createPresentation': 'प्रस्तुति बनाएँ',
-  'approval.delete': 'हटाएँ',
-  'approval.shareFile': 'फ़ाइल साझा करें',
-  'approval.createEvent': 'कार्यक्रम बनाएँ',
-  'approval.allowAction': 'क्रिया की अनुमति दें',
   'approval.deny': 'अस्वीकार',
   'approval.approve': 'स्वीकृत',
 

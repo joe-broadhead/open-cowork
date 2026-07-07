@@ -2,8 +2,10 @@ import { spawn } from 'node:child_process'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+const isWindows = process.platform === 'win32'
+
 function resolveExecutable(command) {
-  return process.platform === 'win32' ? `${command}.cmd` : command
+  return isWindows ? `${command}.cmd` : command
 }
 
 const branding = {
@@ -15,6 +17,9 @@ const branding = {
   // icon without editing electron-builder.yml; defaults to the bundled Open Cowork assets.
   APP_ICON_MAC: process.env.APP_ICON_MAC || 'resources/icon.icns',
   APP_ICON_LINUX: process.env.APP_ICON_LINUX || 'resources/icon.png',
+  // Windows NSIS icon. electron-builder accepts a >=256x256 PNG here and
+  // converts it to an .ico at build time; the bundled icon.png is 256x256.
+  APP_ICON_WIN: process.env.APP_ICON_WIN || 'resources/icon.png',
 }
 
 function cleanReleaseOutput() {
@@ -39,6 +44,10 @@ function runStep(command, args) {
     const child = spawn(resolveExecutable(command), args, {
       cwd: process.cwd(),
       stdio: 'inherit',
+      // Node >=20 refuses to spawn a .cmd/.bat directly (CVE-2024-27980) and throws
+      // EINVAL; on Windows the pnpm/electron-builder shims are .cmd files, so route
+      // them through the shell. POSIX keeps shell:false to avoid needless quoting.
+      shell: isWindows,
       env: {
         ...process.env,
         ...branding,

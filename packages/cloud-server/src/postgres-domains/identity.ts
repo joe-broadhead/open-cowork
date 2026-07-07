@@ -58,6 +58,7 @@ export function membershipFromRow(row: QueryRow): MembershipRecord {
     orgId: String(row.org_id),
     accountId: String(row.account_id),
     role: String(row.role) as ControlPlaneRole,
+    customRoleKey: stringOrNull(row.custom_role_key),
     status: String(row.status) as MembershipRecord['status'],
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),

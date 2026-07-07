@@ -31,6 +31,37 @@ duplicated per app.
 
 Avoid adding new Tailwind arbitrary font-size utilities such as `text-[13px]`. `pnpm lint` ratchets the existing renderer count and fails if the count increases.
 
+## Token Tiers
+
+The design system is layered in three tiers. Work flows downward; a change at a
+lower tier re-skins everything above it without editing the higher tiers.
+
+1. **Primitive** — raw literal values, single-sourced in the token layer. The
+   accent presets in `DESIGN_ACCENT_PRESETS`, the base/surface/border/text hexes
+   in `DEFAULT_DARK_BRAND_THEME` / `DEFAULT_LIGHT_BRAND_THEME`, and the
+   categorical data-viz palettes (`KNOWLEDGE_SPACE_HUES` in
+   `packages/ui/src/knowledge-hues.ts`, `ENTITY_HUES` in
+   `packages/ui/src/utils.ts`) are primitives. Only this tier holds literal
+   colors.
+2. **Semantic** — themeable CSS custom properties emitted from the token layer by
+   `emitRootTokensCss()` (`--color-*`, `--space-*`, `--radius-*`, `--dur-*`,
+   `--ease-*`, `--z-*`, `--shadow-*`, `--studio-*`, …). These are theme-invariant
+   in structure and brand-variable in color. Consumers read these variables; they
+   never read primitives directly.
+3. **Component** — `packages/ui/src` React components and their CSS-in-TS
+   (`surface-styles.ts`), plus the renderer classes in
+   `packages/app/src/styles/globals.css`. Component code consumes semantic tokens
+   only.
+
+**Semantic-tokens-only guard.** `scripts/check-design-token-usage.mjs` (run by
+`pnpm lint`) fails if Tier-3 component code in `packages/ui/src` hardcodes a raw
+hex, `rgb()`, or `hsl()` color literal instead of a token. Pure ink/white
+(`#fff` / `#000`) inside `color-mix()` material math is allowed because there is
+no semantic token for pure black or white, and the two primitive palette files
+above are allowlisted by path. See the script header for the exact scoping. This
+keeps a downstream retint (see [Design Tokens → Retint in 5 minutes](design-tokens.md#retint-in-5-minutes))
+a pure token override with no component edits.
+
 ## Primitives
 
 Shared React primitives live in `packages/ui` and are exported as the private
@@ -60,6 +91,35 @@ should happen in the package:
   both Desktop and Cloud Web.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
+
+`packages/ui/src/index.ts` is the single import surface for the package: every
+primitive, surface, hook, and helper is re-exported there, so consumers import
+from `@open-cowork/ui` and never reach into deep paths. `PrimitiveGallery`
+renders the catalog live at `#/ui-primitives` on both Desktop and Cloud Web.
+
+## Component Catalog
+
+Core primitives and the primary semantic tokens they consume. Interaction states
+(`:hover`, `:active`, `:focus-visible`, `:disabled` / `aria-disabled`) are styled
+on the shared classes in `packages/app/src/styles/globals.css` and
+`packages/ui/src/surface-styles.ts`; every focusable primitive picks up the
+global `*:focus-visible` accent outline plus its own state styling.
+
+| Primitive | Role | Key semantic tokens |
+| --- | --- | --- |
+| `Button` / `IconButton` | actions | `--accent-action-fill`, `--accent-action-foreground`, `--radius-sm`, `--control-h-*`, `--ring-focus`, `--dur-1`/`--ease-out` |
+| `Input` / `Textarea` | text entry | `--color-surface`, `--color-border`, `--color-border-strong`, `--control-h-*`, `--ring-focus` |
+| `Select` / `Menu` | choice + popover | `--glass-bg`, `--glass-border`, `--z-dropdown`, `--shadow-3`, `--radius-md` |
+| `SegmentedControl` / `Switch` | toggles | `--color-surface-active`, `--color-accent`, `--control-h-*`, `--dur-1` |
+| `Card` | container surface | `--color-surface`, `--color-border`, `--shadow-card`, `--specular`, `--radius-lg` |
+| `Dialog` | modal / drawer | `--z-modal`, `--glass-bg`, `--shadow-elevated`, `--primitive-dialog-*`, focus trap |
+| `Tooltip` | hover hint | `--z-tooltip`, `--glass-bg`, `--primitive-tooltip-max-w` |
+| `Toaster` / `toast` | transient feedback | `--z-toast`, `--color-green`/`--color-amber`/`--color-red`, `--shadow-elevated` |
+| `Badge` | inline status pill | `--color-green`/`--color-amber`/`--color-red`/`--color-info`, cooled `--chip-*`, `--radius-full` |
+| `EmptyState` / `Skeleton` | placeholders | `--color-text-secondary`, `--color-surface`, `--radius-lg`, `--dur-2` |
+| `Icon` / `Kbd` | glyph + hint | `--icon-size-*`, `--text-2xs`, `--color-text-secondary` |
+| `WorkbenchLayout` / `ActionCluster` / `DiffView` | workflow IA | `--studio-*`, `--color-border-subtle`, `--z-sticky` |
+| Studio cards/rows/lanes (`CoworkerCard`, `TaskLane`, `KanbanBoard`, `ReviewPanel`, …) | Studio product language | `--coworker-*`, `--lane-*`, `--review-*`, `--density-*` |
 
 ## Agent Builder
 
@@ -104,7 +164,29 @@ and responsive layout while OpenCode still owns execution.
 
 ## Accessibility Gates
 
-CI runs `pnpm lint:a11y --max-warnings=0` and the focused renderer accessibility smoke tests. The smoke helper explicitly enables axe `color-contrast`, so contrast regressions are part of the required test gate.
+CI runs `pnpm lint:a11y --max-warnings=0` and the focused renderer accessibility smoke tests. The smoke helper explicitly enables axe `color-contrast`, so contrast regressions are part of the required test gate. `pnpm lint:a11y --max-warnings=0` is a blocking job in `.github/workflows/ci.yml` (and `release.yml`), so any `jsx-a11y` warning fails the build.
+
+### AA baseline
+
+The product targets WCAG 2.1/2.2 AA. Shared primitives ship these guarantees so
+feature code inherits them:
+
+- **Focus visibility.** A global `*:focus-visible` rule paints a 1px accent
+  outline; `--ring-focus` is a solid, fully-opaque 2px accent ring (a
+  semi-transparent ring failed SC 1.4.11), so keyboard focus stays visible on
+  every surface.
+- **Roles and labels.** `IconButton` requires a `label` prop (enforced by
+  `pnpm lint`); command-style pickers expose `role="listbox"` / `role="option"`
+  with `aria-controls` + `aria-activedescendant` on the search input.
+- **Focus trap in overlays.** `Dialog`, `Select`, and `Menu` use
+  `useFocusTrap`, which traps Tab, restores focus on close, and closes on
+  `Escape`.
+- **Target size.** Interactive controls size to the `--control-h-*` scale
+  (24–48px); primary touch targets use `--control-h-lg` (40px) / `--control-h-xl`
+  (48px) to meet the 44px AA target-size guidance.
+- **Contrast.** Accent action fills are computed to clear 4.5:1 against their own
+  gradient (see `accentActionPlanForColors`), and the axe `color-contrast` rule
+  is enabled in the required smoke tests.
 
 Command-style pickers should expose the result list as `role="listbox"` with `role="option"` rows. Search inputs should remain search/text inputs and point at the listbox with `aria-controls` and `aria-activedescendant`; do not model these as a combobox unless the input itself owns a popup value.
 

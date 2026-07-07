@@ -580,6 +580,202 @@ placeholders for secrets and list each variable in
 Upstream distributions ship with telemetry disabled by default —
 no remote calls happen unless a downstream opts in.
 
+## Team distribution and interop
+
+Beyond a full downstream repackage, Open Cowork supports lighter-weight ways to
+move a *setup* between machines and to interoperate with external MCP clients
+and plugin ecosystems. These share one internal model — the **unified extension
+descriptor** — so a skill, a custom MCP server, a custom agent, or a provider
+can all be described, redacted, and reinstalled through one shape.
+
+### Unified extension descriptor
+
+`packages/shared/src/extension-descriptor.ts` defines a single typed
+`ExtensionDescriptor` that represents any installable unit:
+
+```ts
+interface ExtensionDescriptor {
+  schemaVersion: 1
+  id: string                 // e.g. "mcp:tickets", "agent:reviewer"
+  kind: 'skill' | 'mcp' | 'agent' | 'provider'
+  name: string
+  source: ExtensionSource    // origin, original scope, advisory reference
+  secrets: ExtensionSecretRequirement[]  // what import must re-supply
+  setup: ExtensionSetupStep[]            // human-readable install steps
+  payload: ExtensionPayload  // the redacted per-type record, tagged by kind
+}
+```
+
+Pure, browser-safe converters map each existing per-type record onto the
+descriptor and back — `mcpToExtensionDescriptor` / `extensionDescriptorToMcp`,
+and the equivalents for skills, agents, and providers. The converters do **not**
+rebuild the per-type UIs or storage; they translate onto the same
+`CustomMcpConfig` / `CustomSkillConfig` / `CustomAgentConfig` records the
+existing stores already persist. This descriptor is the foundation for a future
+unified "Extensions" surface and the item shape carried by the setup bundle
+below.
+
+Redaction happens inside the converters, so the same logic runs on desktop, in
+the browser, and in tests:
+
+- MCP environment values and HTTP header values → replaced with
+  `__OPEN_COWORK_REDACTED__` and re-declared as `env:<KEY>` / `header:<KEY>`
+  secret requirements.
+- Absolute local paths in a stdio MCP's `command`/`args` → replaced and
+  re-declared as `path:*` requirements (relative launchers such as `npx` stay
+  intact).
+- Provider credential-like option keys (`apiKey`, `*token`, `*secret`, …) →
+  replaced and re-declared as `credential:<key>` requirements. Provider
+  *shape* travels; provider secrets never do.
+
+### Shareable setup export/import bundle
+
+The setup bundle is the concrete, implemented interop artifact. It packages a
+deployment's installed **skills + custom MCP servers + custom agents** as a
+portable, versioned JSON document with every secret redacted:
+
+```jsonc
+{
+  "format": "open-cowork-setup-bundle",
+  "version": 1,
+  "exportedAt": "2026-01-01T00:00:00.000Z",
+  "exportedBy": "Example Cowork",
+  "skills": [ /* ExtensionDescriptor (kind: skill) */ ],
+  "mcps":   [ /* ExtensionDescriptor (kind: mcp)   */ ],
+  "agents": [ /* ExtensionDescriptor (kind: agent) */ ]
+}
+```
+
+The format, validation, redaction, and import *planning* live in the pure
+`@open-cowork/shared` (`setup-bundle.ts`); the IO half
+(`packages/runtime-host/src/setup-bundle-store.ts`) wires it to the **existing**
+`custom-mcp-store` / `custom-skill-store` / `custom-agent-store` install code —
+there is no second write path.
+
+Export and import are exposed to both product surfaces through the
+`CoworkAPI.custom` methods `exportSetupBundle` / `importSetupBundle`, keeping
+desktop⇄web parity (desktop implements them over IPC; the browser build reports
+them unavailable, like the other local-filesystem capability mutations).
+
+**Import semantics.** Import validates the bundle version/shape, then reports a
+per-item outcome without ever silently clobbering local state:
+
+| Status | Meaning |
+|---|---|
+| `applied` | Installed (or, with `overwrite`, replaced) via the existing store. |
+| `needs-secret` | Has required secrets the operator hasn't supplied; **not** installed, so no placeholder secret is ever persisted. |
+| `skipped-conflict` | An item of the same name already exists; left unchanged. |
+| `skipped-unsupported` | Unknown kind, or the per-type install threw. |
+
+Import is **idempotent** — re-importing the same bundle is a no-op because every
+item conflicts with the one already installed. Secrets are supplied out-of-band
+at import time (`secretValues[descriptor.id][secretKey]`), so the JSON stays
+safe to email, commit to an internal repo, or attach to a ticket. This is the
+right mechanism for "seed every teammate's install with the approved skills,
+MCPs, and agents" without shipping a whole downstream build.
+
+### Per-org install links (design)
+
+> Status: **design**. This section documents the contract and the minimal hook;
+> it does not add download-serving infrastructure.
+
+The goal is a single signed, byte-identical generic installer that boots as a
+branded, config-stamped app depending on *which link* a user downloaded from —
+so an org can hand out `https://get.example.com/acme` and have it launch already
+pointed at Acme's config, without maintaining a fork or a per-org signed binary.
+
+Open Cowork already has every runtime hook this needs; the design reuses them
+rather than inventing a new bootstrap:
+
+- **Config stamping** is the existing downstream config chain (see *Config merge
+  order* above): `OPEN_COWORK_DOWNSTREAM_ROOT` / `OPEN_COWORK_CONFIG_DIR` /
+  `OPEN_COWORK_CONFIG_PATH` select the active `open-cowork.config.json`, and
+  `branding.*` stamps name, icons, and copy. The rebranding env vars
+  (`APP_PRODUCT_NAME`, `APP_ID`, `APP_ARTIFACT_PREFIX`) are **build-time** only
+  and are intentionally *not* part of this per-download flow.
+- **Content stamping** is the skills/MCPs overlay resolved from the downstream
+  root.
+
+The per-org link then only has to deliver a small, signed **sidecar** next to
+the unchanged binary:
+
+```text
+Example-Cowork-Setup.exe          # byte-identical signed installer
+Example-Cowork-Setup.exe.acme     # filename tag identifying the org (advisory)
+bootstrap.json                    # signed: { org, configUrl|configDir, downstreamRoot, mirror? }
+```
+
+The download server stamps `bootstrap.json` per deployment at download time
+(the binary is never re-signed). On first run the app:
+
+1. Verifies the `bootstrap.json` signature against a pinned org public key.
+2. Resolves the referenced config + content into the downstream root (fetch
+   once and cache, or point at a pre-provisioned directory).
+3. Sets `OPEN_COWORK_DOWNSTREAM_ROOT` for itself and boots through the existing
+   merge chain — identical to launching with the env var by hand today.
+
+Two operating modes:
+
+- **Online**: `bootstrap.json.configUrl` points at the org's config/content
+  bundle; the app fetches and caches it.
+- **Air-gapped / mirror**: `bootstrap.json.mirror` names an internal artifact
+  mirror (or a `configDir` on a mounted share), so no public network egress is
+  required.
+
+Minimal hook needed to make this real: a small first-run bootstrap reader that
+verifies the signed `bootstrap.json`, materializes the downstream root, and
+exports `OPEN_COWORK_DOWNSTREAM_ROOT` before config load. Everything downstream
+of that env var already works. The **setup bundle** above is the natural
+payload for the content half of `bootstrap.json` — an org's approved skills,
+MCPs, and agents travel as one redacted bundle, and secrets are still supplied
+per user at first run.
+
+### Standalone semantic-UI MCP and plugin import (design)
+
+> Status: **design**, plus the real converter hook from the extension
+> descriptor. No new server infrastructure is added.
+
+**Publishing the semantic-UI control MCP standalone.** The app already runs a
+loopback semantic-UI bridge (`packages/runtime-host/src/semantic-ui-bridge.ts`)
+that binds `127.0.0.1:<random-port>` with a per-session scoped token and hands
+the bundled `mcps/semantic-ui` server its coordinates through two env vars:
+
+```text
+OPEN_COWORK_SEMANTIC_UI_URL=http://127.0.0.1:<port>
+OPEN_COWORK_SEMANTIC_UI_TOKEN=<base64url 256-bit token>
+```
+
+To let an **external** MCP client (Claude Desktop, an editor, another agent
+runtime) drive the same read-only status/snapshot and audited action surface,
+the design writes those same coordinates to a **bridge-discovery file** — the
+standard "MCP endpoint + scoped token" handshake — instead of only injecting
+them into the app's own child process:
+
+```jsonc
+// ~/.config/<dataDirName>/semantic-ui-bridge.json  (0600)
+{
+  "contractVersion": 1,
+  "url": "http://127.0.0.1:<port>",
+  "token": "<scoped session token>",
+  "tools": ["ui_status", "ui_snapshot", "ui_list_actions", "ui_execute_action"]
+}
+```
+
+The token stays session-scoped and loopback-bound; `authorizeSemanticUiTool`
+already gates read-only vs. action tools, so exposing the file does not widen
+authority — an external client gets exactly the same contract the bundled MCP
+does. Minimal hook: emit/rotate the discovery file alongside
+`ensureSemanticUiBridge()` / `stopSemanticUiBridge()`.
+
+**Importing an external agent/plugin bundle.** A foreign plugin or agent
+package becomes installable by mapping it onto the unified extension descriptor
+(kind `agent`/`mcp`/`skill`, `source.origin: 'external'`). Once a converter
+produces `ExtensionDescriptor`s, the *same* `importSetupBundle` planning and
+install path applies — including redaction, `needs-secret` prompting, and
+idempotent conflict handling. The descriptor and its converters are the small,
+tested code hook that makes this real; a per-vendor adapter only has to emit
+descriptors, not re-implement install or secret handling.
+
 ## Signing, notarization, and distribution
 
 This repository ships **unsigned** artifacts by default. Downstream

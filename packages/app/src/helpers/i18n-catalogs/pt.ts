@@ -172,14 +172,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}} recuperou o resto do app. Volte ao início e tente novamente.',
   'error.backToHome': 'Voltar ao início',
 
-  'approval.sendEmail': 'Enviar email',
-  'approval.createSpreadsheet': 'Criar planilha',
-  'approval.createDocument': 'Criar documento',
-  'approval.createPresentation': 'Criar apresentação',
-  'approval.delete': 'Excluir',
-  'approval.shareFile': 'Compartilhar arquivo',
-  'approval.createEvent': 'Criar evento',
-  'approval.allowAction': 'Permitir ação',
   'approval.deny': 'Negar',
   'approval.approve': 'Aprovar',
 

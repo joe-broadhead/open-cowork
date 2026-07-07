@@ -1,0 +1,83 @@
+name: Nightly Evals
+
+# Nightly, real-Electron UI eval flows. These are heavier than the PR-gate
+# smoke suite (they drive full user journeys and capture visual evidence), so
+# they run on a schedule instead of on every push. Kept as a standalone
+# workflow — its job names are intentionally NOT part of the required-checks
+# set enforced by scripts/verify-release-checks.mjs.
+
+on:
+  schedule:
+    # 06:17 UTC daily.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      update_baselines:
+        description: 'Re-seed visual-regression baselines (upload for review)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TZ: UTC
+
+concurrency:
+  group: nightly-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install Linux display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Runs every apps/desktop/tests/*.eval.test.ts flow on a virtual display.
+      # Each flow captures screenshot evidence under
+      # apps/desktop/test-artifacts/evals/<flow>/, and the visual-regression
+      # flow diffs Home + Team (light + dark) against committed baselines
+      # (seeding any that are missing on first run).
+      - name: Run nightly UI eval flows + visual regression (xvfb)
+        run: xvfb-run -a pnpm test:e2e:evals
+        env:
+          OPEN_COWORK_EVAL_UPDATE_BASELINES: ${{ inputs.update_baselines && '1' || '0' }}
+
+      - name: Upload eval evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-eval-evidence
+          path: apps/desktop/test-artifacts/evals/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      # On first run (or an explicit re-seed) the visual baselines are written
+      # into the tree but not committed. Upload them so a maintainer can review
+      # and commit the accepted baselines.
+      - name: Upload seeded/updated visual baselines
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-eval-visual-baselines
+          path: apps/desktop/tests/visual-baselines/**
+          if-no-files-found: ignore
+          retention-days: 14

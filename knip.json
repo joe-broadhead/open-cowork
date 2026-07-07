@@ -35,6 +35,7 @@
         "src/preload/index.ts",
         "tests/*.smoke.test.ts",
         "tests/*.packaged.test.ts",
+        "tests/*.eval.test.ts",
         "tests/screenshots.ts"
       ],
       "project": [

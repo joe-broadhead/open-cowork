@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import {
   ControlPlaneQuotaExceededError,
+  hashScimToken,
   type ControlPlaneStore,
 } from '@open-cowork/cloud-server/control-plane-store'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
@@ -498,6 +499,134 @@ function runControlPlaneDomainContracts(
       assert.ok(revokedToken?.revokedAt)
       assert.equal(await store.findApiTokenByPlaintext(issuedToken.plaintext), null)
 
+      // Custom roles (RBAC #894) — org-defined named permission maps: create/list/get,
+      // assign to a member (with omit-preserves / null-clears semantics), resolve the
+      // member's effective permissions, and revoke the member's tokens on downgrade.
+      const customRole = await store.createCustomRole({
+        orgId: org.orgId,
+        roleKey: 'analyst',
+        name: 'Analyst',
+        baseRole: 'member',
+        permissions: ['sessions:read', 'members:read', 'members:read'],
+      })
+      assert.deepEqual(customRole.permissions, ['members:read', 'sessions:read'])
+      assert.deepEqual((await store.listCustomRoles(org.orgId)).map((role) => role.roleKey), ['analyst'])
+      assert.equal((await store.getCustomRole(org.orgId, 'analyst'))?.name, 'Analyst')
+      await store.upsertMembership({ orgId: org.orgId, accountId: account.accountId, role: 'member', customRoleKey: 'analyst' })
+      const resolvedPermissions = await store.resolveMemberPermissions(org.orgId, account.accountId)
+      assert.equal(resolvedPermissions?.customRoleKey, 'analyst')
+      assert.deepEqual(resolvedPermissions?.permissions, ['members:read', 'sessions:read'])
+      // A membership upsert that omits customRoleKey preserves the assignment.
+      await store.upsertMembership({ orgId: org.orgId, accountId: account.accountId, role: 'member' })
+      assert.equal((await store.resolveMemberPermissions(org.orgId, account.accountId))?.customRoleKey, 'analyst')
+      const widenedRole = await store.updateCustomRole({ orgId: org.orgId, roleKey: 'analyst', permissions: ['sessions:read', 'sessions:write', 'members:read'] })
+      assert.deepEqual(widenedRole?.permissions, ['members:read', 'sessions:read', 'sessions:write'])
+      // Revoking all of a member's tokens fails their auth closed on the next request.
+      const memberToken = await store.issueApiToken({ orgId: org.orgId, accountId: account.accountId, name: 'Member token', scopes: ['desktop'] })
+      assert.ok(await store.findApiTokenByPlaintext(memberToken.plaintext))
+      assert.ok(await store.revokeApiTokensForAccount({ orgId: org.orgId, accountId: account.accountId }) >= 1)
+      assert.equal(await store.findApiTokenByPlaintext(memberToken.plaintext), null)
+      // Clearing the assignment (null) falls back to the built-in role map; delete cleans up.
+      await store.upsertMembership({ orgId: org.orgId, accountId: account.accountId, role: 'member', customRoleKey: null })
+      assert.equal((await store.resolveMemberPermissions(org.orgId, account.accountId))?.customRoleKey, null)
+      assert.equal(await store.deleteCustomRole(org.orgId, 'analyst'), true)
+      assert.equal(await store.getCustomRole(org.orgId, 'analyst'), null)
+
+      // Managed workspace & desktop policy (#898) — one org-scoped record; a set MERGES a
+      // partial onto the current record (or the unrestricted defaults). Unset ⇒ null.
+      assert.equal(await store.getManagedPolicy(org.orgId), null)
+      const firstPolicy = await store.setManagedPolicy({
+        orgId: org.orgId,
+        permissionCeilings: { bash: 'deny', web: 'ask' },
+        allowedProviders: ['openai', 'openai', 'anthropic'],
+        deniedModels: ['gpt-legacy'],
+        keyManagement: 'byok_required',
+        extensions: { customMcps: false },
+        features: { channels: false },
+        updateChannel: 'stable',
+      })
+      assert.equal(firstPolicy.permissionCeilings.bash, 'deny')
+      assert.equal(firstPolicy.permissionCeilings.web, 'ask')
+      // Dimensions not set stay unrestricted; provider allow-list is deduped + sorted.
+      assert.equal(firstPolicy.permissionCeilings.task, 'allow')
+      assert.deepEqual(firstPolicy.allowedProviders, ['anthropic', 'openai'])
+      assert.deepEqual(firstPolicy.deniedModels, ['gpt-legacy'])
+      assert.equal(firstPolicy.keyManagement, 'byok_required')
+      assert.equal(firstPolicy.extensions.customMcps, false)
+      assert.equal(firstPolicy.extensions.customProviders, true)
+      assert.deepEqual(firstPolicy.features, { channels: false })
+      assert.equal(firstPolicy.updateChannel, 'stable')
+      // A second set merges: a new field changes, omitted fields are preserved, and a
+      // nullable allow-list can be cleared back to unrestricted with null.
+      const mergedPolicy = await store.setManagedPolicy({
+        orgId: org.orgId,
+        permissionCeilings: { task: 'ask' },
+        allowedProviders: null,
+      })
+      assert.equal(mergedPolicy.permissionCeilings.bash, 'deny')
+      assert.equal(mergedPolicy.permissionCeilings.task, 'ask')
+      assert.equal(mergedPolicy.allowedProviders, null)
+      assert.equal(mergedPolicy.keyManagement, 'byok_required')
+      assert.equal(mergedPolicy.createdAt, firstPolicy.createdAt)
+      assert.deepEqual((await store.getManagedPolicy(org.orgId))?.permissionCeilings.bash, 'deny')
+
+      // Enterprise SSO config + SCIM sync queue (#895). Upsert MERGES a partial patch;
+      // secrets are opaque ciphertext to the store; lookups by SCIM token + verified
+      // domain; the durable queue claims due events, completes, and retries with backoff.
+      assert.equal(await store.getOrgSsoConfig(org.orgId), null)
+      const sso = await store.upsertOrgSsoConfig({
+        orgId: org.orgId,
+        protocol: 'oidc',
+        enabled: true,
+        enforced: true,
+        verifiedDomains: ['Example.test', 'example.test'],
+        oidcIssuer: 'https://idp.example.test',
+        oidcClientSecretCiphertext: 'enc:v1:opaque',
+        scimEnabled: true,
+        scimTokenHash: hashScimToken('scim-secret-token'),
+      })
+      assert.deepEqual(sso.verifiedDomains, ['example.test'])
+      assert.equal(sso.enforced, true)
+      assert.equal(sso.oidcIssuer, 'https://idp.example.test/')
+      // A partial upsert preserves omitted fields (issuer stays; only enforced flips).
+      const ssoMerged = await store.upsertOrgSsoConfig({ orgId: org.orgId, enforced: false })
+      assert.equal(ssoMerged.enforced, false)
+      assert.equal(ssoMerged.oidcIssuer, 'https://idp.example.test/')
+      assert.equal(ssoMerged.oidcClientSecretCiphertext, 'enc:v1:opaque')
+      assert.equal((await store.findOrgSsoConfigByScimToken('scim-secret-token'))?.orgId, org.orgId)
+      assert.equal(await store.findOrgSsoConfigByScimToken('wrong-token'), null)
+      // Domain lookup requires enabled; enforced=false still resolves for enforcement checks.
+      assert.equal((await store.findOrgSsoConfigByDomain('example.test'))?.orgId, org.orgId)
+      assert.equal(await store.findOrgSsoConfigByDomain('unverified.test'), null)
+      // Durable SCIM sync queue: enqueue → claim (marks processing, +1 attempt) → fail
+      // reschedules pending with backoff → claim again → complete.
+      const claimTime = new Date('2026-04-01T00:00:00.000Z')
+      const scimEvent = await store.enqueueScimSyncEvent({
+        orgId: org.orgId,
+        operation: 'user.provision',
+        externalId: 'idp-user-1',
+        payload: { accountId: account.accountId, status: 'active' },
+        createdAt: claimTime,
+      })
+      assert.equal(scimEvent.status, 'pending')
+      const claimed = await store.claimNextScimSyncEvents({ orgId: org.orgId, now: claimTime })
+      assert.deepEqual(claimed.map((entry) => entry.eventId), [scimEvent.eventId])
+      assert.equal(claimed[0]?.status, 'processing')
+      assert.equal(claimed[0]?.attempts, 1)
+      const failed = await store.failScimSyncEvent({ orgId: org.orgId, eventId: scimEvent.eventId, error: 'transient', now: claimTime })
+      assert.equal(failed?.status, 'pending')
+      assert.ok(new Date(failed!.nextAttemptAt).getTime() > claimTime.getTime())
+      // Not yet due at claim time (backoff), due after the delay.
+      assert.deepEqual(await store.claimNextScimSyncEvents({ orgId: org.orgId, now: claimTime }), [])
+      const reclaimed = await store.claimNextScimSyncEvents({ orgId: org.orgId, now: new Date(claimTime.getTime() + 60_000) })
+      assert.equal(reclaimed.length, 1)
+      assert.equal(reclaimed[0]?.attempts, 2)
+      const completed = await store.completeScimSyncEvent({ orgId: org.orgId, eventId: scimEvent.eventId })
+      assert.equal(completed?.status, 'succeeded')
+      assert.deepEqual((await store.listScimSyncEvents({ orgId: org.orgId, status: 'succeeded' })).map((entry) => entry.eventId), [scimEvent.eventId])
+      assert.equal(await store.deleteOrgSsoConfig(org.orgId), true)
+      assert.equal(await store.getOrgSsoConfig(org.orgId), null)
+
       // Setting metadata — tenant-scoped vs user-scoped upsert/get/list stay isolated.
       await store.setSettingMetadata({ tenantId, key: 'appearance', value: { theme: 'dark' } })
       assert.deepEqual((await store.getSettingMetadata(tenantId, 'appearance'))?.value, { theme: 'dark' })
@@ -552,6 +681,37 @@ function runControlPlaneDomainContracts(
       assert.equal(await store.pruneExpiredAuditEvents(noopCutoff), 0)
       assert.equal(await store.pruneExpiredUsageEvents(noopCutoff), 0)
       assert.equal(await store.pruneExpiredWorkspaceEvents(noopCutoff), 0)
+
+      // Queryable audit log (#899) — filter + keyset-cursor parity. Seed a small, ordered set
+      // and assert both stores return identical filtered/paged results.
+      const auditSeeds = [
+        { eventType: 'session.created', actorId: 'actor-a', result: 'success', createdAt: new Date('2026-04-01T00:00:00.000Z') },
+        { eventType: 'session.imported', actorId: 'actor-a', result: 'success', createdAt: new Date('2026-04-02T00:00:00.000Z') },
+        { eventType: 'command.prompt', actorId: 'actor-b', result: 'failure', createdAt: new Date('2026-04-03T00:00:00.000Z') },
+        { eventType: 'command.aborted', actorId: 'actor-b', result: 'success', createdAt: new Date('2026-04-04T00:00:00.000Z') },
+      ]
+      for (const seed of auditSeeds) {
+        await store.recordAuditEvent({
+          orgId: org.orgId, actorType: 'user', actorId: seed.actorId,
+          eventType: seed.eventType, targetType: 'session', targetId: sessionId,
+          metadata: { result: seed.result }, createdAt: seed.createdAt,
+        })
+      }
+      // Prefix + actor + result filters (newest first).
+      const sessionQuery = await store.queryAuditEvents({ orgId: org.orgId, eventTypePrefix: 'session.' })
+      assert.deepEqual(sessionQuery.events.map((row) => row.eventType), ['session.imported', 'session.created'])
+      assert.equal(sessionQuery.nextCursor, null)
+      const failures = await store.queryAuditEvents({ orgId: org.orgId, result: 'failure' })
+      assert.deepEqual(failures.events.map((row) => row.eventType), ['command.prompt'])
+      const byActor = await store.queryAuditEvents({ orgId: org.orgId, actorId: 'actor-b' })
+      assert.deepEqual(byActor.events.map((row) => row.actorId), ['actor-b', 'actor-b'])
+      // Keyset paging: page size 1 across the "command." family walks both rows with a stable cursor.
+      const firstCommand = await store.queryAuditEvents({ orgId: org.orgId, eventTypePrefix: 'command.', limit: 1 })
+      assert.deepEqual(firstCommand.events.map((row) => row.eventType), ['command.aborted'])
+      assert.ok(firstCommand.nextCursor)
+      const secondCommand = await store.queryAuditEvents({ orgId: org.orgId, eventTypePrefix: 'command.', limit: 1, cursor: firstCommand.nextCursor })
+      assert.deepEqual(secondCommand.events.map((row) => row.eventType), ['command.prompt'])
+      assert.equal(secondCommand.nextCursor, null)
 
       // Worker heartbeats — upsert by worker id (active session ids deduped), then list.
       await store.recordWorkerHeartbeat({ workerId: `${prefix}-hb-worker`, role: 'worker', activeSessionIds: [sessionId, sessionId] })

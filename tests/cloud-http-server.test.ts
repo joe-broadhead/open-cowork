@@ -397,6 +397,11 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(config.profileName, 'full')
     assert.equal(config.features.chat, true)
     assert.equal(asRecord(config.publicBranding).productName, 'Open Cowork Cloud')
+    // The org-managed policy (#898) rides the config path; with none set it is the
+    // unrestricted default view carrying an empty disabledByPolicy map.
+    const managedPolicy = asRecord(config.managedPolicy)
+    assert.equal(asRecord(managedPolicy.permissionCeilings).bash, 'allow')
+    assert.deepEqual(managedPolicy.disabledByPolicy, {})
 
     const runtimeStatus = await readJson(await fetch(`${baseUrl}/api/runtime/status`))
     assert.equal(runtimeStatus.role, 'all-in-one')
@@ -458,6 +463,51 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(asRecord(abort.projectionFence).commandId, asRecord(abort.command).commandId)
     assert.equal(asRecord(abort.projectionFence).sequence, asRecord(asRecord(abort.view).projection).sequence)
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP policy routes get/set the org managed policy and deliver it to the effective view', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Bootstrap the org via the config path, then read the (empty) admin policy.
+    await readJson(await fetch(`${baseUrl}/api/config`))
+    const initial = await readJson(await fetch(`${baseUrl}/api/policy`))
+    assert.equal(initial.policy, null)
+    assert.deepEqual(asRecord(initial.view).disabledByPolicy, {})
+
+    // Set a tightening policy (PUT), then confirm the record + transparency view.
+    const setResponse = await fetch(`${baseUrl}/api/policy`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        permissionCeilings: { bash: 'deny', web: 'ask' },
+        allowedProviders: ['openai'],
+        extensions: { customMcps: false },
+        keyManagement: 'byok_required',
+      }),
+    })
+    assert.equal(setResponse.status, 200)
+    const set = await readJson(setResponse)
+    assert.equal(asRecord(asRecord(set.policy).permissionCeilings).bash, 'deny')
+    assert.equal(asRecord(asRecord(set.view).disabledByPolicy).bash?.disabledByPolicy, true)
+
+    // The effective view (config path + explicit effective route) reflects the policy.
+    const effective = await readJson(await fetch(`${baseUrl}/api/policy/effective`))
+    assert.equal(asRecord(asRecord(effective.policy).permissionCeilings).bash, 'deny')
+    const config = await readJson(await fetch(`${baseUrl}/api/config`))
+    assert.equal(asRecord(asRecord(config.managedPolicy).permissionCeilings).bash, 'deny')
+    assert.deepEqual(asRecord(config.managedPolicy).allowedProviders, ['openai'])
+
+    // A malformed update is rejected with 400.
+    const badResponse = await fetch(`${baseUrl}/api/policy`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ allowedProviders: 'not-an-array' }),
+    })
+    assert.equal(badResponse.status, 400)
   } finally {
     await fixture.server.close()
   }
@@ -8176,6 +8226,50 @@ test('cloud HTTP returns policy verdicts when artifacts are disabled', async () 
     })
     const indexResponse = await fetch(`${baseUrl}/api/artifacts`)
     assert.equal(indexResponse.status, 403)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP admin audit log is queryable, filterable, and exportable (JSON + CSV)', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Creating a session emits a fire-and-forget session.created data-plane audit event.
+    const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(createdResponse.status, 201)
+
+    // Poll the query endpoint until the async emission lands (best-effort, non-blocking).
+    let events: Array<Record<string, unknown>> = []
+    for (let attempt = 0; attempt < 200 && events.length === 0; attempt += 1) {
+      const page = await readJson(await fetch(`${baseUrl}/api/admin/audit?action=session.`))
+      events = asArray(page.events) as Array<Record<string, unknown>>
+      if (events.length === 0) await new Promise((resolve) => setImmediate(resolve))
+    }
+    assert.ok(events.some((event) => event.eventType === 'session.created'), 'session.created is queryable')
+
+    // The paginated query shape carries a nextCursor (null when the page is the last).
+    const firstPage = await readJson(await fetch(`${baseUrl}/api/admin/audit?limit=100`))
+    assert.ok('nextCursor' in firstPage)
+
+    // JSON export streams an attachment with the redacted event set.
+    const jsonExport = await fetch(`${baseUrl}/api/admin/audit/export?format=json&action=session.`)
+    assert.equal(jsonExport.status, 200)
+    assert.match(jsonExport.headers.get('content-type') || '', /application\/json/)
+    assert.match(jsonExport.headers.get('content-disposition') || '', /attachment; filename=/)
+    const exportBody = JSON.parse(await jsonExport.text()) as { events: Array<Record<string, unknown>> }
+    assert.ok(exportBody.events.some((event) => event.eventType === 'session.created'))
+
+    // CSV export streams a header row + one row per event.
+    const csvExport = await fetch(`${baseUrl}/api/admin/audit/export?format=csv`)
+    assert.equal(csvExport.status, 200)
+    assert.match(csvExport.headers.get('content-type') || '', /text\/csv/)
+    const csv = await csvExport.text()
+    assert.ok(csv.startsWith('eventId,createdAt,orgId,'))
   } finally {
     await fixture.server.close()
   }

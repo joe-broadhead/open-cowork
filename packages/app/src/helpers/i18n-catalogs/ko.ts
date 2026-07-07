@@ -169,14 +169,6 @@ const strings: Record<string, string> = {
   'error.viewErrorBody': '{{brandName}}이(가) 앱의 나머지 부분을 복구했습니다. 홈으로 돌아가서 다시 시도하세요.',
   'error.backToHome': '홈으로 돌아가기',
 
-  'approval.sendEmail': '이메일 보내기',
-  'approval.createSpreadsheet': '스프레드시트 만들기',
-  'approval.createDocument': '문서 만들기',
-  'approval.createPresentation': '프레젠테이션 만들기',
-  'approval.delete': '삭제',
-  'approval.shareFile': '파일 공유',
-  'approval.createEvent': '이벤트 만들기',
-  'approval.allowAction': '작업 허용',
   'approval.deny': '거부',
   'approval.approve': '승인',
 

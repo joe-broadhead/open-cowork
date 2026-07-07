@@ -7,6 +7,7 @@ import {
 import { Badge, type BadgeTone } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
+import { ErrorState } from './ErrorState.js'
 import { Icon, type IconName } from './Icon.js'
 import { Input } from './Input.js'
 import { Skeleton } from './Skeleton.js'
@@ -389,7 +390,15 @@ export function ArtifactsLibrarySurface({
           ) : null}
         </div>
       </div>
-      {error ? <p className="studio-artifacts-notice" data-tone="danger">{error}</p> : null}
+      {error ? (
+        <ErrorState
+          title="Couldn’t load artifacts"
+          message={error}
+          hint="Your saved artifacts aren’t lost — this is a load error. Reload to try fetching them again."
+          onRetry={onReload ? () => { void onReload() } : undefined}
+          retryLabel="Reload"
+        />
+      ) : null}
       {truncated ? <p className="studio-artifacts-notice" data-tone="warning">Showing the first {artifacts.length} of {knownTotal} artifacts. Search, filters, and bulk export apply to loaded results only.</p> : null}
       {filteredArtifacts.length ? (
         <div className="studio-artifacts-grid">

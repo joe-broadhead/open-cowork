@@ -10,6 +10,7 @@ export type AppView =
   | 'tools'
   | 'artifacts'
   | 'health'
+  | 'admin'
   | 'ui-primitives'
 
 export type LegacyAppView = 'threads' | 'workflows' | 'agents' | 'capabilities'
@@ -28,6 +29,7 @@ const APP_VIEWS: readonly AppView[] = [
   'tools',
   'artifacts',
   'health',
+  'admin',
   'ui-primitives',
 ]
 

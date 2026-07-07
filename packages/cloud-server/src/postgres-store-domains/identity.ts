@@ -1,4 +1,5 @@
 import { nowIso } from '../postgres-store-id-helpers.ts'
+import { normalizeCustomRoleKey } from '../control-plane-permissions.ts'
 import { accountFromRow, membershipFromRow, orgFromRow, userFromRow } from '../postgres-domains/identity.ts'
 import { iso, type QueryResult, type QueryRow } from '../postgres-domains/shared.ts'
 import type {
@@ -165,15 +166,20 @@ export class PostgresIdentityRepository {
         client,
       )
       const now = nowIso(input.updatedAt)
+      // undefined ⇒ preserve any existing custom-role assignment; null ⇒ clear; string ⇒ assign.
+      const customRoleKey = input.customRoleKey === undefined
+        ? (existing ? (existing.custom_role_key == null ? null : String(existing.custom_role_key)) : null)
+        : (input.customRoleKey === null ? null : normalizeCustomRoleKey(input.customRoleKey))
       const result = await client.query(
-        `INSERT INTO cloud_memberships (org_id, account_id, role, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $5)
+        `INSERT INTO cloud_memberships (org_id, account_id, role, custom_role_key, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $6)
          ON CONFLICT (org_id, account_id) DO UPDATE
          SET role = EXCLUDED.role,
+             custom_role_key = EXCLUDED.custom_role_key,
              status = EXCLUDED.status,
              updated_at = EXCLUDED.updated_at
          RETURNING *`,
-        [input.orgId, input.accountId, input.role, input.status || 'active', now],
+        [input.orgId, input.accountId, input.role, customRoleKey, input.status || 'active', now],
       )
       await this.options.recordAuditEvent(client, {
         orgId: input.orgId,
@@ -199,6 +205,7 @@ export class PostgresIdentityRepository {
          a.email,
          a.display_name,
          m.role,
+         m.custom_role_key,
          m.status,
          m.created_at,
          m.updated_at
@@ -223,6 +230,7 @@ export class PostgresIdentityRepository {
       email: String(row.email),
       displayName: row.display_name ? String(row.display_name) : null,
       role: row.role as OrgMemberRecord['role'],
+      customRoleKey: row.custom_role_key == null ? null : String(row.custom_role_key),
       status: row.status as OrgMemberRecord['status'],
       createdAt: iso(row.created_at),
       updatedAt: iso(row.updated_at),
@@ -244,7 +252,7 @@ export class PostgresIdentityRepository {
          o.created_at AS org_created_at, o.updated_at AS org_updated_at,
          a.account_id, a.idp_subject, a.email, a.display_name,
          a.created_at AS account_created_at, a.updated_at AS account_updated_at,
-         m.role, m.status AS membership_status,
+         m.role, m.custom_role_key, m.status AS membership_status,
          m.created_at AS membership_created_at, m.updated_at AS membership_updated_at
        FROM cloud_orgs o
        JOIN cloud_memberships m ON m.org_id = o.org_id
@@ -291,6 +299,7 @@ export class PostgresIdentityRepository {
         org_id: row.org_id,
         account_id: row.account_id,
         role: row.role,
+        custom_role_key: row.custom_role_key,
         status: row.membership_status,
         created_at: row.membership_created_at,
         updated_at: row.membership_updated_at,

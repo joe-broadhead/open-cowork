@@ -113,6 +113,7 @@ nav:
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
+      - Frontend Architecture: frontend-architecture.md
       - Product Contract: product-contract.md
       - Coordination Model: coordination-model.md
       - Session Projection Contract: session-projection-contract.md
@@ -150,8 +151,10 @@ nav:
       - Restore Drill Report: runbooks/restore-drill-report.md
       - Managed BYOK SaaS: runbooks/managed-byok-saas.md
       - Managed BYOK Boundary: runbooks/managed-byok-saas-boundary.md
+      - SSO and SCIM Setup: runbooks/sso-scim-setup.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
+      - Verifying Releases: verifying-releases.md
       - Release Checklist: release-checklist.md
       - Versioning and Cadence: versioning.md
       - Troubleshooting: troubleshooting.md

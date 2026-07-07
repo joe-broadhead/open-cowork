@@ -4,6 +4,6 @@
 // the language picker; the i18n:check gate fails if this file drifts from
 // the computed report.
 export const BUILT_IN_TRANSLATION_COVERAGE = {
-  translatedKeys: 437,
-  totalStaticKeys: 1379,
+  translatedKeys: 430,
+  totalStaticKeys: 1615,
 } as const

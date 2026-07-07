@@ -9,7 +9,13 @@ import {
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
 import type { CloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
-import type { SessionView, WorkflowRun, WorkflowStatus } from '@open-cowork/shared'
+import type { SessionView, WorkflowRun, WorkflowStatus, ManagedDesktopPolicyView } from '@open-cowork/shared'
+import {
+  getActiveManagedPolicy,
+  setActiveManagedPolicy,
+  resetActiveManagedPolicyCache,
+} from '@open-cowork/runtime-host/managed-policy'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 
 function workflowSummary(status: WorkflowStatus = 'active') {
   return {
@@ -639,6 +645,61 @@ test('cloud workspace adapter maps cloud records to desktop session contracts', 
   assert.equal((await adapter.listSettings())[0]?.key, 'portable-settings')
   assert.equal((await adapter.getSetting('portable-settings'))?.value.selectedProviderId, 'anthropic')
   assert.equal((await adapter.setSetting('portable-settings', { selectedProviderId: 'openai' })).value.selectedProviderId, 'openai')
+})
+
+function managedPolicyView(bash: 'allow' | 'ask' | 'deny'): ManagedDesktopPolicyView {
+  return {
+    allowedProviders: ['openai'],
+    deniedProviders: [],
+    allowedModels: null,
+    deniedModels: [],
+    keyManagement: 'byok_required',
+    extensions: { customProviders: true, customMcps: false, customSkills: true },
+    features: {},
+    permissionCeilings: { bash, fileWrite: 'allow', web: 'allow', webSearch: 'allow', task: 'allow', mcp: 'allow', externalDirectory: 'allow' },
+    updateChannel: 'stable',
+    disabledByPolicy: {},
+  }
+}
+
+test('cloud workspace adapter pushes the org managed policy into runtime-host enforcement', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'adapter-policy-'))
+  const previousEnv = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = dir
+  clearConfigCaches()
+  setActiveManagedPolicy(null)
+  resetActiveManagedPolicyCache()
+  const connection = {
+    id: 'cloud:test',
+    baseUrl: 'https://cloud.example.test',
+    label: 'Test Cloud',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    lastSyncedAt: null,
+  }
+  try {
+    const withPolicy: CloudTransportAdapter = {
+      ...transport(),
+      getConfig: async () => ({ ...(await transport().getConfig()), managedPolicy: managedPolicyView('deny') }),
+    }
+    const adapter = new CloudWorkspaceAdapter({ connection, transport: withPolicy, cache: null })
+    await adapter.policy()
+    // The delivered policy is now enforced by the runtime-host singleton.
+    assert.equal(getActiveManagedPolicy().permissionCeilings.bash, 'deny')
+    assert.equal(getActiveManagedPolicy().extensions.customMcps, false)
+
+    // A server that omits managedPolicy (older/offline-safe) leaves the last-known
+    // policy in place rather than clearing enforcement.
+    const withoutPolicy = new CloudWorkspaceAdapter({ connection, transport: transport(), cache: null })
+    await withoutPolicy.policy()
+    assert.equal(getActiveManagedPolicy().permissionCeilings.bash, 'deny')
+  } finally {
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
+    if (previousEnv === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousEnv
+    clearConfigCaches()
+  }
 })
 
 test('cloud workspace adapter bounds sync hydration concurrency', async () => {

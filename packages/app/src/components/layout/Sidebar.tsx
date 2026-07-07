@@ -30,6 +30,8 @@ interface Props {
   collapsed?: boolean
   onExpandSidebar?: () => void
   features?: DesktopFeatureFlags
+  // RBAC-gated Admin entry (cloud-only); resolved from admin permissions in App.
+  showAdmin?: boolean
 }
 
 const SettingsPanel = lazy(() =>
@@ -59,6 +61,8 @@ const MANAGE_NAV_ITEMS: SidebarNavItem[] = [
   { view: 'tools', icon: 'blocks', labelKey: 'sidebar.toolsSkills', fallback: 'Tools & Skills', feature: 'tools' },
   { view: 'artifacts', icon: 'file', labelKey: 'sidebar.artifacts', fallback: 'Artifacts', feature: 'artifacts' },
 ]
+
+const ADMIN_NAV_ITEM: SidebarNavItem = { view: 'admin', icon: 'shield-check', labelKey: 'sidebar.admin', fallback: 'Admin' }
 
 function visibleNavItems(items: SidebarNavItem[], features: DesktopFeatureFlags | undefined): SidebarNavItem[] {
   return items.filter((item) => !item.feature || isDesktopFeatureEnabled(features, item.feature))
@@ -756,9 +760,11 @@ export function Sidebar({
   collapsed = false,
   onExpandSidebar,
   features,
+  showAdmin = false,
 }: Props) {
   const primaryNavItems = visibleNavItems(PRIMARY_NAV_ITEMS, features)
-  const manageNavItems = visibleNavItems(MANAGE_NAV_ITEMS, features)
+  // ADMIN_NAV_ITEM is RBAC-gated (not deployment-feature-gated); shown only when the caller has admin permissions.
+  const manageNavItems = showAdmin ? [...visibleNavItems(MANAGE_NAV_ITEMS, features), ADMIN_NAV_ITEM] : visibleNavItems(MANAGE_NAV_ITEMS, features)
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)

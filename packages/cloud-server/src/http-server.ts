@@ -21,8 +21,10 @@ import {
 } from './http-routes/access-policy.ts'
 import { SSE_MAX_BUFFERED_BYTES, SSE_REPLAY_BATCH, SSE_TCP_KEEPALIVE_MS } from './http-routes/sse-limits.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
+import { handleScimApiRoute } from './http-routes/scim.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
+import { handlePolicyApiRoute } from './http-routes/policy.ts'
 import { handleBillingApiRoute } from './http-routes/billing.ts'
 import { handleByokApiRoute } from './http-routes/byok.ts'
 import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
@@ -852,6 +854,21 @@ async function handleApiRequest(
 
   if (resource === 'admin') {
     await handleAdminApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
+  if (resource === 'policy') {
+    await handlePolicyApiRoute({
       req,
       res,
       options,
@@ -1765,6 +1782,23 @@ export class CloudHttpServer {
 
       if (url.pathname === '/webhooks/billing') {
         await handleBillingWebhook(req, res, requestOptions)
+        return
+      }
+
+      // SCIM 2.0 provisioning (#895): mounted top-level (pre-user-auth) because the IdP
+      // presents the org's SCIM bearer token, not a user session. The handler owns its
+      // own auth (service.authenticateScim) and renders SCIM error shapes.
+      if (url.pathname === '/scim/v2' || url.pathname.startsWith('/scim/v2/')) {
+        await this.enforceIpRateLimit(req)
+        await handleScimApiRoute({
+          req,
+          res,
+          url,
+          service: this.options.service,
+          corsOrigin: requestOptions.corsOrigin,
+          maxBodyBytes: this.options.maxBodyBytes || 1024 * 1024,
+          tools: { readJsonBody },
+        })
         return
       }
 

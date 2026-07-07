@@ -1043,6 +1043,52 @@ test('session engine caps hydrated sessions at the LRU budget after many activat
   )
 })
 
+test('session engine holds a hard memory ceiling under a heavy activation soak', () => {
+  // Soak the growth path issue #900 cares about: churning through far more
+  // sessions than the warm budget (as a heavy user browsing thousands of threads
+  // does over a long-lived main process). Interleave getSessionView() so the
+  // materialized view cache is also exercised, not just the warm state map. The
+  // hydrated set — and, transitively, the pruned view cache — must stay bounded to
+  // a HARD ceiling regardless of how many sessions were ever activated, proving
+  // main-process memory is O(budget), not O(sessions-ever-seen).
+  const engine = new SessionEngine()
+  const soakCount = 2_000
+  const hardCeiling = MAX_WARM_SESSION_DETAILS + 1 // warm budget + the active session
+
+  for (let index = 0; index < soakCount; index += 1) {
+    const sessionId = `soak-${index}`
+    engine.setSessionFromHistory(sessionId, [
+      {
+        id: `evt-${index}`,
+        messageId: `msg-${index}`,
+        partId: `part-${index}`,
+        type: 'text',
+        role: 'user',
+        content: 'soak',
+        timestamp: new Date(2026, 6, 5, 9, index % 60, index % 60).toISOString(),
+      },
+    ])
+    engine.activateSession(sessionId)
+    // Force view materialization so the view cache would grow if prune missed it.
+    engine.getSessionView(sessionId)
+  }
+
+  let hydrated = 0
+  for (let index = 0; index < soakCount; index += 1) {
+    if (engine.isHydrated(`soak-${index}`)) hydrated += 1
+  }
+
+  assert.ok(
+    hydrated <= hardCeiling,
+    `after ${soakCount} activations the engine kept ${hydrated} hydrated sessions, above the hard `
+    + `ceiling of ${hardCeiling}. The LRU prune is leaking warm session state under churn.`,
+  )
+  // Only the tail of recently-activated sessions may remain warm; everything older
+  // must have been evicted back to disk-backed cold state.
+  assert.equal(engine.isHydrated('soak-0'), false, 'the first soak session must be evicted')
+  assert.equal(engine.isHydrated(`soak-${soakCount - 1}`), true, 'the active session stays warm')
+})
+
 test('session engine memoizes getSessionView until the state changes', () => {
   const engine = new SessionEngine()
   const sessionId = 'session-cache-1'

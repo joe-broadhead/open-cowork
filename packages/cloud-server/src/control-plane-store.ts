@@ -5,6 +5,16 @@ export {
 } from './session-page-cursor.ts'
 export type { SessionPageCursorScope } from './session-page-cursor.ts'
 export {
+  decodeAuditQueryCursor,
+  encodeAuditQueryCursor,
+  InvalidAuditQueryCursorError,
+} from './audit-query-cursor.ts'
+export type { AuditQueryCursorScope } from './audit-query-cursor.ts'
+export {
+  MAX_AUDIT_QUERY_LIMIT,
+  normalizeAuditQueryLimit,
+} from './audit-query.ts'
+export {
   ControlPlaneQuotaExceededError,
   publicQuotaMessage,
   quotaExceeded,
@@ -15,9 +25,11 @@ export {
   generateCloudApiToken,
   hashChannelInteractionToken,
   hashCloudApiToken,
+  hashScimToken,
   plaintextMatchesCloudApiTokenId,
   verifyChannelInteractionTokenHash,
   verifyCloudApiTokenHash,
+  verifyScimTokenHash,
 } from './control-plane-tokens.ts'
 export {
   generateManagedWorkerCredential,
@@ -27,6 +39,47 @@ export type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 export type * from './channel-provider-types.ts'
 export type * from './control-plane-enums.ts'
 export type * from './control-plane-records.ts'
+export type * from './control-plane-permissions.ts'
+export type {
+  ManagedPolicyRecord,
+  SetManagedPolicyInput,
+} from './control-plane-policy.ts'
+export {
+  DEFAULT_MANAGED_POLICY,
+  applyManagedPolicyInput,
+  effectiveManagedPolicy,
+  managedPolicyDisabledControls,
+  toManagedDesktopPolicyView,
+} from './control-plane-policy.ts'
+export type * from './control-plane-sso.ts'
+export {
+  defaultOrgSsoConfig,
+  emailDomain as ssoEmailDomain,
+  generateDomainVerificationToken,
+  isSsoProtocol,
+  mergeOrgSsoConfig,
+  normalizeSsoProtocol,
+  normalizeVerifiedDomains,
+  toPublicOrgSsoConfig,
+} from './control-plane-sso.ts'
+export type * from './control-plane-scim.ts'
+export {
+  isScimSyncOperation,
+  normalizeScimSyncOperation,
+  scimRetryDelayMs,
+  SCIM_SYNC_DEFAULT_MAX_ATTEMPTS,
+} from './control-plane-scim.ts'
+export {
+  BUILTIN_ROLE_PERMISSIONS,
+  CONTROL_PLANE_PERMISSIONS,
+  builtinRolePermissions,
+  hasPermission,
+  isControlPlanePermission,
+  normalizeControlPlanePermissions,
+  normalizeCustomRoleKey,
+  permissionsRemoved,
+  resolveEffectivePermissions,
+} from './control-plane-permissions.ts'
 export type * from './control-plane-usage-records.ts'
 export type * from './control-plane-channel-records.ts'
 export type * from './control-plane-auth-records.ts'

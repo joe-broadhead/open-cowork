@@ -185,10 +185,11 @@ so a decomposed file cannot silently re-grow. Most now sit under the 2,000-line
 limit; only `postgres-control-plane-store.ts` still exceeds it today. These
 budgets are implementation backlogs, not target architecture:
 
-- `postgres-control-plane-store.ts` (budget 2,600 lines): the only file still
+- `postgres-control-plane-store.ts` (budget 2,820 lines): the only file still
   above the 2,000-line limit. Compatibility implementation for the full
   Postgres-backed store plus webhook security store and managed work claim
-  fencing. Domain row mappers belong in `postgres-domains/`.
+  fencing (now including the enterprise SSO + SCIM sync-queue delegation).
+  Domain row mappers belong in `postgres-domains/` / `postgres-store-domains/`.
 - `in-memory-control-plane-store.ts` (budget 1,750 lines): decomposed below the
   2,000-line limit and ratcheted. Compatibility implementation for the full
   domain store contract, including managed work claim fencing until the store

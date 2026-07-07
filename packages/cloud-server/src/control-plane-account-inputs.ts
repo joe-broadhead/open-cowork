@@ -5,6 +5,7 @@ import type {
   ControlPlaneMembershipStatus,
   ControlPlaneRole,
 } from './control-plane-enums.ts'
+import type { AuditEventRecord } from './control-plane-auth-records.ts'
 
 // The control-plane's account / membership / API-token / audit / BYOK operation
 // input shapes, extracted from the 4k-line in-memory store. Pure types depending
@@ -22,6 +23,10 @@ export type UpsertMembershipInput = {
   orgId: string
   accountId: string
   role: ControlPlaneRole
+  // Assign (string), clear (null), or preserve (undefined) the member's custom
+  // role. Undefined leaves any existing assignment untouched so callers that only
+  // change role/status never accidentally wipe a permission-map assignment.
+  customRoleKey?: string | null
   status?: ControlPlaneMembershipStatus
   updatedAt?: Date
   actor?: AuditActorInput
@@ -76,6 +81,37 @@ export type RecordAuditEventInput = {
   targetId?: string | null
   metadata?: Record<string, unknown>
   createdAt?: Date
+}
+
+// A decoded keyset cursor for the audit-event query — the (createdAt, eventId)
+// tuple of the last row a page returned. Mirrors the session-page cursor tuple.
+export type AuditQueryCursor = {
+  createdAt: string
+  eventId: string
+}
+
+// Filterable, keyset-paginated audit query used by the admin query + export
+// surfaces. `eventTypePrefix` matches an action prefix ("session." → every
+// session.* event); `result` matches metadata.result (the emitted outcome tag);
+// `from`/`to` bound created_at. The store applies the cursor + limit and returns
+// the next cursor; the service owns the opaque string encode/decode.
+export type QueryAuditEventsInput = {
+  orgId: string
+  actorId?: string | null
+  actorType?: AuditActorType | null
+  eventTypePrefix?: string | null
+  targetType?: string | null
+  targetId?: string | null
+  result?: string | null
+  from?: Date | null
+  to?: Date | null
+  limit?: number | null
+  cursor?: AuditQueryCursor | null
+}
+
+export type QueryAuditEventsResult = {
+  events: AuditEventRecord[]
+  nextCursor: AuditQueryCursor | null
 }
 
 export type CreateByokSecretInput = {

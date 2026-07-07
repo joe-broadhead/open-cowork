@@ -26,6 +26,7 @@ import {
 import { Badge, type BadgeTone } from './Badge.js'
 import { Button } from './Button.js'
 import { EmptyState } from './EmptyState.js'
+import { ErrorState } from './ErrorState.js'
 import { Icon } from './Icon.js'
 import { Skeleton } from './Skeleton.js'
 import { CoworkerAvatar, StudioPageHeader, StudioStatusDot, type StudioStatusTone } from './StudioPrimitives.js'
@@ -258,8 +259,18 @@ function eventLabel(eventType: CoordinationWatchEventType) {
   return eventType.replace('.', ' ')
 }
 
-function ChannelsNotice({ notice, error }: { notice: Notice | null; error?: string | null }) {
-  if (error) return <p className="studio-channel-notice" data-tone="warning">{safeDisplay(error, 'Channel surface failed to load.')}</p>
+function ChannelsNotice({ notice, error, onReload }: { notice: Notice | null; error?: string | null; onReload?: () => Promise<unknown> | unknown }) {
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn’t load channels"
+        message={safeDisplay(error, 'Channel surface failed to load.')}
+        hint="Your channel connections stay configured — this is a load error. Reload to reconnect to the gateway."
+        onRetry={onReload ? () => { void onReload() } : undefined}
+        retryLabel="Reload"
+      />
+    )
+  }
   if (!notice) return null
   return <p className="studio-channel-notice" data-tone={notice.tone}>{notice.message}</p>
 }
@@ -847,7 +858,7 @@ export function ChannelsGatewaySurface({
           },
         ]}
       />
-      <ChannelsNotice notice={notice} error={error} />
+      <ChannelsNotice notice={notice} error={error} onReload={onReload} />
       <div className="studio-channel-dashboard">
         <div className="studio-channel-panel">
           <div className="studio-channel-panel__head">

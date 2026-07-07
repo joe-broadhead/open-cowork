@@ -75,6 +75,7 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimeEvent,
 } from './runtime-adapter.ts'
+import type { CloudObservabilityAdapter } from './observability.ts'
 import {
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
@@ -101,6 +102,25 @@ import {
 } from './services/member-service.ts'
 import { CloudCoordinationService } from './services/coordination-service.ts'
 import { CloudPrincipalService } from './services/principal-service.ts'
+import {
+  CloudRoleService,
+  type CreateCustomRoleRequest,
+  type UpdateCustomRoleRequest,
+} from './services/role-service.ts'
+import {
+  CloudPolicyService,
+  type SetManagedPolicyRequest,
+} from './services/policy-service.ts'
+import {
+  CloudSsoService,
+  type UpsertSsoConfigRequest,
+} from './services/sso-service.ts'
+import { CloudScimService } from './services/scim-service.ts'
+import { CloudScimReconciler } from './scim-reconciler.ts'
+import { createSsoVerifierRegistry, type SsoAssertionVerifier } from './sso-assertion.ts'
+import type { SecretAdapter } from './secret-adapter.ts'
+import type { SsoProtocol } from './control-plane-sso.ts'
+import type { ScimGroupInput, ScimUserInput, ScimUserPatch } from './scim-schema.ts'
 import { CloudSessionImportService } from './services/session-import-service.ts'
 import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
 import { CloudSessionExecutionService } from './session-execution-operations.ts'
@@ -111,6 +131,14 @@ import {
   type CloudAdminPolicyOverview,
   type CloudWorkspaceOverview,
 } from './services/overview-service.ts'
+import {
+  CloudAuditService,
+  type AuditExportOptions,
+  type AuditExportStream,
+  type AuditQueryFilters,
+  type AuditQueryPage,
+  type DataPlaneAuditInput,
+} from './services/audit-service.ts'
 import { CloudProjectSourceService } from './services/project-source-service.ts'
 import {
   type PermissionRespondPayload,
@@ -134,6 +162,8 @@ import {
   type UpdateManagedWorkerPoolRequest,
 } from './services/managed-worker-service.ts'
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
+import { CloudEntitlementService } from './services/entitlement-service.ts'
+import { UnlimitedEntitlementResolver, type EntitlementResolver } from './entitlements/entitlement-resolver.ts'
 import { CloudChannelDomainService } from './services/channel-domain-service.ts'
 import { CloudThreadOrganizationService } from './session-thread-organization.ts'
 import { CloudBillingOperationsService } from './session-billing-operations.ts'
@@ -215,8 +245,14 @@ export class CloudSessionService {
   private readonly overviewService: CloudOverviewService
   private readonly managedWorkerService: CloudManagedWorkerService
   private readonly usageGovernance: CloudUsageGovernanceService
+  private readonly entitlements: CloudEntitlementService
   private readonly channelDomain: CloudChannelDomainService
   private readonly memberService: CloudMemberService
+  private readonly roleService: CloudRoleService
+  private readonly policyService: CloudPolicyService
+  private readonly ssoService: CloudSsoService
+  private readonly scimService: CloudScimService
+  private readonly scimReconciler: CloudScimReconciler
   private readonly coordinationService: CloudCoordinationService
   private readonly capabilityService: CloudCapabilityService
   private readonly settingMetadataService: CloudSettingMetadataService
@@ -232,6 +268,7 @@ export class CloudSessionService {
   private readonly sessionImportService: CloudSessionImportService
   private readonly coordinationDispatch: CloudCoordinationDispatchService
   private readonly sessionExecution: CloudSessionExecutionService
+  private readonly auditService: CloudAuditService
 
   constructor(
     store: ControlPlaneStore,
@@ -249,6 +286,18 @@ export class CloudSessionService {
     projectSources: CloudProjectSourceStore | null = null,
     inviteSigningSecret: string | Buffer | null = null,
     emailSender: CloudEmailSender | null = null,
+    // Optional, pluggable monetization (#897). Defaults to the unlimited resolver
+    // so billing never gates a deployment that has not opted in.
+    entitlementResolver: EntitlementResolver = new UnlimitedEntitlementResolver(),
+    // Optional telemetry sink (#899). When present, data-plane audit events also
+    // fan out to the metric pipeline so operators can alert on audit volume.
+    observability: CloudObservabilityAdapter | null = null,
+    // Envelope-encryption adapter used to seal enterprise SSO IdP secrets (#895).
+    // Null ⇒ SSO config CRUD that stores a secret fails closed with a clear error.
+    secretAdapter: SecretAdapter | null = null,
+    // Optional operator-supplied SSO assertion verifiers (#895). The SAML default is a
+    // fail-closed seam; an operator plugs in a real SAML response validator here.
+    ssoVerifiers: Partial<Record<SsoProtocol, SsoAssertionVerifier>> = {},
   ) {
     this.store = store
     this.runtime = runtime
@@ -293,6 +342,7 @@ export class CloudSessionService {
     })
     this.managedWorkerService = new CloudManagedWorkerService(store, (principal) => this.ensurePrincipal(principal))
     this.usageGovernance = new CloudUsageGovernanceService({ store, abuse, billingConfig })
+    this.entitlements = new CloudEntitlementService({ resolver: entitlementResolver })
     this.channelDomain = new CloudChannelDomainService({
       store,
       policy,
@@ -319,6 +369,31 @@ export class CloudSessionService {
       assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
     })
+    this.roleService = new CloudRoleService({
+      store,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
+    this.policyService = new CloudPolicyService({
+      store,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
+    this.ssoService = new CloudSsoService({
+      store,
+      secretAdapter,
+      verifiers: createSsoVerifierRegistry(ssoVerifiers),
+      ensurePrincipal: (principal) => this.principalService.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
+    this.scimReconciler = new CloudScimReconciler({ store })
+    this.scimService = new CloudScimService({ store, reconciler: this.scimReconciler })
     this.coordinationService = new CloudCoordinationService({
       store,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
@@ -408,6 +483,15 @@ export class CloudSessionService {
       assertBillingAllowed: (input) => this.assertBillingAllowed(input),
       assertRemoteInteractionAllowed: (principal, input) => this.assertRemoteInteractionAllowed(principal, input),
     })
+    this.auditService = new CloudAuditService({
+      store,
+      observability,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
   }
 
   get eventBus() {
@@ -454,7 +538,75 @@ export class CloudSessionService {
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
+    // SSO-only enforcement (#895): reject a non-SSO login on a domain an org has enforced
+    // SSO for, BEFORE bootstrapping. Local/self-host and SSO-verified principals are exempt.
+    await this.ssoService.assertNonSsoLoginAllowed(principal)
     return this.principalService.ensurePrincipal(principal)
+  }
+
+  // --- Enterprise SSO configuration (#895), gated on sso:manage ---
+  getSsoConfig(principal: CloudPrincipal) {
+    return this.ssoService.getSsoConfig(principal)
+  }
+
+  upsertSsoConfig(principal: CloudPrincipal, input: UpsertSsoConfigRequest) {
+    return this.ssoService.upsertSsoConfig(principal, input)
+  }
+
+  deleteSsoConfig(principal: CloudPrincipal) {
+    return this.ssoService.deleteSsoConfig(principal)
+  }
+
+  rotateScimToken(principal: CloudPrincipal) {
+    return this.ssoService.rotateScimToken(principal)
+  }
+
+  // The SSO login binding: verify a raw IdP assertion → bootstrapped principal.
+  authenticateSso(input: { orgId: string, rawAssertion: string }) {
+    return this.ssoService.authenticateSso(input)
+  }
+
+  // --- SCIM 2.0 provisioning (#895), authenticated by the per-org SCIM bearer token ---
+  authenticateScim(bearerToken: string | null) {
+    return this.scimService.authenticate(bearerToken)
+  }
+
+  listScimMembers(orgId: string, filter: { email?: string | null } = {}) {
+    return this.scimService.listMembers(orgId, filter)
+  }
+
+  getScimMember(orgId: string, accountId: string) {
+    return this.scimService.getMember(orgId, accountId)
+  }
+
+  createScimUser(orgId: string, input: ScimUserInput) {
+    return this.scimService.createUser(orgId, input)
+  }
+
+  replaceScimUser(orgId: string, accountId: string, input: ScimUserInput) {
+    return this.scimService.replaceUser(orgId, accountId, input)
+  }
+
+  patchScimUser(orgId: string, accountId: string, patch: ScimUserPatch) {
+    return this.scimService.patchUser(orgId, accountId, patch)
+  }
+
+  deprovisionScimUser(orgId: string, accountId: string) {
+    return this.scimService.deprovisionUser(orgId, accountId)
+  }
+
+  syncScimGroup(orgId: string, input: ScimGroupInput) {
+    return this.scimService.syncGroup(orgId, input)
+  }
+
+  // Drain the durable SCIM sync-event queue (retry with backoff); run periodically by the
+  // scheduler and directly by tests. Returns processed/succeeded/failed counts.
+  drainScimSyncQueue(input: { orgId?: string | null, limit?: number } = {}) {
+    return this.scimReconciler.drain(input)
+  }
+
+  enqueueScimReconcile(orgId: string) {
+    return this.scimReconciler.enqueueReconcile(orgId)
   }
 
   async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {
@@ -501,11 +653,94 @@ export class CloudSessionService {
     return this.memberService.updateOrgMember(principal, accountId, input)
   }
 
+  deprovisionOrgMember(principal: CloudPrincipal, accountId: string): Promise<PublicOrgMemberRecord> {
+    return this.memberService.deprovisionOrgMember(principal, accountId)
+  }
+
+  listPermissionCatalog() {
+    return this.roleService.listPermissionCatalog()
+  }
+
+  listCustomRoles(principal: CloudPrincipal) {
+    return this.roleService.listCustomRoles(principal)
+  }
+
+  createCustomRole(principal: CloudPrincipal, input: CreateCustomRoleRequest) {
+    return this.roleService.createCustomRole(principal, input)
+  }
+
+  updateCustomRole(principal: CloudPrincipal, roleKey: string, input: UpdateCustomRoleRequest) {
+    return this.roleService.updateCustomRole(principal, roleKey, input)
+  }
+
+  deleteCustomRole(principal: CloudPrincipal, roleKey: string) {
+    return this.roleService.deleteCustomRole(principal, roleKey)
+  }
+
+  assignMemberRole(principal: CloudPrincipal, accountId: string, input: { roleKey: string | null }) {
+    return this.roleService.assignMemberRole(principal, accountId, input)
+  }
+
+  resolveMemberPermissions(principal: CloudPrincipal, accountId: string) {
+    return this.roleService.resolveMemberPermissions(principal, accountId)
+  }
+
+  getManagedPolicy(principal: CloudPrincipal) {
+    return this.policyService.getManagedPolicy(principal)
+  }
+
+  setManagedPolicy(principal: CloudPrincipal, input: SetManagedPolicyRequest) {
+    return this.policyService.setManagedPolicy(principal, input)
+  }
+
+  getEffectiveManagedPolicy(principal: CloudPrincipal) {
+    return this.policyService.getEffectiveManagedPolicy(principal)
+  }
+
   async listAuditEvents(
     principal: CloudPrincipal,
     input: { limit?: number | null } = {},
   ) {
     return this.overviewService.listAuditEvents(principal, input)
+  }
+
+  // Filterable, keyset-paginated audit query (#899). Gated on audit:read.
+  queryAuditEvents(principal: CloudPrincipal, filters: AuditQueryFilters = {}): Promise<AuditQueryPage> {
+    return this.auditService.queryAuditEvents(principal, filters)
+  }
+
+  // Streamed, redacted-by-default JSON/CSV export (#899). Unredacted mode is
+  // org-admin-only and records its own audit event.
+  exportAuditEvents(principal: CloudPrincipal, options: AuditExportOptions = {}): Promise<AuditExportStream> {
+    return this.auditService.exportAuditEvents(principal, options)
+  }
+
+  // Fire-and-forget data-plane audit emission for callers outside this service
+  // (e.g. the artifact service, which already holds a session-service handle).
+  // Best-effort by construction: emitDataPlaneEvent never rejects on a write error.
+  emitDataPlaneAuditEvent(input: DataPlaneAuditInput): void {
+    void this.auditService.emitDataPlaneEvent(input)
+  }
+
+  // Build a data-plane audit input for a principal-driven action, resolving the
+  // actor + org from the principal so call sites stay one line. Public so callers
+  // that already hold a session-service handle (e.g. the artifact service) can
+  // audit their own data-plane actions without re-plumbing the actor/org.
+  auditPrincipalAction(
+    principal: CloudPrincipal,
+    event: {
+      eventType: string
+      targetType?: string | null
+      targetId?: string | null
+      result?: 'success' | 'failure' | 'denied'
+      metadata?: Record<string, unknown>
+    },
+  ): void {
+    this.emitDataPlaneAuditEvent({
+      orgId: this.principalOrgId(principal),
+      actor: this.auditActor(principal),
+      ...event,
+    })
   }
 
   createManagedWorkerPool(principal: CloudPrincipal, input: CreateManagedWorkerPoolRequest) {
@@ -582,11 +817,24 @@ export class CloudSessionService {
       deferRuntime: Boolean(projectSource),
     })
     if (projectSource) await this.bindSessionProjectSource(principal.tenantId, session.sessionId, projectSource)
+    this.auditPrincipalAction(principal, {
+      eventType: 'session.created',
+      targetType: 'session',
+      targetId: session.sessionId,
+      metadata: { profileName, hasProjectSource: Boolean(projectSource) },
+    })
     return this.getSessionView(principal, session.sessionId)
   }
 
   async createImportedSession(principal: CloudPrincipal, input: SessionImportRequest): Promise<CloudSessionView> {
-    return this.sessionImportService.createImportedSession(principal, input)
+    const view = await this.sessionImportService.createImportedSession(principal, input)
+    this.auditPrincipalAction(principal, {
+      eventType: 'session.imported',
+      targetType: 'session',
+      targetId: view.session.sessionId,
+      metadata: { profileName: view.session.profileName },
+    })
+    return view
   }
 
   async completeSessionImport(
@@ -1271,7 +1519,23 @@ export class CloudSessionService {
     workerId: string
     leaseToken: string
   }) {
-    return this.usageGovernance.recordManagedWorkClaimed(input)
+    const result = await this.usageGovernance.recordManagedWorkClaimed(input)
+    // Worker lease claim (data-plane). Actor is the system/worker, not a principal;
+    // resolve the org from the tenant. Best-effort — never blocks the claim.
+    try {
+      const orgId = await this.resolveOrgIdForTenant(input.tenantId)
+      this.emitDataPlaneAuditEvent({
+        orgId,
+        actor: { actorType: 'system', actorId: input.workerId },
+        eventType: 'worker.lease_claimed',
+        targetType: 'session',
+        targetId: input.sessionId,
+        metadata: { result: 'success', workerId: input.workerId },
+      })
+    } catch {
+      // Org resolution can fail for an orphaned tenant; the claim itself still stands.
+    }
+    return result
   }
 
   async recordManagedExecutionEvent(input: {
@@ -1411,11 +1675,25 @@ export class CloudSessionService {
     sessionId: string,
     input: { text: string, agent?: string | null },
   ): Promise<SessionCommandRecord> {
-    return this.sessionExecution.enqueuePrompt(principal, sessionId, input)
+    const command = await this.sessionExecution.enqueuePrompt(principal, sessionId, input)
+    this.auditPrincipalAction(principal, {
+      eventType: 'command.prompt',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: { commandId: command.commandId, agent: input.agent || null },
+    })
+    return command
   }
 
   async enqueueAbort(principal: CloudPrincipal, sessionId: string): Promise<SessionCommandRecord> {
-    return this.sessionExecution.enqueueAbort(principal, sessionId)
+    const command = await this.sessionExecution.enqueueAbort(principal, sessionId)
+    this.auditPrincipalAction(principal, {
+      eventType: 'command.aborted',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: { commandId: command.commandId },
+    })
+    return command
   }
 
   async enqueueQuestionReply(
@@ -1439,7 +1717,14 @@ export class CloudSessionService {
     sessionId: string,
     payload: PermissionRespondPayload,
   ): Promise<SessionCommandRecord> {
-    return this.sessionExecution.enqueuePermissionResponse(principal, sessionId, payload)
+    const command = await this.sessionExecution.enqueuePermissionResponse(principal, sessionId, payload)
+    this.auditPrincipalAction(principal, {
+      eventType: 'command.permission_responded',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: { commandId: command.commandId, permissionId: payload.permissionId },
+    })
+    return command
   }
 
   async executeCommand(
@@ -1507,22 +1792,41 @@ export class CloudSessionService {
     profileName?: string | null
     providerId?: string | null
   }) {
-    if (!this.billingConfig || !isBillingConfigured(this.billingConfig)) return
-    const subscription = await this.store.getBillingSubscription(input.orgId)
-    const verdict = evaluateBillingEntitlement({
-      config: this.billingConfig,
-      subscription,
-      action: input.action,
+    // Legacy billing-config gate (unchanged): active only when billing is
+    // explicitly configured. This is a WRITE-only helper — every caller is a
+    // create/write path, so reads/exports/deletes/admin never reach here.
+    if (this.billingConfig && isBillingConfigured(this.billingConfig)) {
+      const subscription = await this.store.getBillingSubscription(input.orgId)
+      const verdict = evaluateBillingEntitlement({
+        config: this.billingConfig,
+        subscription,
+        action: input.action,
+        profileName: input.profileName,
+        providerId: input.providerId,
+      })
+      if (!verdict.allowed) {
+        throw new CloudServiceError(
+          verdict.status || 402,
+          verdict.reason || 'Billing entitlement does not allow this action.',
+          { policyCode: verdict.policyCode || 'billing.entitlement_denied' },
+        )
+      }
+    }
+    // Pluggable entitlements gate (#897). A no-op when the kill switch is off /
+    // the provider is `none` (the default resolver never denies).
+    await this.entitlements.assertAction(input.action, {
+      orgId: input.orgId,
       profileName: input.profileName,
       providerId: input.providerId,
     })
-    if (!verdict.allowed) {
-      throw new CloudServiceError(
-        verdict.status || 402,
-        verdict.reason || 'Billing entitlement does not allow this action.',
-        { policyCode: verdict.policyCode || 'billing.entitlement_denied' },
-      )
-    }
+  }
+
+  // Read-only entitlement/plan status for the admin plane and the future Billing
+  // UI (#896). Never gates; `gatingEnabled`/`billingEnabled` let the admin plane
+  // decide whether to surface a Billing section.
+  async describeEntitlements(principal: CloudPrincipal) {
+    await this.ensurePrincipal(principal)
+    return this.entitlements.describe({ orgId: this.principalOrgId(principal), profileName: this.policy.profileName })
   }
 
   async assertWorkerLeaseAllowed(tenantId: string) {

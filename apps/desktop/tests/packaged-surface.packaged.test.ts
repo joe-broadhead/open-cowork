@@ -5,6 +5,7 @@ import {
   createSmokePaths,
   launchPackagedLinuxProbe,
   launchPackagedMacProbe,
+  launchPackagedWindowsProbe,
   launchSmokeSession,
   type SmokeSession,
 } from './smoke-helpers.ts'
@@ -53,7 +54,9 @@ test(
         ? launchPackagedMacProbe
         : process.platform === 'linux'
           ? launchPackagedLinuxProbe
-          : null
+          : process.platform === 'win32'
+            ? launchPackagedWindowsProbe
+            : null
       if (launchPackagedProbe) {
         const probe = await launchPackagedProbe(paths, executablePath, { timeoutMs: packagedLaunchTimeoutMs })
         assert.deepEqual(probe.surface, {

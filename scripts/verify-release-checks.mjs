@@ -5,6 +5,7 @@ const DEFAULT_REQUIRED_CHECKS = [
   'cloud-gates',
   'macos-build',
   'linux-package',
+  'windows-package',
   'docs',
   'coverage',
   'analyze (javascript-typescript)',

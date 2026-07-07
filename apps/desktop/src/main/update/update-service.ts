@@ -90,7 +90,9 @@ function reasonCapability(input: {
   feedConfigured: boolean
 }): UpdateInstallUnsupportedReason | null {
   if (!input.isPackaged) return 'dev'
-  if (input.platform !== 'darwin') return 'platform'
+  // In-app installs are supported on macOS (MacUpdater) and Windows
+  // (NsisUpdater). Linux keeps the verified manual-download path.
+  if (input.platform !== 'darwin' && input.platform !== 'win32') return 'platform'
   if (!input.signedInstallEligible) return 'unsigned'
   if (!input.feedConfigured) return 'missing-feed'
   return null

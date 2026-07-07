@@ -28,6 +28,29 @@ export type {
   MembershipInviteResult,
   PublicOrgMemberRecord,
 } from './member-service.ts'
+export { CloudPrincipalService } from './principal-service.ts'
+export type { CloudPrincipalServiceDeps } from './principal-service.ts'
+export { CloudRoleService } from './role-service.ts'
+export type {
+  CloudRoleServiceOptions,
+  CreateCustomRoleRequest,
+  UpdateCustomRoleRequest,
+} from './role-service.ts'
+export { CloudPolicyService } from './policy-service.ts'
+export type {
+  CloudPolicyServiceOptions,
+  SetManagedPolicyRequest,
+} from './policy-service.ts'
+export { CloudSsoService } from './sso-service.ts'
+export type { CloudSsoServiceOptions, UpsertSsoConfigRequest } from './sso-service.ts'
+export { CloudScimService } from './scim-service.ts'
+export type { CloudScimServiceOptions, ScimAuthContext } from './scim-service.ts'
+export {
+  DEFAULT_SINGLE_ORG_ID,
+  DEFAULT_SINGLE_ORG_NAME,
+  resolvedOrgMode,
+} from './api-token-policy.ts'
+export type { CloudIdentityPolicy, CloudOrgMode } from './api-token-policy.ts'
 export { CloudCoordinationService } from './coordination-service.ts'
 export type { CloudCoordinationServiceOptions } from './coordination-service.ts'
 export { CloudCapabilityService } from './capability-service.ts'
@@ -40,6 +63,17 @@ export type {
   CloudOverviewServiceOptions,
   CloudWorkspaceOverview,
 } from './overview-service.ts'
+export { CloudAuditService } from './audit-service.ts'
+export type {
+  AuditActor,
+  AuditExportFormat,
+  AuditExportOptions,
+  AuditExportStream,
+  AuditQueryFilters,
+  AuditQueryPage,
+  CloudAuditServiceOptions,
+  DataPlaneAuditInput,
+} from './audit-service.ts'
 export { CloudProjectSourceService } from './project-source-service.ts'
 export type { CloudProjectSourceServiceOptions } from './project-source-service.ts'
 export { CloudManagedWorkerService } from './managed-worker-service.ts'

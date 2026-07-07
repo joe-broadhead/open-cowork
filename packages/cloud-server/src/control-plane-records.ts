@@ -43,6 +43,10 @@ export type MembershipRecord = {
   orgId: string
   accountId: string
   role: ControlPlaneRole
+  // Optional pointer to an org-defined custom role (a named permission map). When
+  // set, the member's effective permissions come from that role's permission set
+  // instead of the built-in role's map. Null ⇒ the built-in `role` map applies.
+  customRoleKey: string | null
   status: ControlPlaneMembershipStatus
   createdAt: string
   updatedAt: string
@@ -54,6 +58,7 @@ export type OrgMemberRecord = {
   email: string
   displayName: string | null
   role: ControlPlaneRole
+  customRoleKey: string | null
   status: ControlPlaneMembershipStatus
   createdAt: string
   updatedAt: string

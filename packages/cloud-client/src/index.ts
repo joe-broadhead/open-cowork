@@ -1,4 +1,6 @@
 export * from './adapter.js'
+export type * from './domains/admin.js'
+export type * from './domains/admin-governance.js'
 export type * from './domains/artifacts.js'
 export type * from './domains/billing.js'
 export type * from './domains/byok.js'

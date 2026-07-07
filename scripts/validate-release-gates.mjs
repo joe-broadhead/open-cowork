@@ -54,6 +54,7 @@ const requiredBranchChecks = [
   { check: 'cloud-gates', workflow: 'CI' },
   { check: 'macos-build', workflow: 'CI' },
   { check: 'linux-package', workflow: 'CI' },
+  { check: 'windows-package', workflow: 'CI' },
   { check: 'docs', workflow: 'CI' },
   { check: 'coverage', workflow: 'CI' },
   { check: 'analyze (javascript-typescript)', workflow: 'CodeQL' },
@@ -311,7 +312,7 @@ function assertBranchProtectionContract() {
 }
 
 function assertCiContract() {
-  for (const job of ['validate', 'cloud-gates', 'macos-build', 'linux-package', 'docs', 'coverage']) {
+  for (const job of ['validate', 'cloud-gates', 'macos-build', 'linux-package', 'windows-package', 'docs', 'coverage']) {
     assertWorkflowJob(ciWorkflowPath, job)
   }
   for (const command of [
@@ -487,7 +488,7 @@ function assertReleaseChecklistContract() {
 function assertPackagingDocsContract() {
   for (const phrase of [
     'packaged desktop smoke tests on Linux under `xvfb`',
-    'runs packaged desktop smoke tests for macOS and Linux release artifacts',
+    'runs packaged desktop smoke tests for macOS, Windows, and Linux release',
   ]) {
     assertIncludes(packagingDocsPath, phrase)
   }
