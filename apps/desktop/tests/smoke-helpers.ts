@@ -780,13 +780,16 @@ export async function launchSmokeSession(
     }
   }
 
-  if (options?.executablePath && process.platform === 'linux') {
+  if (options?.executablePath && (process.platform === 'linux' || process.platform === 'win32')) {
+    // Packaged apps can't be driven by Playwright's electron.launch() (it drives
+    // an `electron .` dev process), so on Linux and Windows we spawn the packaged
+    // binary directly with an explicit remote-debugging port and attach over CDP.
+    // The Chromium sandbox flags are a Linux-CI concern only.
     const port = await getAvailablePort()
     const childArgs = [
       '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`,
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
+      ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
     ]
     const child = spawn(options.executablePath, childArgs, {
       cwd: desktopAppDir,

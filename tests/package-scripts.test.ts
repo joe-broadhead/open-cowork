@@ -247,11 +247,18 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
     'pnpm --filter @open-cowork/desktop test:e2e:packaged:optional',
   ])
 
+  // The packaged-executable guard must stay first so a missing packaged build
+  // fails fast, before the harness dependencies (shared + runtime-host, needed
+  // by smoke-helpers) are rebuilt and smoke discovery begins.
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged', desktopPackageJson)), [
     'node ../../scripts/require-packaged-executable.mjs',
+    'pnpm --dir ../.. build:shared',
+    'pnpm --dir ../.. --filter @open-cowork/runtime-host build',
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional', desktopPackageJson)), [
+    'pnpm --dir ../.. build:shared',
+    'pnpm --dir ../.. --filter @open-cowork/runtime-host build',
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
 
