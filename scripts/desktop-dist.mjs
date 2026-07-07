@@ -2,8 +2,10 @@ import { spawn } from 'node:child_process'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+const isWindows = process.platform === 'win32'
+
 function resolveExecutable(command) {
-  return process.platform === 'win32' ? `${command}.cmd` : command
+  return isWindows ? `${command}.cmd` : command
 }
 
 const branding = {
@@ -42,6 +44,10 @@ function runStep(command, args) {
     const child = spawn(resolveExecutable(command), args, {
       cwd: process.cwd(),
       stdio: 'inherit',
+      // Node >=20 refuses to spawn a .cmd/.bat directly (CVE-2024-27980) and throws
+      // EINVAL; on Windows the pnpm/electron-builder shims are .cmd files, so route
+      // them through the shell. POSIX keeps shell:false to avoid needless quoting.
+      shell: isWindows,
       env: {
         ...process.env,
         ...branding,
