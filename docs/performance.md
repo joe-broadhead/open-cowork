@@ -60,6 +60,28 @@ allowed to settle after each patch. That keeps active approval jumps,
 task drill-ins, and scroll-to-bottom behavior stable while avoiding a
 10k-message DOM cliff.
 
+## List virtualization audit
+
+Every long, unbounded renderer list is either virtualized or bounded at
+the source:
+
+| List | Where | Strategy |
+|------|-------|----------|
+| Sidebar threads / sessions | `ThreadList.tsx` | Virtualized above 50 rows |
+| Chat transcript | `ChatView.tsx` | Virtualized above 80 items |
+| Audit log | `admin/AuditSection.tsx` | Virtualized above 60 rows (accumulates via "Load more") |
+| Members / roles / policies | `admin/*Section.tsx` | Server-bounded admin tables |
+| Artifacts | `ui/ArtifactsLibrarySurface.tsx` | Server index capped at 200 with a truncated flag |
+| Channels agents/bindings/people | `studio/StudioUtilityPages.tsx` | Server `limit` (100–500) |
+| Capabilities tools / skills | `capabilities/CapabilitiesPage.tsx` | Bounded by the installed catalog |
+
+The audit log is the one list that grows unboundedly on the client — each
+"Load more" appends another 50-row server page onto the DOM — so it uses
+the same `@tanstack/react-virtual` window as the sidebar and transcript
+above a 60-row threshold, rendered as an ARIA grid so tabular semantics
+survive the absolute positioning. Below the threshold it stays a plain
+semantic `<table>` because the DOM cost is negligible.
+
 ## Main-process session eviction
 
 `SessionEngine.maybePrune()` keeps `MAX_WARM_SESSION_DETAILS` (12)
@@ -137,6 +159,67 @@ regression thresholds, with wider absolute floors when the runner OS,
 architecture, or Node major differs from the stored baseline. Refresh the
 baseline intentionally with `pnpm perf:baseline` when a known-good
 regression is accepted.
+
+## Enforced budgets
+
+Discipline only holds if it's a CI gate. Three budgets fail the build on
+regression so "blazing fast & non-bloated" stays true (issue #900):
+
+### Startup budget
+
+Startup-to-interactive is gated from both ends:
+
+- **Renderer side (parse/eval bytes):** the gzipped eager startup graph
+  the browser fetches on first load. `scripts/check-bundle-size.mjs`
+  walks the `browser.html` entry's static-import closure plus its single
+  bootstrap dynamic import and sums the gzipped bytes. Budget: **220 KB**
+  (current ~216 KB). Lazy route views and chart/diagram vendors are
+  excluded — they load on demand and must not count against startup.
+- **Main-process side (init to first interactive session):**
+  `tests/startup-budget.test.ts` measures a fresh `SessionEngine`
+  hydrating a realistic session from projected history and producing the
+  first `getSessionView()` — the work the main process must finish before
+  the renderer can paint an interactive transcript. It gates the median
+  sample against a **12 ms** absolute ceiling (~40× current headroom): it
+  never flakes on slow CI, but a catastrophic regression (an accidental
+  `O(n²)` hydrate turning a sub-millisecond path into tens of ms) fails
+  hard.
+
+### Per-route bundle budgets
+
+Each lazily-loaded feature page has its own gzipped budget in
+`scripts/check-bundle-size.mjs` so no single route can balloon on demand:
+
+| Route chunk | Budget | Current |
+|-------------|--------|---------|
+| `ChatView` | 47 KB | ~42.6 KB |
+| `CapabilitiesPage` | 28 KB | ~25.3 KB |
+| `AgentsPage` | 27 KB | ~24.3 KB |
+| `SettingsPanel` | 21 KB | ~18.7 KB |
+| `StudioUtilityPages` (artifacts/approvals/channels) | 15 KB | ~12.9 KB |
+| `AdminPage` | 13 KB | ~11.1 KB |
+| `KnowledgePage` | 10 KB | ~8.0 KB |
+
+The heavyweight lazy chart/diagram vendors (`vega`, `cytoscape`, `katex`)
+also carry generous ceilings that catch gross bloat — a duplicated copy
+or a version that doubles the engine — without tripping on routine
+dependabot patch bumps.
+
+All three checks run under `tests/bundle-size-budget.test.ts`
+(`pnpm check:bundle-size` locally), which is part of `pnpm test` in CI.
+Set budgets just above the measured size and ratchet them **down** as
+things shrink; only raise a budget with a note explaining the growth.
+
+### Memory ceiling
+
+`tests/session-engine.test.ts` soaks the main-process growth path — 2,000
+session activations with interleaved view materialization — and asserts
+the hydrated set stays at a hard ceiling of `MAX_WARM_SESSION_DETAILS + 1`
+(the warm budget plus the active session), regardless of how many sessions
+were ever activated. That proves main-process session memory is
+`O(budget)`, not `O(sessions-ever-seen)`; the view cache is pruned in
+lockstep because `maybePrune()` drops materialized views for any session
+that leaves the warm set.
 
 ## What's NOT optimized (yet)
 

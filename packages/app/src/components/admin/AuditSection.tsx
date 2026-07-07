@@ -1,10 +1,65 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { AdminAuditEvent, AdminAuditQuery } from '@open-cowork/shared'
 import { Badge, Button, Input, Select } from '../ui'
 import { toast } from '../ui'
 import { t } from '../../helpers/i18n'
 import { AdminSectionHeader, AdminEmpty, AdminError, AdminLoading, AdminTable } from './AdminPrimitives'
 import { describeAuditEvent, downloadTextFile, formatDateTime } from './admin-support'
+
+// The audit log accumulates unboundedly on the client: each "Load more" appends
+// another server page (50 rows) onto the rendered list, so an operator paging deep
+// into history can mount thousands of rows. Above this threshold we window the rows
+// with the same @tanstack/react-virtual pattern the sidebar and chat transcript use;
+// below it, the plain semantic table is simplest and the DOM cost is negligible.
+const VIRTUALIZE_THRESHOLD = 60
+const ESTIMATED_AUDIT_ROW_HEIGHT = 57
+
+// Virtualized audit rows. Rendered as an ARIA grid (role="table"/"row"/"cell") so
+// screen readers still get tabular semantics even though absolute positioning rules
+// out a real <table> here.
+function VirtualAuditLog({ events }: { events: AdminAuditEvent[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: events.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ESTIMATED_AUDIT_ROW_HEIGHT,
+    overscan: 8,
+  })
+  return (
+    <div
+      ref={scrollRef}
+      role="table"
+      aria-label={t('admin.audit.title', 'Audit')}
+      aria-rowcount={events.length}
+      className="max-h-[60vh] overflow-y-auto rounded-lg border border-border-subtle"
+    >
+      <div role="rowgroup" style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((vRow) => {
+          const event = events[vRow.index]
+          if (!event) return null
+          return (
+            <div
+              key={event.eventId}
+              role="row"
+              data-index={vRow.index}
+              ref={virtualizer.measureElement}
+              className="grid grid-cols-[2fr_1.5fr_1fr] items-start gap-4 border-b border-border-subtle px-4 py-2.5 text-sm last:border-b-0"
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vRow.start}px)` }}
+            >
+              <div role="cell" className="font-medium text-text">{describeAuditEvent(event)}</div>
+              <div role="cell">
+                <Badge tone="muted">{event.actorType}</Badge>
+                <span className="ml-2 text-text-muted">{event.actorId || '—'}</span>
+              </div>
+              <div role="cell" className="text-text-muted">{formatDateTime(event.createdAt)}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 const ACTOR_OPTIONS = [
   { value: '', label: 'Any actor' },
@@ -169,27 +224,31 @@ export function AuditSection({ canRead }: { canRead: boolean }) {
         />
       ) : (
         <div className="space-y-3">
-          <AdminTable
-            caption={t('admin.audit.title', 'Audit')}
-            columns={[
-              t('admin.audit.event', 'Event'),
-              t('admin.audit.actorCol', 'Actor'),
-              t('admin.audit.when', 'When'),
-            ]}
-          >
-            {events.map((event) => (
-              <tr key={event.eventId} className="border-b border-border-subtle align-top last:border-b-0">
-                <td className="px-4 py-2.5">
-                  <div className="font-medium text-text">{describeAuditEvent(event)}</div>
-                </td>
-                <td className="px-4 py-2.5">
-                  <Badge tone="muted">{event.actorType}</Badge>
-                  <span className="ml-2 text-text-muted">{event.actorId || '—'}</span>
-                </td>
-                <td className="px-4 py-2.5 text-text-muted">{formatDateTime(event.createdAt)}</td>
-              </tr>
-            ))}
-          </AdminTable>
+          {events.length > VIRTUALIZE_THRESHOLD ? (
+            <VirtualAuditLog events={events} />
+          ) : (
+            <AdminTable
+              caption={t('admin.audit.title', 'Audit')}
+              columns={[
+                t('admin.audit.event', 'Event'),
+                t('admin.audit.actorCol', 'Actor'),
+                t('admin.audit.when', 'When'),
+              ]}
+            >
+              {events.map((event) => (
+                <tr key={event.eventId} className="border-b border-border-subtle align-top last:border-b-0">
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-text">{describeAuditEvent(event)}</div>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge tone="muted">{event.actorType}</Badge>
+                    <span className="ml-2 text-text-muted">{event.actorId || '—'}</span>
+                  </td>
+                  <td className="px-4 py-2.5 text-text-muted">{formatDateTime(event.createdAt)}</td>
+                </tr>
+              ))}
+            </AdminTable>
+          )}
           {cursor ? (
             <div className="flex justify-center">
               <Button variant="secondary" size="sm" onClick={() => void load(applied, cursor)} loading={loading}>
