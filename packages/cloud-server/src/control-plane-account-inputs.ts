@@ -22,6 +22,10 @@ export type UpsertMembershipInput = {
   orgId: string
   accountId: string
   role: ControlPlaneRole
+  // Assign (string), clear (null), or preserve (undefined) the member's custom
+  // role. Undefined leaves any existing assignment untouched so callers that only
+  // change role/status never accidentally wipe a permission-map assignment.
+  customRoleKey?: string | null
   status?: ControlPlaneMembershipStatus
   updatedAt?: Date
   actor?: AuditActorInput

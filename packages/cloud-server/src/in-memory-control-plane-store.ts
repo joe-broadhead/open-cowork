@@ -40,6 +40,15 @@ import { InMemoryAuditDomain } from './in-memory-domains/audit.ts'
 import { InMemoryChannelBindingsDomain } from './in-memory-domains/channel-bindings.ts'
 import { InMemoryIdentityDomain } from './in-memory-domains/identity.ts'
 import { InMemoryApiTokensDomain } from './in-memory-domains/api-tokens.ts'
+import { InMemoryRolesDomain } from './in-memory-domains/roles.ts'
+import { resolveEffectivePermissions } from './control-plane-permissions.ts'
+import type {
+  CreateCustomRoleInput,
+  CustomRoleRecord,
+  MemberPermissionResolution,
+  RevokeApiTokensForAccountInput,
+  UpdateCustomRoleInput,
+} from './control-plane-permissions.ts'
 import { InMemorySettingsDomain } from './in-memory-domains/settings.ts'
 import { InMemoryWorkflowsDomain } from './in-memory-domains/workflows.ts'
 import {
@@ -309,6 +318,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly identityDomain = new InMemoryIdentityDomain({
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
+  private readonly rolesDomain = new InMemoryRolesDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
   private readonly channelBindingsDomain = new InMemoryChannelBindingsDomain({
     getHeadlessAgent: (orgId, agentId) => this.getHeadlessAgent(orgId, agentId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
@@ -393,6 +406,45 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): PrincipalMembershipRecord | null {
     return this.identityDomain.resolvePrincipalMembership(input)
+  }
+
+  createCustomRole(input: CreateCustomRoleInput): CustomRoleRecord {
+    return this.rolesDomain.createCustomRole(input)
+  }
+
+  listCustomRoles(orgId: string): CustomRoleRecord[] {
+    return this.rolesDomain.listCustomRoles(orgId)
+  }
+
+  getCustomRole(orgId: string, roleKey: string): CustomRoleRecord | null {
+    return this.rolesDomain.getCustomRole(orgId, roleKey)
+  }
+
+  updateCustomRole(input: UpdateCustomRoleInput): CustomRoleRecord | null {
+    return this.rolesDomain.updateCustomRole(input)
+  }
+
+  deleteCustomRole(orgId: string, roleKey: string): boolean {
+    return this.rolesDomain.deleteCustomRole(orgId, roleKey)
+  }
+
+  // Effective permissions for a member: its custom role's permission map when one
+  // is assigned (and still exists), otherwise the built-in role's map.
+  resolveMemberPermissions(orgId: string, accountId: string): MemberPermissionResolution | null {
+    const membership = this.identityDomain.listMembershipsForAccount(accountId).find((entry) => entry.orgId === orgId)
+    if (!membership) return null
+    const customRole = membership.customRoleKey ? this.rolesDomain.getCustomRole(orgId, membership.customRoleKey) : null
+    return {
+      orgId,
+      accountId,
+      role: membership.role,
+      customRoleKey: customRole ? membership.customRoleKey : null,
+      permissions: resolveEffectivePermissions({ role: membership.role, customRole }),
+    }
+  }
+
+  revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput): number {
+    return this.apiTokensDomain.revokeApiTokensForAccount(input)
   }
 
   orgExists(orgId: string): boolean {

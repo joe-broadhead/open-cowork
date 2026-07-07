@@ -11,6 +11,7 @@ import type {
   ListApiTokenChannelBindingGrantsInput,
   RecordAuditEventInput,
   RevokeApiTokenInput,
+  RevokeApiTokensForAccountInput,
 } from '../control-plane-store.ts'
 
 // API-token SQL domain extracted from postgres-control-plane-store.ts. Owns the
@@ -157,6 +158,36 @@ export class PostgresApiTokensRepository {
         createdAt: input.revokedAt,
       })
       return token
+    })
+  }
+
+  // Revoke every live token issued to one member in one statement (credential
+  // invalidation on permission downgrade / deprovision). Audits each revoked token.
+  async revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput): Promise<number> {
+    return this.options.withTransaction(async (client) => {
+      const now = nowIso(input.revokedAt)
+      const result = await client.query(
+        `UPDATE cloud_api_tokens
+         SET revoked_at = $3, updated_at = $3
+         WHERE org_id = $1 AND account_id = $2 AND revoked_at IS NULL
+         RETURNING *`,
+        [input.orgId, input.accountId, now],
+      )
+      for (const row of result.rows) {
+        const token = apiTokenFromRow(row)
+        await this.options.recordAuditEvent(client, {
+          orgId: token.orgId,
+          accountId: token.accountId,
+          actorType: input.actor?.actorType || 'system',
+          actorId: input.actor?.actorId || null,
+          eventType: 'api_token.revoked',
+          targetType: 'api_token',
+          targetId: token.tokenId,
+          metadata: { name: token.name, scopes: token.scopes, last4: token.last4, reason: input.reason || 'account_revocation' },
+          createdAt: input.revokedAt,
+        })
+      }
+      return result.rows.length
     })
   }
 

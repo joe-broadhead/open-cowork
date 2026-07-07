@@ -47,6 +47,11 @@ import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
+  CreateCustomRoleInput,
+  CustomRoleRecord,
+  MemberPermissionResolution,
+  RevokeApiTokensForAccountInput,
+  UpdateCustomRoleInput,
   CreateChannelBindingInput,
   CreateChannelDeliveryInput,
   CreateChannelInteractionInput,
@@ -159,6 +164,9 @@ import { PostgresChannelBindingsRepository } from './postgres-store-domains/chan
 import { PostgresHeadlessAgentsRepository } from './postgres-store-domains/headless-agents.ts'
 import { PostgresChannelIdentitiesRepository } from './postgres-store-domains/channel-identities.ts'
 import { PostgresIdentityRepository } from './postgres-store-domains/identity.ts'
+import { PostgresRolesRepository } from './postgres-store-domains/roles.ts'
+import { membershipFromRow } from './postgres-domains/identity.ts'
+import { resolveEffectivePermissions } from './control-plane-permissions.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
 import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/channel-deliveries.ts'
@@ -205,6 +213,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   // Set by connect() from PostgresControlPlaneStoreOptions.ssePgNotify (default off).
   private ssePgNotifyEnabled = false
   private readonly identity: PostgresIdentityRepository
+  private readonly roles: PostgresRolesRepository
   private readonly apiTokens: PostgresApiTokensRepository
   private readonly rateLimits: PostgresRateLimitsRepository
   private readonly authBackoff: PostgresAuthBackoffRepository
@@ -236,6 +245,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
       requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+    })
+    this.roles = new PostgresRolesRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
     })
     this.apiTokens = new PostgresApiTokensRepository({
       pool: this.pool,
@@ -380,6 +394,47 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.identity.resolvePrincipalMembership(input)
   }
 
+  async createCustomRole(input: CreateCustomRoleInput): Promise<CustomRoleRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.roles.createCustomRole(input)
+  }
+
+  async listCustomRoles(orgId: string): Promise<CustomRoleRecord[]> {
+    return this.roles.listCustomRoles(orgId)
+  }
+
+  async getCustomRole(orgId: string, roleKey: string): Promise<CustomRoleRecord | null> {
+    return this.roles.getCustomRole(orgId, roleKey)
+  }
+
+  async updateCustomRole(input: UpdateCustomRoleInput): Promise<CustomRoleRecord | null> {
+    return this.roles.updateCustomRole(input)
+  }
+
+  async deleteCustomRole(orgId: string, roleKey: string): Promise<boolean> {
+    return this.roles.deleteCustomRole(orgId, roleKey)
+  }
+
+  // Effective permissions for a member: its custom role's permission map when one
+  // is assigned (and still exists), otherwise the built-in role's map.
+  async resolveMemberPermissions(orgId: string, accountId: string): Promise<MemberPermissionResolution | null> {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_memberships WHERE org_id = $1 AND account_id = $2`,
+      [orgId, accountId],
+    )
+    if (!row) return null
+    const membership = membershipFromRow(row)
+    const customRole = membership.customRoleKey ? await this.roles.getCustomRole(orgId, membership.customRoleKey) : null
+    return {
+      orgId,
+      accountId,
+      role: membership.role,
+      customRoleKey: customRole ? membership.customRoleKey : null,
+      permissions: resolveEffectivePermissions({ role: membership.role, customRole }),
+    }
+  }
+
   async issueApiToken(input: IssueApiTokenInput): Promise<IssuedApiTokenRecord> {
     return this.apiTokens.issueApiToken(input)
   }
@@ -394,6 +449,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async revokeApiToken(input: RevokeApiTokenInput) {
     return this.apiTokens.revokeApiToken(input)
+  }
+
+  async revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput) {
+    return this.apiTokens.revokeApiTokensForAccount(input)
   }
 
   async grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): Promise<ApiTokenChannelBindingGrantRecord> {

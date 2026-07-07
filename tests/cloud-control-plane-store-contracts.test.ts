@@ -498,6 +498,39 @@ function runControlPlaneDomainContracts(
       assert.ok(revokedToken?.revokedAt)
       assert.equal(await store.findApiTokenByPlaintext(issuedToken.plaintext), null)
 
+      // Custom roles (RBAC #894) — org-defined named permission maps: create/list/get,
+      // assign to a member (with omit-preserves / null-clears semantics), resolve the
+      // member's effective permissions, and revoke the member's tokens on downgrade.
+      const customRole = await store.createCustomRole({
+        orgId: org.orgId,
+        roleKey: 'analyst',
+        name: 'Analyst',
+        baseRole: 'member',
+        permissions: ['sessions:read', 'members:read', 'members:read'],
+      })
+      assert.deepEqual(customRole.permissions, ['members:read', 'sessions:read'])
+      assert.deepEqual((await store.listCustomRoles(org.orgId)).map((role) => role.roleKey), ['analyst'])
+      assert.equal((await store.getCustomRole(org.orgId, 'analyst'))?.name, 'Analyst')
+      await store.upsertMembership({ orgId: org.orgId, accountId: account.accountId, role: 'member', customRoleKey: 'analyst' })
+      const resolvedPermissions = await store.resolveMemberPermissions(org.orgId, account.accountId)
+      assert.equal(resolvedPermissions?.customRoleKey, 'analyst')
+      assert.deepEqual(resolvedPermissions?.permissions, ['members:read', 'sessions:read'])
+      // A membership upsert that omits customRoleKey preserves the assignment.
+      await store.upsertMembership({ orgId: org.orgId, accountId: account.accountId, role: 'member' })
+      assert.equal((await store.resolveMemberPermissions(org.orgId, account.accountId))?.customRoleKey, 'analyst')
+      const widenedRole = await store.updateCustomRole({ orgId: org.orgId, roleKey: 'analyst', permissions: ['sessions:read', 'sessions:write', 'members:read'] })
+      assert.deepEqual(widenedRole?.permissions, ['members:read', 'sessions:read', 'sessions:write'])
+      // Revoking all of a member's tokens fails their auth closed on the next request.
+      const memberToken = await store.issueApiToken({ orgId: org.orgId, accountId: account.accountId, name: 'Member token', scopes: ['desktop'] })
+      assert.ok(await store.findApiTokenByPlaintext(memberToken.plaintext))
+      assert.ok(await store.revokeApiTokensForAccount({ orgId: org.orgId, accountId: account.accountId }) >= 1)
+      assert.equal(await store.findApiTokenByPlaintext(memberToken.plaintext), null)
+      // Clearing the assignment (null) falls back to the built-in role map; delete cleans up.
+      await store.upsertMembership({ orgId: org.orgId, accountId: account.accountId, role: 'member', customRoleKey: null })
+      assert.equal((await store.resolveMemberPermissions(org.orgId, account.accountId))?.customRoleKey, null)
+      assert.equal(await store.deleteCustomRole(org.orgId, 'analyst'), true)
+      assert.equal(await store.getCustomRole(org.orgId, 'analyst'), null)
+
       // Setting metadata — tenant-scoped vs user-scoped upsert/get/list stay isolated.
       await store.setSettingMetadata({ tenantId, key: 'appearance', value: { theme: 'dark' } })
       assert.deepEqual((await store.getSettingMetadata(tenantId, 'appearance'))?.value, { theme: 'dark' })

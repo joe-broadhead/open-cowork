@@ -27,6 +27,18 @@ export type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 export type * from './channel-provider-types.ts'
 export type * from './control-plane-enums.ts'
 export type * from './control-plane-records.ts'
+export type * from './control-plane-permissions.ts'
+export {
+  BUILTIN_ROLE_PERMISSIONS,
+  CONTROL_PLANE_PERMISSIONS,
+  builtinRolePermissions,
+  hasPermission,
+  isControlPlanePermission,
+  normalizeControlPlanePermissions,
+  normalizeCustomRoleKey,
+  permissionsRemoved,
+  resolveEffectivePermissions,
+} from './control-plane-permissions.ts'
 export type * from './control-plane-usage-records.ts'
 export type * from './control-plane-channel-records.ts'
 export type * from './control-plane-auth-records.ts'

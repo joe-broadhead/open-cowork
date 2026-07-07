@@ -714,6 +714,9 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
 | `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `closed` remains a backward-compatible alias for `disabled`; `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
+| `OPEN_COWORK_CLOUD_ORG_MODE` | Deployment topology: `multi-org` (default) preserves multi-tenant behaviour; `single-org` funnels every principal into one auto-bootstrapped org and skips tenant switching, for single-tenant self-host installs. |
+| `OPEN_COWORK_CLOUD_SINGLE_ORG_ID` | Org/tenant id used as the single org when `OPEN_COWORK_CLOUD_ORG_MODE=single-org` (default `default`). Ignored in `multi-org` mode. |
+| `OPEN_COWORK_CLOUD_SINGLE_ORG_NAME` | Display name for the single org in `single-org` mode (default `Default Organization`). Ignored in `multi-org` mode. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` / `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF` | Required for public `header` auth; trusted proxies must provide the same value in `x-open-cowork-header-auth-secret`. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED` | Local/demo escape hatch only. Public and `public_production` trusted-header deployments require signed headers. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS` | Maximum accepted trusted-header signature age. Defaults to five minutes. |

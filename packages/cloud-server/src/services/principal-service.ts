@@ -1,10 +1,18 @@
 import type {
   ControlPlaneMembershipStatus,
+  ControlPlanePermission,
   ControlPlaneRole,
   ControlPlaneStore,
 } from '../control-plane-store.ts'
+import { builtinRolePermissions, hasPermission } from '../control-plane-permissions.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
-import { resolvedSignupMode, type CloudIdentityPolicy } from './api-token-policy.ts'
+import {
+  DEFAULT_SINGLE_ORG_ID,
+  DEFAULT_SINGLE_ORG_NAME,
+  resolvedOrgMode,
+  resolvedSignupMode,
+  type CloudIdentityPolicy,
+} from './api-token-policy.ts'
 import { principalCanManageOrg, principalEmailDomain } from '../session-principal-access.ts'
 import { importAuditActor, type CloudPrincipal } from '../session-service-types.ts'
 
@@ -31,7 +39,37 @@ export class CloudPrincipalService {
     this.identityPolicy = deps.identityPolicy
   }
 
+  // In single-org (self-host) mode every principal is funneled into the one
+  // auto-bootstrapped org: force the tenant/org identity before any membership
+  // resolution so an incoming tenant claim can't select a different tenant. No-op
+  // in multi-org mode. The org itself is materialised by the existing
+  // createTenant / ensureOrgForTenant bootstrap below.
+  private applySingleOrgMode(principal: CloudPrincipal) {
+    if (resolvedOrgMode(this.identityPolicy) !== 'single-org') return
+    const orgId = this.identityPolicy.singleOrgId?.trim() || DEFAULT_SINGLE_ORG_ID
+    principal.tenantId = orgId
+    principal.orgId = orgId
+    principal.tenantName = this.identityPolicy.singleOrgName?.trim() || DEFAULT_SINGLE_ORG_NAME
+  }
+
+  // Resolve and attach the member's effective permission set (custom-role map when
+  // assigned, else the built-in role map) so authorization can consult it. Falls
+  // back to the built-in role map if the membership row can't be resolved.
+  private async applyEffectivePermissions(principal: CloudPrincipal) {
+    const orgId = principal.orgId || principal.tenantId
+    const accountId = principal.accountId || principal.userId
+    const resolution = await this.store.resolveMemberPermissions(orgId, accountId)
+    if (resolution) {
+      principal.permissions = resolution.permissions
+      principal.customRoleKey = resolution.customRoleKey
+      return
+    }
+    principal.permissions = builtinRolePermissions(principal.role || 'member')
+    principal.customRoleKey = null
+  }
+
   async ensurePrincipal(principal: CloudPrincipal) {
+    this.applySingleOrgMode(principal)
     const signupMode = resolvedSignupMode(this.identityPolicy)
     const allowedDomains = (this.identityPolicy.allowedEmailDomains || [])
       .map((domain) => domain.trim().toLowerCase())
@@ -82,6 +120,7 @@ export class CloudPrincipalService {
       principal.accountId = existingMembership.account.accountId
       principal.email = existingMembership.account.email
       principal.role = existingMembership.membership.role
+      await this.applyEffectivePermissions(principal)
       return
     }
     await this.store.createTenant({
@@ -147,6 +186,7 @@ export class CloudPrincipalService {
     principal.accountId = account.accountId
     principal.email = account.email
     principal.role = effectiveRole
+    await this.applyEffectivePermissions(principal)
     // Mark bootstrapped so subsequent requests within the TTL take the fast path
     // above and skip these idempotent writes (the gates still re-run each time).
     this.bootstrappedPrincipals.set(bootstrapKey, Date.now() + 60_000)
@@ -166,7 +206,37 @@ export class CloudPrincipalService {
     return membership?.membership.status === 'active'
   }
 
+  // Effective permissions attached during ensurePrincipal. Local principals bypass
+  // the permission model; otherwise the resolved set (custom-role-aware) is used,
+  // falling back to the built-in role map if ensurePrincipal has not populated it.
+  principalPermissions(principal: CloudPrincipal): ControlPlanePermission[] {
+    if (principal.permissions) return principal.permissions
+    return builtinRolePermissions(principal.role || 'member')
+  }
+
+  principalHasPermission(principal: CloudPrincipal, permission: ControlPlanePermission): boolean {
+    if (principal.authSource === 'local') return true
+    return hasPermission(this.principalPermissions(principal), permission)
+  }
+
+  assertPermission(principal: CloudPrincipal, permission: ControlPlanePermission) {
+    if (!this.principalHasPermission(principal, permission)) {
+      throw new CloudServiceError(403, `This action requires the "${permission}" permission.`)
+    }
+  }
+
   assertOrgAdmin(principal: CloudPrincipal) {
+    // When a custom role is in effect its permission map is authoritative — this is
+    // how a custom role can DOWNGRADE a base admin below org-management, or UPGRADE a
+    // base member to it. With no custom role, the built-in role/scope gate applies so
+    // existing behaviour is unchanged.
+    if (principal.customRoleKey) {
+      if (principal.authSource === 'local') return
+      if (hasPermission(this.principalPermissions(principal), 'org:manage') || hasPermission(this.principalPermissions(principal), 'members:manage')) {
+        return
+      }
+      throw new CloudServiceError(403, 'Org administration requires the "org:manage" or "members:manage" permission.')
+    }
     if (!principalCanManageOrg(principal)) {
       throw new CloudServiceError(403, 'Org administration requires an org admin or admin-scoped API token.')
     }

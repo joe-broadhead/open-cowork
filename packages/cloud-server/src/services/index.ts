@@ -28,6 +28,20 @@ export type {
   MembershipInviteResult,
   PublicOrgMemberRecord,
 } from './member-service.ts'
+export { CloudPrincipalService } from './principal-service.ts'
+export type { CloudPrincipalServiceDeps } from './principal-service.ts'
+export { CloudRoleService } from './role-service.ts'
+export type {
+  CloudRoleServiceOptions,
+  CreateCustomRoleRequest,
+  UpdateCustomRoleRequest,
+} from './role-service.ts'
+export {
+  DEFAULT_SINGLE_ORG_ID,
+  DEFAULT_SINGLE_ORG_NAME,
+  resolvedOrgMode,
+} from './api-token-policy.ts'
+export type { CloudIdentityPolicy, CloudOrgMode } from './api-token-policy.ts'
 export { CloudCoordinationService } from './coordination-service.ts'
 export type { CloudCoordinationServiceOptions } from './coordination-service.ts'
 export { CloudCapabilityService } from './capability-service.ts'

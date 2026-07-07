@@ -2,8 +2,10 @@ import type {
   ControlPlaneMembershipStatus,
   ControlPlaneRole,
   ControlPlaneStore,
+  MemberPermissionResolution,
   OrgMemberRecord,
 } from '../control-plane-store.ts'
+import { permissionsRemoved } from '../control-plane-permissions.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { signMembershipInviteToken, verifyMembershipInviteToken } from '../membership-invite-token.ts'
 import {
@@ -112,6 +114,7 @@ export class CloudMemberService {
       email: account.email,
       displayName: account.displayName,
       role: membership.role,
+      customRoleKey: membership.customRoleKey,
       status: membership.status,
       createdAt: membership.createdAt,
       updatedAt: membership.updatedAt,
@@ -231,6 +234,8 @@ export class CloudMemberService {
     if (existing.role === 'owner' && existing.status === 'active' && (nextRole !== 'owner' || nextStatus !== 'active') && activeOwnerCount <= 1) {
       throw new CloudServiceError(400, 'Cannot remove or demote the last active owner.')
     }
+    // Snapshot effective permissions BEFORE the change so we can detect a downgrade.
+    const before = await this.store.resolveMemberPermissions(orgId, accountId)
     const updated = await this.store.upsertMembership({
       orgId,
       accountId,
@@ -242,15 +247,51 @@ export class CloudMemberService {
         accountId: currentActorAccountId,
       },
     })
+    await this.revokeCredentialsIfDowngraded(orgId, accountId, before, nextStatus, principal, 'membership_update')
     return {
       orgId,
       accountId: existing.accountId,
       email: existing.email,
       displayName: existing.displayName,
       role: updated.role,
+      customRoleKey: updated.customRoleKey,
       status: updated.status,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
     }
+  }
+
+  // Full deprovision: disable the membership AND immediately revoke every API token
+  // the member holds, so their access is cut on the next request. Reuses updateOrgMember's
+  // guards (last-owner, self-disable, owner-protection, confirmation).
+  async deprovisionOrgMember(principal: CloudPrincipal, accountId: string): Promise<PublicOrgMemberRecord> {
+    return this.updateOrgMember(principal, accountId, { status: 'disabled', confirm: accountId })
+  }
+
+  // Revoke a member's issued credentials when their effective permissions shrink or
+  // their membership is suspended, so a permission change takes effect immediately
+  // rather than lingering until the token TTL. No-op when nothing was lost.
+  private async revokeCredentialsIfDowngraded(
+    orgId: string,
+    accountId: string,
+    before: MemberPermissionResolution | null,
+    nextStatus: ControlPlaneMembershipStatus,
+    principal: CloudPrincipal,
+    reason: string,
+  ): Promise<number> {
+    const suspended = nextStatus !== 'active'
+    const after = await this.store.resolveMemberPermissions(orgId, accountId)
+    const lostPermissions = before && after ? permissionsRemoved(before.permissions, after.permissions).length > 0 : false
+    if (!suspended && !lostPermissions) return 0
+    return this.store.revokeApiTokensForAccount({
+      orgId,
+      accountId,
+      reason: suspended ? `${reason}:suspended` : `${reason}:downgraded`,
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
   }
 }

@@ -1179,6 +1179,25 @@ const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS = [
     ON cloud_channel_interactions (org_id, expires_at) WHERE status = 'pending'`,
 ] as const
 
+// Org custom roles (named permission maps) + the membership pointer that assigns
+// one to a member. Built-in roles keep working: custom_role_key is nullable and
+// only overrides the effective permission set when set. RBAC foundation (#894).
+export const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID = '026_org_custom_roles'
+const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_custom_roles (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    role_key text NOT NULL,
+    name text NOT NULL,
+    description text,
+    base_role text NOT NULL,
+    permissions jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, role_key)
+  )`,
+  `ALTER TABLE cloud_memberships ADD COLUMN IF NOT EXISTS custom_role_key text`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1295,5 +1314,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     statements: CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS,
     concurrentIndexes: ['cloud_workspace_events_created_idx', 'cloud_channel_interactions_pending_idx'],
     transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS,
   },
 ] as const

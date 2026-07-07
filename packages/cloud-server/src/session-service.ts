@@ -101,6 +101,11 @@ import {
 } from './services/member-service.ts'
 import { CloudCoordinationService } from './services/coordination-service.ts'
 import { CloudPrincipalService } from './services/principal-service.ts'
+import {
+  CloudRoleService,
+  type CreateCustomRoleRequest,
+  type UpdateCustomRoleRequest,
+} from './services/role-service.ts'
 import { CloudSessionImportService } from './services/session-import-service.ts'
 import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
 import { CloudSessionExecutionService } from './session-execution-operations.ts'
@@ -217,6 +222,7 @@ export class CloudSessionService {
   private readonly usageGovernance: CloudUsageGovernanceService
   private readonly channelDomain: CloudChannelDomainService
   private readonly memberService: CloudMemberService
+  private readonly roleService: CloudRoleService
   private readonly coordinationService: CloudCoordinationService
   private readonly capabilityService: CloudCapabilityService
   private readonly settingMetadataService: CloudSettingMetadataService
@@ -318,6 +324,13 @@ export class CloudSessionService {
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
+    })
+    this.roleService = new CloudRoleService({
+      store,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
     })
     this.coordinationService = new CloudCoordinationService({
       store,
@@ -499,6 +512,38 @@ export class CloudSessionService {
     },
   ): Promise<PublicOrgMemberRecord> {
     return this.memberService.updateOrgMember(principal, accountId, input)
+  }
+
+  deprovisionOrgMember(principal: CloudPrincipal, accountId: string): Promise<PublicOrgMemberRecord> {
+    return this.memberService.deprovisionOrgMember(principal, accountId)
+  }
+
+  listPermissionCatalog() {
+    return this.roleService.listPermissionCatalog()
+  }
+
+  listCustomRoles(principal: CloudPrincipal) {
+    return this.roleService.listCustomRoles(principal)
+  }
+
+  createCustomRole(principal: CloudPrincipal, input: CreateCustomRoleRequest) {
+    return this.roleService.createCustomRole(principal, input)
+  }
+
+  updateCustomRole(principal: CloudPrincipal, roleKey: string, input: UpdateCustomRoleRequest) {
+    return this.roleService.updateCustomRole(principal, roleKey, input)
+  }
+
+  deleteCustomRole(principal: CloudPrincipal, roleKey: string) {
+    return this.roleService.deleteCustomRole(principal, roleKey)
+  }
+
+  assignMemberRole(principal: CloudPrincipal, accountId: string, input: { roleKey: string | null }) {
+    return this.roleService.assignMemberRole(principal, accountId, input)
+  }
+
+  resolveMemberPermissions(principal: CloudPrincipal, accountId: string) {
+    return this.roleService.resolveMemberPermissions(principal, accountId)
   }
 
   async listAuditEvents(

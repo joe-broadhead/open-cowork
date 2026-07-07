@@ -11,6 +11,8 @@ export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'> & {
   channelBindingIds: string[]
 }
 
+export type CloudOrgMode = 'multi-org' | 'single-org'
+
 export type CloudIdentityPolicy = {
   allowSelfServiceSignup: boolean
   signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
@@ -18,6 +20,19 @@ export type CloudIdentityPolicy = {
   apiTokenDefaultTtlMs?: number | null
   apiTokenMaxTtlMs?: number | null
   apiTokenAllowedScopes?: readonly string[] | null
+  // Deployment topology. In `single-org` (self-host) mode every principal is
+  // funneled into one auto-bootstrapped org and tenant-switching is skipped;
+  // `multi-org` (default) preserves the multi-tenant behaviour.
+  orgMode?: CloudOrgMode
+  singleOrgId?: string
+  singleOrgName?: string
+}
+
+export const DEFAULT_SINGLE_ORG_ID = 'default'
+export const DEFAULT_SINGLE_ORG_NAME = 'Default Organization'
+
+export function resolvedOrgMode(policy: CloudIdentityPolicy): CloudOrgMode {
+  return policy.orgMode === 'single-org' ? 'single-org' : 'multi-org'
 }
 
 export function publicApiToken(token: ApiTokenRecord, channelBindingIds: readonly string[] = []): PublicApiTokenRecord {

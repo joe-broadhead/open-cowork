@@ -1,4 +1,5 @@
 import { clone, key, nowIso } from './store-helpers.ts'
+import { normalizeCustomRoleKey } from '../control-plane-permissions.ts'
 import type {
   AccountRecord,
   AuditEventRecord,
@@ -179,10 +180,15 @@ export class InMemoryIdentityDomain {
     const membershipKey = key(input.orgId, input.accountId)
     const existing = this.memberships.get(membershipKey)
     const now = nowIso(input.updatedAt)
+    // undefined ⇒ preserve any existing assignment; null ⇒ clear; string ⇒ assign.
+    const customRoleKey = input.customRoleKey === undefined
+      ? (existing?.customRoleKey ?? null)
+      : (input.customRoleKey === null ? null : normalizeCustomRoleKey(input.customRoleKey))
     const record: MembershipRecord = {
       orgId: input.orgId,
       accountId: input.accountId,
       role: input.role,
+      customRoleKey,
       status: input.status || 'active',
       createdAt: existing?.createdAt || now,
       updatedAt: now,
@@ -217,6 +223,7 @@ export class InMemoryIdentityDomain {
           email: account.email,
           displayName: account.displayName,
           role: membership.role,
+          customRoleKey: membership.customRoleKey,
           status: membership.status,
           createdAt: membership.createdAt,
           updatedAt: membership.updatedAt,

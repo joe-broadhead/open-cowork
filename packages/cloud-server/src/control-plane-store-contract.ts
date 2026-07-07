@@ -42,6 +42,13 @@ import type {
   UserRecord,
 } from './control-plane-records.ts'
 import type {
+  CreateCustomRoleInput,
+  CustomRoleRecord,
+  MemberPermissionResolution,
+  RevokeApiTokensForAccountInput,
+  UpdateCustomRoleInput,
+} from './control-plane-permissions.ts'
+import type {
   BillingSubscriptionRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -183,10 +190,21 @@ export type ControlPlaneStore = {
   listOrgMembers(orgId: string, input?: { query?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
   listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
+  // Custom roles (org-defined named permission maps). CRUD plus effective-permission
+  // resolution for a member; built-in roles keep working when no custom role applies.
+  createCustomRole(input: CreateCustomRoleInput): MaybePromise<CustomRoleRecord>
+  listCustomRoles(orgId: string): MaybePromise<CustomRoleRecord[]>
+  getCustomRole(orgId: string, roleKey: string): MaybePromise<CustomRoleRecord | null>
+  updateCustomRole(input: UpdateCustomRoleInput): MaybePromise<CustomRoleRecord | null>
+  deleteCustomRole(orgId: string, roleKey: string): MaybePromise<boolean>
+  resolveMemberPermissions(orgId: string, accountId: string): MaybePromise<MemberPermissionResolution | null>
   issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
   listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>
   findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
+  // Revoke every live API token issued to one member (credential revocation on a
+  // permission downgrade / deprovision). Returns the count revoked.
+  revokeApiTokensForAccount(input: RevokeApiTokensForAccountInput): MaybePromise<number>
   grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): MaybePromise<ApiTokenChannelBindingGrantRecord>
   listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): MaybePromise<ApiTokenChannelBindingGrantRecord[]>
   createManagedWorkerPool(input: CreateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord>

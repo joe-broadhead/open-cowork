@@ -339,9 +339,20 @@ export function shouldRunCloudScheduler(role: CloudRuntimePolicy['role']) {
   return role === 'all-in-one' || role === 'scheduler'
 }
 
+function parseCloudOrgMode(value: string | null | undefined): 'multi-org' | 'single-org' {
+  if (!value) return 'multi-org'
+  if (value === 'multi-org' || value === 'single-org') return value
+  throw new Error(`Invalid OPEN_COWORK_CLOUD_ORG_MODE "${value}". Expected multi-org or single-org.`)
+}
+
 export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
   const workerPollMs = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_POLL_MS'), 1000)
   return {
+    // Deployment topology (RBAC #894): single-org self-host mode auto-bootstraps one
+    // org and skips tenant switching; multi-org (default) preserves multi-tenancy.
+    orgMode: parseCloudOrgMode(envValue(env, 'OPEN_COWORK_CLOUD_ORG_MODE')),
+    singleOrgId: envValue(env, 'OPEN_COWORK_CLOUD_SINGLE_ORG_ID') || undefined,
+    singleOrgName: envValue(env, 'OPEN_COWORK_CLOUD_SINGLE_ORG_NAME') || undefined,
     deploymentTier: parseCloudDeploymentTier(envValue(env, 'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER')),
     root: resolve(envValue(env, 'OPEN_COWORK_CLOUD_ROOT') || DEFAULT_CLOUD_ROOT),
     hostname: envValue(env, 'HOST') || envValue(env, 'OPEN_COWORK_CLOUD_HOST') || '0.0.0.0',
@@ -1473,6 +1484,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       apiTokenDefaultTtlMs: authConfig.apiTokens?.defaultTtlMs,
       apiTokenMaxTtlMs: authConfig.apiTokens?.maxTtlMs,
       apiTokenAllowedScopes: authConfig.apiTokens?.allowedScopes,
+      orgMode: envOptions.orgMode,
+      singleOrgId: envOptions.singleOrgId,
+      singleOrgName: envOptions.singleOrgName,
     },
     projectSources,
     cookieSecret,
