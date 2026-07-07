@@ -8,6 +8,7 @@ export const updateInstallCapabilityResourceName = 'open-cowork-update-capabilit
 const platformPrefixes = {
   darwin: 'opencode-darwin-',
   linux: 'opencode-linux-',
+  win32: 'opencode-windows-',
 }
 const archNames = {
   0: 'ia32',
@@ -80,7 +81,10 @@ export function listInstalledOpencodePackages(platformName, archName, options = 
     )
   }
 
-  const binaryName = 'opencode'
+  // The OpenCode native binary is `opencode` on macOS/Linux and
+  // `opencode.exe` on Windows; accept either so the Windows target
+  // bundles the same runtime as the other platforms.
+  const binaryNames = platformName === 'win32' ? ['opencode.exe', 'opencode'] : ['opencode']
   const packagesByName = new Map()
   for (const entry of readdirSync(storeDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue
@@ -90,7 +94,7 @@ export function listInstalledOpencodePackages(platformName, archName, options = 
     if (!packageTargetsArch(packageName, archName)) continue
 
     const sourceDir = join(storeDir, entry.name, 'node_modules', packageName)
-    if (!existsSync(join(sourceDir, 'bin', binaryName))) continue
+    if (!binaryNames.some((binaryName) => existsSync(join(sourceDir, 'bin', binaryName)))) continue
     packagesByName.set(packageName, { name: packageName, version: packageVersion, sourceDir })
   }
 
@@ -111,7 +115,10 @@ function safeUpdateChannel(value) {
 }
 
 export function buildUpdateInstallCapabilityResource(context, env = process.env) {
-  if (context.electronPlatformName !== 'darwin') return null
+  // Signed in-app installs are wired for macOS and Windows (NSIS). Linux
+  // stays on the verified manual-download path, so no marker is written
+  // there — see docs/verifying-releases.md.
+  if (context.electronPlatformName !== 'darwin' && context.electronPlatformName !== 'win32') return null
   const signedInstallEligible = isTruthyEnv(env.OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE)
   const feedConfigured = isTruthyEnv(env.OPEN_COWORK_UPDATE_FEED_CONFIGURED)
   if (!signedInstallEligible && !feedConfigured) return null

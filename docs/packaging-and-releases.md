@@ -14,7 +14,7 @@ names, Helm chart names, or Gateway mode language.
 
 | Product surface | Release artifact |
 | --- | --- |
-| Open Cowork Desktop | macOS `.dmg`/`.zip`, Linux `.AppImage`/`.deb` |
+| Open Cowork Desktop | macOS `.dmg`/`.zip`, Windows NSIS `.exe`, Linux `.AppImage`/`.deb` |
 | Open Cowork Cloud | `open-cowork-cloud` OCI image, Helm chart, Compose references |
 | Open Cowork Gateway | `open-cowork-gateway` OCI image, Helm chart, Compose references |
 | Open Cowork Standalone Gateway | source-built `open-cowork-gateway-standalone` CLI; no public image until the image release gate exists |
@@ -30,17 +30,25 @@ Current release targets:
 - `x64`
 - `arm64`
 
+### Windows
+
+- NSIS installer `.exe` (wizard installer, per-user or elevated per-machine)
+- `x64`
+- Authenticode-signed for public `v1.0.0` and later releases
+- ships `latest.yml` + `*.blockmap` update-feed metadata for signed builds
+
+Windows is a first-class, free release target. The `windows-package` CI job
+packages and smoke-tests the NSIS installer on every PR, and the release
+workflow's `build-windows` job produces the signed installer for tags. There
+is no paid or deferred Windows tier.
+
 ### Linux
 
 - `.AppImage`
 - `.deb`
 - `x64`
-
-### Windows
-
-Windows packaging is not part of the v0.x preview release matrix. Add a
-Windows Electron Builder target, signing policy, and smoke test before
-claiming Windows support for a stable release.
+- optional community AUR package (`open-cowork-bin`) that repackages the
+  published `.AppImage`; not built by this repo's release workflow
 
 ## Local packaging
 
@@ -49,6 +57,7 @@ From the repository root:
 ```bash
 pnpm --dir apps/desktop dist:ci:mac
 pnpm --dir apps/desktop dist:ci:linux
+pnpm --dir apps/desktop dist:ci:win   # run on Windows (or a Windows runner)
 ```
 
 Artifacts are written to:
@@ -80,9 +89,11 @@ The repository includes:
   - deploys the published docs site on pushes to `master`
 
 - `release.yml`
-  - builds release artifacts for macOS and Linux
-  - runs packaged desktop smoke tests for macOS and Linux release artifacts
-    before upload
+  - builds release artifacts for macOS, Windows, and Linux
+  - runs packaged desktop smoke tests for macOS, Windows, and Linux release
+    artifacts before upload
+  - Authenticode-signs the Windows NSIS installer and verifies the signature
+    (`Get-AuthenticodeSignature`) when the Windows signing secrets are present
   - verifies the tag signature, allowed release actor, and required green CI
     checks before publishing
   - reruns Cloud Web, Desktop/Web/Gateway continuation, Docker/Compose,
@@ -125,7 +136,11 @@ GitHub CLI installed, verify an artifact against this repository:
 gh attestation verify ./Open-Cowork-<version>-arm64.dmg --repo joe-broadhead/open-cowork
 ```
 
-Replace the filename with the artifact you downloaded.
+Replace the filename with the artifact you downloaded (macOS `.dmg`/`.zip`,
+Windows `-setup.exe`, or Linux `.AppImage`/`.deb`). For the full,
+user-facing verification walkthrough — checksums, detached GPG signature,
+GitHub provenance, and platform code-signature checks — see
+[Verifying Releases](verifying-releases.md).
 
 ## Verify Cloud and Gateway images
 
@@ -389,6 +404,143 @@ authoritative reference for the full set of knobs.
 
 For a genuinely production-grade public release, treat signing and
 notarization as a release requirement, not an optional polish item.
+
+## Windows signing
+
+Windows public releases must be Authenticode-signed. The `build-windows`
+release job resolves a signing mode through
+`.github/scripts/release-windows-signing-mode.mjs`, exactly mirroring the
+macOS gate: signed when a signing mechanism is configured, otherwise the
+tag build fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` preview
+override is enabled for a `v0.x` tag. `v1.0.0` and later fail closed
+without signing.
+
+Two mechanisms are supported:
+
+### Native certificate (recommended, fully automated)
+
+Provide an exportable code-signing certificate (OV or EV) to the workflow:
+
+| Runtime env var | GitHub secret | Purpose |
+| --- | --- | --- |
+| `WIN_CSC_LINK` | `WIN_CERTIFICATE_PFX_BASE64` | Base64-encoded `.pfx`/`.p12` code-signing certificate |
+| `WIN_CSC_KEY_PASSWORD` | `WIN_CERTIFICATE_PASSWORD` | Password for the `.pfx` |
+
+electron-builder signs the app and NSIS installer **during** packaging, so
+the sha512 recorded in `latest.yml` matches the shipped, signed binary and
+electron-updater can verify it with no extra steps.
+
+### SignPath Foundation (free for OSS)
+
+[SignPath Foundation](https://signpath.org/) offers free code signing for
+open-source projects. SignPath holds the private key in its cloud HSM, so
+the certificate cannot be exported into `WIN_CSC_LINK`; instead the
+installer is signed **after** packaging. To use it:
+
+1. Register the project with SignPath Foundation and record the
+   organization id and project/signing-policy slug.
+2. Set secret `SIGNPATH_API_TOKEN` and repository variables
+   `SIGNPATH_ORGANIZATION_ID` and `SIGNPATH_PROJECT_SLUG`. The signing-mode
+   gate then reports `mechanism=signpath`.
+3. In `build-windows`, insert the SignPath submit-signing-request action
+   immediately before the "Reconcile update metadata after post-build
+   signing" step so it signs `apps/desktop/release/*-setup.exe`.
+4. That reconcile step runs `scripts/regenerate-windows-update-metadata.mjs`,
+   which recomputes the sha512/size in `latest.yml` against the signed
+   installer and removes the now-stale `*.blockmap` files. Without this,
+   electron-updater would reject the signed download because the packaged
+   metadata still described the unsigned binary.
+
+Because SignPath is post-build, differential updates fall back to a
+verified full download for that release; the update still applies safely.
+
+## Operator secrets for a signed v1.0
+
+Real signing cannot be done in-repo — it requires operator-held certificates
+and credentials. A maintainer must add the following before tagging a signed
+`v1.0.0`. Everything is secret-gated: when a secret is absent the pipeline
+still builds an **unsigned** artifact (so PR CI stays green), but the release
+policy fails for `v1.0.0`+ unless signing is configured.
+
+| Platform | Secret / variable | Kind | Required for signed v1.0 |
+| --- | --- | --- | --- |
+| macOS | `MAC_CERTIFICATE_P12_BASE64` | secret | Yes |
+| macOS | `MAC_CERTIFICATE_PASSWORD` | secret | Yes |
+| macOS | `APPLE_ID` | secret | Yes (notarization) |
+| macOS | `APPLE_APP_SPECIFIC_PASSWORD` | secret | Yes (notarization) |
+| macOS | `APPLE_TEAM_ID` | secret | Yes (notarization) |
+| Windows | `WIN_CERTIFICATE_PFX_BASE64` + `WIN_CERTIFICATE_PASSWORD` | secret | Yes (native cert) — or the SignPath trio below |
+| Windows | `SIGNPATH_API_TOKEN` + `SIGNPATH_ORGANIZATION_ID` + `SIGNPATH_PROJECT_SLUG` | secret + vars | Alternative to the native cert |
+| Linux | `OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY` (+ optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) | secret | Yes (detached `SHA256SUMS.txt.asc`) |
+| All | `OPEN_COWORK_RELEASE_ALLOWED_ACTORS` | variable | Yes (release actor allowlist) |
+
+The `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` variable is the preview-only escape
+hatch for `v0.x` unsigned dry runs; leave it unset for signed releases.
+
+## v1.0 release runbook
+
+1. Confirm every required check is green on the tag commit, including
+   `windows-package` (see [Branch Protection](branch-protection.md)). All
+   three OS builds are required — `scripts/verify-release-checks.mjs` blocks
+   publishing otherwise.
+2. Ensure the macOS, Windows, and Linux signing secrets above are present.
+3. Create and push a signed annotated tag `vX.Y.Z` (see
+   [Release Checklist](release-checklist.md)).
+4. The release workflow runs `build-macos`, `build-windows`, and
+   `build-linux` in parallel, each producing signed artifacts and its
+   packaged smoke test.
+5. `release-policy` fails the release if any of macOS/Windows/Linux is
+   unsigned for a `v1.0.0`+ tag, and `verify-release-artifact-matrix.mjs`
+   confirms the exact per-OS artifact set (including `latest-mac.yml` and
+   `latest.yml` for signed builds).
+6. `publish` regenerates checksums, signs `SHA256SUMS.txt`, attaches
+   SBOM/provenance attestations for the desktop artifacts (including the
+   Windows `.exe` and its signed `latest.yml`), and publishes the GitHub
+   Release.
+7. After publishing, run a manual staged self-update `N`→`N+1` on macOS and
+   Windows (see below), and verify a Linux download with
+   [Verifying Releases](verifying-releases.md).
+
+## Auto-update per OS
+
+The runtime updater is `electron-updater`. Its feed is resolved from
+`updates.releaseSource` in the app config at check/download time
+(`apps/desktop/src/main/update/update-release-source.ts`), so the same
+packaged binary works against GitHub Releases or a downstream private feed
+with no rebuild. Signature verification is inherent to every feed:
+
+| OS | In-app install | Feed metadata | Signature verification |
+| --- | --- | --- | --- |
+| macOS | Yes (`MacUpdater`) | `latest-mac.yml` + `.blockmap` | Notarized/hardened-runtime build; sha512 from feed |
+| Windows | Yes (`NsisUpdater`) | `latest.yml` + `.blockmap` | Authenticode publisher check + sha512 from feed |
+| Linux | Verified manual download | `SHA256SUMS.txt(.asc)` + provenance | GPG detached signature + GitHub provenance |
+
+On macOS and Windows the updater exposes download progress, a staged
+install (`downloadUpdate` then `quitAndInstall`), and a safe rollback path:
+the running install is untouched until the verified swap, and NSIS/macOS
+keep the previous version available if the swap is aborted. Whether checks
+are opt-in or automatic is configurable through `updates.enabled` and the
+in-app Settings updater controls; `autoDownload`/`autoInstallOnAppQuit` are
+forced off so an update is only ever fetched and installed on explicit user
+action. Linux stays on the verified manual-download path (AppImage
+in-place auto-update can be layered on downstream but `.deb` cannot, so the
+upstream posture keeps Linux manual-but-verified).
+
+## Downstream / self-host
+
+A branded fork points auto-update and signing at its own infrastructure
+through config and secrets, without editing `electron-builder.yml`:
+
+- **Update feed** — set `updates.releaseSource` (`github-releases`,
+  `generic-http`, or `gcs`) in the app config. See
+  [Configurable Update Release Sources](#configurable-update-release-sources)
+  and [Downstream Customization](downstream.md).
+- **Signing identity** — override the brand env vars
+  (`APP_ID`, `APP_PRODUCT_NAME`, `APP_ARTIFACT_PREFIX`, `APP_ICON_*`,
+  `APP_MAINTAINER`) and supply the fork's own signing secrets
+  (`MAC_CERTIFICATE_*`, `APPLE_*`, `WIN_CERTIFICATE_*` or SignPath,
+  `OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`). The signing-mode gates read the
+  same env var names, so a fork only swaps secret values.
 
 ## Notes
 

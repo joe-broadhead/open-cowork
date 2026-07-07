@@ -153,6 +153,7 @@ nav:
       - Managed BYOK Boundary: runbooks/managed-byok-saas-boundary.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
+      - Verifying Releases: verifying-releases.md
       - Release Checklist: release-checklist.md
       - Versioning and Cadence: versioning.md
       - Troubleshooting: troubleshooting.md

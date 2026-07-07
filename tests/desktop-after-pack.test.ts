@@ -60,6 +60,26 @@ test('listInstalledOpencodePackages finds only matching native packages with bin
   }
 })
 
+test('listInstalledOpencodePackages finds the Windows native package by its .exe binary', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-after-pack-'))
+  try {
+    const store = join(root, '.pnpm')
+    mkdirSync(store, { recursive: true })
+    const winDir = join(store, 'opencode-windows-x64@1.2.3', 'node_modules', 'opencode-windows-x64')
+    mkdirSync(join(winDir, 'bin'), { recursive: true })
+    writeFileSync(join(winDir, 'package.json'), JSON.stringify({ name: 'opencode-windows-x64', version: '1.2.3' }))
+    writeFileSync(join(winDir, 'bin', 'opencode.exe'), 'binary')
+
+    const packages = listInstalledOpencodePackages('win32', 'x64', {
+      expectedVersion: '1.2.3',
+      virtualStoreDir: store,
+    })
+    assert.deepEqual(packages, [{ name: 'opencode-windows-x64', version: '1.2.3', sourceDir: winDir }])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('desktop-after-pack copies native OpenCode packages into app.asar.unpacked', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-after-pack-'))
   try {
@@ -96,6 +116,21 @@ test('desktop-after-pack writes signed macOS update capability metadata only whe
         OPEN_COWORK_UPDATE_FEED_CONFIGURED: 'true',
       },
     ), null)
+    // Windows (NSIS) is a first-class signed in-app-install target, so the
+    // capability marker is written there too.
+    assert.deepEqual(buildUpdateInstallCapabilityResource(
+      { electronPlatformName: 'win32' },
+      {
+        OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: 'true',
+        OPEN_COWORK_UPDATE_FEED_CONFIGURED: 'true',
+      },
+    ), {
+      schemaVersion: 2,
+      signedInstallEligible: true,
+      feedConfigured: true,
+      releaseSourceKind: 'github-releases',
+      channel: 'latest',
+    })
     assert.equal(writeUpdateInstallCapabilityResource({ electronPlatformName: 'darwin' }, resourcesDir, {}), false)
 
     assert.equal(writeUpdateInstallCapabilityResource(

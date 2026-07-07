@@ -125,7 +125,7 @@ test('update install capability disables install while running from source', asy
   })
 })
 
-test('update install capability is macOS-only for the first signed installer phase', async () => {
+test('update install capability keeps Linux on the verified manual-download path', async () => {
   assert.deepEqual(await getUpdateInstallCapability({
     isPackaged: true,
     platform: 'linux',
@@ -136,6 +136,39 @@ test('update install capability is macOS-only for the first signed installer pha
   }), {
     supported: false,
     reason: 'platform',
+    currentVersion: '1.2.3',
+    manualReleaseUrl: null,
+    releaseSource: githubReleaseSource,
+  })
+})
+
+test('update install capability supports signed packaged Windows builds with feed metadata', async () => {
+  assert.deepEqual(await getUpdateInstallCapability({
+    isPackaged: true,
+    platform: 'win32',
+    signedInstallEligible: true,
+    feedConfigured: true,
+    currentVersion: '1.2.3',
+    manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+  }), {
+    supported: true,
+    currentVersion: '1.2.3',
+    manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+    releaseSource: githubReleaseSource,
+  })
+})
+
+test('update install capability rejects unsigned packaged Windows builds', async () => {
+  assert.deepEqual(await getUpdateInstallCapability({
+    isPackaged: true,
+    platform: 'win32',
+    signedInstallEligible: false,
+    feedConfigured: true,
+    currentVersion: '1.2.3',
+    manualReleaseUrl: null,
+  }), {
+    supported: false,
+    reason: 'unsigned',
     currentVersion: '1.2.3',
     manualReleaseUrl: null,
     releaseSource: githubReleaseSource,

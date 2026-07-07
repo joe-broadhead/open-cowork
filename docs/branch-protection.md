@@ -15,6 +15,7 @@ checks:
 | `cloud-gates` | CI | OpenCode portability proof, Postgres cloud concurrency, Docker/Compose smoke, Helm validation, deployment validators, launch validators, and operations validators. |
 | `macos-build` | CI | macOS packaging and packaged-app smoke validation. |
 | `linux-package` | CI | Linux packaging and packaged-app smoke validation. |
+| `windows-package` | CI | Windows NSIS packaging and packaged-app smoke validation. |
 | `docs` | CI | Strict MkDocs build for every PR. |
 | `coverage` | CI | Coverage ratchet and PR coverage summary. |
 | `analyze (javascript-typescript)` | CodeQL | JavaScript/TypeScript security and quality analysis. |

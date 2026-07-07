@@ -15,6 +15,9 @@ const branding = {
   // icon without editing electron-builder.yml; defaults to the bundled Open Cowork assets.
   APP_ICON_MAC: process.env.APP_ICON_MAC || 'resources/icon.icns',
   APP_ICON_LINUX: process.env.APP_ICON_LINUX || 'resources/icon.png',
+  // Windows NSIS icon. electron-builder accepts a >=256x256 PNG here and
+  // converts it to an .ico at build time; the bundled icon.png is 256x256.
+  APP_ICON_WIN: process.env.APP_ICON_WIN || 'resources/icon.png',
 }
 
 function cleanReleaseOutput() {

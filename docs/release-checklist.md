@@ -118,12 +118,14 @@ and linked from the release Go/No-Go report.
       same product mode in release notes, docs, or deployment assets
 - [ ] any `opencode-gateway` or `opencode-agent-gateway` compatibility alias
       points at the matching Open Cowork artifact and is marked as legacy
-- [ ] macOS and Linux packaging scripts still match Electron Builder config
+- [ ] macOS, Windows, and Linux packaging scripts (`dist:ci:mac`, `dist:ci:win`, `dist:ci:linux`) still match Electron Builder config
 - [ ] release workflow is still tag-driven only
 - [ ] release tag will be an annotated signed tag and GitHub shows it as verified
 - [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.x` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
 - [ ] if `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` was enabled for an unsigned preview tag, the repository variable is scheduled to be unset immediately after the GitHub Release publishes
-- [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
+- [ ] the release repo or fork has the macOS signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
+- [ ] the release repo or fork has the Windows signing inputs expected by the `build-windows` job: either the native certificate (`WIN_CERTIFICATE_PFX_BASE64` + `WIN_CERTIFICATE_PASSWORD`) or the SignPath trio (`SIGNPATH_API_TOKEN` secret + `SIGNPATH_ORGANIZATION_ID`/`SIGNPATH_PROJECT_SLUG` variables); a `v1.0.0`+ tag fails without one of these unless the unsigned preview override is enabled
+- [ ] all three OS build checks (`macos-build`, `windows-package`, `linux-package`) are green on the tag commit; `scripts/verify-release-checks.mjs` blocks publishing otherwise
 - [ ] Linux artifacts are either covered by a detached `SHA256SUMS.txt.asc` signature (`OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`, optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) or explicitly documented as unsigned `v0.x` artifacts verified through `SHA256SUMS.txt` plus GitHub provenance
 - [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES.tar.gz`, SBOMs, and provenance attestation
 - [ ] GHCR Cloud and Gateway images have immutable digest metadata, Cosign
@@ -223,6 +225,9 @@ git push origin vX.Y.Z
    - macOS zip artifacts
    - macOS dmg artifacts
    - `latest-mac.yml` for signed macOS releases only
+   - Windows NSIS `-setup.exe` installer
+   - `latest.yml` for signed Windows releases only
+   - Windows `*.blockmap`
    - Linux AppImage artifacts
    - Linux deb artifacts
    - `SHA256SUMS.txt`
@@ -242,12 +247,14 @@ git push origin vX.Y.Z
    `digestRef` values in `open-cowork-*.image.json`; those final tags
    must be created only after SBOM, scan, signing, and attestation steps
    succeed.
-5. Smoke-test at least one macOS build and one Linux build.
-6. For signed macOS releases, run a staging update check from version
-   `N` to `N+1`: install the previous signed build, open Settings, check
-   for updates, download the new signed update, restart to install, and
-   confirm the app relaunches on the new version. Do not perform this
-   self-update test for unsigned preview artifacts.
+5. Smoke-test at least one macOS build, one Windows build, and one Linux
+   build.
+6. For signed macOS and Windows releases, run a staging update check from
+   version `N` to `N+1`: install the previous signed build, open Settings,
+   check for updates, download the new signed update, restart to install,
+   and confirm the app relaunches on the new version. Do not perform this
+   self-update test for unsigned preview artifacts. Linux uses the verified
+   manual-download path in [Verifying Releases](verifying-releases.md).
 
 ## After release
 

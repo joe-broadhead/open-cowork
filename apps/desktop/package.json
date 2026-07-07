@@ -32,6 +32,7 @@
     "dist:ci": "node ../../scripts/desktop-dist.mjs --mac zip --x64 --arm64 --publish never",
     "dist:ci:mac": "node ../../scripts/desktop-dist.mjs --mac zip dmg --x64 --arm64 --publish never",
     "dist:ci:linux": "node ../../scripts/desktop-dist.mjs --linux AppImage deb --x64 --publish never",
+    "dist:ci:win": "node ../../scripts/desktop-dist.mjs --win nsis --x64 --publish never",
     "security": "pnpm audit --prod --audit-level high"
   },
   "dependencies": {

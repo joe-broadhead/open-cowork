@@ -403,11 +403,134 @@ jobs:
             apps/desktop/release/*.deb
             apps/desktop/release/*.blockmap
 
+  build-windows:
+    needs: release-preflight
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    outputs:
+      signing-mode: ${{ steps.signing.outputs.mode }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set reproducible build timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
+
+      - name: Resolve Windows signing mode
+        id: signing
+        run: node .github/scripts/release-windows-signing-mode.mjs >> "$GITHUB_OUTPUT"
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CERTIFICATE_PFX_BASE64 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          OPEN_COWORK_ALLOW_UNSIGNED_RELEASES: ${{ vars.OPEN_COWORK_ALLOW_UNSIGNED_RELEASES }}
+
+      # Native-certificate signing: electron-builder Authenticode-signs the
+      # installer and app during packaging when WIN_CSC_LINK /
+      # WIN_CSC_KEY_PASSWORD are present, so latest.yml stays consistent.
+      - name: Build signed Windows release artifacts
+        if: steps.signing.outputs.mode == 'signed'
+        run: pnpm --dir apps/desktop dist:ci:win
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CERTIFICATE_PFX_BASE64 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+          # Brand vars are referenced by electron-builder.yml. As with the
+          # macOS job, electron-builder runs as a separate process and does
+          # not inherit the pnpm script's inline env, so set them here.
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
+          OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: true
+          OPEN_COWORK_UPDATE_FEED_CONFIGURED: true
+
+      # SignPath Foundation (free-for-OSS) alternative: WIN_CSC is absent,
+      # so the build above produced an unsigned installer. Insert the
+      # SignPath submit-signing-request action immediately before this step
+      # to sign apps/desktop/release/*-setup.exe, then regenerate latest.yml
+      # so electron-updater's sha512 matches the signed binary. Documented
+      # in docs/packaging-and-releases.md.
+      - name: Reconcile update metadata after post-build signing
+        if: steps.signing.outputs.mode == 'signed' && steps.signing.outputs.mechanism == 'signpath'
+        run: node scripts/regenerate-windows-update-metadata.mjs --dir apps/desktop/release
+
+      - name: Build Windows release artifacts (unsigned preview override)
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: pnpm --dir apps/desktop dist:ci:win
+        env:
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
+
+      - name: Resolve packaged desktop executable
+        id: packaged-executable
+        run: echo "path=$(node scripts/find-windows-packaged-executable.mjs)" >> "$GITHUB_OUTPUT"
+
+      - name: Run packaged desktop smoke test
+        run: pnpm --dir apps/desktop test:e2e:packaged
+        env:
+          OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
+          OPEN_COWORK_EXPECT_SIGNED_UPDATE_INSTALL: ${{ steps.signing.outputs.mode == 'signed' }}
+
+      - name: Verify Windows Authenticode signature
+        if: steps.signing.outputs.mode == 'signed'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/release/*-setup.exe | Select-Object -First 1
+          if (-not $installer) { throw "No Windows installer found in apps/desktop/release" }
+          $sig = Get-AuthenticodeSignature $installer.FullName
+          if ($sig.Status -ne 'Valid') { throw "Authenticode signature is not valid: $($sig.Status)" }
+          Write-Host "Authenticode signature valid for $($installer.Name)"
+
+      - name: Upload signed Windows artifacts
+        if: steps.signing.outputs.mode == 'signed'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/desktop/release/*-setup.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest.yml
+
+      - name: Upload unsigned Windows artifacts
+        if: steps.signing.outputs.mode == 'unsigned'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/desktop/release/*-setup.exe
+            apps/desktop/release/*.blockmap
+
   release-policy:
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
       - build-macos
       - build-linux
+      - build-windows
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -431,6 +554,22 @@ jobs:
           echo "::error::Unsigned macOS artifacts are not allowed for ${GITHUB_REF_NAME}. Configure signing/notarization secrets before tagging v1.0.0 or later."
           exit 1
 
+      - name: Enforce Windows signing policy
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          signing_mode="${{ needs.build-windows.outputs.signing-mode }}"
+          if [ "$signing_mode" = "signed" ]; then
+            echo "Signed Windows artifacts are available."
+            exit 0
+          fi
+          if [ "$major" = "0" ]; then
+            echo "::warning::Publishing unsigned Windows artifacts for ${GITHUB_REF_NAME}. This is permitted only for v0.x public-preview releases."
+            exit 0
+          fi
+          echo "::error::Unsigned Windows artifacts are not allowed for ${GITHUB_REF_NAME}. Configure Authenticode signing (WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD) or SignPath before tagging v1.0.0 or later."
+          exit 1
+
       - name: Download release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -439,10 +578,12 @@ jobs:
       - name: Verify release artifacts
         run: |
           signing_mode="${{ needs.build-macos.outputs.signing-mode }}"
+          windows_signing_mode="${{ needs.build-windows.outputs.signing-mode }}"
           node scripts/verify-release-artifact-matrix.mjs \
             --root dist-artifacts \
             --version "${GITHUB_REF_NAME#v}" \
-            --signing-mode "$signing_mode"
+            --signing-mode "$signing_mode" \
+            --windows-signing-mode "$windows_signing_mode"
 
       - name: Enforce Linux signing policy
         env:
@@ -684,6 +825,7 @@ jobs:
     needs:
       - build-macos
       - build-linux
+      - build-windows
       - release-policy
       - publish-oci-images
     runs-on: ubuntu-latest
@@ -710,6 +852,22 @@ jobs:
             exit 0
           fi
           echo "::error::Refusing to publish unsigned macOS artifacts for ${GITHUB_REF_NAME}."
+          exit 1
+
+      - name: Re-assert Windows signing policy before publishing
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          signing_mode="${{ needs.build-windows.outputs.signing-mode }}"
+          if [ "$signing_mode" = "signed" ]; then
+            echo "Publishing signed Windows release artifacts."
+            exit 0
+          fi
+          if [ "$major" = "0" ]; then
+            echo "::warning::Publishing unsigned Windows preview artifacts for ${GITHUB_REF_NAME}."
+            exit 0
+          fi
+          echo "::error::Refusing to publish unsigned Windows artifacts for ${GITHUB_REF_NAME}."
           exit 1
 
       - name: Download release artifacts
@@ -830,6 +988,7 @@ jobs:
             dist-artifacts/**/*.zip
             dist-artifacts/**/*.AppImage
             dist-artifacts/**/*.deb
+            dist-artifacts/**/*.exe
             dist-artifacts/**/*.blockmap
             dist-artifacts/SHA256SUMS.txt
             dist-artifacts/THIRD_PARTY_NOTICES.md
@@ -849,6 +1008,12 @@ jobs:
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: dist-artifacts/release-macos/latest-mac.yml
+
+      - name: Attest signed Windows update feed metadata
+        if: needs.build-windows.outputs.signing-mode == 'signed'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: dist-artifacts/release-windows/latest.yml
 
       - name: Log in to GHCR for final OCI tag promotion
         env:
@@ -887,6 +1052,7 @@ jobs:
           files: |
             dist-artifacts/release-macos/*
             dist-artifacts/release-linux/*
+            dist-artifacts/release-windows/*
             dist-artifacts/SHA256SUMS.txt
             dist-artifacts/SHA256SUMS.txt.asc
             dist-artifacts/THIRD_PARTY_NOTICES.md
