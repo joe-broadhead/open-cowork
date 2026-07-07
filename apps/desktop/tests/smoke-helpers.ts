@@ -530,18 +530,24 @@ export async function launchPackagedMacProbe(
   }
 }
 
-export async function launchPackagedLinuxProbe(
+// Shared spawn-based packaged probe used on Linux and Windows. It launches the
+// packaged binary with the E2E probe action + ready file and resolves as soon as
+// the preload surface is captured — it deliberately does NOT wait for the managed
+// runtime to become ready, so it works against unsigned CI smoke builds that ship
+// without the trusted runtime component manifest.
+async function launchPackagedSpawnProbe(
   paths: SmokePaths,
   executablePath: string,
-  options?: { action?: 'surface' | 'create-session' | 'list-sessions'; timeoutMs?: number },
+  options: {
+    label: string
+    sandbox: boolean
+    action?: 'surface' | 'create-session' | 'list-sessions'
+    timeoutMs?: number
+  },
 ): Promise<PackagedMacProbe> {
-  if (process.platform !== 'linux') {
-    throw new Error('launchPackagedLinuxProbe is only supported on Linux')
-  }
-
   const port = await getAvailablePort()
-  const action = options?.action || 'surface'
-  const readyFile = join(paths.tempRoot, `packaged-linux-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
+  const action = options.action || 'surface'
+  const readyFile = join(paths.tempRoot, `packaged-${options.label}-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
   const probeEnvironment = getLaunchServicesEnvironment(paths, {
     OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION: '1',
     OPEN_COWORK_E2E_PROBE_ACTION: action,
@@ -549,8 +555,8 @@ export async function launchPackagedLinuxProbe(
     OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
   })
   const childArgs = [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
+    // Chromium sandbox flags are a Linux-CI concern only.
+    ...(options.sandbox ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
     ...buildE2EArgEnvironment(probeEnvironment),
   ]
   const child = spawn(executablePath, childArgs, {
@@ -565,7 +571,7 @@ export async function launchPackagedLinuxProbe(
   const earlyExit = new Promise<never>((_resolve, reject) => {
     const onError = (error: Error) => reject(error)
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      reject(new Error(`Packaged Linux probe app exited before writing ready file: ${signal || code}`))
+      reject(new Error(`Packaged ${options.label} probe app exited before writing ready file: ${signal || code}`))
     }
     child.once('error', onError)
     child.once('exit', onExit)
@@ -577,7 +583,7 @@ export async function launchPackagedLinuxProbe(
 
   try {
     return await Promise.race([
-      waitForPackagedProbeFile(readyFile, options?.timeoutMs ?? 90_000),
+      waitForPackagedProbeFile(readyFile, options.timeoutMs ?? 90_000),
       earlyExit,
     ])
   } finally {
@@ -585,6 +591,28 @@ export async function launchPackagedLinuxProbe(
     await stopSpawnedSmokeProcess(child)
     await delay(1_000)
   }
+}
+
+export async function launchPackagedLinuxProbe(
+  paths: SmokePaths,
+  executablePath: string,
+  options?: { action?: 'surface' | 'create-session' | 'list-sessions'; timeoutMs?: number },
+): Promise<PackagedMacProbe> {
+  if (process.platform !== 'linux') {
+    throw new Error('launchPackagedLinuxProbe is only supported on Linux')
+  }
+  return launchPackagedSpawnProbe(paths, executablePath, { ...options, label: 'linux', sandbox: true })
+}
+
+export async function launchPackagedWindowsProbe(
+  paths: SmokePaths,
+  executablePath: string,
+  options?: { action?: 'surface' | 'create-session' | 'list-sessions'; timeoutMs?: number },
+): Promise<PackagedMacProbe> {
+  if (process.platform !== 'win32') {
+    throw new Error('launchPackagedWindowsProbe is only supported on Windows')
+  }
+  return launchPackagedSpawnProbe(paths, executablePath, { ...options, label: 'windows', sandbox: false })
 }
 
 async function closeCdpSmokeApp(browser: Browser, port: number) {
