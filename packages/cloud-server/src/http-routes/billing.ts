@@ -8,6 +8,13 @@ export async function handleBillingApiRoute(input: CloudApiRouteInput): Promise<
     return true
   }
 
+  // Read-only entitlement/plan status (#897). Never gated — the admin plane reads
+  // `billingEnabled`/`gatingEnabled` to decide whether to surface a Billing section.
+  if (itemId === 'entitlements' && !action && req.method === 'GET') {
+    tools.writeJson(res, 200, await options.service.describeEntitlements(context.principal), options.corsOrigin)
+    return true
+  }
+
   if (itemId === 'checkout' && !action && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     const checkout = await options.service.createBillingCheckout(context.principal, {

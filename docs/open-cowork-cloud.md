@@ -765,6 +765,39 @@ Managed billing variables:
 | `OPEN_COWORK_CLOUD_STRIPE_PRICE_ID` | Default Stripe price id for the default plan. |
 | `OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL` / `OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL` / `OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL` | Public URLs used by Stripe hosted checkout and portal flows. |
 
+### Optional, pluggable monetization (entitlements engine)
+
+Billing is optional and **must never gate administration or reads**. An
+`EntitlementResolver` is the single typed seam the app consults for feature
+access and quotas (`canUse(feature)`, `checkQuota(resource, amount)`,
+`describeEntitlements(org)`). Feature/quota code asks the resolver — it never
+calls a payment provider directly. The payment-provider sync boundary
+(checkout/portal/webhook) stays behind the separate billing adapter.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_ENTITLEMENTS_ENABLED` | Global kill switch for entitlement gating. Default `false`. When `false`, **no** gating is applied regardless of provider — reads, writes, and admin all pass. Existing orgs are grandfathered because gating is off until an operator opts in; flip back to `false` to instantly disable all gating during a rollout. |
+| `OPEN_COWORK_CLOUD_ENTITLEMENTS_PROVIDER` | Which resolver backs feature/quota decisions: `none` (default) → the unlimited resolver (complete, ungated product, no Billing UI signal); `stripe` → the plan/subscription **metadata** resolver, which decides purely from stored plan tiers + `cloud_billing_subscriptions` state (no live provider calls) and returns structured `402` denials on gated **writes**; `custom` → a downstream-registered resolver (see below). |
+
+Gating discipline (enforced and tested): entitlement checks may gate
+**writes/creation only** (session/prompt/worker/workflow/artifact/BYOK/channel
+create paths, via `assertEntitled`) — never reads, exports, deletes, or any
+admin/org/RBAC/policy/audit action. With a lapsed or free plan, reads/exports
+and every admin action still succeed while a gated create is denied; with
+`provider: none` (or the kill switch off) nothing is ever denied.
+
+The read-only `GET /api/billing/entitlements` endpoint returns the current plan
+status (`provider`, `gatingEnabled`, `billingEnabled`, `planKey`, `features`,
+`limits`). The admin plane reads `billingEnabled` to decide whether to surface a
+Billing section; it is never gated and carries no secrets.
+
+Custom adapter seam: a downstream fork wires its own resolver with a small
+module — implement `EntitlementResolver` (exported from `@open-cowork/cloud-server`),
+call `registerEntitlementResolverProvider('custom', factory)` at startup, then set
+`OPEN_COWORK_CLOUD_ENTITLEMENTS_PROVIDER=custom`. No entitlement plan/subscription
+migration is required: state persists in the existing `cloud_billing_subscriptions`
+store, and the kill switch defaults off so no existing org breaks.
+
 BYOK provider keys are never supplied through environment variables. Users add
 them through `/api/byok`; records remain `pending_validation` until a provider
 validator passes, or an org admin uses the audited override endpoint with a

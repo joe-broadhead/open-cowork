@@ -16,11 +16,12 @@ import {
   resolveCloudAbuseConfig,
   resolveCloudAuthConfig,
   resolveCloudBillingConfig,
+  resolveCloudEntitlementsConfig,
   resolveCloudRuntimePolicy,
   type CloudDeploymentTier,
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
-export { parseCloudDeploymentTier, resolveCloudAbuseConfig, resolveCloudAuthConfig, resolveCloudBillingConfig, type CloudDeploymentTier } from './cloud-config.ts'
+export { parseCloudDeploymentTier, resolveCloudAbuseConfig, resolveCloudAuthConfig, resolveCloudBillingConfig, resolveCloudEntitlementsConfig, type CloudDeploymentTier } from './cloud-config.ts'
 import type { ControlPlaneStore } from './control-plane-store.ts'
 import { InMemoryControlPlaneStore } from './in-memory-control-plane-store.ts'
 import {
@@ -70,6 +71,7 @@ import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, 
 import { CloudScheduler, type CloudRetentionOptions } from './scheduler.ts'
 import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
+import { resolveEntitlementResolver } from './entitlements/entitlement-provider.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
 import {
@@ -1277,6 +1279,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const authConfig = await resolveCloudAuthRuntimeSecrets(resolveCloudAuthConfig(config, env), env)
   const abuseConfig = resolveCloudAbuseConfig(config, env)
   const billingConfig = resolveCloudBillingConfig(config, env)
+  const entitlementsConfig = resolveCloudEntitlementsConfig(config, env)
   const listenHostname = options.hostname || envOptions.hostname
   assertCloudAuthDeploymentSafe({
     role: policy.role,
@@ -1465,6 +1468,14 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const cookieSecret = shouldRunCloudWeb(policy.role)
     ? await resolveCloudCookieSecretForRuntime(resolvedAuthConfig, env)
     : null
+  // Optional, pluggable monetization (#897). The resolver decides feature/quota
+  // access purely from stored plan/subscription state — the payment provider is
+  // never called from here. Kill switch OFF (default) ⇒ the unlimited resolver.
+  const entitlementResolver = resolveEntitlementResolver({
+    config: entitlementsConfig,
+    billingConfig,
+    loadSubscription: (orgId) => Promise.resolve(store.getBillingSubscription(orgId)),
+  })
   const service = new CloudSessionService(
     store,
     runtime,
@@ -1491,6 +1502,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     projectSources,
     cookieSecret,
     options.emailSender ?? null,
+    entitlementResolver,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const sessionCookies = shouldRunCloudWeb(policy.role)

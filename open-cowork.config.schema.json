@@ -305,7 +305,16 @@
         "projectSources": { "$ref": "#/$defs/cloudProjectSources" },
         "features": { "$ref": "#/$defs/cloudFeatures" },
         "abuse": { "$ref": "#/$defs/cloudAbuse" },
-        "billing": { "$ref": "#/$defs/cloudBilling" }
+        "billing": { "$ref": "#/$defs/cloudBilling" },
+        "entitlements": { "$ref": "#/$defs/cloudEntitlements" }
+      }
+    },
+    "cloudEntitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "provider": { "type": "string", "enum": ["none", "stripe", "custom"] }
       }
     },
     "cloudRole": {

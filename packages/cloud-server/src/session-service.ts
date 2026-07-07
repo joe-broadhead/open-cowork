@@ -139,6 +139,8 @@ import {
   type UpdateManagedWorkerPoolRequest,
 } from './services/managed-worker-service.ts'
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
+import { CloudEntitlementService } from './services/entitlement-service.ts'
+import { UnlimitedEntitlementResolver, type EntitlementResolver } from './entitlements/entitlement-resolver.ts'
 import { CloudChannelDomainService } from './services/channel-domain-service.ts'
 import { CloudThreadOrganizationService } from './session-thread-organization.ts'
 import { CloudBillingOperationsService } from './session-billing-operations.ts'
@@ -220,6 +222,7 @@ export class CloudSessionService {
   private readonly overviewService: CloudOverviewService
   private readonly managedWorkerService: CloudManagedWorkerService
   private readonly usageGovernance: CloudUsageGovernanceService
+  private readonly entitlements: CloudEntitlementService
   private readonly channelDomain: CloudChannelDomainService
   private readonly memberService: CloudMemberService
   private readonly roleService: CloudRoleService
@@ -255,6 +258,9 @@ export class CloudSessionService {
     projectSources: CloudProjectSourceStore | null = null,
     inviteSigningSecret: string | Buffer | null = null,
     emailSender: CloudEmailSender | null = null,
+    // Optional, pluggable monetization (#897). Defaults to the unlimited resolver
+    // so billing never gates a deployment that has not opted in.
+    entitlementResolver: EntitlementResolver = new UnlimitedEntitlementResolver(),
   ) {
     this.store = store
     this.runtime = runtime
@@ -299,6 +305,7 @@ export class CloudSessionService {
     })
     this.managedWorkerService = new CloudManagedWorkerService(store, (principal) => this.ensurePrincipal(principal))
     this.usageGovernance = new CloudUsageGovernanceService({ store, abuse, billingConfig })
+    this.entitlements = new CloudEntitlementService({ resolver: entitlementResolver })
     this.channelDomain = new CloudChannelDomainService({
       store,
       policy,
@@ -1552,22 +1559,41 @@ export class CloudSessionService {
     profileName?: string | null
     providerId?: string | null
   }) {
-    if (!this.billingConfig || !isBillingConfigured(this.billingConfig)) return
-    const subscription = await this.store.getBillingSubscription(input.orgId)
-    const verdict = evaluateBillingEntitlement({
-      config: this.billingConfig,
-      subscription,
-      action: input.action,
+    // Legacy billing-config gate (unchanged): active only when billing is
+    // explicitly configured. This is a WRITE-only helper — every caller is a
+    // create/write path, so reads/exports/deletes/admin never reach here.
+    if (this.billingConfig && isBillingConfigured(this.billingConfig)) {
+      const subscription = await this.store.getBillingSubscription(input.orgId)
+      const verdict = evaluateBillingEntitlement({
+        config: this.billingConfig,
+        subscription,
+        action: input.action,
+        profileName: input.profileName,
+        providerId: input.providerId,
+      })
+      if (!verdict.allowed) {
+        throw new CloudServiceError(
+          verdict.status || 402,
+          verdict.reason || 'Billing entitlement does not allow this action.',
+          { policyCode: verdict.policyCode || 'billing.entitlement_denied' },
+        )
+      }
+    }
+    // Pluggable entitlements gate (#897). A no-op when the kill switch is off /
+    // the provider is `none` (the default resolver never denies).
+    await this.entitlements.assertAction(input.action, {
+      orgId: input.orgId,
       profileName: input.profileName,
       providerId: input.providerId,
     })
-    if (!verdict.allowed) {
-      throw new CloudServiceError(
-        verdict.status || 402,
-        verdict.reason || 'Billing entitlement does not allow this action.',
-        { policyCode: verdict.policyCode || 'billing.entitlement_denied' },
-      )
-    }
+  }
+
+  // Read-only entitlement/plan status for the admin plane and the future Billing
+  // UI (#896). Never gates; `gatingEnabled`/`billingEnabled` let the admin plane
+  // decide whether to surface a Billing section.
+  async describeEntitlements(principal: CloudPrincipal) {
+    await this.ensurePrincipal(principal)
+    return this.entitlements.describe({ orgId: this.principalOrgId(principal), profileName: this.policy.profileName })
   }
 
   async assertWorkerLeaseAllowed(tenantId: string) {

@@ -370,6 +370,24 @@ export type CloudBillingConfig = {
   }
 }
 
+// Optional, pluggable monetization (#897). Entitlements are decoupled from the
+// payment-provider sync boundary (billing adapter): `provider` selects which
+// EntitlementResolver backs feature/quota decisions, and `enabled` is a global
+// kill switch. Both default to the OFF/unlimited path so billing NEVER gates a
+// deployment that has not opted in.
+export type CloudEntitlementsProvider = 'none' | 'stripe' | 'custom'
+
+export type CloudEntitlementsConfig = {
+  // Kill switch. When false (default) NO entitlement gating is applied regardless
+  // of provider — reads, writes, and admin actions all pass. Flip on for a staged
+  // rollout; flip off to instantly disable all gating.
+  enabled: boolean
+  // Which resolver decides feature access + quotas. 'none' → unlimited (default),
+  // 'stripe' → plan/subscription metadata resolver, 'custom' → a downstream fork's
+  // registered resolver. A payment provider is NEVER called from this decision path.
+  provider: CloudEntitlementsProvider
+}
+
 export type CloudDesktopConnectionConfig = {
   baseUrl: string
   label?: string
@@ -396,6 +414,9 @@ export type CloudConfig = {
   features: CloudFeatureConfig
   abuse: CloudAbuseConfig
   billing: CloudBillingConfig
+  // Optional. Omitted ⇒ the unlimited/off default (see DEFAULT_CLOUD_ENTITLEMENTS),
+  // so existing configs and constructors keep working without change.
+  entitlements?: CloudEntitlementsConfig
 }
 
 export const OPEN_COWORK_CONFIG_CONTRACT_VERSION = 1
@@ -589,6 +610,11 @@ const DEFAULT_CLOUD_BILLING: CloudBillingConfig = {
   },
 }
 
+const DEFAULT_CLOUD_ENTITLEMENTS: CloudEntitlementsConfig = {
+  enabled: false,
+  provider: 'none',
+}
+
 const DEFAULT_CLOUD_PUBLIC_BRANDING: PublicBrandingConfig = {
   productName: 'Open Cowork Cloud',
   shortName: 'OC',
@@ -726,6 +752,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     features: DEFAULT_CLOUD_FEATURES,
     abuse: DEFAULT_CLOUD_ABUSE,
     billing: DEFAULT_CLOUD_BILLING,
+    entitlements: DEFAULT_CLOUD_ENTITLEMENTS,
     profiles: {
       full: {
         label: 'Full app',
