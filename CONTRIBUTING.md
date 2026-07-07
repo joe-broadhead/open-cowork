@@ -65,6 +65,11 @@ pnpm dev
   rules are documented in `docs/design-system.md`. Prefer the shared
   renderer primitives before adding local button, input, badge, modal, or
   icon-only control markup.
+- **Frontend architecture** — the renderer layering, the "core imports
+  nothing upward" rule, the import-cycle gate
+  (`scripts/check-import-cycles.mjs`, part of `pnpm lint`), and the renderer
+  file-size budgets are documented in `docs/frontend-architecture.md` and
+  enforced by `tests/renderer-modularity-boundaries.test.ts`.
 - **Tests** run with Node's built-in runner via
   `--experimental-strip-types` for main/shared/runtime coverage.
   Renderer component tests run with Vitest + jsdom via

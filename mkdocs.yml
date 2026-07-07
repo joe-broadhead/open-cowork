@@ -113,6 +113,7 @@ nav:
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
+      - Frontend Architecture: frontend-architecture.md
       - Product Contract: product-contract.md
       - Coordination Model: coordination-model.md
       - Session Projection Contract: session-projection-contract.md

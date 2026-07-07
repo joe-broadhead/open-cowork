@@ -90,6 +90,7 @@ test('root lint script runs all release gate checks', () => {
     'eslint . --max-warnings 0',
     'pnpm design-tokens:check',
     'node scripts/lint.mjs',
+    'node scripts/check-import-cycles.mjs',
     'node scripts/build-docs-mermaid-vendor.mjs --check',
     'node scripts/check-preload-channels.mjs',
     'node scripts/check-shared-dist.mjs',
