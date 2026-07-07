@@ -142,6 +142,10 @@
       "types": "./dist/mcp-stdio-policy.d.ts",
       "import": "./dist/mcp-stdio-policy.js"
     },
+    "./managed-policy": {
+      "types": "./dist/managed-policy.d.ts",
+      "import": "./dist/managed-policy.js"
+    },
     "./mcp-url-policy": {
       "types": "./dist/mcp-url-policy.d.ts",
       "import": "./dist/mcp-url-policy.js"

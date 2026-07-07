@@ -397,6 +397,11 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(config.profileName, 'full')
     assert.equal(config.features.chat, true)
     assert.equal(asRecord(config.publicBranding).productName, 'Open Cowork Cloud')
+    // The org-managed policy (#898) rides the config path; with none set it is the
+    // unrestricted default view carrying an empty disabledByPolicy map.
+    const managedPolicy = asRecord(config.managedPolicy)
+    assert.equal(asRecord(managedPolicy.permissionCeilings).bash, 'allow')
+    assert.deepEqual(managedPolicy.disabledByPolicy, {})
 
     const runtimeStatus = await readJson(await fetch(`${baseUrl}/api/runtime/status`))
     assert.equal(runtimeStatus.role, 'all-in-one')
@@ -458,6 +463,51 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(asRecord(abort.projectionFence).commandId, asRecord(abort.command).commandId)
     assert.equal(asRecord(abort.projectionFence).sequence, asRecord(asRecord(abort.view).projection).sequence)
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP policy routes get/set the org managed policy and deliver it to the effective view', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    // Bootstrap the org via the config path, then read the (empty) admin policy.
+    await readJson(await fetch(`${baseUrl}/api/config`))
+    const initial = await readJson(await fetch(`${baseUrl}/api/policy`))
+    assert.equal(initial.policy, null)
+    assert.deepEqual(asRecord(initial.view).disabledByPolicy, {})
+
+    // Set a tightening policy (PUT), then confirm the record + transparency view.
+    const setResponse = await fetch(`${baseUrl}/api/policy`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        permissionCeilings: { bash: 'deny', web: 'ask' },
+        allowedProviders: ['openai'],
+        extensions: { customMcps: false },
+        keyManagement: 'byok_required',
+      }),
+    })
+    assert.equal(setResponse.status, 200)
+    const set = await readJson(setResponse)
+    assert.equal(asRecord(asRecord(set.policy).permissionCeilings).bash, 'deny')
+    assert.equal(asRecord(asRecord(set.view).disabledByPolicy).bash?.disabledByPolicy, true)
+
+    // The effective view (config path + explicit effective route) reflects the policy.
+    const effective = await readJson(await fetch(`${baseUrl}/api/policy/effective`))
+    assert.equal(asRecord(asRecord(effective.policy).permissionCeilings).bash, 'deny')
+    const config = await readJson(await fetch(`${baseUrl}/api/config`))
+    assert.equal(asRecord(asRecord(config.managedPolicy).permissionCeilings).bash, 'deny')
+    assert.deepEqual(asRecord(config.managedPolicy).allowedProviders, ['openai'])
+
+    // A malformed update is rejected with 400.
+    const badResponse = await fetch(`${baseUrl}/api/policy`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ allowedProviders: 'not-an-array' }),
+    })
+    assert.equal(badResponse.status, 400)
   } finally {
     await fixture.server.close()
   }

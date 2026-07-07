@@ -106,6 +106,10 @@ import {
   type CreateCustomRoleRequest,
   type UpdateCustomRoleRequest,
 } from './services/role-service.ts'
+import {
+  CloudPolicyService,
+  type SetManagedPolicyRequest,
+} from './services/policy-service.ts'
 import { CloudSessionImportService } from './services/session-import-service.ts'
 import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
 import { CloudSessionExecutionService } from './session-execution-operations.ts'
@@ -226,6 +230,7 @@ export class CloudSessionService {
   private readonly channelDomain: CloudChannelDomainService
   private readonly memberService: CloudMemberService
   private readonly roleService: CloudRoleService
+  private readonly policyService: CloudPolicyService
   private readonly coordinationService: CloudCoordinationService
   private readonly capabilityService: CloudCapabilityService
   private readonly settingMetadataService: CloudSettingMetadataService
@@ -333,6 +338,13 @@ export class CloudSessionService {
       principalOrgId: (principal) => this.principalOrgId(principal),
     })
     this.roleService = new CloudRoleService({
+      store,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
+      principalOrgId: (principal) => this.principalOrgId(principal),
+      auditActor: (principal) => this.auditActor(principal),
+    })
+    this.policyService = new CloudPolicyService({
       store,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
@@ -551,6 +563,18 @@ export class CloudSessionService {
 
   resolveMemberPermissions(principal: CloudPrincipal, accountId: string) {
     return this.roleService.resolveMemberPermissions(principal, accountId)
+  }
+
+  getManagedPolicy(principal: CloudPrincipal) {
+    return this.policyService.getManagedPolicy(principal)
+  }
+
+  setManagedPolicy(principal: CloudPrincipal, input: SetManagedPolicyRequest) {
+    return this.policyService.setManagedPolicy(principal, input)
+  }
+
+  getEffectiveManagedPolicy(principal: CloudPrincipal) {
+    return this.policyService.getEffectiveManagedPolicy(principal)
   }
 
   async listAuditEvents(

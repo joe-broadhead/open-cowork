@@ -10,6 +10,9 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
   const { req, res, options, context, resource, itemId, action, tools } = input
 
   if (resource === 'config' && req.method === 'GET') {
+    // The org-managed policy (#898) travels on the existing cloud policy path so the
+    // desktop enforces it via workspace-gateway → cloudPolicy. Any member gets the
+    // effective view (unrestricted defaults when no policy / no org).
     tools.writeJson(res, 200, {
       role: options.policy.role,
       profileName: options.policy.profileName,
@@ -17,6 +20,7 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
       allowedAgents: options.policy.allowedAgents,
       allowedTools: options.policy.allowedTools,
       allowedMcps: options.policy.allowedMcps,
+      managedPolicy: await options.service.getEffectiveManagedPolicy(context.principal),
       publicBranding: options.publicBranding || null,
     }, options.corsOrigin)
     return true

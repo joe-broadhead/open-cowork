@@ -29,7 +29,9 @@ import type {
   WorkflowListPayload,
   WorkflowRun,
   WorkspacePolicy,
+  ManagedDesktopPolicyView,
 } from '@open-cowork/shared'
+import { setActiveManagedPolicy } from '@open-cowork/runtime-host/managed-policy'
 import type { SessionRecord } from '@open-cowork/cloud-server/control-plane-store'
 import { cloudSessionViewToSessionView } from '@open-cowork/cloud-server/session-view-contract'
 import {
@@ -158,6 +160,22 @@ function policyFromConfig(config: CloudTransportConfig): WorkspacePolicy {
   }
 }
 
+// Map the delivered policy view onto the enforcement shape (dropping the transparency
+// map) and hand it to the runtime-host singleton, which persists it for offline-safety.
+export function applyManagedPolicyFromConfig(view: ManagedDesktopPolicyView): void {
+  setActiveManagedPolicy({
+    allowedProviders: view.allowedProviders,
+    deniedProviders: view.deniedProviders,
+    allowedModels: view.allowedModels,
+    deniedModels: view.deniedModels,
+    keyManagement: view.keyManagement,
+    extensions: view.extensions,
+    features: view.features,
+    permissionCeilings: view.permissionCeilings,
+    updateChannel: view.updateChannel,
+  })
+}
+
 export function cloudWorkspaceCacheKey(connection: CloudWorkspaceConnectionRecord) {
   return [
     `connection:${connection.id}`,
@@ -225,7 +243,14 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   }
 
   async policy(): Promise<WorkspacePolicy> {
-    return policyFromConfig(await this.transport.getConfig())
+    const config = await this.transport.getConfig()
+    // Push the org-managed policy (#898) into the runtime-host enforcement singleton so
+    // the local runtime clamps its permission maxima and scopes providers/models to it.
+    // A server that predates the policy omits the field — leave the last-known (offline-
+    // safe) policy in place rather than clearing enforcement. When offline this call
+    // never runs (getConfig throws), so the persisted policy keeps enforcing.
+    if (config.managedPolicy) applyManagedPolicyFromConfig(config.managedPolicy)
+    return policyFromConfig(config)
   }
 
   async listSessions(): Promise<SessionInfo[]> {

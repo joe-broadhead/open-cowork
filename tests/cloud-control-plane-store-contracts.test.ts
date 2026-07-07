@@ -531,6 +531,44 @@ function runControlPlaneDomainContracts(
       assert.equal(await store.deleteCustomRole(org.orgId, 'analyst'), true)
       assert.equal(await store.getCustomRole(org.orgId, 'analyst'), null)
 
+      // Managed workspace & desktop policy (#898) — one org-scoped record; a set MERGES a
+      // partial onto the current record (or the unrestricted defaults). Unset ⇒ null.
+      assert.equal(await store.getManagedPolicy(org.orgId), null)
+      const firstPolicy = await store.setManagedPolicy({
+        orgId: org.orgId,
+        permissionCeilings: { bash: 'deny', web: 'ask' },
+        allowedProviders: ['openai', 'openai', 'anthropic'],
+        deniedModels: ['gpt-legacy'],
+        keyManagement: 'byok_required',
+        extensions: { customMcps: false },
+        features: { channels: false },
+        updateChannel: 'stable',
+      })
+      assert.equal(firstPolicy.permissionCeilings.bash, 'deny')
+      assert.equal(firstPolicy.permissionCeilings.web, 'ask')
+      // Dimensions not set stay unrestricted; provider allow-list is deduped + sorted.
+      assert.equal(firstPolicy.permissionCeilings.task, 'allow')
+      assert.deepEqual(firstPolicy.allowedProviders, ['anthropic', 'openai'])
+      assert.deepEqual(firstPolicy.deniedModels, ['gpt-legacy'])
+      assert.equal(firstPolicy.keyManagement, 'byok_required')
+      assert.equal(firstPolicy.extensions.customMcps, false)
+      assert.equal(firstPolicy.extensions.customProviders, true)
+      assert.deepEqual(firstPolicy.features, { channels: false })
+      assert.equal(firstPolicy.updateChannel, 'stable')
+      // A second set merges: a new field changes, omitted fields are preserved, and a
+      // nullable allow-list can be cleared back to unrestricted with null.
+      const mergedPolicy = await store.setManagedPolicy({
+        orgId: org.orgId,
+        permissionCeilings: { task: 'ask' },
+        allowedProviders: null,
+      })
+      assert.equal(mergedPolicy.permissionCeilings.bash, 'deny')
+      assert.equal(mergedPolicy.permissionCeilings.task, 'ask')
+      assert.equal(mergedPolicy.allowedProviders, null)
+      assert.equal(mergedPolicy.keyManagement, 'byok_required')
+      assert.equal(mergedPolicy.createdAt, firstPolicy.createdAt)
+      assert.deepEqual((await store.getManagedPolicy(org.orgId))?.permissionCeilings.bash, 'deny')
+
       // Setting metadata — tenant-scoped vs user-scoped upsert/get/list stay isolated.
       await store.setSettingMetadata({ tenantId, key: 'appearance', value: { theme: 'dark' } })
       assert.deepEqual((await store.getSettingMetadata(tenantId, 'appearance'))?.value, { theme: 'dark' })

@@ -1198,6 +1198,28 @@ const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS = [
   `ALTER TABLE cloud_memberships ADD COLUMN IF NOT EXISTS custom_role_key text`,
 ] as const
 
+// Org-managed workspace & desktop policy (#898): one policy record per org that clamps
+// permission maxima, allow/deny-lists providers/models, gates extension classes, pins
+// the update channel, and sets the key-management requirement. Nullable allow-lists are
+// SQL NULL (unrestricted); deny-lists default to an empty jsonb array.
+export const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_MIGRATION_ID = '027_managed_policies'
+const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_managed_policies (
+    org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    allowed_providers jsonb,
+    denied_providers jsonb NOT NULL DEFAULT '[]'::jsonb,
+    allowed_models jsonb,
+    denied_models jsonb NOT NULL DEFAULT '[]'::jsonb,
+    key_management text NOT NULL DEFAULT 'any',
+    extensions jsonb NOT NULL DEFAULT '{}'::jsonb,
+    features jsonb NOT NULL DEFAULT '{}'::jsonb,
+    permission_ceilings jsonb NOT NULL DEFAULT '{}'::jsonb,
+    update_channel text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1318,5 +1340,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_MANAGED_POLICIES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS,
   },
 ] as const

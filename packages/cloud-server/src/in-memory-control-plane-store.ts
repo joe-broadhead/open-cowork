@@ -41,6 +41,8 @@ import { InMemoryChannelBindingsDomain } from './in-memory-domains/channel-bindi
 import { InMemoryIdentityDomain } from './in-memory-domains/identity.ts'
 import { InMemoryApiTokensDomain } from './in-memory-domains/api-tokens.ts'
 import { InMemoryRolesDomain } from './in-memory-domains/roles.ts'
+import { InMemoryManagedPolicyDomain } from './in-memory-domains/policy.ts'
+import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
 import { resolveEffectivePermissions } from './control-plane-permissions.ts'
 import type {
   CreateCustomRoleInput,
@@ -322,6 +324,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     orgExists: (orgId) => this.orgExists(orgId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
+  private readonly managedPolicyDomain = new InMemoryManagedPolicyDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
   private readonly channelBindingsDomain = new InMemoryChannelBindingsDomain({
     getHeadlessAgent: (orgId, agentId) => this.getHeadlessAgent(orgId, agentId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
@@ -426,6 +432,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   deleteCustomRole(orgId: string, roleKey: string): boolean {
     return this.rolesDomain.deleteCustomRole(orgId, roleKey)
+  }
+
+  getManagedPolicy(orgId: string): ManagedPolicyRecord | null {
+    return this.managedPolicyDomain.getManagedPolicy(orgId)
+  }
+
+  setManagedPolicy(input: SetManagedPolicyInput): ManagedPolicyRecord {
+    return this.managedPolicyDomain.setManagedPolicy(input)
   }
 
   // Effective permissions for a member: its custom role's permission map when one

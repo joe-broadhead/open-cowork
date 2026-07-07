@@ -165,6 +165,8 @@ import { PostgresHeadlessAgentsRepository } from './postgres-store-domains/headl
 import { PostgresChannelIdentitiesRepository } from './postgres-store-domains/channel-identities.ts'
 import { PostgresIdentityRepository } from './postgres-store-domains/identity.ts'
 import { PostgresRolesRepository } from './postgres-store-domains/roles.ts'
+import { PostgresManagedPolicyRepository } from './postgres-store-domains/policy.ts'
+import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
 import { membershipFromRow } from './postgres-domains/identity.ts'
 import { resolveEffectivePermissions } from './control-plane-permissions.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
@@ -214,6 +216,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private ssePgNotifyEnabled = false
   private readonly identity: PostgresIdentityRepository
   private readonly roles: PostgresRolesRepository
+  private readonly managedPolicy: PostgresManagedPolicyRepository
   private readonly apiTokens: PostgresApiTokensRepository
   private readonly rateLimits: PostgresRateLimitsRepository
   private readonly authBackoff: PostgresAuthBackoffRepository
@@ -247,6 +250,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
     })
     this.roles = new PostgresRolesRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.managedPolicy = new PostgresManagedPolicyRepository({
       pool: this.pool,
       withTransaction: (fn) => this.withTransaction(fn),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
@@ -414,6 +422,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async deleteCustomRole(orgId: string, roleKey: string): Promise<boolean> {
     return this.roles.deleteCustomRole(orgId, roleKey)
+  }
+
+  async getManagedPolicy(orgId: string): Promise<ManagedPolicyRecord | null> {
+    return this.managedPolicy.getManagedPolicy(orgId)
+  }
+
+  async setManagedPolicy(input: SetManagedPolicyInput): Promise<ManagedPolicyRecord> {
+    const org = await this.maybeOne(`SELECT 1 FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    return this.managedPolicy.setManagedPolicy(input)
   }
 
   // Effective permissions for a member: its custom role's permission map when one

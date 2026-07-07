@@ -23,6 +23,7 @@ import { SSE_MAX_BUFFERED_BYTES, SSE_REPLAY_BATCH, SSE_TCP_KEEPALIVE_MS } from '
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
+import { handlePolicyApiRoute } from './http-routes/policy.ts'
 import { handleBillingApiRoute } from './http-routes/billing.ts'
 import { handleByokApiRoute } from './http-routes/byok.ts'
 import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
@@ -852,6 +853,21 @@ async function handleApiRequest(
 
   if (resource === 'admin') {
     await handleAdminApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
+  if (resource === 'policy') {
+    await handlePolicyApiRoute({
       req,
       res,
       options,

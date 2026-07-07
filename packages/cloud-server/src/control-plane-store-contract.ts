@@ -49,6 +49,10 @@ import type {
   UpdateCustomRoleInput,
 } from './control-plane-permissions.ts'
 import type {
+  ManagedPolicyRecord,
+  SetManagedPolicyInput,
+} from './control-plane-policy.ts'
+import type {
   BillingSubscriptionRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -197,6 +201,10 @@ export type ControlPlaneStore = {
   getCustomRole(orgId: string, roleKey: string): MaybePromise<CustomRoleRecord | null>
   updateCustomRole(input: UpdateCustomRoleInput): MaybePromise<CustomRoleRecord | null>
   deleteCustomRole(orgId: string, roleKey: string): MaybePromise<boolean>
+  // Org-managed workspace & desktop policy (#898). A single record per org; a set
+  // merges a partial input onto the current record (or the unrestricted defaults).
+  getManagedPolicy(orgId: string): MaybePromise<ManagedPolicyRecord | null>
+  setManagedPolicy(input: SetManagedPolicyInput): MaybePromise<ManagedPolicyRecord>
   resolveMemberPermissions(orgId: string, accountId: string): MaybePromise<MemberPermissionResolution | null>
   issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
   listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>

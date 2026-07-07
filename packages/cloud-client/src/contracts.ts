@@ -33,6 +33,7 @@ import type {
   WorkflowListPayload,
   WorkflowRun,
   WorkflowTriggerType,
+  ManagedDesktopPolicyView,
 } from '@open-cowork/shared'
 
 export type {
@@ -525,6 +526,10 @@ export type CloudTransportConfig = {
   allowedAgents: string[] | null
   allowedTools: string[] | null
   allowedMcps: string[] | null
+  // The org-managed workspace & desktop policy (#898), delivered on the existing
+  // config path. Absent for servers that predate it; the desktop treats absence as
+  // the unrestricted default so nothing changes for individuals with no org.
+  managedPolicy?: ManagedDesktopPolicyView
 }
 
 export type CloudTransportResponse<T> = {

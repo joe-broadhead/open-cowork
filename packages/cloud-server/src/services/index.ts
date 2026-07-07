@@ -36,6 +36,11 @@ export type {
   CreateCustomRoleRequest,
   UpdateCustomRoleRequest,
 } from './role-service.ts'
+export { CloudPolicyService } from './policy-service.ts'
+export type {
+  CloudPolicyServiceOptions,
+  SetManagedPolicyRequest,
+} from './policy-service.ts'
 export {
   DEFAULT_SINGLE_ORG_ID,
   DEFAULT_SINGLE_ORG_NAME,

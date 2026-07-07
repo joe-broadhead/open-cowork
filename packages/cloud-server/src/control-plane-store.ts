@@ -28,6 +28,17 @@ export type * from './channel-provider-types.ts'
 export type * from './control-plane-enums.ts'
 export type * from './control-plane-records.ts'
 export type * from './control-plane-permissions.ts'
+export type {
+  ManagedPolicyRecord,
+  SetManagedPolicyInput,
+} from './control-plane-policy.ts'
+export {
+  DEFAULT_MANAGED_POLICY,
+  applyManagedPolicyInput,
+  effectiveManagedPolicy,
+  managedPolicyDisabledControls,
+  toManagedDesktopPolicyView,
+} from './control-plane-policy.ts'
 export {
   BUILTIN_ROLE_PERMISSIONS,
   CONTROL_PLANE_PERMISSIONS,

@@ -310,6 +310,75 @@ export type WorkspacePolicy = {
   machineRuntimeConfig: 'disabled' | 'allowlisted'
 }
 
+// Org-managed workspace & desktop policy (#898). A single org-scoped record the
+// control plane owns and the desktop enforces. The permission ceilings clamp the
+// runtime-host permission maxima TIGHTER (never looser); the allow/deny lists scope
+// providers/models; the extension classes gate custom providers/MCPs/skills; and the
+// update channel pins auto-update. Shared so the control-plane record, the cloud
+// delivery response, the runtime-host clamping path, and the desktop can agree on one
+// authoritative shape. Individuals with no org receive the unrestricted defaults, so
+// there is no behavioural change for them.
+export type ManagedPolicyPermissionCeiling = 'allow' | 'ask' | 'deny'
+
+// The permission dimensions a policy can clamp, aligned with the runtime-host
+// permission model (bash / file-write / web / web-search / task / mcp / external dir).
+export const MANAGED_POLICY_PERMISSION_DIMENSIONS = [
+  'bash',
+  'fileWrite',
+  'web',
+  'webSearch',
+  'task',
+  'mcp',
+  'externalDirectory',
+] as const
+
+export type ManagedPolicyPermissionDimension = typeof MANAGED_POLICY_PERMISSION_DIMENSIONS[number]
+
+export type ManagedPolicyPermissionCeilings = Record<ManagedPolicyPermissionDimension, ManagedPolicyPermissionCeiling>
+
+// Whether members must bring their own key, use an org-managed key, or either.
+export const MANAGED_POLICY_KEY_MANAGEMENT_VALUES = ['any', 'byok_required', 'org_managed_required'] as const
+export type ManagedPolicyKeyManagement = typeof MANAGED_POLICY_KEY_MANAGEMENT_VALUES[number]
+
+// The classes of user-authored extensions a policy can enable/disable wholesale.
+export type ManagedPolicyExtensionClasses = {
+  customProviders: boolean
+  customMcps: boolean
+  customSkills: boolean
+}
+
+// The enforcement-relevant policy shape delivered to the desktop. Excludes the
+// control-plane bookkeeping (orgId / timestamps) the record carries.
+export type ManagedDesktopPolicy = {
+  allowedProviders: string[] | null
+  deniedProviders: string[]
+  allowedModels: string[] | null
+  deniedModels: string[]
+  keyManagement: ManagedPolicyKeyManagement
+  extensions: ManagedPolicyExtensionClasses
+  features: Record<string, boolean>
+  permissionCeilings: ManagedPolicyPermissionCeilings
+  updateChannel: string | null
+}
+
+// The machine-readable transparency signal a surface renders as "Managed by your
+// organization". Keyed by control id (permission dimension, extension class, or
+// 'providers'/'models'); present only for controls the policy actively restricts.
+export const MANAGED_POLICY_DISABLED_REASON = 'Managed by your organization'
+
+export type ManagedPolicyControlStatus = {
+  disabledByPolicy: true
+  reason: string
+}
+
+export type ManagedPolicyDisabledControls = Record<string, ManagedPolicyControlStatus>
+
+// The delivered view: the effective policy plus the transparency map of the controls
+// the policy restricts relative to an unrestricted baseline.
+export type ManagedDesktopPolicyView = ManagedDesktopPolicy & {
+  disabledByPolicy: ManagedPolicyDisabledControls
+}
+
 export type WorkspaceActionVerdict = {
   allowed: boolean
   reason: string | null
