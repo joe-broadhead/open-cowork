@@ -75,3 +75,71 @@ Downstream distributions can opt into remote telemetry by setting
 is not enabled in the public upstream build. See
 [Downstream Customization](downstream.md#telemetry-forwarding) for the
 exact contract and the privacy implications of turning it on.
+
+## Opt-in adoption telemetry (content-free)
+
+Separately from the diagnostic forwarder above, Open Cowork ships an
+**opt-in, content-free adoption signal**. It is **off by default** and
+sends **nothing** unless an operator explicitly enables it. When enabled,
+it reports only coarse, anonymous usage so maintainers and self-hosters
+can gauge adoption — never the substance of anyone's work.
+
+What it *may* send when enabled:
+
+- Coarse lifecycle events — that the app launched (with only the OS
+  platform string `darwin`/`win32`/`linux` and the app's semantic
+  version) and that it became ready.
+- Coarse interaction events chosen from a fixed vocabulary — which
+  built-in surface was opened (`home`, `chat`, `team`, `tools`,
+  `playbooks`, `settings`, `admin`, `artifacts`, `knowledge`,
+  `channels`, `onboarding`), whether a session streamed, an
+  approval decision as the enum `approved`/`denied`, and a workflow
+  run trigger as the enum `manual`/`scheduled`/`webhook`.
+
+What it **never** sends — by construction, not by policy:
+
+- Prompts, message content, chat transcripts, or model output.
+- File contents, file names, or **any filesystem path**.
+- Email addresses, API keys, tokens, hostnames, or free-form text.
+- Any device id, install id, or user identifier — adoption events carry
+  no identifier at all.
+
+Every event passes through a strict allowlist guard
+(`redactAdoptionEvent` in
+`packages/runtime-host/src/adoption-telemetry.ts`). The guard rejects any
+event name not on a fixed list and drops any property that is not both
+on that event's schema and accepted by a coarse validator (fixed enums,
+bounded integers, booleans, or a strict semver). There is intentionally
+no validator that accepts arbitrary text, so prompts, content, and paths
+have no way through even if a caller passes them in by mistake. A unit
+test (`tests/adoption-telemetry.test.ts`) asserts that injected prompts,
+file paths, emails, and secrets never appear in a transmitted payload.
+
+### Enabling, self-hosting, or disabling it
+
+The sink is fully configurable and HTTPS-only. Point it at your own
+collector, or leave it unset to transmit nothing. In
+`open-cowork.config.json`:
+
+```json
+{
+  "telemetry": {
+    "adoption": {
+      "enabled": true,
+      "endpoint": "https://adoption.example.com/ingest",
+      "headers": { "Authorization": "Bearer {env:EXAMPLE_ADOPTION_TOKEN}" }
+    }
+  }
+}
+```
+
+Operators who cannot edit the packaged config can toggle it with
+environment variables, which take precedence over the config file:
+
+- `OPEN_COWORK_ADOPTION_TELEMETRY_ENABLED` — `1`/`true` to enable,
+  `0`/`false` to force off.
+- `OPEN_COWORK_ADOPTION_TELEMETRY_ENDPOINT` — the HTTPS collector URL.
+
+To disable entirely, leave `telemetry.adoption` unset (the default), set
+`enabled: false`, or set `OPEN_COWORK_ADOPTION_TELEMETRY_ENABLED=0`. With
+no endpoint configured the emitter performs no network I/O at all.

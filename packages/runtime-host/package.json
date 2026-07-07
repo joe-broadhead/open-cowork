@@ -22,6 +22,10 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
     },
+    "./adoption-telemetry": {
+      "types": "./dist/adoption-telemetry.d.ts",
+      "import": "./dist/adoption-telemetry.js"
+    },
     "./agent-config": {
       "types": "./dist/agent-config.d.ts",
       "import": "./dist/agent-config.js"

@@ -61,6 +61,7 @@
     "test:e2e": "pnpm --filter @open-cowork/desktop test:e2e",
     "test:e2e:packaged": "pnpm --filter @open-cowork/desktop test:e2e:packaged",
     "test:e2e:packaged:optional": "pnpm --filter @open-cowork/desktop test:e2e:packaged:optional",
+    "test:e2e:evals": "pnpm --filter @open-cowork/desktop test:e2e:evals",
     "screenshots": "pnpm --filter @open-cowork/desktop screenshots",
     "cloud:dev": "node --no-warnings --experimental-strip-types scripts/open-cowork-cloud.ts",
     "cloud:build": "node scripts/build-cloud.mjs",

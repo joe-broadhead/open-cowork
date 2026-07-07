@@ -512,6 +512,20 @@ export type OpenCoworkConfig = {
     enabled?: boolean
     endpoint?: string
     headers?: Record<string, string>
+    // Opt-in, content-free adoption/usage signal. Distinct from the
+    // diagnostic forwarder above: `adoption` only ever transmits coarse,
+    // anonymous events (app launched, feature opened) after they pass a
+    // strict allowlist guard — never prompts, message/file content, or
+    // filesystem paths. Default off. Self-hosters point `endpoint` at their
+    // own collector (or leave it unset) and can also toggle it via the
+    // `OPEN_COWORK_ADOPTION_TELEMETRY_ENABLED` /
+    // `OPEN_COWORK_ADOPTION_TELEMETRY_ENDPOINT` environment variables. See
+    // docs/privacy.md for the exact contract.
+    adoption?: {
+      enabled?: boolean
+      endpoint?: string
+      headers?: Record<string, string>
+    }
   }
   // Per-deployment desktop feature flags (omit a key to keep it enabled).
   features?: DesktopFeatureFlags

@@ -568,3 +568,29 @@ file or a macOS `.app` bundle with a resolvable executable under
 `Contents/MacOS`. Broad discovery jobs that intentionally allow packaged
 tests to skip can use `pnpm test:e2e:packaged:optional`; do not use the
 optional command in release or branch-protection gates.
+
+## Nightly UI eval flows
+
+Beyond the PR-gate smoke suite, a heavier set of real-Electron user-journey
+"eval flows" lives in `apps/desktop/tests/*.eval.test.ts` (onboarding reaches
+ready, a prompt streams and an approval resolves offline, the admin surface
+renders for an authorized role, an artifact/chart renders, and a light/dark
+visual-regression check). They run via `pnpm test:e2e:evals` — which uses the
+same smoke runner but a `tests/*.eval.test.ts` pattern — and are kept out of
+the fast PR gate. The `.github/workflows/nightly-evals.yml` workflow runs them
+nightly on a virtual display (`xvfb`), captures per-flow screenshot evidence,
+and uploads it as an artifact. See
+`apps/desktop/tests/visual-baselines/README.md` for how visual baselines are
+seeded and accepted.
+
+## Download / adoption statistics
+
+Release download counts are public GitHub data available on demand from the
+Releases API (`GET /repos/{owner}/{repo}/releases`, `assets[].download_count`)
+using the default `GITHUB_TOKEN` — no extra secret required. A committed daily
+stats job is intentionally **not** wired here: pushing a generated STATS file
+back to `master` needs `contents: write` and would fight branch protection and
+the release-governance required-checks. Maintainers who want a tracked series
+should run the API pull in a fork/branch and open a PR, or point the opt-in
+[adoption telemetry](privacy.md#opt-in-adoption-telemetry-content-free) at
+their own collector for live usage signal.

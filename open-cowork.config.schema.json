@@ -263,6 +263,26 @@
             "type": "string",
             "maxLength": 4096
           }
+        },
+        "adoption": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Opt-in, content-free adoption/usage signal. Only coarse anonymous events are ever transmitted; prompts, message/file content, and filesystem paths are never sent. Default off.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "endpoint": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^https://.+"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            }
+          }
         }
       }
     },
