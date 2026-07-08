@@ -7,6 +7,7 @@ import {
   type CloudProjectionFenceToken,
   type CloudProjectionFenceWaitResult,
   type CloudProjectedSessionEventType,
+  type CloudSessionProjectionView,
 } from '@open-cowork/shared'
 import type { SessionEventRecord } from './control-plane-store.ts'
 import type { ProjectionControlPlaneStore } from './control-plane-store-domains.ts'
@@ -90,6 +91,13 @@ export class CloudSessionProjectionService {
   private readonly store: CloudProjectionStore
   private readonly sessionEvents: CloudSessionEventBus
   private readonly workspaceEvents: CloudWorkspaceEventBus
+  // Cache of the last normalized projection view per session, validated by the stored sequence.
+  // Reusing it lets the append path skip re-normalizing (deep-validating) the ENTIRE accumulated
+  // view from JSON on every event — that was O(view-size) per event and O(N^2) over a long session
+  // (#913). Sequence validation keeps it correct across worker/instance handoff (a mismatch falls
+  // back to a fresh normalize); LRU-bounded so one process can't retain a view per session forever.
+  private readonly viewCache = new Map<string, { sequence: number, view: CloudSessionProjectionView }>()
+  private readonly maxCachedViews = 512
 
   constructor(
     store: CloudProjectionStore,
@@ -99,6 +107,18 @@ export class CloudSessionProjectionService {
     this.store = store
     this.sessionEvents = sessionEvents
     this.workspaceEvents = workspaceEvents
+  }
+
+  private cacheView(key: string, sequence: number, view: CloudSessionProjectionView) {
+    // Move-to-most-recent (delete+set) then evict the oldest once over the cap, so an actively
+    // streamed session stays warm and idle sessions are dropped first.
+    this.viewCache.delete(key)
+    this.viewCache.set(key, { sequence, view })
+    while (this.viewCache.size > this.maxCachedViews) {
+      const oldest = this.viewCache.keys().next().value
+      if (oldest === undefined) break
+      this.viewCache.delete(oldest)
+    }
   }
 
   async appendProjectedEvent(input: AppendProjectedEventInput) {
@@ -129,7 +149,14 @@ export class CloudSessionProjectionService {
       createdAt: new Date(event.createdAt),
     })
     const currentProjection = await this.store.getSessionProjection(input.tenantId, input.sessionId)
-    const currentView = normalizeCloudSessionProjectionView(currentProjection?.view, session)
+    const cacheKey = `${input.tenantId}\0${input.sessionId}`
+    const cached = this.viewCache.get(cacheKey)
+    // Reuse the cached, already-normalized view when it matches the stored sequence (the common
+    // case: one worker folds a session's events in order). Otherwise re-normalize the stored view
+    // — cold cache, or another instance advanced the projection.
+    const currentView = cached && currentProjection && cached.sequence === currentProjection.sequence
+      ? cached.view
+      : normalizeCloudSessionProjectionView(currentProjection?.view, session)
     const nextView = reduceCloudSessionProjectionEvent(session, currentView, event)
     await this.store.writeSessionProjection({
       tenantId: input.tenantId,
@@ -139,6 +166,8 @@ export class CloudSessionProjectionService {
       leaseToken: input.leaseToken,
       updatedAt: new Date(event.createdAt),
     })
+    // Cache only after a durable write, so a rejected/out-of-order write can't poison the cache.
+    this.cacheView(cacheKey, event.sequence, nextView)
     this.sessionEvents.publish(event)
     this.workspaceEvents.publish(workspaceEvent)
     return event

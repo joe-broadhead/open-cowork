@@ -104,3 +104,32 @@ test('cloud projection service waits for session-scoped fence checkpoints', asyn
   assert.equal(timedOut.ok, false)
   assert.equal(timedOut.code, 'projection_fence_timeout')
 })
+
+test('projection append view-cache matches the re-normalize path over a long stream (#913)', async () => {
+  const store = new InMemoryControlPlaneStore()
+  await store.createTenant({ tenantId: 'tenant-1', name: 'T' })
+  await store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'u@e.test', role: 'owner' })
+  for (const sessionId of ['cached', 'fresh']) {
+    await store.createSession({ tenantId: 'tenant-1', userId: 'user-1', sessionId, opencodeSessionId: `rt-${sessionId}`, profileName: 'default', title: 'T' })
+  }
+  const bus = new CloudSessionEventBus()
+  const wbus = new CloudWorkspaceEventBus()
+  const events = [
+    { type: 'prompt.submitted' as const, payload: { messageId: 'u1', text: 'hi' } },
+    ...Array.from({ length: 25 }, (_, index) => ({ type: 'assistant.message' as const, payload: { messageId: `a${index}`, content: `msg ${index}` } })),
+  ]
+
+  // Cached path: one persistent service keeps its per-session view cache warm across the stream.
+  const cachedService = new CloudSessionProjectionService(store, bus, wbus)
+  for (const event of events) await cachedService.appendProjectedEvent({ tenantId: 'tenant-1', sessionId: 'cached', ...event })
+  // Re-normalize path: a fresh service per event has a cold cache, forcing a full re-normalize of
+  // the stored view each time (the pre-#913 behavior). Both must yield an identical projection.
+  for (const event of events) await new CloudSessionProjectionService(store, bus, wbus).appendProjectedEvent({ tenantId: 'tenant-1', sessionId: 'fresh', ...event })
+
+  const messages = (view: unknown) => ((view as { messages?: Array<{ id: string, role: string, content: string }> }).messages || [])
+    .map((message) => ({ id: message.id, role: message.role, content: message.content }))
+  const cachedView = (await store.getSessionProjection('tenant-1', 'cached'))?.view
+  const freshView = (await store.getSessionProjection('tenant-1', 'fresh'))?.view
+  assert.deepEqual(messages(cachedView), messages(freshView))
+  assert.equal(messages(cachedView).length, 26)
+})
