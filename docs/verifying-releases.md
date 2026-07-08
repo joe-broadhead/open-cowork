@@ -111,3 +111,27 @@ the verified manual-download path above.
 Downstream forks that host their own feed follow the identical steps against
 their own signing key and provenance; see
 [Packaging and Releases](packaging-and-releases.md#downstream-self-host).
+
+## Runtime component integrity
+
+Beyond the installer signature, the app verifies the **runtime components** it
+executes (the bundled OpenCode CLI/SDK and the managed MCP servers) against a
+trusted manifest, so a tampered component inside an otherwise-valid install is
+detected before the managed runtime starts.
+
+- **Trust anchor.** A signed release ships
+  `resources/runtime-components.manifest.json` that pins each component's
+  build-time SHA-256 (`sha256`). At launch the runtime re-hashes the bundled
+  files and raises `component_hash_mismatch` (and refuses to start the managed
+  server) if any digest differs from the pinned value. The manifest is produced
+  by `writeRuntimeComponentManifest`, which hashes the packaged components and
+  records the digest as the authoritative `sha256`.
+- **No override in packaged builds.** The development override
+  (`OPEN_COWORK_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON`) only relaxes provenance
+  checks for **local, unpackaged** development. It is ignored entirely once the
+  app is packaged (`app.isPackaged`), so it can never be set in production to
+  defeat the anchor.
+- **Unsigned/dev builds.** Local and unsigned CI smoke builds legitimately ship
+  without the pinned manifest; verification degrades to the provenance check and
+  is enforced only for packaged builds. Generating and shipping the pinned
+  manifest is a signed-release build step.

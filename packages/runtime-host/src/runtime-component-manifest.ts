@@ -7,7 +7,7 @@ import type {
   RuntimeComponentVerificationReport,
 } from '@open-cowork/shared'
 import { createHash } from 'node:crypto'
-import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
   getBundledOpencodeSdkVersion,
@@ -500,6 +500,46 @@ export async function buildRuntimeComponentManifest(
   }
 }
 
+/**
+ * Build the TRUSTED (expected) manifest that ships inside a signed release. It hashes each
+ * bundled component at build time and PINS that digest as the authoritative `sha256`, so at
+ * runtime buildRuntimeComponentVerificationReport re-hashes the same files and
+ * verifyRuntimeComponentManifest raises `component_hash_mismatch` if any bundled component
+ * was tampered with after signing. Components whose file cannot be hashed at build time keep
+ * whatever provenance they already declared. Runtime-observed evidence is re-derived at
+ * verification time, so we do not persist it here (#907).
+ */
+async function buildTrustedRuntimeComponentManifest(
+  input: RuntimeComponentManifestBuildInput = {},
+): Promise<RuntimeComponentManifest> {
+  const observed = await buildRuntimeComponentManifest({ ...input, isPackaged: input.isPackaged ?? true })
+  return {
+    format: observed.format,
+    generatedAt: observed.generatedAt,
+    components: observed.components.map((component) => {
+      // Promote the build-time observed digest to the authoritative pinned `sha256`, and
+      // drop the runtime-observed evidence fields — they are re-derived at verification time.
+      const entry: RuntimeComponentManifestEntry = { ...component }
+      if (component.observedSha256 && validSha256(component.observedSha256)) {
+        entry.sha256 = normalizedSha256(component.observedSha256)
+      }
+      delete entry.observedSha256
+      delete entry.observedVersion
+      return entry
+    }),
+  }
+}
+
+/** Write the trusted manifest to `path` (release build step; see docs/verifying-releases.md). */
+export async function writeRuntimeComponentManifest(
+  path: string,
+  input: RuntimeComponentManifestBuildInput = {},
+): Promise<RuntimeComponentManifest> {
+  const manifest = await buildTrustedRuntimeComponentManifest(input)
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`)
+  return manifest
+}
+
 export function resolveRuntimeComponentManifestPath(input: RuntimeComponentManifestBuildInput = {}) {
   if (input.manifestPath !== undefined) return input.manifestPath
 
@@ -567,11 +607,20 @@ export async function buildRuntimeComponentVerificationReport(
     ? mergeObservedComponentEvidence(loaded.manifest, observedManifest)
     : null
 
+  // The development override (env- or input-supplied) exists to let LOCAL, unpackaged
+  // development skip provenance/compatibility gates. It must never apply to a packaged
+  // build — otherwise an operator (or attacker) can set
+  // OPEN_COWORK_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON in production and defeat the whole
+  // integrity anchor. Hard-drop it when packaged (#907).
+  const developmentOverride = isPackaged(input)
+    ? undefined
+    : input.developmentOverride || runtimeComponentDevelopmentOverrideFromEnv(input.env)
+
   return verifyRuntimeComponentManifest({
     manifest,
     observedManifest,
     manifestLoadIssue: loaded.issue,
-    developmentOverride: input.developmentOverride || runtimeComponentDevelopmentOverrideFromEnv(input.env),
+    developmentOverride,
     now: input.now,
   })
 }
