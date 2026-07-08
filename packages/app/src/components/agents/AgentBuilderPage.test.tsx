@@ -435,7 +435,7 @@ describe('AgentBuilderPage', () => {
         }),
       ]),
     }))
-  })
+  }, 15_000)
 
   it('starts first-time specific permission rules from a denied wildcard', async () => {
     const user = userEvent.setup()

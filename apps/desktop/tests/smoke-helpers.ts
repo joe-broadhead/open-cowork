@@ -101,6 +101,14 @@ export interface LaunchSmokeSessionOptions {
 }
 
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
+const DEFAULT_APP_SHELL_TIMEOUT_MS = 90_000
+
+function smokeAppShellTimeoutMs() {
+  const raw = process.env.OPEN_COWORK_DESKTOP_SMOKE_APP_SHELL_TIMEOUT_MS
+  if (!raw) return DEFAULT_APP_SHELL_TIMEOUT_MS
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_APP_SHELL_TIMEOUT_MS
+}
 
 async function getAppShellDiagnostics(page: Page) {
   try {
@@ -476,7 +484,7 @@ async function withLaunchServicesEnvironment<T>(env: Record<string, string>, fn:
   }
 }
 
-async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_000) {
+async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = DEFAULT_APP_SHELL_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     for (const page of app.windows()) {
@@ -714,7 +722,7 @@ async function closeSmokeApp(app: ElectronApplication) {
   await delay(1_000)
 }
 
-async function bootstrapSmokeSettings(page: Page, appShellTimeoutMs = 30_000) {
+async function bootstrapSmokeSettings(page: Page, appShellTimeoutMs = DEFAULT_APP_SHELL_TIMEOUT_MS) {
   const setupComplete = await page.evaluate(async () => {
     const [config, settings] = await Promise.all([
       window.coworkApi.app.config(),
@@ -768,7 +776,7 @@ export async function launchSmokeSession(
   paths: SmokePaths,
   options?: LaunchSmokeSessionOptions,
 ): Promise<SmokeSession> {
-  const appShellTimeoutMs = options?.appShellTimeoutMs ?? 30_000
+  const appShellTimeoutMs = options?.appShellTimeoutMs ?? smokeAppShellTimeoutMs()
   const macAppBundlePath = options?.executablePath && process.platform === 'darwin'
     ? getMacAppBundlePath(options.executablePath)
     : null
@@ -887,7 +895,7 @@ export async function launchSmokeSession(
   // Wait for the preload to attach `coworkApi` — until that happens any
   // renderer-side test is racing app bootstrap. We also wait for the
   // settings bridge because the bootstrap path below depends on it.
-  const page = await waitForElectronAppPage(app)
+  const page = await waitForElectronAppPage(app, appShellTimeoutMs)
 
   await bootstrapSmokeSettings(page, appShellTimeoutMs)
 

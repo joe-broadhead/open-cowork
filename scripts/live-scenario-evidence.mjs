@@ -92,6 +92,19 @@ function validateScenario(scenario, index) {
   if (!Array.isArray(scenario.command) || scenario.command.length === 0 || scenario.command.some((part) => typeof part !== 'string' || !part.trim())) {
     throw new Error(`${label}.command must be a non-empty argv array`)
   }
+  for (const filePath of declaredNodeTestFiles(scenario.command)) {
+    if (!existsSync(filePath)) throw new Error(`${label}.command references missing test file: ${filePath}`)
+  }
+}
+
+function declaredNodeTestFiles(command) {
+  if (command[0] !== 'node') return []
+  const testIndex = command.indexOf('--test')
+  if (testIndex < 0) return []
+  return command
+    .slice(testIndex + 1)
+    .filter((part) => !part.startsWith('-'))
+    .filter((part) => part.startsWith('tests/') || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(part))
 }
 
 export function validateScenarioSuite(suite) {

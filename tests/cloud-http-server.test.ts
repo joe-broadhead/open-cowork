@@ -1702,8 +1702,26 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
       'x-test-auth': 'gateway',
       'content-type': 'application/json',
     }
-    const gatewaySession = await fixture.service.createSession(gatewayPrincipal())
-    const gatewaySessionId = gatewaySession.session.sessionId
+    const gateway = gatewayPrincipal()
+    await fixture.service.ensurePrincipal(gateway)
+    const gatewaySessionId = 'watch-recipient-session'
+    fixture.store.createSession({
+      tenantId: gateway.tenantId,
+      userId: gateway.userId,
+      sessionId: gatewaySessionId,
+      opencodeSessionId: 'watch-recipient-opencode-session',
+      profileName: 'full',
+    })
+    fixture.store.bindChannelSession({
+      bindingId: 'binding-watch-recipient-session',
+      orgId: 'tenant-1',
+      agentId: 'agent-watch-recipient',
+      channelBindingId: 'binding-watch-recipient',
+      provider: 'telegram',
+      externalChatId: 'watch-recipient-chat',
+      externalThreadId: 'watch-recipient-thread',
+      sessionId: gatewaySessionId,
+    })
 
     const gatewayWatchResponse = await fetch(`${baseUrl}/api/coordination/watches`, {
       method: 'POST',
@@ -4087,7 +4105,7 @@ test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', 
     const session = await fetch(`${baseUrl}/api/sessions/gateway-readable-session`, {
       headers: { authorization: `Bearer ${issued.plaintext}` },
     })
-    assert.equal(session.status, 200)
+    assert.equal(session.status, 403)
 
     const sessionList = await fetch(`${baseUrl}/api/sessions`, {
       headers: { authorization: `Bearer ${issued.plaintext}` },
@@ -5118,6 +5136,37 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     const secondWorkspaceSessionBinding = asRecord((await readJson(secondWorkspaceBindResponse)).binding)
     assert.equal(secondWorkspaceSessionBinding.externalWorkspaceId, 'bot-2')
     assert.notEqual(secondWorkspaceSessionBinding.bindingId, sessionBinding.bindingId)
+
+    const grantedGatewaySessionRead = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(String(cloudSession.sessionId))}`, {
+      headers: gatewayOnlyHeaders,
+    })
+    assert.equal(grantedGatewaySessionRead.status, 200)
+
+    const ungrantedSessionId = String(secondWorkspaceSessionBinding.sessionId)
+    const ungrantedGatewaySessionRead = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(ungrantedSessionId)}`, {
+      headers: gatewayOnlyHeaders,
+    })
+    assert.equal(ungrantedGatewaySessionRead.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewaySessionRead)).error), /not authorized/)
+
+    const ungrantedGatewaySessionView = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(ungrantedSessionId)}/view`, {
+      headers: gatewayOnlyHeaders,
+    })
+    assert.equal(ungrantedGatewaySessionView.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewaySessionView)).error), /not authorized/)
+
+    const ungrantedGatewaySessionEvents = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(ungrantedSessionId)}/events`, {
+      headers: gatewayOnlyHeaders,
+    })
+    assert.equal(ungrantedGatewaySessionEvents.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewaySessionEvents)).error), /not authorized/)
+
+    const ungrantedGatewayArtifactRead = await fetch(
+      `${baseUrl}/api/sessions/${encodeURIComponent(ungrantedSessionId)}/artifacts/missing-artifact`,
+      { headers: gatewayOnlyHeaders },
+    )
+    assert.equal(ungrantedGatewayArtifactRead.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayArtifactRead)).error), /not authorized/)
 
     const ungrantedGatewayBind = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
       method: 'POST',

@@ -298,5 +298,5 @@ The normal repo gates also cover the standalone app:
 pnpm lint
 pnpm typecheck
 pnpm test
-python3 -m mkdocs build --strict
+pnpm docs:build
 ```

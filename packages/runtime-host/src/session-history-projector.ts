@@ -651,7 +651,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           tool: {
             name: part.tool === 'task' && part.title ? part.title : part.tool,
             input: state.input,
-            status: deriveToolStatus({ hasOutput: Boolean(state.output), hasError: state.error !== undefined }),
+            status: deriveToolStatus({ hasOutput: state.output !== undefined, hasError: state.error !== undefined }),
             output: state.output,
             agent: typeof state.metadata.agent === 'string'
               ? state.metadata.agent
@@ -851,7 +851,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             tool: {
               name: part.tool === 'task' && title ? title : part.tool,
               input: state.input,
-              status: deriveToolStatus({ hasOutput: Boolean(toolOutput), hasError: state.error !== undefined }),
+              status: deriveToolStatus({ hasOutput: toolOutput !== undefined, hasError: state.error !== undefined }),
               output: toolOutput,
               attachments: state.attachments,
               agent: normalizeAgentName(

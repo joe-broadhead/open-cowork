@@ -1944,6 +1944,47 @@ test('history projector accepts deterministic fallback id generation', async () 
   )
 })
 
+test('history projector treats falsy tool outputs as completed outputs', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-falsy-tool-output',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-falsy-msg', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { type: 'tool', tool: 'read', id: 'root-empty-tool', state: { input: { filePath: 'README.md' }, output: '', metadata: {} } },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-falsy-tool-output',
+      title: 'Falsy tool output task',
+      parentSessionId: 'root-falsy-tool-output',
+      time: { created: 2, updated: 3 },
+    }],
+    statuses: {
+      'root-falsy-tool-output': { type: 'idle' },
+      'child-falsy-tool-output': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({
+      messages: [{
+        info: { id: 'child-falsy-msg', role: 'assistant', time: { created: 2 } },
+        parts: [
+          { type: 'tool', tool: 'bash', id: 'child-zero-tool', state: { input: { cmd: 'true' }, output: 0, metadata: {} } },
+          { id: 'child-falsy-finish', type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const rootTool = items.find((item) => item.type === 'tool' && item.id === 'root-empty-tool')
+  const childTool = items.find((item) => item.type === 'task_tool' && item.id === 'child-zero-tool')
+  assert.equal(rootTool?.tool?.status, 'complete')
+  assert.equal(rootTool?.tool?.output, '')
+  assert.equal(childTool?.tool?.status, 'complete')
+  assert.equal(childTool?.tool?.output, 0)
+})
+
 test('history projector does not mine agent identity from user prompt/raw content', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-attr',

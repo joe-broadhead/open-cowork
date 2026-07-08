@@ -15,6 +15,15 @@ const composeFiles = [
 const gatewayOnlyComposeFiles = [
   'docker-compose.gateway-remote.yml',
 ]
+const testImageDigest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+const publicHelmPrerequisites = [
+  '--set',
+  `image.digest=${testImageDigest}`,
+  '--set',
+  'networkPolicy.egress.enabled=true',
+  '--set-json',
+  'networkPolicy.egress.to=[{"ipBlock":{"cidr":"203.0.113.0/24"}}]',
+]
 
 function log(message) {
   process.stdout.write(`[deploy-validate] ${message}\n`)
@@ -238,7 +247,9 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.digest must be a sha256:<64 lowercase hex> OCI digest')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.image.digest must be a sha256:<64 lowercase hex> OCI digest')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.enabled=true requires cloudSqlProxy.instanceConnectionName')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.address must be 127.0.0.1')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.healthCheck.port must be distinct from cloudSqlProxy.port')
@@ -257,6 +268,11 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production rejects cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires cloud.cookieSecure=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.web.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires image.digest')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production with cloudSqlProxy.enabled=true requires cloudSqlProxy.image.digest')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires networkPolicy.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires networkPolicy.egress.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires networkPolicy.egress.to entries')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.worker.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.scheduler.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'web role requires cloud.publicUrl')
@@ -302,6 +318,11 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.allowLoopbackOperatorBypass=true requires gateway.host=127.0.0.1 or localhost')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'OPEN_COWORK_GATEWAY_INSTANCE_ID')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'image.digest must be a sha256:<64 lowercase hex> OCI digest')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments require image.digest')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments require networkPolicy.enabled=true')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments require networkPolicy.egress.enabled=true')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments require networkPolicy.egress.to entries')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'topologySpreadConstraints')
   assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'readOnlyRootFilesystem: true')
@@ -650,6 +671,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -683,6 +705,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -718,6 +741,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -751,6 +775,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -784,6 +809,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -817,6 +843,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -1025,6 +1052,7 @@ function validateHelm() {
         'template',
         'unsafe-public-gateway-inline-secrets',
         gatewayChart,
+        ...publicHelmPrerequisites,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',
@@ -1044,6 +1072,7 @@ function validateHelm() {
         'template',
         'unsafe-gateway-http-public-url',
         gatewayChart,
+        ...publicHelmPrerequisites,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',
@@ -1059,6 +1088,7 @@ function validateHelm() {
         'template',
         'unsafe-gateway-ingress-loopback-bypass',
         gatewayChart,
+        ...publicHelmPrerequisites,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',

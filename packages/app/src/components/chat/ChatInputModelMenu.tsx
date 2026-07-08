@@ -30,8 +30,10 @@ export function ChatInputModelMenu({
   const [query, setQuery] = useState('')
   const [highlightIndex, setHighlightIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const useSearch = models.length > SEARCH_THRESHOLD
+  const listboxId = 'chat-model-menu-listbox'
 
   // Reset search every time the menu re-opens so the previous filter
   // doesn't bleed into the next interaction.
@@ -42,6 +44,8 @@ export function ChatInputModelMenu({
       if (useSearch) {
         // Autofocus after the portal mounts so the user can type immediately.
         requestAnimationFrame(() => inputRef.current?.focus())
+      } else {
+        requestAnimationFrame(() => menuRef.current?.focus())
       }
     }
   }, [visible, useSearch])
@@ -90,6 +94,7 @@ export function ChatInputModelMenu({
   )
 
   const hasFeatured = filtered.some((model) => model.featured)
+  const activeOptionId = filtered[highlightIndex] ? `${listboxId}-option-${filtered[highlightIndex]!.id}` : undefined
 
   function handleKeyDown(event: React.KeyboardEvent) {
     if (filtered.length === 0) {
@@ -125,9 +130,13 @@ export function ChatInputModelMenu({
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
+        ref={menuRef}
+        id={listboxId}
         className="theme-popover fixed z-50 flex flex-col overflow-hidden rounded-lg"
         role="listbox"
+        tabIndex={-1}
         aria-label={t('chatModelMenu.selectModel', 'Select model')}
+        aria-activedescendant={activeOptionId}
         onKeyDown={handleKeyDown}
         style={{
           width: MENU_WIDTH,
@@ -177,6 +186,7 @@ export function ChatInputModelMenu({
                     </div>
                   )}
                   <Card
+                    id={`${listboxId}-option-${model.id}`}
                     interactive
                     padding="sm"
                     role="option"

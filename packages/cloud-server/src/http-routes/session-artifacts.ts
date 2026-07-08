@@ -9,6 +9,9 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
     tools.writePolicyError(res, 403, 'Artifacts are disabled for this cloud profile.', 'artifacts.disabled', options.corsOrigin)
     return true
   }
+  if (req.method === 'GET') {
+    await options.service.getSessionView(context.principal, sessionId)
+  }
   if (!options.artifacts) {
     tools.writeError(res, 503, 'Cloud artifact storage is not configured.', options.corsOrigin)
     return true

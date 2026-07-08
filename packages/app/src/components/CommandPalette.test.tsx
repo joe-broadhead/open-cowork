@@ -96,6 +96,7 @@ describe('CommandPalette', () => {
       />,
     )
 
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toHaveAttribute('aria-modal', 'true')
     const search = screen.getByRole('searchbox', { name: 'Search command palette' })
     expect(search).toHaveAttribute('aria-controls', 'command-palette-results')
     expect(screen.getByRole('listbox', { name: 'Command palette results' })).toBeTruthy()

@@ -1,5 +1,7 @@
 import { createCoordinationWatch, deleteCoordinationWatch, getCoordinationWatchDetail, listCoordinationWatches, pauseCoordinationWatch, resumeCoordinationWatch, updateCoordinationWatch } from '@open-cowork/runtime-host/coordination/coordination-service'
 import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   buildChannelProviderStatuses,
   isCoordinationWatchStatus,
@@ -25,10 +27,11 @@ import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { getAppConfig } from '../config-loader.ts'
 import { createUnavailableRuntimeAdapter } from '@open-cowork/cloud-server/unavailable-runtime-adapter'
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
-import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { InMemoryControlPlaneStore, type InMemoryChannelStateSnapshot } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import { normalizeChannelProviderId } from '@open-cowork/cloud-server/channel-provider-utils'
 import { publicChannelIdentity } from '@open-cowork/cloud-server/public-channel-records'
 import { CloudSessionService, type CloudPrincipal } from '@open-cowork/cloud-server/session-service'
+import { getAppDataDir } from '../config-loader.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 import type { IpcHandlerContext } from './context.ts'
 import {
@@ -45,6 +48,7 @@ const LOCAL_CHANNEL_ORG_ID = 'desktop-local'
 const LOCAL_CHANNEL_ACCOUNT_ID = 'desktop-local-owner'
 
 let channelService: CloudSessionService | null = null
+let channelStore: InMemoryControlPlaneStore | null = null
 
 type DesktopChannelAgentUpdateInput = {
   name?: string
@@ -57,6 +61,9 @@ function getDesktopChannelService() {
   if (!channelService) {
     const config = getAppConfig()
     const store = new InMemoryControlPlaneStore()
+    seedDesktopChannelPrincipal(store)
+    restoreDesktopChannelSnapshot(store)
+    channelStore = store
     channelService = new CloudSessionService(
       store,
       createUnavailableRuntimeAdapter('Desktop channel IPC does not execute Cloud runtime sessions.'),
@@ -71,6 +78,65 @@ function getDesktopChannelService() {
     )
   }
   return channelService
+}
+
+function desktopChannelSnapshotPath() {
+  return join(getAppDataDir(), 'desktop-channels.json')
+}
+
+function seedDesktopChannelPrincipal(store: InMemoryControlPlaneStore) {
+  store.ensureOrgForTenant({
+    tenantId: LOCAL_CHANNEL_TENANT_ID,
+    name: 'Desktop Local',
+    orgId: LOCAL_CHANNEL_ORG_ID,
+  })
+  if (!store.accountExists(LOCAL_CHANNEL_ACCOUNT_ID)) {
+    store.createAccount({
+      accountId: LOCAL_CHANNEL_ACCOUNT_ID,
+      idpSubject: LOCAL_CHANNEL_ACCOUNT_ID,
+      email: 'desktop-local@open-cowork.local',
+    })
+  }
+}
+
+function isChannelSnapshot(value: unknown): value is InMemoryChannelStateSnapshot {
+  const record = value as Partial<InMemoryChannelStateSnapshot> | null
+  return Boolean(
+    record
+      && record.version === 1
+      && typeof record.orgId === 'string'
+      && Array.isArray(record.headlessAgents)
+      && Array.isArray(record.channelBindings)
+      && Array.isArray(record.channelIdentities)
+      && Array.isArray(record.channelDeliveries),
+  )
+}
+
+function restoreDesktopChannelSnapshot(store: InMemoryControlPlaneStore) {
+  const path = desktopChannelSnapshotPath()
+  if (!existsSync(path)) return
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown
+    if (isChannelSnapshot(parsed)) store.restoreChannelState(parsed)
+  } catch {
+    // A corrupt local snapshot must not block opening the desktop Channels page.
+  }
+}
+
+function persistDesktopChannelSnapshot() {
+  if (!channelStore) return
+  const dir = getAppDataDir()
+  const path = desktopChannelSnapshotPath()
+  const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`
+  const snapshot = channelStore.snapshotChannelState(LOCAL_CHANNEL_ORG_ID)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(tmpPath, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o600 })
+  renameSync(tmpPath, path)
+}
+
+export function resetDesktopChannelServiceForTests() {
+  channelService = null
+  channelStore = null
 }
 
 function localPrincipal(): CloudPrincipal {
@@ -307,12 +373,16 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'channels:agents:create', objectArg<ChannelAgentInput>('channel agent', normalizeAgentInput), async (event, input) => {
     assertLocalWorkspace(context, event, input)
-    return getDesktopChannelService().createHeadlessAgent(localPrincipal(), input)
+    const agent = await getDesktopChannelService().createHeadlessAgent(localPrincipal(), input)
+    persistDesktopChannelSnapshot()
+    return agent
   })
 
   registerIpcInvoke(context, 'channels:agents:update', stringAndObjectArgs<DesktopChannelAgentUpdateInput>('channel agent id', 'channel agent update', {}, normalizeAgentUpdateInput), async (event, agentId, input) => {
     assertLocalWorkspace(context, event)
-    return getDesktopChannelService().updateHeadlessAgent(localPrincipal(), agentId, input)
+    const agent = await getDesktopChannelService().updateHeadlessAgent(localPrincipal(), agentId, input)
+    persistDesktopChannelSnapshot()
+    return agent
   })
 
   registerIpcInvoke(context, 'channels:bindings:list', optionalObjectArg<ChannelBindingListOptions>('channel binding options', normalizeBindingListOptions), async (event, options) => {
@@ -322,17 +392,23 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'channels:bindings:connect', objectArg<ChannelBindingConnectInput>('channel binding', normalizeBindingInput), async (event, input) => {
     assertLocalWorkspace(context, event, input)
-    return getDesktopChannelService().createChannelBinding(localPrincipal(), input)
+    const binding = await getDesktopChannelService().createChannelBinding(localPrincipal(), input)
+    persistDesktopChannelSnapshot()
+    return binding
   })
 
   registerIpcInvoke(context, 'channels:bindings:update', stringAndObjectArgs<ChannelBindingUpdateInput>('channel binding id', 'channel binding update', {}, normalizeBindingUpdateInput), async (event, bindingId, input) => {
     assertLocalWorkspace(context, event)
-    return getDesktopChannelService().updateChannelBinding(localPrincipal(), bindingId, input)
+    const binding = await getDesktopChannelService().updateChannelBinding(localPrincipal(), bindingId, input)
+    persistDesktopChannelSnapshot()
+    return binding
   })
 
   registerIpcInvoke(context, 'channels:bindings:disconnect', stringAndOptionalObjectArgs<WorkspaceOptions>('channel binding id', 'workspace options', {}, normalizeWorkspaceOptions), async (event, bindingId, options) => {
     assertLocalWorkspace(context, event, options)
-    return getDesktopChannelService().updateChannelBinding(localPrincipal(), bindingId, { status: 'disabled' })
+    const binding = await getDesktopChannelService().updateChannelBinding(localPrincipal(), bindingId, { status: 'disabled' })
+    persistDesktopChannelSnapshot()
+    return binding
   })
 
   registerIpcInvoke(context, 'channels:people:list', optionalObjectArg<ChannelPeopleListOptions>('channel people options', normalizePeopleListOptions), async (event, options) => {
@@ -343,6 +419,7 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'channels:people:resolve', objectArg<ChannelPersonResolveInput>('channel person', normalizePersonResolveInput), async (event, input) => {
     assertLocalWorkspace(context, event, input)
     const identity = await getDesktopChannelService().resolveChannelIdentity(localPrincipal(), input)
+    persistDesktopChannelSnapshot()
     return publicChannelIdentity(identity)
   })
 
@@ -353,12 +430,16 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'channels:deliveries:retry', stringArg('channel delivery id'), async (event, deliveryId) => {
     assertLocalWorkspace(context, event)
-    return getDesktopChannelService().retryChannelDelivery(localPrincipal(), deliveryId)
+    const delivery = await getDesktopChannelService().retryChannelDelivery(localPrincipal(), deliveryId)
+    persistDesktopChannelSnapshot()
+    return delivery
   })
 
   registerIpcInvoke(context, 'channels:deliveries:dead-letter', stringAndOptionalObjectArgs<ChannelDeliveryDeadLetterInput>('channel delivery id', 'channel delivery dead-letter input', {}, normalizeDeadLetterInput), async (event, deliveryId, input) => {
     assertLocalWorkspace(context, event, input)
-    return getDesktopChannelService().deadLetterChannelDelivery(localPrincipal(), { deliveryId, lastError: input?.lastError })
+    const delivery = await getDesktopChannelService().deadLetterChannelDelivery(localPrincipal(), { deliveryId, lastError: input?.lastError })
+    persistDesktopChannelSnapshot()
+    return delivery
   })
 
   registerIpcInvoke(context, 'channels:watches:list', optionalObjectArg<ChannelWatchListOptions>('channel watch options', normalizeWatchListOptions), async (event, options) => {

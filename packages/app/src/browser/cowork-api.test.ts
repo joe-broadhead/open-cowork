@@ -202,6 +202,44 @@ describe('browser shim presigned artifact upload', () => {
   })
 })
 
+describe('browser shim workspace support', () => {
+  function supportEntry(support: Awaited<ReturnType<ReturnType<typeof createBrowserCoworkApi>['workspace']['support']>>, api: string) {
+    return support.find((entry) => entry.api === api)
+  }
+
+  it('reports cloud-web feature gates and browser-only limitations accurately', async () => {
+    installRecordingFetch((url) => {
+      if (url.endsWith('/api/config')) {
+        return jsonResponse({
+          features: {
+            chat: false,
+            artifacts: true,
+            threadIndex: false,
+            agents: false,
+            customSkills: false,
+            customMcps: false,
+          },
+        })
+      }
+      return jsonResponse({})
+    })
+
+    const support = await createBrowserCoworkApi({}).workspace.support()
+
+    expect(supportEntry(support, 'sessions.create')?.status).toBe('blocked_by_policy')
+    expect(supportEntry(support, 'sessions.create')?.verdict?.reason).toMatch(/chat is disabled/i)
+    expect(supportEntry(support, 'sessions.fileSnippet')?.status).toBe('not_supported')
+    expect(supportEntry(support, 'sessions.diff')?.status).toBe('not_supported')
+    expect(supportEntry(support, 'localFiles')?.status).toBe('not_supported')
+    expect(supportEntry(support, 'machineRuntimeConfig')?.status).toBe('not_supported')
+    expect(supportEntry(support, 'threads.search')?.status).toBe('blocked_by_policy')
+    expect(supportEntry(support, 'capabilities.catalog')?.status).toBe('blocked_by_policy')
+    expect(supportEntry(support, 'artifacts.download')?.status).toBe('supported')
+    expect(supportEntry(support, 'artifacts.reveal')?.status).toBe('not_supported')
+    expect(supportEntry(support, 'artifacts.reveal')?.context?.artifacts.reveal).toBe('none')
+  })
+})
+
 // Tranche H / PERF-2: cloud `assistant.message` SSE events route through the renderer's
 // batched sessionPatch path (the same incremental session-view-reducer the desktop uses)
 // so the transcript advances LIVE and folds many tokens into one reducer pass, rather than

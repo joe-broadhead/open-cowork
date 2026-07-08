@@ -204,7 +204,6 @@ Run these checks after editing packaging, naming, migration, or release docs:
 
 ```bash
 pnpm docs:build
-python3 -m mkdocs build --strict
 git diff --check
 ```
 

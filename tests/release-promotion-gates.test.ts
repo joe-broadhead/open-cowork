@@ -109,6 +109,71 @@ test('release promotion validator accepts completed private hosted evidence', as
   }
 })
 
+test('release promotion validator rejects stale commit evidence for hosted releases', async () => {
+  const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-release-promotion-'))
+  try {
+    const manifestPath = await writeCompletedManifest(outputDir)
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        'scripts/validate-release-promotion.mjs',
+        '--tier',
+        'private-hosted-beta',
+        '--manifest',
+        manifestPath,
+        '--expected-commit-sha',
+        '1111111111111111111111111111111111111111',
+      ], { encoding: 'utf8' }),
+      /must match expected release commit/,
+    )
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+test('release promotion validator binds hosted evidence to pushed OCI image digests', async () => {
+  const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-release-promotion-'))
+  try {
+    const manifestPath = await writeCompletedManifest(outputDir)
+    const cloudImageJson = join(outputDir, 'open-cowork-cloud.image.json')
+    const gatewayImageJson = join(outputDir, 'open-cowork-gateway.image.json')
+    writeFileSync(cloudImageJson, `${JSON.stringify({ digest: cloudDigest }, null, 2)}\n`)
+    writeFileSync(gatewayImageJson, `${JSON.stringify({ digest: gatewayDigest }, null, 2)}\n`)
+
+    const { stdout } = await execFileAsync(process.execPath, [
+      'scripts/validate-release-promotion.mjs',
+      '--tier',
+      'private-hosted-beta',
+      '--manifest',
+      manifestPath,
+      '--expected-commit-sha',
+      commitSha,
+      '--cloud-image-json',
+      cloudImageJson,
+      '--gateway-image-json',
+      gatewayImageJson,
+    ], { encoding: 'utf8' })
+    assert.match(stdout, /private-hosted-beta promotion gate validated/)
+
+    writeFileSync(gatewayImageJson, `${JSON.stringify({ digest: `sha256:${'3'.repeat(64)}` }, null, 2)}\n`)
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        'scripts/validate-release-promotion.mjs',
+        '--tier',
+        'private-hosted-beta',
+        '--manifest',
+        manifestPath,
+        '--cloud-image-json',
+        cloudImageJson,
+        '--gateway-image-json',
+        gatewayImageJson,
+      ], { encoding: 'utf8' }),
+      /must match pushed gateway image digest/,
+    )
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
 test('release promotion validator fails closed for unclaimed hosted tiers', async () => {
   const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-release-promotion-'))
   try {

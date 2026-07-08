@@ -1,6 +1,9 @@
 {{- if and (not $.Values.image.tag) (not $.Values.image.digest) }}
 {{- fail "image.tag or image.digest is required; pin a release tag or immutable digest instead of relying on latest." }}
 {{- end }}
+{{- if and $.Values.image.digest (not (regexMatch "^sha256:[a-f0-9]{64}$" $.Values.image.digest)) }}
+{{- fail "image.digest must be a sha256:<64 lowercase hex> OCI digest." }}
+{{- end }}
 {{- if eq $.Values.image.tag "latest" }}
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}
@@ -14,6 +17,9 @@
 {{- if eq (default "" $cloudSqlProxyImage.tag) "latest" }}
 {{- fail "cloudSqlProxy.image.tag=latest is not allowed; pin a Cloud SQL Auth Proxy version tag or immutable digest." }}
 {{- end }}
+{{- if and $cloudSqlProxyImage.digest (not (regexMatch "^sha256:[a-f0-9]{64}$" $cloudSqlProxyImage.digest)) }}
+{{- fail "cloudSqlProxy.image.digest must be a sha256:<64 lowercase hex> OCI digest." }}
+{{- end }}
 {{- if not $cloudSqlProxy.instanceConnectionName }}
 {{- fail "cloudSqlProxy.enabled=true requires cloudSqlProxy.instanceConnectionName in PROJECT:REGION:INSTANCE form." }}
 {{- end }}
@@ -25,6 +31,21 @@
 {{- end }}
 {{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
+{{- if not $.Values.image.digest }}
+{{- fail "cloud.deploymentTier=public_production requires image.digest so the Cloud deployment is bound to an immutable OCI artifact." }}
+{{- end }}
+{{- if and $cloudSqlProxy.enabled (not $cloudSqlProxyImage.digest) }}
+{{- fail "cloud.deploymentTier=public_production with cloudSqlProxy.enabled=true requires cloudSqlProxy.image.digest." }}
+{{- end }}
+{{- if not $.Values.networkPolicy.enabled }}
+{{- fail "cloud.deploymentTier=public_production requires networkPolicy.enabled=true." }}
+{{- end }}
+{{- if not $.Values.networkPolicy.egress.enabled }}
+{{- fail "cloud.deploymentTier=public_production requires networkPolicy.egress.enabled=true with explicit egress destinations." }}
+{{- end }}
+{{- if empty $.Values.networkPolicy.egress.to }}
+{{- fail "cloud.deploymentTier=public_production requires networkPolicy.egress.to entries for approved control-plane, object-store, identity, and telemetry destinations." }}
+{{- end }}
 {{- if $.Values.cloud.allowInsecureAuth }}
 {{- fail "cloud.deploymentTier=public_production rejects cloud.allowInsecureAuth=true; insecure auth overrides are local/demo-only." }}
 {{- end }}

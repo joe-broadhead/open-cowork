@@ -80,6 +80,8 @@ export function ChatInputReasoningMenu({
     anchorRect.left,
     Math.max(8, window.innerWidth - MENU_WIDTH - 8),
   )
+  const listboxId = 'chat-reasoning-menu-listbox'
+  const activeOptionId = `${listboxId}-option-${options[highlightIndex] || 'auto'}`
 
   function handleKeyDown(event: React.KeyboardEvent) {
     if (event.key === 'ArrowDown') {
@@ -109,10 +111,12 @@ export function ChatInputReasoningMenu({
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         ref={menuRef}
+        id={listboxId}
         className="theme-popover fixed z-50 overflow-hidden rounded-lg"
         role="listbox"
         tabIndex={-1}
         aria-label={t('chat.reasoningSelect', 'Select reasoning mode')}
+        aria-activedescendant={activeOptionId}
         onKeyDown={handleKeyDown}
         style={{
           width: MENU_WIDTH,
@@ -132,6 +136,7 @@ export function ChatInputReasoningMenu({
             const description = describeReasoningVariant(variant)
             return (
               <Card
+                id={`${listboxId}-option-${variant || 'auto'}`}
                 interactive
                 padding="sm"
                 key={variant || 'auto'}

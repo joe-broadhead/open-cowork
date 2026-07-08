@@ -264,8 +264,7 @@ pnpm --dir apps/desktop dist:ci:linux
 ### Build the docs locally
 
 ```bash
-python -m pip install -r docs/requirements.txt
-mkdocs build --strict
+pnpm docs:build
 ```
 
 ## Documentation
