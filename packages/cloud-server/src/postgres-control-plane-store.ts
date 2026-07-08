@@ -296,7 +296,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       withTransaction: (fn) => this.withTransaction(fn),
       requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
       requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
-      requireSession: (tenantId, sessionId, executor) => this.requireSession(tenantId, sessionId, executor),
+      requireSessions: (tenantId, sessionIds, executor) => this.requireSessions(tenantId, sessionIds, executor),
     })
     this.webhooks = new PostgresWebhooksRepository({
       pool: this.pool,
@@ -1308,6 +1308,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [tenantId, userId, sessionId],
     )
     return row ? sessionFromRow(row) : null
+  }
+
+  async getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]) {
+    await this.requireTenantUser(tenantId, userId)
+    const owned = new Set<string>()
+    if (sessionIds.length === 0) return owned
+    // Single set-based ownership probe instead of one round-trip per id, so bulk
+    // thread-tag operations validate hundreds of sessions in one statement.
+    const result = await this.pool.query(
+      `SELECT session_id FROM cloud_sessions
+       WHERE tenant_id = $1 AND user_id = $2 AND session_id = ANY($3::text[])`,
+      [tenantId, userId, sessionIds],
+    )
+    for (const row of result.rows) owned.add(String(row.session_id))
+    return owned
   }
 
   async getSessionForTenant(tenantId: string, sessionId: string) {
@@ -2501,6 +2516,22 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     )
     if (!row) throw new Error(`Unknown session ${sessionId}.`)
     return row
+  }
+
+  private async requireSessions(tenantId: string, sessionIds: string[], executor: PgExecutor = this.pool) {
+    await this.requireTenant(tenantId, executor)
+    if (sessionIds.length === 0) return
+    // Single set-based existence probe instead of one FOR-UPDATE-less round-trip per id,
+    // so bulk thread-tag writes validate every session in one statement (#910 follow-up).
+    const result = await executor.query(
+      `SELECT session_id FROM cloud_sessions
+       WHERE tenant_id = $1 AND session_id = ANY($2::text[])`,
+      [tenantId, sessionIds],
+    )
+    const known = new Set(result.rows.map((row) => String(row.session_id)))
+    for (const sessionId of sessionIds) {
+      if (!known.has(sessionId)) throw new Error(`Unknown session ${sessionId}.`)
+    }
   }
 
   private async requireCommand(commandId: string, executor: PgExecutor, forUpdate = false) {

@@ -358,6 +358,7 @@ export type ControlPlaneStore = {
   completeChannelProviderEvent(input: CompleteChannelProviderEventInput): MaybePromise<ChannelProviderEventRecord | null>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
   getSession(tenantId: string, userId: string, sessionId: string): MaybePromise<SessionRecord | null>
+  getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]): MaybePromise<Set<string>>
   getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
   findSession(sessionId: string): MaybePromise<SessionRecord | null>
   listSessions(tenantId: string, userId: string): MaybePromise<SessionRecord[]>

@@ -744,6 +744,22 @@ function runControlPlaneDomainContracts(
       const clearedMetadata = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
       assert.deepEqual(clearedMetadata?.tags, [])
 
+      // Batch ownership + existence validation: getOwnedSessionIds returns exactly the owned
+      // subset in one set-based probe, and the bulk tag writes reject an unknown session or tag
+      // id identically on both stores (replacing the prior per-id validation N+1).
+      const ownedSubset = await store.getOwnedSessionIds(tenantId, userId, [sessionId, `${prefix}-missing`])
+      assert.equal(ownedSubset.size, 1)
+      assert.equal(ownedSubset.has(sessionId), true)
+      assert.equal(ownedSubset.has(`${prefix}-missing`), false)
+      await assert.rejects(
+        Promise.resolve().then(() => store.applyThreadTags({ tenantId, sessionIds: [sessionId, `${prefix}-missing`], tagIds: [`${prefix}-tag`] })),
+        /Unknown session/,
+      )
+      await assert.rejects(
+        Promise.resolve().then(() => store.applyThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-missing-tag`] })),
+        /Unknown thread tag/,
+      )
+
       // #910: applying a SET of tags to a SET of sessions creates the full cross product in one
       // set-based statement (both sessions get both tags), identically on both stores, and is
       // idempotent under a re-apply (ON CONFLICT DO NOTHING).

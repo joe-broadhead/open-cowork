@@ -24,7 +24,12 @@ const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
-  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_690],
+  // Delegates ~13 domain families to Postgres*Repository sub-stores already; the residual inline
+  // bulk (sessions/commands/leases/workflows/coordination) is the top remaining extraction target.
+  // Ratcheted to just above current size: the +29 over the prior 2690 is the batch session
+  // ownership/existence probes (getOwnedSessionIds/requireSessions) that removed the bulk
+  // thread-tag validation N+1. New capabilities must extract a sub-store, not grow this file.
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_719],
   // session-service is a thin facade: ~156 of its ~168 methods are one-line delegators to the
   // ~30 cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). The real
   // decomposition already lives at the service layer; this budget is ratcheted to just above the

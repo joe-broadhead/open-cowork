@@ -1116,6 +1116,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(record)
   }
 
+  getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]): Set<string> {
+    this.requireTenantUser(tenantId, userId)
+    const owned = new Set<string>()
+    for (const sessionId of sessionIds) {
+      const record = this.sessions.get(key(tenantId, sessionId))?.record
+      if (record && record.userId === userId) owned.add(sessionId)
+    }
+    return owned
+  }
+
   getSessionForTenant(tenantId: string, sessionId: string): SessionRecord | null {
     this.requireTenant(tenantId)
     return clone(this.sessions.get(key(tenantId, sessionId))?.record || null)

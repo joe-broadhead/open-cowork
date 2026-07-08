@@ -3,6 +3,7 @@ import type { ControlPlaneStore } from '../control-plane-store.ts'
 export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'createSession'
   | 'getSession'
+  | 'getOwnedSessionIds'
   | 'getSessionForTenant'
   | 'findSession'
   | 'listSessions'
