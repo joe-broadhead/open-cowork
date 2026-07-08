@@ -4,5 +4,5 @@
 // entry (index.ts → desktop-electron-hosts.ts), not here, so this module — and
 // therefore everything in the substrate that imports it — stays Electron-free.
 // The cloud server reaches this module too, with the hosts unset, and the core
-// takes its env/homedir/cwd fallbacks. See docs/design/cloud-server-extraction.md.
+// takes its env/homedir/cwd fallbacks.
 export * from '@open-cowork/runtime-host/config'
