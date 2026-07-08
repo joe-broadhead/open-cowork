@@ -204,7 +204,7 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
-    const filePath = file.localPath ?? file.path;
+    const filePath = file.localPath;
     const inputFile = filePath ? new InputFile(filePath, file.filename) : new InputFile(file.data ?? new Uint8Array(), file.filename);
     const sent = await this.retry(() => this.bot.api.sendDocument(toChatId(target.chatId), inputFile, {
       message_thread_id: toThreadId(target.threadId)

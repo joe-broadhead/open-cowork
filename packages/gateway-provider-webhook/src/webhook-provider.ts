@@ -67,7 +67,6 @@ export interface WebhookProviderConfig {
   deliveryTimeoutMs?: number;
   circuitBreakerFailureThreshold?: number;
   circuitBreakerCooldownMs?: number;
-  legacySharedSecretHeader?: boolean;
   maxSeenIngressSignatures?: number;
   maxSeenIngressSignaturesPerScope?: number;
 }
@@ -433,10 +432,7 @@ export class WebhookProvider implements ChannelProvider {
       ...(signature ? {
         "x-open-cowork-gateway-webhook-timestamp": timestamp,
         "x-open-cowork-gateway-webhook-signature": signature
-      } : {}),
-      ...(this.config.legacySharedSecretHeader && this.config.sharedSecret
-        ? { "x-open-cowork-gateway-webhook-secret": this.config.sharedSecret }
-        : {})
+      } : {})
     };
   }
 

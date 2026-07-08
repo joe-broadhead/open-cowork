@@ -284,7 +284,7 @@ function validateProviderCapabilities(provider: ChannelProvider): void {
     ["maxButtonsPerMessage", !capabilities.inlineButtons],
     ["maxButtonRowsPerMessage", !capabilities.inlineButtons],
     ["maxButtonTokenBytes", !capabilities.inlineButtons],
-    ["maxFileSizeBytes", false],
+    ["maxFileBytes", false],
   ] as const) {
     const value = capabilities[field] ?? 0;
     if (!Number.isInteger(value) || value < (allowZero ? 0 : 1)) {

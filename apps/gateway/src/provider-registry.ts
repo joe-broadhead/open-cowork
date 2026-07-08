@@ -156,7 +156,6 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
     return new FakeChannelProvider({
       capabilities: {
         maxFileBytes: gateway.server.maxRequestBodyBytes,
-        maxFileSizeBytes: gateway.server.maxRequestBodyBytes,
       },
     })
   }

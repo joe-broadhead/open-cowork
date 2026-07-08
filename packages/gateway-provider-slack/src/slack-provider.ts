@@ -157,7 +157,7 @@ export class SlackProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
-    const filePath = file.localPath ?? file.path;
+    const filePath = file.localPath;
     const data = file.data || (filePath ? new Uint8Array(await readFile(filePath)) : new Uint8Array());
     if (data.byteLength === 0) throw new Error("Slack file upload requires file data.");
     if (data.byteLength > this.capabilities.maxFileBytes!) {
