@@ -118,7 +118,9 @@ export class CloudByokService {
   async getSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
     await this.ensurePrincipal(principal)
     this.assertByokAllowed(principal)
-    const normalizedProviderId = await this.assertByokProviderAllowed(principal, providerId)
+    // Reads are never billing-gated (#906): reading key metadata must work even when
+    // the subscription is past_due — config-only provider check, no entitlement gate.
+    const normalizedProviderId = this.assertByokProviderConfigured(providerId)
     return this.requireByokSecrets().getMetadata(this.principalOrgId(principal), normalizedProviderId)
   }
 
@@ -171,7 +173,9 @@ export class CloudByokService {
   async disableSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
     await this.ensurePrincipal(principal)
     this.assertByokAllowed(principal)
-    const normalizedProviderId = await this.assertByokProviderAllowed(principal, providerId)
+    // De-escalation is never billing-gated (#906): an admin must be able to disable/revoke
+    // a leaked key even while past_due — config-only provider check, no entitlement gate.
+    const normalizedProviderId = this.assertByokProviderConfigured(providerId)
     return this.requireByokSecrets().disableSecret({
       orgId: this.principalOrgId(principal),
       providerId: normalizedProviderId,
