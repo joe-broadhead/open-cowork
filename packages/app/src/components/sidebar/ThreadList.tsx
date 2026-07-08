@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
-import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { switchToSession } from '../../helpers/switchToSession'
 import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
@@ -247,7 +247,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     if (editingId) return
     if (sessionId === currentSessionId) { onSelect?.(); return }
     onSelect?.()
-    await loadSessionMessages(sessionId)
+    await switchToSession(sessionId)
   }
 
   const handleRename = async (id: string) => {
@@ -324,7 +324,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       setCurrentSession(result.sessionId)
       setCopyDialog(null)
       onSelect?.()
-      await loadSessionMessages(result.sessionId)
+      await switchToSession(result.sessionId)
     } catch (error) {
       setCopyDialog((current) => current ? { ...current, busy: false } : current)
       addGlobalError(error instanceof Error ? error.message : String(error))

@@ -3,7 +3,7 @@ import type { SessionView } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../stores/session-workspace-keys'
-import { switchToSession } from './loadSessionMessages'
+import { switchToSession } from './switchToSession'
 
 function resetSessionStore() {
   useSessionStore.setState({

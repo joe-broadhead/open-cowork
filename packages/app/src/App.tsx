@@ -49,7 +49,7 @@ import { useAppGlobalEvents } from './hooks/useAppGlobalEvents'
 import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
 import { useRuntimeHealth } from './hooks/useRuntimeHealth'
 import { useAdminAccessState } from './hooks/useAdminAccessible'
-import { loadSessionMessages } from './helpers/loadSessionMessages'
+import { switchToSession } from './helpers/switchToSession'
 import { setBrandName, setDocsBaseUrl } from './helpers/brand'
 import { configureI18n, subscribeLocale, t } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
@@ -213,9 +213,9 @@ export function App() {
   const openExistingThread = useCallback(async (sessionId: string, workspaceId?: string) => {
     navigateView('chat')
     if (workspaceId) {
-      await loadSessionMessages(sessionId, { workspaceId })
+      await switchToSession(sessionId, { workspaceId })
     } else {
-      await loadSessionMessages(sessionId)
+      await switchToSession(sessionId)
     }
   }, [navigateView])
 

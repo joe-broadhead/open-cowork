@@ -3,7 +3,7 @@ import type { SessionInfo } from '@open-cowork/shared'
 
 import { normalizeAppView, type AppView } from '../app-types'
 import { t } from '../helpers/i18n'
-import { loadSessionMessages } from '../helpers/loadSessionMessages'
+import { switchToSession } from '../helpers/switchToSession'
 import { useSessionStore } from '../stores/session'
 
 type UseAppGlobalEventsOptions = {
@@ -44,7 +44,7 @@ async function revertCurrentSession(sessionId: string) {
       reportGlobalActionError(userMessage, `Failed to revert session ${sessionId}`, new Error('session.revert returned false'))
       return
     }
-    await loadSessionMessages(sessionId, { force: true })
+    await switchToSession(sessionId, { force: true })
   } catch (err) {
     reportGlobalActionError(userMessage, `Failed to revert session ${sessionId}`, err)
   }
@@ -58,7 +58,7 @@ async function unrevertCurrentSession(sessionId: string) {
       reportGlobalActionError(userMessage, `Failed to unrevert session ${sessionId}`, new Error('session.unrevert returned false'))
       return
     }
-    await loadSessionMessages(sessionId, { force: true })
+    await switchToSession(sessionId, { force: true })
   } catch (err) {
     reportGlobalActionError(userMessage, `Failed to unrevert session ${sessionId}`, err)
   }
@@ -89,7 +89,7 @@ async function switchProjectByIndex(index: number, setView: (view: AppView) => v
     const store = useSessionStore.getState()
     store.setSessions([session, ...store.sessions.filter((existing) => existing.id !== session.id)])
     setView('chat')
-    await loadSessionMessages(session.id, { force: true })
+    await switchToSession(session.id, { force: true })
   } catch (err) {
     reportGlobalActionError(
       t('globalActions.projectSwitchFailed', 'Could not switch projects. Please try again.'),

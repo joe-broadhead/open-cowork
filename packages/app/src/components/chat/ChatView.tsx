@@ -9,7 +9,7 @@ import {
 import type { AppNavigationTarget } from '../../app-types'
 import { useSessionStore, type Message, type PendingApproval, type TaskRun } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { switchToSession } from '../../helpers/switchToSession'
 import { t } from '../../helpers/i18n'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
@@ -535,7 +535,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
           taskContext={taskContext}
           onOpenParent={() => {
             if (currentSession?.parentSessionId) {
-              void loadSessionMessages(currentSession.parentSessionId)
+              void switchToSession(currentSession.parentSessionId)
             }
           }}
           onOpenBoard={taskContext ? () => onNavigate?.('projects') : undefined}

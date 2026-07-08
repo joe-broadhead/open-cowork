@@ -12,11 +12,11 @@ import type {
 } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
-import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { switchToSession } from '../../helpers/switchToSession'
 import { ChatView } from './ChatView'
 
-vi.mock('../../helpers/loadSessionMessages', () => ({
-  loadSessionMessages: vi.fn(async () => undefined),
+vi.mock('../../helpers/switchToSession', () => ({
+  switchToSession: vi.fn(async () => undefined),
 }))
 
 vi.mock('./MessageBubble', () => ({
@@ -387,7 +387,7 @@ describe('ChatView', () => {
     await waitFor(() => expect(api.app.builtinAgents).toHaveBeenCalledTimes(2))
 
     await user.click(screen.getByRole('button', { name: /Forked from Parent thread/ }))
-    expect(loadSessionMessages).toHaveBeenCalledWith('parent-1')
+    expect(switchToSession).toHaveBeenCalledWith('parent-1')
 
     await user.click(screen.getByRole('button', { name: 'Reverted · click to unrevert' }))
     await waitFor(() => expect(api.session.unrevert).toHaveBeenCalledWith('session-1'))
