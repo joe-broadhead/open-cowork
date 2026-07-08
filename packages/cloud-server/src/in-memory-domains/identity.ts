@@ -245,6 +245,34 @@ export class InMemoryIdentityDomain {
       .map((member) => clone(member))
   }
 
+  listOrgMembersPage(orgId: string, input: { afterAccountId?: string | null, limit?: number | null } = {}): OrgMemberRecord[] {
+    if (!this.orgExists(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    const afterAccountId = input.afterAccountId?.trim() || ''
+    const limit = Math.max(1, Math.min(input.limit || 500, 1000))
+    return Array.from(this.memberships.values())
+      .filter((membership) => membership.orgId === orgId)
+      .map((membership) => {
+        const account = this.accounts.get(membership.accountId)
+        if (!account) return null
+        return {
+          orgId: membership.orgId,
+          accountId: membership.accountId,
+          email: account.email,
+          displayName: account.displayName,
+          role: membership.role,
+          customRoleKey: membership.customRoleKey,
+          status: membership.status,
+          createdAt: membership.createdAt,
+          updatedAt: membership.updatedAt,
+        } satisfies OrgMemberRecord
+      })
+      .filter((member): member is OrgMemberRecord => Boolean(member))
+      .filter((member) => (afterAccountId ? member.accountId.localeCompare(afterAccountId) > 0 : true))
+      .sort((left, right) => left.accountId.localeCompare(right.accountId))
+      .slice(0, limit)
+      .map((member) => clone(member))
+  }
+
   listMembershipsForAccount(accountId: string): MembershipRecord[] {
     return Array.from(this.memberships.values())
       .filter((membership) => membership.accountId === accountId)

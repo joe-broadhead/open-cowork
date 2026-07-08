@@ -413,6 +413,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.identity.listOrgMembers(orgId, input)
   }
 
+  async listOrgMembersPage(orgId: string, input: { afterAccountId?: string | null, limit?: number | null } = {}) {
+    return this.identity.listOrgMembersPage(orgId, input)
+  }
+
   async listMembershipsForAccount(accountId: string) {
     return this.identity.listMembershipsForAccount(accountId)
   }

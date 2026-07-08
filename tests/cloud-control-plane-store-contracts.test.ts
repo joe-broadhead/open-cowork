@@ -155,6 +155,23 @@ function runControlPlaneDomainContracts(
       assert.equal(invitedPrincipal?.account.accountId, invitedAccount.accountId)
       assert.equal(invitedPrincipal?.membership.status, 'invited')
 
+      // #909: keyset member pagination returns EVERY member ordered by the stable account_id,
+      // identically on both stores. Paginating one at a time must reconstruct the full set with
+      // no gaps or duplicates (the property SCIM reconcile relies on for orgs past one UI page).
+      const allMembers = await store.listOrgMembersPage(org.orgId, {})
+      const allMemberIds = allMembers.map((member) => member.accountId)
+      assert.equal(allMemberIds.includes(account.accountId), true)
+      assert.equal(allMemberIds.includes(invitedAccount.accountId), true)
+      const pagedMemberIds: string[] = []
+      let memberCursor: string | null = null
+      for (;;) {
+        const page = await store.listOrgMembersPage(org.orgId, { afterAccountId: memberCursor, limit: 1 })
+        if (page.length === 0) break
+        pagedMemberIds.push(...page.map((member) => member.accountId))
+        memberCursor = page[page.length - 1]!.accountId
+      }
+      assert.deepEqual(pagedMemberIds, allMemberIds)
+
       await store.createSession({
         tenantId,
         userId,

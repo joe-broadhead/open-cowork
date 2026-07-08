@@ -172,3 +172,22 @@ test('SCIM sync queue retries a failing event with backoff, then a reconcile con
   assert.ok(drained.succeeded >= 1)
   assert.equal(await store.findApiTokenByPlaintext(driftToken.plaintext), null)
 })
+
+test('SCIM reconcile revokes disabled members beyond the first page (#909)', async () => {
+  const { store, principalService, reconciler } = makeHarness()
+  await bootstrapOrg(store, principalService)
+  // Seed more members than a single reconcile page (500) can hold, with the disabled member's
+  // account_id sorting onto page 2. A reconcile that stopped at the first page would miss it.
+  for (let index = 0; index < 600; index += 1) {
+    const accountId = `bulk-${String(index).padStart(3, '0')}`
+    await store.createAccount({ accountId, email: `${accountId}@example.test` })
+    await store.upsertMembership({ orgId: 'org-1', accountId, role: 'member', status: index === 599 ? 'disabled' : 'active' })
+  }
+  const disabledToken = await store.issueApiToken({ orgId: 'org-1', accountId: 'bulk-599', name: 'bulk', scopes: ['desktop'] })
+
+  await reconciler.enqueueReconcile('org-1')
+  const drained = await reconciler.drain({ orgId: 'org-1' })
+  assert.ok(drained.succeeded >= 1)
+  // The disabled member on page 2 is still revoked — no silent truncation at 500 members.
+  assert.equal(await store.findApiTokenByPlaintext(disabledToken.plaintext), null)
+})

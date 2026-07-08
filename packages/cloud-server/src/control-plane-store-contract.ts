@@ -206,6 +206,11 @@ export type ControlPlaneStore = {
   findAccountByEmail(email: string): MaybePromise<AccountRecord | null>
   upsertMembership(input: UpsertMembershipInput): MaybePromise<MembershipRecord>
   listOrgMembers(orgId: string, input?: { query?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
+  // Keyset iteration over ALL members of an org, ordered by the immutable account_id so the
+  // cursor is stable even while the caller mutates memberships mid-iteration (SCIM reconcile).
+  // Callers page until a short page is returned; unlike listOrgMembers this is not capped at a
+  // single UI page.
+  listOrgMembersPage(orgId: string, input?: { afterAccountId?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
   listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
   // Custom roles (org-defined named permission maps). CRUD plus effective-permission

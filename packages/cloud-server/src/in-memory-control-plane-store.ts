@@ -436,6 +436,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.identityDomain.listOrgMembers(orgId, input)
   }
 
+  listOrgMembersPage(orgId: string, input: { afterAccountId?: string | null, limit?: number | null } = {}): OrgMemberRecord[] {
+    return this.identityDomain.listOrgMembersPage(orgId, input)
+  }
+
   listMembershipsForAccount(accountId: string): MembershipRecord[] {
     return this.identityDomain.listMembershipsForAccount(accountId)
   }
