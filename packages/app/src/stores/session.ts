@@ -148,6 +148,26 @@ export interface SessionStore {
   registerChartArtifact: (sessionId: string, artifact: SessionArtifact) => void
 }
 
+// `sessions` mirrors `sessionsByWorkspace[activeWorkspaceId]` as a single source of truth. Every
+// mutation of a workspace's session list must go through this helper so the mirror can never
+// desync — previously each mutator wrote the same transform twice by hand, and a forgotten second
+// copy silently desynced the sidebar from the workspace cache (#919).
+function applyToWorkspace(
+  state: SessionStore,
+  workspaceId: string | null | undefined,
+  updater: (sessions: Session[]) => Session[],
+): Pick<SessionStore, 'sessions' | 'sessionsByWorkspace'> {
+  const activeWorkspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
+  const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? activeWorkspaceId)
+  const targetIsActive = targetWorkspaceId === activeWorkspaceId
+  const currentSessions = targetIsActive ? state.sessions : (state.sessionsByWorkspace[targetWorkspaceId] || [])
+  const nextSessions = updater(currentSessions)
+  return {
+    sessions: targetIsActive ? nextSessions : state.sessions,
+    sessionsByWorkspace: { ...state.sessionsByWorkspace, [targetWorkspaceId]: nextSessions },
+  }
+}
+
 export const useSessionStore = create<SessionStore>((set) => ({
   activeWorkspaceId: LOCAL_WORKSPACE_ID,
   sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: [] },
@@ -173,16 +193,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       ),
     }
   }),
-  setSessions: (sessions) => set((state) => {
-    const workspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
-    return {
-      sessions,
-      sessionsByWorkspace: {
-        ...state.sessionsByWorkspace,
-        [workspaceId]: sessions,
-      },
-    }
-  }),
+  setSessions: (sessions) => set((state) => applyToWorkspace(state, state.activeWorkspaceId, () => sessions)),
   setCurrentSession: (id) => set((state) => {
     let sessionStateById = { ...state.sessionStateById }
     if (!id) {
@@ -220,22 +231,12 @@ export const useSessionStore = create<SessionStore>((set) => ({
       ),
     }
   }),
-  addSession: (session) => set((state) => ({
-    sessions: [session, ...state.sessions],
-    sessionsByWorkspace: {
-      ...state.sessionsByWorkspace,
-      [normalizeWorkspaceId(state.activeWorkspaceId)]: [session, ...state.sessions],
-    },
-  })),
-  renameSession: (id, title) => set((state) => ({
-    sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
-    sessionsByWorkspace: {
-      ...state.sessionsByWorkspace,
-      [normalizeWorkspaceId(state.activeWorkspaceId)]: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
-    },
-  })),
-  setSessionComposerPreferences: (id, preferences) => set((state) => ({
-    sessions: state.sessions.map((session) => {
+  addSession: (session) => set((state) => applyToWorkspace(state, state.activeWorkspaceId, (sessions) => [session, ...sessions])),
+  renameSession: (id, title) => set((state) => applyToWorkspace(state, state.activeWorkspaceId, (sessions) => (
+    sessions.map((session) => (session.id === id ? { ...session, title } : session))
+  ))),
+  setSessionComposerPreferences: (id, preferences) => set((state) => applyToWorkspace(state, state.activeWorkspaceId, (sessions) => (
+    sessions.map((session) => {
       if (session.id !== id) return session
       return {
         ...session,
@@ -249,41 +250,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
           ? { composerReasoningVariant: preferences.reasoningVariant ?? null }
           : {}),
       }
-    }),
-    sessionsByWorkspace: {
-      ...state.sessionsByWorkspace,
-      [normalizeWorkspaceId(state.activeWorkspaceId)]: state.sessions.map((session) => {
-        if (session.id !== id) return session
-        return {
-          ...session,
-          ...(Object.prototype.hasOwnProperty.call(preferences, 'agentName')
-            ? { composerAgentName: preferences.agentName ?? null }
-            : {}),
-          ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
-            ? { composerModelId: preferences.modelId ?? null }
-            : {}),
-          ...(Object.prototype.hasOwnProperty.call(preferences, 'reasoningVariant')
-            ? { composerReasoningVariant: preferences.reasoningVariant ?? null }
-            : {}),
-        }
-      }),
-    },
-  })),
-  applySessionMetadata: (patch, workspaceId) => set((state) => {
-    const activeWorkspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
-    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? activeWorkspaceId)
-    const currentSessions = targetWorkspaceId === activeWorkspaceId
-      ? state.sessions
-      : state.sessionsByWorkspace[targetWorkspaceId] || []
-    const nextSessions = currentSessions.map((session) => applySessionMetadataPatch(session, patch))
-    return {
-      sessions: targetWorkspaceId === activeWorkspaceId ? nextSessions : state.sessions,
-      sessionsByWorkspace: {
-        ...state.sessionsByWorkspace,
-        [targetWorkspaceId]: nextSessions,
-      },
-    }
-  }),
+    })
+  ))),
+  applySessionMetadata: (patch, workspaceId) => set((state) => applyToWorkspace(state, workspaceId, (sessions) => (
+    sessions.map((session) => applySessionMetadataPatch(session, patch))
+  ))),
   removeSession: (id, workspaceId) => set((state) => {
     const activeWorkspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
     const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? activeWorkspaceId)
@@ -309,17 +280,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const nextAwaitingQuestion = state.awaitingQuestionSessions.has(sessionKey)
       ? new Set(Array.from(state.awaitingQuestionSessions).filter((sid) => sid !== sessionKey))
       : state.awaitingQuestionSessions
-    const currentSessions = targetIsActive
-      ? state.sessions
-      : state.sessionsByWorkspace[targetWorkspaceId] || []
-    const nextSessions = currentSessions.filter((session) => session.id !== id)
-
     const patch: Partial<SessionStore> = {
-      sessions: targetIsActive ? nextSessions : state.sessions,
-      sessionsByWorkspace: {
-        ...state.sessionsByWorkspace,
-        [targetWorkspaceId]: nextSessions,
-      },
+      ...applyToWorkspace(state, targetWorkspaceId, (sessions) => sessions.filter((session) => session.id !== id)),
       sessionStateById,
       totalCost: sumSessionCosts(sessionStateById),
       busySessions: nextBusy,
@@ -492,18 +454,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const trimmed = agentName?.trim()
     if (trimmed) sessionPrimaryAgents[sessionKey] = trimmed
     else delete sessionPrimaryAgents[sessionKey]
-    const currentSessions = targetWorkspaceId === activeWorkspaceId
-      ? state.sessions
-      : state.sessionsByWorkspace[targetWorkspaceId] || []
-    const nextSessions = currentSessions.map((session) => (
-      session.id === sessionId ? { ...session, composerAgentName: trimmed || null } : session
-    ))
     return {
-      sessions: targetWorkspaceId === activeWorkspaceId ? nextSessions : state.sessions,
-      sessionsByWorkspace: {
-        ...state.sessionsByWorkspace,
-        [targetWorkspaceId]: nextSessions,
-      },
+      ...applyToWorkspace(state, targetWorkspaceId, (sessions) => sessions.map((session) => (
+        session.id === sessionId ? { ...session, composerAgentName: trimmed || null } : session
+      ))),
       sessionPrimaryAgents,
     }
   }),

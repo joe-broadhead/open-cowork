@@ -9,6 +9,7 @@ export type IdentityControlPlaneStore = Pick<ControlPlaneStore,
   | 'findAccountByEmail'
   | 'upsertMembership'
   | 'listOrgMembers'
+  | 'listOrgMembersPage'
   | 'listMembershipsForAccount'
   | 'resolvePrincipalMembership'
   | 'recordAuditEvent'

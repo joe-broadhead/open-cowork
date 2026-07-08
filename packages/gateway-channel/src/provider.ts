@@ -93,18 +93,18 @@ export function channelProviderKindFromId(value: unknown): ChannelProviderKind |
 export function normalizeChannelProviderIdentity(
   kind: ChannelProviderKind,
   providerId?: string | null,
-): { providerId: ChannelProviderId; providerKind: ChannelProviderKind; legacyKindId: boolean } {
+): { providerId: ChannelProviderId; providerKind: ChannelProviderKind } {
   const id = providerId?.trim() || kind;
   if (id === kind) {
-    return { providerId: kind, providerKind: kind, legacyKindId: true };
+    return { providerId: kind, providerKind: kind };
   }
   if (!isChannelProviderInstanceIdForKind(id, kind)) {
     if (isSafeChannelProviderInstanceId(id)) {
-      return { providerId: id, providerKind: kind, legacyKindId: true };
+      return { providerId: id, providerKind: kind };
     }
     throw new Error(`Channel provider id ${id} must equal ${kind}, start with ${kind}-, or be a safe legacy provider id.`);
   }
-  return { providerId: id, providerKind: kind, legacyKindId: false };
+  return { providerId: id, providerKind: kind };
 }
 
 function isSafeChannelProviderInstanceId(value: unknown): value is ChannelProviderLegacyInstanceId {
@@ -125,7 +125,6 @@ export interface ChannelCapabilities {
   maxButtonRowsPerMessage?: number;
   maxButtonTokenBytes?: number;
   maxFileBytes?: number;
-  maxFileSizeBytes?: number;
   inboundFileModes?: ChannelFileInputMode[];
   outboundFileModes?: ChannelFileOutputMode[];
   editSemantics?: ChannelEditSemantics;
@@ -212,10 +211,6 @@ export interface OutgoingFile {
   filename: string;
   mimeType?: string;
   localPath?: string;
-  /**
-   * @deprecated Use localPath. Kept for compatibility with existing callers.
-   */
-  path?: string;
   data?: Uint8Array;
 }
 
@@ -254,7 +249,7 @@ export interface OutgoingFileSource {
 }
 
 export function normalizeChannelCapabilities(capabilities: ChannelCapabilities): ChannelCapabilities {
-  const maxFileBytes = positiveInteger(capabilities.maxFileBytes ?? capabilities.maxFileSizeBytes ?? 25 * 1024 * 1024, "maxFileBytes");
+  const maxFileBytes = positiveInteger(capabilities.maxFileBytes ?? 25 * 1024 * 1024, "maxFileBytes");
   const preferredParseMode = parseMode(capabilities.preferredParseMode);
   const parseModes = capabilities.parseModes?.length
     ? Array.from(new Set(capabilities.parseModes.map(parseMode)))
@@ -268,7 +263,6 @@ export function normalizeChannelCapabilities(capabilities: ChannelCapabilities):
     maxButtonRowsPerMessage: nonNegativeInteger(capabilities.maxButtonRowsPerMessage ?? (capabilities.inlineButtons ? 4 : 0), "maxButtonRowsPerMessage"),
     maxButtonTokenBytes: nonNegativeInteger(capabilities.maxButtonTokenBytes ?? (capabilities.inlineButtons ? 64 : 0), "maxButtonTokenBytes"),
     maxFileBytes,
-    maxFileSizeBytes: maxFileBytes,
     inboundFileModes: capabilities.inboundFileModes ?? (capabilities.fileDownloads ? ["provider_file_id", "download_url", "inline_buffer"] : []),
     outboundFileModes: capabilities.outboundFileModes ?? (capabilities.fileUploads ? ["local_path", "inline_buffer"] : []),
     editSemantics: capabilities.editSemantics ?? (capabilities.messageEditing ? "message" : "none"),
@@ -281,11 +275,8 @@ export function normalizeChannelCapabilities(capabilities: ChannelCapabilities):
 export function validateOutgoingFilePayload(file: OutgoingFile): string[] {
   const violations: string[] = [];
   const filename = file.filename.trim();
-  const localPath = file.localPath ?? file.path;
+  const localPath = file.localPath;
   if (!filename) violations.push("outgoing file filename is required");
-  if (file.localPath && file.path && file.localPath !== file.path) {
-    violations.push("outgoing file cannot set both localPath and path to different values");
-  }
   if (file.data && localPath) {
     violations.push("outgoing file cannot set both inline data and a local path");
   }
@@ -303,7 +294,7 @@ export function resolveOutgoingFileSource(file: OutgoingFile): OutgoingFileSourc
   if (violations.length > 0) throw new Error(violations.join("; "));
   return {
     data: file.data,
-    localPath: file.localPath ?? file.path
+    localPath: file.localPath
   };
 }
 

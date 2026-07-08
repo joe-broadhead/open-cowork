@@ -42,17 +42,6 @@ const STORAGE_KEYS = {
   density: 'open-cowork-density',
 }
 
-const LEGACY_THEME_KEYS = ['open-cowork-theme', 'cowork-theme']
-const LEGACY_THEME_MAP: Record<string, UiTheme> = {
-  mercury: 'mercury',
-  ocean: 'tokyostorm',
-  tokyonight: 'tokyostorm',
-  graphite: 'nord',
-  forest: 'everforest',
-  sunrise: 'gruvbox',
-  catppuccin: 'frappe',
-}
-
 const SYSTEM_QUERY = '(prefers-color-scheme: light)'
 
 const UI_FONT_STACKS: Record<UiFont, string> = {
@@ -92,28 +81,15 @@ export const DENSITY_OPTIONS: Array<{ id: Density; label: string }> = [
 
 let mediaCleanup: (() => void) | null = null
 
-function readLegacyColorScheme(): ColorScheme | null {
-  for (const key of LEGACY_THEME_KEYS) {
-    const value = localStorage.getItem(key)
-    if (value === 'dark' || value === 'light') return value
-  }
-  return null
-}
-
 function readColorScheme(): ColorScheme {
   const stored = localStorage.getItem(STORAGE_KEYS.colorScheme)
   if (stored === 'system' || stored === 'dark' || stored === 'light') return stored
-  return readLegacyColorScheme() || 'dark'
+  return 'dark'
 }
 
 function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
-  const resolved = isUiTheme(stored)
-    ? stored
-    : (stored && stored in LEGACY_THEME_MAP) ? LEGACY_THEME_MAP[stored]! : getDefaultThemeId()
-  // Only the branded Mercury identity (Mercury/Day schemes) is user-facing; any
-  // legacy code-editor preset still stored from earlier builds collapses to it.
-  return isUserFacingTheme(resolved) ? resolved : getDefaultThemeId()
+  return isUiTheme(stored) ? stored : getDefaultThemeId()
 }
 
 function readAccent(): UiAccentChoice {

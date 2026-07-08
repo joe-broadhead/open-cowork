@@ -154,6 +154,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '021_performance_indexes',
         '022_event_retention_indexes',
         '025_workspace_event_retention_and_interaction_index',
+        '029_projection_lag_index',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))

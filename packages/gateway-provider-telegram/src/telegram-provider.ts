@@ -63,7 +63,6 @@ export class TelegramProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 4,
     maxButtonTokenBytes: 64,
     maxFileBytes: 20 * 1024 * 1024,
-    maxFileSizeBytes: 20 * 1024 * 1024,
     inboundFileModes: ["provider_file_id"],
     outboundFileModes: ["local_path", "inline_buffer"],
     editSemantics: "message",
@@ -205,7 +204,7 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
-    const filePath = file.localPath ?? file.path;
+    const filePath = file.localPath;
     const inputFile = filePath ? new InputFile(filePath, file.filename) : new InputFile(file.data ?? new Uint8Array(), file.filename);
     const sent = await this.retry(() => this.bot.api.sendDocument(toChatId(target.chatId), inputFile, {
       message_thread_id: toThreadId(target.threadId)

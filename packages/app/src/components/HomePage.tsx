@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRovingMenuKeyboard } from './home/use-roving-menu-keyboard'
+import { useDismissOnOutsidePointer } from './home/use-dismiss-on-outside-pointer'
 import type {
   BrandingHomeConfig,
   LaunchpadFeedPayload,
@@ -227,6 +229,7 @@ function HomeComposer({
   const reasoningBtnRef = useRef<HTMLButtonElement>(null)
   const assignBtnRef = useRef<HTMLButtonElement>(null)
   const assignMenuRef = useRef<HTMLDivElement>(null)
+  const { onKeyDown: handleAssignMenuKeyDown } = useRovingMenuKeyboard(assignMenuRef, assignBtnRef, showAssignMenu, () => setShowAssignMenu(false))
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
@@ -379,42 +382,15 @@ function HomeComposer({
     })
   }, [inlinePicker, text])
 
-  useEffect(() => {
-    if (!inlinePicker) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (inlinePickerRef.current?.contains(target)) return
-      if (textareaRef.current?.contains(target)) return
-      setInlinePicker(null)
-    }
-
-    document.addEventListener('mousedown', handlePointerDown, true)
-    return () => document.removeEventListener('mousedown', handlePointerDown, true)
-  }, [inlinePicker])
-
-  useEffect(() => {
-    if (!showAssignMenu) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (assignMenuRef.current?.contains(target)) return
-      if (assignBtnRef.current?.contains(target)) return
-      setShowAssignMenu(false)
-    }
-
-    document.addEventListener('mousedown', handlePointerDown, true)
-    return () => document.removeEventListener('mousedown', handlePointerDown, true)
-  }, [showAssignMenu])
+  useDismissOnOutsidePointer(Boolean(inlinePicker), () => setInlinePicker(null), [inlinePickerRef, textareaRef])
+  useDismissOnOutsidePointer(showAssignMenu, () => setShowAssignMenu(false), [assignMenuRef, assignBtnRef])
 
   // Composer chrome is deliberately quiet at rest — the borders use a
   // static `rgba` so the theme's purple accent never bleeds in through
   // `--color-border` when the textarea takes focus. A drop-over state
   // is the only thing that lights up the border, since that's a
   // discoverability cue we actually want the user to see.
-  const restBorder = '1px solid rgba(148, 148, 172, 0.18)'
+  const restBorder = '1px solid color-mix(in srgb, var(--color-border) 70%, transparent)'
   const dropBorder = '1px solid var(--color-accent)'
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel || t('chat.modelFallback', 'Model')
   const policyBlockedReason = !canPrompt
@@ -486,7 +462,7 @@ function HomeComposer({
           border: dragOver ? dropBorder : restBorder,
           boxShadow: dragOver
             ? '0 18px 48px color-mix(in srgb, var(--color-accent) 16%, transparent)'
-            : '0 26px 70px rgba(0, 0, 0, 0.40), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px rgba(255, 255, 255, 0.05)',
+            : '0 26px 70px color-mix(in srgb, #000 40%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px color-mix(in srgb, #fff 5%, transparent)',
         }}
       >
         <div className="home-composer-assign-row">
@@ -514,7 +490,7 @@ function HomeComposer({
               {primaryLeadAvailable && <Icon name="chevron-down" size={16} className="shrink-0 text-text-muted" />}
             </button>
             {showAssignMenu && primaryLeadAvailable && (
-              <div ref={assignMenuRef} className="home-assign-menu" role="menu" aria-label={t('home.assign.menuLabel', 'Assign lead coworker')}>
+              <div ref={assignMenuRef} className="home-assign-menu" role="menu" aria-label={t('home.assign.menuLabel', 'Assign lead coworker')} onKeyDown={handleAssignMenuKeyDown}>
                 {visibleAssignOptions.map((option) => (
                   <button
                     key={option.id}

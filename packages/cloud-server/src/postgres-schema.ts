@@ -908,6 +908,16 @@ export const CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS = [
 // enqueue/claim/create. The trigger fires for EVERY row change regardless of code
 // path, so the gauge can't drift; a migration-time backfill seeds it from the
 // current COUNT. (Built one gauge per migration — this one covers workflow runs.)
+//
+// KNOWN CEILING (#912): the counter is one row per (scope_id=org, counter_key), so all
+// concurrent transactions that change an org's active count serialize on that row's lock
+// until commit. The trigger already narrows this to genuine active-count transitions
+// (`IF old_active = new_active THEN RETURN NULL`), so steady-state churn that doesn't cross
+// the queued/running boundary never touches the row. It remains a per-ORG write-throughput
+// ceiling (not cross-org, and each update is sub-millisecond). If a single very high-volume
+// org approaches it, shard the row into (scope_id, counter_key, bucket) with the bucket
+// chosen by hash(session_id/run_id) % N and SUM the buckets on read — the read stays O(N
+// buckets). See docs/performance.md ("What's NOT optimized (yet)") for the threshold guidance.
 export const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID = '017_cloud_concurrency_counters'
 const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_concurrency_counters (
@@ -1030,6 +1040,14 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
 // with the always-firing AFTER-row trigger this is drift-free for all post-migration activity. The
 // `reconcile` statements recompute every counter from its source table (resetting idle scopes to 0)
 // to wipe drift accumulated under the old clamp on deploy, and are reused by the periodic reconcile.
+//
+// COST (#924): each statement is a full, status-filtered GROUP BY scan of its source table — no
+// index serves it. That is cheap at deploy time (one-off) but EXPENSIVE if the optional periodic
+// reconcile (concurrencyReconcileMs) is enabled on a large deployment, where it re-scans all of
+// cloud_sessions / cloud_session_commands / cloud_workflow_runs on every tick. It is off by default
+// because the clamp-on-read trigger already keeps the gauges drift-free; only enable it as a
+// belt-and-braces safety net, and if a deployment is large enough for the scan to matter, bound it
+// (per-org batching) rather than running the global aggregate.
 function concurrencyReconcileStatements(counterKey: string, sourceTable: string, activeWhere: string) {
   // counterKey/sourceTable/activeWhere are fixed literals below — never request input.
   return [
@@ -1268,6 +1286,16 @@ const CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS = [
      ON cloud_scim_sync_events (status, next_attempt_at)`,
 ] as const
 
+// Serves the scheduler's projection-lag gauge, which previously full-scanned cloud_sessions +
+// LEFT JOINed projections on every emission. A partial index on updated_at over only the sessions
+// that carry events lets the bounded (recent-window) lag query touch just the active tail (#911).
+export const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_MIGRATION_ID = '029_projection_lag_index'
+const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_sessions_projection_lag_idx
+    ON cloud_sessions (updated_at)
+    WHERE next_event_sequence > 0`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1396,5 +1424,11 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_SSO_SCIM_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_sessions_projection_lag_idx'],
+    transactional: false,
   },
 ] as const

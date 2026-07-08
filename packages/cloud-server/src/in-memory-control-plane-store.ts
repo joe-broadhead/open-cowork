@@ -149,13 +149,11 @@ import type {
   ThreadTagRecord,
 } from './control-plane-workspace-records.ts'
 import type {
-  ClaimRunnableSessionsInput,
   ListRunnableSessionsInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
   ReapedWorkflowClaimRecord,
-  RunnableSessionClaimRecord,
   RunnableSessionListRecord,
   SessionCommandRecord,
   WorkerHeartbeatRecord,
@@ -434,6 +432,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listOrgMembers(orgId: string, input: { query?: string | null, limit?: number | null } = {}): OrgMemberRecord[] {
     return this.identityDomain.listOrgMembers(orgId, input)
+  }
+
+  listOrgMembersPage(orgId: string, input: { afterAccountId?: string | null, limit?: number | null } = {}): OrgMemberRecord[] {
+    return this.identityDomain.listOrgMembersPage(orgId, input)
   }
 
   listMembershipsForAccount(accountId: string): MembershipRecord[] {
@@ -1114,6 +1116,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(record)
   }
 
+  getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]): Set<string> {
+    this.requireTenantUser(tenantId, userId)
+    const owned = new Set<string>()
+    for (const sessionId of sessionIds) {
+      const record = this.sessions.get(key(tenantId, sessionId))?.record
+      if (record && record.userId === userId) owned.add(sessionId)
+    }
+    return owned
+  }
+
   getSessionForTenant(tenantId: string, sessionId: string): SessionRecord | null {
     this.requireTenant(tenantId)
     return clone(this.sessions.get(key(tenantId, sessionId))?.record || null)
@@ -1179,7 +1191,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return {
       items: page.map((session) => this.sessionRecordWithProjectSource(session)),
       nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!, input) : null,
-      totalEstimate: filtered.length,
+      // Bounded has-more probe capped at limit + 1, matching the Postgres store (#915) — not the
+      // full post-cursor count, which would diverge from production and grow unbounded.
+      totalEstimate: hasMore ? limit + 1 : filtered.length,
     }
   }
 
@@ -1196,38 +1210,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         tenantId: candidate.session.record.tenantId,
         sessionId: candidate.session.record.sessionId,
       })),
-      // Bound the estimate like the postgres backend (which probes limit+1), so the
-      // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
-      pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,
-    }
-  }
-
-  claimRunnableSessions(input: ClaimRunnableSessionsInput): RunnableSessionClaimRecord {
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const ttlMs = input.ttlMs ?? 30_000
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    const candidates = this.runnableSessionCandidates(nowMs)
-
-    const leases: WorkerLeaseRecord[] = []
-    for (const candidate of candidates.slice(0, limit)) {
-      const session = candidate.session
-      const attempt = session.nextLeaseAttempt += 1
-      const lease: WorkerLeaseRecord = {
-        tenantId: session.record.tenantId,
-        sessionId: session.record.sessionId,
-        leasedBy: input.workerId,
-        leaseToken: `${session.record.tenantId}:${session.record.sessionId}:${attempt}:${input.workerId}`,
-        leaseExpiresAt: nowMs + ttlMs,
-        checkpointVersion: session.lease?.checkpointVersion || 0,
-      }
-      session.lease = lease
-      session.record.status = 'running'
-      session.record.updatedAt = now.toISOString()
-      leases.push(clone(lease))
-    }
-    return {
-      leases,
       // Bound the estimate like the postgres backend (which probes limit+1), so the
       // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
       pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,
@@ -1392,9 +1374,13 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   getMaxProjectionLag(): number {
+    // Match the Postgres bound: only sessions active within the last hour count toward the live
+    // lag gauge, so both stores report the same "recently-active projection lag" semantics (#911).
+    const windowStartMs = Date.now() - 60 * 60 * 1000
     let maxLag = 0
     for (const session of this.sessions.values()) {
       if (session.nextEventSequence <= 0) continue
+      if (new Date(session.record.updatedAt).getTime() <= windowStartMs) continue
       const latest = session.nextEventSequence - 1
       const projected = session.projection?.sequence ?? 0
       maxLag = Math.max(maxLag, latest - projected)

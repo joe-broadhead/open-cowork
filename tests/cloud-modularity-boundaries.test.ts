@@ -24,8 +24,18 @@ const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
-  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_820],
-  ['packages/cloud-server/src/session-service.ts', 2_720],
+  // Delegates ~13 domain families to Postgres*Repository sub-stores already; the residual inline
+  // bulk (sessions/commands/leases/workflows/coordination) is the top remaining extraction target.
+  // Ratcheted to just above current size: the +29 over the prior 2690 is the batch session
+  // ownership/existence probes (getOwnedSessionIds/requireSessions) that removed the bulk
+  // thread-tag validation N+1. New capabilities must extract a sub-store, not grow this file.
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_719],
+  // session-service is a thin facade: ~156 of its ~168 methods are one-line delegators to the
+  // ~30 cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). The real
+  // decomposition already lives at the service layer; this budget is ratcheted to just above the
+  // current size so the facade can't grow — new capabilities must go into a sub-service (and,
+  // over time, routes should depend on those sub-services directly). See docs/architecture.md (#914).
+  ['packages/cloud-server/src/session-service.ts', 1_935],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
@@ -307,8 +317,6 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assert.match(postgresQuotaDomain, /export async function reconcilePostgresConcurrencyCounters/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
-  assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)
-  assert.doesNotMatch(extractMethodSource(postgresStore, 'claimRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresChannelDeliveriesDomain, /async claimNext[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresWorkflowsDomain, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
@@ -412,13 +420,6 @@ function assertIndexShape(indexName: string, tableName: string, columns: string,
     `CREATE (?:UNIQUE )?INDEX(?: CONCURRENTLY)? IF NOT EXISTS ${escapeRegex(indexName)}\\s+ON ${escapeRegex(tableName)} \\(${escapeRegex(columns)}\\)${predicate ? `[\\s\\S]*${escapeRegex(predicate)}` : ''}`,
   )
   assert.match(postgresSchema, pattern, `${indexName} must keep its indexed table, column order, and predicate`)
-}
-
-function extractMethodSource(source: string, methodName: string) {
-  const start = source.indexOf(`async ${methodName}`)
-  assert.notEqual(start, -1, `${methodName} method is missing`)
-  const nextMethod = source.indexOf('\n  async ', start + 1)
-  return source.slice(start, nextMethod === -1 ? undefined : nextMethod)
 }
 
 function extractFunctionSource(source: string, functionName: string) {

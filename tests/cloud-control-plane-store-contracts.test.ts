@@ -155,6 +155,23 @@ function runControlPlaneDomainContracts(
       assert.equal(invitedPrincipal?.account.accountId, invitedAccount.accountId)
       assert.equal(invitedPrincipal?.membership.status, 'invited')
 
+      // #909: keyset member pagination returns EVERY member ordered by the stable account_id,
+      // identically on both stores. Paginating one at a time must reconstruct the full set with
+      // no gaps or duplicates (the property SCIM reconcile relies on for orgs past one UI page).
+      const allMembers = await store.listOrgMembersPage(org.orgId, {})
+      const allMemberIds = allMembers.map((member) => member.accountId)
+      assert.equal(allMemberIds.includes(account.accountId), true)
+      assert.equal(allMemberIds.includes(invitedAccount.accountId), true)
+      const pagedMemberIds: string[] = []
+      let memberCursor: string | null = null
+      for (;;) {
+        const page = await store.listOrgMembersPage(org.orgId, { afterAccountId: memberCursor, limit: 1 })
+        if (page.length === 0) break
+        pagedMemberIds.push(...page.map((member) => member.accountId))
+        memberCursor = page[page.length - 1]!.accountId
+      }
+      assert.deepEqual(pagedMemberIds, allMemberIds)
+
       await store.createSession({
         tenantId,
         userId,
@@ -182,8 +199,13 @@ function runControlPlaneDomainContracts(
       const cursorPageOne = await store.listSessionsPage({ tenantId, userId, limit: 2, query: 'cursor-contract' })
       assert.deepEqual(cursorPageOne.items.map((session) => session.sessionId), [`${prefix}-page-a`, `${prefix}-page-b`])
       assert.ok(cursorPageOne.nextCursor)
+      // #915: totalEstimate is a bounded has-more probe capped at limit + 1, identically on both
+      // stores — 3 matches with limit 2 report 3 (= limit + 1, "there's more"), not the true count.
+      assert.equal(cursorPageOne.totalEstimate, 3)
       const cursorPageTwo = await store.listSessionsPage({ tenantId, userId, limit: 2, query: 'cursor-contract', cursor: cursorPageOne.nextCursor })
       assert.deepEqual(cursorPageTwo.items.map((session) => session.sessionId), [`${prefix}-page-c`])
+      // The final page has fewer than `limit` remaining, so the probe is the exact remaining count.
+      assert.equal(cursorPageTwo.totalEstimate, 1)
       assert.equal(new Set([...cursorPageOne.items, ...cursorPageTwo.items].map((session) => session.sessionId)).size, 3)
       await assert.rejects(
         Promise.resolve().then(() => store.listSessionsPage({ tenantId, userId, limit: 2, query: 'changed-filter', cursor: cursorPageOne.nextCursor })),
@@ -248,19 +270,10 @@ function runControlPlaneDomainContracts(
         }) },
         /was reused with different content/,
       )
-      const runnableClaim = await store.claimRunnableSessions({
-        workerId: `${prefix}-worker`,
-        limit: 10,
-        now: new Date('2026-01-01T00:00:00.000Z'),
-        ttlMs: 30_000,
-      })
-      assert.equal(runnableClaim.pendingSessionCountEstimate >= 1, true)
-      assert.equal(runnableClaim.leases.some((lease) => lease.sessionId === sessionId), true)
-
       // Claim/fencing parity (audit P1-O6): these are exactly the lease-fenced/atomic-claim methods
       // where a subtle SQL difference causes prod double-claims, yet they were exercised by neither the
       // always-on contract nor (un-skipped) the postgres concurrency proofs. Run them on both stores.
-      const commandLease = runnableClaim.leases.find((lease) => lease.sessionId === sessionId)
+      const commandLease = await store.claimSessionLease(tenantId, sessionId, `${prefix}-worker`, new Date('2026-01-01T00:00:00.000Z'), 30_000)
       assert.ok(commandLease)
       // The lease-fenced command claim hands the pending command to exactly one holder, once.
       const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z'))
@@ -730,6 +743,38 @@ function runControlPlaneDomainContracts(
       await store.removeThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-tag`] })
       const clearedMetadata = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
       assert.deepEqual(clearedMetadata?.tags, [])
+
+      // Batch ownership + existence validation: getOwnedSessionIds returns exactly the owned
+      // subset in one set-based probe, and the bulk tag writes reject an unknown session or tag
+      // id identically on both stores (replacing the prior per-id validation N+1).
+      const ownedSubset = await store.getOwnedSessionIds(tenantId, userId, [sessionId, `${prefix}-missing`])
+      assert.equal(ownedSubset.size, 1)
+      assert.equal(ownedSubset.has(sessionId), true)
+      assert.equal(ownedSubset.has(`${prefix}-missing`), false)
+      await assert.rejects(
+        Promise.resolve().then(() => store.applyThreadTags({ tenantId, sessionIds: [sessionId, `${prefix}-missing`], tagIds: [`${prefix}-tag`] })),
+        /Unknown session/,
+      )
+      await assert.rejects(
+        Promise.resolve().then(() => store.applyThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-missing-tag`] })),
+        /Unknown thread tag/,
+      )
+
+      // #910: applying a SET of tags to a SET of sessions creates the full cross product in one
+      // set-based statement (both sessions get both tags), identically on both stores, and is
+      // idempotent under a re-apply (ON CONFLICT DO NOTHING).
+      const secondTag = await store.createThreadTag({ tenantId, tagId: `${prefix}-tag2`, name: 'Later', color: '#888888' })
+      await store.applyThreadTags({ tenantId, sessionIds: [sessionId, `${prefix}-page-a`], tagIds: [`${prefix}-tag`, secondTag.tagId] })
+      const expectedTagIds = [`${prefix}-tag`, `${prefix}-tag2`].sort()
+      const crossProduct = await store.listThreadMetadata({ tenantId, userId })
+      const tagsFor = (id: string) => crossProduct.find((entry) => entry.sessionId === id)?.tags.map((tag) => tag.tagId).sort()
+      assert.deepEqual(tagsFor(sessionId), expectedTagIds)
+      assert.deepEqual(tagsFor(`${prefix}-page-a`), expectedTagIds)
+      await store.applyThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-tag`] })
+      const reapplied = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
+      assert.deepEqual(reapplied?.tags.map((tag) => tag.tagId).sort(), expectedTagIds)
+      await store.removeThreadTags({ tenantId, sessionIds: [sessionId, `${prefix}-page-a`], tagIds: expectedTagIds })
+      await store.deleteThreadTag(tenantId, secondTag.tagId)
       assert.equal((await store.updateThreadTag({ tenantId, tagId: `${prefix}-tag`, name: 'Urgent' }))?.name, 'Urgent')
       const smartFilter = await store.createThreadSmartFilter({ tenantId, filterId: `${prefix}-filter`, name: 'Open', query: { status: ['active'] } })
       assert.deepEqual(smartFilter.query, { status: ['active'] })

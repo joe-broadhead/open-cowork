@@ -35,8 +35,8 @@ vi.mock('./hooks/useOpenCodeEvents', () => ({
   useOpenCodeEvents: mockUseOpenCodeEvents,
 }))
 
-vi.mock('./helpers/loadSessionMessages', () => ({
-  loadSessionMessages: mockLoadSessionMessages,
+vi.mock('./helpers/switchToSession', () => ({
+  switchToSession: mockLoadSessionMessages,
 }))
 
 vi.mock('./helpers/brand', () => ({

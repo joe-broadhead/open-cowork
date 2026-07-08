@@ -265,7 +265,13 @@ function isLegacyAliasShape(key: string): boolean {
   return false
 }
 
-function isLegacyMcpAliasPermissionKey(key: string) {
+// Shared canonical check for a legacy flat `provider_tool`-shaped MCP permission
+// key. Single source of truth: custom-agent-store re-imports this so the two
+// modules can never disagree. Uses the ReDoS-safe linear `isLegacyAliasShape`
+// (behaviorally equivalent to the old
+// /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i regex) and only rejects the
+// fixed set of built-in non-MCP tool keys, so it never rejects a valid modern key.
+export function isLegacyMcpAliasPermissionKey(key: string) {
   if (NON_MCP_PERMISSION_KEYS.has(key)) return false
   if (key.startsWith('repo_')) return false
   if (key.startsWith('mcp__')) return false

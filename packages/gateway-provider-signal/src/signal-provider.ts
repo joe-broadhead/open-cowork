@@ -19,7 +19,6 @@ export const signalCapabilities: ChannelCapabilities = {
   preferredParseMode: "plain",
   parseModes: ["plain"],
   maxFileBytes: 100 * 1024 * 1024,
-  maxFileSizeBytes: 100 * 1024 * 1024,
   inboundFileModes: ["provider_file_id", "download_url", "inline_buffer"],
   outboundFileModes: ["inline_buffer"],
   editSemantics: "none",

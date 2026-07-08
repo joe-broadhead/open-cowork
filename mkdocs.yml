@@ -175,6 +175,3 @@ extra:
 # `mkdocs build --strict`'s "not in nav" info message.
 not_in_nav: |
   /assets/README.md
-  /design-refinement-and-cloud-react-proposal.md
-  /design/**
-  /production-readiness-audit.md

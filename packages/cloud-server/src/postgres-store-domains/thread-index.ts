@@ -40,7 +40,7 @@ type PostgresThreadIndexRepositoryOptions = {
   withTransaction<T>(fn: (client: PgClient) => Promise<T>): Promise<T>
   requireTenant(tenantId: string, executor?: PgExecutor): Promise<unknown>
   requireTenantUser(tenantId: string, userId: string, executor?: PgExecutor): Promise<unknown>
-  requireSession(tenantId: string, sessionId: string, executor?: PgExecutor): Promise<unknown>
+  requireSessions(tenantId: string, sessionIds: string[], executor?: PgExecutor): Promise<void>
 }
 
 export class PostgresThreadIndexRepository {
@@ -116,19 +116,21 @@ export class PostgresThreadIndexRepository {
       await this.options.requireTenant(input.tenantId, client)
       const sessionIds = normalizeIdList(input.sessionIds, 'sessionIds', THREAD_BULK_MAX_SESSION_IDS)
       const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-      for (const sessionId of sessionIds) await this.options.requireSession(input.tenantId, sessionId, client)
-      for (const tagId of tagIds) await this.requireThreadTag(input.tenantId, tagId, client)
+      await this.options.requireSessions(input.tenantId, sessionIds, client)
+      await this.requireThreadTags(input.tenantId, tagIds, client)
+      if (sessionIds.length === 0 || tagIds.length === 0) return
       const createdAt = nowIso(input.createdAt)
-      for (const sessionId of sessionIds) {
-        for (const tagId of tagIds) {
-          await client.query(
-            `INSERT INTO cloud_thread_tag_links (tenant_id, session_id, tag_id, created_at)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (tenant_id, session_id, tag_id) DO NOTHING`,
-            [input.tenantId, sessionId, tagId, createdAt],
-          )
-        }
-      }
+      // One set-based insert over the session × tag cross product instead of a nested loop
+      // that fired up to THREAD_BULK_MAX_SESSION_IDS × THREAD_FILTER_MAX_VALUES statements
+      // (500 × 50 = 25,000 round-trips) per call, holding row locks the whole transaction (#910).
+      await client.query(
+        `INSERT INTO cloud_thread_tag_links (tenant_id, session_id, tag_id, created_at)
+         SELECT $1, s.session_id, t.tag_id, $4
+         FROM unnest($2::text[]) AS s(session_id)
+         CROSS JOIN unnest($3::text[]) AS t(tag_id)
+         ON CONFLICT (tenant_id, session_id, tag_id) DO NOTHING`,
+        [input.tenantId, sessionIds, tagIds, createdAt],
+      )
     })
   }
 
@@ -137,8 +139,8 @@ export class PostgresThreadIndexRepository {
       await this.options.requireTenant(input.tenantId, client)
       const sessionIds = normalizeIdList(input.sessionIds, 'sessionIds', THREAD_BULK_MAX_SESSION_IDS)
       const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
-      for (const sessionId of sessionIds) await this.options.requireSession(input.tenantId, sessionId, client)
-      for (const tagId of tagIds) await this.requireThreadTag(input.tenantId, tagId, client)
+      await this.options.requireSessions(input.tenantId, sessionIds, client)
+      await this.requireThreadTags(input.tenantId, tagIds, client)
       if (sessionIds.length === 0 || tagIds.length === 0) return
       await client.query(
         `DELETE FROM cloud_thread_tag_links
@@ -270,18 +272,21 @@ export class PostgresThreadIndexRepository {
     }))
   }
 
-  private async requireThreadTag(
+  private async requireThreadTags(
     tenantId: string,
-    tagId: string,
+    tagIds: string[],
     executor: PgExecutor = this.options.pool,
   ) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_thread_tags WHERE tenant_id = $1 AND tag_id = $2`,
-      [tenantId, tagId],
-      executor,
+    if (tagIds.length === 0) return
+    // Single set-based existence probe instead of one round-trip per tag id.
+    const result = await executor.query(
+      `SELECT tag_id FROM cloud_thread_tags WHERE tenant_id = $1 AND tag_id = ANY($2::text[])`,
+      [tenantId, tagIds],
     )
-    if (!row) throw new Error(`Unknown thread tag ${tagId}.`)
-    return threadTagFromRow(row)
+    const known = new Set(result.rows.map((row) => String(row.tag_id)))
+    for (const tagId of tagIds) {
+      if (!known.has(tagId)) throw new Error(`Unknown thread tag ${tagId}.`)
+    }
   }
 
   private async listThreadTagsForSessions(

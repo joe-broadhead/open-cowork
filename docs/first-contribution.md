@@ -9,7 +9,7 @@ You need:
 
 - Node `>= 22.12` (tracked in `.nvmrc`).
 - pnpm `>= 10` (install via Corepack).
-- macOS or Linux. Windows isn't supported yet.
+- macOS, Linux, or Windows.
 
 No API keys required to run the dev server. Actual LLM calls need
 an OpenRouter key or another provider's credential,

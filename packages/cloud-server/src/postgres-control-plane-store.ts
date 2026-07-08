@@ -296,7 +296,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       withTransaction: (fn) => this.withTransaction(fn),
       requireTenant: (tenantId, executor) => this.requireTenant(tenantId, executor),
       requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
-      requireSession: (tenantId, sessionId, executor) => this.requireSession(tenantId, sessionId, executor),
+      requireSessions: (tenantId, sessionIds, executor) => this.requireSessions(tenantId, sessionIds, executor),
     })
     this.webhooks = new PostgresWebhooksRepository({
       pool: this.pool,
@@ -411,6 +411,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listOrgMembers(orgId: string, input: { query?: string | null, limit?: number | null } = {}) {
     return this.identity.listOrgMembers(orgId, input)
+  }
+
+  async listOrgMembersPage(orgId: string, input: { afterAccountId?: string | null, limit?: number | null } = {}) {
+    return this.identity.listOrgMembersPage(orgId, input)
   }
 
   async listMembershipsForAccount(accountId: string) {
@@ -1306,6 +1310,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return row ? sessionFromRow(row) : null
   }
 
+  async getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]) {
+    await this.requireTenantUser(tenantId, userId)
+    const owned = new Set<string>()
+    if (sessionIds.length === 0) return owned
+    // Single set-based ownership probe instead of one round-trip per id, so bulk
+    // thread-tag operations validate hundreds of sessions in one statement.
+    const result = await this.pool.query(
+      `SELECT session_id FROM cloud_sessions
+       WHERE tenant_id = $1 AND user_id = $2 AND session_id = ANY($3::text[])`,
+      [tenantId, userId, sessionIds],
+    )
+    for (const row of result.rows) owned.add(String(row.session_id))
+    return owned
+  }
+
   async getSessionForTenant(tenantId: string, sessionId: string) {
     await this.requireTenant(tenantId)
     const row = await this.maybeOne(
@@ -1411,106 +1430,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     now?: Date
   } = {}) {
     return listPostgresRunnableSessions(this.pool, input)
-  }
-
-  async claimRunnableSessions(input: {
-    workerId: string
-    limit?: number | null
-    now?: Date
-    ttlMs?: number
-  }) {
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const ttlMs = input.ttlMs ?? 30_000
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    return this.withTransaction(async (client) => {
-      const selected = await client.query(
-        `SELECT sessions.*, runnable.first_sequence
-         FROM cloud_sessions sessions
-         JOIN (
-           SELECT commands.tenant_id, commands.session_id, min(commands.created_sequence) AS first_sequence
-           FROM cloud_session_commands commands
-           LEFT JOIN cloud_worker_leases leases
-             ON leases.tenant_id = commands.tenant_id
-            AND leases.session_id = commands.session_id
-           WHERE commands.target_lease_token IS NULL
-             AND commands.status IN ('pending', 'running')
-             AND (commands.status <> 'pending' OR commands.available_at IS NULL OR commands.available_at <= $2)
-             AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
-           GROUP BY commands.tenant_id, commands.session_id
-           ORDER BY first_sequence, commands.tenant_id, commands.session_id
-           LIMIT $3
-         ) runnable
-           ON runnable.tenant_id = sessions.tenant_id
-          AND runnable.session_id = sessions.session_id
-         ORDER BY runnable.first_sequence, sessions.tenant_id, sessions.session_id
-         FOR UPDATE OF sessions SKIP LOCKED`,
-        [nowMs, now.toISOString(), limit],
-      )
-      // Batch-fetch the current leases for all selected sessions in one query instead
-      // of a per-row locking SELECT (the N+1). The CTE already holds `FOR UPDATE OF
-      // sessions SKIP LOCKED` on each session, which serializes claims per session, so
-      // the per-row lease FOR UPDATE was redundant — an unclaimed session has no
-      // concurrent lease mutation (renew/release require a live lease token it lacks).
-      const leaseByKey = new Map<string, ReturnType<typeof leaseFromRow>>()
-      if (selected.rows.length > 0) {
-        const leaseRows = await client.query(
-          `SELECT * FROM cloud_worker_leases
-           WHERE (tenant_id, session_id) IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
-          [selected.rows.map((row) => String(row.tenant_id)), selected.rows.map((row) => String(row.session_id))],
-        )
-        for (const leaseRow of leaseRows.rows) {
-          leaseByKey.set(`${String(leaseRow.tenant_id)}\u0000${String(leaseRow.session_id)}`, leaseFromRow(leaseRow))
-        }
-      }
-      const leases = []
-      for (const row of selected.rows) {
-        const tenantId = String(row.tenant_id)
-        const sessionId = String(row.session_id)
-        const currentLease = leaseByKey.get(`${tenantId}\u0000${sessionId}`) || null
-        if (currentLease && currentLease.leaseExpiresAt > nowMs) continue
-        const attempt = numberValue(row.next_lease_attempt) + 1
-        const leaseRecord = {
-          tenantId,
-          sessionId,
-          leasedBy: input.workerId,
-          leaseToken: `${tenantId}:${sessionId}:${attempt}:${input.workerId}`,
-          leaseExpiresAt: nowMs + ttlMs,
-          checkpointVersion: currentLease?.checkpointVersion || 0,
-        }
-        await client.query(
-          `UPDATE cloud_sessions
-           SET next_lease_attempt = $3, status = 'running', updated_at = $4
-           WHERE tenant_id = $1 AND session_id = $2`,
-          [tenantId, sessionId, attempt, now.toISOString()],
-        )
-        const result = await client.query(
-          `INSERT INTO cloud_worker_leases (
-            tenant_id, session_id, leased_by, lease_token, lease_expires_at_ms, checkpoint_version
-           )
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (tenant_id, session_id) DO UPDATE
-           SET leased_by = EXCLUDED.leased_by,
-               lease_token = EXCLUDED.lease_token,
-               lease_expires_at_ms = EXCLUDED.lease_expires_at_ms,
-               checkpoint_version = EXCLUDED.checkpoint_version
-           RETURNING *`,
-          [
-            tenantId,
-            sessionId,
-            leaseRecord.leasedBy,
-            leaseRecord.leaseToken,
-            leaseRecord.leaseExpiresAt,
-            leaseRecord.checkpointVersion,
-          ],
-        )
-        leases.push(leaseFromRow(result.rows[0]!))
-      }
-      return {
-        leases,
-        pendingSessionCountEstimate: selected.rows.length,
-      }
-    })
   }
 
   async bindSessionRuntime(input: {
@@ -1812,11 +1731,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async getMaxProjectionLag(): Promise<number> {
+    // Bounded to the recently-active tail (served by cloud_sessions_projection_lag_idx) instead of
+    // a full-table scan + join on every scheduler emission (#911). Projection lag is a live signal:
+    // a session that has produced no events in the window is not actively lagging, and its backlog
+    // (if any) is drained by the worker/reaper rather than surfaced by this real-time gauge.
     const result = await this.pool.query(
       `SELECT coalesce(max(GREATEST(0, s.next_event_sequence - 1 - coalesce(p.sequence, 0))), 0) AS lag
        FROM cloud_sessions s
        LEFT JOIN cloud_session_projections p ON p.tenant_id = s.tenant_id AND p.session_id = s.session_id
-       WHERE s.next_event_sequence > 0`,
+       WHERE s.next_event_sequence > 0
+         AND s.updated_at > now() - interval '1 hour'`,
     )
     return numberValue(result.rows[0]?.lag)
   }
@@ -2014,8 +1938,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
             nowIsoValue,
           ],
         )
+        // lease.tenantId is unambiguously a tenant id, so resolve the org by the tenant
+        // relationship only. The prior `OR org_id = $1` could match a different org whose org_id
+        // coincided with this tenant id, mis-attributing the audit event (#924).
         const org = await this.maybeOne(
-          `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 OR org_id = $1 LIMIT 1`,
+          `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 LIMIT 1`,
           [lease.tenantId],
           client,
         )
@@ -2589,6 +2516,22 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     )
     if (!row) throw new Error(`Unknown session ${sessionId}.`)
     return row
+  }
+
+  private async requireSessions(tenantId: string, sessionIds: string[], executor: PgExecutor = this.pool) {
+    await this.requireTenant(tenantId, executor)
+    if (sessionIds.length === 0) return
+    // Single set-based existence probe instead of one FOR-UPDATE-less round-trip per id,
+    // so bulk thread-tag writes validate every session in one statement (#910 follow-up).
+    const result = await executor.query(
+      `SELECT session_id FROM cloud_sessions
+       WHERE tenant_id = $1 AND session_id = ANY($2::text[])`,
+      [tenantId, sessionIds],
+    )
+    const known = new Set(result.rows.map((row) => String(row.session_id)))
+    for (const sessionId of sessionIds) {
+      if (!known.has(sessionId)) throw new Error(`Unknown session ${sessionId}.`)
+    }
   }
 
   private async requireCommand(commandId: string, executor: PgExecutor, forUpdate = false) {

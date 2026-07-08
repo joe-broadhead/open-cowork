@@ -602,77 +602,6 @@ test('cloud control plane limits expired session lease reaping to oldest leases'
   assert.deepEqual(second.map((record) => record.sessionId), ['session-3'])
 })
 
-test('cloud control plane claims only runnable sessions for workers', () => {
-  const store = seededStore()
-  store.createSession({
-    tenantId: 'tenant-1',
-    userId: 'user-1',
-    sessionId: 'session-2',
-    opencodeSessionId: 'oc-session-2',
-    profileName: 'full',
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-  })
-  store.createSession({
-    tenantId: 'tenant-1',
-    userId: 'user-1',
-    sessionId: 'session-3',
-    opencodeSessionId: 'oc-session-3',
-    profileName: 'full',
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-  })
-  store.enqueueSessionCommand({
-    commandId: 'cmd-1',
-    tenantId: 'tenant-1',
-    userId: 'user-1',
-    sessionId: 'session-1',
-    kind: 'prompt',
-  })
-  store.enqueueSessionCommand({
-    commandId: 'cmd-2',
-    tenantId: 'tenant-1',
-    userId: 'user-1',
-    sessionId: 'session-2',
-    kind: 'prompt',
-  })
-  store.enqueueSessionCommand({
-    commandId: 'cmd-targeted',
-    tenantId: 'tenant-1',
-    userId: 'user-1',
-    sessionId: 'session-3',
-    kind: 'abort',
-    targetLeaseToken: 'tenant-1:session-3:1:other-worker',
-  })
-
-  const first = store.claimRunnableSessions({
-    workerId: 'worker-a',
-    limit: 1,
-    now: new Date('2030-01-01T00:00:00.000Z'),
-    ttlMs: 1_000,
-  })
-  assert.equal(first.pendingSessionCountEstimate, 2)
-  assert.deepEqual(first.leases.map((lease) => lease.sessionId), ['session-1'])
-
-  const second = store.claimRunnableSessions({
-    workerId: 'worker-b',
-    limit: 10,
-    now: new Date('2030-01-01T00:00:00.000Z'),
-    ttlMs: 1_000,
-  })
-  assert.equal(second.pendingSessionCountEstimate, 1)
-  assert.deepEqual(second.leases.map((lease) => lease.sessionId), ['session-2'])
-
-  const claimed = store.claimNextSessionCommand(first.leases[0]!)
-  assert.equal(claimed?.commandId, 'cmd-1')
-  const reclaimed = store.claimRunnableSessions({
-    workerId: 'worker-c',
-    limit: 10,
-    now: new Date('2030-01-01T00:00:02.000Z'),
-    ttlMs: 1_000,
-  })
-  assert.equal(reclaimed.leases.some((lease) => lease.sessionId === 'session-1'), true)
-  assert.equal(reclaimed.leases.some((lease) => lease.sessionId === 'session-3'), false)
-})
-
 test('cloud control plane records worker heartbeats, settings metadata, and migrations', () => {
   const store = seededStore()
 
@@ -2157,4 +2086,22 @@ test('cloud control plane recovers workflow starts stranded after session attach
   assert.equal(retried[0]?.action, 'retried')
   assert.equal(store.getWorkflowRun('tenant-1', 'attached-run-retry')?.claimToken, null)
   assert.equal(store.getWorkflowForTenant('tenant-1', 'workflow-attached-retry')?.latestRunStatus, 'running')
+})
+
+test('getMaxProjectionLag only counts sessions active within the last hour (#911)', () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'a@example.com', role: 'owner' })
+  const recentAt = new Date()
+  const oldAt = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  store.createSession({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'recent', opencodeSessionId: 'oc-recent', profileName: 'default', createdAt: recentAt })
+  store.createSession({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'old', opencodeSessionId: 'oc-old', profileName: 'default', createdAt: oldAt })
+  // Advance events (creating projection lag) on both sessions without projecting them. Appending
+  // an event stamps the session's updated_at with the event time, so the old session's events are
+  // dated three hours ago (its projection never caught up) while the recent session is live.
+  for (let index = 0; index < 5; index += 1) store.appendSessionEvent({ tenantId: 'tenant-1', sessionId: 'recent', type: 'x', payload: {} })
+  for (let index = 0; index < 9; index += 1) store.appendSessionEvent({ tenantId: 'tenant-1', sessionId: 'old', type: 'x', payload: {}, createdAt: oldAt })
+
+  // The old session's larger lag (8) is excluded by the one-hour window; only the recent lag (4) counts.
+  assert.equal(store.getMaxProjectionLag(), 4)
 })

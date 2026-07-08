@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Message } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
-import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { switchToSession } from '../../helpers/switchToSession'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { Button, Dialog, IconButton, Tooltip } from '../ui'
@@ -54,7 +54,7 @@ export function MessageActions({
         return
       }
       addSession(forked)
-      await loadSessionMessages(forked.id)
+      await switchToSession(forked.id)
     } finally {
       setBusy(null)
     }

@@ -43,7 +43,6 @@ const defaultFakeCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 4,
   maxButtonTokenBytes: 128,
   maxFileBytes: 25 * 1024 * 1024,
-  maxFileSizeBytes: 25 * 1024 * 1024,
   inboundFileModes: ["inline_buffer"],
   outboundFileModes: ["inline_buffer"],
   editSemantics: "message",

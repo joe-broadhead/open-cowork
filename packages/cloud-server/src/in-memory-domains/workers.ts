@@ -8,7 +8,7 @@ import {
   nowIso,
   stableJson,
 } from './store-helpers.ts'
-import { createHash, randomBytes, scryptSync } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { hashSecretWithRandomSalt, verifySecretHash } from '../control-plane-tokens.ts'
 import type {
   CreateManagedWorkerPoolInput,
@@ -403,15 +403,11 @@ export function hashManagedWorkerCredential(plaintext: string) {
 }
 
 export function verifyManagedWorkerCredentialHash(plaintext: string, tokenHash: string) {
-  return verifySecretHash(plaintext, tokenHash, legacyManagedWorkerCredentialHash)
+  return verifySecretHash(plaintext, tokenHash)
 }
 
 export function plaintextMatchesManagedWorkerCredentialId(plaintext: string, credentialId: string) {
   return plaintext.startsWith(`ocw_${credentialId}_`)
-}
-
-function legacyManagedWorkerCredentialHash(plaintext: string) {
-  return `scrypt:${scryptSync(plaintext, 'open-cowork-managed-worker-credential-v1', 32).toString('base64url')}`
 }
 
 export function generateManagedWorkerCredential(input: { credentialId?: string, secret?: string } = {}) {

@@ -237,6 +237,41 @@ export class PostgresIdentityRepository {
     }))
   }
 
+  async listOrgMembersPage(orgId: string, input: { afterAccountId?: string | null, limit?: number | null } = {}) {
+    const afterAccountId = input.afterAccountId?.trim() || null
+    const limit = Math.max(1, Math.min(input.limit || 500, 1000))
+    const result = await this.options.pool.query(
+      `SELECT
+         m.org_id,
+         m.account_id,
+         a.email,
+         a.display_name,
+         m.role,
+         m.custom_role_key,
+         m.status,
+         m.created_at,
+         m.updated_at
+       FROM cloud_memberships m
+       JOIN cloud_accounts a ON a.account_id = m.account_id
+       WHERE m.org_id = $1
+         AND ($2::text IS NULL OR m.account_id > $2)
+       ORDER BY m.account_id ASC
+       LIMIT $3`,
+      [orgId, afterAccountId, limit],
+    )
+    return result.rows.map((row): OrgMemberRecord => ({
+      orgId: String(row.org_id),
+      accountId: String(row.account_id),
+      email: String(row.email),
+      displayName: row.display_name ? String(row.display_name) : null,
+      role: row.role as OrgMemberRecord['role'],
+      customRoleKey: row.custom_role_key == null ? null : String(row.custom_role_key),
+      status: row.status as OrgMemberRecord['status'],
+      createdAt: iso(row.created_at),
+      updatedAt: iso(row.updated_at),
+    }))
+  }
+
   async listMembershipsForAccount(accountId: string) {
     const result = await this.options.pool.query(
       `SELECT * FROM cloud_memberships WHERE account_id = $1 ORDER BY updated_at DESC, org_id`,

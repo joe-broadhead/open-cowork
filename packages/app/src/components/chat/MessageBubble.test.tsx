@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Message, SessionInfo } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
-import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { switchToSession } from '../../helpers/switchToSession'
 import { MessageBubble } from './MessageBubble'
 
-vi.mock('../../helpers/loadSessionMessages', () => ({
-  loadSessionMessages: vi.fn(async () => undefined),
+vi.mock('../../helpers/switchToSession', () => ({
+  switchToSession: vi.fn(async () => undefined),
 }))
 
 vi.mock('./MarkdownContent', () => ({
@@ -163,7 +163,7 @@ describe('MessageBubble', () => {
 
     await user.click(screen.getByRole('button', { name: 'Branch here' }))
     await waitFor(() => expect(api.session.fork).toHaveBeenCalledWith('session-1', 'assistant-message'))
-    expect(loadSessionMessages).toHaveBeenCalledWith('forked-session')
+    expect(switchToSession).toHaveBeenCalledWith('forked-session')
     expect(useSessionStore.getState().sessions[0]?.id).toBe('forked-session')
 
     await user.click(screen.getByRole('button', { name: 'View diff' }))

@@ -144,9 +144,11 @@ unchanged.
 
 ## Windows support
 
-Not currently implemented. The build matrix produces macOS (DMG /
-zip) and Linux (AppImage / deb). Contributions welcome — tracking
-in the roadmap.
+Windows x64 is a supported target: the release pipeline builds and
+Authenticode-signs an NSIS `.exe` installer alongside the macOS (DMG /
+zip) and Linux (AppImage / deb) artifacts. Public `v0.x` preview builds
+may ship unsigned while signing certificates are provisioned, the same
+caveat that applies to the other platforms.
 
 ## Logs, in short
 

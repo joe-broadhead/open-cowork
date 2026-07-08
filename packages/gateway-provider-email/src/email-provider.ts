@@ -100,7 +100,6 @@ const emailCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 0,
   maxButtonTokenBytes: 0,
   maxFileBytes: 15 * 1024 * 1024,
-  maxFileSizeBytes: 15 * 1024 * 1024,
   inboundFileModes: ["inline_buffer"],
   outboundFileModes: [],
   editSemantics: "none",
@@ -201,6 +200,11 @@ export class EmailProvider implements ChannelProvider {
 
   private assertWebhookAuthorized(auth: EmailWebhookAuth): void {
     if (auth.verified === true) return;
+    // SECURITY (#922): email ingress authenticates a long-lived shared/bearer secret rather than a
+    // per-request HMAC over the body+timestamp (email has no native per-request signature). The
+    // compare is constant-time and messageId dedup bounds replay, but the body is not integrity-
+    // bound to the secret — so this endpoint MUST be reachable only over TLS to a trusted relay.
+    // Prefer the webhook provider's HMAC ingress mode where per-request signing is available.
     const expectedSecret = this.config.inboundSecret;
     const providedSecret = auth.sharedSecret
       || headerValue(auth.headers, "x-open-cowork-gateway-email-secret")

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChartArtifactSource, SessionArtifact } from '@open-cowork/shared'
+import { DEFAULT_DARK_BRAND_THEME, type ChartArtifactSource, type SessionArtifact } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { t } from '../../helpers/i18n'
@@ -69,11 +69,13 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
       title: ensureReadableTextColor(text, surface),
       grid: styles.getPropertyValue('--color-border-subtle').trim() || 'rgba(255,255,255,0.08)',
       domain: styles.getPropertyValue('--color-border').trim() || 'rgba(255,255,255,0.12)',
-      accent: styles.getPropertyValue('--color-accent').trim() || '#2f6bf0',
-      green: styles.getPropertyValue('--color-green').trim() || '#77c599',
-      amber: styles.getPropertyValue('--color-amber').trim() || '#fc9b6f',
-      red: styles.getPropertyValue('--color-red').trim() || '#d6587e',
-      info: styles.getPropertyValue('--color-info').trim() || '#77becf',
+      // Fallbacks derive from the canonical brand theme so they can't drift from the tokens the
+      // CSS vars are generated from (#923). They fire only if a `--color-*` var resolves empty.
+      accent: styles.getPropertyValue('--color-accent').trim() || DEFAULT_DARK_BRAND_THEME.accent,
+      green: styles.getPropertyValue('--color-green').trim() || DEFAULT_DARK_BRAND_THEME.green,
+      amber: styles.getPropertyValue('--color-amber').trim() || DEFAULT_DARK_BRAND_THEME.amber,
+      red: styles.getPropertyValue('--color-red').trim() || DEFAULT_DARK_BRAND_THEME.red,
+      info: styles.getPropertyValue('--color-info').trim() || DEFAULT_DARK_BRAND_THEME.info,
       muted: ensureReadableTextColor(textMuted, surface),
       secondary: ensureReadableTextColor(textSecondary, surface),
     }

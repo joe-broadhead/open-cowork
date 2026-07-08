@@ -49,6 +49,3 @@ export async function switchToSession(sessionId: string, options?: { force?: boo
     reportSessionLoadError(sessionId, err)
   }
 }
-
-// Backward compat alias
-export const loadSessionMessages = switchToSession

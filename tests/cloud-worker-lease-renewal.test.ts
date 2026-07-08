@@ -341,3 +341,45 @@ test('cloud worker reaps expired leases in bounded batches and reports drain cap
   assert.equal(capHitMetric?.value, 1)
   assert.equal(capHitMetric?.attributes?.status, 'cap_hit')
 })
+
+test('cloud worker LRU-evicts idle leases so the cache stays bounded (#908)', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.com', role: 'owner' })
+  const sessions = ['session-1', 'session-2', 'session-3']
+  for (const sessionId of sessions) {
+    store.createSession({ tenantId: 'tenant-1', userId: 'user-1', sessionId, opencodeSessionId: `oc-${sessionId}`, profileName: 'default' })
+    store.enqueueSessionCommand({ tenantId: 'tenant-1', userId: 'user-1', sessionId, commandId: `${sessionId}-cmd-1`, kind: 'prompt', payload: { text: 'p', agent: 'build' } })
+  }
+
+  const claimCounts = new Map<string, number>()
+  const originalClaim = store.claimSessionLease.bind(store)
+  store.claimSessionLease = ((...args: Parameters<typeof store.claimSessionLease>) => {
+    claimCounts.set(args[1], (claimCounts.get(args[1]) ?? 0) + 1)
+    return originalClaim(...args)
+  }) as typeof store.claimSessionLease
+
+  const runtime = new SlowSuccessfulRuntime(0)
+  const service = new CloudSessionService(store, runtime, resolveCloudRuntimePolicy(DEFAULT_CONFIG), undefined, { randomUUID: () => 'test-id' })
+  // maxLeases: 2 → after three distinct sessions, the least-recently-touched (session-1) is evicted.
+  const worker = new CloudWorker(store, service, 'worker-1', 3_000, {}, null, null, { maxLeases: 2 })
+
+  for (const sessionId of sessions) {
+    assert.equal(await worker.processSessionCommands('tenant-1', sessionId), 1)
+  }
+  assert.deepEqual(sessions.map((sessionId) => claimCounts.get(sessionId)), [1, 1, 1])
+
+  // session-1 (least-recently-touched) was evicted from the in-memory cache. It therefore has no
+  // cached lease to renew, and can't re-claim while its server-side lease is still valid — so it
+  // attempts a fresh claim (proving it is no longer cached) and processes nothing this tick; its
+  // command is retried after the lease expires and is reaped. A cache that had NOT evicted it would
+  // have renewed and returned 1.
+  store.enqueueSessionCommand({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'session-1', commandId: 'session-1-cmd-2', kind: 'prompt', payload: { text: 'p', agent: 'build' } })
+  assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 0)
+  assert.equal(claimCounts.get('session-1'), 2)
+
+  // A still-cached session renews (no fresh claim) and processes normally.
+  store.enqueueSessionCommand({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'session-3', commandId: 'session-3-cmd-2', kind: 'prompt', payload: { text: 'p', agent: 'build' } })
+  assert.equal(await worker.processSessionCommands('tenant-1', 'session-3'), 1)
+  assert.equal(claimCounts.get('session-3'), 1)
+})

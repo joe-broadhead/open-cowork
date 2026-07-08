@@ -55,7 +55,9 @@ lower tier re-skins everything above it without editing the higher tiers.
 
 **Semantic-tokens-only guard.** `scripts/check-design-token-usage.mjs` (run by
 `pnpm lint`) fails if Tier-3 component code in `packages/ui/src` hardcodes a raw
-hex, `rgb()`, or `hsl()` color literal instead of a token. Pure ink/white
+hex, `rgb()`, or `hsl()` color literal instead of a token, and additionally
+ratchets `packages/app/src` — its raw-color count may not rise above the pinned
+baseline, so new drift is blocked while the legacy count is migrated down. Pure ink/white
 (`#fff` / `#000`) inside `color-mix()` material math is allowed because there is
 no semantic token for pure black or white, and the two primitive palette files
 above are allowlisted by path. See the script header for the exact scoping. This

@@ -1,4 +1,5 @@
 import type { ControlPlaneStore } from './control-plane-store.ts'
+import type { OrgMemberRecord } from './control-plane-records.ts'
 import type { ControlPlaneRole } from './control-plane-enums.ts'
 import type { ScimSyncEventRecord } from './control-plane-scim.ts'
 import { normalizeControlPlaneRole } from './session-input-validation.ts'
@@ -68,10 +69,26 @@ export class CloudScimReconciler {
     if (status === 'disabled') await this.revoke(orgId, accountId)
   }
 
+  // Collect EVERY member of an org keyed by accountId via the stable account_id keyset, so
+  // reconciliation never silently ignores members past the first UI page — the exact failure
+  // for the large enterprise directories SCIM targets (#909).
+  private async collectOrgMembers(orgId: string): Promise<Map<string, OrgMemberRecord>> {
+    const byAccountId = new Map<string, OrgMemberRecord>()
+    const pageSize = 500
+    let afterAccountId: string | null = null
+    for (;;) {
+      const page = await this.store.listOrgMembersPage(orgId, { afterAccountId, limit: pageSize })
+      for (const member of page) byAccountId.set(member.accountId, member)
+      if (page.length < pageSize) break
+      afterAccountId = page[page.length - 1]!.accountId
+    }
+    return byAccountId
+  }
+
   private async deprovision(orgId: string, accountId: string | null): Promise<void> {
     if (!accountId) throw new Error('SCIM deprovision sync event is missing accountId.')
-    const members = await this.store.listOrgMembers(orgId, { limit: 500 })
-    const member = members.find((entry) => entry.accountId === accountId)
+    const members = await this.collectOrgMembers(orgId)
+    const member = members.get(accountId)
     const role: ControlPlaneRole = member?.role || 'member'
     await this.store.upsertMembership({
       orgId,
@@ -92,10 +109,10 @@ export class CloudScimReconciler {
       : null
     if (!role) return
     const memberIds = Array.isArray(payload.memberAccountIds) ? payload.memberAccountIds : []
-    const members = await this.store.listOrgMembers(orgId, { limit: 500 })
+    const members = await this.collectOrgMembers(orgId)
     for (const raw of memberIds) {
       const accountId = typeof raw === 'string' ? raw : null
-      const member = accountId ? members.find((entry) => entry.accountId === accountId) : null
+      const member = accountId ? members.get(accountId) : null
       if (!member) continue
       await this.store.upsertMembership({
         orgId,
@@ -111,8 +128,8 @@ export class CloudScimReconciler {
   // membership state converges to what the store holds (the durable directory projection).
   // Idempotent and side-effect-free for already-consistent members.
   private async reconcileOrg(orgId: string): Promise<void> {
-    const members = await this.store.listOrgMembers(orgId, { limit: 500 })
-    for (const member of members) {
+    const members = await this.collectOrgMembers(orgId)
+    for (const member of members.values()) {
       if (member.status === 'disabled') await this.revoke(orgId, member.accountId)
     }
   }

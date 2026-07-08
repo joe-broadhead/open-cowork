@@ -232,6 +232,23 @@ that leaves the warm set.
 - **Session registry indexing** — 10k sessions on disk read linearly
   on every boot. Needs a lightweight index (SQLite or a sidecar
   B-tree) before the app targets long-term heavy users.
+- **Per-org concurrency-counter write ceiling** — cloud concurrency
+  quotas are kept in `cloud_concurrency_counters` as one row per
+  `(org, counter_key)`, giving O(1) quota reads. The write side is a
+  deliberate tradeoff: transactions that change an org's active count
+  serialize on that single row's lock until commit. The trigger only
+  fires on genuine active-count transitions (queued/running boundary
+  crossings), and each update is sub-millisecond, so this is a
+  per-**org** write-throughput ceiling, not a cross-org or read
+  concern. **Threshold:** it only matters when a *single* org sustains
+  roughly thousands of active-count transitions per second (many
+  hundreds of concurrent sessions/commands churning at once); typical
+  multi-org load never approaches it because contention is per-org.
+  **Mitigation when hit:** shard the counter into
+  `(org, counter_key, bucket)` with the bucket chosen by
+  `hash(session_id) % N` and `SUM` the buckets on read (the read stays
+  O(N buckets)), or move that org to a batched/approximate gauge. The
+  trigger and read paths are the only sites that change.
 
 If you hit a performance issue that isn't covered here, please open
 an issue with the `performance` label and attach the diagnostics

@@ -108,13 +108,11 @@ import type {
   ThreadTagRecord,
 } from './control-plane-workspace-records.ts'
 import type {
-  ClaimRunnableSessionsInput,
   ListRunnableSessionsInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
   ReapedWorkflowClaimRecord,
-  RunnableSessionClaimRecord,
   RunnableSessionListRecord,
   SessionCommandRecord,
   WorkerHeartbeatRecord,
@@ -206,6 +204,11 @@ export type ControlPlaneStore = {
   findAccountByEmail(email: string): MaybePromise<AccountRecord | null>
   upsertMembership(input: UpsertMembershipInput): MaybePromise<MembershipRecord>
   listOrgMembers(orgId: string, input?: { query?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
+  // Keyset iteration over ALL members of an org, ordered by the immutable account_id so the
+  // cursor is stable even while the caller mutates memberships mid-iteration (SCIM reconcile).
+  // Callers page until a short page is returned; unlike listOrgMembers this is not capped at a
+  // single UI page.
+  listOrgMembersPage(orgId: string, input?: { afterAccountId?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
   listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
   // Custom roles (org-defined named permission maps). CRUD plus effective-permission
@@ -355,13 +358,13 @@ export type ControlPlaneStore = {
   completeChannelProviderEvent(input: CompleteChannelProviderEventInput): MaybePromise<ChannelProviderEventRecord | null>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
   getSession(tenantId: string, userId: string, sessionId: string): MaybePromise<SessionRecord | null>
+  getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]): MaybePromise<Set<string>>
   getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
   findSession(sessionId: string): MaybePromise<SessionRecord | null>
   listSessions(tenantId: string, userId: string): MaybePromise<SessionRecord[]>
   listSessionsPage(input: ListSessionsPageInput): MaybePromise<ListSessionsPageRecord>
   listAllSessions(): MaybePromise<SessionRecord[]>
   listRunnableSessions(input: ListRunnableSessionsInput): MaybePromise<RunnableSessionListRecord>
-  claimRunnableSessions(input: ClaimRunnableSessionsInput): MaybePromise<RunnableSessionClaimRecord>
   bindSessionRuntime(input: {
     tenantId: string
     sessionId: string

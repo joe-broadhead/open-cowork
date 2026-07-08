@@ -14,6 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { isRecord } from "@open-cowork/gateway-channel";
 import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface CliProviderConfig {
@@ -63,7 +64,6 @@ export class CliProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 0,
     maxButtonTokenBytes: 0,
     maxFileBytes: 10 * 1024 * 1024,
-    maxFileSizeBytes: 10 * 1024 * 1024,
     inboundFileModes: ["inline_buffer"],
     outboundFileModes: [],
     editSemantics: "none",
@@ -280,8 +280,4 @@ function cleanString(value: unknown): string | undefined {
 function deliveryIdFromPayload(payload: Record<string, unknown>): string | undefined {
   const options = payload.options;
   return isRecord(options) ? cleanString(options.deliveryId) : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -161,7 +161,7 @@ Open Cowork is designed for:
 - Workflows created from Workflow Designer setup threads, with manual, scheduled, and webhook runs.
 - Artifact storage and workspace management.
 - Config-driven branding, auth mode, providers, and default capabilities.
-- Packaged macOS and Linux desktop builds.
+- Packaged macOS, Linux, and Windows desktop builds.
 
 ## Supported platforms
 
@@ -175,7 +175,8 @@ Open Cowork is designed for:
   - `.AppImage`
   - `.deb`
 
-Windows is not currently supported.
+- Windows `x64`
+  - `.exe` (NSIS installer)
 
 ## Install
 

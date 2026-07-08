@@ -5,8 +5,8 @@ import { useSessionStore } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { ThreadList } from './ThreadList'
 
-vi.mock('../../helpers/loadSessionMessages', () => ({
-  loadSessionMessages: vi.fn(async () => undefined),
+vi.mock('../../helpers/switchToSession', () => ({
+  switchToSession: vi.fn(async () => undefined),
 }))
 
 const sessions: SessionInfo[] = [

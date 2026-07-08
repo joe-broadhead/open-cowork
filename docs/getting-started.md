@@ -49,8 +49,8 @@ pnpm typecheck
 pnpm dev
 ```
 
-The root `pnpm dev` command builds `@open-cowork/shared` and the bundled
-MCP servers before launching the desktop app. If you launch the desktop
+The root `pnpm dev` command builds all workspace packages, the design
+tokens, and the bundled MCP servers before launching the desktop app. If you launch the desktop
 workspace directly and see missing `packages/shared/dist/` or
 `mcps/*/dist/` errors, run `pnpm build:shared` and `pnpm build:mcps`
 from the repo root first.
@@ -62,6 +62,7 @@ Download a release artifact for your platform from GitHub Releases.
 Current targets:
 - macOS: `.zip`, `.dmg`
 - Linux: `.AppImage`, `.deb`
+- Windows: `.exe` (NSIS installer, `x64`)
 
 Release assets include checksums, SBOMs, and provenance. The `v0.x`
 preview line is intentionally unsigned until Apple Developer validation

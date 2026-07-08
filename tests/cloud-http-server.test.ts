@@ -2202,7 +2202,8 @@ test('cloud HTTP server paginates session lists with scoped cursors and filters'
     const first = await readJson(firstResponse)
     const firstItems = asArray(first.sessions).map((session) => String(asRecord(session).sessionId))
     assert.deepEqual(firstItems, [createdSessionIds[0], createdSessionIds[1]])
-    assert.equal(first.totalEstimate, 5)
+    // totalEstimate is a bounded has-more probe (limit + 1), not the true count (#915).
+    assert.equal(first.totalEstimate, 3)
     assert.equal(typeof first.nextCursor, 'string')
 
     const secondResponse = await fetch(`${baseUrl}/api/sessions?limit=2&cursor=${encodeURIComponent(String(first.nextCursor))}`)

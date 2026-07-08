@@ -148,9 +148,10 @@ export class CloudThreadOrganizationService {
   }
 
   private async requireOwnedSessions(principal: CloudPrincipal, sessionIds: string[]) {
+    if (sessionIds.length === 0) return
+    const owned = await this.store.getOwnedSessionIds(principal.tenantId, principal.userId, sessionIds)
     for (const sessionId of sessionIds) {
-      const session = await this.store.getSession(principal.tenantId, principal.userId, sessionId)
-      if (!session) throw new Error(`Unknown session ${sessionId}.`)
+      if (!owned.has(sessionId)) throw new Error(`Unknown session ${sessionId}.`)
     }
   }
 }

@@ -508,7 +508,7 @@ describe("WebhookProvider", () => {
       {
         filename: "diff.patch",
         mimeType: "text/x-diff",
-        path: "/srv/repos/private-app/diff.patch",
+        localPath: "/srv/repos/private-app/diff.patch",
         data: Buffer.from("patch")
       },
     )).resolves.toMatchObject({
@@ -546,7 +546,7 @@ describe("WebhookProvider", () => {
       { provider: "webhook", chatId: "team-chat" },
       {
         filename: "diff.patch",
-        path: "/srv/repos/private-app/diff.patch"
+        localPath: "/srv/repos/private-app/diff.patch"
       },
     )).rejects.toThrow("Webhook file delivery requires inline data; local paths are not exposed to bridge providers");
     expect(calls).toBe(0);

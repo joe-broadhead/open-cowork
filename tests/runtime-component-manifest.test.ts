@@ -1,4 +1,4 @@
-import { buildRuntimeComponentManifest, buildRuntimeComponentVerificationReport, formatRuntimeComponentVerificationFailure, runtimeComponentDevelopmentOverrideFromEnv, runtimeComponentVerificationIsEnforced, verifyRuntimeComponentManifest } from '@open-cowork/runtime-host/runtime-component-manifest'
+import { buildRuntimeComponentManifest, buildRuntimeComponentVerificationReport, formatRuntimeComponentVerificationFailure, runtimeComponentDevelopmentOverrideFromEnv, runtimeComponentVerificationIsEnforced, verifyRuntimeComponentManifest, writeRuntimeComponentManifest } from '@open-cowork/runtime-host/runtime-component-manifest'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -249,4 +249,76 @@ test('runtime component development override is explicit and reason-bearing', ()
     }),
     { enabled: true, reason: 'unsigned local component build' },
   )
+})
+
+const NULL_COMPONENT_PATHS = {
+  'opencode-cli': null,
+  'opencode-sdk': null,
+  'workflow-mcp': null,
+  'agent-tool-mcp': null,
+  'semantic-ui-mcp': null,
+} as const
+const COMPONENT_VERSIONS = {
+  'opencode-cli': '1.15.5',
+  'opencode-sdk': '2.3.4',
+  'workflow-mcp': '0.0.0',
+  'agent-tool-mcp': '0.0.0',
+  'semantic-ui-mcp': '0.0.0',
+} as const
+
+test('writeRuntimeComponentManifest pins the build-time hash and catches post-signing tamper (#907)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-manifest-'))
+  const cliPath = join(dir, 'opencode')
+  const manifestPath = join(dir, 'runtime-components.manifest.json')
+  try {
+    writeFileSync(cliPath, 'trusted-opencode-bytes')
+    const expectedSha = createHash('sha256').update('trusted-opencode-bytes').digest('hex')
+
+    const written = await writeRuntimeComponentManifest(manifestPath, {
+      componentPaths: { ...NULL_COMPONENT_PATHS, 'opencode-cli': cliPath },
+      componentVersions: COMPONENT_VERSIONS,
+      isPackaged: true,
+    })
+    // The trusted manifest pins the authoritative sha256 (not an observed-evidence field).
+    const cli = written.components.find((component) => component.id === 'opencode-cli')
+    assert.equal(cli?.sha256, expectedSha)
+    assert.equal(cli?.observedSha256, undefined)
+
+    // Untouched binary verifies clean (no hash mismatch).
+    const clean = await buildRuntimeComponentVerificationReport({
+      componentPaths: { ...NULL_COMPONENT_PATHS, 'opencode-cli': cliPath },
+      componentVersions: COMPONENT_VERSIONS,
+      manifestPath,
+      isPackaged: true,
+    })
+    assert.equal(clean.issues.some((issue) => issue.code === 'component_hash_mismatch'), false)
+
+    // A post-signing modification is caught and fails closed.
+    writeFileSync(cliPath, 'tampered-opencode-bytes')
+    const tampered = await buildRuntimeComponentVerificationReport({
+      componentPaths: { ...NULL_COMPONENT_PATHS, 'opencode-cli': cliPath },
+      componentVersions: COMPONENT_VERSIONS,
+      manifestPath,
+      isPackaged: true,
+    })
+    assert.equal(tampered.ok, false)
+    assert.equal(tampered.issues.some((issue) => issue.code === 'component_hash_mismatch'), true)
+  } finally {
+    rmSync(dir, { force: true, recursive: true })
+  }
+})
+
+test('development override is honored in local dev but ignored in packaged builds (#907)', async () => {
+  const base = {
+    componentPaths: NULL_COMPONENT_PATHS,
+    componentVersions: COMPONENT_VERSIONS,
+    env: { OPEN_COWORK_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON: 'unsigned local component build' },
+    manifestPath: '/definitely/missing/runtime-components.manifest.json',
+  }
+  // Unpackaged local dev: the env override applies.
+  const dev = await buildRuntimeComponentVerificationReport({ ...base, isPackaged: false })
+  assert.equal(dev.developmentOverride, true)
+  // Packaged: the same env override cannot defeat the integrity anchor.
+  const packaged = await buildRuntimeComponentVerificationReport({ ...base, isPackaged: true })
+  assert.equal(packaged.developmentOverride, false)
 })

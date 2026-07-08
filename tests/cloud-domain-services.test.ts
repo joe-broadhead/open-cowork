@@ -353,6 +353,33 @@ test('cloud BYOK service enforces storage, provider, KMS, billing, and audit bou
   ])
 })
 
+test('cloud BYOK service never billing-gates reads or revocation (#906)', async () => {
+  const store: string[] = []
+  const admin: CloudPrincipal = { ...principal, authSource: 'api_token', tokenId: 'tok_admin', tokenScopes: ['admin'] }
+  const service = new CloudByokService({
+    ensurePrincipal: async (input) => input,
+    principalOrgId: (input) => input.orgId || input.tenantId,
+    byokSecrets: byokStore({
+      async getMetadata() { store.push('getMetadata'); return metadata('anthropic') },
+      async disableSecret(input) { store.push('disableSecret'); return metadata(input.providerId) },
+      async setSecret(input) { store.push('setSecret'); return metadata(input.providerId) },
+    }),
+    byokPolicy: { allowedProviderIds: ['anthropic'] },
+    // Simulate a past_due subscription: the billing gate always denies. Reads and
+    // revocation must still succeed; only writes may be blocked.
+    assertBillingAllowed: async () => { throw new CloudServiceError(402, 'subscription past_due') },
+  })
+
+  assert.equal((await service.getSecret(admin, 'anthropic'))?.providerId, 'anthropic')
+  assert.equal((await service.disableSecret(admin, 'anthropic'))?.providerId, 'anthropic')
+  await assert.rejects(
+    () => service.setSecret(admin, { providerId: 'anthropic', plaintext: 'sk-test' }),
+    /past_due/,
+  )
+  // The write never reached the store; the read + revoke did.
+  assert.deepEqual(store, ['getMetadata', 'disableSecret'])
+})
+
 test('cloud channel domain service owns channel agent listing behind explicit dependencies', async () => {
   const calls: unknown[] = []
   const agents: HeadlessAgentRecord[] = [

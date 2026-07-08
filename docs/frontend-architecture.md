@@ -64,7 +64,7 @@ backlogs — they may not grow past their pinned budget:
 | File | Budget | Decomposition backlog |
 | --- | --- | --- |
 | `browser/cowork-api.ts` | 1,446 | Split the browser cloud API facade by domain (sessions / threads / artifacts / workflows), mirroring the `cloud-client` domain barrels. |
-| `components/HomePage.tsx` | 1,208 | Extract the launchpad feed, quick-actions, and hero sections into feature components. |
+| `components/HomePage.tsx` | 1,190 | Extract the inline HomeComposer into a feature component (its shared menu keyboard, outside-pointer dismiss, and roving-focus hooks are already extracted under `home/`, #918/#920), plus the launchpad feed, quick-actions, and hero sections. |
 | `components/layout/Sidebar.tsx` | 954 | Extract the per-section nav groups into dedicated components. |
 
 Budgets are ratchets: when a file shrinks, lower its budget; never raise a

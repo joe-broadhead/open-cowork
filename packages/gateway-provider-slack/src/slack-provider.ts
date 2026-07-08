@@ -14,6 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { isRecord } from "@open-cowork/gateway-channel";
 import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 
 export interface SlackProviderConfig {
@@ -88,7 +89,6 @@ export class SlackProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 5,
     maxButtonTokenBytes: 2000,
     maxFileBytes: 20 * 1024 * 1024,
-    maxFileSizeBytes: 20 * 1024 * 1024,
     inboundFileModes: ["download_url", "provider_file_id"],
     outboundFileModes: ["local_path", "inline_buffer"],
     editSemantics: "message",
@@ -157,7 +157,7 @@ export class SlackProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
-    const filePath = file.localPath ?? file.path;
+    const filePath = file.localPath;
     const data = file.data || (filePath ? new Uint8Array(await readFile(filePath)) : new Uint8Array());
     if (data.byteLength === 0) throw new Error("Slack file upload requires file data.");
     if (data.byteLength > this.capabilities.maxFileBytes!) {
@@ -210,6 +210,13 @@ export class SlackProvider implements ChannelProvider {
 
   async downloadAttachment(attachment: ChannelAttachment): Promise<Uint8Array> {
     if (!attachment.providerFileId) throw new Error("Slack attachment is missing a private file URL.");
+    // Pin the bot-token-bearing request to Slack hosts. The URL originates from a
+    // signature-verified Slack payload today, but this guard ensures a future refactor that lets
+    // less-trusted data reach this path can't redirect the credential elsewhere (#922).
+    const fileUrl = new URL(attachment.providerFileId);
+    if (fileUrl.protocol !== "https:" || !(fileUrl.hostname === "slack.com" || fileUrl.hostname.endsWith(".slack.com"))) {
+      throw new Error(`Refusing to send the Slack bot token to a non-Slack host: ${fileUrl.hostname}`);
+    }
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
     const response = await fetchWithTimeout(fetchImpl, attachment.providerFileId, {
       headers: {
@@ -567,9 +574,6 @@ function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function stringField(value: Record<string, unknown> | undefined, key: string): string | null {
   if (!value) return null;

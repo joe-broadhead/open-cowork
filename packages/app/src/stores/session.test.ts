@@ -439,3 +439,32 @@ describe('useSessionStore', () => {
     expect(state.chartArtifactsBySession.ses_1).toEqual([{ ...artifact, id: 'artifact-2' }])
   })
 })
+
+describe('useSessionStore workspace-list invariant (#919)', () => {
+  beforeEach(() => resetStore())
+
+  it('keeps sessions in sync with sessionsByWorkspace[active] across every mutation', () => {
+    const state = () => useSessionStore.getState()
+    const expectInSync = () => {
+      const s = state()
+      expect(s.sessions).toEqual(s.sessionsByWorkspace[s.activeWorkspaceId])
+    }
+
+    state().setSessions([session('a'), session('b')])
+    expectInSync()
+    state().addSession(session('c'))
+    expectInSync()
+    state().renameSession('a', 'Renamed A')
+    expectInSync()
+    expect(state().sessions.find((entry) => entry.id === 'a')?.title).toBe('Renamed A')
+    state().setSessionComposerPreferences('b', { modelId: 'gpt-x' })
+    expectInSync()
+    state().setSessionPrimaryAgent('c', 'build')
+    expectInSync()
+    state().applySessionMetadata({ id: 'b', title: 'B via metadata' })
+    expectInSync()
+    state().removeSession('b')
+    expectInSync()
+    expect(state().sessions.map((entry) => entry.id)).toEqual(['c', 'a'])
+  })
+})
