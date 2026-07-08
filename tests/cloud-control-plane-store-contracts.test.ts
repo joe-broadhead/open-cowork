@@ -199,8 +199,13 @@ function runControlPlaneDomainContracts(
       const cursorPageOne = await store.listSessionsPage({ tenantId, userId, limit: 2, query: 'cursor-contract' })
       assert.deepEqual(cursorPageOne.items.map((session) => session.sessionId), [`${prefix}-page-a`, `${prefix}-page-b`])
       assert.ok(cursorPageOne.nextCursor)
+      // #915: totalEstimate is a bounded has-more probe capped at limit + 1, identically on both
+      // stores — 3 matches with limit 2 report 3 (= limit + 1, "there's more"), not the true count.
+      assert.equal(cursorPageOne.totalEstimate, 3)
       const cursorPageTwo = await store.listSessionsPage({ tenantId, userId, limit: 2, query: 'cursor-contract', cursor: cursorPageOne.nextCursor })
       assert.deepEqual(cursorPageTwo.items.map((session) => session.sessionId), [`${prefix}-page-c`])
+      // The final page has fewer than `limit` remaining, so the probe is the exact remaining count.
+      assert.equal(cursorPageTwo.totalEstimate, 1)
       assert.equal(new Set([...cursorPageOne.items, ...cursorPageTwo.items].map((session) => session.sessionId)).size, 3)
       await assert.rejects(
         Promise.resolve().then(() => store.listSessionsPage({ tenantId, userId, limit: 2, query: 'changed-filter', cursor: cursorPageOne.nextCursor })),

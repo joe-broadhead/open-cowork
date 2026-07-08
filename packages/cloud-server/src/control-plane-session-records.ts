@@ -31,6 +31,10 @@ export type ListSessionsPageInput = {
 export type ListSessionsPageRecord = {
   items: SessionRecord[]
   nextCursor: string | null
+  // Bounded has-more probe, NOT an exact total: at most `limit + 1`. A value of `limit + 1`
+  // means "more than `limit` sessions remain after the cursor" (page it); any smaller value is
+  // the exact remaining count. Both stores cap it identically so the paged UI behaves the same
+  // on Postgres and in-memory — computing a true total would require an unbounded COUNT (#915).
   totalEstimate: number
 }
 

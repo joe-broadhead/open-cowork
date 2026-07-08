@@ -1181,7 +1181,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return {
       items: page.map((session) => this.sessionRecordWithProjectSource(session)),
       nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!, input) : null,
-      totalEstimate: filtered.length,
+      // Bounded has-more probe capped at limit + 1, matching the Postgres store (#915) — not the
+      // full post-cursor count, which would diverge from production and grow unbounded.
+      totalEstimate: hasMore ? limit + 1 : filtered.length,
     }
   }
 
