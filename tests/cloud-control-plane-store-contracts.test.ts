@@ -747,6 +747,22 @@ function runControlPlaneDomainContracts(
       await store.removeThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-tag`] })
       const clearedMetadata = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
       assert.deepEqual(clearedMetadata?.tags, [])
+
+      // #910: applying a SET of tags to a SET of sessions creates the full cross product in one
+      // set-based statement (both sessions get both tags), identically on both stores, and is
+      // idempotent under a re-apply (ON CONFLICT DO NOTHING).
+      const secondTag = await store.createThreadTag({ tenantId, tagId: `${prefix}-tag2`, name: 'Later', color: '#888888' })
+      await store.applyThreadTags({ tenantId, sessionIds: [sessionId, `${prefix}-page-a`], tagIds: [`${prefix}-tag`, secondTag.tagId] })
+      const expectedTagIds = [`${prefix}-tag`, `${prefix}-tag2`].sort()
+      const crossProduct = await store.listThreadMetadata({ tenantId, userId })
+      const tagsFor = (id: string) => crossProduct.find((entry) => entry.sessionId === id)?.tags.map((tag) => tag.tagId).sort()
+      assert.deepEqual(tagsFor(sessionId), expectedTagIds)
+      assert.deepEqual(tagsFor(`${prefix}-page-a`), expectedTagIds)
+      await store.applyThreadTags({ tenantId, sessionIds: [sessionId], tagIds: [`${prefix}-tag`] })
+      const reapplied = (await store.listThreadMetadata({ tenantId, userId })).find((entry) => entry.sessionId === sessionId)
+      assert.deepEqual(reapplied?.tags.map((tag) => tag.tagId).sort(), expectedTagIds)
+      await store.removeThreadTags({ tenantId, sessionIds: [sessionId, `${prefix}-page-a`], tagIds: expectedTagIds })
+      await store.deleteThreadTag(tenantId, secondTag.tagId)
       assert.equal((await store.updateThreadTag({ tenantId, tagId: `${prefix}-tag`, name: 'Urgent' }))?.name, 'Urgent')
       const smartFilter = await store.createThreadSmartFilter({ tenantId, filterId: `${prefix}-filter`, name: 'Open', query: { status: ['active'] } })
       assert.deepEqual(smartFilter.query, { status: ['active'] })

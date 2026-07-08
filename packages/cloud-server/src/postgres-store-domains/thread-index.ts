@@ -118,17 +118,19 @@ export class PostgresThreadIndexRepository {
       const tagIds = normalizeIdList(input.tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
       for (const sessionId of sessionIds) await this.options.requireSession(input.tenantId, sessionId, client)
       for (const tagId of tagIds) await this.requireThreadTag(input.tenantId, tagId, client)
+      if (sessionIds.length === 0 || tagIds.length === 0) return
       const createdAt = nowIso(input.createdAt)
-      for (const sessionId of sessionIds) {
-        for (const tagId of tagIds) {
-          await client.query(
-            `INSERT INTO cloud_thread_tag_links (tenant_id, session_id, tag_id, created_at)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (tenant_id, session_id, tag_id) DO NOTHING`,
-            [input.tenantId, sessionId, tagId, createdAt],
-          )
-        }
-      }
+      // One set-based insert over the session × tag cross product instead of a nested loop
+      // that fired up to THREAD_BULK_MAX_SESSION_IDS × THREAD_FILTER_MAX_VALUES statements
+      // (500 × 50 = 25,000 round-trips) per call, holding row locks the whole transaction (#910).
+      await client.query(
+        `INSERT INTO cloud_thread_tag_links (tenant_id, session_id, tag_id, created_at)
+         SELECT $1, s.session_id, t.tag_id, $4
+         FROM unnest($2::text[]) AS s(session_id)
+         CROSS JOIN unnest($3::text[]) AS t(tag_id)
+         ON CONFLICT (tenant_id, session_id, tag_id) DO NOTHING`,
+        [input.tenantId, sessionIds, tagIds, createdAt],
+      )
     })
   }
 
