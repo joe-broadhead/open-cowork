@@ -1040,6 +1040,14 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
 // with the always-firing AFTER-row trigger this is drift-free for all post-migration activity. The
 // `reconcile` statements recompute every counter from its source table (resetting idle scopes to 0)
 // to wipe drift accumulated under the old clamp on deploy, and are reused by the periodic reconcile.
+//
+// COST (#924): each statement is a full, status-filtered GROUP BY scan of its source table — no
+// index serves it. That is cheap at deploy time (one-off) but EXPENSIVE if the optional periodic
+// reconcile (concurrencyReconcileMs) is enabled on a large deployment, where it re-scans all of
+// cloud_sessions / cloud_session_commands / cloud_workflow_runs on every tick. It is off by default
+// because the clamp-on-read trigger already keeps the gauges drift-free; only enable it as a
+// belt-and-braces safety net, and if a deployment is large enough for the scan to matter, bound it
+// (per-org batching) rather than running the global aggregate.
 function concurrencyReconcileStatements(counterKey: string, sourceTable: string, activeWhere: string) {
   // counterKey/sourceTable/activeWhere are fixed literals below — never request input.
   return [

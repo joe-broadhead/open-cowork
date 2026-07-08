@@ -1923,8 +1923,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
             nowIsoValue,
           ],
         )
+        // lease.tenantId is unambiguously a tenant id, so resolve the org by the tenant
+        // relationship only. The prior `OR org_id = $1` could match a different org whose org_id
+        // coincided with this tenant id, mis-attributing the audit event (#924).
         const org = await this.maybeOne(
-          `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 OR org_id = $1 LIMIT 1`,
+          `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 LIMIT 1`,
           [lease.tenantId],
           client,
         )
