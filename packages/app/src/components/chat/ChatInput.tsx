@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore, type Session } from '../../stores/session'
+import { useDismissOnOutsidePointer } from '../home/use-dismiss-on-outside-pointer'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { activeSessionWorkspaceKey, LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
@@ -331,20 +332,7 @@ export function ChatInput() {
     return () => document.removeEventListener('keydown', handler, true)
   }, [clearSessionPrimaryAgentForModeSwitch, setAgentMode])
 
-  useEffect(() => {
-    if (!inlinePicker) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (inlinePickerRef.current?.contains(target)) return
-      if (textareaRef.current?.contains(target)) return
-      setInlinePicker(null)
-    }
-
-    document.addEventListener('mousedown', handlePointerDown, true)
-    return () => document.removeEventListener('mousedown', handlePointerDown, true)
-  }, [inlinePicker])
+  useDismissOnOutsidePointer(Boolean(inlinePicker), () => setInlinePicker(null), [inlinePickerRef, textareaRef])
 
   const handleStop = useCallback(async () => {
     if (!currentSessionId) return

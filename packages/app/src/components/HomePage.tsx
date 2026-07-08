@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRovingMenuKeyboard } from './home/use-roving-menu-keyboard'
+import { useDismissOnOutsidePointer } from './home/use-dismiss-on-outside-pointer'
 import type {
   BrandingHomeConfig,
   LaunchpadFeedPayload,
@@ -381,35 +382,8 @@ function HomeComposer({
     })
   }, [inlinePicker, text])
 
-  useEffect(() => {
-    if (!inlinePicker) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (inlinePickerRef.current?.contains(target)) return
-      if (textareaRef.current?.contains(target)) return
-      setInlinePicker(null)
-    }
-
-    document.addEventListener('mousedown', handlePointerDown, true)
-    return () => document.removeEventListener('mousedown', handlePointerDown, true)
-  }, [inlinePicker])
-
-  useEffect(() => {
-    if (!showAssignMenu) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (assignMenuRef.current?.contains(target)) return
-      if (assignBtnRef.current?.contains(target)) return
-      setShowAssignMenu(false)
-    }
-
-    document.addEventListener('mousedown', handlePointerDown, true)
-    return () => document.removeEventListener('mousedown', handlePointerDown, true)
-  }, [showAssignMenu])
+  useDismissOnOutsidePointer(Boolean(inlinePicker), () => setInlinePicker(null), [inlinePickerRef, textareaRef])
+  useDismissOnOutsidePointer(showAssignMenu, () => setShowAssignMenu(false), [assignMenuRef, assignBtnRef])
 
   // Composer chrome is deliberately quiet at rest — the borders use a
   // static `rgba` so the theme's purple accent never bleeds in through
