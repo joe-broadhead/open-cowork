@@ -150,7 +150,7 @@ node --no-warnings --experimental-strip-types --test tests/runtime-input-diagnos
 pnpm test:renderer -- HealthCenterPage
 pnpm deploy:validate
 pnpm ops:validate
-python3 -m mkdocs build --strict
+pnpm docs:build
 ```
 
 The release expectation is simple: Desktop-only users can start immediately,

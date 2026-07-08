@@ -139,7 +139,7 @@ and deployment artifacts:
 - `pnpm test`
 - `pnpm test:e2e` when UI/runtime paths are touched
 - `pnpm perf:check` for renderer/runtime-sensitive work
-- `uv run mkdocs build --strict` or CI docs build when docs are touched
+- `pnpm docs:build` or CI docs build when docs are touched
 - `git diff --check`
 - Real Postgres concurrency tests with `OPEN_COWORK_TEST_POSTGRES_URL`
 - Gateway provider/channel matrix tests

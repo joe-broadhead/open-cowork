@@ -1,6 +1,9 @@
 {{- if and (not .Values.image.tag) (not .Values.image.digest) }}
 {{- fail "image.tag or image.digest is required; pin a release tag or immutable digest instead of relying on latest." }}
 {{- end }}
+{{- if and .Values.image.digest (not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.image.digest)) }}
+{{- fail "image.digest must be a sha256:<64 lowercase hex> OCI digest." }}
+{{- end }}
 {{- if ne .Values.gateway.productMode "cloud_channel" }}
 {{- fail "open-cowork-gateway Helm chart only deploys Cloud Channel Gateway. Use the standalone gateway chart/app for gateway.productMode=standalone." }}
 {{- end }}
@@ -13,6 +16,18 @@
 {{- $sharedConfig := or .Values.gateway.configPath .Values.gateway.configDir .Values.gateway.downstreamRoot }}
 {{- $publicGateway := or .Values.ingress.enabled (eq .Values.service.type "LoadBalancer") (eq .Values.service.type "NodePort") .Values.gateway.publicUrl .Values.gateway.telegram.publicUrl }}
 {{- $inlineGatewaySecrets := or .Values.gateway.serviceToken .Values.gateway.adminToken .Values.gateway.providersJson .Values.gateway.telegram.botToken .Values.gateway.telegram.webhookSecret .Values.gateway.slack.botToken .Values.gateway.slack.signingSecret .Values.gateway.email.inboundSecret .Values.gateway.email.smtpPassword .Values.gateway.webhook.sharedSecret }}
+{{- if and $publicGateway (not .Values.image.digest) }}
+{{- fail "public Gateway deployments require image.digest so the Gateway deployment is bound to an immutable OCI artifact." }}
+{{- end }}
+{{- if and $publicGateway (not .Values.networkPolicy.enabled) }}
+{{- fail "public Gateway deployments require networkPolicy.enabled=true." }}
+{{- end }}
+{{- if and $publicGateway (not .Values.networkPolicy.egress.enabled) }}
+{{- fail "public Gateway deployments require networkPolicy.egress.enabled=true with explicit egress destinations." }}
+{{- end }}
+{{- if and $publicGateway (empty .Values.networkPolicy.egress.to) }}
+{{- fail "public Gateway deployments require networkPolicy.egress.to entries for approved Cloud, provider API, identity, and telemetry destinations." }}
+{{- end }}
 {{- if and $publicGateway (not .Values.gateway.existingSecret) $inlineGatewaySecrets }}
 {{- fail "public Gateway deployments reject inline secret-bearing Helm values; set gateway.existingSecret for service, admin, provider, and webhook tokens." }}
 {{- end }}

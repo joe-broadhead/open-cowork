@@ -15,7 +15,7 @@ import {
 } from './browser-renderer-app.ts'
 import {
   principalHasDesktopApiAccess,
-  routeAllowsGatewayOnlyToken,
+  principalCanUseGatewayOnlyRoute,
   routeAllowsOperationalToken,
   routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
@@ -786,7 +786,7 @@ async function handleApiRequest(
     return
   }
 
-  if (!principalHasDesktopApiAccess(context.principal) && !routeAllowsGatewayOnlyToken({
+  if (!principalHasDesktopApiAccess(context.principal) && !principalCanUseGatewayOnlyRoute(context.principal, {
     resource,
     action,
     method: req.method,

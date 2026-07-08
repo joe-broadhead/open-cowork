@@ -75,6 +75,9 @@ function parseArgs(argv) {
   const args = {
     tier: process.env.OPEN_COWORK_RELEASE_CLAIM_TIER || 'local-self-host-beta',
     manifest: process.env.OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST || '',
+    expectedCommitSha: process.env.OPEN_COWORK_EXPECTED_COMMIT_SHA || '',
+    cloudImageJson: process.env.OPEN_COWORK_CLOUD_IMAGE_JSON || '',
+    gatewayImageJson: process.env.OPEN_COWORK_GATEWAY_IMAGE_JSON || '',
   }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -86,9 +89,18 @@ function parseArgs(argv) {
     } else if (arg === '--manifest') {
       args.manifest = argv[index + 1]
       index += 1
+    } else if (arg === '--expected-commit-sha') {
+      args.expectedCommitSha = argv[index + 1]
+      index += 1
+    } else if (arg === '--cloud-image-json') {
+      args.cloudImageJson = argv[index + 1]
+      index += 1
+    } else if (arg === '--gateway-image-json') {
+      args.gatewayImageJson = argv[index + 1]
+      index += 1
     } else if (arg === '--help' || arg === '-h') {
       process.stdout.write(
-        `Usage: node scripts/validate-release-promotion.mjs --tier ${Object.keys(tierConfigs).join('|')} [--manifest path]\n`,
+        `Usage: node scripts/validate-release-promotion.mjs --tier ${Object.keys(tierConfigs).join('|')} [--manifest path] [--expected-commit-sha sha] [--cloud-image-json path --gateway-image-json path]\n`,
       )
       process.exit(0)
     } else {
@@ -109,6 +121,14 @@ function assertDigest(value, label) {
   if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/i.test(value)) {
     throw new Error(`${label} must be sha256:<64 hex>`)
   }
+}
+
+function expectedDigestFromImageJson(path, label) {
+  if (!path) return null
+  assertFile(path)
+  const record = readJson(path)
+  assertDigest(record.digest, `${label}.digest`)
+  return record.digest
 }
 
 function assertIsoTimestamp(value, label) {
@@ -230,6 +250,9 @@ function validateHostedManifest(args, config) {
   let commitSha = null
   let cloudDigest = null
   let gatewayDigest = null
+  const expectedCloudDigest = expectedDigestFromImageJson(args.cloudImageJson, 'cloud image evidence')
+  const expectedGatewayDigest = expectedDigestFromImageJson(args.gatewayImageJson, 'gateway image evidence')
+  if (args.expectedCommitSha) assertSha(args.expectedCommitSha, '--expected-commit-sha')
   for (const item of manifest.requiredEvidence) {
     if (!requiredLaunchEvidenceIds.includes(item.id)) {
       throw new Error(`${args.manifest} has unexpected promotion evidence item ${item.id}`)
@@ -263,11 +286,20 @@ function validateHostedManifest(args, config) {
     cloudDigest ??= report.imageDigests.cloud
     gatewayDigest ??= report.imageDigests.gateway
     if (report.commitSha !== commitSha) throw new Error(`${item.id}.report.commitSha must match all promotion evidence`)
+    if (args.expectedCommitSha && report.commitSha !== args.expectedCommitSha) {
+      throw new Error(`${item.id}.report.commitSha must match expected release commit ${args.expectedCommitSha}`)
+    }
     if (report.imageDigests.cloud !== cloudDigest) {
       throw new Error(`${item.id}.report.imageDigests.cloud must match all promotion evidence`)
     }
     if (report.imageDigests.gateway !== gatewayDigest) {
       throw new Error(`${item.id}.report.imageDigests.gateway must match all promotion evidence`)
+    }
+    if (expectedCloudDigest && report.imageDigests.cloud !== expectedCloudDigest) {
+      throw new Error(`${item.id}.report.imageDigests.cloud must match pushed cloud image digest ${expectedCloudDigest}`)
+    }
+    if (expectedGatewayDigest && report.imageDigests.gateway !== expectedGatewayDigest) {
+      throw new Error(`${item.id}.report.imageDigests.gateway must match pushed gateway image digest ${expectedGatewayDigest}`)
     }
   }
 }

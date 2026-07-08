@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -9,6 +9,7 @@ const docsVenv = join(repoRoot, '.venv-docs')
 const requirementsPath = join(repoRoot, 'docs', 'requirements.txt')
 const command = process.argv[2] || 'build'
 const passthroughArgs = process.argv.slice(3)
+const MIN_DOCS_PYTHON = { major: 3, minor: 11 }
 
 function log(message) {
   process.stdout.write(`[docs] ${message}\n`)
@@ -28,6 +29,31 @@ function commandWorks(command, args) {
   return result.status === 0
 }
 
+function pythonVersion(command, pyLauncher = false) {
+  const args = pyLauncher
+    ? ['-3', '-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")']
+    : ['-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")']
+  const result = spawnSync(command, args, { cwd: repoRoot, encoding: 'utf8' })
+  if (result.status !== 0) return null
+  const match = String(result.stdout || '').trim().match(/^(\d+)\.(\d+)$/)
+  if (!match) return null
+  return { major: Number(match[1]), minor: Number(match[2]) }
+}
+
+function pythonMeetsMinimum(version) {
+  if (!version) return false
+  if (version.major > MIN_DOCS_PYTHON.major) return true
+  return version.major === MIN_DOCS_PYTHON.major && version.minor >= MIN_DOCS_PYTHON.minor
+}
+
+function assertPythonMeetsMinimum(command, pyLauncher = false, label = command) {
+  const version = pythonVersion(command, pyLauncher)
+  if (!pythonMeetsMinimum(version)) {
+    throw new Error(`${label} must be Python ${MIN_DOCS_PYTHON.major}.${MIN_DOCS_PYTHON.minor}+ to build docs; found ${version ? `${version.major}.${version.minor}` : 'unknown'}.`)
+  }
+  return version
+}
+
 function findPython() {
   const configured = process.env.DOCS_PYTHON || process.env.PYTHON
   const candidates = [
@@ -38,9 +64,9 @@ function findPython() {
   ].filter(Boolean)
   for (const candidate of candidates) {
     const args = candidate === 'py' ? ['-3', '--version'] : ['--version']
-    if (commandWorks(candidate, args)) return candidate
+    if (commandWorks(candidate, args) && pythonMeetsMinimum(pythonVersion(candidate, candidate === 'py'))) return candidate
   }
-  throw new Error('Python 3 is required to build docs. Set DOCS_PYTHON to an explicit Python executable if it is not on PATH.')
+  throw new Error(`Python ${MIN_DOCS_PYTHON.major}.${MIN_DOCS_PYTHON.minor}+ is required to build docs. Set DOCS_PYTHON to an explicit Python executable if it is not on PATH.`)
 }
 
 function venvPythonPath() {
@@ -58,7 +84,16 @@ function venvMkdocsPath() {
 function ensureVenv() {
   const python = findPython()
   const venvPython = venvPythonPath()
+  if (existsSync(venvPython)) {
+    try {
+      assertPythonMeetsMinimum(venvPython, false, venvPython)
+    } catch (error) {
+      log(`${error instanceof Error ? error.message : String(error)} Recreating ${docsVenv}.`)
+      rmSync(docsVenv, { recursive: true, force: true })
+    }
+  }
   if (!existsSync(venvPython)) {
+    assertPythonMeetsMinimum(python, python === 'py')
     mkdirSync(docsVenv, { recursive: true })
     const args = python === 'py'
       ? ['-3', '-m', 'venv', docsVenv]

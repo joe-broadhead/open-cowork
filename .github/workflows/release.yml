@@ -201,6 +201,7 @@ jobs:
       - name: Deployment and launch readiness gates
         env:
           OPEN_COWORK_RELEASE_CLAIM_TIER: ${{ vars.OPEN_COWORK_RELEASE_CLAIM_TIER || 'local-self-host-beta' }}
+          OPEN_COWORK_EXPECTED_COMMIT_SHA: ${{ github.sha }}
         run: |
           pnpm deploy:validate -- --require-tools
           pnpm deploy:launch:validate
@@ -811,6 +812,27 @@ jobs:
           jq empty dist-oci/open-cowork-gateway.image.scan.grype.json
           jq empty dist-oci/open-cowork-cloud.image.cosign-verify.json
           jq empty dist-oci/open-cowork-gateway.image.cosign-verify.json
+
+      - name: Verify hosted promotion evidence matches pushed OCI images
+        if: vars.OPEN_COWORK_RELEASE_CLAIM_TIER != '' && vars.OPEN_COWORK_RELEASE_CLAIM_TIER != 'local-self-host-beta'
+        env:
+          OPEN_COWORK_RELEASE_CLAIM_TIER: ${{ vars.OPEN_COWORK_RELEASE_CLAIM_TIER }}
+          OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64: ${{ secrets.OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 }}
+          OPEN_COWORK_EXPECTED_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64" ]; then
+            echo "::error::Set OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 for hosted release claim tier ${OPEN_COWORK_RELEASE_CLAIM_TIER}."
+            exit 1
+          fi
+          manifest_path="${RUNNER_TEMP}/open-cowork-promotion-evidence.json"
+          printf '%s' "$OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64" | base64 --decode > "$manifest_path"
+          chmod 600 "$manifest_path"
+          node scripts/validate-release-promotion.mjs \
+            --tier "${OPEN_COWORK_RELEASE_CLAIM_TIER}" \
+            --manifest "$manifest_path" \
+            --expected-commit-sha "${OPEN_COWORK_EXPECTED_COMMIT_SHA}" \
+            --cloud-image-json dist-oci/open-cowork-cloud.image.json \
+            --gateway-image-json dist-oci/open-cowork-gateway.image.json
 
       - name: Upload OCI supply-chain artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

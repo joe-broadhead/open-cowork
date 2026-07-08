@@ -107,6 +107,8 @@ networkPolicy:
   ingress:
     from: []
   egress:
+    # Local defaults stay closed-but-unrestricted for simple installs. Public
+    # Gateway values must set enabled=true and list approved egress peers.
     enabled: false
     to: []
 

@@ -234,7 +234,10 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
       return result.filePath
     }
 
-    const { source } = context.resolvePrivateArtifactPath(request)
+    const { root, source } = context.resolvePrivateArtifactPath(request)
+    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+      throw new Error('Only surfaced session artifacts can be exported.')
+    }
 
     const result = await dialog.showSaveDialog({
       title: 'Save Artifact As',
@@ -252,7 +255,10 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
       throw new Error('Cloud artifacts cannot be revealed in the local filesystem. Export the artifact instead.')
     }
-    const { source } = context.resolvePrivateArtifactPath(request)
+    const { root, source } = context.resolvePrivateArtifactPath(request)
+    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+      throw new Error('Only surfaced session artifacts can be revealed.')
+    }
     shell.showItemInFolder(source)
     log('artifact', `Revealed artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
     return true

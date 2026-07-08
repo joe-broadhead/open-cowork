@@ -175,6 +175,10 @@ import {
   principalCanViewOperations,
 } from './session-principal-access.ts'
 import {
+  principalHasPrivilegedTokenScope,
+  principalHasTokenScope,
+} from './principal-access.ts'
+import {
   stableCloudId,
 } from './session-input-validation.ts'
 import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
@@ -882,11 +886,34 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     const session = await this.store.getSession(principal.tenantId, principal.userId, sessionId)
     if (!session) throw new CloudServiceError(404, 'Cloud session was not found.')
+    await this.assertGatewayTokenCanReadSession(principal, sessionId)
     const projection = await this.store.getSessionProjection(principal.tenantId, sessionId)
     return {
       session: this.withProjectionProjectSource(session, projection),
       projection,
     }
+  }
+
+  private async assertGatewayTokenCanReadSession(principal: CloudPrincipal, sessionId: string) {
+    if (!this.requiresGatewayChannelSessionScope(principal)) return
+    const tokenId = principal.tokenId
+    if (!tokenId) throw new CloudServiceError(403, 'Gateway session reads require a gateway API token.')
+    const orgId = this.principalOrgId(principal)
+    const grants = await this.store.listApiTokenChannelBindingGrants({ orgId, tokenId })
+    const grantedBindingIds = new Set(grants.map((grant) => grant.channelBindingId))
+    if (grantedBindingIds.size === 0) {
+      throw new CloudServiceError(403, 'Gateway API token is not authorized for any channel bindings.')
+    }
+    const bindings = await this.store.listChannelSessionBindingsForSession(orgId, sessionId)
+    if (!bindings.some((binding) => grantedBindingIds.has(binding.channelBindingId))) {
+      throw new CloudServiceError(403, 'Gateway API token is not authorized for this channel session.')
+    }
+  }
+
+  private requiresGatewayChannelSessionScope(principal: CloudPrincipal) {
+    if (principal.authSource !== 'api_token') return false
+    if (!principalHasPrivilegedTokenScope(principal, 'gateway')) return false
+    return !principalHasTokenScope(principal, 'desktop')
   }
 
   private withProjectionProjectSource(session: SessionRecord, projection: SessionProjectionRecord | null): SessionRecord {

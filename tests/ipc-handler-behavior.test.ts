@@ -25,7 +25,7 @@ import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
-import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
+import { registerChannelHandlers, resetDesktopChannelServiceForTests } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
 import { validateCustomSkillConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -93,6 +93,11 @@ function createBaseContext() {
 
 test('channel IPC bridge round-trips bindings, people, provider status, watches, and redacts secrets', async () => {
   const db = new DatabaseSync(':memory:')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-channels-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+  resetDesktopChannelServiceForTests()
   setCoordinationDatabaseForTests(db)
   try {
     const { context, handlers } = createBaseContext()
@@ -242,7 +247,63 @@ test('channel IPC bridge round-trips bindings, people, provider status, watches,
     assert.equal(availableTelegramProvider?.connected, false)
   } finally {
     setCoordinationDatabaseForTests(null)
+    resetDesktopChannelServiceForTests()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
     db.close()
+  }
+})
+
+test('channel IPC bridge reloads desktop-local channel bindings from durable app data', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-channel-persist-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+  resetDesktopChannelServiceForTests()
+  try {
+    const first = createBaseContext()
+    registerChannelHandlers(first.context)
+    const event = { sender: { id: 800 } }
+    const createAgent = first.handlers.get('channels:agents:create') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const connectBinding = first.handlers.get('channels:bindings:connect') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const agent = await createAgent(event, {
+      agentId: 'persistent-agent',
+      name: 'Persistent channel agent',
+      profileName: 'reviewer',
+    })
+    await connectBinding(event, {
+      bindingId: 'persistent-binding',
+      agentId: agent.agentId,
+      provider: 'slack',
+      displayName: 'Persistent Slack',
+      credentialRef: 'env:SLACK_BOT_TOKEN',
+      settings: { room: 'launch', token: 'super-secret-token' },
+    })
+
+    resetDesktopChannelServiceForTests()
+
+    const second = createBaseContext()
+    registerChannelHandlers(second.context)
+    const listAgents = second.handlers.get('channels:agents:list') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const listBindings = second.handlers.get('channels:bindings:list') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const agents = await listAgents(event, { limit: 20 })
+    const bindings = await listBindings(event, { agentId: 'persistent-agent', limit: 20 })
+
+    assert.equal(agents.some((entry) => entry.agentId === 'persistent-agent'), true)
+    const binding = bindings.find((entry) => entry.bindingId === 'persistent-binding')
+    assert.equal(binding?.displayName, 'Persistent Slack')
+    assert.equal(binding?.credentialRefConfigured, true)
+    assert.equal(binding?.credentialRefKind, 'env')
+    assert.equal(JSON.stringify(binding).includes('SLACK_BOT_TOKEN'), false)
+    assert.equal(JSON.stringify(binding).includes('super-secret-token'), false)
+  } finally {
+    resetDesktopChannelServiceForTests()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
   }
 })
 
@@ -1477,6 +1538,37 @@ test('artifact:read-attachment rejects private files that were not surfaced by t
     assert.ok(handler, 'expected artifact:read-attachment handler to be registered')
     await assert.rejects(
       () => handler({}, { sessionId, filePath: '/tmp/open-cowork-private-workspace/secret.txt' }),
+      /Only surfaced session artifacts/,
+    )
+  } finally {
+    sessionEngine.removeSession(sessionId)
+  }
+})
+
+test('artifact export and reveal reject private files that were not surfaced by the session', async () => {
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'artifact-ipc-unsurfaced-export-session'
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    sessionEngine.activateSession(sessionId)
+    context.resolvePrivateArtifactPath = () => ({
+      root: '/tmp/open-cowork-private-workspace',
+      source: '/tmp/open-cowork-private-workspace/secret.txt',
+    })
+
+    registerArtifactHandlers(context)
+    const exportHandler = handlers.get('artifact:export')
+    const revealHandler = handlers.get('artifact:reveal')
+
+    assert.ok(exportHandler, 'expected artifact:export handler to be registered')
+    assert.ok(revealHandler, 'expected artifact:reveal handler to be registered')
+    await assert.rejects(
+      () => exportHandler({}, { sessionId, filePath: '/tmp/open-cowork-private-workspace/secret.txt' }),
+      /Only surfaced session artifacts/,
+    )
+    await assert.rejects(
+      () => revealHandler({}, { sessionId, filePath: '/tmp/open-cowork-private-workspace/secret.txt' }),
       /Only surfaced session artifacts/,
     )
   } finally {

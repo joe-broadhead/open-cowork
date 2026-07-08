@@ -43,6 +43,11 @@ import { InMemoryApiTokensDomain } from './in-memory-domains/api-tokens.ts'
 import { InMemoryRolesDomain } from './in-memory-domains/roles.ts'
 import { InMemoryManagedPolicyDomain } from './in-memory-domains/policy.ts'
 import { InMemorySsoDomain } from './in-memory-domains/sso.ts'
+import {
+  restoreChannelState,
+  snapshotChannelState,
+  type InMemoryChannelStateSnapshot,
+} from './in-memory-channel-state-snapshot.ts'
 import type { ManagedPolicyRecord, SetManagedPolicyInput } from './control-plane-policy.ts'
 import type { OrgSsoConfigRecord, UpsertOrgSsoConfigInput } from './control-plane-sso.ts'
 import type {
@@ -251,6 +256,7 @@ export {
   plaintextMatchesCloudApiTokenId,
   verifyCloudApiTokenHash,
 } from './control-plane-tokens.ts'
+export type { InMemoryChannelStateSnapshot } from './in-memory-channel-state-snapshot.ts'
 
 type SessionState = {
   record: SessionRecord
@@ -383,6 +389,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     accountExists: (accountId) => this.accountExists(accountId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
+
+  snapshotChannelState(orgId: string): InMemoryChannelStateSnapshot {
+    return snapshotChannelState(this, orgId)
+  }
+
+  restoreChannelState(snapshot: InMemoryChannelStateSnapshot): void {
+    restoreChannelState(this, snapshot)
+  }
 
   createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }): TenantRecord {
     return this.identityDomain.createTenant(input)

@@ -339,7 +339,8 @@ describe('ChatInput', () => {
 
     render(<ChatInput />)
 
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    screen.getByRole('textbox').focus()
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Tab', shiftKey: true })
 
     expect(useSessionStore.getState().sessions[0]?.composerAgentName).toBeNull()
     expect(useSessionStore.getState().agentMode).toBe('plan')
@@ -347,6 +348,24 @@ describe('ChatInput', () => {
       'session-1',
       { agentName: null },
     ))
+  })
+
+  it('does not steal Shift+Tab reverse navigation outside the composer', async () => {
+    installModelRuntime()
+    seedCurrentSession()
+
+    render(
+      <>
+        <button type="button">Before composer</button>
+        <ChatInput />
+      </>,
+    )
+
+    screen.getByRole('button', { name: 'Before composer' }).focus()
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Before composer' }), { key: 'Tab', shiftKey: true })
+
+    expect(useSessionStore.getState().agentMode).toBe('build')
+    expect(window.coworkApi.session.setComposerPreferences).not.toHaveBeenCalled()
   })
 
   it('serializes rapid prompt submissions while a send is in flight', async () => {

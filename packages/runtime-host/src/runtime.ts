@@ -409,11 +409,11 @@ function buildManagedServerOptions(config: Awaited<ReturnType<typeof buildRuntim
     hostname: '127.0.0.1',
     port: 0,
     config,
-    // Cowork projects runtime state through SDK events and its own
-    // bounded logs. Keep OpenCode's managed-server file logs above
-    // info level so large permission configs are not dumped repeatedly
-    // during normal permission evaluation in downstream catalogs.
-    logLevel: 'WARN',
+    // Cowork projects runtime state through SDK events and its own bounded
+    // logs. Keep OpenCode's managed-server logs quiet, but avoid WARN:
+    // OpenCode 1.15.x suppresses the startup "server listening" line at WARN,
+    // and the supervisor needs that line to learn the ephemeral port.
+    logLevel: 'ERROR',
     // SDK defaults this to 5000ms, which is too aggressive on
     // directory-switch reboots — the opencode binary is cold-loading
     // MCPs + doing filesystem scans, and commonly takes 8-15s. When

@@ -186,7 +186,12 @@ export function CommandPalette({
   return (
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-50 bg-black/45" />
-      <div className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl">
+      <div
+        className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('commandPalette.title', 'Command palette')}
+      >
         <div className="border-b border-border-subtle px-3 py-3">
           <Input
             ref={inputRef}

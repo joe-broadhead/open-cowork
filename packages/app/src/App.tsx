@@ -15,6 +15,19 @@ import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-types'
 import { appHashFor, parseAppHash } from './browser-url-routing'
+import {
+  UI_PRIMITIVES_ENABLED,
+  UI_PRIMITIVES_HASH,
+  browserUrlRoutingEnabled,
+  canUseViewTransition,
+  describeError,
+  dismissPreview,
+  errorStack,
+  initialAppView,
+  previewDismissed,
+  type ViewTransitionDocument,
+} from './app-helpers'
+import { PaletteFallback, RouteFallback } from './components/layout/RouteFallback'
 import { isDesktopRuntime } from './runtime-env'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
@@ -35,7 +48,7 @@ import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { useAppGlobalEvents } from './hooks/useAppGlobalEvents'
 import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
 import { useRuntimeHealth } from './hooks/useRuntimeHealth'
-import { useAdminAccessible } from './hooks/useAdminAccessible'
+import { useAdminAccessState } from './hooks/useAdminAccessible'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 import { setBrandName, setDocsBaseUrl } from './helpers/brand'
 import { configureI18n, subscribeLocale, t } from './helpers/i18n'
@@ -52,73 +65,9 @@ import {
 
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
-const UI_PRIMITIVES_HASH = '#/ui-primitives'
-// The primitive gallery is an internal visual-QA surface; only expose it in dev
-// builds so it never ships as a reachable route in production.
-const UI_PRIMITIVES_ENABLED = import.meta.env.DEV
-
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (callback: () => void) => unknown
-}
-
-function canUseViewTransition() {
-  return Boolean(
-    (document as ViewTransitionDocument).startViewTransition
-    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  )
-}
-
-// Browser (cloud web) runtime routes the active view through the URL hash so
-// refresh restores place and views are shareable. Electron keeps in-memory
-// view state (plus the dev-only #/ui-primitives hash), unchanged.
-function browserUrlRoutingEnabled(): boolean {
-  return typeof window !== 'undefined' && !isDesktopRuntime()
-}
-
-function initialAppView(): AppView {
-  if (UI_PRIMITIVES_ENABLED && typeof window !== 'undefined' && window.location.hash === UI_PRIMITIVES_HASH) return 'ui-primitives'
-  if (browserUrlRoutingEnabled()) {
-    const parsed = parseAppHash(window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
-    // Chat deep links resolve after boot (the session must load first); the
-    // boot effect below opens the thread. Everything else starts in place.
-    if (parsed.view && parsed.view !== 'chat') return parsed.view
-  }
-  return 'home'
-}
-
 type ResourceNavigationNotice = {
   status: ResourceNavigationAction['status'] | 'invalid'
   message: string
-}
-
-function previewDismissed(version: string) {
-  try {
-    return window.localStorage.getItem(`open-cowork.preview-dismissed.${version}`) === 'true'
-  } catch {
-    return false
-  }
-}
-
-function dismissPreview(version: string) {
-  try {
-    window.localStorage.setItem(`open-cowork.preview-dismissed.${version}`, 'true')
-  } catch {
-    // localStorage can be unavailable in restricted renderer contexts.
-  }
-}
-
-function describeError(error: unknown) {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return String(error)
-  }
-}
-
-function errorStack(error: unknown) {
-  return error instanceof Error ? error.stack : undefined
 }
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
@@ -614,7 +563,8 @@ export function App() {
   }, [authChecked, authenticated, config, needsSetup, refreshRuntimeState])
 
   const authReady = authChecked && !!config && !(config.auth.enabled && !authenticated) && !needsSetup
-  const adminAccessible = useAdminAccessible(authReady)
+  const adminAccess = useAdminAccessState(authReady)
+  const adminAccessible = adminAccess.accessible
 
   // Post-auth/config states (unauthenticated, needs-setup) render dedicated screens
   // below, so they resolve to null here — only the boot/config stages gate the shell.
@@ -790,32 +740,32 @@ export function App() {
               />
             )}
             {view === 'chat' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <ChatView onNavigate={navigateView} />
               </Suspense>
             )}
             {view === 'projects' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <ProjectsBoardPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
             {view === 'knowledge' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <KnowledgePage />
               </Suspense>
             )}
             {view === 'approvals' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <StudioApprovalsPage onOpenChat={() => navigateView('chat')} onOpenHome={() => navigateView('home')} />
               </Suspense>
             )}
             {view === 'playbooks' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <WorkflowsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
             {view === 'team' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <AgentsPage
                   initialDraft={agentBuilderSeed}
                   onClearDraft={() => setAgentBuilderSeed(null)}
@@ -827,12 +777,12 @@ export function App() {
               </Suspense>
             )}
             {view === 'channels' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <StudioChannelsPage onOpenSettings={openSidebarSettings} />
               </Suspense>
             )}
             {view === 'tools' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <CapabilitiesPage
                   onClose={() => navigateView('chat')}
                   onCreateAgent={(seed) => {
@@ -843,22 +793,29 @@ export function App() {
               </Suspense>
             )}
             {view === 'artifacts' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <StudioArtifactsPage onOpenChat={() => navigateView('chat')} />
               </Suspense>
             )}
             {view === 'health' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <HealthCenterPage />
               </Suspense>
             )}
-            {view === 'admin' && (
-              <Suspense fallback={null}>
+            {view === 'admin' && adminAccessible && (
+              <Suspense fallback={<RouteFallback label={t('admin.loading', 'Loading admin controls…')} />}>
                 <AdminPage />
               </Suspense>
             )}
+            {view === 'admin' && !adminAccessible && (
+              <RouteFallback
+                label={adminAccess.checked
+                  ? t('admin.unavailable', 'Admin is not available for this account.')
+                  : t('admin.checkingAccess', 'Checking admin access…')}
+              />
+            )}
             {view === 'ui-primitives' && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <PrimitiveGallery />
               </Suspense>
             )}
@@ -874,7 +831,7 @@ export function App() {
             navigateView('home')
           }}
         >
-          <Suspense fallback={null}>
+          <Suspense fallback={<PaletteFallback />}>
             <CommandPalette
               onClose={() => setShowCommandPalette(false)}
               features={config?.features}

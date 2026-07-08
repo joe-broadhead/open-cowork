@@ -313,9 +313,13 @@ export function ChatInput() {
     onBlockedAttachment: () => addGlobalError(workspaceSupport.flags.reasons.attachFiles),
   })
 
-  // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
+  // Shift+Tab toggles agent mode only while focus is inside the composer.
+  // Outside the composer it must remain the browser/OS reverse-tab shortcut.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as Node | null
+      const composer = inputChromeRef.current
+      if (!target || !composer?.contains(target)) return
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()

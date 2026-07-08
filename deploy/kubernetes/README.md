@@ -27,9 +27,10 @@ domain, and credential values.
 ```yaml
 image:
   repository: registry.example.com/open-cowork/open-cowork-cloud
-  tag: IMAGE_TAG # or set image.digest instead
+  digest: sha256:IMAGE_DIGEST
 
 cloud:
+  deploymentTier: public_production
   profile: full
   publicUrl: https://cowork.example.com
   existingSecret: open-cowork-cloud-secrets
@@ -37,6 +38,7 @@ cloud:
     enabled: true
   auth:
     mode: oidc
+    signupMode: invite_only
     oidcIssuerUrl: https://issuer.example.com
     oidcClientId: OPEN_COWORK_OIDC_CLIENT_ID
   objectStore:
@@ -80,6 +82,14 @@ roles:
     enabled: true
     replicas: 1
 
+networkPolicy:
+  enabled: true
+  egress:
+    enabled: true
+    to:
+      - ipBlock:
+          cidr: 203.0.113.0/24 # replace with approved provider/service ranges
+
 ingress:
   enabled: true
   className: nginx
@@ -94,8 +104,10 @@ ingress:
         - cowork.example.com
 ```
 
-`IMAGE_TAG` must be an immutable release tag. Prefer `image.digest` when your
-release process records OCI digests. The charts reject `image.tag=latest`.
+Production values should pin images by `image.digest` rather than mutable tags.
+`cloud.deploymentTier=public_production` requires an immutable Cloud image
+digest, explicit NetworkPolicy egress destinations, and a Cloud SQL Auth Proxy
+image digest when the proxy is enabled. The charts also reject `image.tag=latest`.
 
 The chart exposes PodDisruptionBudget and topology spread values, but it does
 not create HPA or KEDA resources. Add autoscaling manifests in the private
@@ -116,11 +128,17 @@ helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
 helm upgrade --install open-cowork-gateway ./helm/open-cowork-gateway \
   --namespace open-cowork \
   --set image.repository=registry.example.com/open-cowork/open-cowork-gateway \
-  --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:GATEWAY_IMAGE_DIGEST \
   --set gateway.cloudBaseUrl=https://cowork.example.com \
   --set gateway.publicUrl=https://gateway.example.com \
-  --set gateway.existingSecret=open-cowork-gateway-secrets
+  --set gateway.existingSecret=open-cowork-gateway-secrets \
+  --set networkPolicy.egress.enabled=true \
+  --set-json 'networkPolicy.egress.to=[{"ipBlock":{"cidr":"203.0.113.0/24"}}]'
 ```
+
+Public Gateway deployments require `image.digest`, `networkPolicy.enabled=true`,
+`networkPolicy.egress.enabled=true`, and explicit egress destinations before the
+chart renders.
 
 ## Secret Inventory
 
