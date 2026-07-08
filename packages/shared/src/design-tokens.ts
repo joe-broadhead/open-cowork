@@ -768,6 +768,9 @@ export const DESIGN_TOKENS = {
     sm: '7px',
     md: '9px',
     lg: '12px',
+    // `xl` (studio shell / composer chrome) and `2xl` (primary content cards) are distinct role
+    // tokens that currently share a value; they are separate keys, so either can be retuned
+    // independently without touching the other (#923).
     xl: '16px',
     '2xl': '16px',
     '3xl': '22px',
