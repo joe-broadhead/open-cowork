@@ -1268,6 +1268,16 @@ const CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS = [
      ON cloud_scim_sync_events (status, next_attempt_at)`,
 ] as const
 
+// Serves the scheduler's projection-lag gauge, which previously full-scanned cloud_sessions +
+// LEFT JOINed projections on every emission. A partial index on updated_at over only the sessions
+// that carry events lets the bounded (recent-window) lag query touch just the active tail (#911).
+export const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_MIGRATION_ID = '029_projection_lag_index'
+const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_sessions_projection_lag_idx
+    ON cloud_sessions (updated_at)
+    WHERE next_event_sequence > 0`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1396,5 +1406,11 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_SSO_SCIM_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_sessions_projection_lag_idx'],
+    transactional: false,
   },
 ] as const

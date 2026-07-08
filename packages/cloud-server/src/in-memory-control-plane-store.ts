@@ -1396,9 +1396,13 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   getMaxProjectionLag(): number {
+    // Match the Postgres bound: only sessions active within the last hour count toward the live
+    // lag gauge, so both stores report the same "recently-active projection lag" semantics (#911).
+    const windowStartMs = Date.now() - 60 * 60 * 1000
     let maxLag = 0
     for (const session of this.sessions.values()) {
       if (session.nextEventSequence <= 0) continue
+      if (new Date(session.record.updatedAt).getTime() <= windowStartMs) continue
       const latest = session.nextEventSequence - 1
       const projected = session.projection?.sequence ?? 0
       maxLag = Math.max(maxLag, latest - projected)

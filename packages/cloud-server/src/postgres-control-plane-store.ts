@@ -1816,11 +1816,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async getMaxProjectionLag(): Promise<number> {
+    // Bounded to the recently-active tail (served by cloud_sessions_projection_lag_idx) instead of
+    // a full-table scan + join on every scheduler emission (#911). Projection lag is a live signal:
+    // a session that has produced no events in the window is not actively lagging, and its backlog
+    // (if any) is drained by the worker/reaper rather than surfaced by this real-time gauge.
     const result = await this.pool.query(
       `SELECT coalesce(max(GREATEST(0, s.next_event_sequence - 1 - coalesce(p.sequence, 0))), 0) AS lag
        FROM cloud_sessions s
        LEFT JOIN cloud_session_projections p ON p.tenant_id = s.tenant_id AND p.session_id = s.session_id
-       WHERE s.next_event_sequence > 0`,
+       WHERE s.next_event_sequence > 0
+         AND s.updated_at > now() - interval '1 hour'`,
     )
     return numberValue(result.rows[0]?.lag)
   }

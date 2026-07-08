@@ -2158,3 +2158,21 @@ test('cloud control plane recovers workflow starts stranded after session attach
   assert.equal(store.getWorkflowRun('tenant-1', 'attached-run-retry')?.claimToken, null)
   assert.equal(store.getWorkflowForTenant('tenant-1', 'workflow-attached-retry')?.latestRunStatus, 'running')
 })
+
+test('getMaxProjectionLag only counts sessions active within the last hour (#911)', () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'a@example.com', role: 'owner' })
+  const recentAt = new Date()
+  const oldAt = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  store.createSession({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'recent', opencodeSessionId: 'oc-recent', profileName: 'default', createdAt: recentAt })
+  store.createSession({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'old', opencodeSessionId: 'oc-old', profileName: 'default', createdAt: oldAt })
+  // Advance events (creating projection lag) on both sessions without projecting them. Appending
+  // an event stamps the session's updated_at with the event time, so the old session's events are
+  // dated three hours ago (its projection never caught up) while the recent session is live.
+  for (let index = 0; index < 5; index += 1) store.appendSessionEvent({ tenantId: 'tenant-1', sessionId: 'recent', type: 'x', payload: {} })
+  for (let index = 0; index < 9; index += 1) store.appendSessionEvent({ tenantId: 'tenant-1', sessionId: 'old', type: 'x', payload: {}, createdAt: oldAt })
+
+  // The old session's larger lag (8) is excluded by the one-hour window; only the recent lag (4) counts.
+  assert.equal(store.getMaxProjectionLag(), 4)
+})
