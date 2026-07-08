@@ -62,6 +62,7 @@ Download a release artifact for your platform from GitHub Releases.
 Current targets:
 - macOS: `.zip`, `.dmg`
 - Linux: `.AppImage`, `.deb`
+- Windows: `.exe` (NSIS installer, `x64`)
 
 Release assets include checksums, SBOMs, and provenance. The `v0.x`
 preview line is intentionally unsigned until Apple Developer validation

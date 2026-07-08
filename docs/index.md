@@ -26,7 +26,7 @@ hide:
 </div>
 
 <div class="stat" markdown>
-  <div class="stat-value">macOS · Linux</div>
+  <div class="stat-value">macOS · Linux · Windows</div>
   <div class="stat-label">Release targets</div>
 </div>
 
@@ -177,6 +177,15 @@ own branding, providers, skills, and workflows.
     chmod +x Open-Cowork-*.AppImage
     ./Open-Cowork-*.AppImage
     ```
+
+=== ":material-microsoft-windows: Windows"
+
+    Download the `x64` `.exe` (NSIS installer) from
+    [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases)
+    and run it.
+
+    The `v0.x` line is an unsigned public preview until Authenticode
+    signing is configured; verify the checksum before running.
 
 === ":material-source-branch: Build from source"
 
