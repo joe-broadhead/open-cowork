@@ -416,7 +416,7 @@ function HomeComposer({
   // `--color-border` when the textarea takes focus. A drop-over state
   // is the only thing that lights up the border, since that's a
   // discoverability cue we actually want the user to see.
-  const restBorder = '1px solid rgba(148, 148, 172, 0.18)'
+  const restBorder = '1px solid color-mix(in srgb, var(--color-border) 70%, transparent)'
   const dropBorder = '1px solid var(--color-accent)'
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel || t('chat.modelFallback', 'Model')
   const policyBlockedReason = !canPrompt
@@ -488,7 +488,7 @@ function HomeComposer({
           border: dragOver ? dropBorder : restBorder,
           boxShadow: dragOver
             ? '0 18px 48px color-mix(in srgb, var(--color-accent) 16%, transparent)'
-            : '0 26px 70px rgba(0, 0, 0, 0.40), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px rgba(255, 255, 255, 0.05)',
+            : '0 26px 70px color-mix(in srgb, #000 40%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px color-mix(in srgb, #fff 5%, transparent)',
         }}
       >
         <div className="home-composer-assign-row">

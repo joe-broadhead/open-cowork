@@ -44,20 +44,20 @@ const validHexLengths = new Set([3, 4, 6, 8])
 
 const errors = []
 
-function scan(dir) {
+function scan(dir, sink) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const fullPath = join(dir, entry.name)
     if (entry.isDirectory()) {
-      scan(fullPath)
+      scan(fullPath, sink)
       continue
     }
     if (!/\.(ts|tsx)$/.test(entry.name)) continue
     if (/\.(test|spec)\.(ts|tsx)$/.test(entry.name)) continue
-    lintFile(fullPath)
+    lintFile(fullPath, sink)
   }
 }
 
-function lintFile(fullPath) {
+function lintFile(fullPath, sink) {
   const relPath = relative(root, fullPath).split('\\').join('/')
   if (primitivePaletteFiles.has(relPath)) return
 
@@ -70,14 +70,14 @@ function lintFile(fullPath) {
       const digits = literal.length - 1
       if (!validHexLengths.has(digits)) continue
       if (allowedInkHexes.has(literal.toLowerCase())) continue
-      errors.push(
+      sink.push(
         `${relPath}:${lineNo} raw hex color literal "${literal}" — use a semantic token `
         + `(var(--color-*) / color-mix) instead so downstream retints apply.`,
       )
     }
 
     for (const match of line.matchAll(functionalColorPattern)) {
-      errors.push(
+      sink.push(
         `${relPath}:${lineNo} raw ${match[0].replace(/\s*\($/, '')}() color literal — use a semantic token `
         + `(var(--color-*) / color-mix) instead so downstream retints apply.`,
       )
@@ -92,11 +92,39 @@ try {
   process.exit(1)
 }
 
-scan(scanRoot)
+scan(scanRoot, errors)
 
 if (errors.length) {
   console.error('Design token usage check failed:\n' + errors.map((entry) => `- ${entry}`).join('\n'))
   process.exit(1)
 }
 
-process.stdout.write('Design token usage check passed (packages/ui/src component code uses semantic tokens).\n')
+// packages/app pre-dates the token discipline and still carries a batch of raw color literals.
+// Rather than block on migrating them all at once, ratchet the count DOWN: the check fails if a
+// NEW raw color is introduced (count above the baseline), and the baseline must be lowered as
+// they are migrated. This stops the app's raw-color debt from growing (#917).
+const APP_RAW_COLOR_BASELINE = 91
+const appScanRoot = join(root, 'packages/app/src')
+const appErrors = []
+scan(appScanRoot, appErrors)
+if (appErrors.length > APP_RAW_COLOR_BASELINE) {
+  console.error(
+    `Design token usage ratchet failed: packages/app/src has ${appErrors.length} raw color literals `
+    + `but the baseline is ${APP_RAW_COLOR_BASELINE}. A new raw color was added — use a semantic token `
+    + `(var(--color-*) / color-mix). New offenders include:\n`
+    + appErrors.slice(0, 20).map((entry) => `- ${entry}`).join('\n'),
+  )
+  process.exit(1)
+}
+if (appErrors.length < APP_RAW_COLOR_BASELINE) {
+  console.error(
+    `Design token usage ratchet: packages/app/src is down to ${appErrors.length} raw color literals `
+    + `(baseline ${APP_RAW_COLOR_BASELINE}). Lower APP_RAW_COLOR_BASELINE in scripts/check-design-token-usage.mjs `
+    + `to ${appErrors.length} to lock in the improvement.`,
+  )
+  process.exit(1)
+}
+
+process.stdout.write(
+  `Design token usage check passed (packages/ui/src fully tokenized; packages/app/src raw-color ratchet at ${appErrors.length}/${APP_RAW_COLOR_BASELINE}).\n`,
+)
