@@ -210,6 +210,13 @@ export class SlackProvider implements ChannelProvider {
 
   async downloadAttachment(attachment: ChannelAttachment): Promise<Uint8Array> {
     if (!attachment.providerFileId) throw new Error("Slack attachment is missing a private file URL.");
+    // Pin the bot-token-bearing request to Slack hosts. The URL originates from a
+    // signature-verified Slack payload today, but this guard ensures a future refactor that lets
+    // less-trusted data reach this path can't redirect the credential elsewhere (#922).
+    const fileUrl = new URL(attachment.providerFileId);
+    if (fileUrl.protocol !== "https:" || !(fileUrl.hostname === "slack.com" || fileUrl.hostname.endsWith(".slack.com"))) {
+      throw new Error(`Refusing to send the Slack bot token to a non-Slack host: ${fileUrl.hostname}`);
+    }
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
     const response = await fetchWithTimeout(fetchImpl, attachment.providerFileId, {
       headers: {

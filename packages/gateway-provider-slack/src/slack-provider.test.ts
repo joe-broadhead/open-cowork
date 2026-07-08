@@ -8,6 +8,24 @@ const signingSecret = "slack-signing-secret";
 const fixedNow = new Date("2026-05-29T12:00:00.000Z");
 
 describe("SlackProvider", () => {
+  it("refuses to send the bot token to a non-Slack attachment host (#922)", async () => {
+    let fetched = false;
+    const provider = new SlackProvider({
+      botToken: "xoxb-test",
+      signingSecret,
+      fetch: (async () => { fetched = true; return new Response(new Uint8Array()); }) as unknown as typeof fetch,
+      now: () => fixedNow,
+    });
+    let threw = false;
+    try {
+      await provider.downloadAttachment({ id: "a", providerFileId: "https://evil.example.com/steal" } as never);
+    } catch (error) {
+      threw = /non-Slack host/.test(String(error));
+    }
+    expect(threw).toBe(true);
+    expect(fetched).toBe(false);
+  });
+
   it("verifies Slack signatures and maps message events to channel messages", async () => {
     const messages: IncomingChannelMessage[] = [];
     const provider = new SlackProvider({
