@@ -73,4 +73,3 @@ function numericStatus(value: unknown): number | null {
 function cappedBackoffMs(attempt: number): number {
   return sharedCappedBackoffMs(attempt);
 }
-

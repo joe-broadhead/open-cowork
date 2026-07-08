@@ -249,4 +249,3 @@ function parseIpv6MappedPart(value: string | undefined): number | null {
   const parsed = Number.parseInt(value, 16);
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 0xffff ? parsed : null;
 }
-

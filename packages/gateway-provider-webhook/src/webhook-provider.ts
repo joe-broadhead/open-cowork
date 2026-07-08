@@ -1133,4 +1133,3 @@ function cleanOptionalString(value: unknown, label: string, maxBytes: number): s
   }
   return trimmed;
 }
-

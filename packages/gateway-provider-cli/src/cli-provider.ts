@@ -281,4 +281,3 @@ function deliveryIdFromPayload(payload: Record<string, unknown>): string | undef
   const options = payload.options;
   return isRecord(options) ? cleanString(options.deliveryId) : undefined;
 }
-
