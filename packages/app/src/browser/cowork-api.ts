@@ -81,6 +81,7 @@ import {
 } from '@open-cowork/shared'
 import { createBrowserAdminApi } from './cowork-api-admin'
 import { createBrowserCustomApi } from './cowork-api-custom'
+import { createCloudTranscriptProjector, type CloudTranscriptProjector } from './cowork-api-transcript'
 import {
   browserCloudWorkspaceSupport,
   type CloudFeatureFlags,
@@ -401,74 +402,7 @@ function parseSseEvent(event: MessageEvent, type: string): SseEvent {
   return { type, data: record }
 }
 
-export type CloudTranscriptProjector = {
-  patchFor(record: Record<string, unknown>, sessionId: string, workspaceId: string | null): SessionPatch | null
-}
-
-/**
- * Project cloud `assistant.message` SSE events into renderer `SessionPatch`es so the
- * streamed transcript flows through the SAME batched path the desktop uses (the 32ms
- * coalescer in useOpenCodeEvents + the incremental session-view-reducer) instead of an
- * O(M²) full-view rebuild per event (PERF-2). `record` is the full SSE data envelope
- * `{ sessionId, sequence, payload: { messageId, content, mode } }`.
- *
- * Byte-identical guarantee: the cloud projection models each message as ONE monolithic
- * content blob built by plain concatenation of the append deltas (see
- * reduceCloudSessionProjectionEvent → 'assistant.message'). We mirror that exactly: this
- * projector accumulates the deltas by plain concatenation and emits a REPLACE patch
- * carrying the FULL message text each time. The reducer's replace branch sets the segment
- * content directly — it does NOT run the desktop's `mergeStreamingText` overlap heuristic,
- * which is tuned for cumulative SDK text and would otherwise dedupe a coincidental
- * delta-boundary overlap. The streamed transcript is therefore identical to the canonical
- * `/view`, regardless of how the deltas were chunked or coalesced upstream (PERF-1). A
- * full snapshot (`mode` absent) carries the canonical text and is adopted verbatim.
- * eventAt is the projection `sequence`, matching the cloud session view's `lastEventAt`
- * scale so buffer pruning and the streaming-state merge stay consistent. Exported for
- * white-box reducer tests.
- */
-export function createCloudTranscriptProjector(): CloudTranscriptProjector {
-  // One accumulator per session — overwritten when a new message starts, so memory is
-  // bounded by the number of tracked sessions rather than the message count.
-  const bySession = new Map<string, { messageId: string; content: string }>()
-
-  const patchFor = (
-    record: Record<string, unknown>,
-    sessionId: string,
-    workspaceId: string | null,
-  ): SessionPatch | null => {
-    if (!sessionId) return null
-    const projected = record.payload && typeof record.payload === 'object' && !Array.isArray(record.payload)
-      ? (record.payload as Record<string, unknown>)
-      : {}
-    const messageId = typeof projected.messageId === 'string' && projected.messageId ? projected.messageId : ''
-    if (!messageId) return null
-    const delta = typeof projected.content === 'string' ? projected.content : ''
-    const isAppend = projected.mode === 'append'
-    const sequence = typeof record.sequence === 'number' && Number.isFinite(record.sequence) ? record.sequence : 0
-
-    const prior = bySession.get(sessionId)
-    const content = isAppend
-      ? (prior && prior.messageId === messageId ? prior.content + delta : delta)
-      : delta
-    // An append delta that hasn't produced any text yet carries no transcript change.
-    if (isAppend && !content) return null
-    bySession.set(sessionId, { messageId, content })
-
-    return {
-      type: 'message_text',
-      sessionId,
-      workspaceId,
-      messageId,
-      segmentId: messageId,
-      content,
-      mode: 'replace',
-      role: 'assistant',
-      eventAt: sequence,
-    }
-  }
-
-  return { patchFor }
-}
+export { createCloudTranscriptProjector, type CloudTranscriptProjector }
 
 /**
  * Owns the cloud SSE streams (workspace + per-session) and fans each incoming
@@ -478,11 +412,13 @@ export function createCloudTranscriptProjector(): CloudTranscriptProjector {
  */
 class CloudEventHub {
   private workspaceSource: EventSource | null = null
+  // Per-session SSE streams, opened lazily when a session view is first observed
+  // via activate(). Insertion order is the LRU order: re-activating a session moves
+  // it to the end, and once MAX_TRACKED_SESSIONS is reached the least-recently
+  // activated stream is closed and evicted. Without this bound, every thread ever
+  // viewed leaked a client connection AND a held-open server-side subscription (#905).
   private readonly sessionSources = new Map<string, EventSource>()
-  // Sessions the renderer currently cares about (one per `on.sessionView`-style
-  // subscription is overkill, so we open a per-session stream lazily when a
-  // session view is first observed via activate()).
-  private readonly trackedSessions = new Set<string>()
+  private static readonly MAX_TRACKED_SESSIONS = 24
   // Accumulates streamed assistant text per session so each delta SSE event becomes a
   // full-text REPLACE sessionPatch (PERF-2). See createCloudTranscriptProjector.
   private readonly transcriptProjector = createCloudTranscriptProjector()
@@ -547,8 +483,21 @@ class CloudEventHub {
 
   /** Open a per-session SSE stream so message/tool patches flow for it. */
   trackSession(sessionId: string) {
-    if (!sessionId || this.trackedSessions.has(sessionId) || typeof EventSource === 'undefined') return
-    this.trackedSessions.add(sessionId)
+    if (!sessionId || typeof EventSource === 'undefined') return
+    const existing = this.sessionSources.get(sessionId)
+    if (existing) {
+      // Already streaming — mark as most-recently-used (Map preserves insertion order).
+      this.sessionSources.delete(sessionId)
+      this.sessionSources.set(sessionId, existing)
+      return
+    }
+    // Evict the least-recently-activated stream(s) before opening a new one so the
+    // number of live EventSource connections (and server subscriptions) stays bounded.
+    while (this.sessionSources.size >= CloudEventHub.MAX_TRACKED_SESSIONS) {
+      const oldest = this.sessionSources.keys().next().value
+      if (oldest === undefined) break
+      this.untrackSession(oldest)
+    }
     const path = this.transport.endpoint('sessionEvents', { sessionId })
     const source = new EventSource(path, { withCredentials: true })
     const dispatch = (event: MessageEvent, type: string) => this.dispatchSessionEvent(parseSseEvent(event, type), sessionId)
@@ -557,6 +506,15 @@ class CloudEventHub {
       source.addEventListener(type, (event) => dispatch(event as MessageEvent, type))
     }
     this.sessionSources.set(sessionId, source)
+  }
+
+  /** Close and evict a per-session SSE stream (LRU eviction or session deletion). */
+  untrackSession(sessionId: string) {
+    const source = this.sessionSources.get(sessionId)
+    if (!source) return
+    source.close()
+    this.sessionSources.delete(sessionId)
+    this.transcriptProjector.forget(sessionId)
   }
 
   /**

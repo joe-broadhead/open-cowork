@@ -326,4 +326,65 @@ describe('cloud assistant.message → sessionPatch projection', () => {
     useSessionStore.getState().applySessionPatch(snapshot!)
     expect(useSessionStore.getState().currentView.messages.at(-1)?.content).toBe('Hello world')
   })
+
+  it('forgets a session accumulator so a re-opened stream does not resume stale text', () => {
+    const projector = createCloudTranscriptProjector()
+    expect(projector.patchFor(sseRecord('m1', 'Hel', 1, 'append'), 'ses_1', null)?.content).toBe('Hel')
+    projector.forget('ses_1')
+    // After forget, an append for the same message id starts fresh instead of concatenating.
+    expect(projector.patchFor(sseRecord('m1', 'lo', 2, 'append'), 'ses_1', null)?.content).toBe('lo')
+  })
+})
+
+// #905: the browser bridge opens a per-session SSE EventSource on activation. Without a
+// bound, every thread ever viewed leaked a client connection and a server subscription.
+describe('cloud per-session SSE stream lifecycle (#905)', () => {
+  class MockEventSource {
+    static instances: MockEventSource[] = []
+    readonly url: string
+    closed = false
+    onmessage: ((event: MessageEvent) => void) | null = null
+    constructor(url: string) {
+      this.url = url
+      MockEventSource.instances.push(this)
+    }
+    addEventListener() {}
+    close() {
+      this.closed = true
+    }
+  }
+
+  beforeEach(() => {
+    MockEventSource.instances = []
+    installFetch(() => jsonResponse({ view: {} }))
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource)
+  })
+
+  it('caps concurrently open per-session streams and closes the least-recently-activated on overflow', async () => {
+    const api = createBrowserCoworkApi({})
+    const total = 40
+    for (let i = 0; i < total; i++) await api.session.activate(`ses_${i}`)
+
+    const open = MockEventSource.instances.filter((source) => !source.closed)
+    const closed = MockEventSource.instances.filter((source) => source.closed)
+    // Bounded: activating far more than the cap never leaves more than the cap open.
+    expect(open.length).toBeLessThanOrEqual(24)
+    expect(open.length).toBeGreaterThan(0)
+    // Every stream beyond the cap was explicitly closed (not leaked).
+    expect(closed.length).toBe(total - open.length)
+    // The survivors are the most-recently-activated sessions.
+    expect(open.map((source) => source.url).some((url) => url.includes(`ses_${total - 1}`))).toBe(true)
+    expect(closed.map((source) => source.url).some((url) => url.includes('ses_0'))).toBe(true)
+  })
+
+  it('re-activating an already-tracked session opens no new stream', async () => {
+    const api = createBrowserCoworkApi({})
+    await api.session.activate('ses_a')
+    await api.session.activate('ses_b')
+    const before = MockEventSource.instances.length
+    await api.session.activate('ses_a')
+    await api.session.activate('ses_b')
+    expect(MockEventSource.instances.length).toBe(before)
+    expect(MockEventSource.instances.every((source) => !source.closed)).toBe(true)
+  })
 })
