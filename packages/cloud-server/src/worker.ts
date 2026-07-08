@@ -33,6 +33,10 @@ export type CloudWorkerOptions = {
   // to the pool. Bounds a session with a large backlog from monopolising a lane; the
   // session is re-surveyed on the next pass while it still has pending commands.
   maxCommandsPerSessionPerTick?: number
+  // Upper bound on cached lease records held in memory (LRU-evicted). Clamped to
+  // [1, 1_000_000]; defaults to 4096. Bounds worker memory for long-lived workers
+  // that serve a large stream of distinct sessions.
+  maxLeases?: number
 }
 
 export class CloudWorker {
@@ -41,7 +45,14 @@ export class CloudWorker {
   private readonly maxExpiredLeaseReapBatches = 10
   private readonly sessionConcurrency: number
   private readonly maxCommandsPerSessionPerTick: number
+  // Cached lease records keyed on the stable tenant\0session key, retained across ticks so a
+  // revisited session renews (cheap) instead of re-claiming. Bounded with LRU eviction: without
+  // it, a long-lived worker serving a stream of one-shot sessions accumulated one entry per
+  // distinct session forever (#908, same leak class as restoredSessions/P3-13). Every touch moves
+  // the entry to the most-recent end so the oldest (genuinely idle) lease is evicted first; its
+  // server-side lease is then reclaimed by the expiry reaper.
   private readonly leases = new Map<string, WorkerLeaseRecord>()
+  private readonly maxLeases: number
   // Sessions whose checkpoint has already been restored on this worker, keyed on the stable
   // tenant\0session key (not the per-claim lease token, which changed every claim → unbounded
   // growth, and re-ran the expensive restore for an already-warm session on a new token). Bounded
@@ -75,6 +86,7 @@ export class CloudWorker {
     this.observability = observability
     this.sessionConcurrency = clampInteger(options.sessionConcurrency, 4, 1, 32)
     this.maxCommandsPerSessionPerTick = clampInteger(options.maxCommandsPerSessionPerTick, 50, 1, 10_000)
+    this.maxLeases = clampInteger(options.maxLeases, 4096, 1, 1_000_000)
   }
 
   async processSessionCommands(tenantId: string, sessionId: string): Promise<number> {
@@ -175,7 +187,7 @@ export class CloudWorker {
       }
       lease = await this.checkpointLease(lease)
       await this.checkpointHooks.saveAfterCommand?.(lease)
-      this.leases.set(this.leaseKey(tenantId, sessionId), lease)
+      this.touchLease(this.leaseKey(tenantId, sessionId), lease)
       processed += 1
       // Yield the lane after a bounded run so one session's backlog cannot monopolise
       // it; the session is re-surveyed next pass while it still has pending commands.
@@ -302,7 +314,7 @@ export class CloudWorker {
     })
     lease = await this.checkpointLease(lease)
     await this.checkpointHooks.saveAfterCommand?.(lease)
-    this.leases.set(this.leaseKey(tenantId, sessionId), lease)
+    this.touchLease(this.leaseKey(tenantId, sessionId), lease)
     return true
   }
 
@@ -369,7 +381,7 @@ export class CloudWorker {
     if (existing) {
       try {
         const renewed = await this.store.renewSessionLease(existing, new Date(), this.leaseTtlMs)
-        this.leases.set(leaseKey, renewed)
+        this.touchLease(leaseKey, renewed)
         void this.recordRenewalMetric(tenantId, sessionId, 'ok')
         return renewed
       } catch {
@@ -399,7 +411,7 @@ export class CloudWorker {
         : null,
     )
     if (claimed) {
-      this.leases.set(leaseKey, claimed)
+      this.touchLease(leaseKey, claimed)
       await this.service.recordManagedWorkClaimed({
         tenantId,
         sessionId,
@@ -466,7 +478,7 @@ export class CloudWorker {
         .then((renewed) => {
           if (controller.signal.aborted) return
           current = renewed
-          this.leases.set(this.leaseKey(renewed.tenantId, renewed.sessionId), renewed)
+          this.touchLease(this.leaseKey(renewed.tenantId, renewed.sessionId), renewed)
           void this.recordRenewalMetric(renewed.tenantId, renewed.sessionId, 'ok')
         })
         .catch((error: unknown) => {
@@ -489,6 +501,20 @@ export class CloudWorker {
 
   private leaseKey(tenantId: string, sessionId: string) {
     return `${tenantId}\0${sessionId}`
+  }
+
+  // Insert/refresh a cached lease as most-recently-used and evict the oldest idle lease(s)
+  // once the map exceeds maxLeases (#908). Deleting before setting moves an existing key to
+  // the end of the Map's insertion order, so a lease renewed every tick stays fresh and the
+  // eviction target is always the least-recently-touched (idle) session.
+  private touchLease(key: string, record: WorkerLeaseRecord) {
+    this.leases.delete(key)
+    this.leases.set(key, record)
+    while (this.leases.size > this.maxLeases) {
+      const oldest = this.leases.keys().next().value
+      if (oldest === undefined) break
+      this.leases.delete(oldest)
+    }
   }
 
   private async recordRenewalMetric(tenantId: string, sessionId: string, status: 'ok' | 'failed') {
