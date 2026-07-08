@@ -15,6 +15,15 @@ const composeFiles = [
 const gatewayOnlyComposeFiles = [
   'docker-compose.gateway-remote.yml',
 ]
+const testImageDigest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+const publicHelmPrerequisites = [
+  '--set',
+  `image.digest=${testImageDigest}`,
+  '--set',
+  'networkPolicy.egress.enabled=true',
+  '--set-json',
+  'networkPolicy.egress.to=[{"ipBlock":{"cidr":"203.0.113.0/24"}}]',
+]
 
 function log(message) {
   process.stdout.write(`[deploy-validate] ${message}\n`)
@@ -662,6 +671,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -695,6 +705,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -730,6 +741,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -763,6 +775,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -796,6 +809,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -829,6 +843,7 @@ function validateHelm() {
         cloudChart,
         '--set',
         'image.tag=ci',
+        ...publicHelmPrerequisites,
         '--set',
         'cloud.deploymentTier=public_production',
         '--set',
@@ -1037,6 +1052,7 @@ function validateHelm() {
         'template',
         'unsafe-public-gateway-inline-secrets',
         gatewayChart,
+        ...publicHelmPrerequisites,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',
@@ -1056,6 +1072,7 @@ function validateHelm() {
         'template',
         'unsafe-gateway-http-public-url',
         gatewayChart,
+        ...publicHelmPrerequisites,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',
@@ -1071,6 +1088,7 @@ function validateHelm() {
         'template',
         'unsafe-gateway-ingress-loopback-bypass',
         gatewayChart,
+        ...publicHelmPrerequisites,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',
