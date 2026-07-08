@@ -14,6 +14,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { isRecord } from "@open-cowork/gateway-channel";
 import { constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 
 export interface SlackProviderConfig {
@@ -88,7 +89,6 @@ export class SlackProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 5,
     maxButtonTokenBytes: 2000,
     maxFileBytes: 20 * 1024 * 1024,
-    maxFileSizeBytes: 20 * 1024 * 1024,
     inboundFileModes: ["download_url", "provider_file_id"],
     outboundFileModes: ["local_path", "inline_buffer"],
     editSemantics: "message",
@@ -567,9 +567,6 @@ function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function stringField(value: Record<string, unknown> | undefined, key: string): string | null {
   if (!value) return null;

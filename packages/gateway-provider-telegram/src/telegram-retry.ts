@@ -1,4 +1,5 @@
 import { cappedBackoffMs as sharedCappedBackoffMs, withRetry } from "@open-cowork/gateway-channel";
+import { isRecord } from "@open-cowork/gateway-channel";
 
 export interface TelegramRetryOptions {
   attempts?: number;
@@ -73,6 +74,3 @@ function cappedBackoffMs(attempt: number): number {
   return sharedCappedBackoffMs(attempt);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}

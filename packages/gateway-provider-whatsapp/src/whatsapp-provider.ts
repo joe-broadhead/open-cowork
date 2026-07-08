@@ -22,7 +22,6 @@ export const whatsappCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 1,
   maxButtonTokenBytes: 64,
   maxFileBytes: 16 * 1024 * 1024,
-  maxFileSizeBytes: 16 * 1024 * 1024,
   inboundFileModes: ["provider_file_id", "download_url", "inline_buffer"],
   outboundFileModes: ["inline_buffer"],
   editSemantics: "none",

@@ -22,7 +22,6 @@ export const discordCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 5,
   maxButtonTokenBytes: 64,
   maxFileBytes: 8 * 1024 * 1024,
-  maxFileSizeBytes: 8 * 1024 * 1024,
   inboundFileModes: ["provider_file_id", "download_url", "inline_buffer"],
   outboundFileModes: ["inline_buffer"],
   editSemantics: "message",

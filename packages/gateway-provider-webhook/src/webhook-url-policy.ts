@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { isRecord } from "@open-cowork/gateway-channel";
 import {
   WebhookDeliveryNetworkError,
   WebhookDeliveryPolicyError
@@ -249,6 +250,3 @@ function parseIpv6MappedPart(value: string | undefined): number | null {
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 0xffff ? parsed : null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}

@@ -63,7 +63,6 @@ export class TelegramProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 4,
     maxButtonTokenBytes: 64,
     maxFileBytes: 20 * 1024 * 1024,
-    maxFileSizeBytes: 20 * 1024 * 1024,
     inboundFileModes: ["provider_file_id"],
     outboundFileModes: ["local_path", "inline_buffer"],
     editSemantics: "message",

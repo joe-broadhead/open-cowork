@@ -100,7 +100,6 @@ const emailCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 0,
   maxButtonTokenBytes: 0,
   maxFileBytes: 15 * 1024 * 1024,
-  maxFileSizeBytes: 15 * 1024 * 1024,
   inboundFileModes: ["inline_buffer"],
   outboundFileModes: [],
   editSemantics: "none",

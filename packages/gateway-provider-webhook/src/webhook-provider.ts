@@ -16,6 +16,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { isRecord } from "@open-cowork/gateway-channel";
 import { boundedPositiveInt, channelProviderKindFromId, constantTimeStringEqual, normalizeChannelCapabilities, normalizeChannelProviderIdentity, WebhookAuthError } from "@open-cowork/gateway-channel";
 import {
   isAbortError,
@@ -570,7 +571,6 @@ export const defaultWebhookCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 4,
   maxButtonTokenBytes: 64,
   maxFileBytes: 25 * 1024 * 1024,
-  maxFileSizeBytes: 25 * 1024 * 1024,
   inboundFileModes: ["inline_buffer"],
   outboundFileModes: ["inline_buffer"],
   editSemantics: "message",
@@ -1134,6 +1134,3 @@ function cleanOptionalString(value: unknown, label: string, maxBytes: number): s
   return trimmed;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
