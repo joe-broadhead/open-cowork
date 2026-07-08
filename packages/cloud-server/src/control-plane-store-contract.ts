@@ -108,13 +108,11 @@ import type {
   ThreadTagRecord,
 } from './control-plane-workspace-records.ts'
 import type {
-  ClaimRunnableSessionsInput,
   ListRunnableSessionsInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
   ReapedWorkflowClaimRecord,
-  RunnableSessionClaimRecord,
   RunnableSessionListRecord,
   SessionCommandRecord,
   WorkerHeartbeatRecord,
@@ -366,7 +364,6 @@ export type ControlPlaneStore = {
   listSessionsPage(input: ListSessionsPageInput): MaybePromise<ListSessionsPageRecord>
   listAllSessions(): MaybePromise<SessionRecord[]>
   listRunnableSessions(input: ListRunnableSessionsInput): MaybePromise<RunnableSessionListRecord>
-  claimRunnableSessions(input: ClaimRunnableSessionsInput): MaybePromise<RunnableSessionClaimRecord>
   bindSessionRuntime(input: {
     tenantId: string
     sessionId: string

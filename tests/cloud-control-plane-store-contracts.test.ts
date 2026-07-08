@@ -265,19 +265,10 @@ function runControlPlaneDomainContracts(
         }) },
         /was reused with different content/,
       )
-      const runnableClaim = await store.claimRunnableSessions({
-        workerId: `${prefix}-worker`,
-        limit: 10,
-        now: new Date('2026-01-01T00:00:00.000Z'),
-        ttlMs: 30_000,
-      })
-      assert.equal(runnableClaim.pendingSessionCountEstimate >= 1, true)
-      assert.equal(runnableClaim.leases.some((lease) => lease.sessionId === sessionId), true)
-
       // Claim/fencing parity (audit P1-O6): these are exactly the lease-fenced/atomic-claim methods
       // where a subtle SQL difference causes prod double-claims, yet they were exercised by neither the
       // always-on contract nor (un-skipped) the postgres concurrency proofs. Run them on both stores.
-      const commandLease = runnableClaim.leases.find((lease) => lease.sessionId === sessionId)
+      const commandLease = await store.claimSessionLease(tenantId, sessionId, `${prefix}-worker`, new Date('2026-01-01T00:00:00.000Z'), 30_000)
       assert.ok(commandLease)
       // The lease-fenced command claim hands the pending command to exactly one holder, once.
       const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z'))

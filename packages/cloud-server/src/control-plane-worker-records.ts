@@ -11,19 +11,9 @@ import type { WorkerLeaseRecord } from './control-plane-session-records.ts'
 // extracted from the 4k-line in-memory store. Pure types depending only on the
 // enum vocabulary and the worker-lease record.
 
-export type ClaimRunnableSessionsInput = {
-  workerId: string
-  limit?: number | null
-  now?: Date
-  ttlMs?: number
-}
 export type ListRunnableSessionsInput = { limit?: number | null, now?: Date }
 export type RunnableSessionRecord = { tenantId: string, sessionId: string }
 export type RunnableSessionListRecord = { sessions: RunnableSessionRecord[], pendingSessionCountEstimate: number }
-export type RunnableSessionClaimRecord = {
-  leases: WorkerLeaseRecord[]
-  pendingSessionCountEstimate: number
-}
 
 export type ReapExpiredSessionLeasesInput = {
   now?: Date

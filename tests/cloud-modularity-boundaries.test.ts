@@ -307,8 +307,6 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assert.match(postgresQuotaDomain, /export async function reconcilePostgresConcurrencyCounters/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
-  assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)
-  assert.doesNotMatch(extractMethodSource(postgresStore, 'claimRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresChannelDeliveriesDomain, /async claimNext[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresWorkflowsDomain, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
@@ -412,13 +410,6 @@ function assertIndexShape(indexName: string, tableName: string, columns: string,
     `CREATE (?:UNIQUE )?INDEX(?: CONCURRENTLY)? IF NOT EXISTS ${escapeRegex(indexName)}\\s+ON ${escapeRegex(tableName)} \\(${escapeRegex(columns)}\\)${predicate ? `[\\s\\S]*${escapeRegex(predicate)}` : ''}`,
   )
   assert.match(postgresSchema, pattern, `${indexName} must keep its indexed table, column order, and predicate`)
-}
-
-function extractMethodSource(source: string, methodName: string) {
-  const start = source.indexOf(`async ${methodName}`)
-  assert.notEqual(start, -1, `${methodName} method is missing`)
-  const nextMethod = source.indexOf('\n  async ', start + 1)
-  return source.slice(start, nextMethod === -1 ? undefined : nextMethod)
 }
 
 function extractFunctionSource(source: string, functionName: string) {

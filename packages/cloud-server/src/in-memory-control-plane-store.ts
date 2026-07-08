@@ -149,13 +149,11 @@ import type {
   ThreadTagRecord,
 } from './control-plane-workspace-records.ts'
 import type {
-  ClaimRunnableSessionsInput,
   ListRunnableSessionsInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
   ReapedWorkflowClaimRecord,
-  RunnableSessionClaimRecord,
   RunnableSessionListRecord,
   SessionCommandRecord,
   WorkerHeartbeatRecord,
@@ -1200,38 +1198,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         tenantId: candidate.session.record.tenantId,
         sessionId: candidate.session.record.sessionId,
       })),
-      // Bound the estimate like the postgres backend (which probes limit+1), so the
-      // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
-      pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,
-    }
-  }
-
-  claimRunnableSessions(input: ClaimRunnableSessionsInput): RunnableSessionClaimRecord {
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const ttlMs = input.ttlMs ?? 30_000
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    const candidates = this.runnableSessionCandidates(nowMs)
-
-    const leases: WorkerLeaseRecord[] = []
-    for (const candidate of candidates.slice(0, limit)) {
-      const session = candidate.session
-      const attempt = session.nextLeaseAttempt += 1
-      const lease: WorkerLeaseRecord = {
-        tenantId: session.record.tenantId,
-        sessionId: session.record.sessionId,
-        leasedBy: input.workerId,
-        leaseToken: `${session.record.tenantId}:${session.record.sessionId}:${attempt}:${input.workerId}`,
-        leaseExpiresAt: nowMs + ttlMs,
-        checkpointVersion: session.lease?.checkpointVersion || 0,
-      }
-      session.lease = lease
-      session.record.status = 'running'
-      session.record.updatedAt = now.toISOString()
-      leases.push(clone(lease))
-    }
-    return {
-      leases,
       // Bound the estimate like the postgres backend (which probes limit+1), so the
       // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
       pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,

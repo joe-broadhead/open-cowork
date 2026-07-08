@@ -8,7 +8,6 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'listSessions'
   | 'listSessionsPage'
   | 'listAllSessions'
-  | 'claimRunnableSessions'
   | 'bindSessionRuntime'
   | 'updateSessionStatus'
   | 'appendSessionEvent'
