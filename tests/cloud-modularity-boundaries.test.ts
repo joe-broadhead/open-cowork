@@ -24,8 +24,13 @@ const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
-  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_820],
-  ['packages/cloud-server/src/session-service.ts', 2_720],
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_690],
+  // session-service is a thin facade: ~156 of its ~168 methods are one-line delegators to the
+  // ~30 cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). The real
+  // decomposition already lives at the service layer; this budget is ratcheted to just above the
+  // current size so the facade can't grow — new capabilities must go into a sub-service (and,
+  // over time, routes should depend on those sub-services directly). See docs/architecture.md (#914).
+  ['packages/cloud-server/src/session-service.ts', 1_935],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {

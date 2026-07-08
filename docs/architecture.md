@@ -198,14 +198,21 @@ budgets are implementation backlogs, not target architecture:
   and ratcheted. Compatibility Cloud HTTP/SSE entry point that wires shared
   route modules, HTML/CSP serving, pre-auth health, and streaming lifecycles
   while route handlers continue moving into `http-routes/`.
-- `session-service.ts` (budget 2,720 lines): decomposed below the 2,000-line
-  limit into a lean orchestration facade (~1,600 lines, down from 2,718). It
-  delegates to `session-service-types.ts`, `session-coordination-dispatch.ts`,
-  `session-execution-operations.ts`, `services/principal-service.ts`,
-  `services/session-import-service.ts`, and the focused command payload service
-  under `services/session-command-service.ts`, coordinating runtime execution,
-  workflows, quotas, channel coordination, BYOK, billing, and projection
-  services.
+- `session-service.ts` (budget 1,935 lines, ratcheted down from 2,720): a thin
+  orchestration **facade** whose real logic already lives in ~30 cohesive
+  sub-services it composes — `services/byok-service.ts`, `member-service.ts`,
+  `role-service.ts`, `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,
+  `channel-domain-service.ts`, `usage-governance-service.ts`,
+  `entitlement-service.ts`, and more, plus `session-execution-operations.ts`,
+  `session-coordination-dispatch.ts`, and the projection service. About 156 of
+  its ~168 methods are one-line delegators; only a handful carry orchestration
+  logic. The remaining architectural drag is the **flat 168-method surface**
+  every route funnels through. The tightened budget freezes that surface — new
+  capabilities must be added to a sub-service, not as a new facade delegator —
+  and the staged next step (a large, route-by-route change) is to have HTTP
+  routes depend on the narrow sub-services directly, the way the store already
+  exposes `ProjectionControlPlaneStore` / `SessionControlPlaneStore` slices,
+  retiring the facade delegators domain by domain (#914).
 
 New cloud domains should not be added to those exception files. Add a domain
 contract, service, route module, or client domain module first, then wire the
