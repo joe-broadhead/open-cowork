@@ -908,6 +908,16 @@ export const CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS = [
 // enqueue/claim/create. The trigger fires for EVERY row change regardless of code
 // path, so the gauge can't drift; a migration-time backfill seeds it from the
 // current COUNT. (Built one gauge per migration — this one covers workflow runs.)
+//
+// KNOWN CEILING (#912): the counter is one row per (scope_id=org, counter_key), so all
+// concurrent transactions that change an org's active count serialize on that row's lock
+// until commit. The trigger already narrows this to genuine active-count transitions
+// (`IF old_active = new_active THEN RETURN NULL`), so steady-state churn that doesn't cross
+// the queued/running boundary never touches the row. It remains a per-ORG write-throughput
+// ceiling (not cross-org, and each update is sub-millisecond). If a single very high-volume
+// org approaches it, shard the row into (scope_id, counter_key, bucket) with the bucket
+// chosen by hash(session_id/run_id) % N and SUM the buckets on read — the read stays O(N
+// buckets). See docs/performance.md ("What's NOT optimized (yet)") for the threshold guidance.
 export const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID = '017_cloud_concurrency_counters'
 const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_concurrency_counters (
