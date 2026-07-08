@@ -4,12 +4,11 @@ import type {
   WorkerRole,
   WorkReaperAction,
 } from './control-plane-enums.ts'
-import type { WorkerLeaseRecord } from './control-plane-session-records.ts'
 
 // The control-plane's worker-runtime input/record shapes — runnable-session
-// claims, lease/workflow reaping, session commands, and worker heartbeats —
+// listing, lease/workflow reaping, session commands, and worker heartbeats —
 // extracted from the 4k-line in-memory store. Pure types depending only on the
-// enum vocabulary and the worker-lease record.
+// enum vocabulary.
 
 export type ListRunnableSessionsInput = { limit?: number | null, now?: Date }
 export type RunnableSessionRecord = { tenantId: string, sessionId: string }

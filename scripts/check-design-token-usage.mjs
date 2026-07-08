@@ -57,6 +57,23 @@ function scan(dir, sink) {
   }
 }
 
+// Real color literals live inside string/template literals (e.g. background: '#1c1d26'); a `#` in a
+// comment is almost always a GitHub issue reference like (#905) — which is valid 3-digit hex and
+// would false-positive. Only flag matches that sit inside a quoted string on their line.
+function isInsideStringLiteral(line, index) {
+  let inSingle = false
+  let inDouble = false
+  let inTemplate = false
+  for (let i = 0; i < index; i += 1) {
+    if (line[i - 1] === '\\') continue
+    const ch = line[i]
+    if (ch === "'" && !inDouble && !inTemplate) inSingle = !inSingle
+    else if (ch === '"' && !inSingle && !inTemplate) inDouble = !inDouble
+    else if (ch === '`' && !inSingle && !inDouble) inTemplate = !inTemplate
+  }
+  return inSingle || inDouble || inTemplate
+}
+
 function lintFile(fullPath, sink) {
   const relPath = relative(root, fullPath).split('\\').join('/')
   if (primitivePaletteFiles.has(relPath)) return
@@ -70,6 +87,7 @@ function lintFile(fullPath, sink) {
       const digits = literal.length - 1
       if (!validHexLengths.has(digits)) continue
       if (allowedInkHexes.has(literal.toLowerCase())) continue
+      if (!isInsideStringLiteral(line, match.index)) continue
       sink.push(
         `${relPath}:${lineNo} raw hex color literal "${literal}" — use a semantic token `
         + `(var(--color-*) / color-mix) instead so downstream retints apply.`,
@@ -77,6 +95,7 @@ function lintFile(fullPath, sink) {
     }
 
     for (const match of line.matchAll(functionalColorPattern)) {
+      if (!isInsideStringLiteral(line, match.index)) continue
       sink.push(
         `${relPath}:${lineNo} raw ${match[0].replace(/\s*\($/, '')}() color literal — use a semantic token `
         + `(var(--color-*) / color-mix) instead so downstream retints apply.`,
@@ -103,7 +122,7 @@ if (errors.length) {
 // Rather than block on migrating them all at once, ratchet the count DOWN: the check fails if a
 // NEW raw color is introduced (count above the baseline), and the baseline must be lowered as
 // they are migrated. This stops the app's raw-color debt from growing (#917).
-const APP_RAW_COLOR_BASELINE = 91
+const APP_RAW_COLOR_BASELINE = 80
 const appScanRoot = join(root, 'packages/app/src')
 const appErrors = []
 scan(appScanRoot, appErrors)
