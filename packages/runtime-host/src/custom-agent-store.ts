@@ -38,6 +38,7 @@ import { createAttachedSkillDirective } from './agent-prompts.js'
 import {
   buildCustomAgentCatalog,
   buildCustomAgentPermissionFromCatalog,
+  isLegacyMcpAliasPermissionKey,
 } from './custom-agents-utils.js'
 
 type ManagedAgentMetadata = {
@@ -548,27 +549,6 @@ const PERMISSION_ACTION_RANK: Record<CustomAgentPermissionAction, number> = {
   allow: 2,
 }
 
-const LEGACY_MCP_NON_TOOL_KEYS = new Set([
-  'skill',
-  'question',
-  'task',
-  'external_directory',
-  'doom_loop',
-  'todowrite',
-  'codesearch',
-  'webfetch',
-  'websearch',
-  'lsp',
-  'bash',
-  'edit',
-  'write',
-  'apply_patch',
-  'read',
-  'grep',
-  'glob',
-  'list',
-])
-
 function readPermissionActionValue(value: unknown): CustomAgentPermissionAction | null {
   return value === 'allow' || value === 'ask' || value === 'deny' ? value : null
 }
@@ -582,13 +562,6 @@ function strongestPermissionAction(actions: Array<CustomAgentPermissionAction | 
     }
   }
   return strongest
-}
-
-function isLegacyMcpAliasPermissionKey(key: string) {
-  if (LEGACY_MCP_NON_TOOL_KEYS.has(key)) return false
-  if (key.startsWith('repo_')) return false
-  if (key.startsWith('mcp__')) return false
-  return /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(key)
 }
 
 function isMcpPermissionPattern(pattern: string) {
