@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRovingMenuKeyboard } from './home/use-roving-menu-keyboard'
 import type {
   BrandingHomeConfig,
   LaunchpadFeedPayload,
@@ -227,6 +228,7 @@ function HomeComposer({
   const reasoningBtnRef = useRef<HTMLButtonElement>(null)
   const assignBtnRef = useRef<HTMLButtonElement>(null)
   const assignMenuRef = useRef<HTMLDivElement>(null)
+  const { onKeyDown: handleAssignMenuKeyDown } = useRovingMenuKeyboard(assignMenuRef, assignBtnRef, showAssignMenu, () => setShowAssignMenu(false))
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
@@ -514,7 +516,7 @@ function HomeComposer({
               {primaryLeadAvailable && <Icon name="chevron-down" size={16} className="shrink-0 text-text-muted" />}
             </button>
             {showAssignMenu && primaryLeadAvailable && (
-              <div ref={assignMenuRef} className="home-assign-menu" role="menu" aria-label={t('home.assign.menuLabel', 'Assign lead coworker')}>
+              <div ref={assignMenuRef} className="home-assign-menu" role="menu" aria-label={t('home.assign.menuLabel', 'Assign lead coworker')} onKeyDown={handleAssignMenuKeyDown}>
                 {visibleAssignOptions.map((option) => (
                   <button
                     key={option.id}
