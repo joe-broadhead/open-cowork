@@ -108,7 +108,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm test:prepare',
     'pnpm --filter @open-cowork/cloud-client build',
     'node scripts/check-preload-channels.mjs',
-    'node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/regenerate-windows-update-metadata.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts',
+    'node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/regenerate-windows-update-metadata.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts tests/windows-signing-targets.test.ts',
   ])
 
   assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/app test:coverage:renderer')
@@ -437,6 +437,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm --dir apps/desktop test:e2e:packaged',
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
+    'node scripts/windows-signing-targets.mjs',
     'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit:prod',
     'pnpm audit:full',

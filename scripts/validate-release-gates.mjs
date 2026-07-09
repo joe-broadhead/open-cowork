@@ -366,6 +366,7 @@ function assertReleaseWorkflowContract() {
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
     'node scripts/find-windows-packaged-executable.mjs',
+    'node scripts/windows-signing-targets.mjs',
     'pnpm proof:sandbox:opencode-session -- --json',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
