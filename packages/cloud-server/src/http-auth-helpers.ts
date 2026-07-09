@@ -1,9 +1,6 @@
 import { constantTimeEquals } from '@open-cowork/shared/node'
 import type { IncomingMessage } from 'node:http'
 
-// Re-exported for the existing importers that resolved it from here.
-export { constantTimeEquals }
-
 // Pure header / constant-time-token auth helpers for the cloud HTTP server,
 // extracted from http-server.ts. No server state — read a request header, compare
 // two strings in constant time, and validate the internal service token.
