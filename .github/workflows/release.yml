@@ -442,9 +442,6 @@ jobs:
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CERTIFICATE_PFX_BASE64 }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
           OPEN_COWORK_ALLOW_UNSIGNED_RELEASES: ${{ vars.OPEN_COWORK_ALLOW_UNSIGNED_RELEASES }}
 
       # Native-certificate signing: electron-builder Authenticode-signs the
@@ -464,16 +461,6 @@ jobs:
           APP_ARTIFACT_PREFIX: Open-Cowork
           OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: true
           OPEN_COWORK_UPDATE_FEED_CONFIGURED: true
-
-      # SignPath Foundation (free-for-OSS) alternative: WIN_CSC is absent,
-      # so the build above produced an unsigned installer. Insert the
-      # SignPath submit-signing-request action immediately before this step
-      # to sign apps/desktop/release/*-setup.exe, then regenerate latest.yml
-      # so electron-updater's sha512 matches the signed binary. Documented
-      # in docs/packaging-and-releases.md.
-      - name: Reconcile update metadata after post-build signing
-        if: steps.signing.outputs.mode == 'signed' && steps.signing.outputs.mechanism == 'signpath'
-        run: node scripts/regenerate-windows-update-metadata.mjs --dir apps/desktop/release
 
       - name: Build Windows release artifacts (unsigned preview override)
         if: steps.signing.outputs.mode == 'unsigned'
@@ -568,7 +555,7 @@ jobs:
             echo "::warning::Publishing unsigned Windows artifacts for ${GITHUB_REF_NAME}. This is permitted only for v0.x public-preview releases."
             exit 0
           fi
-          echo "::error::Unsigned Windows artifacts are not allowed for ${GITHUB_REF_NAME}. Configure Authenticode signing (WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD) or SignPath before tagging v1.0.0 or later."
+          echo "::error::Unsigned Windows artifacts are not allowed for ${GITHUB_REF_NAME}. Configure Authenticode signing (WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD) before tagging v1.0.0 or later."
           exit 1
 
       - name: Download release artifacts

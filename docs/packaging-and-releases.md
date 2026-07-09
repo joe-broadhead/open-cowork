@@ -415,10 +415,7 @@ tag build fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` preview
 override is enabled for a `v0.x` tag. `v1.0.0` and later fail closed
 without signing.
 
-Two mechanisms are supported:
-
-### Native certificate (recommended, fully automated)
-
+The supported signing mechanism is a native Authenticode certificate.
 Provide an exportable code-signing certificate (OV or EV) to the workflow:
 
 | Runtime env var | GitHub secret | Purpose |
@@ -430,29 +427,10 @@ electron-builder signs the app and NSIS installer **during** packaging, so
 the sha512 recorded in `latest.yml` matches the shipped, signed binary and
 electron-updater can verify it with no extra steps.
 
-### SignPath Foundation (free for OSS)
-
-[SignPath Foundation](https://signpath.org/) offers free code signing for
-open-source projects. SignPath holds the private key in its cloud HSM, so
-the certificate cannot be exported into `WIN_CSC_LINK`; instead the
-installer is signed **after** packaging. To use it:
-
-1. Register the project with SignPath Foundation and record the
-   organization id and project/signing-policy slug.
-2. Set secret `SIGNPATH_API_TOKEN` and repository variables
-   `SIGNPATH_ORGANIZATION_ID` and `SIGNPATH_PROJECT_SLUG`. The signing-mode
-   gate then reports `mechanism=signpath`.
-3. In `build-windows`, insert the SignPath submit-signing-request action
-   immediately before the "Reconcile update metadata after post-build
-   signing" step so it signs `apps/desktop/release/*-setup.exe`.
-4. That reconcile step runs `scripts/regenerate-windows-update-metadata.mjs`,
-   which recomputes the sha512/size in `latest.yml` against the signed
-   installer and removes the now-stale `*.blockmap` files. Without this,
-   electron-updater would reject the signed download because the packaged
-   metadata still described the unsigned binary.
-
-Because SignPath is post-build, differential updates fall back to a
-verified full download for that release; the update still applies safely.
+Post-build signing systems such as SignPath are not currently wired into the
+release workflow. If a downstream fork adopts one, it must add the real
+signing action, regenerate `latest.yml` against the signed installer, and
+extend the release-gate tests before treating that path as supported.
 
 ## Operator secrets for a signed v1.0
 
@@ -469,8 +447,7 @@ policy fails for `v1.0.0`+ unless signing is configured.
 | macOS | `APPLE_ID` | secret | Yes (notarization) |
 | macOS | `APPLE_APP_SPECIFIC_PASSWORD` | secret | Yes (notarization) |
 | macOS | `APPLE_TEAM_ID` | secret | Yes (notarization) |
-| Windows | `WIN_CERTIFICATE_PFX_BASE64` + `WIN_CERTIFICATE_PASSWORD` | secret | Yes (native cert) — or the SignPath trio below |
-| Windows | `SIGNPATH_API_TOKEN` + `SIGNPATH_ORGANIZATION_ID` + `SIGNPATH_PROJECT_SLUG` | secret + vars | Alternative to the native cert |
+| Windows | `WIN_CERTIFICATE_PFX_BASE64` + `WIN_CERTIFICATE_PASSWORD` | secret | Yes |
 | Linux | `OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY` (+ optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) | secret | Yes (detached `SHA256SUMS.txt.asc`) |
 | All | `OPEN_COWORK_RELEASE_ALLOWED_ACTORS` | variable | Yes (release actor allowlist) |
 
@@ -538,7 +515,7 @@ through config and secrets, without editing `electron-builder.yml`:
 - **Signing identity** — override the brand env vars
   (`APP_ID`, `APP_PRODUCT_NAME`, `APP_ARTIFACT_PREFIX`, `APP_ICON_*`,
   `APP_MAINTAINER`) and supply the fork's own signing secrets
-  (`MAC_CERTIFICATE_*`, `APPLE_*`, `WIN_CERTIFICATE_*` or SignPath,
+  (`MAC_CERTIFICATE_*`, `APPLE_*`, `WIN_CERTIFICATE_*`,
   `OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`). The signing-mode gates read the
   same env var names, so a fork only swaps secret values.
 
