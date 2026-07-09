@@ -432,6 +432,18 @@ the main process:
 Manual fallback URLs must be ordinary HTTPS support/release pages, not
 credential-bearing signed artifact URLs.
 
+## Provider Key Redaction Fixtures
+
+Provider-token redaction is backed by a shared fixture matrix in
+`tests/fixtures/secret-redaction-fixtures.ts`. When adding a provider or a new
+key family, add a fake runtime-assembled fixture there first, then run it
+through the log sanitizer, diagnostics export, Gateway diagnostics, Cloud
+telemetry/audit redaction, and deployment evidence sanitizer tests. Prefer
+over-redacting token-shaped strings in diagnostics over preserving readability:
+public support bundles, launch evidence, and logs must never contain raw
+provider keys, OAuth tokens, gateway service tokens, webhook secrets, signed
+URL credentials, or local home-directory paths.
+
 ## Dependency posture
 
 - `pnpm audit --prod --audit-level moderate` runs as part of the CI gate.

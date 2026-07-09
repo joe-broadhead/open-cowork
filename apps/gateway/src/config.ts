@@ -849,10 +849,18 @@ function redactValue(key: string, value: unknown): unknown {
 export function redactGatewayDiagnosticText(value: string) {
   return redactLocalPaths(redactUrlSecretsInText(value)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\b(?:token|secret|password|credential|api[_-]?key)=([^\s"'&]+)/gi, (match) => {
-      const [key] = match.split('=')
+    .replace(/\b([A-Za-z0-9_-]{0,64}(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]{0,64})\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{16,}\2/gi, (_match, key: string) => {
       return `${key}=[redacted]`
     })
+    .replace(/\bya29\.[0-9A-Za-z._-]+\b/g, '[redacted-token]')
+    .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, '[redacted-token]')
+    .replace(/\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
+    .replace(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, '[redacted-token]')
+    .replace(/\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
+    .replace(/\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g, '[redacted-token]')
+    .replace(/\boc(?:c|gw)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]'))
 }
@@ -875,7 +883,7 @@ function redactUrlSecrets(value: string) {
       url.searchParams.set(key, '[redacted]')
     }
   }
-  return url.toString()
+  return url.toString().replace(/%5Bredacted%5D/gi, '[redacted]')
 }
 
 function redactLocalPaths(value: string) {

@@ -8,6 +8,7 @@ import {
   sanitizeEvidenceText,
   validateScenarioSuite,
 } from '../scripts/live-scenario-evidence.mjs'
+import { assertNoSecretFixtureLeaks, redactionFixtureCorpus } from './fixtures/secret-redaction-fixtures.ts'
 
 function scenario(overrides = {}) {
   return {
@@ -147,9 +148,10 @@ test('live scenario evidence runner records sanitized failing scenario details',
 })
 
 test('live scenario redaction handles common evidence leaks', () => {
-  const sanitized = sanitizeEvidenceText('Authorization: Bearer abcdef /home/alice/project ' + 'github_pat_' + 'abcdefghijklmnopqrstuvwxyz')
+  const sanitized = sanitizeEvidenceText(`Authorization: Bearer abcdef /home/alice/project ${redactionFixtureCorpus()}`)
   assert.equal(sanitized.includes('Authorization: Bearer abcdef'), false)
   assert.equal(sanitized.includes('/home/alice/project'), false)
+  assertNoSecretFixtureLeaks(sanitized)
   assert.match(sanitized, /\[REDACTED_TOKEN\]/)
   assert.match(sanitized, /\/home\/\[REDACTED_HOME\]/)
 })
