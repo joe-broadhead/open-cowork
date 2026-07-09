@@ -131,14 +131,18 @@ import type {
 } from './control-plane-auth-records.ts'
 import type {
   CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
   ListCloudArtifactIndexInput,
   ListCloudArtifactIndexResult,
+  ListCloudLaunchpadSessionSummariesInput,
+  ListCloudLaunchpadSessionSummariesResult,
   ListSessionsPageInput,
   ListSessionsPageRecord,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
   UpsertCloudArtifactIndexInput,
+  UpsertCloudLaunchpadSessionSummaryInput,
   WorkerLeaseRecord,
   WorkspaceEventRecord,
 } from './control-plane-session-records.ts'
@@ -309,6 +313,21 @@ function compareCloudArtifacts(left: CloudArtifactIndexRecord, right: CloudArtif
   )
 }
 
+function launchpadSummaryKey(tenantId: string, sessionId: string) {
+  return key(tenantId, sessionId)
+}
+
+function hasPendingLaunchpadWork(record: CloudLaunchpadSessionSummaryRecord) {
+  return record.pendingApprovals.length > 0 || record.pendingQuestions.length > 0
+}
+
+function compareLaunchpadSummaries(left: CloudLaunchpadSessionSummaryRecord, right: CloudLaunchpadSessionSummaryRecord) {
+  return (
+    right.updatedAt.localeCompare(left.updatedAt)
+    || left.sessionId.localeCompare(right.sessionId)
+  )
+}
+
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
@@ -316,6 +335,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelInteractionsByExternal = new Map<string, string>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly artifactIndex = new Map<string, CloudArtifactIndexRecord>()
+  private readonly launchpadSessionSummaries = new Map<string, CloudLaunchpadSessionSummaryRecord>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
     orgTenantId: (orgId) => this.orgTenantId(orgId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
@@ -1463,6 +1483,42 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         }
       })
       .sort(compareCloudArtifacts)
+    const items = rows.slice(0, limit)
+    return {
+      items: clone(items),
+      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
+      truncated: rows.length > limit,
+    }
+  }
+
+  upsertCloudLaunchpadSessionSummary(input: UpsertCloudLaunchpadSessionSummaryInput): CloudLaunchpadSessionSummaryRecord {
+    this.requireTenantUser(input.tenantId, input.userId)
+    this.assertSessionBelongsToUser(input.tenantId, input.sessionId, input.userId)
+    const session = this.requireSession(input.tenantId, input.sessionId)
+    const record: CloudLaunchpadSessionSummaryRecord = {
+      ...clone(input),
+      sessionTitle: session.record.title || null,
+      createdAt: session.record.createdAt,
+    }
+    this.launchpadSessionSummaries.set(launchpadSummaryKey(input.tenantId, input.sessionId), record)
+    return clone(record)
+  }
+
+  listCloudLaunchpadSessionSummaries(input: ListCloudLaunchpadSessionSummariesInput): ListCloudLaunchpadSessionSummariesResult {
+    this.requireTenantUser(input.tenantId, input.userId)
+    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
+    const rows = Array.from(this.launchpadSessionSummaries.values())
+      .filter((record) => record.tenantId === input.tenantId && record.userId === input.userId)
+      .filter(hasPendingLaunchpadWork)
+      .map((record) => {
+        const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
+        return {
+          ...record,
+          sessionTitle: session?.title || null,
+          createdAt: session?.createdAt || record.createdAt,
+        }
+      })
+      .sort(compareLaunchpadSummaries)
     const items = rows.slice(0, limit)
     return {
       items: clone(items),

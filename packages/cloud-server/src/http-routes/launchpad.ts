@@ -1,4 +1,4 @@
-import { buildLaunchpadFeedFromSources, cloudLaunchpadSessionSnapshots, listLaunchpadCoordinationBoard } from '@open-cowork/runtime-host/launchpad/launchpad-service'
+import { buildLaunchpadFeedFromSources, listLaunchpadCoordinationBoard } from '@open-cowork/runtime-host/launchpad/launchpad-service'
 import type { ArtifactIndexPayload, LaunchpadFeedRequest } from '@open-cowork/shared'
 import type { CloudApiRouteInput } from './types.ts'
 const MAX_LAUNCHPAD_SECTION_LIMIT = 50
@@ -58,13 +58,20 @@ export async function handleLaunchpadApiRoute(input: CloudApiRouteInput): Promis
         .filter((task) => task.projectId === request.projectId)
         .map((task) => task.id)
     : null
-  const page = await options.service.listSessionsPage(input.context.principal, {
+  const summaryPage = await options.service.listCloudLaunchpadSessionSummaries(input.context.principal, {
     limit: LAUNCHPAD_SESSION_SCAN_LIMIT,
   })
-  const sessionSnapshots = await cloudLaunchpadSessionSnapshots({
-    sessions: page.items,
-    getSessionView: (sessionId) => options.service.getSessionView(input.context.principal, sessionId),
-  })
+  const sessionSnapshots = summaryPage.items.map((summary) => ({
+    sessionId: summary.sessionId,
+    title: summary.sessionTitle,
+    createdAt: summary.createdAt,
+    updatedAt: summary.updatedAt,
+    runId: null,
+    view: {
+      pendingApprovals: summary.pendingApprovals,
+      pendingQuestions: summary.pendingQuestions,
+    },
+  }))
   const artifactIndex: ArtifactIndexPayload = options.policy.features.artifacts && options.artifacts
     ? await options.artifacts.listArtifactIndex(input.context.principal, {
         projectId: request.projectId || null,
@@ -78,7 +85,7 @@ export async function handleLaunchpadApiRoute(input: CloudApiRouteInput): Promis
     workspaceId,
     board,
     sessions: sessionSnapshots,
-    sessionsTruncated: Boolean(page.nextCursor),
+    sessionsTruncated: summaryPage.truncated,
     artifacts: artifactIndex.artifacts,
     artifactTotal: artifactIndex.total,
     artifactTruncated: artifactIndex.truncated,

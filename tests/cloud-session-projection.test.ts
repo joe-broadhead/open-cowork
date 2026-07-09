@@ -39,8 +39,9 @@ function asArray(value: unknown): unknown[] {
 }
 
 test('cloud session projection persists approvals questions tools todos costs and resolution state', async () => {
+  const store = new InMemoryControlPlaneStore()
   const service = new CloudSessionService(
-    new InMemoryControlPlaneStore(),
+    store,
     new FakeRuntime(),
     resolveCloudRuntimePolicy(DEFAULT_CONFIG),
   )
@@ -163,6 +164,14 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(sessionView.artifacts[0]?.cloudArtifactId, 'artifact-1')
   assert.equal(sessionView.artifacts[0]?.status, 'in-review')
   assert.equal(sessionView.sessionTokens.cacheRead, 2)
+  const pendingSummaries = await store.listCloudLaunchpadSessionSummaries({
+    tenantId: principal.tenantId,
+    userId: principal.userId,
+    limit: 10,
+  })
+  assert.deepEqual(pendingSummaries.items.map((summary) => summary.sessionId), [sessionId])
+  assert.equal(pendingSummaries.items[0]?.pendingApprovals[0]?.description, 'Run git status')
+  assert.equal(pendingSummaries.items[0]?.pendingQuestions[0]?.id, 'question-1')
 
   await service.appendProductEvent(principal, sessionId, {
     type: 'permission.resolved',
@@ -180,6 +189,12 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(asRecord(asArray(resolved.resolvedApprovals)[0]).description, 'Run git status')
   assert.equal(asRecord(asArray(resolved.resolvedQuestions)[0]).rejected, false)
   assert.deepEqual(asArray(asRecord(asArray(resolved.resolvedQuestions)[0]).answers), ['Yes'])
+  const resolvedSummaries = await store.listCloudLaunchpadSessionSummaries({
+    tenantId: principal.tenantId,
+    userId: principal.userId,
+    limit: 10,
+  })
+  assert.equal(resolvedSummaries.items.length, 0)
 })
 
 test('cloud assistant chunks keep projection running until explicit idle event', async () => {

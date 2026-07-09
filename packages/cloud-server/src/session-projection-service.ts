@@ -161,11 +161,20 @@ export class CloudSessionProjectionService {
         }
       },
     })
+    const summaryView = projectedView || normalizeCloudSessionProjectionView(result.projection.view, result.session)
     this.cacheView(
       cacheKey,
       result.projection.sequence,
-      projectedView || normalizeCloudSessionProjectionView(result.projection.view, result.session),
+      summaryView,
     )
+    await this.store.upsertCloudLaunchpadSessionSummary({
+      tenantId: input.tenantId,
+      userId: result.session.userId,
+      sessionId: input.sessionId,
+      pendingApprovals: summaryView.pendingApprovals,
+      pendingQuestions: summaryView.pendingQuestions,
+      updatedAt: summaryView.updatedAt || result.event.createdAt,
+    })
     if (result.sessionEventCreated) this.sessionEvents.publish(result.event)
     if (result.workspaceEventCreated) this.workspaceEvents.publish(result.workspaceEvent)
     return result.event
@@ -242,6 +251,14 @@ export class CloudSessionProjectionService {
       view,
       leaseToken: input.leaseToken,
       updatedAt: new Date(latestCreatedAt || session.updatedAt),
+    })
+    await this.store.upsertCloudLaunchpadSessionSummary({
+      tenantId: input.tenantId,
+      userId: session.userId,
+      sessionId: input.sessionId,
+      pendingApprovals: view.pendingApprovals,
+      pendingQuestions: view.pendingQuestions,
+      updatedAt: view.updatedAt || latestCreatedAt || session.updatedAt,
     })
 
     return {

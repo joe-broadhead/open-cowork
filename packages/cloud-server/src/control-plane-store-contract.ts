@@ -94,10 +94,14 @@ import type {
   ListCloudArtifactIndexInput,
   ListCloudArtifactIndexResult,
   CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
+  ListCloudLaunchpadSessionSummariesInput,
+  ListCloudLaunchpadSessionSummariesResult,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
   UpsertCloudArtifactIndexInput,
+  UpsertCloudLaunchpadSessionSummaryInput,
   WorkerLeaseRecord,
   WorkspaceEventRecord,
 } from './control-plane-session-records.ts'
@@ -409,6 +413,8 @@ export type ControlPlaneStore = {
     artifactId: string
   }): MaybePromise<CloudArtifactIndexRecord | null>
   listCloudArtifactIndex(input: ListCloudArtifactIndexInput): MaybePromise<ListCloudArtifactIndexResult>
+  upsertCloudLaunchpadSessionSummary(input: UpsertCloudLaunchpadSessionSummaryInput): MaybePromise<CloudLaunchpadSessionSummaryRecord>
+  listCloudLaunchpadSessionSummaries(input: ListCloudLaunchpadSessionSummariesInput): MaybePromise<ListCloudLaunchpadSessionSummariesResult>
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
   getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>

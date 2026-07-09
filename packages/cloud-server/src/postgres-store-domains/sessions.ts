@@ -6,6 +6,7 @@ import {
   commandFromRow,
   artifactIndexFromRow,
   eventFromRow,
+  launchpadSessionSummaryFromRow,
   leaseFromRow,
   projectionFromRow,
   sessionFromRow,
@@ -28,17 +29,21 @@ import type {
   AppendWorkspaceEventInput,
   AuditEventRecord,
   CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
   CommandQueueQuota,
   ControlPlaneSessionStatus,
   EnqueueCommandInput,
   ListCloudArtifactIndexInput,
   ListCloudArtifactIndexResult,
+  ListCloudLaunchpadSessionSummariesInput,
+  ListCloudLaunchpadSessionSummariesResult,
   ListSessionsPageInput,
   RecordAuditEventInput,
   ReapExpiredSessionLeasesInput,
   ReapedSessionLeaseRecord,
   SessionEventRecord,
   UpsertCloudArtifactIndexInput,
+  UpsertCloudLaunchpadSessionSummaryInput,
   WorkerLeaseRecord,
   WorkspaceEventCursorRecord,
   WorkspaceEventRecord,
@@ -674,6 +679,74 @@ export class PostgresSessionsRepository {
       params,
     )
     const rows = result.rows.map(artifactIndexFromRow)
+    const items = rows.slice(0, limit)
+    return {
+      items,
+      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
+      truncated: rows.length > limit,
+    }
+  }
+
+  async upsertCloudLaunchpadSessionSummary(input: UpsertCloudLaunchpadSessionSummaryInput): Promise<CloudLaunchpadSessionSummaryRecord> {
+    return this.options.withTransaction(async (client) => {
+      await this.options.requireTenantUser(input.tenantId, input.userId, client)
+      const session = await this.maybeOne(
+        `SELECT * FROM cloud_sessions
+         WHERE tenant_id = $1 AND user_id = $2 AND session_id = $3
+         FOR UPDATE`,
+        [input.tenantId, input.userId, input.sessionId],
+        client,
+      )
+      if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
+      const result = await client.query(
+        `INSERT INTO cloud_launchpad_session_summaries (
+          tenant_id,
+          user_id,
+          session_id,
+          pending_approvals,
+          pending_questions,
+          updated_at
+        ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
+        ON CONFLICT (tenant_id, session_id) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          pending_approvals = EXCLUDED.pending_approvals,
+          pending_questions = EXCLUDED.pending_questions,
+          updated_at = EXCLUDED.updated_at
+        RETURNING *, (SELECT created_at FROM cloud_sessions s WHERE s.tenant_id = cloud_launchpad_session_summaries.tenant_id AND s.session_id = cloud_launchpad_session_summaries.session_id) AS created_at,
+          (SELECT title FROM cloud_sessions s WHERE s.tenant_id = cloud_launchpad_session_summaries.tenant_id AND s.session_id = cloud_launchpad_session_summaries.session_id) AS session_title`,
+        [
+          input.tenantId,
+          input.userId,
+          input.sessionId,
+          JSON.stringify(input.pendingApprovals),
+          JSON.stringify(input.pendingQuestions),
+          input.updatedAt,
+        ],
+      )
+      return launchpadSessionSummaryFromRow(result.rows[0]!)
+    })
+  }
+
+  async listCloudLaunchpadSessionSummaries(input: ListCloudLaunchpadSessionSummariesInput): Promise<ListCloudLaunchpadSessionSummariesResult> {
+    await this.options.requireTenantUser(input.tenantId, input.userId)
+    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
+    const result = await this.options.pool.query(
+      `SELECT l.*, s.title AS session_title, s.created_at AS created_at
+       FROM cloud_launchpad_session_summaries l
+       JOIN cloud_sessions s
+         ON s.tenant_id = l.tenant_id
+        AND s.session_id = l.session_id
+       WHERE l.tenant_id = $1
+         AND l.user_id = $2
+         AND (
+           jsonb_array_length(l.pending_approvals) > 0
+           OR jsonb_array_length(l.pending_questions) > 0
+         )
+       ORDER BY l.updated_at DESC, l.session_id
+       LIMIT $3`,
+      [input.tenantId, input.userId, limit + 1],
+    )
+    const rows = result.rows.map(launchpadSessionSummaryFromRow)
     const items = rows.slice(0, limit)
     return {
       items,

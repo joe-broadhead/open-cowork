@@ -1818,7 +1818,7 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
   }
 })
 
-test('cloud HTTP launchpad feed uses bounded session scans and honors disabled artifacts', async () => {
+test('cloud HTTP launchpad feed reads waiting summaries and honors disabled artifacts', async () => {
   const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   const fixture = createFixture({
     policy: {
@@ -1829,20 +1829,24 @@ test('cloud HTTP launchpad feed uses bounded session scans and honors disabled a
       },
     },
   })
-  const originalListSessionsPage = fixture.service.listSessionsPage.bind(fixture.service)
-  const pageLimits: Array<number | null | undefined> = []
+  const summaryLimits: Array<number | null | undefined> = []
   let listSessionsCalled = false
   let artifactIndexCalled = false
   fixture.service.listSessions = async () => {
     listSessionsCalled = true
-    throw new Error('launchpad feed must use bounded session pagination')
+    throw new Error('launchpad feed must not list sessions')
   }
-  fixture.service.listSessionsPage = async (principal, input = {}) => {
-    pageLimits.push(input.limit)
-    await originalListSessionsPage(principal, input)
+  fixture.service.listSessionsPage = async () => {
+    throw new Error('launchpad feed must not page sessions')
+  }
+  fixture.service.getSessionView = async () => {
+    throw new Error('launchpad feed must not hydrate session views')
+  }
+  fixture.service.listCloudLaunchpadSessionSummaries = async (_principal, input = {}) => {
+    summaryLimits.push(input.limit)
     return {
       items: [],
-      nextCursor: 'more-sessions',
+      truncated: true,
       totalEstimate: 101,
     }
   }
@@ -1856,7 +1860,7 @@ test('cloud HTTP launchpad feed uses bounded session scans and honors disabled a
     assert.equal(response.status, 200)
     const feed = await readJson(response)
     assert.equal(listSessionsCalled, false)
-    assert.deepEqual(pageLimits, [100])
+    assert.deepEqual(summaryLimits, [100])
     assert.equal(artifactIndexCalled, false)
     assert.deepEqual(asArray(feed.freshArtifacts), [])
     assert.equal(asRecord(feed.totals).freshArtifacts, 0)

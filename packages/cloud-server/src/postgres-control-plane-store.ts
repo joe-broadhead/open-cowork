@@ -1365,6 +1365,14 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.listCloudArtifactIndex(input)
   }
 
+  async upsertCloudLaunchpadSessionSummary(input: Parameters<PostgresSessionsRepository['upsertCloudLaunchpadSessionSummary']>[0]) {
+    return this.sessions.upsertCloudLaunchpadSessionSummary(input)
+  }
+
+  async listCloudLaunchpadSessionSummaries(input: Parameters<PostgresSessionsRepository['listCloudLaunchpadSessionSummaries']>[0]) {
+    return this.sessions.listCloudLaunchpadSessionSummaries(input)
+  }
+
   async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
     return this.sessions.appendWorkspaceEvent(input)
   }

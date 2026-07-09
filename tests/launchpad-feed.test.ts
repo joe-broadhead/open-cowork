@@ -365,6 +365,50 @@ test('local launchpad feed fetches one extra artifact to report overflow', async
   }
 })
 
+test('local launchpad feed does not hydrate cold sessions for waiting items', async () => {
+  const records = Array.from({ length: 1000 }, (_value, index) => ({
+    id: index === 0 ? 'session-warm' : `session-cold-${index}`,
+    title: `Session ${index}`,
+    createdAt: '2026-06-09T08:00:00.000Z',
+    updatedAt: '2026-06-09T09:00:00.000Z',
+    opencodeDirectory: '/tmp/open-cowork-test',
+  }))
+  const deps: NonNullable<Parameters<typeof listLaunchpadCoordinationBoard>[1]> = {
+    listSessionRecords: () => records,
+    isHydrated: (sessionId) => sessionId === 'session-warm',
+    getSessionView: () => emptyView({
+      pendingQuestions: [{
+        id: 'question-warm',
+        sessionId: 'session-warm',
+        questions: [{
+          header: 'Choice',
+          question: 'Choose a path',
+          options: [{ label: 'A', description: 'First' }],
+        }],
+      }],
+    }),
+    syncSessionView: async () => {
+      throw new Error('launchpad feed must not sync cold sessions')
+    },
+    listCoordinationBoard: () => ({ projects: [], tasks: [] }),
+    listCoordinationProjects: () => [],
+    listCoordinationTasks: () => [],
+    listArtifactIndex: async (): Promise<ArtifactIndexPayload> => ({
+      artifacts: [],
+      total: 0,
+      truncated: false,
+    }),
+    nowIso: () => '2026-06-09T12:00:00.000Z',
+  }
+  setLaunchpadRuntimeDepsForTests(deps)
+  try {
+    const feed = await listLocalLaunchpadFeed({ waitingLimit: 5 })
+    assert.deepEqual(feed.waitingOnYou.map((item) => item.id), ['question:session-warm:question-warm'])
+  } finally {
+    setLaunchpadRuntimeDepsForTests(null)
+  }
+})
+
 test('launchpad project board loads project-scoped tasks outside workspace board caps', () => {
   const deps: NonNullable<Parameters<typeof listLaunchpadCoordinationBoard>[1]> = {
     listSessionRecords: () => [],

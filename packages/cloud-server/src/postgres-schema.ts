@@ -84,6 +84,19 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     ON cloud_artifact_index (tenant_id, user_id, project_id, task_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_kind_status_idx
     ON cloud_artifact_index (tenant_id, user_id, kind, status, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_launchpad_session_summaries (
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    session_id text NOT NULL,
+    pending_approvals jsonb NOT NULL,
+    pending_questions jsonb NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, session_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_launchpad_session_summaries_user_updated_idx
+    ON cloud_launchpad_session_summaries (tenant_id, user_id, updated_at DESC, session_id)`,
   `CREATE TABLE IF NOT EXISTS cloud_workspace_event_counters (
     tenant_id text NOT NULL,
     user_id text NOT NULL,

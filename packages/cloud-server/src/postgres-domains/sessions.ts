@@ -3,6 +3,7 @@ import type {
   ControlPlaneSessionStatus,
   ControlPlaneCommandStatus,
   CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
@@ -97,6 +98,19 @@ export function artifactIndexFromRow(row: QueryRow): CloudArtifactIndexRecord {
     statusUpdatedAt: isoOrNull(row.status_updated_at),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+  }
+}
+
+export function launchpadSessionSummaryFromRow(row: QueryRow): CloudLaunchpadSessionSummaryRecord {
+  return {
+    tenantId: String(row.tenant_id),
+    userId: String(row.user_id),
+    sessionId: String(row.session_id),
+    sessionTitle: stringOrNull(row.session_title),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+    pendingApprovals: Array.isArray(row.pending_approvals) ? row.pending_approvals as CloudLaunchpadSessionSummaryRecord['pendingApprovals'] : [],
+    pendingQuestions: Array.isArray(row.pending_questions) ? row.pending_questions as CloudLaunchpadSessionSummaryRecord['pendingQuestions'] : [],
   }
 }
 

@@ -14,6 +14,7 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'appendSessionEvent'
   | 'appendProjectedSessionEvent'
   | 'listSessionEvents'
+  | 'upsertCloudLaunchpadSessionSummary'
   | 'appendWorkspaceEvent'
   | 'getWorkspaceEventCursor'
   | 'listWorkspaceEvents'
@@ -41,4 +42,5 @@ export type ProjectionControlPlaneStore = Pick<SessionControlPlaneStore,
   | 'appendWorkspaceEvent'
   | 'getSessionProjection'
   | 'writeSessionProjection'
+  | 'upsertCloudLaunchpadSessionSummary'
 >

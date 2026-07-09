@@ -44,12 +44,14 @@ import type {
   ChannelProviderId,
   ChannelSessionBindingRecord,
   CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
   ControlPlaneMembershipStatus,
   ControlPlaneRole,
   ControlPlaneStore,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
   ListCloudArtifactIndexInput,
+  ListCloudLaunchpadSessionSummariesInput,
   ManagedWorkerPoolStatus,
   ManagedWorkerStatus,
   SessionCommandRecord,
@@ -965,6 +967,22 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     if (input.sessionId) await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
     return this.store.listCloudArtifactIndex({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
+  }
+
+  async listCloudLaunchpadSessionSummaries(
+    principal: CloudPrincipal,
+    input: Omit<ListCloudLaunchpadSessionSummariesInput, 'tenantId' | 'userId'> = {},
+  ): Promise<{
+    items: CloudLaunchpadSessionSummaryRecord[]
+    totalEstimate: number
+    truncated: boolean
+  }> {
+    await this.ensurePrincipal(principal)
+    return this.store.listCloudLaunchpadSessionSummaries({
       ...input,
       tenantId: principal.tenantId,
       userId: principal.userId,

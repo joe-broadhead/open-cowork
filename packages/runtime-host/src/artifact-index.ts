@@ -578,17 +578,6 @@ export function normalizeArtifactLifecycleEntry(input: {
   }
 }
 
-function matchesIndexRequest(entry: ArtifactIndexEntry, request: ArtifactIndexRequest) {
-  if (request.sessionId && entry.sessionId !== request.sessionId) return false
-  const taskIds = new Set((request.taskIds || []).filter(Boolean))
-  if (request.projectId && entry.projectId !== request.projectId && (!entry.taskId || !taskIds.has(entry.taskId))) return false
-  if (request.taskId && entry.taskId !== request.taskId) return false
-  if (!request.projectId && taskIds.size > 0 && (!entry.taskId || !taskIds.has(entry.taskId))) return false
-  if (request.status && entry.status !== request.status) return false
-  if (request.kind && entry.kind !== request.kind) return false
-  return true
-}
-
 function indexLimit(request: ArtifactIndexRequest) {
   const limit = Number(request.limit)
   if (!Number.isFinite(limit) || limit <= 0) return DEFAULT_INDEX_LIMIT

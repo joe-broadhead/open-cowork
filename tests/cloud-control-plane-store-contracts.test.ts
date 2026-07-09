@@ -303,6 +303,33 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(exactArtifact?.status, 'final')
 
+      await store.upsertCloudLaunchpadSessionSummary({
+        tenantId,
+        userId,
+        sessionId,
+        pendingApprovals: [{
+          id: `${prefix}-approval`,
+          sessionId,
+          taskRunId: null,
+          tool: 'bash',
+          input: {},
+          description: 'Approve command',
+          order: 7,
+        }],
+        pendingQuestions: [],
+        updatedAt: '2026-01-02T00:04:00.000Z',
+      })
+      const launchpadSummaries = await store.listCloudLaunchpadSessionSummaries({
+        tenantId,
+        userId,
+        limit: 1,
+      })
+      assert.deepEqual(launchpadSummaries.items.map((summary) => summary.sessionId), [sessionId])
+      assert.equal(launchpadSummaries.items[0]?.sessionTitle, 'Contract session')
+      assert.equal(launchpadSummaries.items[0]?.pendingApprovals[0]?.description, 'Approve command')
+      assert.equal(launchpadSummaries.totalEstimate, 1)
+      assert.equal(launchpadSummaries.truncated, false)
+
       const projectedWorkspace = (projectedEvent: { eventId: string, sequence: number }) => ({
         eventId: projectedEvent.eventId.startsWith(`${sessionId}:`) ? projectedEvent.eventId : `${sessionId}:${projectedEvent.eventId}`,
         entityType: 'session',
