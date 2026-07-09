@@ -474,7 +474,9 @@ Gateway health endpoints:
 - `GET /health` reports process liveness.
 - `GET /ready` reports provider readiness.
 - `GET /metrics` exposes Prometheus metrics when enabled. Public binds require
-  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; local loopback bypass must be explicit.
+  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; local loopback bypass must be explicit and
+  only applies when the bind host, socket peer, and `Host` header are loopback
+  with no forwarded headers.
 - `GET /diagnostics` returns redacted gateway config, provider state, and
   counters for support. It requires the same admin token unless explicit local
   loopback bypass is enabled.
@@ -875,7 +877,7 @@ Gateway variables:
 | `OPEN_COWORK_CLOUD_BASE_URL` | Cloud web base URL used by the gateway HTTP/SSE client. |
 | `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` | Scoped cloud API token with gateway access. Store it as a secret. |
 | `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` | Required for operator endpoints in shared/public deployments. Send as bearer auth or `x-open-cowork-gateway-admin-token`. |
-| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Runtime rejects public URLs and proxy-forwarded requests for this bypass. |
+| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Runtime rejects public URLs, public/forwarded `Host` headers, proxy-forwarded requests, and public binds for this bypass. |
 | `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` | Allows non-loopback HTTP cloud URLs for local Docker networks only. |
 | `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public HTTPS gateway URL for channel webhook registration. Non-HTTPS and loopback values fail closed. |
@@ -1161,8 +1163,10 @@ browser is not the only protection.
 - `GET /api/workers/heartbeats` exposes worker and scheduler heartbeat state
   for authenticated operators.
 - `GET /api/metrics` exposes operator-scoped Prometheus metrics from the
-  in-process cloud observability adapter. Use OTLP for provider-managed
-  tracing/metrics and this endpoint for scrape-based dashboards.
+  in-process cloud observability adapter. API-token callers need `operator`
+  scope; desktop/gateway tokens and non-operator users are rejected. Use OTLP
+  for provider-managed tracing/metrics and this endpoint for scrape-based
+  dashboards.
 - Cloud HTTP requests emit structured request logs with request ids, role,
   profile, status, and duration. When `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` is
   set, the same request observations are exported as OTLP HTTP traces and

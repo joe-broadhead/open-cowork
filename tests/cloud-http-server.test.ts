@@ -6032,6 +6032,59 @@ test('cloud HTTP server exposes operator-scoped Prometheus metrics', async () =>
   }
 })
 
+test('cloud HTTP server metrics require operator-scoped API token access', async () => {
+  const observability = createPrometheusCloudObservability()
+  const principal = (
+    userId: string,
+    role: CloudPrincipal['role'],
+    authSource: CloudPrincipal['authSource'],
+    tokenScopes?: CloudPrincipal['tokenScopes'],
+  ): CloudPrincipal => ({
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId,
+    accountId: userId,
+    email: `${userId}@example.test`,
+    role,
+    authSource,
+    tokenScopes,
+  })
+  const fixture = createFixture({
+    observability,
+    auth: (req) => {
+      const authorization = String(req.headers.authorization || '')
+      if (authorization === 'Bearer operator-token') return principal('operator-token', 'admin', 'api_token', ['operator'])
+      if (authorization === 'Bearer gateway-token') return principal('gateway-token', 'admin', 'api_token', ['gateway'])
+      if (authorization === 'Bearer desktop-token') return principal('desktop-token', 'admin', 'api_token', ['desktop'])
+      return principal('member-1', 'member', 'user')
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    assert.equal((await fetch(`${baseUrl}/api/metrics`)).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer gateway-token' },
+    })).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer desktop-token' },
+    })).status, 403)
+
+    const health = await fetch(`${baseUrl}/healthz`)
+    assert.equal(health.status, 200)
+    await health.text()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const metrics = await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer operator-token' },
+    })
+    assert.equal(metrics.status, 200)
+    assert.match(await metrics.text(), /open_cowork_cloud_http_requests_total/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server emits auth and quota denial metrics', async () => {
   const metrics: unknown[] = []
   const observability: CloudObservabilityAdapter = {

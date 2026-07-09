@@ -959,8 +959,8 @@ test('gateway loopback operator bypass is denied when the socket remoteAddress i
     OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: 'true',
   })
 
-  const makeReq = (remoteAddress: string | undefined): IncomingMessage => ({
-    headers: { host: '127.0.0.1' },
+  const makeReq = (remoteAddress: string | undefined, headers: IncomingMessage['headers'] = { host: '127.0.0.1' }): IncomingMessage => ({
+    headers,
     socket: { remoteAddress },
   } as unknown as IncomingMessage)
 
@@ -969,6 +969,20 @@ test('gateway loopback operator bypass is denied when the socket remoteAddress i
   // Fail closed: an empty or missing remoteAddress must NOT be treated as loopback.
   assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('')), false)
   assert.equal(isLoopbackOperatorBypassRequest(config, makeReq(undefined)), false)
+  assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('127.0.0.1', { host: 'gateway.example.test' })), false)
+  assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('127.0.0.1', {
+    host: '127.0.0.1',
+    'x-forwarded-for': '203.0.113.10, 127.0.0.1',
+  })), false)
+
+  const publicBindConfig = {
+    ...config,
+    server: {
+      ...config.server,
+      host: '0.0.0.0',
+    },
+  }
+  assert.equal(isLoopbackOperatorBypassRequest(publicBindConfig, makeReq('127.0.0.1')), false)
 })
 
 test('gateway operator endpoints require the admin token when configured', async () => {

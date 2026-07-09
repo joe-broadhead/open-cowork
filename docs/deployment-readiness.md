@@ -328,6 +328,14 @@ provider control plane.
 - Configure `OPEN_COWORK_CLOUD_OTLP_ENDPOINT`, scrape authenticated
   `GET /api/metrics` for Cloud where Prometheus is used, and scrape Gateway
   `/metrics` with the Gateway admin token.
+- Metrics exposure is operator-only across all public surfaces:
+
+  | Surface | Endpoint | Required auth |
+  | --- | --- | --- |
+  | Cloud | `GET /api/metrics` | Authenticated operator principal or API token with `operator` scope. |
+  | Cloud Channel Gateway | `GET /metrics` | `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`, except explicit local loopback bypass where the bind host, socket peer, and `Host` header are loopback and no forwarded headers are present. |
+  | Standalone Gateway | `GET /metrics` | `OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN`; there is no loopback bypass. |
+
 - Include request ids, org ids, session ids, run ids, worker ids, scheduler ids,
   and gateway delivery ids.
 - Redact BYOK keys, API tokens, cookies, OAuth tokens, webhook secrets,

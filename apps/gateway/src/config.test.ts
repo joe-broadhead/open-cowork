@@ -494,6 +494,49 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
     },
     server: {
       host: '0.0.0.0',
+      allowLoopbackOperatorBypass: true,
+    },
+    metrics: {
+      enabled: false,
+    },
+    diagnostics: {
+      enabled: false,
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /ALLOW_LOOPBACK_OPERATOR_BYPASS/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '0.0.0.0',
+    },
+    metrics: {
+      enabled: true,
+    },
+    diagnostics: {
+      enabled: false,
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '0.0.0.0',
       adminToken: 'admin-token',
     },
     metrics: {
