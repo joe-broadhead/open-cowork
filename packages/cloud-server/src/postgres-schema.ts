@@ -1339,6 +1339,35 @@ const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS = [
     WHERE next_event_sequence > 0`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID = '030_artifact_upload_reservations'
+const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_artifact_upload_reservations (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    session_id text NOT NULL,
+    artifact_id text NOT NULL,
+    object_key text NOT NULL,
+    filename text NOT NULL,
+    content_type text,
+    quota_key text,
+    quota_window_ms bigint,
+    quota_window_started_at_ms bigint,
+    reserved_bytes bigint NOT NULL,
+    settled_bytes bigint,
+    status text NOT NULL,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, tenant_id, session_id, artifact_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_upload_reservations_expiry_idx
+    ON cloud_artifact_upload_reservations (org_id, status, expires_at)
+    WHERE status = 'reserved'`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1473,5 +1502,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     statements: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS,
     concurrentIndexes: ['cloud_sessions_projection_lag_idx'],
     transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS,
   },
 ] as const

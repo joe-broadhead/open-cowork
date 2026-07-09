@@ -67,6 +67,23 @@ export class InMemoryUsageQuotaDomain {
     }
   }
 
+  adjustUsageQuota(input: {
+    orgId: string
+    quotaKey: string
+    windowStartedAtMs: number
+    quantityDelta: number
+  }): void {
+    if (!this.host.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    if (!Number.isInteger(input.quantityDelta) || input.quantityDelta === 0) return
+    const counterKey = key(input.orgId, input.quotaKey)
+    const existing = this.usageCounters.get(counterKey)
+    if (!existing || existing.windowStartedAtMs !== input.windowStartedAtMs) return
+    this.usageCounters.set(counterKey, {
+      windowStartedAtMs: existing.windowStartedAtMs,
+      quantity: Math.max(0, existing.quantity + input.quantityDelta),
+    })
+  }
+
   listUsageQuotaCounters(orgId: string): UsageQuotaCounterRecord[] {
     if (!this.host.orgExists(orgId)) throw new Error(`Unknown org ${orgId}.`)
     return Array.from(this.usageCounters.entries())

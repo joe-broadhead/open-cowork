@@ -432,14 +432,7 @@ export class CloudArtifactService {
     await this.sessionService.getSessionView(principal, sessionId)
     const filename = boundedFilename(input.filename)
     const contentType = boundedContentType(input.contentType)
-    // SEC-1: the minted PUT URL writes bytes STRAIGHT to the object store, bypassing the
-    // pod, so this mint is the only enforcement point for the direct-transfer path. Run
-    // the SAME assertBillingAllowed + daily-artifact-bytes quota check the buffered upload
-    // runs (assertArtifactUploadAllowed) BEFORE handing out the URL — reserved speculatively
-    // against the client-declared expected size; finalizeSessionArtifactUpload settles the
-    // actual stored size, so steady-state accounting matches the buffered path. Without this
-    // a canceled/over-quota tenant could mint URLs and upload directly, bypassing billing.
-    await this.sessionService.assertArtifactUploadAllowed(principal, boundedExpectedSize(input.expectedSize))
+    const expectedBytes = boundedExpectedSize(input.expectedSize)
     const artifactId = this.ids.randomUUID()
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
@@ -449,6 +442,18 @@ export class CloudArtifactService {
     })
     const presigned = await this.objectStore.presignPut({ key, contentType, expiresSeconds: input.expiresSeconds })
     if (!presigned) return null
+    // SEC-1: the minted PUT URL writes bytes STRAIGHT to the object store, bypassing the
+    // pod. Reserve quota before returning it; finalize settles only the delta between this
+    // expected-size reservation and the authoritative stored size.
+    await this.sessionService.reserveArtifactUploadQuota(principal, {
+      sessionId,
+      artifactId,
+      objectKey: key,
+      filename,
+      contentType,
+      expectedBytes,
+      expiresAt: presigned.expiresAt,
+    })
     return { artifactId, key, presigned }
   }
 
@@ -472,13 +477,38 @@ export class CloudArtifactService {
       artifactId,
       filename: meta.filename,
     })
+    const existing = await this.findSessionArtifact(principal, sessionId, artifactId)
+    if (existing) return existing
     const head = await this.objectStore.headObject(key)
     if (!head) throw new CloudServiceError(409, 'Cloud artifact upload was not found in object storage.')
+    const reservation = await this.sessionService.getArtifactUploadReservation(principal, { sessionId, artifactId })
+    if (!reservation) {
+      await this.objectStore.deleteObject(key)
+      throw new CloudServiceError(409, 'Cloud artifact upload reservation was not found.')
+    }
+    if (reservation.status === 'expired' || Date.parse(reservation.expiresAt) <= Date.now()) {
+      await this.objectStore.deleteObject(key)
+      await this.sessionService.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'expired' })
+      throw new CloudServiceError(409, 'Cloud artifact upload reservation expired.')
+    }
+    if (reservation.status === 'failed') {
+      await this.objectStore.deleteObject(key)
+      throw new CloudServiceError(409, 'Cloud artifact upload reservation failed.')
+    }
     if (head.size > MAX_ARTIFACT_BYTES) {
       await this.objectStore.deleteObject(key)
+      await this.sessionService.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
       throw new CloudServiceError(413, 'Artifact is too large.')
     }
-    await this.sessionService.assertArtifactUploadAllowed(principal, head.size)
+    try {
+      await this.sessionService.settleArtifactUploadQuotaReservation(principal, { sessionId, artifactId, actualBytes: head.size })
+    } catch (error) {
+      if (error instanceof CloudServiceError) {
+        await this.objectStore.deleteObject(key)
+        await this.sessionService.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
+      }
+      throw error
+    }
     return this.persistUploadedArtifact(principal, sessionId, {
       ...meta,
       contentType: meta.contentType ?? head.contentType ?? null,

@@ -1583,6 +1583,41 @@ export class CloudSessionService {
     return this.usageOperations.assertArtifactUploadAllowed(principal, bytes)
   }
 
+  async reserveArtifactUploadQuota(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    objectKey: string
+    filename: string
+    contentType: string | null
+    expectedBytes: number
+    expiresAt: string
+  }) {
+    return this.usageOperations.reserveArtifactUploadQuota(principal, input)
+  }
+
+  async getArtifactUploadReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+  }) {
+    return this.usageOperations.getArtifactUploadReservation(principal, input)
+  }
+
+  async settleArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    actualBytes: number
+  }) {
+    return this.usageOperations.settleArtifactUploadQuotaReservation(principal, input)
+  }
+
+  async releaseArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    status: 'expired' | 'failed'
+  }) {
+    return this.usageOperations.releaseArtifactUploadQuotaReservation(principal, input)
+  }
+
   async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
     return this.usageOperations.recordArtifactUploaded(principal, sessionId, artifactId, bytes)
   }

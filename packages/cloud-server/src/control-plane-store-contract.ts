@@ -66,6 +66,7 @@ import type {
 } from './control-plane-scim.ts'
 import type {
   BillingSubscriptionRecord,
+  ArtifactUploadReservationRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
   RateLimitClaimRecord,
@@ -143,9 +144,12 @@ import type {
   CheckCloudAuthBackoffInput,
   ClaimRateLimitInput,
   ConsumeUsageQuotaInput,
+  CreateArtifactUploadReservationInput,
   CreateSessionInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
+  ReleaseArtifactUploadReservationInput,
+  SettleArtifactUploadReservationInput,
   UpsertBillingSubscriptionInput,
 } from './control-plane-usage-inputs.ts'
 import type {
@@ -282,6 +286,22 @@ export type ControlPlaneStore = {
   queryAuditEvents(input: QueryAuditEventsInput): MaybePromise<QueryAuditEventsResult>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
   listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
+  createArtifactUploadReservation(input: CreateArtifactUploadReservationInput): MaybePromise<{
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+  }>
+  getArtifactUploadReservation(input: {
+    orgId: string
+    tenantId: string
+    sessionId: string
+    artifactId: string
+  }): MaybePromise<ArtifactUploadReservationRecord | null>
+  settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): MaybePromise<{
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+    settled: boolean
+  }>
+  releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): MaybePromise<ArtifactUploadReservationRecord | null>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
   listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
   upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>

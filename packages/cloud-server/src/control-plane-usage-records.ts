@@ -52,6 +52,28 @@ export type UsageQuotaCounterRecord = {
   quantity: number
 }
 
+export type ArtifactUploadReservationStatus = 'reserved' | 'settled' | 'expired' | 'failed'
+
+export type ArtifactUploadReservationRecord = {
+  orgId: string
+  tenantId: string
+  userId: string
+  sessionId: string
+  artifactId: string
+  objectKey: string
+  filename: string
+  contentType: string | null
+  quotaKey: string | null
+  quotaWindowMs: number | null
+  quotaWindowStartedAtMs: number | null
+  reservedBytes: number
+  settledBytes: number | null
+  status: ArtifactUploadReservationStatus
+  expiresAt: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type RateLimitClaimRecord = {
   allowed: boolean
   scope: string

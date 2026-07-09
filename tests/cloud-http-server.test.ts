@@ -8136,6 +8136,8 @@ test('cloud HTTP artifact download falls back to buffered base64 when the store 
 test('cloud HTTP artifact upload issues a presigned PUT, then finalize records the row (F4)', async () => {
   const inner = createInMemoryObjectStore()
   let presignedPutKey: string | null = null
+  const uploadBody = Buffer.from('direct upload body')
+  const abuse = testAbuseConfig({ maxArtifactBytesPerDay: uploadBody.byteLength })
   // A presign-capable store: presignPut hands back a direct PUT URL (modelling S3); real storage
   // stays in-memory so the test can simulate the landed PUT and finalize's headObject finds it.
   const presigningStore: ObjectStoreAdapter = {
@@ -8150,7 +8152,7 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
       }
     },
   }
-  const fixture = createFixture({ objectStore: presigningStore, abuse: testAbuseConfig() })
+  const fixture = createFixture({ objectStore: presigningStore, abuse })
   const baseUrl = await fixture.server.listen()
   try {
     const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
@@ -8164,7 +8166,7 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
     const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', expectedSize: uploadBody.byteLength }),
     }))).upload)
     assert.equal(begin.transfer, 'presigned')
     assert.match(String(begin.uploadUrl), /^https:\/\/object-store\.test\//)
@@ -8176,7 +8178,10 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
     assert.ok(presignedPutKey, 'expected the store to be asked to presign the upload key')
 
     // Simulate the client PUTting bytes directly to the object store at the presigned key.
-    await inner.putObject({ key: presignedPutKey!, body: Buffer.from('direct upload body'), contentType: 'text/plain' })
+    await inner.putObject({ key: presignedPutKey!, body: uploadBody, contentType: 'text/plain' })
+    // Lower the quota after the object has landed. Because begin reserved the declared
+    // bytes and finalize only settles the delta, this valid upload must still complete.
+    abuse.maxArtifactBytesPerDay = 1
 
     // Finalize: record the metadata row. Size is read authoritatively from the store (headObject).
     const finalized = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
@@ -8186,8 +8191,14 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
     }))).artifact)
     assert.equal(finalized.filename, 'report.txt')
     assert.equal(finalized.contentType, 'text/plain')
-    assert.equal(finalized.size, 'direct upload body'.length)
+    assert.equal(finalized.size, uploadBody.byteLength)
     assert.equal(String(finalized.cloudArtifactId || finalized.artifactId), artifactId)
+    const finalizedRetry = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).artifact)
+    assert.equal(String(finalizedRetry.cloudArtifactId || finalizedRetry.artifactId), artifactId)
 
     // The finalized artifact now shows up in the session's artifact list, like a buffered upload.
     const listed = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))).artifacts).map(asRecord)
@@ -8195,7 +8206,9 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
 
     // Finalize attributes the uploaded bytes for usage/billing, exactly like the buffered path.
     const usageEvents = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/usage/events`))).events).map(asRecord)
-    assert.equal(usageEvents.find((event) => event.eventType === 'artifact.uploaded')?.quantity, 'direct upload body'.length)
+    const uploadEvents = usageEvents.filter((event) => event.eventType === 'artifact.uploaded')
+    assert.equal(uploadEvents.length, 1)
+    assert.equal(uploadEvents[0]?.quantity, uploadBody.byteLength)
 
     // Finalize before the PUT lands is a 409 (object missing), so the client can retry/fall back.
     const missing = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}-not-real/finalize`, {
@@ -8204,6 +8217,64 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
       body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
     })
     assert.equal(missing.status, 409)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP presigned artifact upload expiration deletes landed objects and releases quota', async () => {
+  const inner = createInMemoryObjectStore()
+  let presignedPutKey: string | null = null
+  const expiredBody = Buffer.from('expired direct upload')
+  const presigningStore: ObjectStoreAdapter = {
+    ...inner,
+    async presignPut(input) {
+      presignedPutKey = input.key
+      return {
+        method: 'PUT',
+        url: `https://object-store.test/${input.key}?sig=expired`,
+        headers: input.contentType ? { 'content-type': input.contentType } : {},
+        expiresAt: '2000-01-01T00:00:00.000Z',
+      }
+    },
+  }
+  const fixture = createFixture({
+    objectStore: presigningStore,
+    abuse: testAbuseConfig({ maxArtifactBytesPerDay: expiredBody.byteLength }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'expired.txt', contentType: 'text/plain', expectedSize: expiredBody.byteLength }),
+    }))).upload)
+    const artifactId = String(begin.artifactId)
+    assert.ok(presignedPutKey)
+    assert.equal(fixture.store.listUsageQuotaCounters('tenant-1').find((counter) => counter.quotaKey === 'artifact_bytes:day')?.quantity, expiredBody.byteLength)
+    await inner.putObject({ key: presignedPutKey!, body: expiredBody, contentType: 'text/plain' })
+
+    const expired = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'expired.txt', contentType: 'text/plain' }),
+    })
+    assert.equal(expired.status, 409)
+    assert.equal(await inner.headObject(presignedPutKey!), null)
+    assert.equal(fixture.store.listUsageQuotaCounters('tenant-1').find((counter) => counter.quotaKey === 'artifact_bytes:day')?.quantity, 0)
+    assert.equal((await fixture.service.listEvents({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      email: 'user@example.test',
+      role: 'owner',
+      authSource: 'local',
+    }, sessionId)).some((event) => event.type === 'artifact.created'), false)
   } finally {
     await fixture.server.close()
   }

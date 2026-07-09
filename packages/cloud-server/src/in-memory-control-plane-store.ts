@@ -106,6 +106,7 @@ import type {
   UserRecord,
 } from './control-plane-records.ts'
 import type {
+  ArtifactUploadReservationRecord,
   BillingSubscriptionRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -184,9 +185,12 @@ import type {
   CheckCloudAuthBackoffInput,
   ClaimRateLimitInput,
   ConsumeUsageQuotaInput,
+  CreateArtifactUploadReservationInput,
   CreateSessionInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
+  ReleaseArtifactUploadReservationInput,
+  SettleArtifactUploadReservationInput,
   UpsertBillingSubscriptionInput,
 } from './control-plane-usage-inputs.ts'
 import type {
@@ -293,6 +297,14 @@ function artifactIndexKey(tenantId: string, sessionId: string, artifactId: strin
   return key(tenantId, sessionId, artifactId)
 }
 
+function artifactUploadReservationKey(orgId: string, tenantId: string, sessionId: string, artifactId: string) {
+  return key(orgId, tenantId, sessionId, artifactId)
+}
+
+function quotaWindowStart(nowMs: number, windowMs: number) {
+  return Math.floor(nowMs / windowMs) * windowMs
+}
+
 function cloudArtifactMatchesIndexInput(record: CloudArtifactIndexRecord, input: ListCloudArtifactIndexInput) {
   if (record.tenantId !== input.tenantId || record.userId !== input.userId) return false
   if (input.sessionId && record.sessionId !== input.sessionId) return false
@@ -335,6 +347,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelInteractionsByExternal = new Map<string, string>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly artifactIndex = new Map<string, CloudArtifactIndexRecord>()
+  private readonly artifactUploadReservations = new Map<string, ArtifactUploadReservationRecord>()
   private readonly launchpadSessionSummaries = new Map<string, CloudLaunchpadSessionSummaryRecord>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
     orgTenantId: (orgId) => this.orgTenantId(orgId),
@@ -711,6 +724,107 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listUsageQuotaCounters(orgId: string): UsageQuotaCounterRecord[] {
     return this.usageQuotaDomain.listUsageQuotaCounters(orgId)
+  }
+
+  createArtifactUploadReservation(input: CreateArtifactUploadReservationInput): {
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+  } {
+    if (!this.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    this.requireSession(input.tenantId, input.sessionId)
+    const reservationKey = artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId)
+    const existing = this.artifactUploadReservations.get(reservationKey)
+    if (existing) return { reservation: clone(existing), quota: null }
+    const quota = input.quota ? this.consumeUsageQuota(input.quota) : null
+    if (quota && !quota.allowed) return { reservation: null, quota }
+    const now = input.createdAt || input.quota?.now || new Date()
+    const expiresAt = input.expiresAt instanceof Date ? input.expiresAt : new Date(input.expiresAt)
+    const quotaWindowMs = input.quota?.windowMs ?? null
+    const quotaWindowStartedAtMs = input.quota ? quotaWindowStart((input.quota.now || now).getTime(), input.quota.windowMs) : null
+    const reservation: ArtifactUploadReservationRecord = {
+      orgId: input.orgId,
+      tenantId: input.tenantId,
+      userId: input.userId,
+      sessionId: input.sessionId,
+      artifactId: input.artifactId,
+      objectKey: input.objectKey,
+      filename: input.filename,
+      contentType: input.contentType || null,
+      quotaKey: input.quota?.quotaKey ?? null,
+      quotaWindowMs,
+      quotaWindowStartedAtMs,
+      reservedBytes: normalizeNonNegativeInteger(input.reservedBytes, 'Reserved artifact bytes'),
+      settledBytes: null,
+      status: 'reserved',
+      expiresAt: nowIso(expiresAt),
+      createdAt: nowIso(now),
+      updatedAt: nowIso(now),
+    }
+    this.artifactUploadReservations.set(reservationKey, reservation)
+    return { reservation: clone(reservation), quota }
+  }
+
+  getArtifactUploadReservation(input: {
+    orgId: string
+    tenantId: string
+    sessionId: string
+    artifactId: string
+  }): ArtifactUploadReservationRecord | null {
+    const reservation = this.artifactUploadReservations.get(artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId))
+    return reservation ? clone(reservation) : null
+  }
+
+  settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): {
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+    settled: boolean
+  } {
+    const reservationKey = artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId)
+    const reservation = this.artifactUploadReservations.get(reservationKey)
+    if (!reservation) return { reservation: null, quota: null, settled: false }
+    if (reservation.status !== 'reserved') return { reservation: clone(reservation), quota: null, settled: reservation.status === 'settled' }
+    const actualBytes = normalizeNonNegativeInteger(input.actualBytes, 'Artifact upload size')
+    const delta = actualBytes - reservation.reservedBytes
+    const quota = delta > 0 && input.quota ? this.consumeUsageQuota({ ...input.quota, quantity: delta }) : null
+    if (quota && !quota.allowed) return { reservation: clone(reservation), quota, settled: false }
+    if (delta < 0 && reservation.quotaKey && reservation.quotaWindowStartedAtMs !== null) {
+      this.usageQuotaDomain.adjustUsageQuota({
+        orgId: reservation.orgId,
+        quotaKey: reservation.quotaKey,
+        windowStartedAtMs: reservation.quotaWindowStartedAtMs,
+        quantityDelta: delta,
+      })
+    }
+    const now = input.now || new Date()
+    const settled: ArtifactUploadReservationRecord = {
+      ...reservation,
+      settledBytes: actualBytes,
+      status: 'settled',
+      updatedAt: nowIso(now),
+    }
+    this.artifactUploadReservations.set(reservationKey, settled)
+    return { reservation: clone(settled), quota, settled: true }
+  }
+
+  releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): ArtifactUploadReservationRecord | null {
+    const reservationKey = artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId)
+    const reservation = this.artifactUploadReservations.get(reservationKey)
+    if (!reservation) return null
+    if (reservation.status === 'reserved' && reservation.quotaKey && reservation.quotaWindowStartedAtMs !== null) {
+      this.usageQuotaDomain.adjustUsageQuota({
+        orgId: reservation.orgId,
+        quotaKey: reservation.quotaKey,
+        windowStartedAtMs: reservation.quotaWindowStartedAtMs,
+        quantityDelta: -reservation.reservedBytes,
+      })
+    }
+    const released: ArtifactUploadReservationRecord = {
+      ...reservation,
+      status: reservation.status === 'reserved' ? input.status : reservation.status,
+      updatedAt: nowIso(input.now),
+    }
+    this.artifactUploadReservations.set(reservationKey, released)
+    return clone(released)
   }
 
   recordUsageEvent(input: RecordUsageEventInput): UsageEventRecord {

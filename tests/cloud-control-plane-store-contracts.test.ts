@@ -303,6 +303,99 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(exactArtifact?.status, 'final')
 
+      const quotaNow = new Date('2026-01-02T00:05:00.000Z')
+      const quotaInput = {
+        orgId: org.orgId,
+        quotaKey: `${prefix}:artifact-bytes`,
+        limit: 100,
+        quantity: 10,
+        windowMs: 86_400_000,
+        now: quotaNow,
+        policyCode: 'quota.artifact_bytes_per_day_exceeded',
+      } as const
+      const reservation = await store.createArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        objectKey: `${tenantId}/${sessionId}/reserved.txt`,
+        filename: 'reserved.txt',
+        contentType: 'text/plain',
+        reservedBytes: 10,
+        expiresAt: '2026-01-02T00:20:00.000Z',
+        quota: quotaInput,
+        createdAt: quotaNow,
+      })
+      assert.equal(reservation.reservation?.status, 'reserved')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
+      const duplicateReservation = await store.createArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        objectKey: `${tenantId}/${sessionId}/reserved.txt`,
+        filename: 'reserved.txt',
+        contentType: 'text/plain',
+        reservedBytes: 10,
+        expiresAt: '2026-01-02T00:20:00.000Z',
+        quota: quotaInput,
+        createdAt: quotaNow,
+      })
+      assert.equal(duplicateReservation.reservation?.status, 'reserved')
+      assert.equal(duplicateReservation.quota, null)
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
+      const settledReservation = await store.settleArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        actualBytes: 6,
+        quota: { ...quotaInput, quantity: 6 },
+        now: new Date('2026-01-02T00:06:00.000Z'),
+      })
+      assert.equal(settledReservation.settled, true)
+      assert.equal(settledReservation.reservation?.status, 'settled')
+      assert.equal(settledReservation.reservation?.settledBytes, 6)
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+      const settledRetry = await store.settleArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        actualBytes: 6,
+        quota: { ...quotaInput, quantity: 6 },
+        now: new Date('2026-01-02T00:07:00.000Z'),
+      })
+      assert.equal(settledRetry.settled, true)
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+      await store.createArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-expired-artifact`,
+        objectKey: `${tenantId}/${sessionId}/expired.txt`,
+        filename: 'expired.txt',
+        contentType: 'text/plain',
+        reservedBytes: 5,
+        expiresAt: '2026-01-02T00:05:30.000Z',
+        quota: { ...quotaInput, quantity: 5 },
+        createdAt: quotaNow,
+      })
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 11)
+      const expiredReservation = await store.releaseArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-expired-artifact`,
+        status: 'expired',
+        now: new Date('2026-01-02T00:06:00.000Z'),
+      })
+      assert.equal(expiredReservation?.status, 'expired')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+
       await store.upsertCloudLaunchpadSessionSummary({
         tenantId,
         userId,

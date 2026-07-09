@@ -1,6 +1,7 @@
 import type { CloudBillingEntitlements } from '@open-cowork/shared'
 import type { QuotaPolicyCode } from './control-plane-errors.ts'
 import type { BillingSubscriptionStatus, UsageEventType, UsageUnit } from './control-plane-enums.ts'
+import type { ArtifactUploadReservationStatus } from './control-plane-usage-records.ts'
 
 // The control-plane's session / usage / billing / rate-limit / auth-backoff
 // operation input shapes, extracted from the 4k-line in-memory store. Pure types
@@ -30,6 +31,40 @@ export type ConsumeUsageQuotaInput = {
   windowMs: number
   now?: Date
   policyCode?: QuotaPolicyCode | string
+}
+
+export type CreateArtifactUploadReservationInput = {
+  orgId: string
+  tenantId: string
+  userId: string
+  sessionId: string
+  artifactId: string
+  objectKey: string
+  filename: string
+  contentType?: string | null
+  reservedBytes: number
+  expiresAt: Date | string
+  quota?: ConsumeUsageQuotaInput | null
+  createdAt?: Date
+}
+
+export type SettleArtifactUploadReservationInput = {
+  orgId: string
+  tenantId: string
+  sessionId: string
+  artifactId: string
+  actualBytes: number
+  quota?: ConsumeUsageQuotaInput | null
+  now?: Date
+}
+
+export type ReleaseArtifactUploadReservationInput = {
+  orgId: string
+  tenantId: string
+  sessionId: string
+  artifactId: string
+  status: Extract<ArtifactUploadReservationStatus, 'expired' | 'failed'>
+  now?: Date
 }
 
 export type RecordUsageEventInput = {
