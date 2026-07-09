@@ -215,6 +215,8 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_user_idx
     ON cloud_workflows (tenant_id, user_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_workflows_webhook_lookup_idx
+    ON cloud_workflows (workflow_id, updated_at DESC, tenant_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_due_idx
     ON cloud_workflows (status, next_run_at)`,
   `CREATE TABLE IF NOT EXISTS cloud_workflow_runs (
@@ -1378,6 +1380,12 @@ const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS = [
   `DROP INDEX CONCURRENTLY IF EXISTS cloud_workflow_runs_workflow_idx`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID = '034_workflow_webhook_lookup_index'
+const CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflows_webhook_lookup_idx
+    ON cloud_workflows (workflow_id, updated_at DESC, tenant_id)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1531,6 +1539,12 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     id: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS,
     concurrentIndexes: ['cloud_workflow_runs_workflow_recent_idx'],
+    transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_workflows_webhook_lookup_idx'],
     transactional: false,
   },
 ] as const

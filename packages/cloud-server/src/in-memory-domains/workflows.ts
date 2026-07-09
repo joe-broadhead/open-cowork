@@ -101,10 +101,11 @@ export class InMemoryWorkflowsDomain {
   }
 
   findWorkflow(workflowId: string): CloudWorkflowRecord | null {
-    for (const workflow of this.workflows.values()) {
-      if (workflow.record.id === workflowId) return clone(workflow.record)
-    }
-    return null
+    const workflow = Array.from(this.workflows.values())
+      .map((entry) => entry.record)
+      .filter((record) => record.id === workflowId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.tenantId.localeCompare(right.tenantId))[0]
+    return workflow ? clone(workflow) : null
   }
 
   listWorkflows(tenantId: string, userId: string): CloudWorkflowRecord[] {

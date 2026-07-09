@@ -108,7 +108,7 @@ export class PostgresWorkflowsRepository {
     const row = await this.maybeOne(
       `SELECT * FROM cloud_workflows
        WHERE workflow_id = $1
-       ORDER BY updated_at DESC
+       ORDER BY updated_at DESC, tenant_id
        LIMIT 1`,
       [workflowId],
     )

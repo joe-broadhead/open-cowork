@@ -1439,6 +1439,57 @@ function runControlPlaneDomainContracts(
       await store.close?.()
     }
   })
+
+  test(`${name} control plane resolves bare workflow ids by latest update for webhook lookup`, { skip }, async () => {
+    const store = await createStore()
+    const prefix = `${name}-workflow-lookup-${randomUUID()}`
+    const workflowId = `${prefix}-shared-workflow`
+    const tenants = [
+      { tenantId: `${prefix}-tenant-a`, userId: `${prefix}-user-a`, createdAt: new Date(Date.UTC(2032, 0, 1)) },
+      { tenantId: `${prefix}-tenant-b`, userId: `${prefix}-user-b`, createdAt: new Date(Date.UTC(2032, 0, 2)) },
+    ]
+
+    try {
+      for (const tenant of tenants) {
+        await store.createTenant({ tenantId: tenant.tenantId, name: tenant.tenantId })
+        await store.ensureUser({
+          tenantId: tenant.tenantId,
+          userId: tenant.userId,
+          email: `${tenant.userId}@example.test`,
+          role: 'owner',
+        })
+        await store.createWorkflow({
+          tenantId: tenant.tenantId,
+          userId: tenant.userId,
+          workflowId,
+          draft: {
+            title: tenant.tenantId,
+            instructions: 'Exercise bare workflow lookup.',
+            agentName: 'runner',
+            skillNames: [],
+            toolIds: [],
+            projectDirectory: null,
+            draftSessionId: null,
+            triggers: [{ id: 'webhook', type: 'webhook', enabled: true, webhookSecret: tenant.tenantId }],
+          },
+          createdAt: tenant.createdAt,
+        })
+      }
+
+      assert.equal((await store.findWorkflow(workflowId))?.tenantId, tenants[1]?.tenantId)
+      await store.updateWorkflowStatus({
+        tenantId: tenants[0]!.tenantId,
+        userId: tenants[0]!.userId,
+        workflowId,
+        status: 'paused',
+        nextRunAt: null,
+        updatedAt: new Date(Date.UTC(2032, 0, 3)),
+      })
+      assert.equal((await store.findWorkflow(workflowId))?.tenantId, tenants[0]?.tenantId)
+    } finally {
+      await store.close?.()
+    }
+  })
 }
 
 test('cloud_workflow_runs concurrency gauge trigger stays consistent with the COUNT', async () => {
