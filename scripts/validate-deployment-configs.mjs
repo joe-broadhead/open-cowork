@@ -192,6 +192,7 @@ function staticComposeChecks() {
     assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES')
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_PUBLISHED_ADDR: ${OPEN_COWORK_CLOUD_PUBLISHED_ADDR:-127.0.0.1}')
     assertIncludes(file, '${OPEN_COWORK_CLOUD_PUBLISHED_ADDR:-127.0.0.1}:8787:8787')
     assertIncludes(file, '${OPEN_COWORK_MINIO_PUBLISHED_ADDR:-127.0.0.1}:9000:9000')
     assertIncludes(file, '${OPEN_COWORK_MINIO_CONSOLE_PUBLISHED_ADDR:-127.0.0.1}:9001:9001')

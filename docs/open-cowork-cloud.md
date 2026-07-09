@@ -725,12 +725,13 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
+| `OPEN_COWORK_CLOUD_PUBLISHED_ADDR` | Docker compose host-side bind address for local/demo references. Defaults to `127.0.0.1`; when `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH=true`, non-loopback values fail startup. |
 | `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
 | `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
 | `OPEN_COWORK_CLOUD_BRAND_LOGO_URL` | HTTPS logo URL for the browser dashboard. |
 | `OPEN_COWORK_CLOUD_SUPPORT_URL` / `OPEN_COWORK_CLOUD_PRIVACY_URL` / `OPEN_COWORK_CLOUD_SECURITY_URL` / `OPEN_COWORK_CLOUD_LEGAL_URL` | Optional public footer links. |
 | `OPEN_COWORK_CLOUD_AUTH_MODE` | `none` for loopback/local demos, `header` for a trusted identity proxy, or `oidc` for public browser/JWT auth. |
-| `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH` | Explicit local/demo override that permits `auth.mode=none` on a non-loopback bind. Do not use for public deployments. |
+| `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH` | Explicit local/demo override for unauthenticated Cloud demos. It only starts when the published address and public URL are loopback-local; use `oidc` or `header` auth before exposing Cloud beyond localhost. |
 | `OPEN_COWORK_CLOUD_OIDC_ISSUER_URL` | HTTPS OIDC issuer used for discovery and JWT verification. |
 | `OPEN_COWORK_CLOUD_OIDC_CLIENT_ID` | OIDC audience/client id expected in browser login and bearer tokens. |
 | `OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET` | Optional OIDC confidential-client secret; config `clientSecretRef` can point at a platform secret env var instead. |

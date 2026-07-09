@@ -90,6 +90,7 @@ export { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
 const ALLOW_EPHEMERAL_STORAGE_ENV = 'OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE'
+const CLOUD_PUBLISHED_ADDR_ENV = 'OPEN_COWORK_CLOUD_PUBLISHED_ADDR'
 const RUN_MIGRATIONS_ENV = 'OPEN_COWORK_CLOUD_RUN_MIGRATIONS'
 // Opt-in Postgres LISTEN/NOTIFY accelerator for SSE delivery (audit F1b). Default OFF:
 // with it unset, no LISTEN connection is opened and no NOTIFY is issued — SSE delivery is
@@ -385,6 +386,7 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
     cookieSecure: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECURE'), true),
     publicUrl: envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_URL'),
+    publishedAddr: envValue(env, CLOUD_PUBLISHED_ADDR_ENV),
     trustProxyHeaders: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS'), false),
     trustedProxyCidrs: splitTrustedProxyCidrs(envValue(env, 'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS')),
   }
@@ -700,17 +702,57 @@ function publicUrlEnablesStrictTransportSecurity(value: string | null | undefine
   }
 }
 
+function describeInsecureCloudAuthPublicExposure(input: {
+  hostname: string
+  publicUrl?: string | null
+  publishedAddr?: string | null
+  env?: Env
+}) {
+  const publicUrl = parseDeploymentOrigin(input.publicUrl, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
+  if (publicUrl && !isLoopbackCloudHost(publicUrl.hostname)) {
+    return `OPEN_COWORK_CLOUD_PUBLIC_URL=${publicUrl.origin}`
+  }
+
+  const publishedAddr = input.publishedAddr ?? envValue(input.env || {}, CLOUD_PUBLISHED_ADDR_ENV)
+  if (publishedAddr?.trim()) {
+    if (!isLoopbackCloudHost(publishedAddr)) return `${CLOUD_PUBLISHED_ADDR_ENV}=${publishedAddr.trim()}`
+    return null
+  }
+
+  if (!isLoopbackCloudHost(input.hostname)) {
+    return `OPEN_COWORK_CLOUD_HOST/HOST=${input.hostname}`
+  }
+  return null
+}
+
+function assertInsecureCloudAuthNotPublic(input: {
+  hostname: string
+  publicUrl?: string | null
+  publishedAddr?: string | null
+  env?: Env
+}) {
+  const exposure = describeInsecureCloudAuthPublicExposure(input)
+  if (!exposure) return
+  throw new Error(
+    `${ALLOW_INSECURE_CLOUD_AUTH_ENV}=true is local/demo-only and refuses public Cloud exposure via ${exposure}. Publish/bind the demo to 127.0.0.1 or localhost, or configure cloud.auth.mode=oidc/header before exposing it.`,
+  )
+}
+
 export function assertCloudAuthDeploymentSafe(input: {
   role: CloudRuntimePolicy['role']
   hostname: string
   auth: CloudAuthConfig
   publicUrl?: string | null
+  publishedAddr?: string | null
   corsOrigin?: string | null
   cookieSecure?: boolean
   env?: Env
 }) {
   if (!shouldRunCloudWeb(input.role)) return
-  if (parseBoolean(envValue(input.env || process.env, ALLOW_INSECURE_CLOUD_AUTH_ENV), false)) return
+  if (parseBoolean(envValue(input.env || process.env, ALLOW_INSECURE_CLOUD_AUTH_ENV), false)) {
+    assertInsecureCloudAuthNotPublic(input)
+    return
+  }
   if (!isLoopbackCloudHost(input.hostname) && input.cookieSecure === false) {
     throw new Error('Cloud browser session cookies must be Secure on public deployments. Remove OPEN_COWORK_CLOUD_COOKIE_SECURE=false or use the explicit local/demo override.')
   }
@@ -1286,6 +1328,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     hostname: listenHostname,
     auth: authConfig,
     publicUrl: envOptions.publicUrl,
+    publishedAddr: envOptions.publishedAddr,
     corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
     cookieSecure: envOptions.cookieSecure,
     env,

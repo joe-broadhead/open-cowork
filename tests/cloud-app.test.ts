@@ -218,6 +218,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: 'true',
     OPEN_COWORK_CLOUD_COOKIE_SECURE: 'false',
     OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cloud.example.test',
+    OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '127.0.0.1',
     OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS: '127.0.0.0/8, ::1',
     OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'private_beta',
   }), {
@@ -243,6 +244,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     checkpointsEnabled: true,
     cookieSecure: false,
     publicUrl: 'https://cloud.example.test',
+    publishedAddr: '127.0.0.1',
     trustProxyHeaders: false,
     trustedProxyCidrs: ['127.0.0.0/8', '::1'],
   })
@@ -581,7 +583,7 @@ test('cloud auth mode none is local-only and ignores caller identity headers', a
   assert.equal(principal.email, 'local@example.test')
 })
 
-test('cloud auth mode none refuses non-loopback web binds without explicit local override', () => {
+test('cloud auth mode none is local-only and insecure override refuses public exposure', () => {
   assert.throws(() => assertCloudAuthDeploymentSafe({
     role: 'web',
     hostname: '0.0.0.0',
@@ -600,8 +602,40 @@ test('cloud auth mode none refuses non-loopback web binds without explicit local
     role: 'web',
     hostname: '0.0.0.0',
     auth: DEFAULT_CONFIG.cloud.auth,
-    env: { OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+    publicUrl: 'http://localhost:8787',
+    env: {
+      OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true',
+      OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '127.0.0.1',
+    },
   }))
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: { OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+  }), /OPEN_COWORK_CLOUD_HOST\/HOST/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: {
+      OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true',
+      OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '0.0.0.0',
+    },
+  }), /OPEN_COWORK_CLOUD_PUBLISHED_ADDR/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    publicUrl: 'https://cloud.example.test',
+    env: {
+      OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true',
+      OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '127.0.0.1',
+    },
+  }), /OPEN_COWORK_CLOUD_PUBLIC_URL/)
 })
 
 test('cloud public header and OIDC auth require spoofing-resistant deployment settings', () => {
