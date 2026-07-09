@@ -850,6 +850,22 @@ describe('App', () => {
     expect(mockLoadSessionMessages).toHaveBeenCalledWith('existing-session')
   })
 
+  it('opens browser chat deep links from a cold boot without overwriting the hash', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    window.history.replaceState(null, '', '#/chat/deep-session')
+    installAppApi()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('deep-session'))
+    expect(useSessionStore.getState().currentSessionId).toBe('deep-session')
+    expect(window.location.hash).toBe('#/chat/deep-session')
+  })
+
   it('returns stale browser chat deep links home when activation fails', async () => {
     Object.defineProperty(window, '__coworkBrowserRuntime', {
       configurable: true,

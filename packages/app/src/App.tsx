@@ -105,6 +105,12 @@ export function App() {
   const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
   const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
   const [resourceNavigationNotice, setResourceNavigationNotice] = useState<ResourceNavigationNotice | null>(null)
+  const initialBrowserHashRef = useRef(typeof window === 'undefined' ? '' : window.location.hash)
+  const [bootChatDeepLinkPending, setBootChatDeepLinkPending] = useState(() => {
+    if (!browserUrlRoutingEnabled()) return false
+    const parsed = parseAppHash(initialBrowserHashRef.current, { devMode: UI_PRIMITIVES_ENABLED })
+    return parsed.view === 'chat' && Boolean(parsed.sessionId)
+  })
   // Force the whole tree to re-render when the active locale changes.
   // Every `t(key, fallback)` is resolved at render time from the i18n
   // module's module-level cache, so bumping this counter is enough to
@@ -458,6 +464,7 @@ export function App() {
   // empty-hash entry instead of stacking a redundant one.
   useEffect(() => {
     if (!browserUrlRoutingEnabled()) return
+    if (bootChatDeepLinkPending) return
     const next = appHashFor(view, view === 'chat' ? currentSessionId : null)
     if (window.location.hash === next) return
     if (!window.location.hash) {
@@ -465,7 +472,7 @@ export function App() {
       return
     }
     window.location.hash = next
-  }, [view, currentSessionId])
+  }, [bootChatDeepLinkPending, view, currentSessionId])
 
   // Browser runtime, one-shot after auth/config resolve: apply a chat deep
   // link (#/chat/<id> — the session had to load before the thread could open)
@@ -478,14 +485,18 @@ export function App() {
     if (!config || !authChecked) return
     if (config.auth.enabled && !authenticated) return
     bootHashAppliedRef.current = true
-    if (!isDesktopFeatureEnabled(config.features, view as DesktopFeatureKey)) {
+    const parsed = parseAppHash(initialBrowserHashRef.current || window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
+    const bootView = parsed.view || view
+    if (!isDesktopFeatureEnabled(config.features, bootView as DesktopFeatureKey)) {
+      setBootChatDeepLinkPending(false)
       navigateView('home')
       return
     }
-    const parsed = parseAppHash(window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
     if (parsed.view === 'chat' && parsed.sessionId) {
-      void openExistingThread(parsed.sessionId)
+      void openExistingThread(parsed.sessionId).finally(() => setBootChatDeepLinkPending(false))
+      return
     }
+    setBootChatDeepLinkPending(false)
   }, [authChecked, authenticated, config, navigateView, openExistingThread, view])
 
   // If the current thread disappears while the chat view is active —
@@ -494,10 +505,11 @@ export function App() {
   // ChatView returns null in that state, so without this nudge the
   // user would see a blank pane with no way back.
   useEffect(() => {
+    if (bootChatDeepLinkPending) return
     if (view === 'chat' && !currentSessionId) {
       navigateView('home')
     }
-  }, [currentSessionId, navigateView, view])
+  }, [bootChatDeepLinkPending, currentSessionId, navigateView, view])
 
   useEffect(() => {
     if (view !== 'chat' || !pendingComposerInsert) return
