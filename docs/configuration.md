@@ -650,11 +650,15 @@ The upstream core ships these packaged-source MCPs:
 It also ships three command-launched bundled MCPs (`type: local` with a
 `command` launcher rather than a packaged `packageName`):
 - `openwiki` — OpenWiki knowledge base: fusion search, cited reads, claim
-  tracing, graph queries (see [OpenWiki](openwiki.md))
+  tracing, facts/takes, inbox and governance reads, graph queries, and
+  proposal-safe edit/fact/take/source workflows (see [OpenWiki](openwiki.md))
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
   queries
 - `opencode-gateway` — durable work coordination: persistent
-  Initiatives/Issues, scheduler runs
+  Initiatives/Issues, scheduler runs, teams, blueprints, project bindings,
+  environments, channel sends, and diagnostics. The bundled launcher uses the
+  Gateway operate tier: read-tier tools are auto-allowed, operate-tier tools
+  ask, and admin-tier tools are absent.
 
 User-added MCPs are stored separately from the shipped config.
 
