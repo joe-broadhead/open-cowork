@@ -7288,6 +7288,80 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
   }
 })
 
+test('cloud HTTP workflow listing pages workflows and batch-loads recent runs', async () => {
+  const fixture = createFixture()
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.test', role: 'owner' })
+  for (let index = 0; index < 120; index += 1) {
+    const workflowId = `workflow-page-${String(index).padStart(3, '0')}`
+    fixture.store.createWorkflow({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      workflowId,
+      draft: {
+        title: `Workflow ${index}`,
+        instructions: `Run workflow ${index}.`,
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+      createdAt: new Date(Date.UTC(2030, 0, 1, 0, 0, index)),
+    })
+    const runId = `${workflowId}-run`
+    fixture.store.createWorkflowRun({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      workflowId,
+      runId,
+      triggerType: 'manual',
+      createdAt: new Date(Date.UTC(2030, 0, 1, 1, 0, index)),
+    })
+    fixture.store.completeWorkflowRun({
+      tenantId: 'tenant-1',
+      workflowId,
+      runId,
+      summary: `done ${index}`,
+      nextStatus: 'active',
+      nextRunAt: null,
+      finishedAt: new Date(Date.UTC(2030, 0, 1, 1, 1, index)),
+    })
+  }
+  let legacyRunListCalls = 0
+  const originalListWorkflowRuns = fixture.store.listWorkflowRuns.bind(fixture.store)
+  fixture.store.listWorkflowRuns = ((...args: Parameters<typeof fixture.store.listWorkflowRuns>) => {
+    legacyRunListCalls += 1
+    return originalListWorkflowRuns(...args)
+  }) as typeof fixture.store.listWorkflowRuns
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const first = await readJson(await fetch(`${baseUrl}/api/workflows?limit=50`))
+    assert.equal(asArray(first.workflows).length, 50)
+    assert.equal(asArray(first.runs).length, 50)
+    assert.equal(first.totalEstimate, 51)
+    assert.equal(typeof first.nextCursor, 'string')
+    assert.equal(legacyRunListCalls, 0)
+
+    const second = await readJson(await fetch(`${baseUrl}/api/workflows?limit=50&cursor=${encodeURIComponent(String(first.nextCursor))}`))
+    assert.equal(asArray(second.workflows).length, 50)
+    assert.equal(asArray(second.runs).length, 50)
+    assert.notEqual(
+      asRecord(asArray(first.workflows)[0]).id,
+      asRecord(asArray(second.workflows)[0]).id,
+    )
+    assert.equal(legacyRunListCalls, 0)
+
+    const invalid = await fetch(`${baseUrl}/api/workflows?cursor=not-a-workflow-cursor`)
+    assert.equal(invalid.status, 400)
+    assert.equal(asRecord(asRecord(await readJson(invalid)).verdict).policyCode, 'workflows.cursor.invalid')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP validates workflow schedules at the create boundary', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()

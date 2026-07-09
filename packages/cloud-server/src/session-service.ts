@@ -1521,7 +1521,7 @@ export class CloudSessionService {
     return this.threadOrganization.deleteThreadSmartFilter(principal, filterId)
   }
 
-  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<WorkflowListPayload> {
+  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null, cursor?: string | null } = {}): Promise<WorkflowListPayload> {
     return this.workflowOperations.listWorkflows(principal, input)
   }
 

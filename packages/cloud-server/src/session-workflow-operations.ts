@@ -31,6 +31,7 @@ import type {
   SessionCommandRecord,
   SessionRecord,
 } from './control-plane-store.ts'
+import { InvalidWorkflowPageCursorError } from './control-plane-store.ts'
 import { CloudServiceError } from './cloud-service-error.ts'
 import { ControlPlaneQuotaExceededError } from './control-plane-errors.ts'
 import { type CloudRuntimePolicy } from './cloud-config.ts'
@@ -107,20 +108,38 @@ export class CloudWorkflowOperationsService {
     this.createCloudSessionRecord = options.createCloudSessionRecord
   }
 
-  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<WorkflowListPayload> {
+  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null, cursor?: string | null } = {}): Promise<WorkflowListPayload> {
     await this.ensurePrincipal(principal)
     this.assertWorkflowsEnabled()
-    const workflows = (await this.store.listWorkflows(principal.tenantId, principal.userId))
-      .slice(0, normalizedCloudListLimit(input.limit))
-    const runs = (await Promise.all(workflows.map((workflow) => (
-      this.store.listWorkflowRuns(principal.tenantId, workflow.id, 25)
-    )))).flat()
+    let page
+    try {
+      page = await this.store.listWorkflowsPage({
+        tenantId: principal.tenantId,
+        userId: principal.userId,
+        limit: normalizedCloudListLimit(input.limit),
+        cursor: input.cursor,
+      })
+    } catch (error) {
+      if (error instanceof InvalidWorkflowPageCursorError) {
+        throw new CloudServiceError(400, 'Workflow list cursor is invalid.', {
+          policyCode: 'workflows.cursor.invalid',
+        })
+      }
+      throw error
+    }
+    const workflows = page.items
+    const runs = await this.store.listWorkflowRunsForWorkflows({
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      workflowIds: workflows.map((workflow) => workflow.id),
+      limitPerWorkflow: 25,
+      limit: 100,
+    })
     return {
       workflows: workflows.map(toWorkflowSummary),
-      runs: runs
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, 100)
-        .map(toWorkflowRun),
+      runs: runs.map(toWorkflowRun),
+      nextCursor: page.nextCursor,
+      totalEstimate: page.totalEstimate,
     }
   }
 

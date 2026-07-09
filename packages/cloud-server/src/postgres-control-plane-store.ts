@@ -74,6 +74,8 @@ import type {
   ListApiTokenChannelBindingGrantsInput,
   ListCloudCoordinationWatchesInput,
   ListMatchingCloudCoordinationWatchesInput,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
   ListSessionsPageInput,
   ManagedWorkerCredentialRecord,
   ManagedWorkerHeartbeatRecord,
@@ -1644,6 +1646,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.workflows.listWorkflows(tenantId, userId)
   }
 
+  async listWorkflowsPage(input: ListWorkflowsPageInput) {
+    return this.workflows.listWorkflowsPage(input)
+  }
+
   async getWorkflow(tenantId: string, userId: string, workflowId: string) {
     return this.workflows.getWorkflow(tenantId, userId, workflowId)
   }
@@ -1658,6 +1664,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listWorkflowRuns(tenantId: string, workflowId: string, limit = 25) {
     return this.workflows.listWorkflowRuns(tenantId, workflowId, limit)
+  }
+
+  async listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput) {
+    return this.workflows.listWorkflowRunsForWorkflows(input)
   }
 
   async createWorkflowRun(input: CreateWorkflowRunInput) {

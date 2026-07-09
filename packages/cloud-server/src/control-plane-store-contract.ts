@@ -110,6 +110,9 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
+  ListWorkflowsPageRecord,
   SchemaMigrationRecord,
   SettingMetadataRecord,
   ThreadMetadataRecord,
@@ -488,10 +491,12 @@ export type ControlPlaneStore = {
   createWorkflow(input: CreateWorkflowInput): MaybePromise<CloudWorkflowRecord>
   findWorkflow(workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   listWorkflows(tenantId: string, userId: string): MaybePromise<CloudWorkflowRecord[]>
+  listWorkflowsPage(input: ListWorkflowsPageInput): MaybePromise<ListWorkflowsPageRecord>
   getWorkflow(tenantId: string, userId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   getWorkflowForTenant(tenantId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   updateWorkflowStatus(input: UpdateWorkflowStatusInput): MaybePromise<CloudWorkflowRecord | null>
   listWorkflowRuns(tenantId: string, workflowId: string, limit?: number): MaybePromise<CloudWorkflowRunRecord[]>
+  listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput): MaybePromise<CloudWorkflowRunRecord[]>
   createWorkflowRun(input: CreateWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord>
   claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): MaybePromise<ClaimedWorkflowRunRecord | null>
   reapExpiredWorkflowClaims(input?: ReapExpiredWorkflowClaimsInput): MaybePromise<ReapedWorkflowClaimRecord[]>

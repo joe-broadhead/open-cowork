@@ -13,10 +13,14 @@ import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   FailWorkflowRunInput,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
+  ListWorkflowsPageRecord,
   ReapExpiredWorkflowClaimsInput,
   ReapedWorkflowClaimRecord,
   UpdateWorkflowStatusInput,
 } from '../control-plane-store.ts'
+import { decodeWorkflowPageCursor, encodeWorkflowPageCursor } from '../workflow-page-cursor.ts'
 
 // Workflow SQL domain extracted from postgres-control-plane-store.ts. Owns the workflow
 // drafts + runs lifecycle: create/find/list/get, status transitions, run creation (with
@@ -112,17 +116,37 @@ export class PostgresWorkflowsRepository {
   }
 
   async listWorkflows(tenantId: string, userId: string) {
+    return (await this.listWorkflowsPage({ tenantId, userId, limit: WORKFLOW_LIST_LIMIT })).items
+  }
+
+  async listWorkflowsPage(input: ListWorkflowsPageInput): Promise<ListWorkflowsPageRecord> {
+    const { tenantId, userId } = input
     await this.options.requireTenantUser(tenantId, userId)
-    // Defensively bound the per-user workflow list so the query can't grow unbounded
-    // (keyset pagination is the future enhancement; the cap is far above realistic use).
+    const limit = Math.max(1, Math.min(WORKFLOW_LIST_LIMIT, Math.floor(input.limit ?? 100)))
+    const cursor = decodeWorkflowPageCursor(input.cursor, input)
+    const params: unknown[] = [tenantId, userId]
+    const where = ['tenant_id = $1', 'user_id = $2']
+    if (cursor) {
+      params.push(cursor.updatedAt, cursor.workflowId)
+      const updatedAtParam = params.length - 1
+      const workflowIdParam = params.length
+      where.push(`(updated_at < $${updatedAtParam} OR (updated_at = $${updatedAtParam} AND workflow_id > $${workflowIdParam}))`)
+    }
+    params.push(limit + 1)
     const result = await this.options.pool.query(
       `SELECT * FROM cloud_workflows
-       WHERE tenant_id = $1 AND user_id = $2
+       WHERE ${where.join(' AND ')}
        ORDER BY updated_at DESC, workflow_id
-       LIMIT ${WORKFLOW_LIST_LIMIT}`,
-      [tenantId, userId],
+       LIMIT $${params.length}`,
+      params,
     )
-    return result.rows.map(workflowFromRow)
+    const rows = result.rows.map(workflowFromRow)
+    const items = rows.slice(0, limit)
+    return {
+      items,
+      nextCursor: rows.length > limit && items.length > 0 ? encodeWorkflowPageCursor(items[items.length - 1]!, input) : null,
+      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
+    }
   }
 
   async getWorkflow(tenantId: string, userId: string, workflowId: string) {
@@ -174,6 +198,41 @@ export class PostgresWorkflowsRepository {
        ORDER BY created_at DESC, run_id
        LIMIT $3`,
       [tenantId, workflowId, boundedLimit],
+    )
+    return result.rows.map(workflowRunFromRow)
+  }
+
+  async listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput) {
+    await this.options.requireTenantUser(input.tenantId, input.userId)
+    const workflowIds = Array.from(new Set(input.workflowIds.filter(Boolean)))
+      .slice(0, WORKFLOW_LIST_LIMIT)
+    if (workflowIds.length === 0) return []
+    const limitPerWorkflow = Math.max(1, Math.min(WORKFLOW_RUN_LIST_LIMIT, Math.floor(input.limitPerWorkflow ?? 25)))
+    const limit = Math.max(1, Math.min(WORKFLOW_RUN_LIST_LIMIT, Math.floor(input.limit ?? WORKFLOW_RUN_LIST_LIMIT)))
+    const result = await this.options.pool.query(
+      `WITH requested AS (
+         SELECT DISTINCT unnest($3::text[]) AS workflow_id
+       ), ranked AS (
+         SELECT runs.*,
+                row_number() OVER (
+                  PARTITION BY runs.workflow_id
+                  ORDER BY runs.created_at DESC, runs.run_id
+                ) AS workflow_rank
+         FROM cloud_workflow_runs runs
+         JOIN cloud_workflows workflows
+           ON workflows.tenant_id = runs.tenant_id
+          AND workflows.workflow_id = runs.workflow_id
+         JOIN requested
+           ON requested.workflow_id = runs.workflow_id
+         WHERE runs.tenant_id = $1
+           AND workflows.user_id = $2
+       )
+       SELECT *
+       FROM ranked
+       WHERE workflow_rank <= $4
+       ORDER BY created_at DESC, run_id
+       LIMIT $5`,
+      [input.tenantId, input.userId, workflowIds, limitPerWorkflow, limit],
     )
     return result.rows.map(workflowRunFromRow)
   }

@@ -112,6 +112,21 @@ Browser clients use cookie auth and CSRF for mutating requests. Operator-only
 APIs should remain behind operator auth or private networking and must not be
 called from ordinary browser workbench code.
 
+## Workflow Listing
+
+Workflow lists are keyset-paged. Omit options for the default first page, or
+pass the returned `nextCursor` to continue without issuing one run query per
+workflow:
+
+```ts
+let cursor: string | null | undefined
+do {
+  const page = await client.listWorkflows({ limit: 100, cursor })
+  renderWorkflows(page.workflows, page.runs)
+  cursor = page.nextCursor
+} while (cursor)
+```
+
 ## Auth Modes
 
 | Mode | Caller | Transport |

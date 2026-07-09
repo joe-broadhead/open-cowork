@@ -1096,6 +1096,23 @@ function runControlPlaneDomainContracts(
       })
       assert.equal((await store.getWorkflow(tenantId, userId, workflowId))?.id, workflowId)
       assert.deepEqual((await store.listWorkflows(tenantId, userId)).map((entry) => entry.id), [workflowId])
+      const pagedWorkflowIds = [`${prefix}-workflow-page-a`, `${prefix}-workflow-page-b`, `${prefix}-workflow-page-c`]
+      for (let index = 0; index < pagedWorkflowIds.length; index += 1) {
+        await store.createWorkflow({
+          tenantId,
+          userId,
+          workflowId: pagedWorkflowIds[index]!,
+          draft: { title: `Contract workflow page ${index}`, instructions: 'Page it', agentName: 'default', triggers: [] },
+          createdAt: new Date(Date.UTC(2030, 0, 1, 0, 0, index)),
+        })
+      }
+      const firstWorkflowPage = await store.listWorkflowsPage({ tenantId, userId, limit: 2 })
+      assert.deepEqual(firstWorkflowPage.items.map((entry) => entry.id), [pagedWorkflowIds[2], pagedWorkflowIds[1]])
+      assert.equal(firstWorkflowPage.totalEstimate, 3)
+      assert.ok(firstWorkflowPage.nextCursor)
+      const secondWorkflowPage = await store.listWorkflowsPage({ tenantId, userId, limit: 2, cursor: firstWorkflowPage.nextCursor })
+      assert.deepEqual(secondWorkflowPage.items.map((entry) => entry.id).slice(0, 2), [pagedWorkflowIds[0], workflowId])
+      assert.equal(secondWorkflowPage.nextCursor, null)
       const workflowRun = await store.createWorkflowRun({
         tenantId,
         userId,
@@ -1126,6 +1143,34 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(completedRun?.status, 'completed')
       assert.equal((await store.getWorkflowRun(tenantId, `${prefix}-run`))?.status, 'completed')
+      for (let index = 0; index < pagedWorkflowIds.length; index += 1) {
+        const runId = `${pagedWorkflowIds[index]}-run`
+        await store.createWorkflowRun({
+          tenantId,
+          userId,
+          workflowId: pagedWorkflowIds[index]!,
+          runId,
+          triggerType: 'manual',
+          createdAt: new Date(Date.UTC(2030, 0, 2, 0, 0, index)),
+        })
+        await store.completeWorkflowRun({
+          tenantId,
+          workflowId: pagedWorkflowIds[index]!,
+          runId,
+          summary: `done ${index}`,
+          nextStatus: 'active',
+          nextRunAt: null,
+          finishedAt: new Date(Date.UTC(2030, 0, 2, 0, 1, index)),
+        })
+      }
+      const batchedRuns = await store.listWorkflowRunsForWorkflows({
+        tenantId,
+        userId,
+        workflowIds: [workflowId, ...pagedWorkflowIds],
+        limitPerWorkflow: 1,
+        limit: 3,
+      })
+      assert.deepEqual(batchedRuns.map((run) => run.workflowId), [pagedWorkflowIds[2], pagedWorkflowIds[1], pagedWorkflowIds[0]])
 
       const byok = await store.createByokSecret({
         secretId: `${prefix}-secret`,

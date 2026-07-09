@@ -151,6 +151,9 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
+  ListWorkflowsPageRecord,
   SchemaMigrationRecord,
   SettingMetadataRecord,
   ThreadMetadataRecord,
@@ -2073,6 +2076,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.workflowsDomain.listWorkflows(tenantId, userId)
   }
 
+  listWorkflowsPage(input: ListWorkflowsPageInput): ListWorkflowsPageRecord {
+    return this.workflowsDomain.listWorkflowsPage(input)
+  }
+
   getWorkflow(tenantId: string, userId: string, workflowId: string): CloudWorkflowRecord | null {
     return this.workflowsDomain.getWorkflow(tenantId, userId, workflowId)
   }
@@ -2087,6 +2094,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listWorkflowRuns(tenantId: string, workflowId: string, limit = 25): CloudWorkflowRunRecord[] {
     return this.workflowsDomain.listWorkflowRuns(tenantId, workflowId, limit)
+  }
+
+  listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput): CloudWorkflowRunRecord[] {
+    return this.workflowsDomain.listWorkflowRunsForWorkflows(input)
   }
 
   createWorkflowRun(input: CreateWorkflowRunInput): CloudWorkflowRunRecord {

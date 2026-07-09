@@ -31,6 +31,7 @@ import type {
   ThreadTagInput,
   WorkflowDetail,
   WorkflowListPayload,
+  WorkflowListRequest,
   WorkflowRun,
   WorkflowTriggerType,
   ManagedDesktopPolicyView,
@@ -88,6 +89,7 @@ export type {
   ThreadTagInput,
   WorkflowDetail,
   WorkflowListPayload,
+  WorkflowListRequest,
   WorkflowRun,
   WorkflowTriggerType,
 }
@@ -668,7 +670,7 @@ export type CloudTransportAdapter = {
   replyToQuestion(sessionId: string, input: { requestId: string, answers: unknown[] }): Promise<CloudSessionCommandAckResponse>
   rejectQuestion(sessionId: string, input: { requestId: string }): Promise<CloudSessionCommandAckResponse>
   respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<CloudSessionCommandAckResponse>
-  listWorkflows?(): Promise<WorkflowListPayload>
+  listWorkflows?(input?: WorkflowListRequest): Promise<WorkflowListPayload>
   getWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   runWorkflow?(workflowId: string, input?: { triggerType?: WorkflowTriggerType, triggerPayload?: Record<string, unknown> | null }): Promise<WorkflowRun | null>
   pauseWorkflow?(workflowId: string): Promise<WorkflowDetail | null>

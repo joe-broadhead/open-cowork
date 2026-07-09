@@ -12,12 +12,16 @@ import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   FailWorkflowRunInput,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
+  ListWorkflowsPageRecord,
   ReapExpiredWorkflowClaimsInput,
   ReapedWorkflowClaimRecord,
   UpdateWorkflowStatusInput,
   WorkflowRunQuota,
   WorkReaperAction,
 } from '../control-plane-store.ts'
+import { decodeWorkflowPageCursor, encodeWorkflowPageCursor } from '../workflow-page-cursor.ts'
 
 // Workflow + workflow-run domain extracted from in-memory-control-plane-store.ts.
 // Owns the workflow records (with their runs) and the run records, and the full
@@ -104,13 +108,30 @@ export class InMemoryWorkflowsDomain {
   }
 
   listWorkflows(tenantId: string, userId: string): CloudWorkflowRecord[] {
+    return this.listWorkflowsPage({ tenantId, userId, limit: WORKFLOW_LIST_LIMIT }).items
+  }
+
+  listWorkflowsPage(input: ListWorkflowsPageInput): ListWorkflowsPageRecord {
+    const { tenantId, userId } = input
     this.host.requireTenantUser(tenantId, userId)
-    // Mirrors the Postgres store's defensive per-user workflow-list bound (500).
-    return Array.from(this.workflows.values())
+    const limit = Math.max(1, Math.min(WORKFLOW_LIST_LIMIT, Math.floor(input.limit ?? 100)))
+    const cursor = decodeWorkflowPageCursor(input.cursor, input)
+    const filtered = Array.from(this.workflows.values())
       .filter((workflow) => workflow.record.tenantId === tenantId && workflow.record.userId === userId)
-      .sort((left, right) => right.record.updatedAt.localeCompare(left.record.updatedAt))
-      .slice(0, 500)
-      .map((workflow) => clone(workflow.record))
+      .sort((left, right) => (
+        right.record.updatedAt.localeCompare(left.record.updatedAt)
+        || left.record.id.localeCompare(right.record.id)
+      ))
+      .filter((workflow) => !cursor
+        || workflow.record.updatedAt < cursor.updatedAt
+        || (workflow.record.updatedAt === cursor.updatedAt && workflow.record.id > cursor.workflowId))
+    const page = filtered.slice(0, limit)
+    const hasMore = filtered.length > limit
+    return {
+      items: page.map((workflow) => clone(workflow.record)),
+      nextCursor: hasMore && page.length > 0 ? encodeWorkflowPageCursor(page[page.length - 1]!.record, input) : null,
+      totalEstimate: hasMore ? limit + 1 : filtered.length,
+    }
   }
 
   getWorkflow(tenantId: string, userId: string, workflowId: string): CloudWorkflowRecord | null {
@@ -140,8 +161,33 @@ export class InMemoryWorkflowsDomain {
     const workflow = this.requireWorkflow(tenantId, workflowId)
     return workflow.runs
       .slice()
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id))
       .slice(0, Math.min(Math.max(1, limit), WORKFLOW_RUN_LIST_LIMIT))
+      .map((run) => clone(run))
+  }
+
+  listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput): CloudWorkflowRunRecord[] {
+    this.host.requireTenantUser(input.tenantId, input.userId)
+    const workflowIds = Array.from(new Set(input.workflowIds.filter(Boolean)))
+    if (workflowIds.length === 0) return []
+    const workflowIdSet = new Set(workflowIds)
+    const limitPerWorkflow = Math.max(1, Math.min(WORKFLOW_RUN_LIST_LIMIT, Math.floor(input.limitPerWorkflow ?? 25)))
+    const limit = Math.max(1, Math.min(WORKFLOW_RUN_LIST_LIMIT, Math.floor(input.limit ?? WORKFLOW_RUN_LIST_LIMIT)))
+    const runs: CloudWorkflowRunRecord[] = []
+    for (const workflow of this.workflows.values()) {
+      if (
+        workflow.record.tenantId !== input.tenantId
+        || workflow.record.userId !== input.userId
+        || !workflowIdSet.has(workflow.record.id)
+      ) continue
+      runs.push(...workflow.runs
+        .slice()
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id))
+        .slice(0, limitPerWorkflow))
+    }
+    return runs
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id))
+      .slice(0, limit)
       .map((run) => clone(run))
   }
 
@@ -471,6 +517,7 @@ export class InMemoryWorkflowsDomain {
 }
 
 const WORKFLOW_RUN_LIST_LIMIT = 100
+const WORKFLOW_LIST_LIMIT = 500
 
 function workflowRunSessionId(tenantId: string, workflowId: string, runId: string) {
   return stableId('workflow_session', tenantId, workflowId, runId)

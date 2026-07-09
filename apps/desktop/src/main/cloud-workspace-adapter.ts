@@ -27,6 +27,7 @@ import type {
   ThreadTagInput,
   WorkflowDetail,
   WorkflowListPayload,
+  WorkflowListRequest,
   WorkflowRun,
   WorkspacePolicy,
   ManagedDesktopPolicyView,
@@ -94,7 +95,7 @@ export type CloudWorkspaceSessionAdapter = {
   replyToQuestion?(sessionId: string, requestId: string, answers: unknown[]): Promise<void>
   rejectQuestion?(sessionId: string, requestId: string): Promise<void>
   respondToPermission?(sessionId: string, permissionId: string, allowed: boolean): Promise<void>
-  listWorkflows?(): Promise<WorkflowListPayload>
+  listWorkflows?(input?: WorkflowListRequest): Promise<WorkflowListPayload>
   getWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   runWorkflow?(workflowId: string): Promise<WorkflowRun | null>
   pauseWorkflow?(workflowId: string): Promise<WorkflowDetail | null>

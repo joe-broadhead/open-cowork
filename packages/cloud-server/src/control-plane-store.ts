@@ -11,6 +11,12 @@ export {
 } from './audit-query-cursor.ts'
 export type { AuditQueryCursorScope } from './audit-query-cursor.ts'
 export {
+  decodeWorkflowPageCursor,
+  encodeWorkflowPageCursor,
+  InvalidWorkflowPageCursorError,
+} from './workflow-page-cursor.ts'
+export type { WorkflowPageCursorScope } from './workflow-page-cursor.ts'
+export {
   MAX_AUDIT_QUERY_LIMIT,
   normalizeAuditQueryLimit,
 } from './audit-query.ts'

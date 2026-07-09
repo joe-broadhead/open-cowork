@@ -61,6 +61,27 @@ export type CloudWorkflowRunRecord = WorkflowRun & {
   lastErrorSummary: string | null
 }
 
+export type ListWorkflowsPageInput = {
+  tenantId: string
+  userId: string
+  limit?: number | null
+  cursor?: string | null
+}
+
+export type ListWorkflowsPageRecord = {
+  items: CloudWorkflowRecord[]
+  nextCursor: string | null
+  totalEstimate: number
+}
+
+export type ListWorkflowRunsForWorkflowsInput = {
+  tenantId: string
+  userId: string
+  workflowIds: string[]
+  limitPerWorkflow?: number | null
+  limit?: number | null
+}
+
 export type ClaimedWorkflowRunRecord = {
   workflow: CloudWorkflowRecord
   run: CloudWorkflowRunRecord
