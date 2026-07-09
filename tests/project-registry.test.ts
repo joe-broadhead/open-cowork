@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { listRecentProjects } from '../apps/desktop/src/main/project-registry.ts'
 test('listRecentProjects derives Cmd/Ctrl number targets from latest project sessions', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-project-registry-'))

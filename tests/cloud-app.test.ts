@@ -33,7 +33,7 @@ import {
   shouldRunCloudWorker,
   startCloudApp,
 } from '@open-cowork/cloud-server/app'
-import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
+import { getAppConfig } from '@open-cowork/runtime-host/config'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import { createInMemoryObjectStore, createUnavailableObjectStore } from '@open-cowork/cloud-server/object-store'
 import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'

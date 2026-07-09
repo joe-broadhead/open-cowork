@@ -9,7 +9,7 @@ import {
 } from '@open-cowork/shared'
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { getAppDataDir } from '../config-loader.ts'
+import { getAppDataDir } from '@open-cowork/runtime-host/config'
 import { evaluateDesktopPairingBrokerUrl } from './broker-url-policy.ts'
 
 const MAX_TEXT_BYTES = 512

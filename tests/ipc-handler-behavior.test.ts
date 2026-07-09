@@ -28,7 +28,7 @@ import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/des
 import { registerChannelHandlers, resetDesktopChannelServiceForTests } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
 import { validateCustomSkillConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 import { LOCAL_WORKSPACE_ID, createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'

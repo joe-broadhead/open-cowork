@@ -29,7 +29,7 @@ import {
 import { buildArtifactAttachmentPayload, inferArtifactMime } from '../artifact-attachments.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { isReadableSessionArtifact } from '../session-artifact-access.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 

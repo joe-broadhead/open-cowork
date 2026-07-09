@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { setTimeout as delay } from 'timers/promises'
 
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function writeExecutable(root: string, name: string, source: string) {
   const path = join(root, name)
   writeFileSync(path, `#!/bin/sh\n${source}`)

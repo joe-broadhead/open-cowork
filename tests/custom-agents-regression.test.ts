@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 test('custom agent summaries keep agents visible when app-owned skills need frontmatter healing', async () => {
   const tempUserData = mkdtempSync(join(tmpdir(), 'open-cowork-agent-regression-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR

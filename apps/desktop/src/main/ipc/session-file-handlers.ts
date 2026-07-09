@@ -3,7 +3,7 @@ import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { readFileCheckedSync } from '@open-cowork/shared/node'
 import type { IpcHandlerContext } from './context.ts'
 import { MAX_FILE_SNIPPET_BYTES } from './session-handler-validation.ts'
-import { getBrandName } from '../config-loader.ts'
+import { getBrandName } from '@open-cowork/runtime-host/config'
 export function registerSessionFileHandlers(context: IpcHandlerContext) {
   // File-snippet reader used by the diff viewer's "Show N unchanged
   // lines" affordance. Reads a byte range from a file that must live

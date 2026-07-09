@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
 import { trackParentSession } from '../event-task-state.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import type { IpcHandlerContext } from '../ipc/context.ts'
 import type { DesktopPairingCommandExecutor } from './service.ts'
 import {

@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 
 function withTempUserData<T>(fn: () => T | Promise<T>): T | Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-setup-bundle-'))

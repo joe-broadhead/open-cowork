@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '@open-cowork/shared'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { CloudArtifactService } from '@open-cowork/cloud-server/artifact-service'
 import type { BillingAdapter } from '@open-cowork/cloud-server/billing-adapter'
 import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '@open-cowork/cloud-server/app'

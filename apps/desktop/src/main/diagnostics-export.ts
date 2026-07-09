@@ -4,8 +4,8 @@ import { getBundledOpencodeVersion } from '@open-cowork/runtime-host/runtime-ope
 import { getPerfSnapshot } from '@open-cowork/runtime-host/perf-metrics'
 import { sanitizeForExport } from '@open-cowork/shared'
 import { closeSync, fstatSync, openSync, readSync } from 'fs'
-import { getPublicAppConfig } from './config-loader.ts'
-import { getLogFilePath } from './logger.ts'
+import { getPublicAppConfig } from '@open-cowork/runtime-host/config'
+import { getLogFilePath } from '@open-cowork/shared/node'
 import { getRuntimeInputDiagnostics } from './runtime-input-diagnostics.ts'
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 

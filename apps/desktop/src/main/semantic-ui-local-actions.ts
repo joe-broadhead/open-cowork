@@ -12,7 +12,7 @@ import { buildDiagnosticsBundle } from './diagnostics-export.ts'
 import { clearPermission, getPermissionSession } from './permission-tracker.ts'
 import { normalizeQuestionAnswers, normalizeQuestionRequestId } from './question-normalization.ts'
 import { startSessionStatusReconciliation } from './session-status-reconciler.ts'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 
 function nowIso() {
   return new Date().toISOString()

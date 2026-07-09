@@ -15,10 +15,10 @@ import { isCloudProjectedSessionEventType, normalizeCloudProjectSource, type Clo
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
-import { getProviderDescriptor } from '../config-loader.ts'
+import { getProviderDescriptor } from '@open-cowork/runtime-host/config'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import {
   buildSessionImportInventory,
   buildSessionImportRequest,

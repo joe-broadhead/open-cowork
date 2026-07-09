@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import { mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { clearConfigCaches, getProjectNamespace, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches, getProjectNamespace, getSidecarJsonSuffix } from '@open-cowork/runtime-host/config'
 function skillContent(label: string) {
   return `---\ndescription: ${JSON.stringify(label)}\n---\n\nUse this skill for ${label}.\n`
 }

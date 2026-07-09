@@ -19,8 +19,8 @@ import {
 } from './schema.ts'
 import { validateCustomMcpConfig, validateCustomSkillConfig, validateRuntimeContextOptions, validateScopedArtifactRef } from './object-validators.ts'
 import type { SetupBundleImportOptions } from '@open-cowork/shared'
-import { log } from '../logger.ts'
-import { getBrandName } from '../config-loader.ts'
+import { log } from '@open-cowork/shared/node'
+import { getBrandName } from '@open-cowork/runtime-host/config'
 import { computeCustomSkillBundleDigest } from '../custom-skill-integrity.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 

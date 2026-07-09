@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pruneLogDirectory } from '../apps/desktop/src/main/logger.ts'
+import { pruneLogDirectory } from '@open-cowork/shared/node'
 
 function withTempDir(fn: (dir: string) => void) {
   const dir = mkdtempSync(join(tmpdir(), 'open-cowork-logger-'))

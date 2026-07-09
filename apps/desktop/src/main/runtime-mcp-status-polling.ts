@@ -2,7 +2,7 @@ import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 
 import { getMcpStatus } from './events.ts'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { createStartupMcpRecovery } from './runtime-mcp-recovery.ts'
 
 export function restartRuntimeMcpStatusPolling(options: {

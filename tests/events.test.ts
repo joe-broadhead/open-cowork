@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { BrowserWindow } from 'electron'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { getMcpStatus, subscribeToEvents } from '../apps/desktop/src/main/events.ts'
-import { closeLogger } from '../apps/desktop/src/main/logger.ts'
+import { closeLogger } from '@open-cowork/shared/node'
 
 type IntervalId = ReturnType<typeof setInterval>
 

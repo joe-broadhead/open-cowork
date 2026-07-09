@@ -8,7 +8,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { clearConfigCaches, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches, getSidecarJsonSuffix } from '@open-cowork/runtime-host/config'
 import {
   setActiveManagedPolicy,
   resetActiveManagedPolicyCache,

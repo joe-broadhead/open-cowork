@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { cloudProjectionFenceObserved } from '../packages/shared/src/cloud-session-contract.ts'
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)

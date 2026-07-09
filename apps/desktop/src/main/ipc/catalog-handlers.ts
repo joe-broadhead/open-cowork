@@ -33,8 +33,8 @@ import {
   validateToolListOptions,
 } from './object-validators.ts'
 import { listBuiltInAgentDetails } from '../built-in-agent-details.ts'
-import { expandMcpToolPermissionPatterns, getConfiguredToolPatterns, getConfiguredToolsFromConfig } from '../config-loader.ts'
-import { log } from '../logger.ts'
+import { expandMcpToolPermissionPatterns, getConfiguredToolPatterns, getConfiguredToolsFromConfig } from '@open-cowork/runtime-host/config'
+import { log } from '@open-cowork/shared/node'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { preflightConfiguredApiTokenMcp } from '../mcp-preflight.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'

@@ -7,7 +7,7 @@ import type {
   RuntimeContextOptions,
   ScopedArtifactRef,
 } from '@open-cowork/shared'
-import { getBrandName } from './config-loader.ts'
+import { getBrandName } from '@open-cowork/runtime-host/config'
 type RuntimeContextDependencies = {
   ensureSessionRecord: (sessionId: string) => SessionRecord | null
   resolveGrantedProjectDirectory: (directory?: string | null) => string | null

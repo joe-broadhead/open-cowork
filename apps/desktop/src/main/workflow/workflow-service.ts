@@ -17,9 +17,9 @@ import type {
   WorkflowRun,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
-import { getConfiguredAgentsFromConfig } from '../config-loader.ts'
+import { getConfiguredAgentsFromConfig } from '@open-cowork/runtime-host/config'
 import { trackParentSession } from '../event-task-state.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 

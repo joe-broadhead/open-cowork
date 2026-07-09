@@ -1,4 +1,4 @@
-import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
+import { getAppConfig } from '@open-cowork/runtime-host/config'
 import { resolveCloudControlPlaneUrl } from '../packages/cloud-server/src/app.ts'
 import { createPostgresControlPlaneStore } from '../packages/cloud-server/src/postgres-control-plane-store.ts'
 

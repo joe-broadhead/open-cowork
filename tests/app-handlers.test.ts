@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { ensureRuntimeAfterAuthLogin, hasRuntimeSensitiveSettingsUpdate, mergeRuntimeProviderModels } from '../apps/desktop/src/main/ipc/app-handlers.ts'
-import { clearConfigCaches, getPublicAppConfig } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches, getPublicAppConfig } from '@open-cowork/runtime-host/config'
 
 test('ensureRuntimeAfterAuthLogin reboots an active runtime after successful sign-in', async () => {
   const calls: string[] = []

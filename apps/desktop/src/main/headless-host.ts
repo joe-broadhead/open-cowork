@@ -172,7 +172,7 @@ export function createHeadlessHostStatusOutput(input: {
 }
 
 async function defaultStateDir() {
-  const { getAppDataDir } = await import('./config-loader.ts')
+  const { getAppDataDir } = await import('@open-cowork/runtime-host/config')
   return join(getAppDataDir(), 'headless-host')
 }
 

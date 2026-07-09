@@ -6,7 +6,7 @@ import { normalizeSessionId } from './session-handler-validation.ts'
 import { normalizeQuestionAnswers, normalizeQuestionRequestId } from '../question-normalization.ts'
 import { clearPermission, getPermissionSession } from '../permission-tracker.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 async function publishCloudSessionView(

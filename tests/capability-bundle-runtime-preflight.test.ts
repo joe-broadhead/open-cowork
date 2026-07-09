@@ -9,7 +9,7 @@ import { CAPABILITY_BUNDLE_FORMAT } from '../packages/shared/src/capabilities.ts
 import {
   clearConfigCaches,
   getConfiguredCapabilityBundlesFromConfig,
-} from '../apps/desktop/src/main/config-loader.ts'
+} from '@open-cowork/runtime-host/config'
 function withConfigOverride(config: Record<string, unknown>, run: (rootDir: string) => void) {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-capability-bundle-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')

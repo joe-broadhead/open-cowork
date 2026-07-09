@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { SessionArtifact, SessionView } from '@open-cowork/shared'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function sessionViewWithArtifacts(artifacts: SessionArtifact[]): SessionView {
   return {
     messages: [],

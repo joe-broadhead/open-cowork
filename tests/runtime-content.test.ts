@@ -8,7 +8,7 @@ import test from 'node:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 test('writeRuntimeAgentsFile writes the runtime AGENTS mirror privately', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-agents-'))
 

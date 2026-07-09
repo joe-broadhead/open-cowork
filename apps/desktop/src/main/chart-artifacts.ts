@@ -2,8 +2,8 @@ import { writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import type { ChartArtifactSource, ChartSaveArtifactRequest, SessionArtifact } from '@open-cowork/shared'
-import { getAppDataDir } from './config-loader.ts'
-import { log } from './logger.ts'
+import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { log } from '@open-cowork/shared/node'
 
 // Charts are captured client-side (vega-embed's `view.toImageURL`) and
 // written here so they're decoupled from the session's working
