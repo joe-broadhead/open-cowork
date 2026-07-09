@@ -15,7 +15,7 @@ function testTempDir(prefix: string) {
 }
 
 test('readSkillBundleDirectory loads SKILL.md and supporting files from a bundle directory', () => {
-  const root = testTempDir('opencowork-skill-bundle-')
+  const root = testTempDir('open-cowork-skill-bundle-')
   const bundle = join(root, 'Chart Creator')
   mkdirSync(join(bundle, 'references'), { recursive: true })
   writeFileSync(join(bundle, 'SKILL.md'), '---\nname: Chart Creator\ndescription: "Build charts"\n---\n# Chart Creator')
@@ -41,7 +41,7 @@ test('readSkillBundleDirectory loads SKILL.md and supporting files from a bundle
 })
 
 test('readSkillBundleDirectory canonicalizes the imported frontmatter name to the saved bundle id', () => {
-  const root = testTempDir('opencowork-skill-bundle-')
+  const root = testTempDir('open-cowork-skill-bundle-')
   const bundle = join(root, 'Chart Creator')
   mkdirSync(bundle, { recursive: true })
   writeFileSync(join(bundle, 'SKILL.md'), '---\nname: Chart Creator\ndescription: "Build charts"\n---\n# Chart Creator')
@@ -72,7 +72,7 @@ test('saveCustomSkill rejects bundles that do not meet OpenCode frontmatter requ
 })
 
 test('removeCustomSkill rejects path-like names before deleting files', async () => {
-  const root = testTempDir('opencowork-skill-remove-policy-')
+  const root = testTempDir('open-cowork-skill-remove-policy-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
   clearConfigCaches()
@@ -97,7 +97,7 @@ test('removeCustomSkill rejects path-like names before deleting files', async ()
 })
 
 test('readSkillBundleDirectory rejects oversized supporting files', () => {
-  const root = testTempDir('opencowork-skill-bundle-')
+  const root = testTempDir('open-cowork-skill-bundle-')
   const bundle = join(root, 'Chart Creator')
   mkdirSync(join(bundle, 'references'), { recursive: true })
   writeFileSync(join(bundle, 'SKILL.md'), '---\nname: Chart Creator\ndescription: "Build charts"\n---\n# Chart Creator')
@@ -117,7 +117,7 @@ test('readSkillBundleDirectory rejects oversized supporting files', () => {
 })
 
 test('listCustomSkills skips invalid existing bundles without aborting enumeration', async () => {
-  const root = testTempDir('opencowork-skill-list-')
+  const root = testTempDir('open-cowork-skill-list-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
   clearConfigCaches()
@@ -152,7 +152,7 @@ test('listCustomSkills skips invalid existing bundles without aborting enumerati
 })
 
 test('listCustomSkills skips bundles with too-deep supporting file paths', async () => {
-  const root = testTempDir('opencowork-skill-file-depth-')
+  const root = testTempDir('open-cowork-skill-file-depth-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
   clearConfigCaches()
@@ -187,7 +187,7 @@ test('listCustomSkills skips bundles with too-deep supporting file paths', async
 })
 
 test('listCustomSkills keeps edited machine skills even when the managed mirror registry is stale', async () => {
-  const root = testTempDir('opencowork-skill-list-registry-')
+  const root = testTempDir('open-cowork-skill-list-registry-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
   clearConfigCaches()

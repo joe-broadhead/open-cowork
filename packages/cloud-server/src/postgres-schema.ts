@@ -801,20 +801,6 @@ export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS = [
     created_at timestamptz NOT NULL,
     PRIMARY KEY (org_id, token_id, channel_binding_id)
   )`,
-  `INSERT INTO cloud_api_token_channel_binding_grants (
-    org_id, token_id, channel_binding_id, created_at
-   )
-   SELECT tokens.org_id, tokens.token_id, bindings.binding_id, now()
-   FROM cloud_api_tokens tokens
-   JOIN cloud_channel_bindings bindings ON bindings.org_id = tokens.org_id
-   WHERE tokens.revoked_at IS NULL
-     AND tokens.scopes @> '["gateway"]'::jsonb
-     AND NOT EXISTS (
-       SELECT 1
-       FROM cloud_schema_migrations
-       WHERE id = '${CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID}'
-     )
-   ON CONFLICT (org_id, token_id, channel_binding_id) DO NOTHING`,
   `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_token_idx
     ON cloud_api_token_channel_binding_grants (org_id, token_id, channel_binding_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_binding_idx

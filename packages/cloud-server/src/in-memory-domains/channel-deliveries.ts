@@ -147,9 +147,7 @@ export class InMemoryChannelDeliveriesDomain {
     if (input.channelBindingIds && !input.channelBindingIds.includes(delivery.channelBindingId)) return null
     if (input.claimedBy && delivery.claimedBy !== input.claimedBy) return null
     if (input.lastClaimedBy && delivery.lastClaimedBy !== input.lastClaimedBy) {
-      const legacyClaimMatches = delivery.lastClaimedBy === null && Boolean(input.claimedBy) && delivery.claimedBy === input.claimedBy
-      if (!legacyClaimMatches) return null
-      delivery.lastClaimedBy = input.lastClaimedBy
+      return null
     }
     const updatedAt = nowIso(input.updatedAt)
     delivery.status = input.status

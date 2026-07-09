@@ -9,7 +9,7 @@ function readLinkedTarget(path: string) {
 }
 
 test('runtime home tooling bridge mirrors curated tool config but not agent compatibility dirs', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-bridge-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-bridge-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')
   mkdirSync(realHome, { recursive: true })
@@ -45,7 +45,7 @@ test('runtime home tooling bridge mirrors curated tool config but not agent comp
 })
 
 test('runtime home tooling bridge removes stale Copilot config links from older builds', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-copilot-cleanup-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-copilot-cleanup-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')
   mkdirSync(join(realHome, '.config', 'gh-copilot'), { recursive: true })
@@ -66,7 +66,7 @@ test('runtime home tooling bridge removes stale Copilot config links from older 
 })
 
 test('runtime home tooling bridge removes stale bridged entries when the source disappears', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-cleanup-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-cleanup-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')
   mkdirSync(realHome, { recursive: true })
@@ -90,7 +90,7 @@ test('runtime home tooling bridge removes stale bridged entries when the source 
 })
 
 test('runtime home tooling bridge removes configured links when disabled', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-disabled-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-disabled-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')
   mkdirSync(realHome, { recursive: true })
@@ -112,7 +112,7 @@ test('runtime home tooling bridge removes configured links when disabled', () =>
 })
 
 test('runtime home tooling bridge leaves runtime-owned files when disabled', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-disabled-owned-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-disabled-owned-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')
   mkdirSync(realHome, { recursive: true })
@@ -134,7 +134,7 @@ test('runtime home tooling bridge leaves runtime-owned files when disabled', () 
 })
 
 test('runtime home tooling bridge does not replace runtime-owned files when enabled', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-owned-enabled-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-owned-enabled-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')
   mkdirSync(realHome, { recursive: true })

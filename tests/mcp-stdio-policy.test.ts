@@ -37,7 +37,7 @@ test('rejects container runtimes as bare commands for local MCPs', () => {
 })
 
 test('allows project-relative executables that stay inside the project', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-mcp-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-'))
   const scriptPath = join(root, 'bin', 'server.js')
 
   try {
@@ -55,8 +55,8 @@ test('allows project-relative executables that stay inside the project', () => {
 })
 
 test('rejects project-relative executables that escape the project root', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-mcp-'))
-  const outside = mkdtempSync(join(tmpdir(), 'opencowork-mcp-outside-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-'))
+  const outside = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-outside-'))
   const scriptPath = join(outside, 'server.js')
 
   try {
@@ -74,7 +74,7 @@ test('rejects project-relative executables that escape the project root', () => 
 })
 
 test('rejects project-relative executables that escape via a shared-prefix sibling path', () => {
-  const parent = mkdtempSync(join(tmpdir(), 'opencowork-mcp-prefix-parent-'))
+  const parent = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-prefix-parent-'))
   const root = join(parent, 'project')
   const sibling = join(parent, 'project-evil')
   const scriptPath = join(sibling, 'bin', 'server.js')
@@ -95,7 +95,7 @@ test('rejects project-relative executables that escape via a shared-prefix sibli
 })
 
 test('rejects project-relative executables that escape through a symlink inside the project', () => {
-  const parent = mkdtempSync(join(tmpdir(), 'opencowork-mcp-symlink-parent-'))
+  const parent = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-symlink-parent-'))
   const root = join(parent, 'project')
   const outside = join(parent, 'outside')
   const scriptPath = join(outside, 'server.js')

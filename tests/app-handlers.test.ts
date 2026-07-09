@@ -87,7 +87,7 @@ test('small model changes are runtime-sensitive settings updates', () => {
 })
 
 test('mergeRuntimeProviderModels drops provider defaults absent from the live runtime catalog', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-provider-runtime-default-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-provider-runtime-default-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -143,7 +143,7 @@ test('mergeRuntimeProviderModels drops provider defaults absent from the live ru
 })
 
 test('mergeRuntimeProviderModels prefers OpenCode live defaults over app-wide defaults', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-provider-runtime-default-precedence-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-provider-runtime-default-precedence-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -189,7 +189,7 @@ test('mergeRuntimeProviderModels prefers OpenCode live defaults over app-wide de
 })
 
 test('mergeRuntimeProviderModels preserves OpenCode defaults when the runtime omits the model list', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-provider-runtime-default-no-models-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-provider-runtime-default-no-models-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -232,7 +232,7 @@ test('mergeRuntimeProviderModels preserves OpenCode defaults when the runtime om
 })
 
 test('mergeRuntimeProviderModels exposes OpenCode reasoning model metadata', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-provider-runtime-reasoning-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-provider-runtime-reasoning-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 

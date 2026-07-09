@@ -84,7 +84,7 @@ test('resolveCustomMcpRuntimeEntry injects GOOGLE_APPLICATION_CREDENTIALS when g
   // a user who has signed in: ADC file present on disk under the app
   // data dir. The env injection should point the subprocess at that file
   // so google-auth / googleapis / gcloud find it automatically.
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-google-auth-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-google-auth-'))
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
 
@@ -135,7 +135,7 @@ test('resolveCustomMcpRuntimeEntry injects GOOGLE_APPLICATION_CREDENTIALS when g
 })
 
 test('resolveCustomMcpRuntimeEntry resolves project-relative stdio commands against the selected project directory', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-project-mcp-'))
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-project-mcp-'))
   const scriptPath = join(root, 'bin', 'server.js')
 
   try {
@@ -158,7 +158,7 @@ test('resolveCustomMcpRuntimeEntry resolves project-relative stdio commands agai
 })
 
 test('listReadyGoogleAuthLocalMcpNames includes only ready local Google-auth MCPs', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-google-auth-list-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-google-auth-list-'))
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
 

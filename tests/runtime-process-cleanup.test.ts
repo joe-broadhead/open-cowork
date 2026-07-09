@@ -119,7 +119,7 @@ test('runtime pid ledger writes private atomic state', (t) => {
     return
   }
 
-  const root = testTempDir('opencowork-runtime-pids-')
+  const root = testTempDir('open-cowork-runtime-pids-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_USER_DATA_DIR = root
   clearConfigCaches()

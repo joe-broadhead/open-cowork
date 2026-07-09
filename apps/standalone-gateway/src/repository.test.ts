@@ -592,7 +592,7 @@ test("postgres repository touches existing sessions before appending new message
   assert.equal(queries.at(-1), "COMMIT");
 });
 
-test("postgres repository migrations skip applied migration ids before replaying old indexes", async () => {
+test("postgres repository migrations skip applied core schema before applying retention indexes", async () => {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
   const pool = {
     async query(sql: string, params?: unknown[]) {
@@ -604,7 +604,6 @@ test("postgres repository migrations skip applied migration ids before replaying
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO standalone_gateway_schema_migrations")) return { rows: [], rowCount: 1 };
       if (sql.includes("0001_standalone_gateway_core")) throw new Error("migration id should not be embedded in SQL");
-      if (sql.includes("standalone_gateway_sessions_provider_workspace_thread_unique")) return { rows: [], rowCount: 0 };
       if (sql.includes("standalone_gateway_sessions_retention_idx")) return { rows: [], rowCount: 0 };
       throw new Error(`Unexpected migration query: ${sql}`);
     },
@@ -615,12 +614,12 @@ test("postgres repository migrations skip applied migration ids before replaying
 
   const migrationSql = queries.map((query) => query.sql).join("\n");
   assert.equal(migrationSql.includes("CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_sessions_provider_thread_unique"), false);
-  assert.equal(migrationSql.includes("standalone_gateway_sessions_provider_workspace_thread_unique"), true);
+  assert.equal(migrationSql.includes("standalone_gateway_sessions_provider_workspace_thread_unique"), false);
   assert.equal(migrationSql.includes("standalone_gateway_jobs_active_session_idx"), true);
 });
 
 test("standalone retention migration indexes prune and active-job lookups", () => {
-  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0003_standalone_gateway_retention_indexes");
+  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0002_standalone_gateway_retention_indexes");
   assert.ok(migration);
   assert.match(migration.sql, /standalone_gateway_sessions_retention_idx/);
   assert.match(migration.sql, /WHERE status IN \('idle', 'failed', 'completed'\)/);
@@ -630,10 +629,15 @@ test("standalone retention migration indexes prune and active-job lookups", () =
   assert.match(migration.sql, /standalone_gateway_artifacts_session_retention_idx/);
 });
 
-test("standalone identity migration drops legacy provider-user uniqueness by catalog lookup", () => {
-  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0002_standalone_gateway_identity_authorization");
+test("standalone core schema starts with workspace-aware identity authorization", () => {
+  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0001_standalone_gateway_core");
   assert.ok(migration);
-  assert.match(migration.sql, /pg_constraint/);
-  assert.match(migration.sql, /DROP CONSTRAINT %I/);
-  assert.match(migration.sql, /ARRAY\['provider', 'external_user_id'\]/);
+  assert.match(migration.sql, /provider_workspace_id text NOT NULL DEFAULT ''/);
+  assert.match(migration.sql, /standalone_gateway_sessions_provider_workspace_thread_unique/);
+  assert.match(migration.sql, /standalone_gateway_channel_identities_provider_workspace_user_unique/);
+  assert.match(migration.sql, /CHECK \(role IN \('owner', 'admin', 'member', 'approver', 'viewer'\)\)/);
+  assert.match(migration.sql, /CHECK \(status IN \('active', 'disabled'\)\)/);
+  assert.doesNotMatch(migration.sql, /pg_constraint/);
+  assert.doesNotMatch(migration.sql, /DROP CONSTRAINT/);
+  assert.doesNotMatch(migration.sql, /UNIQUE \(provider, external_user_id\)/);
 });

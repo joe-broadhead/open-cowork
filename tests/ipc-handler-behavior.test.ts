@@ -573,7 +573,7 @@ function installCloudWorkspace(context: IpcHandlerContext, adapter: CloudWorkspa
 }
 
 function withPromptProviderConfig() {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-prompt-provider-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-prompt-provider-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
   const providerId = 'acme-provider'
@@ -2436,7 +2436,7 @@ test('settings handlers sync only portable settings for cloud workspaces', async
 })
 
 test('local credential editor IPC masks secret fields and preserves them on save', async () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-ipc-masked-credentials-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-ipc-masked-credentials-'))
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -2509,7 +2509,7 @@ test('local credential editor IPC masks secret fields and preserves them on save
 })
 
 test('provider connection test IPC syncs saved API auth and validates live models', async () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-ipc-provider-test-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-ipc-provider-test-'))
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -3370,7 +3370,7 @@ test('dialog:save-text path policy keeps exports as non-sensitive json files', (
 })
 
 test('dialog:save-text writes private export files atomically', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-save-text-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-save-text-'))
   try {
     const outputPath = join(tempRoot, 'agent.cowork-agent.json')
     saveTextExportFile(outputPath, '{"ok":true}\n')

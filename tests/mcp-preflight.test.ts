@@ -49,7 +49,7 @@ async function withRemoteMcpConfig(
   fn: () => Promise<void>,
   mcpOverrides: Partial<BundleMcp> = {},
 ) {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mcp-preflight-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-preflight-'))
   const configDir = join(tempRoot, 'config')
   const userDataDir = join(tempRoot, 'user-data')
   mkdirSync(configDir, { recursive: true })

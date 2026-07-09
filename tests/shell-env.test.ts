@@ -8,7 +8,7 @@ test('isTrustedShellPath accepts only known shell binaries', () => {
   const trustedShell = ['/bin/sh', '/bin/bash', '/bin/zsh'].find((candidate) => isTrustedShellPath(candidate))
   assert.ok(trustedShell, 'expected at least one trusted shell path on the host')
 
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-shell-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-shell-'))
   const fakeShell = join(tempRoot, 'zsh')
   writeFileSync(fakeShell, '#!/bin/sh\nenv -0\n')
 

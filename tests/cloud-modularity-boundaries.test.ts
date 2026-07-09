@@ -152,21 +152,21 @@ test('large cloud source files are documented exceptions', () => {
   }
 })
 
-test('gateway token delivery-owner migrations preserve upgrade compatibility', () => {
-  assert.match(
-    postgresSchema,
-    /INSERT INTO cloud_api_token_channel_binding_grants[\s\S]+tokens\.scopes @> '\["gateway"\]'::jsonb[\s\S]+NOT EXISTS \([\s\S]+cloud_schema_migrations[\s\S]+CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID/,
-    'gateway API token binding migration must backfill active legacy gateway tokens',
-  )
+test('gateway token delivery-owner paths require explicit current grants and owners', () => {
   assert.match(
     postgresChannelDeliveriesDomain,
-    /last_claimed_by = COALESCE\(last_claimed_by, \$8\)/,
-    'legacy delivery ACKs must backfill last_claimed_by when the gateway token owner is known',
+    /last_claimed_by = COALESCE\(\$8, last_claimed_by\)/,
+    'delivery ACKs must preserve the current owner or set an explicit current owner',
   )
-  assert.match(
+  assert.doesNotMatch(
+    postgresSchema,
+    /INSERT INTO cloud_api_token_channel_binding_grants[\s\S]+tokens\.scopes @> '\["gateway"\]'::jsonb/,
+    'gateway API token grant migration must not backfill from broad legacy gateway scopes',
+  )
+  assert.doesNotMatch(
     postgresChannelDeliveriesDomain,
     /last_claimed_by IS NULL AND \$7::text IS NOT NULL AND claimed_by = \$7/,
-    'legacy claimed deliveries must remain ACKable when claimed_by still matches',
+    'delivery ACKs must not accept legacy ownerless claims when a token owner is required',
   )
 })
 

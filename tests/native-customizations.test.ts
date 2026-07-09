@@ -40,7 +40,7 @@ function withIsolatedPermissionSettings<T>(name: string, run: () => T): T {
 }
 
 test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () => {
-  const projectRoot = testTempDir('opencowork-native-config-')
+  const projectRoot = testTempDir('open-cowork-native-config-')
   const configPath = join(projectRoot, '.opencowork', 'config.jsonc')
   const metadataPath = join(projectRoot, '.opencowork', 'mcp.open-cowork.json')
   mkdirSync(join(projectRoot, '.opencowork'), { recursive: true })
@@ -110,7 +110,7 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
 })
 
 test('custom MCP auth opt-ins round-trip through managed sidecar metadata', () => {
-  const projectRoot = testTempDir('opencowork-native-mcp-flags-')
+  const projectRoot = testTempDir('open-cowork-native-mcp-flags-')
 
   try {
     saveCustomMcp({
@@ -141,7 +141,7 @@ test('custom MCP auth opt-ins round-trip through managed sidecar metadata', () =
 })
 
 test('custom MCP definitions reject unbounded renderer payloads', () => {
-  const projectRoot = testTempDir('opencowork-native-mcp-limits-')
+  const projectRoot = testTempDir('open-cowork-native-mcp-limits-')
 
   try {
     assert.throws(
@@ -163,7 +163,7 @@ test('custom MCP definitions reject unbounded renderer payloads', () => {
 })
 
 test('custom agents derive tool and skill selections from native markdown permissions without a sidecar', () => {
-  const projectRoot = testTempDir('opencowork-native-agents-')
+  const projectRoot = testTempDir('open-cowork-native-agents-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
   const configPath = join(projectRoot, '.opencowork', 'config.json')
 
@@ -203,7 +203,7 @@ Work carefully.
 })
 
 test('custom agent builder selections round-trip through managed sidecar metadata', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-loadout-')
+  const projectRoot = testTempDir('open-cowork-native-agent-loadout-')
 
   try {
     saveCustomAgent(
@@ -292,7 +292,7 @@ test('custom agent builder selections round-trip through managed sidecar metadat
 })
 
 test('removeCustomAgent removes contained legacy names while rejecting path-like names', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-remove-policy-')
+  const projectRoot = testTempDir('open-cowork-native-agent-remove-policy-')
   const coworkDir = join(projectRoot, '.opencowork')
   const agentsDir = join(coworkDir, 'agents')
   mkdirSync(agentsDir, { recursive: true })
@@ -316,7 +316,7 @@ test('removeCustomAgent removes contained legacy names while rejecting path-like
 })
 
 test('runtime guidance is backfilled into existing native custom agent markdown without polluting editor instructions', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-guidance-')
+  const projectRoot = testTempDir('open-cowork-native-agent-guidance-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
 
   mkdirSync(agentsDir, { recursive: true })
@@ -355,8 +355,8 @@ Use Nova carefully.
   }
 })
 
-test('custom agent runtime guidance preserves explicit task delegation opt-in', () => withIsolatedPermissionSettings('opencowork-native-agent-task-settings-', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-task-optin-')
+test('custom agent runtime guidance preserves explicit task delegation opt-in', () => withIsolatedPermissionSettings('open-cowork-native-agent-task-settings-', () => {
+  const projectRoot = testTempDir('open-cowork-native-agent-task-optin-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
 
   mkdirSync(agentsDir, { recursive: true })
@@ -387,8 +387,8 @@ Coordinate carefully.
   }
 }))
 
-test('custom agent runtime guidance merges inline permission maps without duplicating keys', () => withIsolatedPermissionSettings('opencowork-native-agent-inline-settings-', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-inline-permission-')
+test('custom agent runtime guidance merges inline permission maps without duplicating keys', () => withIsolatedPermissionSettings('open-cowork-native-agent-inline-settings-', () => {
+  const projectRoot = testTempDir('open-cowork-native-agent-inline-permission-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
 
   mkdirSync(agentsDir, { recursive: true })
@@ -420,7 +420,7 @@ Research carefully.
 }))
 
 test('runtime guidance rewrite failures do not abort startup sync', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-guidance-readonly-')
+  const projectRoot = testTempDir('open-cowork-native-agent-guidance-readonly-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
   const agentPath = join(agentsDir, 'analyst.md')
 
@@ -448,7 +448,7 @@ Use Nova carefully.
 })
 
 test('custom agent avatars round-trip through the managed sidecar metadata', () => {
-  const projectRoot = testTempDir('opencowork-native-agent-avatar-')
+  const projectRoot = testTempDir('open-cowork-native-agent-avatar-')
 
   try {
     saveCustomAgent(

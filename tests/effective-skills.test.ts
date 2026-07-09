@@ -14,7 +14,7 @@ function testTempDir(prefix: string) {
 }
 
 test('effective skill bundle file reads reject traversal and symlinks outside the bundle root', async () => {
-  const tempRoot = testTempDir('opencowork-effective-skills-')
+  const tempRoot = testTempDir('open-cowork-effective-skills-')
   const configDir = join(tempRoot, 'config')
   const downstreamRoot = join(tempRoot, 'downstream')
   const skillRoot = join(downstreamRoot, 'skills', 'leak-test')
@@ -72,7 +72,7 @@ test('effective skill bundle file reads reject traversal and symlinks outside th
 })
 
 test('bundled skill discovery skips symlinked directories outside the configured root', () => {
-  const tempRoot = testTempDir('opencowork-skill-discovery-')
+  const tempRoot = testTempDir('open-cowork-skill-discovery-')
   const skillRoot = join(tempRoot, 'skills')
   const nestedRoot = join(skillRoot, 'nested')
   const realSkill = join(nestedRoot, 'safe-skill')
@@ -107,7 +107,7 @@ test('bundled skill discovery skips symlinked directories outside the configured
 })
 
 test('bundled skill discovery rejects symlinked SKILL.md definitions', () => {
-  const tempRoot = testTempDir('opencowork-skill-definition-')
+  const tempRoot = testTempDir('open-cowork-skill-definition-')
   const skillRoot = join(tempRoot, 'skills')
   const leakySkill = join(skillRoot, 'leaky-skill')
   const outsideSkillDefinition = join(tempRoot, 'SKILL.md')
@@ -127,7 +127,7 @@ test('bundled skill discovery rejects symlinked SKILL.md definitions', () => {
 })
 
 test('bundled skill index prefers root order and shallower duplicate bundles', () => {
-  const tempRoot = testTempDir('opencowork-skill-index-')
+  const tempRoot = testTempDir('open-cowork-skill-index-')
   const firstRoot = join(tempRoot, 'first', 'skills')
   const secondRoot = join(tempRoot, 'second', 'skills')
   const firstNested = join(firstRoot, 'nested', 'duplicate-skill')
@@ -156,7 +156,7 @@ test('bundled skill index prefers root order and shallower duplicate bundles', (
 })
 
 test('bundled skill index accepts symlinked bundle roots while rejecting nested symlink escapes', () => {
-  const tempRoot = testTempDir('opencowork-skill-index-symlink-root-')
+  const tempRoot = testTempDir('open-cowork-skill-index-symlink-root-')
   const realRoot = join(tempRoot, 'real-skills')
   const linkedRoot = join(tempRoot, 'linked-skills')
   const skillDir = join(realRoot, 'linked-skill')
@@ -181,7 +181,7 @@ test('bundled skill index accepts symlinked bundle roots while rejecting nested 
 })
 
 test('bundled skill index reflects nested tree changes without a manual cache clear', () => {
-  const tempRoot = testTempDir('opencowork-skill-index-refresh-')
+  const tempRoot = testTempDir('open-cowork-skill-index-refresh-')
   const skillRoot = join(tempRoot, 'skills')
   const firstSkill = join(skillRoot, 'first-skill')
   const nestedSkill = join(skillRoot, 'vendor', 'nested-skill')
@@ -209,7 +209,7 @@ test('bundled skill index reflects nested tree changes without a manual cache cl
 })
 
 test('warmed bundled skill index stays stable until explicit invalidation', () => {
-  const tempRoot = testTempDir('opencowork-skill-index-warm-')
+  const tempRoot = testTempDir('open-cowork-skill-index-warm-')
   const skillRoot = join(tempRoot, 'skills')
   const firstSkill = join(skillRoot, 'first-skill')
   const lateSkill = join(skillRoot, 'late-skill')
@@ -237,7 +237,7 @@ test('warmed bundled skill index stays stable until explicit invalidation', () =
 })
 
 test('effective skill bundle file reads return null when a validated file becomes unreadable', async () => {
-  const tempRoot = testTempDir('opencowork-effective-skills-unreadable-')
+  const tempRoot = testTempDir('open-cowork-effective-skills-unreadable-')
   const configDir = join(tempRoot, 'config')
   const downstreamRoot = join(tempRoot, 'downstream')
   const skillRoot = join(downstreamRoot, 'skills', 'unreadable-test')
@@ -283,7 +283,7 @@ test('effective skill bundle file reads return null when a validated file become
 })
 
 test('built-in skill bundles are materialized in one pass while only valid custom skills shadow configured bundles', () => {
-  const tempRoot = testTempDir('opencowork-effective-builtins-')
+  const tempRoot = testTempDir('open-cowork-effective-builtins-')
   const configDir = join(tempRoot, 'config')
   const downstreamRoot = join(tempRoot, 'downstream')
   const downstreamSkills = join(downstreamRoot, 'skills')

@@ -1,5 +1,5 @@
 import { getAppPathHost, getDesktopShellHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   SMALL_MODEL_USE_MAIN,
@@ -91,19 +91,6 @@ function normalizeRuntimePermissionPolicy(
   return isRuntimePermissionPolicy(requested)
     ? clampRuntimePermissionPolicy(requested, maximum)
     : undefined
-}
-
-function migrateRuntimePermissionPolicy(
-  requested: unknown,
-  legacyEnabled: unknown,
-  maximum: RuntimePermissionPolicy,
-  fallback: RuntimePermissionPolicy,
-): RuntimePermissionPolicy {
-  const normalized = normalizeRuntimePermissionPolicy(requested, maximum)
-  if (normalized) return normalized
-  if (legacyEnabled === false) return 'deny'
-  if (legacyEnabled === true) return clampRuntimePermissionPolicy('ask', maximum)
-  return fallback
 }
 
 function resolveProviderModelSelection(
@@ -312,60 +299,26 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   return update
 }
 
-function migrateLegacySettings(rawInput: unknown): AppSettings {
+function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
   assertSupportedSettingsSchemaVersion(rawInput)
   const raw = asSettingsRecord(rawInput)
   const defaults = createDefaults()
   const appPermissions = getAppConfig().permissions
-  const bashPermission = migrateRuntimePermissionPolicy(
-    raw?.bashPermission,
-    raw?.enableBash,
-    appPermissions.bash,
-    defaults.bashPermission,
-  )
-  const fileWritePermission = migrateRuntimePermissionPolicy(
-    raw?.fileWritePermission,
-    raw?.enableFileWrite,
-    appPermissions.fileWrite,
-    defaults.fileWritePermission,
-  )
-  const webPermission = migrateRuntimePermissionPolicy(
-    raw?.webPermission,
-    undefined,
-    appPermissions.web,
-    defaults.webPermission,
-  )
-  const taskPermission = migrateRuntimePermissionPolicy(
-    raw?.taskPermission,
-    undefined,
-    appPermissions.task,
-    defaults.taskPermission,
-  )
-  const externalDirectoryPermission = migrateRuntimePermissionPolicy(
-    raw?.externalDirectoryPermission,
-    undefined,
-    'allow',
-    defaults.externalDirectoryPermission,
-  )
-  const mcpPermission = migrateRuntimePermissionPolicy(
-    raw?.mcpPermission,
-    undefined,
-    'allow',
-    defaults.mcpPermission,
-  )
+  const bashPermission = normalizeRuntimePermissionPolicy(raw?.bashPermission, appPermissions.bash) || defaults.bashPermission
+  const fileWritePermission = normalizeRuntimePermissionPolicy(raw?.fileWritePermission, appPermissions.fileWrite) || defaults.fileWritePermission
+  const webPermission = normalizeRuntimePermissionPolicy(raw?.webPermission, appPermissions.web) || defaults.webPermission
+  const taskPermission = normalizeRuntimePermissionPolicy(raw?.taskPermission, appPermissions.task) || defaults.taskPermission
+  const externalDirectoryPermission = normalizeRuntimePermissionPolicy(raw?.externalDirectoryPermission, 'allow') || defaults.externalDirectoryPermission
+  const mcpPermission = normalizeRuntimePermissionPolicy(raw?.mcpPermission, 'allow') || defaults.mcpPermission
   const next: AppSettings = {
     ...defaults,
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedProviderId: typeof raw?.selectedProviderId === 'string'
       ? raw.selectedProviderId
-      : typeof raw?.provider === 'string'
-        ? (raw.provider === 'google-vertex' ? 'vertex' : raw.provider)
-        : defaults.selectedProviderId,
+      : defaults.selectedProviderId,
     selectedModelId: typeof raw?.selectedModelId === 'string'
       ? raw.selectedModelId
-      : typeof raw?.defaultModel === 'string'
-        ? raw.defaultModel
-        : defaults.selectedModelId,
+      : defaults.selectedModelId,
     selectedSmallModelId: typeof raw?.selectedSmallModelId === 'string'
       ? raw.selectedSmallModelId
       : null,
@@ -393,66 +346,15 @@ function migrateLegacySettings(rawInput: unknown): AppSettings {
     runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
     runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
     windowZoomFactor: normalizeWindowZoomFactor(raw?.windowZoomFactor) ?? defaults.windowZoomFactor,
-    workflowLaunchAtLogin: raw?.workflowLaunchAtLogin === true || raw?.automationLaunchAtLogin === true,
-    workflowRunInBackground: raw?.workflowRunInBackground === true || raw?.automationRunInBackground === true,
-    workflowDesktopNotifications: raw?.workflowDesktopNotifications !== false && raw?.automationDesktopNotifications !== false,
+    workflowLaunchAtLogin: raw?.workflowLaunchAtLogin === true,
+    workflowRunInBackground: raw?.workflowRunInBackground === true,
+    workflowDesktopNotifications: raw?.workflowDesktopNotifications !== false,
     workflowQuietHoursStart: typeof raw?.workflowQuietHoursStart === 'string' && raw.workflowQuietHoursStart.trim()
       ? raw.workflowQuietHoursStart.trim()
-      : typeof raw?.automationQuietHoursStart === 'string' && raw.automationQuietHoursStart.trim()
-        ? raw.automationQuietHoursStart.trim()
-        : defaults.workflowQuietHoursStart,
+      : defaults.workflowQuietHoursStart,
     workflowQuietHoursEnd: typeof raw?.workflowQuietHoursEnd === 'string' && raw.workflowQuietHoursEnd.trim()
       ? raw.workflowQuietHoursEnd.trim()
-      : typeof raw?.automationQuietHoursEnd === 'string' && raw.automationQuietHoursEnd.trim()
-        ? raw.automationQuietHoursEnd.trim()
-        : defaults.workflowQuietHoursEnd,
-  }
-
-  const legacyProviderCredentials = next.providerCredentials['google-vertex']
-  if (legacyProviderCredentials) {
-    next.providerCredentials.vertex = {
-      ...(legacyProviderCredentials || {}),
-      ...(next.providerCredentials.vertex || {}),
-    }
-    delete next.providerCredentials['google-vertex']
-  }
-
-  const legacyVertex = {
-    projectId: typeof raw?.gcpProjectId === 'string' ? raw.gcpProjectId : '',
-    location: typeof raw?.gcpRegion === 'string' ? raw.gcpRegion : '',
-  }
-  if (legacyVertex.projectId || legacyVertex.location) {
-    next.providerCredentials.vertex = {
-      ...(next.providerCredentials.vertex || {}),
-      ...(legacyVertex.projectId ? { projectId: legacyVertex.projectId } : {}),
-      ...(legacyVertex.location ? { location: legacyVertex.location } : {}),
-    }
-  }
-
-  const legacyDatabricks = {
-    host: typeof raw?.databricksHost === 'string' ? raw.databricksHost : '',
-    token: typeof raw?.databricksToken === 'string' ? raw.databricksToken : '',
-  }
-  if (legacyDatabricks.host || legacyDatabricks.token) {
-    next.providerCredentials.databricks = {
-      ...(next.providerCredentials.databricks || {}),
-      ...(legacyDatabricks.host ? { host: legacyDatabricks.host } : {}),
-      ...(legacyDatabricks.token ? { token: legacyDatabricks.token } : {}),
-    }
-  }
-
-  if (typeof raw?.githubToken === 'string' && raw.githubToken.trim()) {
-    next.integrationCredentials.github = {
-      ...(next.integrationCredentials.github || {}),
-      token: raw.githubToken.trim(),
-    }
-  }
-
-  if (typeof raw?.perplexityApiKey === 'string' && raw.perplexityApiKey.trim()) {
-    next.integrationCredentials.perplexity = {
-      ...(next.integrationCredentials.perplexity || {}),
-      apiKey: raw.perplexityApiKey.trim(),
-    }
+      : defaults.workflowQuietHoursEnd,
   }
 
   return next
@@ -462,7 +364,7 @@ function getSettingsPath() {
   return join(getAppDataDir(), 'settings.enc')
 }
 
-function getLegacySettingsPath() {
+function getPlaintextSettingsPath() {
   return join(getAppDataDir(), 'settings.json')
 }
 
@@ -501,17 +403,6 @@ function requireSafeStorage() {
 export function setSettingsSecretStorageForTests(adapter: SecretStorageAdapter | null) {
   settingsSecretStorageForTests = adapter
   settingsCache = null
-}
-
-function decryptLegacyDevelopmentSecret(raw: Buffer) {
-  const testDecrypt = settingsSecretStorageForTests?.decryptString
-  if (testDecrypt) {
-    try { return testDecrypt(raw) } catch { return null }
-  }
-  if (getAppPathHost()?.isPackaged) return null
-  const safeStorage = getSafeStorageHost()
-  if (!safeStorage?.isEncryptionAvailable() || !safeStorage.decryptString) return null
-  try { return safeStorage.decryptString(raw) } catch { return null }
 }
 
 // Sentinel rendered into masked credential fields returned by
@@ -594,7 +485,7 @@ export function loadSettings(): AppSettings {
       const safeStorage = requireSafeStorage()
       const raw = readFileSync(encryptedPath)
       const decrypted = safeStorage.decryptString(raw)
-      const result = migrateLegacySettings(JSON.parse(decrypted))
+      const result = normalizeSettingsFromDisk(JSON.parse(decrypted))
       settingsCache = result
       return result
     } catch (err: unknown) {
@@ -603,38 +494,17 @@ export function loadSettings(): AppSettings {
     }
   }
 
-  if (existsSync(encryptedPath) && storageMode === 'plaintext') {
-    try {
-      const raw = readFileSync(encryptedPath)
-      const decrypted = decryptLegacyDevelopmentSecret(raw)
-      if (!decrypted) throw new Error('safeStorage could not decrypt legacy development settings')
-      const result = migrateLegacySettings(JSON.parse(decrypted))
-      settingsCache = result
+  if (storageMode === 'plaintext') {
+    const plaintextPath = getPlaintextSettingsPath()
+    if (existsSync(plaintextPath)) {
       try {
-        saveSettings(result)
-        try { rmSync(encryptedPath, { force: true }) } catch { /* best effort */ }
-      } catch (rewriteErr: unknown) {
-        log('error', `Settings development storage migration rewrite failed: ${rewriteErr instanceof Error ? rewriteErr.message : String(rewriteErr)}`)
-      }
-      return result
-    } catch (err: unknown) {
-      if (isUnsupportedSettingsSchemaVersionError(err)) throw err
-      log('error', `Settings development encrypted load failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
-  if (!getAppPathHost()?.isPackaged) {
-    const legacyPath = getLegacySettingsPath()
-    if (existsSync(legacyPath)) {
-      try {
-        const raw = readFileSync(legacyPath, 'utf-8')
-        const result = migrateLegacySettings(JSON.parse(raw))
+        const raw = readFileSync(plaintextPath, 'utf-8')
+        const result = normalizeSettingsFromDisk(JSON.parse(raw))
         settingsCache = result
-        saveSettings(result)
         return result
       } catch (err: unknown) {
         if (isUnsupportedSettingsSchemaVersionError(err)) throw err
-        log('error', `Settings legacy load failed: ${err instanceof Error ? err.message : String(err)}`)
+        log('error', `Settings plaintext load failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
@@ -670,7 +540,7 @@ export function saveSettings(settings: Partial<AppSettings>) {
     // truncated, wiping the user's provider keys on next launch.
     writeFileAtomic(getSettingsPath(), safeStorage.encryptString(json), { mode: 0o600 })
   } else if (storageMode === 'plaintext') {
-    writeFileAtomic(getLegacySettingsPath(), json, { mode: 0o600 })
+    writeFileAtomic(getPlaintextSettingsPath(), json, { mode: 0o600 })
   } else {
     const message = 'Secure storage unavailable on this system. Open Cowork cannot persist settings in production without OS-backed secret storage.'
     log('error', message)

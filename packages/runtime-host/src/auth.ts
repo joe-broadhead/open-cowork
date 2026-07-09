@@ -128,35 +128,6 @@ function createGoogleOAuthClient(oauth: GoogleOAuthConfig, redirectUri?: string)
   })
 }
 
-function decryptLegacyDevelopmentSecret(raw: Buffer) {
-  const testDecrypt = authSecretStorageForTests?.decryptString
-  if (testDecrypt) {
-    try { return testDecrypt(raw) } catch { return null }
-  }
-  if (getAppPathHost()?.isPackaged) return null
-  const safeStorage = getSafeStorageHost()
-  if (!safeStorage?.isEncryptionAvailable() || !safeStorage.decryptString) return null
-  try { return safeStorage.decryptString(raw) } catch { return null }
-}
-
-function migrateLegacyEncryptedDevelopmentTokens(path: string, raw: Buffer) {
-  const decrypted = decryptLegacyDevelopmentSecret(raw)
-  if (!decrypted) return null
-  try {
-    const tokens = JSON.parse(decrypted) as StoredTokens
-    try {
-      saveTokens(tokens)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      log('auth', `Could not rewrite legacy encrypted development tokens at ${path}: ${message}`)
-      cachedTokens = { path, tokens }
-    }
-    return tokens
-  } catch {
-    return null
-  }
-}
-
 function loadTokens(): StoredTokens | null {
   const path = getTokenPath()
   if (cachedTokens?.path === path) return cachedTokens.tokens
@@ -176,12 +147,12 @@ function loadTokens(): StoredTokens | null {
         return tokens
       } catch {
         // Encryption is available but the on-disk blob can't be decrypted
-        // (either corrupted or a legacy plaintext install from before
-        // safeStorage wrapping was added). We intentionally do NOT fall
-        // back to reading plaintext — keeping refresh tokens readable on
-        // disk by any other process with user perms is exactly what the
-        // encryption step is protecting against. Instead, wipe the file
-        // and force re-auth; the next save will be encrypted.
+        // (corrupted, wrong backend, or written by a different profile).
+        // We intentionally do NOT fall back to reading plaintext: keeping
+        // refresh tokens readable on disk by any other process with user
+        // perms is exactly what the encryption step is protecting against.
+        // Instead, wipe the file and force re-auth; the next save will be
+        // encrypted.
         log('auth', `Could not decrypt stored tokens at ${path}; deleting and requiring re-authentication.`)
         try { rmSync(path, { force: true }) } catch { /* ignore */ }
         cachedTokens = { path, tokens: null }
@@ -194,17 +165,8 @@ function loadTokens(): StoredTokens | null {
       return null
     }
     // Dev-only plaintext fallback when safeStorage is unavailable or only
-    // offers Linux's non-protective `basic_text` backend. Existing dev
-    // installs may still have an encrypted basic_text blob from earlier
-    // builds; migrate it once instead of silently dropping auth state.
-    let tokens: StoredTokens
-    try {
-      tokens = JSON.parse(raw.toString('utf-8'))
-    } catch (error) {
-      const migrated = migrateLegacyEncryptedDevelopmentTokens(path, raw)
-      if (migrated) return migrated
-      throw error
-    }
+    // offers Linux's non-protective `basic_text` backend.
+    const tokens = JSON.parse(raw.toString('utf-8')) as StoredTokens
     cachedTokens = { path, tokens }
     return tokens
   } catch {

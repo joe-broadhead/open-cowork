@@ -9,7 +9,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 test('custom agent summaries keep agents visible when app-owned skills need frontmatter healing', async () => {
-  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-agent-regression-'))
+  const tempUserData = mkdtempSync(join(tmpdir(), 'open-cowork-agent-regression-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
@@ -60,7 +60,7 @@ test('custom agent summaries keep agents visible when app-owned skills need fron
 })
 
 test('custom agent markdown carries SDK-native inference fields without config.agent duplication', () => {
-  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-agent-frontmatter-'))
+  const tempUserData = mkdtempSync(join(tmpdir(), 'open-cowork-agent-frontmatter-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
@@ -111,7 +111,7 @@ test('custom agent markdown carries SDK-native inference fields without config.a
 })
 
 test('custom agents can explicitly opt into Task delegation', async () => {
-  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-agent-task-tool-'))
+  const tempUserData = mkdtempSync(join(tmpdir(), 'open-cowork-agent-task-tool-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData

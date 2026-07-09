@@ -972,7 +972,7 @@ test('gateway config supports multiple instance ids for one provider kind', () =
       credentials: { sharedSecret: 'ci-secret' },
       settings: { deliveryUrl: 'https://bridge.example.test/ci' },
     }],
-  }, operatorEnv), /safe legacy provider id/)
+  }, operatorEnv), /must equal webhook or start with webhook-/)
 })
 
 test('gateway config loads the shared open-cowork config gateway section with allowlisted env placeholders', () => {
@@ -999,9 +999,9 @@ test('gateway config loads the shared open-cowork config gateway section with al
           port: 0,
         },
         providers: [{
-          id: 'acme-telegram',
+          id: 'telegram-acme',
           kind: 'telegram',
-          channelBindingId: 'acme-telegram',
+          channelBindingId: 'telegram-acme',
           credentials: {
             botToken: '{env:ACME_TELEGRAM_BOT_TOKEN}',
             webhookSecret: '{env:ACME_TELEGRAM_WEBHOOK_SECRET}',
@@ -1026,7 +1026,7 @@ test('gateway config loads the shared open-cowork config gateway section with al
     assert.equal(config.branding.productName, 'Acme Cowork')
     assert.equal(config.cloud.baseUrl, 'https://cowork.acme.example')
     assert.equal(config.cloud.serviceToken, 'service-token-from-env')
-    assert.equal(config.providers[0]?.id, 'acme-telegram')
+    assert.equal(config.providers[0]?.id, 'telegram-acme')
     assert.equal(config.providers[0]?.credentials.botToken, 'telegram-token-from-central-config')
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
@@ -1049,9 +1049,9 @@ test('gateway config overlays provider env credentials onto shared provider bind
           webhookDeliveryMs: 1234,
         },
         providers: [{
-          id: 'acme-telegram',
+          id: 'telegram-acme',
           kind: 'telegram',
-          channelBindingId: 'acme-telegram',
+          channelBindingId: 'telegram-acme',
           settings: {
             mode: 'webhook',
             publicBaseUrl: 'https://cowork-gateway.acme.example',
@@ -1071,8 +1071,8 @@ test('gateway config overlays provider env credentials onto shared provider bind
     })
 
     assert.equal(config.providers.length, 1)
-    assert.equal(config.providers[0]?.id, 'acme-telegram')
-    assert.equal(config.providers[0]?.channelBindingId, 'acme-telegram')
+    assert.equal(config.providers[0]?.id, 'telegram-acme')
+    assert.equal(config.providers[0]?.channelBindingId, 'telegram-acme')
     assert.equal(config.providers[0]?.credentials.botToken, 'telegram-token-from-env')
     assert.equal(config.providers[0]?.credentials.webhookSecret, 'telegram-secret-from-env')
     assert.equal(config.providers[0]?.settings.mode, 'webhook')

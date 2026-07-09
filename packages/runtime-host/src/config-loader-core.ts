@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
@@ -259,9 +259,8 @@ export function getDataDirName() {
 }
 
 // Kebab-case filesystem namespace used for the `.<ns>/` project overlay
-// directory and the `.<ns>.json` sidecar suffix. Falls back to "opencowork"
-// so existing installs keep writing `.opencowork/` even if a downstream
-// forgets to set the field.
+// directory and the `.<ns>.json` sidecar suffix. The upstream config keeps
+// `.opencowork/` intentionally as its documented on-disk namespace.
 export function getProjectNamespace() {
   const raw = getBranding().projectNamespace?.trim()
   return raw && /^[a-z0-9][a-z0-9-]*$/.test(raw) ? raw : 'opencowork'
@@ -289,25 +288,10 @@ export function getAppDataDir() {
   if (dataDirCache) return dataDirCache
 
   const userDataRoot = getUserDataRoot()
-  const preferredDir = userDataRoot
-  const legacyDirs = Array.from(new Set([
-    join(userDataRoot, getDataDirName()),
-    join(userDataRoot, 'cowork'),
-  ])).filter((path) => path !== preferredDir)
+  mkdirSync(userDataRoot, { recursive: true })
 
-  mkdirSync(preferredDir, { recursive: true })
-
-  for (const legacyDir of legacyDirs) {
-    if (!existsSync(legacyDir)) continue
-    try {
-      cpSync(legacyDir, preferredDir, { recursive: true, force: false })
-    } catch {
-      // Best-effort migration only. Existing root data wins over legacy copies.
-    }
-  }
-
-  dataDirCache = preferredDir
-  return preferredDir
+  dataDirCache = userDataRoot
+  return dataDirCache
 }
 
 export function resolveProviderDefaultModel(

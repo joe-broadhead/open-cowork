@@ -1269,14 +1269,7 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     status: 'dead',
     updatedAt: new Date('2026-01-01T00:00:03.000Z'),
   }), null)
-  const legacyDeliveryRecord = (store as unknown as {
-    channelDeliveriesDomain: {
-      deliveries: Map<string, { lastClaimedBy: string | null }>
-    }
-  }).channelDeliveriesDomain.deliveries.get(delivery.deliveryId)
-  assert.ok(legacyDeliveryRecord)
-  legacyDeliveryRecord.lastClaimedBy = null
-  const legacyAck = store.ackChannelDelivery({
+  const ack = store.ackChannelDelivery({
     orgId: org.orgId,
     deliveryId: delivery.deliveryId,
     claimedBy: 'gateway-instance-1',
@@ -1284,8 +1277,8 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     status: 'sent',
     updatedAt: new Date('2026-01-01T00:00:03.000Z'),
   })
-  assert.equal(legacyAck?.status, 'sent')
-  assert.equal(legacyAck?.lastClaimedBy, 'gateway-token-1')
+  assert.equal(ack?.status, 'sent')
+  assert.equal(ack?.lastClaimedBy, 'gateway-token-1')
 
   const firstProviderEvent = store.claimChannelProviderEvent({
     orgId: org.orgId,

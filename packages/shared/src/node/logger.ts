@@ -51,7 +51,7 @@ function escapeRegex(value: string) {
 }
 
 function isKnownLogFile(file: string) {
-  const prefixes = Array.from(new Set([resolveStorage().filePrefix, 'cowork', 'open-cowork']))
+  const prefixes = Array.from(new Set([resolveStorage().filePrefix, 'open-cowork']))
   return prefixes.some((prefix) => new RegExp(`^${escapeRegex(prefix)}-\\d{4}-\\d{2}-\\d{2}\\.log(?:\\.\\d+)?$`).test(file))
 }
 

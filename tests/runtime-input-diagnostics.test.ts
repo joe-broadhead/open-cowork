@@ -9,7 +9,7 @@ import { tmpdir } from 'os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getRuntimeInputDiagnostics } from '../apps/desktop/src/main/runtime-input-diagnostics.ts'
 test('getRuntimeInputDiagnostics reports effective provider inputs and override sources', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-inputs-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-inputs-'))
   const configDir = join(tempRoot, 'config')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -156,7 +156,7 @@ test('getRuntimeInputDiagnostics reports built-in provider credential overrides 
 })
 
 test('getRuntimeInputDiagnostics reports auth-pending and override conflicts with stable reason codes', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-provenance-conflicts-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-provenance-conflicts-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const previousConfigPath = process.env.OPEN_COWORK_CONFIG_PATH
@@ -243,7 +243,7 @@ Custom override.
 })
 
 test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking command details', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-provenance-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-provenance-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
@@ -283,7 +283,7 @@ test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking c
 })
 
 test('getRuntimeInputDiagnostics explains custom skills disabled by managed policy', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-custom-skill-policy-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-custom-skill-policy-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
