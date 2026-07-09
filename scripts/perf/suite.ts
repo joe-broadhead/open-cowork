@@ -3,6 +3,14 @@ import { SessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { buildCoworkRuntimePermissionConfig } from '@open-cowork/runtime-host/runtime-permissions'
 import { summarizeCustomAgents } from '@open-cowork/runtime-host/custom-agents-utils'
 import { buildOpenCoworkAgentConfig } from '@open-cowork/runtime-host/agent-config'
+import { buildLaunchpadFeedFromSources } from '@open-cowork/runtime-host/launchpad/launchpad-service'
+import {
+  clearArtifactLifecycleStoreCache,
+  indexLocalSessionArtifactsFromView,
+  setArtifactLifecycleDatabaseForTests,
+} from '@open-cowork/runtime-host/artifact-index'
+import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -46,11 +54,238 @@ function createSeededThreadIndexStore() {
   }
 }
 
+function perfIso(day: number, minute: number, second = 0) {
+  return new Date(Date.UTC(2033, 0, day, 0, minute, second)).toISOString()
+}
+
+function createLaunchpadFeedFixture() {
+  const projects = Array.from({ length: 8 }, (_, index) => ({
+    id: `perf-project-${index}`,
+    kind: 'project',
+    workspaceId: 'local',
+    ownerAuthority: 'local',
+    executionAuthority: 'local',
+    stateOwner: 'local',
+    title: `Project ${index}`,
+    objective: `Coordinate project ${index}`,
+    status: 'active',
+    team: ['build', 'review'],
+    createdAt: perfIso(1, index),
+    updatedAt: perfIso(2, index),
+  }))
+  const tasks = Array.from({ length: 240 }, (_, index) => ({
+    id: `perf-task-${index}`,
+    kind: 'task',
+    workspaceId: 'local',
+    ownerAuthority: 'local',
+    executionAuthority: 'local',
+    stateOwner: 'local',
+    projectId: projects[index % projects.length]!.id,
+    title: `Task ${index}`,
+    spec: `Coordinate task ${index}`,
+    status: index % 5 === 0 ? 'completed' : index % 3 === 0 ? 'running' : 'open',
+    column: index % 5 === 0 ? 'done' : 'doing',
+    priority: index % 4 === 0 ? 'high' : 'medium',
+    assigneeAgent: index % 2 === 0 ? 'build' : 'review',
+    assignedRunId: `run-${index}`,
+    assignedSessionId: `launchpad-session-${index % 120}`,
+    createdAt: perfIso(1, index % 60, index % 60),
+    updatedAt: perfIso(3, index % 60, index % 60),
+  }))
+  const sessions = Array.from({ length: 120 }, (_, index) => ({
+    sessionId: `launchpad-session-${index}`,
+    title: `Launchpad session ${index}`,
+    createdAt: perfIso(1, index % 60),
+    updatedAt: perfIso(4, index % 60, index % 60),
+    runId: `run-${index}`,
+    view: {
+      pendingApprovals: index % 2 === 0 ? [{
+        id: `approval-${index}`,
+        sessionId: `launchpad-session-${index}`,
+        taskRunId: `run-${index}`,
+        tool: 'shell',
+        description: `Approve task ${index}`,
+      }] : [],
+      pendingQuestions: index % 3 === 0 ? [{
+        id: `question-${index}`,
+        sessionId: `launchpad-session-${index}`,
+        questions: [{ id: `q-${index}`, header: 'Clarify', question: `Clarify task ${index}` }],
+      }] : [],
+    },
+  }))
+  const artifacts = Array.from({ length: 360 }, (_, index) => ({
+    id: `artifact-${index}`,
+    workspaceId: 'local',
+    sessionId: `launchpad-session-${index % 120}`,
+    sessionTitle: `Launchpad session ${index % 120}`,
+    toolId: `tool-${index}`,
+    toolName: 'write',
+    filename: `artifact-${index}.md`,
+    filePath: `/tmp/open-cowork-perf/artifact-${index}.md`,
+    kind: index % 2 === 0 ? 'document' : 'chart',
+    status: index % 3 === 0 ? 'in-review' : 'draft',
+    projectId: projects[index % projects.length]!.id,
+    taskId: `perf-task-${index % tasks.length}`,
+    taskRunId: `run-${index % tasks.length}`,
+    authorAgentId: index % 2 === 0 ? 'build' : 'review',
+    createdAt: perfIso(2, index % 60, index % 60),
+    updatedAt: perfIso(5, index % 60, index % 60),
+  }))
+  return {
+    board: { projects, tasks },
+    sessions,
+    artifacts,
+  }
+}
+
+function createLocalArtifactIndexFixture() {
+  const db = new DatabaseSync(':memory:')
+  setArtifactLifecycleDatabaseForTests(db)
+  const artifactCount = 320
+  const artifacts = Array.from({ length: artifactCount }, (_, index) => ({
+    id: `local-artifact-${index}`,
+    toolId: `tool-${index}`,
+    toolName: 'write',
+    filename: `local-artifact-${index}.md`,
+    filePath: `/tmp/open-cowork-perf/local-artifact-${index}.md`,
+    order: index,
+    taskRunId: `local-run-${index}`,
+  }))
+  const tasks = Array.from({ length: artifactCount }, (_, index) => ({
+    id: `local-task-${index}`,
+    projectId: `local-project-${index % 12}`,
+    assigneeAgent: index % 2 === 0 ? 'build' : 'review',
+    assignedRunId: `local-run-${index}`,
+    assignedSessionId: 'local-artifact-session',
+  }))
+  const view = {
+    toolCalls: [],
+    taskRuns: [],
+    artifacts,
+  }
+  return {
+    view,
+    tasks,
+    close() {
+      setArtifactLifecycleDatabaseForTests(null)
+      clearArtifactLifecycleStoreCache()
+      db.close()
+    },
+  }
+}
+
+function createCloudStoreFixture() {
+  const store = new InMemoryControlPlaneStore()
+  const tenantId = 'perf-tenant'
+  const userId = 'perf-user'
+  store.createTenant({ tenantId, name: 'Perf tenant' })
+  store.ensureUser({ tenantId, userId, email: 'perf@example.test', role: 'owner' })
+  for (let index = 0; index < 180; index += 1) {
+    const sessionId = `cloud-session-${index}`
+    store.createSession({
+      tenantId,
+      userId,
+      sessionId,
+      opencodeSessionId: `oc-${sessionId}`,
+      profileName: 'default',
+      title: `Cloud session ${index}`,
+      createdAt: new Date(Date.UTC(2033, 1, 1, 0, index % 60, index % 60)),
+    })
+    store.upsertCloudLaunchpadSessionSummary({
+      tenantId,
+      userId,
+      sessionId,
+      updatedAt: perfIso(5, index % 60, index % 60),
+      pendingApprovals: index % 2 === 0 ? [{
+        id: `approval-${index}`,
+        sessionId,
+        tool: 'shell',
+        description: `Approve cloud action ${index}`,
+      }] : [],
+      pendingQuestions: index % 3 === 0 ? [{
+        id: `question-${index}`,
+        sessionId,
+        questions: [{ id: `q-${index}`, header: 'Clarify', question: `Clarify cloud task ${index}` }],
+      }] : [],
+    })
+    for (let artifactIndex = 0; artifactIndex < 3; artifactIndex += 1) {
+      const absoluteIndex = index * 3 + artifactIndex
+      store.upsertCloudArtifactIndex({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `cloud-artifact-${absoluteIndex}`,
+        filename: `cloud-artifact-${absoluteIndex}.md`,
+        contentType: 'text/markdown',
+        size: 1_000 + absoluteIndex,
+        key: `tenant/${sessionId}/artifact-${absoluteIndex}.md`,
+        kind: artifactIndex === 0 ? 'document' : 'chart',
+        status: artifactIndex === 2 ? 'in-review' : 'draft',
+        authorAgentId: artifactIndex % 2 === 0 ? 'build' : 'review',
+        projectId: `cloud-project-${index % 8}`,
+        taskId: `cloud-task-${absoluteIndex % 90}`,
+        statusUpdatedBy: null,
+        statusUpdatedAt: null,
+        createdAt: perfIso(2, absoluteIndex % 60, artifactIndex),
+        updatedAt: perfIso(6, absoluteIndex % 60, artifactIndex),
+      })
+    }
+  }
+  for (let workflowIndex = 0; workflowIndex < 48; workflowIndex += 1) {
+    const workflowId = `perf-workflow-${workflowIndex}`
+    store.createWorkflow({
+      tenantId,
+      userId,
+      workflowId,
+      draft: {
+        title: `Workflow ${workflowIndex}`,
+        instructions: 'Synthetic workflow perf fixture.',
+        agentName: 'build',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+      },
+      createdAt: new Date(Date.UTC(2033, 1, 2, 0, workflowIndex % 60)),
+    })
+    for (let runIndex = 0; runIndex < 24; runIndex += 1) {
+      const runId = `${workflowId}-run-${runIndex}`
+      store.createWorkflowRun({
+        tenantId,
+        userId,
+        workflowId,
+        runId,
+        triggerType: 'manual',
+        createdAt: new Date(Date.UTC(2033, 1, 3, 0, runIndex, workflowIndex % 60)),
+      })
+      store.completeWorkflowRun({
+        tenantId,
+        workflowId,
+        runId,
+        summary: `done ${runIndex}`,
+        nextStatus: 'active',
+        nextRunAt: null,
+        finishedAt: new Date(Date.UTC(2033, 1, 3, 0, runIndex, (workflowIndex % 60) + 1)),
+      })
+    }
+  }
+  return {
+    store,
+    tenantId,
+    userId,
+    workflowIds: Array.from({ length: 48 }, (_, index) => `perf-workflow-${index}`),
+  }
+}
+
 export async function runSessionBenchmarks() {
   const historyFixture = createHistoryFixture()
   const downstreamCatalog = createDownstreamCatalogFixture()
   const downstreamProjectDirectory = join(tmpdir(), 'open-cowork-downstream-project')
   const threadIndex = createSeededThreadIndexStore()
+  const launchpadFeed = createLaunchpadFeedFixture()
+  const localArtifactIndex = createLocalArtifactIndexFixture()
+  const cloudStore = createCloudStoreFixture()
   const projectedHistory = await buildProjectedHistory(historyFixture)
   const streamEvents = createStreamEvents('perf-stream')
   const hydratedEngine = new SessionEngine()
@@ -224,10 +459,68 @@ export async function runSessionBenchmarks() {
           throw new Error('threads.search.downstreamHistory produced incomplete results')
         }
       }, { batchSize: 3, warmupIterations: 2 }),
+      await runBenchmark('launchpad.feed.syntheticScale', 24, () => {
+        const feed = buildLaunchpadFeedFromSources({
+          request: { limit: 50 },
+          board: launchpadFeed.board as any,
+          sessions: launchpadFeed.sessions as any,
+          artifacts: launchpadFeed.artifacts as any,
+          generatedAt: perfIso(7, 0),
+        })
+        if (feed.inProgress.length === 0 || feed.waitingOnYou.length === 0 || feed.freshArtifacts.length === 0) {
+          throw new Error('launchpad.feed.syntheticScale produced an incomplete feed')
+        }
+      }, { batchSize: 6, warmupIterations: 3 }),
+      await runBenchmark('artifacts.localIndex.writeScale', 18, () => {
+        const entries = indexLocalSessionArtifactsFromView({
+          sessionId: 'local-artifact-session',
+          sessionTitle: 'Local artifact session',
+          view: localArtifactIndex.view as any,
+          tasks: localArtifactIndex.tasks as any,
+        })
+        if (entries.length !== localArtifactIndex.tasks.length) {
+          throw new Error('artifacts.localIndex.writeScale lost artifact entries')
+        }
+      }, { batchSize: 3, warmupIterations: 2 }),
+      await runBenchmark('workflows.recentRuns.batchScale', 24, () => {
+        const runs = cloudStore.store.listWorkflowRunsForWorkflows({
+          tenantId: cloudStore.tenantId,
+          userId: cloudStore.userId,
+          workflowIds: cloudStore.workflowIds,
+          limitPerWorkflow: 3,
+          limit: 100,
+        })
+        if (runs.length !== 100) {
+          throw new Error('workflows.recentRuns.batchScale returned an unexpected run count')
+        }
+      }, { batchSize: 6, warmupIterations: 3 }),
+      await runBenchmark('cloud.launchpadSummaries.queryScale', 24, () => {
+        const summaries = cloudStore.store.listCloudLaunchpadSessionSummaries({
+          tenantId: cloudStore.tenantId,
+          userId: cloudStore.userId,
+          limit: 100,
+        })
+        if (summaries.items.length !== 100 || !summaries.truncated) {
+          throw new Error('cloud.launchpadSummaries.queryScale returned incomplete summaries')
+        }
+      }, { batchSize: 6, warmupIterations: 3 }),
+      await runBenchmark('cloud.artifactIndex.queryScale', 24, () => {
+        const artifacts = cloudStore.store.listCloudArtifactIndex({
+          tenantId: cloudStore.tenantId,
+          userId: cloudStore.userId,
+          projectId: 'cloud-project-3',
+          taskIds: ['cloud-task-3', 'cloud-task-11', 'cloud-task-19'],
+          limit: 100,
+        })
+        if (artifacts.items.length === 0) {
+          throw new Error('cloud.artifactIndex.queryScale returned no artifacts')
+        }
+      }, { batchSize: 6, warmupIterations: 3 }),
     ]
 
     return createReport(results)
   } finally {
+    localArtifactIndex.close()
     threadIndex.close()
   }
 }
