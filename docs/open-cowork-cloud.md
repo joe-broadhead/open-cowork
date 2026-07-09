@@ -563,6 +563,14 @@ operator bypass is combined with public exposure, when placeholder secrets are
 still present, or when generic webhook ingress is configured without a shared
 secret.
 
+Kubernetes public production deployments force NetworkPolicy egress isolation.
+For Cloud, `cloud.deploymentTier=public_production` renders an Egress policy
+even when `networkPolicy.egress.enabled=false`; for Gateway, public exposure
+does the same. An empty allowlist renders `egress: []`. Add one
+`networkPolicy.egress.allow[]` entry per approved dependency, with explicit
+`to` peers and `ports`, when the cluster needs outbound access to Cloud,
+object-store, identity, provider API, or telemetry endpoints.
+
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and
 object-store checkpoints. A single-worker PVC can be enabled for controlled

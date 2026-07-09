@@ -85,10 +85,14 @@ roles:
 networkPolicy:
   enabled: true
   egress:
-    enabled: true
-    to:
-      - ipBlock:
-          cidr: 203.0.113.0/24 # replace with approved provider/service ranges
+    allow:
+      - name: approved-provider-api
+        to:
+          - ipBlock:
+              cidr: 203.0.113.0/24 # replace with approved provider/service ranges
+        ports:
+          - protocol: TCP
+            port: 443
 
 ingress:
   enabled: true
@@ -106,8 +110,11 @@ ingress:
 
 Production values should pin images by `image.digest` rather than mutable tags.
 `cloud.deploymentTier=public_production` requires an immutable Cloud image
-digest, explicit NetworkPolicy egress destinations, and a Cloud SQL Auth Proxy
-image digest when the proxy is enabled. The charts also reject `image.tag=latest`.
+digest and a Cloud SQL Auth Proxy image digest when the proxy is enabled. It
+also forces NetworkPolicy egress isolation: an empty `networkPolicy.egress`
+allowlist renders `egress: []`, and production overlays should add one typed
+allow entry per approved control-plane, object-store, identity, or telemetry
+destination. The charts also reject `image.tag=latest`.
 
 The chart exposes PodDisruptionBudget and topology spread values, but it does
 not create HPA or KEDA resources. Add autoscaling manifests in the private
@@ -132,13 +139,13 @@ helm upgrade --install open-cowork-gateway ./helm/open-cowork-gateway \
   --set gateway.cloudBaseUrl=https://cowork.example.com \
   --set gateway.publicUrl=https://gateway.example.com \
   --set gateway.existingSecret=open-cowork-gateway-secrets \
-  --set networkPolicy.egress.enabled=true \
-  --set-json 'networkPolicy.egress.to=[{"ipBlock":{"cidr":"203.0.113.0/24"}}]'
+  --set-json 'networkPolicy.egress.allow=[{"name":"cloud-api","to":[{"ipBlock":{"cidr":"203.0.113.0/24"}}],"ports":[{"protocol":"TCP","port":443}]}]'
 ```
 
 Public Gateway deployments require `image.digest`, `networkPolicy.enabled=true`,
-`networkPolicy.egress.enabled=true`, and explicit egress destinations before the
-chart renders.
+and `gateway.existingSecret`. Public exposure forces egress isolation; leave the
+allowlist empty for deny-all or add typed `networkPolicy.egress.allow` entries
+for approved Cloud, provider API, identity, and telemetry destinations.
 
 ## Secret Inventory
 

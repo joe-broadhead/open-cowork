@@ -1,4 +1,17 @@
+{{- $egress := default dict .Values.networkPolicy.egress }}
+{{- $egressAllow := default (list) $egress.allow }}
+{{- $egressTo := default (list) $egress.to }}
+{{- $publicProduction := eq .Values.cloud.deploymentTier "public_production" }}
+{{- $egressEnabled := or $egress.enabled $publicProduction }}
 {{- if .Values.networkPolicy.enabled }}
+{{- range $index, $entry := $egressAllow }}
+{{- if empty $entry.to }}
+{{- fail (printf "networkPolicy.egress.allow[%d].to is required; use explicit peers for each egress allowlist entry." $index) }}
+{{- end }}
+{{- if empty $entry.ports }}
+{{- fail (printf "networkPolicy.egress.allow[%d].ports is required; use explicit ports for each egress allowlist entry." $index) }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -12,14 +25,22 @@ spec:
       {{- include "open-cowork-cloud.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
-    {{- if .Values.networkPolicy.egress.enabled }}
+    {{- if $egressEnabled }}
     - Egress
     {{- end }}
-  {{- if .Values.networkPolicy.egress.enabled }}
-  {{- with .Values.networkPolicy.egress.to }}
+  {{- if $egressEnabled }}
+  {{- if or $egressAllow $egressTo }}
   egress:
+    {{- range $entry := $egressAllow }}
     - to:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml $entry.to | nindent 8 }}
+      ports:
+        {{- toYaml $entry.ports | nindent 8 }}
+    {{- end }}
+    {{- if $egressTo }}
+    - to:
+        {{- toYaml $egressTo | nindent 8 }}
+    {{- end }}
   {{- else }}
   egress: []
   {{- end }}

@@ -22,12 +22,6 @@
 {{- if and $publicGateway (not .Values.networkPolicy.enabled) }}
 {{- fail "public Gateway deployments require networkPolicy.enabled=true." }}
 {{- end }}
-{{- if and $publicGateway (not .Values.networkPolicy.egress.enabled) }}
-{{- fail "public Gateway deployments require networkPolicy.egress.enabled=true with explicit egress destinations." }}
-{{- end }}
-{{- if and $publicGateway (empty .Values.networkPolicy.egress.to) }}
-{{- fail "public Gateway deployments require networkPolicy.egress.to entries for approved Cloud, provider API, identity, and telemetry destinations." }}
-{{- end }}
 {{- if and $publicGateway (not .Values.gateway.existingSecret) $inlineGatewaySecrets }}
 {{- fail "public Gateway deployments reject inline secret-bearing Helm values; set gateway.existingSecret for service, admin, provider, and webhook tokens." }}
 {{- end }}

@@ -107,9 +107,22 @@ networkPolicy:
   ingress:
     from: []
   egress:
-    # Local defaults stay closed-but-unrestricted for simple installs. Public
-    # Gateway values must set enabled=true and list approved egress peers.
+    # Local defaults stay ingress-isolated but outbound-unrestricted for simple
+    # installs. Public Gateway exposure forces egress isolation even when this
+    # is false, and an empty allowlist renders egress: [].
     enabled: false
+    # Prefer typed entries so each approved dependency has explicit peers and
+    # ports. Example:
+    # allow:
+    #   - name: cloud-api
+    #     to:
+    #       - ipBlock:
+    #           cidr: 203.0.113.0/24
+    #     ports:
+    #       - protocol: TCP
+    #         port: 443
+    allow: []
+    # Raw Kubernetes NetworkPolicy peers are kept for existing private overlays.
     to: []
 
 serviceAccount:

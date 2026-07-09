@@ -207,6 +207,10 @@ provider control plane.
   production-strength or resolved from a managed secret ref, auth is enabled,
   the web role has a canonical HTTPS public URL, web does not process commands
   inline, and workers have checkpoints enabled.
+- For Kubernetes, keep `networkPolicy.enabled=true`. Public production Cloud
+  and public Gateway chart renders force egress isolation; an empty allowlist is
+  deny-all, and each opened dependency should use a typed
+  `networkPolicy.egress.allow[]` entry with explicit peers and ports.
 - Use `/livez` for process liveness and `/readyz` for dependency readiness.
   `/healthz` remains backward-compatible, but Kubernetes readiness probes should
   not use it for public production.

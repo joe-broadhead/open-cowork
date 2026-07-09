@@ -195,6 +195,11 @@ Release tags are acceptable when your registry prevents tag mutation:
 --set image.tag=v0.1.0
 ```
 
+Public-production Cloud and public Gateway Helm renders force NetworkPolicy
+egress isolation. With an empty `networkPolicy.egress.allow` list the rendered
+policy is deny-all; add one typed allow entry per approved destination with
+explicit peers and ports in your private deployment overlay.
+
 The Compose files expose `OPEN_COWORK_CLOUD_IMAGE` and
 `OPEN_COWORK_GATEWAY_IMAGE` for local image-name overrides, but they still
 include `build:` blocks and insecure local defaults. Treat them as local/demo

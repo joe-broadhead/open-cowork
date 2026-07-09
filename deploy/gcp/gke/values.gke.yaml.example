@@ -175,3 +175,15 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+networkPolicy:
+  enabled: true
+  egress:
+    allow:
+      - name: google-apis
+        to:
+          - ipBlock:
+              cidr: 203.0.113.0/24 # replace with approved Google API/provider ranges
+        ports:
+          - protocol: TCP
+            port: 443
