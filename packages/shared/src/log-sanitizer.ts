@@ -47,6 +47,9 @@ const TOKEN_PATTERNS = [
   /\bDefaultEndpointsProtocol=https?;AccountName=[^;\s]+;AccountKey=[^;\s]+(?:;EndpointSuffix=[^;\s]+)?\b/gi,
 ]
 
+const STRUCTURED_AUTH_VALUE_PATTERN = /\b(["']?authorization["']?\s*[:=]\s*["']?(?:bearer|basic)\s+)[^"',\s}]{1,4096}/gi
+const STRUCTURED_SIGNATURE_VALUE_PATTERN = /\b(["']?(?:x-open-cowork-signature|x-open-cowork-gateway-webhook-signature|x-slack-signature|stripe-signature|signature)["']?\s*[:=]\s*["']?)(?:sha\d+=|v\d+=|t=)?[^"'\s}]{8,4096}/gi
+
 // Every quantifier is bounded to its RFC ceiling (local ≤64, label ≤63, ≤16 labels,
 // TLD ≤24) so the match is strictly linear. Any open-ended `+`/`*` here (local part,
 // domain labels, or the TLD tail) backtracks quadratically on adversarial input with no
@@ -105,6 +108,9 @@ export function sanitizeLogMessage(message: string) {
       sanitized = sanitized.replace(new RegExp(escapeRegExp(value), 'g'), '[REDACTED_SECRET]')
     }
   }
+
+  sanitized = sanitized.replace(STRUCTURED_AUTH_VALUE_PATTERN, '$1[REDACTED_TOKEN]')
+  sanitized = sanitized.replace(STRUCTURED_SIGNATURE_VALUE_PATTERN, '$1[REDACTED_SIGNATURE]')
 
   for (const pattern of TOKEN_PATTERNS) {
     sanitized = sanitized.replace(pattern, '[REDACTED_TOKEN]')

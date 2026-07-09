@@ -87,6 +87,42 @@ test('sanitizeForExport redacts managed runtime Basic authorization headers', ()
   assert.match(exported, /\[REDACTED_TOKEN\]/)
 })
 
+test('sanitizeLogMessage redacts structured authorization values', () => {
+  const input = [
+    '{"authorization":"Bearer opaque-renderer-token"}',
+    '{"Authorization":"Basic b3BlbmNvd29yazpzZWNyZXQ="}',
+    'authorization=Bearer query-param-token',
+  ].join(' ')
+  const sanitized = sanitizeLogMessage(input)
+
+  assert.equal(sanitized.includes('opaque-renderer-token'), false)
+  assert.equal(sanitized.includes('b3BlbmNvd29yazpzZWNyZXQ='), false)
+  assert.equal(sanitized.includes('query-param-token'), false)
+  assert.equal((sanitized.match(/\[REDACTED_TOKEN\]/g) || []).length, 3)
+})
+
+test('sanitizeLogMessage redacts webhook and signing header values', () => {
+  const input = [
+    'x-open-cowork-signature: sha256=abcdef1234567890abcdef1234567890',
+    'x-open-cowork-gateway-webhook-signature=sha256=fedcba0987654321fedcba0987654321',
+    '"x-slack-signature":"v0=1234567890abcdef1234567890abcdef"',
+    'stripe-signature: t=1783590000,v1=0123456789abcdef0123456789abcdef',
+    '"signature":"sha256=99999999999999999999999999999999"',
+  ].join(' ')
+  const sanitized = sanitizeLogMessage(input)
+
+  for (const secret of [
+    'abcdef1234567890abcdef1234567890',
+    'fedcba0987654321fedcba0987654321',
+    '1234567890abcdef1234567890abcdef',
+    '0123456789abcdef0123456789abcdef',
+    '99999999999999999999999999999999',
+  ]) {
+    assert.equal(sanitized.includes(secret), false)
+  }
+  assert.equal((sanitized.match(/\[REDACTED_SIGNATURE\]/g) || []).length, 5)
+})
+
 test('sanitizeLogMessage redacts managed runtime env-backed secrets', () => {
   process.env.OPENCODE_SERVER_PASSWORD = 'managed-runtime-password'
   process.env.OPENCODE_CONFIG_CONTENT = '{"provider":{"secret":"value"}}'
