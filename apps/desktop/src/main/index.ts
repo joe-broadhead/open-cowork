@@ -18,6 +18,8 @@ import { setManagedOpencodeSupervisorForker } from '@open-cowork/runtime-host/ru
 import { configureAgentToolBridge } from '@open-cowork/runtime-host/agent-tool-bridge'
 import { registerRuntimeDirectoryEnsurer } from '@open-cowork/runtime-host/runtime-context'
 import { configureCoordinationService } from '@open-cowork/runtime-host/coordination/coordination-service'
+import { invalidateCustomAgentCatalogCache } from '@open-cowork/runtime-host/custom-agents'
+import { getRuntimeCatalogSnapshot } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
 import { resolveAppIconFile, appendE2ERemoteDebuggingSwitches, e2eWindowReadyProbeEnabled } from '@open-cowork/runtime-host'
 import './desktop-electron-hosts.ts'
 import { app, ipcMain, Menu, nativeImage, session as electronSession, utilityProcess } from 'electron'
@@ -195,7 +197,6 @@ export async function rebootRuntime(): Promise<void> {
     // or model may have changed, and serving stale tool metadata from
     // the Capabilities UI would mislead the user.
     const { invalidateRuntimeToolCache } = await import('@open-cowork/runtime-host/runtime-tool-cache')
-    const { invalidateCustomAgentCatalogCache } = await import('@open-cowork/runtime-host/custom-agents')
     invalidateRuntimeToolCache()
     invalidateCustomAgentCatalogCache()
     await stopRuntime()
@@ -327,9 +328,7 @@ async function runBootRuntime(projectDirectory?: string | null) {
     }
 
     eventSubscriptions.ensure(getRuntimeHomeDir(), client)
-    void import('@open-cowork/runtime-host/runtime-catalog-snapshot').then(({ getRuntimeCatalogSnapshot }) =>
-      getRuntimeCatalogSnapshot(runtimeProjectDirectory ? { directory: runtimeProjectDirectory } : undefined)
-    ).catch((err) => {
+    void getRuntimeCatalogSnapshot(runtimeProjectDirectory ? { directory: runtimeProjectDirectory } : undefined).catch((err) => {
       log('main', `Runtime catalog warmup skipped: ${err instanceof Error ? err.message : String(err)}`)
     })
 

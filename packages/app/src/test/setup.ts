@@ -297,6 +297,12 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       archive: vi.fn(async () => null),
       regenerateWebhookSecret: vi.fn(async () => null),
     },
+    capabilities: {
+      tools: vi.fn(async () => []),
+      tool: vi.fn(async () => null),
+      skills: vi.fn(async () => []),
+      skillBundle: vi.fn(async () => null),
+    },
     coordination: {
       board: vi.fn(async () => ({ projects: [], tasks: [] })),
       listProjects: vi.fn(async () => []),

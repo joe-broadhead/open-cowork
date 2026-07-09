@@ -3,11 +3,18 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { Badge, Button, Card, EmptyState, Icon, Skeleton, StudioPageHeader, entityChroma, toast, type BadgeTone } from '../ui'
+import { Badge, Button, Card, EmptyState, ErrorState, Icon, Skeleton, StudioPageHeader, entityChroma, toast, type BadgeTone } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
+
+export type WorkflowNavigationTarget = {
+  workflowId: string
+  runId?: string | null
+}
 
 type Props = {
   onOpenThread: (sessionId: string) => void
+  initialTarget?: WorkflowNavigationTarget | null
+  onInitialTargetHandled?: () => void
 }
 
 const EMPTY_PAYLOAD: WorkflowListPayload = { workflows: [], runs: [] }
@@ -90,13 +97,16 @@ function webhookCurlCommand(workflow: WorkflowSummary) {
   ].join(' \\\n')
 }
 
-export function WorkflowsPage({ onOpenThread }: Props) {
+export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTargetHandled }: Props) {
   const [payload, setPayload] = useState<WorkflowListPayload>(EMPTY_PAYLOAD)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<WorkflowSummary | null>(null)
+  const [highlightedTarget, setHighlightedTarget] = useState<WorkflowNavigationTarget | null>(null)
   const [runtimeConfigSource, setRuntimeConfigSource] = useState<EffectiveAppSettings['runtimeConfigSource']>('app')
   const refreshGenerationRef = useRef(0)
+  const workflowCardRefs = useRef(new Map<string, HTMLDivElement>())
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = useMemo(
@@ -110,6 +120,12 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     () => payload.workflows.filter((workflow) => workflow.status !== 'archived'),
     [payload.workflows],
   )
+  const visibleWorkflows = useMemo(() => {
+    if (!highlightedTarget) return activeWorkflows
+    if (activeWorkflows.some((workflow) => workflow.id === highlightedTarget.workflowId)) return activeWorkflows
+    const target = payload.workflows.find((workflow) => workflow.id === highlightedTarget.workflowId)
+    return target ? [target, ...activeWorkflows] : activeWorkflows
+  }, [activeWorkflows, highlightedTarget, payload.workflows])
   const archivedCount = payload.workflows.length - activeWorkflows.length
   const activeCount = useMemo(
     () => activeWorkflows.filter((workflow) => workflow.status === 'active').length,
@@ -124,15 +140,24 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     refreshGenerationRef.current = generation
     const isCurrentRefresh = () => refreshGenerationRef.current === generation
     setLoading(true)
+    if (isCurrentRefresh()) setLoadError(null)
     try {
       if (workflowListBlocked) {
-        if (isCurrentRefresh()) setPayload(EMPTY_PAYLOAD)
+        if (isCurrentRefresh()) {
+          setPayload(EMPTY_PAYLOAD)
+          setLoadError(null)
+        }
         return
       }
       const nextPayload = activeWorkspaceIsLocal
         ? await window.coworkApi.workflows.list()
         : await window.coworkApi.workflows.list(workspaceOptions)
-      if (isCurrentRefresh()) setPayload(nextPayload)
+      if (isCurrentRefresh()) {
+        setPayload(nextPayload)
+        setLoadError(null)
+      }
+    } catch (error) {
+      if (isCurrentRefresh()) setLoadError(error instanceof Error ? error.message : String(error))
     } finally {
       if (isCurrentRefresh()) setLoading(false)
     }
@@ -159,6 +184,26 @@ export function WorkflowsPage({ onOpenThread }: Props) {
       unsubscribe()
     }
   }, [activeWorkspaceIsLocal, refresh, workspaceOptions])
+
+  useEffect(() => {
+    if (!initialTarget || loading) return
+    if (loadError && payload.workflows.length === 0) return
+    setHighlightedTarget(initialTarget)
+    onInitialTargetHandled?.()
+    const frame = window.requestAnimationFrame(() => {
+      workflowCardRefs.current.get(initialTarget.workflowId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [initialTarget, loadError, loading, onInitialTargetHandled, payload.workflows.length])
+
+  const setWorkflowCardRef = useCallback((workflowId: string, node: HTMLDivElement | null) => {
+    if (node) {
+      workflowCardRefs.current.set(workflowId, node)
+      return
+    }
+    workflowCardRefs.current.delete(workflowId)
+  }, [])
+
   const workflowDraftBlocked = !activeWorkspaceIsLocal || runtimeConfigSource === 'machine'
   const workflowActionBlocked = !workspaceSupport.flags.canRunWorkflow
   const workflowActionReason = workflowActionBlocked ? workspaceSupport.flags.reasons.runWorkflow : null
@@ -262,7 +307,15 @@ export function WorkflowsPage({ onOpenThread }: Props) {
               <Skeleton key={index} variant="card" className="h-40" />
             ))}
           </div>
-        ) : activeWorkflows.length === 0 ? (
+        ) : loadError && payload.workflows.length === 0 ? (
+          <ErrorState
+            title={t('workflows.loadErrorTitle', 'Couldn’t load playbooks')}
+            message={t('workflows.loadErrorBody', 'We couldn’t reach the workflow store to list your saved playbooks.')}
+            hint={loadError}
+            onRetry={() => void refresh()}
+            retryLabel={t('workflows.reload', 'Reload')}
+          />
+        ) : visibleWorkflows.length === 0 ? (
           <EmptyState
             icon="workflow"
             title={t('workflows.emptyTitle', 'No playbooks yet')}
@@ -286,8 +339,25 @@ export function WorkflowsPage({ onOpenThread }: Props) {
           />
         ) : (
           <div className="grid gap-4">
-            {activeWorkflows.map((workflow) => (
-              <Card key={workflow.id} variant="surface">
+            {loadError ? (
+              <div role="alert" className="rounded-md border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
+                <span className="font-semibold">{t('workflows.refreshFailed', 'Couldn’t refresh playbooks.')}</span> {loadError}
+                <Button size="sm" variant="ghost" className="ml-2" onClick={() => void refresh()}>
+                  {t('workflows.reload', 'Reload')}
+                </Button>
+              </div>
+            ) : null}
+            {visibleWorkflows.map((workflow) => {
+              const isHighlighted = highlightedTarget?.workflowId === workflow.id
+              return (
+              <div
+                key={workflow.id}
+                ref={(node) => setWorkflowCardRef(workflow.id, node)}
+                className={`rounded-lg border p-0.5 transition-colors ${isHighlighted ? 'border-accent bg-accent/10' : 'border-transparent bg-transparent'}`}
+                data-workflow-id={workflow.id}
+                data-open-cowork-target={isHighlighted ? 'true' : undefined}
+              >
+              <Card variant="surface">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
                     <div
@@ -304,6 +374,13 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         {workflow.status}
                       </Badge>
                     </div>
+                    {isHighlighted ? (
+                      <div role="status" className="mt-1 text-2xs font-semibold text-accent">
+                        {highlightedTarget?.runId
+                          ? t('workflows.openedTargetRun', 'Opened run {{runId}}', { runId: highlightedTarget.runId })
+                          : t('workflows.openedTargetWorkflow', 'Opened playbook')}
+                      </div>
+                    ) : null}
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-secondary">{workflow.instructions}</p>
                     <div className="mt-3 text-xs font-medium text-text-muted">
                       {t('workflows.runsAs', 'Runs as')} {workflow.agentName || 'build'} <span aria-hidden="true">·</span> {t('workflows.lastRun', 'last run')} {workflowLastRunLabel(workflow)}
@@ -415,7 +492,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                   </div>
                 ) : null}
               </Card>
-            ))}
+              </div>
+              )
+            })}
           </div>
         )}
         {archivedCount > 0 ? (

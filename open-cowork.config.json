@@ -387,9 +387,6 @@
         "mcp__opencode-gateway__gateway_active_run_control",
         "mcp__opencode-gateway__gateway_environment_action",
         "mcp__opencode-gateway__gateway_environment_reconcile",
-        "mcp__opencode-gateway__gateway_agent_presence_create",
-        "mcp__opencode-gateway__gateway_agent_presence_update",
-        "mcp__opencode-gateway__gateway_session_admit",
         "mcp__opencode-gateway__gateway_channel_send",
         "mcp__opencode-gateway__gateway_channel_send_to_task",
         "mcp__opencode-gateway__gateway_channel_send_to_roadmap"

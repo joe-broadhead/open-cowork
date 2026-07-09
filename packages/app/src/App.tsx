@@ -27,6 +27,8 @@ import {
 } from './app-helpers'
 import { PaletteFallback, RouteFallback } from './components/layout/RouteFallback'
 import { isDesktopRuntime } from './runtime-env'
+import type { WorkflowNavigationTarget } from './components/workflows/WorkflowsPage'
+import type { CapabilityNavigationTarget } from './components/capabilities/CapabilitiesPage'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const ProjectsBoardPage = lazy(() => import('./components/projects/ProjectsBoardPage').then((m) => ({ default: m.ProjectsBoardPage })))
@@ -120,6 +122,8 @@ export function App() {
   const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
   const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
   const [resourceNavigationNotice, setResourceNavigationNotice] = useState<ResourceNavigationNotice | null>(null)
+  const [workflowNavigationTarget, setWorkflowNavigationTarget] = useState<WorkflowNavigationTarget | null>(null)
+  const [capabilityNavigationTarget, setCapabilityNavigationTarget] = useState<CapabilityNavigationTarget | null>(null)
   const initialBrowserHashRef = useRef(typeof window === 'undefined' ? '' : window.location.hash)
   const [bootChatDeepLinkPending, setBootChatDeepLinkPending] = useState(() => {
     if (!browserUrlRoutingEnabled()) return false
@@ -305,6 +309,13 @@ export function App() {
     }
 
     if (action.routeKey === 'workflow' || action.routeKey === 'workflow-run') {
+      const workflowId = action.routeParams.workflowId
+      if (workflowId) {
+        setWorkflowNavigationTarget({
+          workflowId,
+          runId: action.routeKey === 'workflow-run' ? action.routeParams.runId || null : null,
+        })
+      }
       navigateView('playbooks')
       return
     }
@@ -320,6 +331,15 @@ export function App() {
     }
 
     if (action.routeKey === 'capability') {
+      const value = action.value
+      if (value && typeof value === 'object' && 'kind' in value) {
+        const capability = value as { kind?: unknown; id?: unknown }
+        if (capability.kind === 'capability-tool' && typeof capability.id === 'string') {
+          setCapabilityNavigationTarget({ kind: 'tool', id: capability.id })
+        } else if (capability.kind === 'capability-skill' && typeof capability.id === 'string') {
+          setCapabilityNavigationTarget({ kind: 'skill', id: capability.id })
+        }
+      }
       navigateView('tools')
       return
     }
@@ -761,7 +781,11 @@ export function App() {
             )}
             {view === 'playbooks' && (
               <Suspense fallback={<RouteFallback />}>
-                <WorkflowsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
+                <WorkflowsPage
+                  onOpenThread={(sessionId) => void openExistingThread(sessionId)}
+                  initialTarget={workflowNavigationTarget}
+                  onInitialTargetHandled={() => setWorkflowNavigationTarget(null)}
+                />
               </Suspense>
             )}
             {view === 'team' && (
@@ -785,6 +809,8 @@ export function App() {
               <Suspense fallback={<RouteFallback />}>
                 <CapabilitiesPage
                   onClose={() => navigateView('chat')}
+                  initialTarget={capabilityNavigationTarget}
+                  onInitialTargetHandled={() => setCapabilityNavigationTarget(null)}
                   onCreateAgent={(seed) => {
                     setAgentBuilderSeed(seed)
                     navigateView('team')

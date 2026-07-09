@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { getAppPathHost, getSafeStorageHost } from '@open-cowork/shared/node'
+import { getAppPathHost, getSafeStorageHost, type WebhookAuthFailureRecord, type WorkflowWebhookReplayClaim, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import type {
   CloudProjectionCheckpoint,
   CloudProjectionFenceToken,
@@ -40,7 +41,7 @@ import {
   type WorkflowSecretStorageAdapter,
 } from './workflow-secret-storage.js'
 
-const WORKFLOW_DB_SCHEMA_VERSION = 2
+const WORKFLOW_DB_SCHEMA_VERSION = 3
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
 const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
@@ -182,6 +183,24 @@ function initDb(db: DatabaseSync) {
     );
     create index if not exists idx_workflow_runs_workflow on workflow_runs(workflow_id, created_at);
     create index if not exists idx_workflows_due on workflows(status, next_run_at);
+    create table if not exists workflow_webhook_rate_limits (
+      source text primary key,
+      window_started_at integer not null,
+      count integer not null
+    );
+    create table if not exists workflow_webhook_auth_failures (
+      scope text primary key,
+      source text not null,
+      auth_window_started_at integer not null,
+      auth_failure_count integer not null,
+      blocked_until integer not null
+    );
+    create table if not exists workflow_webhook_signatures (
+      key_hash text primary key,
+      seen_at integer not null,
+      status text not null check (status in ('pending', 'accepted'))
+    );
+    create index if not exists idx_workflow_webhook_signatures_seen_at on workflow_webhook_signatures(seen_at);
   `)
   const columns = new Set((db.prepare('pragma table_info(workflows)').all() as Array<{ name?: unknown }>)
     .map((column) => String(column.name || '')))
@@ -230,6 +249,166 @@ function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
     }
     throw error
   }
+}
+
+function normalizeMs(value: unknown) {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0
+}
+
+function webhookSecurityKeyHash(key: string) {
+  return createHash('sha256').update(key).digest('hex')
+}
+
+function pruneWorkflowWebhookSignatures(db: DatabaseSync, nowMs: number, windowMs: number, cacheLimit: number) {
+  db.prepare('delete from workflow_webhook_signatures where ? - seen_at > ?').run(nowMs, windowMs)
+  const row = db.prepare('select count(*) as count from workflow_webhook_signatures').get() as { count?: unknown } | undefined
+  const count = Number(row?.count || 0)
+  const overflow = count - cacheLimit
+  if (overflow > 0) {
+    db.prepare(`
+      delete from workflow_webhook_signatures
+      where key_hash in (
+        select key_hash from workflow_webhook_signatures
+        order by seen_at asc
+        limit ?
+      )
+    `).run(overflow)
+  }
+}
+
+export class SqliteWorkflowWebhookSecurityStore implements WorkflowWebhookSecurityStore {
+  readonly clearOnStop = false
+
+  claimRequest(input: {
+    source: string
+    nowMs: number
+    windowMs: number
+    limit: number
+  }) {
+    return withTransaction((db) => {
+      const nowMs = normalizeMs(input.nowMs)
+      const source = input.source || 'unknown'
+      db.prepare('delete from workflow_webhook_rate_limits where ? - window_started_at > ?').run(nowMs, input.windowMs)
+      const row = db.prepare('select window_started_at, count from workflow_webhook_rate_limits where source = ?').get(source) as DbRow | undefined
+      const windowStartedAt = normalizeMs(row?.window_started_at)
+      const currentCount = normalizeMs(row?.count)
+      const expired = !row || nowMs - windowStartedAt > input.windowMs
+      const nextWindowStartedAt = expired ? nowMs : windowStartedAt
+      const nextCount = (expired ? 0 : currentCount) + 1
+      db.prepare(`
+        insert into workflow_webhook_rate_limits (source, window_started_at, count)
+        values (?, ?, ?)
+        on conflict(source) do update set
+          window_started_at = excluded.window_started_at,
+          count = excluded.count
+      `).run(source, nextWindowStartedAt, nextCount)
+      return nextCount <= input.limit
+    })
+  }
+
+  checkAuthBackoff(input: {
+    scope: string
+    nowMs: number
+  }) {
+    const row = getWorkflowDb().prepare('select blocked_until from workflow_webhook_auth_failures where scope = ?')
+      .get(input.scope || 'unknown') as DbRow | undefined
+    return !row || normalizeMs(row.blocked_until) <= normalizeMs(input.nowMs)
+  }
+
+  recordAuthFailure(input: {
+    scope: string
+    source: string
+    nowMs: number
+    windowMs: number
+    limit: number
+    backoffMs: number
+  }): WebhookAuthFailureRecord {
+    return withTransaction((db) => {
+      const nowMs = normalizeMs(input.nowMs)
+      const scope = input.scope || 'unknown'
+      const source = input.source || 'unknown'
+      db.prepare('delete from workflow_webhook_auth_failures where blocked_until <= ? and ? - auth_window_started_at > ?')
+        .run(nowMs, nowMs, input.windowMs)
+      const row = db.prepare(`
+        select auth_window_started_at, auth_failure_count, blocked_until
+        from workflow_webhook_auth_failures
+        where scope = ?
+      `).get(scope) as DbRow | undefined
+      const windowStartedAt = normalizeMs(row?.auth_window_started_at)
+      const currentCount = normalizeMs(row?.auth_failure_count)
+      const currentBlockedUntil = normalizeMs(row?.blocked_until)
+      const expired = !row || nowMs - windowStartedAt > input.windowMs
+      const nextWindowStartedAt = expired ? nowMs : windowStartedAt
+      const nextCount = (expired ? 0 : currentCount) + 1
+      const nextBlockedUntil = nextCount >= input.limit
+        ? Math.max(currentBlockedUntil, nowMs + input.backoffMs)
+        : currentBlockedUntil
+      db.prepare(`
+        insert into workflow_webhook_auth_failures (
+          scope, source, auth_window_started_at, auth_failure_count, blocked_until
+        ) values (?, ?, ?, ?, ?)
+        on conflict(scope) do update set
+          source = excluded.source,
+          auth_window_started_at = excluded.auth_window_started_at,
+          auth_failure_count = excluded.auth_failure_count,
+          blocked_until = excluded.blocked_until
+      `).run(scope, source, nextWindowStartedAt, nextCount, nextBlockedUntil)
+      return {
+        authWindowStartedAt: nextWindowStartedAt,
+        authFailureCount: nextCount,
+        blockedUntil: nextBlockedUntil,
+      }
+    })
+  }
+
+  claimSignature(input: {
+    key: string
+    nowMs: number
+    windowMs: number
+    cacheLimit: number
+  }): WorkflowWebhookReplayClaim | null {
+    const keyHash = webhookSecurityKeyHash(input.key)
+    const claimedAt = normalizeMs(input.nowMs)
+    return withTransaction((db) => {
+      pruneWorkflowWebhookSignatures(db, claimedAt, input.windowMs, input.cacheLimit)
+      const existing = db.prepare('select key_hash from workflow_webhook_signatures where key_hash = ?').get(keyHash)
+      if (existing) return null
+      db.prepare('insert into workflow_webhook_signatures (key_hash, seen_at, status) values (?, ?, ?)')
+        .run(keyHash, claimedAt, 'pending')
+      let active = true
+      return {
+        accept: () => {
+          if (!active) return
+          active = false
+          withTransaction((acceptDb) => {
+            acceptDb.prepare('update workflow_webhook_signatures set status = ? where key_hash = ? and status = ?')
+              .run('accepted', keyHash, 'pending')
+          })
+        },
+        release: () => {
+          if (!active) return
+          active = false
+          withTransaction((releaseDb) => {
+            releaseDb.prepare('delete from workflow_webhook_signatures where key_hash = ? and status = ?')
+              .run(keyHash, 'pending')
+          })
+        },
+      }
+    })
+  }
+
+  clear() {
+    withTransaction((db) => {
+      db.prepare('delete from workflow_webhook_rate_limits').run()
+      db.prepare('delete from workflow_webhook_auth_failures').run()
+      db.prepare('delete from workflow_webhook_signatures').run()
+    })
+  }
+}
+
+export function createWorkflowWebhookSecurityStore(): WorkflowWebhookSecurityStore {
+  return new SqliteWorkflowWebhookSecurityStore()
 }
 
 function readWorkflowProjectionVersion(db = getWorkflowDb()) {

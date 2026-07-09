@@ -15,7 +15,7 @@ type AppShellNoticesProps = {
   onPreviewDismiss: () => void
   runtimeWasReady: boolean
   runtimeError: string | null
-  onRuntimeRestart: () => void
+  onRuntimeRestart: () => Promise<void>
   rendererErrorNotice: string | null
   onRendererErrorDismiss: () => void
   resourceNavigationNotice: ResourceNavigationNotice | null

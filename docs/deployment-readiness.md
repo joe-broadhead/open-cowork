@@ -60,7 +60,7 @@ roles and shared Postgres/object storage.
 Compose files in this repo are local/demo references. They intentionally ship
 loopback URLs, local MinIO, local Postgres, insecure auth overrides, fake/demo
 tokens, and `build:` blocks for fast validation. Production downstream
-overlays must pin OCI images by release tag or digest, replace every demo
+overlays must pin OCI images by immutable digest, replace every demo
 secret, use HTTPS public URLs, and move Postgres/object storage/secrets to the
 provider control plane.
 
@@ -683,7 +683,7 @@ clears the redacted product state.
 Provider recipes under `deploy/gcp`, `deploy/aws`, `deploy/azure`, and
 `deploy/digitalocean` must stay thin. They should define:
 
-- image repository plus immutable release tag or digest,
+- image repository plus immutable digest,
 - public HTTPS origins,
 - OIDC or trusted header auth,
 - Postgres control-plane URL,

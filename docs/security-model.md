@@ -446,9 +446,11 @@ URL credentials, or local home-directory paths.
 
 ## Dependency posture
 
-- `pnpm audit --prod --audit-level moderate` runs as part of the CI gate.
+- `pnpm audit:prod` runs the production graph at the moderate gate and
+  `pnpm audit:full` runs the full dependency graph at the high gate in CI and
+  release policy.
 - Root `pnpm.overrides` entries are intentional. The full set lives in
-  `pnpm.overrides` in the root `package.json`; representative examples are:
+  `pnpm-workspace.yaml`; representative examples are:
   - `ip-address@<=10.1.0` is forced to `>=10.1.1` to keep Electron
     Builder's transitive `socks` stack above GHSA-v2v4-37r5-5v8g.
   - `mermaid>uuid` is pinned to `^14.0.0` so Mermaid's transitive UUID
@@ -458,11 +460,13 @@ URL credentials, or local home-directory paths.
   - Several CVE forces raise transitive dependencies past their patched
     versions (for example `dompurify`, `form-data`, `hono`, `js-yaml`, `qs`,
     `tar`, `tmp`, `undici`, and `vite`).
-- Audit-gate exceptions: when an advisory that trips the CI audit gate has
-  no fixed release yet, add its identifier to `pnpm.auditConfig.ignoreCves`
-  (or `pnpm.auditConfig.ignoreGhsas`) in the root `package.json` with a
-  justification in the PR description. The entry is removed once a patched
-  release ships and is re-reviewed during monthly maintenance.
+- Audit-gate exceptions: when an advisory that trips the CI audit gate has no
+  fixed release yet, add only its `CVE-*` or `GHSA-*` identifier to
+  `pnpm.auditConfig.ignoreCves` or `pnpm.auditConfig.ignoreGhsas` in the root
+  `package.json`. `scripts/pnpm-audit.mjs` enforces that allowlist around
+  `pnpm audit --json`. The PR must include a justification, impact notes, and
+  an owner/date for removal; the entry is removed once a patched release ships
+  and is re-reviewed during monthly maintenance.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

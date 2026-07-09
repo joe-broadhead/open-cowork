@@ -147,6 +147,7 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
   assert.match(docs, /OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED/)
   assert.match(docs, /helm\/open-cowork-gateway/)
+  assert.match(docs, /--set image\.digest=sha256:REPLACE_WITH_CLOUD_DIGEST/)
   assert.match(docs, /cloud-managed-operations\.md/)
   assert.match(docs, /deployment-readiness\.md/)
   assert.match(docs, /runbooks\/managed-byok-saas\.md/)
@@ -156,6 +157,26 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /pnpm deploy:desktop:smoke/)
   assert.match(docs, /pnpm deploy:gateway:smoke/)
   assert.match(docs, /pnpm deploy:continuation:smoke/)
+})
+
+test('provider deployment recipes pin production Helm images by digest', () => {
+  const deployReadme = readRepoFile('deploy/README.md')
+  const readinessDocs = readRepoFile('docs/deployment-readiness.md')
+  const managedWorkersReadme = readRepoFile('deploy/managed-workers/README.md')
+  const awsReadme = readRepoFile('deploy/aws/README.md')
+  const azureReadme = readRepoFile('deploy/azure/README.md')
+  const digitalOceanReadme = readRepoFile('deploy/digitalocean/README.md')
+
+  assert.match(deployReadme, /Public-production Cloud and public Gateway renders require\n`image\.digest`/)
+  assert.match(deployReadme, /immutable OCI digest/)
+  assert.match(readinessDocs, /overlays must pin OCI images by immutable digest/)
+  assert.match(readinessDocs, /image repository plus immutable digest/)
+  assert.match(managedWorkersReadme, /Pinned OCI digest for production/)
+
+  for (const readme of [awsReadme, azureReadme, digitalOceanReadme]) {
+    assert.match(readme, /--set image\.digest=sha256:REPLACE_WITH_CLOUD_DIGEST/)
+    assert.match(readme, /--set image\.digest=sha256:REPLACE_WITH_GATEWAY_DIGEST/)
+  }
 })
 
 test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
@@ -409,6 +430,7 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   assert.match(readme, /GCP configuration is adapter wiring only/)
 
   assert.match(values, /REGION-docker\.pkg\.dev\/PROJECT\/open-cowork\/open-cowork-cloud/)
+  assert.match(values, /digest: sha256:REPLACE_WITH_CLOUD_DIGEST/)
   assert.match(values, /existingSecret: open-cowork-cloud-secrets/)
   assert.match(values, /deploymentTier: public_production/)
   assert.match(values, /mode: oidc/)
@@ -424,6 +446,7 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   assert.match(values, /kind: gcs/)
   assert.match(values, /cloudSqlProxy:/)
   assert.match(values, /enabled: true/)
+  assert.match(values, /digest: sha256:REPLACE_WITH_CLOUD_SQL_PROXY_DIGEST/)
   assert.match(values, /instanceConnectionName: PROJECT:REGION:INSTANCE/)
   assert.match(values, /runConnectionTest: true/)
   assert.match(values, /healthCheck:/)

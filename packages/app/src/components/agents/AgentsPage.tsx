@@ -14,7 +14,7 @@ import {
   CustomSelectionCard,
   RuntimeSelectionCard,
 } from './AgentSelectionCard'
-import { Button, Dialog, EmptyState, Input, SegmentedControl, Skeleton, StudioPageHeader, toast } from '../ui'
+import { Button, Dialog, EmptyState, ErrorState, Input, SegmentedControl, Skeleton, StudioPageHeader, toast } from '../ui'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -63,6 +63,7 @@ export function AgentsPage({
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   // When an import collides with an existing custom coworker, we hold the
   // decoded bundle here and surface a styled confirm before overwriting.
   const [importConflict, setImportConflict] = useState<{ name: string } | null>(null)
@@ -83,6 +84,7 @@ export function AgentsPage({
 
   const refresh = useCallback(() => {
     setLoading(true)
+    setLoadError(null)
     void Promise.all([
       window.coworkApi.agents.list(contextOptions),
       window.coworkApi.agents.catalog(contextOptions),
@@ -96,6 +98,9 @@ export function AgentsPage({
         setBuiltinDetails(nextBuiltIns)
         setRuntimeAgents(nextRuntimeAgents)
         setAppConfig(nextConfig)
+      })
+      .catch((error) => {
+        setLoadError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => setLoading(false))
   }, [contextOptions])
@@ -335,7 +340,26 @@ export function AgentsPage({
           </div>
         ) : null}
 
-        {!(loading && !catalog) && showCustoms && (
+        {!loading && loadError && !catalog ? (
+          <ErrorState
+            title={t('studioTeamPage.loadErrorTitle', 'Couldn’t load coworkers')}
+            message={t('studioTeamPage.loadErrorBody', 'We couldn’t reach the runtime to load your coworker catalog.')}
+            hint={loadError}
+            onRetry={refresh}
+            retryLabel={t('studioTeamPage.reload', 'Reload')}
+          />
+        ) : null}
+
+        {loadError && catalog ? (
+          <div role="alert" className="mb-4 rounded-md border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
+            <span className="font-semibold">{t('studioTeamPage.refreshFailed', 'Couldn’t refresh coworkers.')}</span> {loadError}
+            <Button size="sm" variant="ghost" className="ml-2" onClick={refresh}>
+              {t('studioTeamPage.reload', 'Reload')}
+            </Button>
+          </div>
+        ) : null}
+
+        {!(loading && !catalog) && !(loadError && !catalog) && showCustoms && (
           <ListSection
             label={t('studioTeamPage.customSection', 'Custom coworkers')}
             sublabel={t('studioTeamPage.customSectionHelp', 'Built by you; edit, enable, export, or delete from the card.')}
@@ -375,7 +399,7 @@ export function AgentsPage({
           </ListSection>
         )}
 
-        {!(loading && !catalog) && showBuiltIns && (
+        {!(loading && !catalog) && !(loadError && !catalog) && showBuiltIns && (
           <ListSection
             label={t('studioTeamPage.builtInSection', 'Built-in coworkers')}
             sublabel={t('studioTeamPage.builtInSectionHelp', 'Open Cowork specialists built from bundled skills and tools.')}
@@ -393,7 +417,7 @@ export function AgentsPage({
           </ListSection>
         )}
 
-        {!(loading && !catalog) && showRuntime && (
+        {!(loading && !catalog) && !(loadError && !catalog) && showRuntime && (
           <ListSection
             label={t('studioTeamPage.runtimeSection', 'Runtime-registered coworkers')}
             sublabel={t('studioTeamPage.runtimeSectionHelp', 'Coworkers registered by an SDK plugin; OpenCode still owns their runtime behavior.')}
@@ -411,7 +435,7 @@ export function AgentsPage({
           </ListSection>
         )}
 
-        {!(loading && !catalog) && showOpenCode && (
+        {!(loading && !catalog) && !(loadError && !catalog) && showOpenCode && (
           <ListSection
             label="OpenCode defaults"
             sublabel="Native OpenCode agents that own core execution behavior."

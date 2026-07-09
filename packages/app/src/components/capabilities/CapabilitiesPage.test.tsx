@@ -173,6 +173,8 @@ function renderCapabilitiesPage(overrides: {
   customAgents?: CustomAgentSummary[]
   builtInAgents?: BuiltInAgentDetail[]
   workflows?: WorkflowListPayload
+  initialTarget?: { kind: 'tool' | 'skill'; id: string } | null
+  onInitialTargetHandled?: () => void
 } = {}) {
   useSessionStore.setState({
     currentSessionId: 'session-1',
@@ -201,6 +203,7 @@ function renderCapabilitiesPage(overrides: {
   const listAgents = vi.fn(async () => overrides.customAgents ?? [])
   const builtinAgents = vi.fn(async () => overrides.builtInAgents ?? [])
   const listWorkflows = vi.fn(async () => overrides.workflows ?? { workflows: [], runs: [] })
+  const getSkillBundle = vi.fn(async () => skillBundle)
   let settingsSnapshot = {
     selectedProviderId: null,
     selectedModelId: null,
@@ -269,7 +272,7 @@ function renderCapabilitiesPage(overrides: {
       tools,
       tool,
       skills,
-      skillBundle: vi.fn(async () => skillBundle),
+      skillBundle: getSkillBundle,
       skillBundleFile,
     },
     custom: {
@@ -300,6 +303,8 @@ function renderCapabilitiesPage(overrides: {
   const props = {
     onClose: vi.fn(),
     onCreateAgent: vi.fn(),
+    initialTarget: overrides.initialTarget ?? null,
+    onInitialTargetHandled: overrides.onInitialTargetHandled,
   }
   const view = render(<CapabilitiesPage {...props} />)
 
@@ -307,6 +312,7 @@ function renderCapabilitiesPage(overrides: {
     tools,
     tool,
     skills,
+    getSkillBundle,
     skillBundleFile,
     listMcps,
     listSkills,
@@ -355,6 +361,30 @@ describe('CapabilitiesPage', () => {
 
     api.unmount()
     expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens exact tool navigation targets in the detail view', async () => {
+    const onInitialTargetHandled = vi.fn()
+    const api = renderCapabilitiesPage({
+      initialTarget: { kind: 'tool', id: 'charts' },
+      onInitialTargetHandled,
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
+    expect(api.tool).toHaveBeenCalledWith('charts', { sessionId: 'session-1' })
+    expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens exact skill navigation targets in the detail view', async () => {
+    const onInitialTargetHandled = vi.fn()
+    const api = renderCapabilitiesPage({
+      initialTarget: { kind: 'skill', id: 'research' },
+      onInitialTargetHandled,
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()
+    expect(api.getSkillBundle).toHaveBeenCalledWith('research', { directory: '/work/project' })
+    expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
   })
 
   it('renders the gated relationship graph, consumer matrix, and remediation entry points', async () => {

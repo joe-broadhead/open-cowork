@@ -3,7 +3,7 @@
 ## Requirements
 
 - Node `>=22.12`
-- pnpm `>=10`
+- pnpm `10.32.1` via Corepack
 - Python `>=3.11` for documentation work
 
 ## Choose the product surface

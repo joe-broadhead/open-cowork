@@ -171,8 +171,14 @@ vi.mock('./components/chat/ChatView', () => ({
 }))
 
 vi.mock('./components/workflows/WorkflowsPage', () => ({
-  WorkflowsPage: ({ onOpenThread }: { onOpenThread: (sessionId: string) => void }) => (
-    <div data-testid="workflows-page">
+  WorkflowsPage: ({
+    onOpenThread,
+    initialTarget,
+  }: {
+    onOpenThread: (sessionId: string) => void
+    initialTarget?: { workflowId: string; runId?: string | null } | null
+  }) => (
+    <div data-testid="workflows-page" data-target={JSON.stringify(initialTarget ?? null)}>
       <button type="button" onClick={() => onOpenThread('workflow-session')}>Open workflow thread</button>
     </div>
   ),
@@ -191,11 +197,13 @@ vi.mock('./components/capabilities/CapabilitiesPage', () => ({
   CapabilitiesPage: ({
     onClose,
     onCreateAgent,
+    initialTarget,
   }: {
     onClose: () => void
     onCreateAgent: (seed: { name: string }) => void
+    initialTarget?: { kind: 'tool' | 'skill'; id: string } | null
   }) => (
-    <div data-testid="capabilities-page">
+    <div data-testid="capabilities-page" data-target={JSON.stringify(initialTarget ?? null)}>
       <button type="button" onClick={onClose}>Close capabilities</button>
       <button type="button" onClick={() => onCreateAgent({ name: 'Seeded agent' })}>Create agent from capability</button>
     </div>
@@ -1191,6 +1199,58 @@ describe('App', () => {
     })))
 
     await waitFor(() => expect(api.workflows.get).toHaveBeenCalledWith('workflow-1', undefined))
-    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('workflows-page')).toHaveAttribute('data-target', JSON.stringify({
+      workflowId: 'workflow-1',
+      runId: 'run-1',
+    }))
+  })
+
+  it('opens exact tool capability resource links to the targeted capability surface', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.capabilities.tool).mockResolvedValueOnce({
+      id: 'charts',
+      name: 'Charts',
+    } as Awaited<ReturnType<typeof api.capabilities.tool>>)
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'capability',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      capabilityKind: 'tool',
+      capabilityId: 'charts',
+    })))
+
+    await waitFor(() => expect(api.capabilities.tool).toHaveBeenCalledWith('charts', undefined))
+    expect(await screen.findByTestId('capabilities-page')).toHaveAttribute('data-target', JSON.stringify({
+      kind: 'tool',
+      id: 'charts',
+    }))
+  })
+
+  it('opens exact skill capability resource links to the targeted capability surface', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.capabilities.skillBundle).mockResolvedValueOnce({
+      name: 'research',
+    } as Awaited<ReturnType<typeof api.capabilities.skillBundle>>)
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'capability',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      capabilityKind: 'skill',
+      capabilityId: 'research',
+    })))
+
+    await waitFor(() => expect(api.capabilities.skillBundle).toHaveBeenCalledWith('research', undefined))
+    expect(await screen.findByTestId('capabilities-page')).toHaveAttribute('data-target', JSON.stringify({
+      kind: 'skill',
+      id: 'research',
+    }))
   })
 })

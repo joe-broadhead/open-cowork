@@ -502,6 +502,7 @@ point:
 ```bash
 helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-cloud \
+  --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.deploymentTier=public_production \
   --set cloud.profile=full \
   --set cloud.auth.mode=oidc \

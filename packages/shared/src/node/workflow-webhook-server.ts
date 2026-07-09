@@ -45,6 +45,7 @@ export type WorkflowWebhookReplayClaim = {
 }
 
 export type WorkflowWebhookSecurityStore = {
+  clearOnStop?: boolean
   claimRequest(input: {
     source: string
     nowMs: number
@@ -496,6 +497,6 @@ export function stopWorkflowWebhookServer() {
   server = null
   baseUrl = null
   requireSignatureAuth = false
-  void webhookSecurityStore.clear()
+  if (webhookSecurityStore.clearOnStop !== false) void webhookSecurityStore.clear()
   if (current) current.close()
 }

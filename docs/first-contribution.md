@@ -8,7 +8,7 @@ a small change. Five minutes end-to-end.
 You need:
 
 - Node `>= 22.12` (tracked in `.nvmrc`).
-- pnpm `>= 10` (install via Corepack).
+- pnpm `10.32.1` (install via Corepack).
 - macOS, Linux, or Windows.
 
 No API keys required to run the dev server. Actual LLM calls need

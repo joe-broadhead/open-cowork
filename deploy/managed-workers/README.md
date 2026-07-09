@@ -54,7 +54,7 @@ runtime, scheduler, session store, or gateway execution path.
 
 | Input | Required for workers | Source |
 | --- | --- | --- |
-| Cloud image | Yes | Pinned OCI tag or digest, never `latest` |
+| Cloud image | Yes | Pinned OCI digest for production, never `latest` |
 | Control plane URL | Yes | Secret manager or private env injection |
 | Secret adapter key/ref | Yes | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` where possible |
 | Object store | Yes for scaled workers | Shared bucket/container and prefix |

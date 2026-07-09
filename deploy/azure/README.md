@@ -20,13 +20,14 @@ connect it to Azure Database for PostgreSQL, Blob Storage, and Key Vault
 through workload identity or External Secrets.
 
 Example Helm overrides. Keep real subscription IDs, tenant IDs, registry names,
-resource groups, domains, image tags, and secret values in a private deployment
-repo or Azure-native config, not in this recipe:
+resource groups, domains, image tags, image digests, and secret values in a
+private deployment repo or Azure-native config, not in this recipe:
 
 ```bash
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=REGISTRY.azurecr.io/open-cowork-cloud \
   --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.profile=full \
   --set cloud.publicUrl=https://cowork.example.com \
   --set cloud.auth.mode=oidc \
@@ -45,6 +46,7 @@ Install the gateway as a separate Container Apps service or AKS Deployment:
 helm upgrade --install open-cowork-gateway ../../helm/open-cowork-gateway \
   --set image.repository=REGISTRY.azurecr.io/open-cowork-gateway \
   --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:REPLACE_WITH_GATEWAY_DIGEST \
   --set gateway.cloudBaseUrl=https://cowork.example.com \
   --set gateway.publicUrl=https://gateway.example.com \
   --set gateway.existingSecret=open-cowork-gateway-secrets

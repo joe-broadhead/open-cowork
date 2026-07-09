@@ -71,7 +71,7 @@ and linked from the release Go/No-Go report.
       release
 - [ ] `docs/architecture.md` OpenCode SDK policy points to `apps/desktop/package.json` and `pnpm-lock.yaml`
 - [ ] `SECURITY.md` and `SUPPORT.md` are current
-- [ ] medium-severity `pnpm audit --prod` output has been reviewed manually if CI stayed green
+- [ ] `pnpm audit:prod` and `pnpm audit:full` output has been reviewed if CI stayed green only because of an explicit audit exception
 
 ### Desktop app
 
@@ -161,7 +161,7 @@ and linked from the release Go/No-Go report.
       -- --tier private-hosted-beta --manifest <private-record>`, and summarized in
       `deploy/private-beta/private-beta-go-no-go.public.md` without private
       values.
-- [ ] worker images are pinned by release tag or digest; no deployment uses
+- [ ] worker images are pinned by immutable digest; no deployment uses
       `latest`, mutable aliases, or public repo project/account/customer
       values.
 - [ ] worker drain, rolling update, rollback, and emergency revoke drills have

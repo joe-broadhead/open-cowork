@@ -18,7 +18,7 @@ import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { Button, Card, Icon, Input, type BadgeTone, type IconName } from '../ui'
-import { buildDesktopApprovalQueueItems } from '../studio/approval-queue-model'
+import { countDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 import { useEscape } from '../../hooks/useEscape'
 
 interface Props {
@@ -775,13 +775,13 @@ export function Sidebar({
   const sessionStateById = useSessionStore((state) => state.sessionStateById)
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessionView = useSessionStore((state) => state.currentView)
-  const approvalsQueueCount = useMemo(() => buildDesktopApprovalQueueItems({
+  const approvalsQueueCount = useMemo(() => countDesktopApprovalQueueItems({
     activeWorkspaceId,
     sessionsByWorkspace,
     sessionStateById,
     currentSessionId,
     currentView: sessionView,
-  }).length, [activeWorkspaceId, sessionsByWorkspace, sessionStateById, currentSessionId, sessionView])
+  }), [activeWorkspaceId, sessionsByWorkspace, sessionStateById, currentSessionId, sessionView])
   const manageActive = manageNavItems.some((item) => item.view === currentView)
 
   useEffect(() => {

@@ -89,14 +89,19 @@ Tool
     `mcp__skills__delete_skill_bundle`). Tools belong to MCPs;
     capabilities aggregate them.
 
-## Workflows
+## Playbooks & workflows
+
+Playbook
+:   The user-facing name for a saved repeatable task. A playbook is created
+    from a Workflow Designer setup thread, then run manually, on a schedule,
+    or from a webhook. The Playbooks page is the product surface for creating,
+    running, pausing, and reviewing these saved tasks.
 
 Workflow
-:   A saved repeatable task created from a Workflow Designer setup thread. It
-    can run manually, on a schedule, or from a webhook. It reuses OpenCode
-    agents, tools, skills, approvals, and sessions; Open Cowork stores only the
+:   The internal durable record behind a playbook. It reuses OpenCode agents,
+    tools, skills, approvals, and sessions; Open Cowork stores only the
     definition, triggers, run records, and thread links. See
-    [Workflows](workflows.md).
+    [Playbooks and workflows](workflows.md).
 
 Setup thread
 :   The setup thread where the user and Workflow Designer clarify a workflow.

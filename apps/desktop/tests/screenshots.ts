@@ -104,13 +104,13 @@ async function captureSettingsTabs(page: Page, outputDir: string) {
   // Each settings tab button renders the label + a description on the
   // next line, so the accessible name is "Appearance Theme, color
   // scheme, and fonts". Match the leading label rather than exact-name.
-  // Studio copy renamed "Models" → "Model" and "Workflows" → "Automations";
+  // Studio copy renamed "Models" → "Model" and "Workflows" → "Playbooks";
   // the historical asset IDs stay stable so docs references don't break.
   const tabs: Array<{ pattern: RegExp; id: string }> = [
     { pattern: /^Appearance\b/, id: 'settings-appearance' },
     { pattern: /^Model\b/, id: 'settings-models' },
     { pattern: /^Permissions\b/, id: 'settings-permissions' },
-    { pattern: /^Automations\b/, id: 'settings-workflows' },
+    { pattern: /^Playbooks\b/, id: 'settings-workflows' },
     { pattern: /^Storage\b/, id: 'settings-storage' },
   ]
 

@@ -103,6 +103,27 @@ test('workflow renderer surface uses workflow filenames and route key', () => {
   assert.doesNotMatch(appTypes, /'automations'/)
 })
 
+test('settings and glossary use Playbooks as the product term for saved workflows', () => {
+  const checkedFiles = [
+    'packages/app/src/components/sidebar/SettingsPanel.tsx',
+    'packages/app/src/components/sidebar/SettingsWorkflowsPanel.tsx',
+    'apps/desktop/tests/screenshots.ts',
+    'docs/glossary.md',
+  ]
+  const failures: string[] = []
+  for (const relativePath of checkedFiles) {
+    const content = readFileSync(join(repoRoot, relativePath), 'utf8')
+    for (const stale of [/Automations\b/, /Automation notifications/, /Workflow Preferences/]) {
+      if (stale.test(content)) failures.push(`${relativePath}: ${stale}`)
+    }
+  }
+
+  assert.deepEqual(failures, [])
+  assert.match(readFileSync(join(repoRoot, 'packages/app/src/components/sidebar/SettingsPanel.tsx'), 'utf8'), /'Playbooks'/)
+  assert.match(readFileSync(join(repoRoot, 'packages/app/src/components/sidebar/SettingsWorkflowsPanel.tsx'), 'utf8'), /'Playbook Preferences'/)
+  assert.match(readFileSync(join(repoRoot, 'docs/glossary.md'), 'utf8'), /Playbook\s*\n:/)
+})
+
 test('chat delegated-run surface uses agent-run vocabulary instead of mission-control vocabulary', () => {
   const chatFiles = walkFiles('packages/app/src/components/chat')
   const staleChatNames = chatFiles.filter((relativePath) => /MissionControl|mission-control/.test(relativePath))

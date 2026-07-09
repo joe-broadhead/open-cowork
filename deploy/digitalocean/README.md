@@ -19,13 +19,14 @@ For scalable deployments, install the provider-neutral Helm chart on DOKS and
 connect it to Managed PostgreSQL and Spaces.
 
 Example Helm overrides. Keep real registry names, project IDs, domains, image
-tags, and secret values in a private deployment repo or DigitalOcean-native
-config, not in this recipe:
+tags, image digests, and secret values in a private deployment repo or
+DigitalOcean-native config, not in this recipe:
 
 ```bash
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=registry.digitalocean.com/REGISTRY/open-cowork-cloud \
   --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.profile=full \
   --set cloud.publicUrl=https://cowork.example.com \
   --set cloud.auth.mode=oidc \
@@ -45,6 +46,7 @@ a DOKS Deployment for production:
 helm upgrade --install open-cowork-gateway ../../helm/open-cowork-gateway \
   --set image.repository=registry.digitalocean.com/REGISTRY/open-cowork-gateway \
   --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:REPLACE_WITH_GATEWAY_DIGEST \
   --set gateway.cloudBaseUrl=https://cowork.example.com \
   --set gateway.publicUrl=https://gateway.example.com \
   --set gateway.existingSecret=open-cowork-gateway-secrets

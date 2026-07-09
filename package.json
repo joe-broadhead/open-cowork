@@ -48,6 +48,8 @@
     "lint": "eslint . --max-warnings 0 && pnpm design-tokens:check && node scripts/lint.mjs && node scripts/check-design-token-usage.mjs && node scripts/check-import-cycles.mjs && node scripts/build-docs-mermaid-vendor.mjs --check && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs",
     "lint:dead-code": "knip --production --files --exports",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'packages/app/src/**/*.tsx' 'packages/ui/src/**/*.tsx'",
+    "audit:prod": "node scripts/pnpm-audit.mjs --prod --audit-level moderate",
+    "audit:full": "node scripts/pnpm-audit.mjs --audit-level high",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "i18n:check": "node scripts/i18n-coverage.mjs",
     "test": "pnpm test:prepare && pnpm --workspace-concurrency=1 --filter=./packages/* test && pnpm --filter=./mcps/* test && pnpm --filter @open-cowork/gateway test && pnpm --filter @open-cowork/standalone-gateway test && node scripts/run-node-tests.mjs",
@@ -113,6 +115,12 @@
     "node": ">=22.12",
     "pnpm": "10.32.1",
     "npm": "0"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreCves": [],
+      "ignoreGhsas": []
+    }
   },
   "dependencies": {
     "@open-cowork/runtime-host": "workspace:*",

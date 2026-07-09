@@ -4,6 +4,7 @@
 image:
   repository: REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud
   tag: IMAGE_TAG
+  digest: sha256:REPLACE_WITH_CLOUD_DIGEST
   pullPolicy: IfNotPresent
 
 cloud:
@@ -56,6 +57,8 @@ cloud:
 
 cloudSqlProxy:
   enabled: true
+  image:
+    digest: sha256:REPLACE_WITH_CLOUD_SQL_PROXY_DIGEST
   instanceConnectionName: PROJECT:REGION:INSTANCE
   address: 127.0.0.1
   port: 5432

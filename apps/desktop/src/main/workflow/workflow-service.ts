@@ -1,5 +1,5 @@
 import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
-import { attachWorkflowRunSession, claimDueWorkflowRun, createWorkflowRun, getWorkflow, getWorkflowRun, listWorkflows as listWorkflowState, markWorkflowRunCompleted, markWorkflowRunFailed, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { attachWorkflowRunSession, claimDueWorkflowRun, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow, getWorkflowRun, listWorkflows as listWorkflowState, markWorkflowRunCompleted, markWorkflowRunFailed, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
 import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
@@ -174,7 +174,7 @@ export function configureWorkflowService(options: { getMainWindow: () => Browser
       await replayClaim.release()
       throw error
     }
-  })
+  }, { securityStore: createWorkflowWebhookSecurityStore() })
 }
 
 export function startWorkflowService() {

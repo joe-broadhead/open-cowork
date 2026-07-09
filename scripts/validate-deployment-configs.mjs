@@ -259,6 +259,22 @@ function staticHelmChecks() {
   assertNotIncludes('helm/open-cowork-cloud/values.yaml', 'accent: "#2d6b56"')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'digest: ""')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'digest: ""')
+  assertIncludes('deploy/README.md', 'immutable OCI digest')
+  assertIncludes('deploy/README.md', 'Public-production Cloud and public Gateway renders require')
+  assertIncludes('docs/deployment-readiness.md', 'overlays must pin OCI images by immutable digest')
+  assertIncludes('docs/deployment-readiness.md', 'image repository plus immutable digest')
+  assertIncludes('deploy/managed-workers/README.md', 'Pinned OCI digest for production')
+  for (const file of [
+    'deploy/aws/README.md',
+    'deploy/azure/README.md',
+    'deploy/digitalocean/README.md',
+  ]) {
+    assertIncludes(file, '--set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST')
+    assertIncludes(file, '--set image.digest=sha256:REPLACE_WITH_GATEWAY_DIGEST')
+  }
+  assertIncludes('deploy/gcp/gke/values.gke.yaml.example', 'digest: sha256:REPLACE_WITH_CLOUD_DIGEST')
+  assertIncludes('deploy/gcp/gke/values.gke.yaml.example', 'digest: sha256:REPLACE_WITH_CLOUD_SQL_PROXY_DIGEST')
+  assertIncludes('docs/open-cowork-cloud.md', '--set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')

@@ -1,6 +1,6 @@
 import { ensureWorkflowToolBridge, getWorkflowToolBridgeEnvironment, stopWorkflowToolBridge } from '@open-cowork/runtime-host/workflow/workflow-tool-bridge'
 import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
-import { clearWorkflowStoreCache, createWorkflow, createWorkflowRun, getWorkflow } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { clearWorkflowStoreCache, createWorkflow, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { setRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
 import { runtimeState } from '@open-cowork/runtime-host/runtime-state'
 import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, isWorkflowWebhookLoopbackBindAddress, InMemoryWorkflowWebhookSecurityStore, resetWorkflowWebhookSecurityStateForTests, signWorkflowWebhookPayload, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth } from '@open-cowork/shared/node'
@@ -315,6 +315,39 @@ test('workflow webhook security store atomically claims requests, auth failures,
     windowMs: 60_000,
     cacheLimit: 10,
   }))
+})
+
+test('sqlite workflow webhook security store preserves accepted replay claims across server stops', async () => {
+  await withWorkflowRuntimeStore('durable-webhook-security', async () => {
+    const rawBody = JSON.stringify({ source: 'signed' })
+    const timestamp = '2026-05-14T10:00:00.000Z'
+    const signature = signWorkflowWebhookPayload('secret', rawBody, timestamp)
+    const auth = { kind: 'signature' as const, timestamp, signature, rawBody }
+
+    configureWorkflowWebhookServer(async () => {}, { securityStore: createWorkflowWebhookSecurityStore() })
+    const acceptedClaim = await claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:00.000Z'))
+    assert.ok(acceptedClaim)
+    await acceptedClaim.accept()
+
+    stopWorkflowWebhookServer()
+    configureWorkflowWebhookServer(async () => {}, { securityStore: createWorkflowWebhookSecurityStore() })
+
+    assert.equal(
+      await claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:01.000Z')),
+      null,
+      'accepted signed delivery must stay replay-blocked after local webhook server restart',
+    )
+
+    const transientClaim = await claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:01.000Z'))
+    assert.ok(transientClaim)
+    await transientClaim.release()
+    assert.ok(
+      await claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:02.000Z')),
+      'released transient claims should still allow provider retry',
+    )
+
+    await createWorkflowWebhookSecurityStore().clear()
+  })
 })
 
 test('workflow webhook server throttles repeated unauthorized requests per workflow scope', async () => {

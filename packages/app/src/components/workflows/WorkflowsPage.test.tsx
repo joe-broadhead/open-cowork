@@ -163,6 +163,58 @@ describe('WorkflowsPage', () => {
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
   })
 
+  it('shows a recoverable error instead of an empty state when workflow loading fails', async () => {
+    const { api } = installApi()
+    vi.mocked(api.workflows!.list).mockRejectedValueOnce(new Error('workflow store unavailable'))
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    expect(await screen.findByText('Couldn’t load playbooks')).toBeInTheDocument()
+    expect(screen.getByText('workflow store unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('No playbooks yet')).not.toBeInTheDocument()
+  })
+
+  it('keeps stale playbooks visible when a refresh fails', async () => {
+    const { api, triggerWorkflowUpdated } = installApi()
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    expect(await screen.findByText('Inbox summary')).toBeInTheDocument()
+    vi.mocked(api.workflows!.list).mockRejectedValueOnce(new Error('refresh failed'))
+    triggerWorkflowUpdated()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh playbooks.')
+    expect(screen.getByText('Inbox summary')).toBeInTheDocument()
+  })
+
+  it('highlights and scrolls exact workflow-run navigation targets', async () => {
+    installApi()
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
+    const cancelAnimationFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined)
+    const onInitialTargetHandled = vi.fn()
+
+    render(
+      <WorkflowsPage
+        onOpenThread={vi.fn()}
+        initialTarget={{ workflowId: 'workflow-1', runId: 'run-1' }}
+        onInitialTargetHandled={onInitialTargetHandled}
+      />,
+    )
+
+    expect(await screen.findByText('Opened run run-1')).toBeInTheDocument()
+    expect(screen.getByText('Inbox summary').closest('[data-workflow-id="workflow-1"]')).toHaveAttribute('data-open-cowork-target', 'true')
+    expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+
+    scrollIntoView.mockRestore()
+    requestAnimationFrame.mockRestore()
+    cancelAnimationFrame.mockRestore()
+  })
+
   it('falls back when older workflow payloads omit ordered steps', async () => {
     const legacyPayload = payload()
     delete (legacyPayload.workflows[0] as Partial<WorkflowListPayload['workflows'][number]>).steps

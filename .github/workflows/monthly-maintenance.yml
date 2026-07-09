@@ -43,7 +43,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Production audit (high + moderate)
-        run: pnpm audit --prod --audit-level moderate
+        run: pnpm audit:prod
         continue-on-error: false
 
       - name: Report outdated packages (advisory only)
