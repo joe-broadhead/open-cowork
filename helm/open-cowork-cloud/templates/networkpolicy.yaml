@@ -1,4 +1,44 @@
+{{- $egress := default dict .Values.networkPolicy.egress }}
+{{- $ingress := default dict .Values.networkPolicy.ingress }}
+{{- $egressAllow := default (list) $egress.allow }}
+{{- $egressTo := default (list) $egress.to }}
+{{- $ingressFrom := default (list) $ingress.from }}
+{{- $publicProduction := eq .Values.cloud.deploymentTier "public_production" }}
+{{- $egressEnabled := or $egress.enabled $publicProduction }}
+{{- $allowAllIngressForLocalValue := true }}
+{{- if hasKey $ingress "allowAllSourcesForLocalOnly" }}
+{{- $allowAllIngressForLocalValue = $ingress.allowAllSourcesForLocalOnly }}
+{{- end }}
+{{- $allowAllIngressForLocal := and $allowAllIngressForLocalValue (not $publicProduction) }}
 {{- if .Values.networkPolicy.enabled }}
+{{- range $index, $peer := $ingressFrom }}
+{{- if empty $peer }}
+{{- fail (printf "networkPolicy.ingress.from[%d] must select explicit sources; empty peers allow all sources." $index) }}
+{{- end }}
+{{- $namespaceSelector := default dict $peer.namespaceSelector }}
+{{- if and (hasKey $peer "namespaceSelector") (empty $namespaceSelector.matchLabels) (empty $namespaceSelector.matchExpressions) }}
+{{- fail (printf "networkPolicy.ingress.from[%d].namespaceSelector must use matchLabels or matchExpressions; empty namespaceSelector allows all namespaces." $index) }}
+{{- end }}
+{{- $podSelector := default dict $peer.podSelector }}
+{{- if and (hasKey $peer "podSelector") (empty $podSelector.matchLabels) (empty $podSelector.matchExpressions) }}
+{{- fail (printf "networkPolicy.ingress.from[%d].podSelector must use matchLabels or matchExpressions; empty podSelector allows all pods." $index) }}
+{{- end }}
+{{- end }}
+{{- range $index, $entry := $egressAllow }}
+{{- if empty $entry.to }}
+{{- fail (printf "networkPolicy.egress.allow[%d].to is required; use explicit peers for each egress allowlist entry." $index) }}
+{{- end }}
+{{- if empty $entry.ports }}
+{{- fail (printf "networkPolicy.egress.allow[%d].ports is required; use explicit ports for each egress allowlist entry." $index) }}
+{{- end }}
+{{- end }}
+{{- if and .Values.roles.web.enabled (empty $ingressFrom) (not $allowAllIngressForLocal) }}
+{{- if $publicProduction }}
+{{- fail "cloud.deploymentTier=public_production requires networkPolicy.ingress.from[] with explicit ingress-controller namespace/pod selectors or provider-approved ipBlock peers." }}
+{{- else }}
+{{- fail "networkPolicy.ingress.from[] is required when networkPolicy.ingress.allowAllSourcesForLocalOnly=false." }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -12,14 +52,22 @@ spec:
       {{- include "open-cowork-cloud.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
-    {{- if .Values.networkPolicy.egress.enabled }}
+    {{- if $egressEnabled }}
     - Egress
     {{- end }}
-  {{- if .Values.networkPolicy.egress.enabled }}
-  {{- with .Values.networkPolicy.egress.to }}
+  {{- if $egressEnabled }}
+  {{- if or $egressAllow $egressTo }}
   egress:
+    {{- range $entry := $egressAllow }}
     - to:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml $entry.to | nindent 8 }}
+      ports:
+        {{- toYaml $entry.ports | nindent 8 }}
+    {{- end }}
+    {{- if $egressTo }}
+    - to:
+        {{- toYaml $egressTo | nindent 8 }}
+    {{- end }}
   {{- else }}
   egress: []
   {{- end }}
@@ -43,7 +91,7 @@ spec:
     - ports:
         - protocol: TCP
           port: {{ .Values.roles.web.port }}
-      {{- with .Values.networkPolicy.ingress.from }}
+      {{- with $ingressFrom }}
       from:
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -1,9 +1,8 @@
 import { writeFileAtomic } from '@open-cowork/shared/node'
 import { mkdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import type { RuntimeContextOptions } from '@open-cowork/shared'
 import { getProjectOverlayDirName } from './config-loader-core.js'
-import { listEffectiveBuiltInSkillBundlesSync } from './effective-skills.js'
+import { listEffectiveSkillBundlesSync, type EffectiveSkillContextOptions } from './effective-skills.js'
 import { warmBundledSkillIndex } from './bundled-skill-index.js'
 import { log } from '@open-cowork/shared/node'
 import { getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.js'
@@ -154,12 +153,12 @@ export function writeRuntimeSkillBundle(root: string, bundle: RuntimeSkillBundle
   }
 }
 
-function listContextBundles(context?: RuntimeContextOptions): RuntimeSkillBundle[] {
-  // OpenCode already discovers user-authored machine and project skills
-  // from its native skills directory. The generated SDK skills.paths
-  // catalog is only for Cowork-curated built-in bundles; including custom
-  // skills here exposes the same skill twice to OpenCode.
-  return listEffectiveBuiltInSkillBundlesSync(context)
+function listContextBundles(context?: EffectiveSkillContextOptions): RuntimeSkillBundle[] {
+  // The generated SDK skills.paths catalog is the app-owned discovery surface
+  // for both bundled and allowed custom skills. Runtime config disables
+  // OpenCode's ambient custom-skill discovery so org policy can hide custom
+  // skills deterministically without deleting user/project skill files.
+  return listEffectiveSkillBundlesSync(context)
     .map((bundle) => ({
       name: bundle.name,
       content: bundle.content || '',
@@ -177,7 +176,7 @@ function resolveReadableMirrorRoot(directory?: string | null) {
   return join(resolve(directory), getProjectOverlayDirName(), 'skill-bundles')
 }
 
-export function syncReadableSkillMirror(directory?: string | null, context?: RuntimeContextOptions) {
+export function syncReadableSkillMirror(directory?: string | null, context?: EffectiveSkillContextOptions) {
   const root = resolveReadableMirrorRoot(directory)
   try {
     rmSync(root, { recursive: true, force: true })
@@ -192,7 +191,7 @@ export function syncReadableSkillMirror(directory?: string | null, context?: Run
   }
 }
 
-export function buildRuntimeSkillCatalog(context?: RuntimeContextOptions) {
+export function buildRuntimeSkillCatalog(context?: EffectiveSkillContextOptions) {
   const catalogRoot = getRuntimeSkillCatalogDir()
   rmSync(catalogRoot, { recursive: true, force: true })
   mkdirSync(catalogRoot, { recursive: true })

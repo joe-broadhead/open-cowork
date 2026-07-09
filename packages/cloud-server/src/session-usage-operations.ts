@@ -6,10 +6,12 @@
 // governance sub-service (recordManagedWorkClaimed/recordManagedExecutionEvent) and the
 // read-only summaries (getUsageSummary/listUsageEvents) stay on CloudSessionService.
 import type {
+  ArtifactUploadReservationRecord,
   ControlPlaneStore,
   SessionEventRecord,
 } from './control-plane-store.ts'
 import { type CloudRuntimePolicy } from './cloud-config.ts'
+import { CloudServiceError } from './cloud-service-error.ts'
 import type { BillingAction } from './billing-adapter.ts'
 import type { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
 import type { AppendProjectedEventInput } from './session-projection-service.ts'
@@ -60,6 +62,7 @@ export class CloudUsageOperationsService {
     principal: CloudPrincipal,
     sessionId: string,
     input: {
+      eventId?: string
       type: CloudProjectedSessionEventType
       payload?: Record<string, unknown>
       createdAt?: Date
@@ -69,6 +72,7 @@ export class CloudUsageOperationsService {
     return this.appendProjectedEvent({
       tenantId: principal.tenantId,
       sessionId,
+      eventId: input.eventId,
       type: input.type,
       payload: input.payload || {},
       createdAt: input.createdAt,
@@ -76,12 +80,25 @@ export class CloudUsageOperationsService {
   }
 
   async assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number) {
+    const quota = await this.artifactUploadQuota(principal, bytes, new Date())
+    if (!quota) return
+    const result = await this.store.consumeUsageQuota(quota)
+    if (!result.allowed) {
+      throw this.usageGovernance.quotaError(
+        'Cloud artifact upload quota exceeded.',
+        'quota.artifact_bytes_per_day_exceeded',
+        result.retryAfterMs,
+      )
+    }
+  }
+
+  private async artifactUploadQuota(principal: CloudPrincipal, bytes: number, now: Date) {
     await this.assertBillingAllowed({
       orgId: this.principalOrgId(principal),
       action: 'artifact.upload',
       profileName: this.policy.profileName,
     })
-    await this.usageGovernance.consumeQuota({
+    const quota = await this.usageGovernance.usageQuotaForOrg({
       orgId: this.principalOrgId(principal),
       quotaKey: 'artifact_bytes:day',
       limit: this.abuse.maxArtifactBytesPerDay,
@@ -89,12 +106,106 @@ export class CloudUsageOperationsService {
       quantity: bytes,
       windowMs: DAY_MS,
       policyCode: 'quota.artifact_bytes_per_day_exceeded',
-      message: 'Cloud artifact upload quota exceeded.',
+    })
+    return quota ? { ...quota, now } : null
+  }
+
+  async reserveArtifactUploadQuota(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    objectKey: string
+    filename: string
+    contentType: string | null
+    expectedBytes: number
+    expiresAt: string
+  }): Promise<ArtifactUploadReservationRecord> {
+    const now = new Date()
+    const quota = await this.artifactUploadQuota(principal, input.expectedBytes, now)
+    const result = await this.store.createArtifactUploadReservation({
+      orgId: this.principalOrgId(principal),
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      sessionId: input.sessionId,
+      artifactId: input.artifactId,
+      objectKey: input.objectKey,
+      filename: input.filename,
+      contentType: input.contentType,
+      reservedBytes: input.expectedBytes,
+      expiresAt: input.expiresAt,
+      quota,
+      createdAt: now,
+    })
+    if (result.quota && !result.quota.allowed) {
+      throw this.usageGovernance.quotaError(
+        'Cloud artifact upload quota exceeded.',
+        'quota.artifact_bytes_per_day_exceeded',
+        result.quota.retryAfterMs,
+      )
+    }
+    if (!result.reservation) throw new CloudServiceError(409, 'Cloud artifact upload reservation could not be created.')
+    return result.reservation
+  }
+
+  async getArtifactUploadReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+  }): Promise<ArtifactUploadReservationRecord | null> {
+    return this.store.getArtifactUploadReservation({
+      orgId: this.principalOrgId(principal),
+      tenantId: principal.tenantId,
+      sessionId: input.sessionId,
+      artifactId: input.artifactId,
+    })
+  }
+
+  async settleArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    actualBytes: number
+  }): Promise<ArtifactUploadReservationRecord> {
+    const now = new Date()
+    const quota = await this.artifactUploadQuota(principal, input.actualBytes, now)
+    const result = await this.store.settleArtifactUploadReservation({
+      orgId: this.principalOrgId(principal),
+      tenantId: principal.tenantId,
+      sessionId: input.sessionId,
+      artifactId: input.artifactId,
+      actualBytes: input.actualBytes,
+      quota,
+      now,
+    })
+    if (result.quota && !result.quota.allowed) {
+      throw this.usageGovernance.quotaError(
+        'Cloud artifact upload quota exceeded.',
+        'quota.artifact_bytes_per_day_exceeded',
+        result.quota.retryAfterMs,
+      )
+    }
+    if (!result.reservation) throw new CloudServiceError(409, 'Cloud artifact upload reservation was not found.')
+    if (!result.settled && result.reservation.status !== 'settled') {
+      throw new CloudServiceError(409, `Cloud artifact upload reservation is ${result.reservation.status}.`)
+    }
+    return result.reservation
+  }
+
+  async releaseArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    status: 'expired' | 'failed'
+  }): Promise<ArtifactUploadReservationRecord | null> {
+    return this.store.releaseArtifactUploadReservation({
+      orgId: this.principalOrgId(principal),
+      tenantId: principal.tenantId,
+      sessionId: input.sessionId,
+      artifactId: input.artifactId,
+      status: input.status,
+      now: new Date(),
     })
   }
 
   async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
     await this.usageGovernance.recordUsage({
+      eventId: `artifact.uploaded:${principal.tenantId}:${sessionId}:${artifactId}`,
       orgId: this.principalOrgId(principal),
       accountId: principal.accountId || principal.userId,
       eventType: 'artifact.uploaded',

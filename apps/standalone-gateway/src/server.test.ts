@@ -70,6 +70,13 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
     });
     assert.equal(dashboard.status, 200);
     assert.match(await dashboard.text(), /Standalone Gateway/);
+    assert.equal((await fetch(`${url}/metrics`)).status, 401);
+    assert.equal((await fetch(`${url}/metrics`, {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+    })).status, 401);
+    assert.equal((await fetch(`${url}/metrics`, {
+      headers: { authorization: "Bearer wrong-token" },
+    })).status, 401);
     const metrics = await fetch(`${url}/metrics`, {
       headers: { authorization: "Bearer standalone-admin-token" },
     });

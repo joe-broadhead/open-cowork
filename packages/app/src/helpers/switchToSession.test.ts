@@ -29,7 +29,7 @@ function resetSessionStore() {
 }
 
 describe('switchToSession', () => {
-  it('surfaces activation failures through the chat error channel and diagnostics', async () => {
+  it('surfaces activation failures without making the failed session active', async () => {
     const activate = vi.fn(async () => {
       throw new Error('activation ipc failed')
     })
@@ -44,10 +44,10 @@ describe('switchToSession', () => {
     })
     resetSessionStore()
 
-    await switchToSession('session-1')
+    await expect(switchToSession('session-1')).resolves.toBe('failed')
 
     expect(activate).toHaveBeenCalledWith('session-1', { workspaceId: LOCAL_WORKSPACE_ID })
-    expect(useSessionStore.getState().currentSessionId).toBe('session-1')
+    expect(useSessionStore.getState().currentSessionId).toBeNull()
     expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load this thread. Try reopening it.')
     expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
       message: expect.stringContaining('activation ipc failed'),
@@ -104,12 +104,11 @@ describe('switchToSession', () => {
       isAwaitingPermission: false,
       isAwaitingQuestion: false,
     })
-    await loading
+    await expect(loading).resolves.toBe('stale')
 
     expect(activate).toHaveBeenCalledWith('same-session-id', { workspaceId: 'cloud:one' })
     expect(useSessionStore.getState().activeWorkspaceId).toBe('cloud:two')
     expect(useSessionStore.getState().sessionStateById[sessionWorkspaceKey('cloud:two', 'same-session-id')]).toBeUndefined()
-    expect(useSessionStore.getState().sessionStateById[sessionWorkspaceKey('cloud:one', 'same-session-id')]?.hydrated).toBe(false)
-    expect(useSessionStore.getState().sessionStateById[sessionWorkspaceKey('cloud:one', 'same-session-id')]?.messageIds).toEqual([])
+    expect(useSessionStore.getState().sessionStateById[sessionWorkspaceKey('cloud:one', 'same-session-id')]).toBeUndefined()
   })
 })

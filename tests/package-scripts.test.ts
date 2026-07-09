@@ -3,7 +3,14 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 type PackageJson = {
+  packageManager?: string
   engines?: Record<string, string>
+  pnpm?: {
+    auditConfig?: {
+      ignoreCves?: string[]
+      ignoreGhsas?: string[]
+    }
+  }
   scripts?: Record<string, string>
 }
 
@@ -22,8 +29,23 @@ const knipJson = JSON.parse(readFileSync(new URL('../knip.json', import.meta.url
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', import.meta.url), 'utf8')
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
+const monthlyMaintenanceWorkflow = readFileSync(new URL('../.github/workflows/monthly-maintenance.yml', import.meta.url), 'utf8')
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
+const npmrc = readFileSync(new URL('../.npmrc', import.meta.url), 'utf8')
+const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
 const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
+const gettingStartedDocs = readFileSync(new URL('../docs/getting-started.md', import.meta.url), 'utf8')
+const firstContributionDocs = readFileSync(new URL('../docs/first-contribution.md', import.meta.url), 'utf8')
+const securityModelDocs = readFileSync(new URL('../docs/security-model.md', import.meta.url), 'utf8')
+const releaseChecklistDocs = readFileSync(new URL('../docs/release-checklist.md', import.meta.url), 'utf8')
+const mkdocsConfig = readFileSync(new URL('../mkdocs.yml', import.meta.url), 'utf8')
+const linuxNode22PerfBaseline = JSON.parse(readFileSync(new URL('../benchmarks/perf-baseline.linux-x64-node22.json', import.meta.url), 'utf8')) as {
+  environment?: {
+    platform?: string
+    arch?: string
+    node?: string
+  }
+}
 const nvmrc = readFileSync(new URL('../.nvmrc', import.meta.url), 'utf8').trim()
 const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
 const smokeHelpers = readFileSync(new URL('../apps/desktop/tests/smoke-helpers.ts', import.meta.url), 'utf8')
@@ -82,6 +104,13 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'node scripts/coverage-summary.mjs --check',
   ])
 
+  assert.deepEqual(splitScriptSteps(requireScript('test:windows-prepackage')), [
+    'pnpm test:prepare',
+    'pnpm --filter @open-cowork/cloud-client build',
+    'node scripts/check-preload-channels.mjs',
+    'node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/regenerate-windows-update-metadata.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts',
+  ])
+
   assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/app test:coverage:renderer')
 })
 
@@ -102,6 +131,8 @@ test('root lint script runs all release gate checks', () => {
 })
 
 test('dead-code gate covers every source workspace package', () => {
+  assert.equal(requireScript('lint:dead-code'), 'knip --production --files --exports')
+
   const workspaces = knipJson.workspaces || {}
   const expected = sourceWorkspacePackageDirs()
   const missing = expected.filter((workspace) => !workspaces[workspace])
@@ -116,10 +147,27 @@ test('dead-code gate covers every source workspace package', () => {
 })
 
 test('contributor setup docs and dependency update governance match enforced engines', () => {
-  assert.equal(nvmrc, '22.12.0')
-  assert.equal(packageJson.engines?.node, '>=22.12')
-  assert.match(contributingDocs, /Node `>=22\.12`/)
+  assert.equal(nvmrc, '22.13.0')
+  assert.equal(packageJson.packageManager, 'pnpm@10.32.1')
+  assert.equal(packageJson.engines?.node, '>=22.13')
+  assert.equal(packageJson.engines?.pnpm, '10.32.1')
+  assert.deepEqual(linuxNode22PerfBaseline.environment, {
+    platform: 'linux',
+    arch: 'x64',
+    node: `v${nvmrc}`,
+  })
+  assert.match(npmrc, /^engine-strict=true$/m)
+  assert.match(contributingDocs, /Node `>=22\.13`/)
   assert.doesNotMatch(contributingDocs, /Node `>=22`[^.]/)
+  for (const docs of [readmeDocs, contributingDocs, gettingStartedDocs, firstContributionDocs]) {
+    assert.match(docs, /pnpm `10\.32\.1`/)
+    assert.doesNotMatch(docs, /pnpm `>= ?10`/)
+  }
+  assert.match(readmeDocs, /\[!\[pnpm 10\.32\.1\]/)
+  assert.doesNotMatch(readmeDocs, /\[!\[pnpm 10\+\]/)
+  for (const workflow of [ciWorkflow, docsWorkflow, releaseWorkflow, monthlyMaintenanceWorkflow]) {
+    assert.match(workflow, /version: 10\.32\.1/)
+  }
 
   for (const directory of [
     '/docker/open-cowork-cloud',
@@ -127,6 +175,35 @@ test('contributor setup docs and dependency update governance match enforced eng
   ]) {
     assert.match(dependabotConfig, new RegExp(`package-ecosystem: "docker"[\\s\\S]*directory: "${directory}"`))
   }
+})
+
+test('pnpm audit policy is explicit and wired through repository scripts', () => {
+  assert.equal(requireScript('audit:prod'), 'node scripts/pnpm-audit.mjs --prod --audit-level moderate')
+  assert.equal(requireScript('audit:full'), 'node scripts/pnpm-audit.mjs --audit-level high')
+  assert.deepEqual(packageJson.pnpm?.auditConfig?.ignoreCves, [])
+  assert.deepEqual(packageJson.pnpm?.auditConfig?.ignoreGhsas, [])
+  assert.match(ciWorkflow, /run: pnpm audit:prod/)
+  assert.match(ciWorkflow, /run: pnpm audit:full/)
+  assert.match(releaseWorkflow, /run: pnpm audit:prod/)
+  assert.match(releaseWorkflow, /run: pnpm audit:full/)
+  assert.match(monthlyMaintenanceWorkflow, /run: pnpm audit:prod/)
+  assert.doesNotMatch(ciWorkflow, /pnpm audit --/)
+  assert.doesNotMatch(releaseWorkflow, /pnpm audit --/)
+  assert.match(securityModelDocs, /pnpm audit:prod/)
+  assert.match(securityModelDocs, /scripts\/pnpm-audit\.mjs/)
+  assert.match(securityModelDocs, /pnpm\.auditConfig\.ignoreCves/)
+  assert.match(releaseChecklistDocs, /pnpm audit:prod/)
+  assert.match(releaseChecklistDocs, /pnpm audit:full/)
+})
+
+test('published docs do not include superseded audit reports', () => {
+  for (const path of [
+    'docs/production-readiness-audit.md',
+    'docs/repo-deep-audit-2026-06.md',
+  ]) {
+    assert.equal(existsSync(new URL(`../${path}`, import.meta.url)), false, `${path} must remain quarantined outside published docs`)
+  }
+  assert.doesNotMatch(mkdocsConfig, /production-readiness-audit|repo-deep-audit-2026-06/)
 })
 
 test('production license compatibility gate is wired as a script and CI step', () => {
@@ -285,6 +362,16 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
     /OPEN_COWORK_E2E_READY_FILE: readyFile/,
     'packaged probe launch must pass an isolated ready file into the packaged process',
   )
+  assert.match(
+    smokeHelpers,
+    /OPEN_COWORK_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON/,
+    'direct desktop smoke must use an explicit runtime component development override',
+  )
+  assert.match(
+    smokeHelpers,
+    /export async function assertRuntimeComponentProvenance/,
+    'desktop smoke helpers must expose a runtime component provenance assertion',
+  )
 })
 
 test('ci and release workflows use canonical release gate scripts', () => {
@@ -310,12 +397,15 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
+    'pnpm test:windows-prepackage',
     'node scripts/find-linux-packaged-executable.mjs',
+    'node scripts/find-windows-packaged-executable.mjs',
     'pnpm proof:cloud:opencode-portability --json',
     'pnpm proof:sandbox:opencode-session -- --json',
-    'pnpm audit --prod --audit-level moderate',
-    'pnpm audit --audit-level high',
+    'pnpm audit:prod',
+    'pnpm audit:full',
     'pnpm license:check',
+    'pnpm lint:dead-code',
   ]) {
     assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
   }
@@ -348,8 +438,9 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
     'pnpm proof:sandbox:opencode-session -- --json',
-    'pnpm audit --prod --audit-level moderate',
-    'pnpm audit --audit-level high',
+    'pnpm audit:prod',
+    'pnpm audit:full',
+    'pnpm lint:dead-code',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
     'node scripts/verify-release-actor.mjs',

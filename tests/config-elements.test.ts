@@ -78,7 +78,7 @@ test('GitHub Copilot provider descriptor matches pinned OpenCode runtime discove
 })
 
 test('invalid config fails fast with a readable validation error', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -109,7 +109,7 @@ test('invalid config fails fast with a readable validation error', () => {
 })
 
 test('config loader lets downstreams disable native web search while keeping web fetch allowed', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-websearch-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-websearch-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -140,7 +140,7 @@ test('config loader lets downstreams disable native web search while keeping web
 })
 
 test('config loader normalizes cloud defaults and focused profile overrides', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-cloud-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-cloud-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -187,7 +187,7 @@ test('config loader normalizes cloud defaults and focused profile overrides', ()
 })
 
 test('config loader preserves every documented gateway provider kind', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-gateway-providers-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-gateway-providers-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
   const providerKinds = ['fake', 'telegram', 'slack', 'email', 'webhook', 'discord', 'whatsapp', 'signal', 'cli'] as const
@@ -243,7 +243,7 @@ test('config loader preserves every documented gateway provider kind', () => {
 })
 
 test('config loader accepts select and radio credential metadata for bundled MCPs', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-mcp-credentials-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-mcp-credentials-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -316,7 +316,7 @@ test('config loader accepts select and radio credential metadata for bundled MCP
 })
 
 test('config loader accepts JSONC, file placeholders, and partial config directory overrides', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-dir-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-dir-'))
   const configDir = join(tempRoot, 'downstream')
   const configPath = join(configDir, 'config.jsonc')
   const brandPath = join(configDir, 'brand.txt')
@@ -361,7 +361,7 @@ test('config loader accepts JSONC, file placeholders, and partial config directo
 })
 
 test('config loader applies per-user config after downstream env layers', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-merge-order-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-merge-order-'))
   const tempHome = join(tempRoot, 'home')
   const configDir = join(tempRoot, 'downstream')
   const userConfigDir = join(tempHome, '.config', 'merge-order-data')
@@ -483,7 +483,7 @@ test('config normalization applies layer precedence without loader state', () =>
 })
 
 test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-branding-fallback-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-branding-fallback-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
   const logoDataUrl = 'data:image/png;base64,AAAA'
@@ -520,7 +520,7 @@ test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve',
 })
 
 test('config loader accepts downstream model price and context overrides', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-model-info-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-model-info-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -574,7 +574,7 @@ test('config loader accepts downstream model price and context overrides', () =>
 })
 
 test('config loader exposes provider-local default models when present in the configured catalog', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-provider-default-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-provider-default-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -630,7 +630,7 @@ test('config loader exposes provider-local default models when present in the co
 })
 
 test('config loader silently ignores provider-local defaults absent from the current catalog', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-provider-default-missing-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-provider-default-missing-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 
@@ -672,7 +672,7 @@ test('config loader silently ignores provider-local defaults absent from the cur
 })
 
 test('config loader resolves telemetry header env placeholders', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-telemetry-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-telemetry-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
   const previousToken = process.env.ACME_TELEMETRY_TOKEN
@@ -712,7 +712,7 @@ test('config loader resolves telemetry header env placeholders', () => {
 })
 
 test('config loader rejects env placeholders that are not explicitly allowlisted', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-env-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-env-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
 

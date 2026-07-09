@@ -57,6 +57,12 @@ function byokStore(overrides: Partial<ByokSecretStore> = {}): ByokSecretStore {
   }
 }
 
+function assertPolicyManage(input: CloudPrincipal) {
+  if (input.role !== 'owner' && input.role !== 'admin') {
+    throw new CloudServiceError(403, 'BYOK credential administration requires policy:manage permission.')
+  }
+}
+
 function unusedStoreAction(): Promise<never> {
   throw new Error('not used')
 }
@@ -160,6 +166,7 @@ test('cloud domain services expose testable seams without an HTTP server', async
   const byok = new CloudByokService({
     ensurePrincipal: async (input) => input,
     principalOrgId: (input) => input.orgId || input.tenantId,
+    assertPermission: assertPolicyManage,
     byokSecrets: byokStore({
       async listMetadata() {
         calls.push('byok.list')
@@ -273,6 +280,7 @@ test('cloud BYOK service enforces storage, provider, KMS, billing, and audit bou
       return input
     },
     principalOrgId: (input) => input.orgId || input.tenantId,
+    assertPermission: assertPolicyManage,
     byokSecrets: byokStore({
       async setSecret(input) {
         calls.push({
@@ -307,6 +315,7 @@ test('cloud BYOK service enforces storage, provider, KMS, billing, and audit bou
     () => new CloudByokService({
       ensurePrincipal: async (input) => input,
       principalOrgId: (input) => input.orgId || input.tenantId,
+      assertPermission: assertPolicyManage,
       byokSecrets: null,
       assertBillingAllowed: async () => {},
     }).listSecrets(principal),
@@ -359,6 +368,7 @@ test('cloud BYOK service never billing-gates reads or revocation (#906)', async 
   const service = new CloudByokService({
     ensurePrincipal: async (input) => input,
     principalOrgId: (input) => input.orgId || input.tenantId,
+    assertPermission: assertPolicyManage,
     byokSecrets: byokStore({
       async getMetadata() { store.push('getMetadata'); return metadata('anthropic') },
       async disableSecret(input) { store.push('disableSecret'); return metadata(input.providerId) },
@@ -453,6 +463,7 @@ test('cloud BYOK service rejects non-admin principals before billing or mutation
   const service = new CloudByokService({
     ensurePrincipal: async (input) => input,
     principalOrgId: (input) => input.orgId || input.tenantId,
+    assertPermission: assertPolicyManage,
     byokSecrets: byokStore({
       async setSecret(input) {
         calls.push(`set:${input.providerId}`)

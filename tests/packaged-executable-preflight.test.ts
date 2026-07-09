@@ -46,7 +46,9 @@ test('packaged executable preflight accepts executable files', () => {
   })
 })
 
-test('packaged executable preflight rejects non-executable files', () => {
+test('packaged executable preflight rejects non-executable files', {
+  skip: process.platform === 'win32' ? 'Windows does not enforce POSIX executable bits.' : false,
+}, () => {
   withTempDir((dir) => {
     const executable = join(dir, 'open-cowork')
     writeFileSync(executable, '#!/bin/sh\nexit 0\n')

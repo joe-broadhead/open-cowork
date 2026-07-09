@@ -1818,7 +1818,7 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
   }
 })
 
-test('cloud HTTP launchpad feed uses bounded session scans and honors disabled artifacts', async () => {
+test('cloud HTTP launchpad feed reads waiting summaries and honors disabled artifacts', async () => {
   const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   const fixture = createFixture({
     policy: {
@@ -1829,20 +1829,24 @@ test('cloud HTTP launchpad feed uses bounded session scans and honors disabled a
       },
     },
   })
-  const originalListSessionsPage = fixture.service.listSessionsPage.bind(fixture.service)
-  const pageLimits: Array<number | null | undefined> = []
+  const summaryLimits: Array<number | null | undefined> = []
   let listSessionsCalled = false
   let artifactIndexCalled = false
   fixture.service.listSessions = async () => {
     listSessionsCalled = true
-    throw new Error('launchpad feed must use bounded session pagination')
+    throw new Error('launchpad feed must not list sessions')
   }
-  fixture.service.listSessionsPage = async (principal, input = {}) => {
-    pageLimits.push(input.limit)
-    await originalListSessionsPage(principal, input)
+  fixture.service.listSessionsPage = async () => {
+    throw new Error('launchpad feed must not page sessions')
+  }
+  fixture.service.getSessionView = async () => {
+    throw new Error('launchpad feed must not hydrate session views')
+  }
+  fixture.service.listCloudLaunchpadSessionSummaries = async (_principal, input = {}) => {
+    summaryLimits.push(input.limit)
     return {
       items: [],
-      nextCursor: 'more-sessions',
+      truncated: true,
       totalEstimate: 101,
     }
   }
@@ -1856,7 +1860,7 @@ test('cloud HTTP launchpad feed uses bounded session scans and honors disabled a
     assert.equal(response.status, 200)
     const feed = await readJson(response)
     assert.equal(listSessionsCalled, false)
-    assert.deepEqual(pageLimits, [100])
+    assert.deepEqual(summaryLimits, [100])
     assert.equal(artifactIndexCalled, false)
     assert.deepEqual(asArray(feed.freshArtifacts), [])
     assert.equal(asRecord(feed.totals).freshArtifacts, 0)
@@ -3140,6 +3144,117 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     assert.equal(audit.some((event) => event.eventType === 'byok_secret.disabled'), true)
     assert.equal(JSON.stringify(audit).includes(rawFirst), false)
     assert.equal(JSON.stringify(audit).includes(rawSecond), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP BYOK APIs enforce effective policy permissions and explicit token scope', async () => {
+  const rawKey = 'credential-http-rbac-1234567890'
+  let currentPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'policy-manager',
+    accountId: 'policy-manager',
+    email: 'policy-manager@example.test',
+    role: 'member',
+    authSource: 'user',
+  }
+  const fixture = createFixture({
+    auth: () => ({
+      ...currentPrincipal,
+      tokenScopes: currentPrincipal.tokenScopes ? [...currentPrincipal.tokenScopes] : undefined,
+    }),
+  })
+  await fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1', orgId: 'tenant-1' })
+  await fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1', orgId: 'tenant-1' })
+  await fixture.store.createAccount({ accountId: 'policy-manager', email: 'policy-manager@example.test' })
+  await fixture.store.createCustomRole({
+    orgId: 'tenant-1',
+    roleKey: 'provider-key-admin',
+    name: 'Provider Key Admin',
+    baseRole: 'member',
+    permissions: ['org:read', 'policy:manage'],
+  })
+  await fixture.store.upsertMembership({
+    orgId: 'tenant-1',
+    accountId: 'policy-manager',
+    role: 'member',
+    customRoleKey: 'provider-key-admin',
+    status: 'active',
+  })
+  await fixture.store.createAccount({ accountId: 'limited-admin', email: 'limited-admin@example.test' })
+  await fixture.store.createCustomRole({
+    orgId: 'tenant-1',
+    roleKey: 'limited-admin',
+    name: 'Limited Admin',
+    baseRole: 'admin',
+    permissions: ['org:read', 'members:read'],
+  })
+  await fixture.store.upsertMembership({
+    orgId: 'tenant-1',
+    accountId: 'limited-admin',
+    role: 'admin',
+    customRoleKey: 'limited-admin',
+    status: 'active',
+  })
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const delegatedCreate = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: rawKey }),
+    })
+    assert.equal(delegatedCreate.status, 201)
+    assert.equal(asRecord((await readJson(delegatedCreate)).secret).providerId, 'anthropic')
+
+    currentPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'limited-admin',
+      accountId: 'limited-admin',
+      email: 'limited-admin@example.test',
+      role: 'admin',
+      authSource: 'user',
+    }
+    const strippedAdminRead = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(strippedAdminRead.status, 403)
+    assert.match(JSON.stringify(await readJson(strippedAdminRead)), /policy:manage/)
+
+    currentPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'token-admin',
+      accountId: 'token-admin',
+      email: 'token-admin@example.test',
+      role: 'owner',
+      authSource: 'api_token',
+      tokenId: 'token-desktop',
+      tokenScopes: ['desktop'],
+    }
+    const desktopTokenRead = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(desktopTokenRead.status, 403)
+    assert.match(JSON.stringify(await readJson(desktopTokenRead)), /admin token scope/)
+
+    currentPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'token-admin',
+      accountId: 'token-admin',
+      email: 'token-admin@example.test',
+      role: 'owner',
+      authSource: 'api_token',
+      tokenId: 'token-admin',
+      tokenScopes: ['admin'],
+    }
+    const adminTokenRead = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(adminTokenRead.status, 200)
+    assert.equal(asArray((await readJson(adminTokenRead)).secrets).length, 1)
   } finally {
     await fixture.server.close()
   }
@@ -5917,6 +6032,59 @@ test('cloud HTTP server exposes operator-scoped Prometheus metrics', async () =>
   }
 })
 
+test('cloud HTTP server metrics require operator-scoped API token access', async () => {
+  const observability = createPrometheusCloudObservability()
+  const principal = (
+    userId: string,
+    role: CloudPrincipal['role'],
+    authSource: CloudPrincipal['authSource'],
+    tokenScopes?: CloudPrincipal['tokenScopes'],
+  ): CloudPrincipal => ({
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId,
+    accountId: userId,
+    email: `${userId}@example.test`,
+    role,
+    authSource,
+    tokenScopes,
+  })
+  const fixture = createFixture({
+    observability,
+    auth: (req) => {
+      const authorization = String(req.headers.authorization || '')
+      if (authorization === 'Bearer operator-token') return principal('operator-token', 'admin', 'api_token', ['operator'])
+      if (authorization === 'Bearer gateway-token') return principal('gateway-token', 'admin', 'api_token', ['gateway'])
+      if (authorization === 'Bearer desktop-token') return principal('desktop-token', 'admin', 'api_token', ['desktop'])
+      return principal('member-1', 'member', 'user')
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    assert.equal((await fetch(`${baseUrl}/api/metrics`)).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer gateway-token' },
+    })).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer desktop-token' },
+    })).status, 403)
+
+    const health = await fetch(`${baseUrl}/healthz`)
+    assert.equal(health.status, 200)
+    await health.text()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const metrics = await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer operator-token' },
+    })
+    assert.equal(metrics.status, 200)
+    assert.match(await metrics.text(), /open_cowork_cloud_http_requests_total/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server emits auth and quota denial metrics', async () => {
   const metrics: unknown[] = []
   const observability: CloudObservabilityAdapter = {
@@ -7147,7 +7315,7 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
 
     const run = asRecord(runBody.run)
     assert.equal(run.status, 'completed')
-    assert.equal(run.sessionId, 'oc-session-1')
+    assert.match(String(run.sessionId), /^workflow_session_/)
     assert.equal(run.summary, 'echo: Summarize revenue for today.')
 
     const workflow = asRecord(runBody.workflow)
@@ -7168,6 +7336,80 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
       'Load daily revenue',
       'Summarize variance',
     ])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP workflow listing pages workflows and batch-loads recent runs', async () => {
+  const fixture = createFixture()
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.test', role: 'owner' })
+  for (let index = 0; index < 120; index += 1) {
+    const workflowId = `workflow-page-${String(index).padStart(3, '0')}`
+    fixture.store.createWorkflow({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      workflowId,
+      draft: {
+        title: `Workflow ${index}`,
+        instructions: `Run workflow ${index}.`,
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+      createdAt: new Date(Date.UTC(2030, 0, 1, 0, 0, index)),
+    })
+    const runId = `${workflowId}-run`
+    fixture.store.createWorkflowRun({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      workflowId,
+      runId,
+      triggerType: 'manual',
+      createdAt: new Date(Date.UTC(2030, 0, 1, 1, 0, index)),
+    })
+    fixture.store.completeWorkflowRun({
+      tenantId: 'tenant-1',
+      workflowId,
+      runId,
+      summary: `done ${index}`,
+      nextStatus: 'active',
+      nextRunAt: null,
+      finishedAt: new Date(Date.UTC(2030, 0, 1, 1, 1, index)),
+    })
+  }
+  let legacyRunListCalls = 0
+  const originalListWorkflowRuns = fixture.store.listWorkflowRuns.bind(fixture.store)
+  fixture.store.listWorkflowRuns = ((...args: Parameters<typeof fixture.store.listWorkflowRuns>) => {
+    legacyRunListCalls += 1
+    return originalListWorkflowRuns(...args)
+  }) as typeof fixture.store.listWorkflowRuns
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const first = await readJson(await fetch(`${baseUrl}/api/workflows?limit=50`))
+    assert.equal(asArray(first.workflows).length, 50)
+    assert.equal(asArray(first.runs).length, 50)
+    assert.equal(first.totalEstimate, 51)
+    assert.equal(typeof first.nextCursor, 'string')
+    assert.equal(legacyRunListCalls, 0)
+
+    const second = await readJson(await fetch(`${baseUrl}/api/workflows?limit=50&cursor=${encodeURIComponent(String(first.nextCursor))}`))
+    assert.equal(asArray(second.workflows).length, 50)
+    assert.equal(asArray(second.runs).length, 50)
+    assert.notEqual(
+      asRecord(asArray(first.workflows)[0]).id,
+      asRecord(asArray(second.workflows)[0]).id,
+    )
+    assert.equal(legacyRunListCalls, 0)
+
+    const invalid = await fetch(`${baseUrl}/api/workflows?cursor=not-a-workflow-cursor`)
+    assert.equal(invalid.status, 400)
+    assert.equal(asRecord(asRecord(await readJson(invalid)).verdict).policyCode, 'workflows.cursor.invalid')
   } finally {
     await fixture.server.close()
   }
@@ -7697,6 +7939,7 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
     userId: 'user-1',
     workflowId: workflow.id,
     runId: 'workflow-attached-recovery-run',
+    sessionId: 'workflow-stranded-session',
     triggerType: 'manual',
     triggerPayload: { source: 'test' },
     claimedBy: 'workflow-api:user-1',
@@ -7747,6 +7990,82 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
     'scheduler-recovery',
   )
   assert.equal(second, null)
+})
+
+test('cloud workflow recovery reuses planned sessions across pre-attach crash windows', async () => {
+  const fixture = createFixture({ autoProcessCommands: false })
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.test', role: 'owner' })
+
+  const createWorkflow = (workflowId: string, title: string) => fixture.store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId,
+    draft: {
+      title,
+      instructions: `Recover ${title}.`,
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+
+  const noSessionWorkflow = createWorkflow('workflow-no-session-recovery', 'No session recovery')
+  const noSessionRun = fixture.store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: noSessionWorkflow.id,
+    runId: 'workflow-no-session-run',
+    triggerType: 'manual',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 30_000,
+    createdAt: new Date('2030-01-01T10:00:00.000Z'),
+  })
+  assert.match(noSessionRun.sessionId || '', /^workflow_session_/)
+  fixture.store.reapExpiredWorkflowClaims({ now: new Date('2030-01-01T10:00:31.000Z') })
+  const recoveredNoSession = await fixture.service.claimAndStartDueWorkflow(
+    new Date('2030-01-01T10:00:32.000Z'),
+    'scheduler-recovery',
+  )
+  assert.equal(recoveredNoSession?.run.id, noSessionRun.id)
+  assert.equal(recoveredNoSession?.sessionId, noSessionRun.sessionId)
+  assert.equal(recoveredNoSession?.command.commandId, `workflow:tenant-1:${noSessionWorkflow.id}:${noSessionRun.id}:prompt`)
+
+  const preAttachWorkflow = createWorkflow('workflow-pre-attach-recovery', 'Pre attach recovery')
+  const preAttachRun = fixture.store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: preAttachWorkflow.id,
+    runId: 'workflow-pre-attach-run',
+    triggerType: 'manual',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 30_000,
+    createdAt: new Date('2030-01-01T11:00:00.000Z'),
+  })
+  assert.ok(preAttachRun.sessionId)
+  fixture.store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: preAttachRun.sessionId!,
+    opencodeSessionId: '',
+    profileName: 'full',
+    title: 'Run Pre attach recovery',
+    createdAt: new Date('2030-01-01T11:00:01.000Z'),
+  })
+  fixture.store.reapExpiredWorkflowClaims({ now: new Date('2030-01-01T11:00:31.000Z') })
+  const recoveredPreAttach = await fixture.service.claimAndStartDueWorkflow(
+    new Date('2030-01-01T11:00:32.000Z'),
+    'scheduler-recovery',
+  )
+  assert.equal(recoveredPreAttach?.run.id, preAttachRun.id)
+  assert.equal(recoveredPreAttach?.sessionId, preAttachRun.sessionId)
+  assert.equal((await fixture.store.getSessionForTenant('tenant-1', preAttachRun.sessionId!))?.createdAt, '2030-01-01T11:00:01.000Z')
+  assert.equal(recoveredPreAttach?.command.commandId, `workflow:tenant-1:${preAttachWorkflow.id}:${preAttachRun.id}:prompt`)
 })
 
 test('cloud HTTP rejects workflow APIs when the cloud profile disables them', async () => {
@@ -8021,6 +8340,8 @@ test('cloud HTTP artifact download falls back to buffered base64 when the store 
 test('cloud HTTP artifact upload issues a presigned PUT, then finalize records the row (F4)', async () => {
   const inner = createInMemoryObjectStore()
   let presignedPutKey: string | null = null
+  const uploadBody = Buffer.from('direct upload body')
+  const abuse = testAbuseConfig({ maxArtifactBytesPerDay: uploadBody.byteLength })
   // A presign-capable store: presignPut hands back a direct PUT URL (modelling S3); real storage
   // stays in-memory so the test can simulate the landed PUT and finalize's headObject finds it.
   const presigningStore: ObjectStoreAdapter = {
@@ -8035,7 +8356,7 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
       }
     },
   }
-  const fixture = createFixture({ objectStore: presigningStore, abuse: testAbuseConfig() })
+  const fixture = createFixture({ objectStore: presigningStore, abuse })
   const baseUrl = await fixture.server.listen()
   try {
     const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
@@ -8049,7 +8370,7 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
     const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain', expectedSize: uploadBody.byteLength }),
     }))).upload)
     assert.equal(begin.transfer, 'presigned')
     assert.match(String(begin.uploadUrl), /^https:\/\/object-store\.test\//)
@@ -8061,7 +8382,10 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
     assert.ok(presignedPutKey, 'expected the store to be asked to presign the upload key')
 
     // Simulate the client PUTting bytes directly to the object store at the presigned key.
-    await inner.putObject({ key: presignedPutKey!, body: Buffer.from('direct upload body'), contentType: 'text/plain' })
+    await inner.putObject({ key: presignedPutKey!, body: uploadBody, contentType: 'text/plain' })
+    // Lower the quota after the object has landed. Because begin reserved the declared
+    // bytes and finalize only settles the delta, this valid upload must still complete.
+    abuse.maxArtifactBytesPerDay = 1
 
     // Finalize: record the metadata row. Size is read authoritatively from the store (headObject).
     const finalized = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
@@ -8071,8 +8395,14 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
     }))).artifact)
     assert.equal(finalized.filename, 'report.txt')
     assert.equal(finalized.contentType, 'text/plain')
-    assert.equal(finalized.size, 'direct upload body'.length)
+    assert.equal(finalized.size, uploadBody.byteLength)
     assert.equal(String(finalized.cloudArtifactId || finalized.artifactId), artifactId)
+    const finalizedRetry = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
+    }))).artifact)
+    assert.equal(String(finalizedRetry.cloudArtifactId || finalizedRetry.artifactId), artifactId)
 
     // The finalized artifact now shows up in the session's artifact list, like a buffered upload.
     const listed = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))).artifacts).map(asRecord)
@@ -8080,7 +8410,9 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
 
     // Finalize attributes the uploaded bytes for usage/billing, exactly like the buffered path.
     const usageEvents = asArray(asRecord(await readJson(await fetch(`${baseUrl}/api/usage/events`))).events).map(asRecord)
-    assert.equal(usageEvents.find((event) => event.eventType === 'artifact.uploaded')?.quantity, 'direct upload body'.length)
+    const uploadEvents = usageEvents.filter((event) => event.eventType === 'artifact.uploaded')
+    assert.equal(uploadEvents.length, 1)
+    assert.equal(uploadEvents[0]?.quantity, uploadBody.byteLength)
 
     // Finalize before the PUT lands is a 409 (object missing), so the client can retry/fall back.
     const missing = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}-not-real/finalize`, {
@@ -8089,6 +8421,64 @@ test('cloud HTTP artifact upload issues a presigned PUT, then finalize records t
       body: JSON.stringify({ filename: 'report.txt', contentType: 'text/plain' }),
     })
     assert.equal(missing.status, 409)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP presigned artifact upload expiration deletes landed objects and releases quota', async () => {
+  const inner = createInMemoryObjectStore()
+  let presignedPutKey: string | null = null
+  const expiredBody = Buffer.from('expired direct upload')
+  const presigningStore: ObjectStoreAdapter = {
+    ...inner,
+    async presignPut(input) {
+      presignedPutKey = input.key
+      return {
+        method: 'PUT',
+        url: `https://object-store.test/${input.key}?sig=expired`,
+        headers: input.contentType ? { 'content-type': input.contentType } : {},
+        expiresAt: '2000-01-01T00:00:00.000Z',
+      }
+    },
+  }
+  const fixture = createFixture({
+    objectStore: presigningStore,
+    abuse: testAbuseConfig({ maxArtifactBytesPerDay: expiredBody.byteLength }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const begin = asRecord(asRecord(await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'expired.txt', contentType: 'text/plain', expectedSize: expiredBody.byteLength }),
+    }))).upload)
+    const artifactId = String(begin.artifactId)
+    assert.ok(presignedPutKey)
+    assert.equal(fixture.store.listUsageQuotaCounters('tenant-1').find((counter) => counter.quotaKey === 'artifact_bytes:day')?.quantity, expiredBody.byteLength)
+    await inner.putObject({ key: presignedPutKey!, body: expiredBody, contentType: 'text/plain' })
+
+    const expired = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: 'expired.txt', contentType: 'text/plain' }),
+    })
+    assert.equal(expired.status, 409)
+    assert.equal(await inner.headObject(presignedPutKey!), null)
+    assert.equal(fixture.store.listUsageQuotaCounters('tenant-1').find((counter) => counter.quotaKey === 'artifact_bytes:day')?.quantity, 0)
+    assert.equal((await fixture.service.listEvents({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      email: 'user@example.test',
+      role: 'owner',
+      authSource: 'local',
+    }, sessionId)).some((event) => event.type === 'artifact.created'), false)
   } finally {
     await fixture.server.close()
   }
@@ -8131,7 +8521,7 @@ test('cloud HTTP artifact upload begin signals unsupported when the store cannot
   }
 })
 
-test('cloud artifact index scans paged sessions until matching artifacts are found', async () => {
+test('cloud artifact index reads persisted rows without paging sessions', async () => {
   const principal: CloudPrincipal = {
     tenantId: 'tenant-1',
     tenantName: 'Tenant 1',
@@ -8142,63 +8532,26 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
     role: 'owner',
     authSource: 'user',
   }
-  const sessions = [
-    ...Array.from({ length: 100 }, (_value, index) => ({
-      sessionId: `session-empty-${index + 1}`,
-      title: `Empty session ${index + 1}`,
-      updatedAt: '2026-01-02T00:00:00.000Z',
-    })),
-    { sessionId: 'session-artifact', title: 'Artifact session', updatedAt: '2026-01-01T00:00:00.000Z' },
-  ]
-  const eventCalls: string[] = []
-  const requestedLimits: Array<number | undefined> = []
+  const indexRequests: unknown[] = []
   const sessionService = {
-    async listSessions() {
-      assert.fail('Artifact index must use paged session listing.')
+    async listSessionsPage() {
+      assert.fail('Artifact index must not page sessions.')
     },
-    async listSessionsPage(_principal: CloudPrincipal, input: { limit?: number, cursor?: string | null } = {}) {
-      requestedLimits.push(input.limit)
-      const offset = input.cursor ? Number(input.cursor) : 0
-      const limit = input.limit ?? sessions.length
-      const nextOffset = offset + limit
+    async getSessionView() {
+      assert.fail('Artifact index must not hydrate session projections.')
+    },
+    async listEvents() {
+      assert.fail('Artifact index must not replay session events.')
+    },
+    async listCloudArtifactIndex(_principal: CloudPrincipal, request: Record<string, unknown>) {
+      indexRequests.push(request)
       return {
-        items: sessions.slice(offset, nextOffset),
-        nextCursor: nextOffset < sessions.length ? String(nextOffset) : null,
-        totalEstimate: sessions.length,
-      }
-    },
-    async getSessionView(_principal: CloudPrincipal, sessionId: string) {
-      const session = sessions.find((entry) => entry.sessionId === sessionId)
-      if (!session) throw new Error(`Unknown session ${sessionId}`)
-      return { session, projection: null }
-    },
-    async listEvents(_principal: CloudPrincipal, sessionId: string) {
-      eventCalls.push(sessionId)
-      if (sessionId !== 'session-artifact') return []
-      return [{
-        type: 'artifact.created',
-        payload: {
-          artifactId: 'artifact-older',
-          sessionId,
-          filename: 'older.txt',
-          contentType: 'text/plain',
-          size: 6,
-          key: 'tenants/tenant-1/private-object-key-older',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-          kind: 'document',
-          status: 'draft',
-          authorAgentId: 'agent-writer',
-          projectId: 'project-1',
-          taskId: 'task-1',
-          statusUpdatedBy: null,
-          statusUpdatedAt: null,
-        },
-      }, {
-        type: 'artifact.created',
-        payload: {
+        items: [{
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          sessionId: 'session-artifact',
+          sessionTitle: 'Artifact session',
           artifactId: 'artifact-newer',
-          sessionId,
           filename: 'newer.txt',
           contentType: 'text/plain',
           size: 7,
@@ -8212,44 +8565,35 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
           taskId: 'task-1',
           statusUpdatedBy: null,
           statusUpdatedAt: null,
-        },
-      }]
+        }],
+        totalEstimate: 2,
+        truncated: true,
+      }
     },
   } as unknown as CloudSessionService
   const artifacts = new CloudArtifactService(sessionService, createInMemoryObjectStore())
 
-  const indexed = await artifacts.listArtifactIndex(principal, { limit: 1 })
-  assert.equal(indexed.artifacts.length, 1)
-  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-newer')
-  assert.equal('key' in indexed.artifacts[0]!, false)
-  assert.equal(indexed.scannedSessions, 101)
-  assert.equal(indexed.truncated, true)
-  assert.deepEqual(requestedLimits, [100, 100])
-  assert.equal(eventCalls.length, 101)
-  assert.equal(eventCalls[0], 'session-empty-1')
-  assert.equal(eventCalls.at(-1), 'session-artifact')
-
-  requestedLimits.length = 0
-  eventCalls.length = 0
-  const complete = await artifacts.listArtifactIndex(principal, { limit: 2 })
-  assert.equal(complete.artifacts.length, 2)
-  assert.deepEqual(complete.artifacts.map((artifact) => artifact.artifactId), ['artifact-newer', 'artifact-older'])
-  assert.equal(complete.scannedSessions, 101)
-  assert.equal(complete.truncated, true)
-  assert.deepEqual(requestedLimits, [100, 100])
-  assert.equal(eventCalls.length, 101)
-
-  requestedLimits.length = 0
-  eventCalls.length = 0
-  const linkedByTask = await artifacts.listArtifactIndex(principal, {
+  const indexed = await artifacts.listArtifactIndex(principal, {
     projectId: 'project-with-task-only-artifacts',
     taskIds: ['task-1'],
     limit: 1,
   })
-  assert.equal(linkedByTask.artifacts.length, 1)
-  assert.equal(linkedByTask.artifacts[0]?.artifactId, 'artifact-newer')
-  assert.equal(linkedByTask.truncated, true)
-  assert.deepEqual(requestedLimits, [100, 100])
+  assert.equal(indexed.artifacts.length, 1)
+  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-newer')
+  assert.equal(indexed.artifacts[0]?.sessionTitle, 'Artifact session')
+  assert.equal(indexed.total, 2)
+  assert.equal(indexed.scannedSessions, 0)
+  assert.equal('key' in indexed.artifacts[0]!, false)
+  assert.equal(indexed.truncated, true)
+  assert.deepEqual(indexRequests, [{
+    sessionId: undefined,
+    projectId: 'project-with-task-only-artifacts',
+    taskId: undefined,
+    taskIds: ['task-1'],
+    status: undefined,
+    kind: undefined,
+    limit: 1,
+  }])
 })
 
 test('cloud HTTP returns policy verdicts when artifacts are disabled', async () => {

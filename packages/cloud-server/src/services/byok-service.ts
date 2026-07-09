@@ -4,7 +4,8 @@ import type {
   ByokSecretStore,
 } from '../byok-secret-store.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
-import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
+import { principalHasPrivilegedTokenScope } from '../principal-access.ts'
+import type { ControlPlanePermission } from '../control-plane-permissions.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 
 export type ByokEntitlementVerdict = {
@@ -47,6 +48,7 @@ export type ByokPolicyOverview = {
 export type CloudByokServiceOptions = {
   ensurePrincipal: (principal: CloudPrincipal) => Promise<unknown> | unknown
   principalOrgId: (principal: CloudPrincipal) => string
+  assertPermission: (principal: CloudPrincipal, permission: ControlPlanePermission) => void
   byokSecrets: ByokSecretStore | null
   byokPolicy?: ByokManagementPolicy
   assertBillingAllowed: (input: {
@@ -55,12 +57,6 @@ export type CloudByokServiceOptions = {
     profileName?: string | null
     providerId?: string | null
   }) => Promise<void> | void
-}
-
-function principalCanManageByok(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
 }
 
 function normalizeByokProviderIdForPolicy(value: string) {
@@ -82,6 +78,7 @@ function byokAuditActor(principal: CloudPrincipal) {
 export class CloudByokService {
   private readonly ensurePrincipal: CloudByokServiceOptions['ensurePrincipal']
   private readonly principalOrgId: CloudByokServiceOptions['principalOrgId']
+  private readonly assertPermission: CloudByokServiceOptions['assertPermission']
   private readonly byokSecrets: ByokSecretStore | null
   private readonly byokPolicy: ByokManagementPolicy
   private readonly assertBillingAllowed: CloudByokServiceOptions['assertBillingAllowed']
@@ -89,6 +86,7 @@ export class CloudByokService {
   constructor(options: CloudByokServiceOptions) {
     this.ensurePrincipal = options.ensurePrincipal
     this.principalOrgId = options.principalOrgId
+    this.assertPermission = options.assertPermission
     this.byokSecrets = options.byokSecrets
     this.byokPolicy = options.byokPolicy || {}
     this.assertBillingAllowed = options.assertBillingAllowed
@@ -184,8 +182,9 @@ export class CloudByokService {
   }
 
   private assertByokAllowed(principal: CloudPrincipal) {
-    if (!principalCanManageByok(principal)) {
-      throw new CloudServiceError(403, 'BYOK credential administration requires an org admin or admin-scoped API token.')
+    this.assertPermission(principal, 'policy:manage')
+    if (principal.authSource === 'api_token' && !principalHasPrivilegedTokenScope(principal, 'admin')) {
+      throw new CloudServiceError(403, 'BYOK credential administration with an API token requires the admin token scope.')
     }
   }
 

@@ -33,6 +33,16 @@ export type TaskRunMeta = {
   finishedAt?: string | null
 }
 
+export type ReplayedChildSessionLineageSeed = {
+  id: string
+  parentSessionId?: string | null
+  title?: string | null
+  agent?: string | null
+  status?: TaskStatus | null
+  startedAt?: string | null
+  finishedAt?: string | null
+}
+
 type QueuedChildSessionMeta = {
   id: string
 }
@@ -91,6 +101,59 @@ export class SessionTaskStateStore {
       return
     }
     this.sessionLineage.set(sessionId, parentId)
+  }
+
+  seedReplayedChildSessionLineage(rootSessionId: string, children: ReplayedChildSessionLineageSeed[]) {
+    if (!rootSessionId || children.length === 0) return
+    this.trackParentSession(rootSessionId)
+
+    for (const child of children) {
+      if (!child.id) continue
+      this.registerSession(child.id, child.parentSessionId || rootSessionId)
+    }
+
+    for (const child of children) {
+      if (!child.id) continue
+      const childRootSessionId = this.resolveRootSession(child.id) || rootSessionId
+      const parentSessionId = this.getImmediateParentSession(child.id) || rootSessionId
+      const existingTaskRunId = this.childSessionToTaskRunId.get(child.id) || `child:${child.id}`
+      const existingTaskRun = this.taskRuns.get(existingTaskRunId)
+      const agent = child.agent ?? existingTaskRun?.agent ?? null
+      const existingTitle = existingTaskRun
+        && !isPlaceholderTaskTitle(existingTaskRun.title, existingTaskRun.agent || agent)
+        ? existingTaskRun.title
+        : null
+      const status = child.status || existingTaskRun?.status || 'queued'
+      const taskRunPatch: Partial<TaskRunMeta> = {
+        rootSessionId: childRootSessionId,
+        parentSessionId,
+        title: chooseTaskTitle(agent, existingTitle, child.title || null),
+        agent,
+        childSessionId: child.id,
+        status,
+        startedAt: existingTaskRun?.startedAt || child.startedAt || null,
+        finishedAt: existingTaskRun?.finishedAt || child.finishedAt || null,
+      }
+
+      if (existingTaskRun) {
+        const updated = applyTaskTimingTransition(existingTaskRun, taskRunPatch)
+        this.taskRuns.set(existingTaskRunId, updated)
+        this.childSessionToTaskRunId.set(child.id, existingTaskRunId)
+      } else {
+        this.registerTaskRun({
+          id: existingTaskRunId,
+          rootSessionId: childRootSessionId,
+          parentSessionId,
+          title: taskRunPatch.title || chooseTaskTitle(agent),
+          agent,
+          childSessionId: child.id,
+          status,
+          startedAt: child.startedAt || null,
+          finishedAt: child.finishedAt || null,
+        })
+      }
+      this.removeQueuedChildSession(child.id)
+    }
   }
 
   getImmediateParentSession(sessionId?: string | null): string | null {

@@ -31,6 +31,16 @@ Release-sensitive scripts should stay deterministic, avoid network calls
 unless the caller clearly expects them, and produce actionable errors for
 CI logs.
 
+`pnpm test:coverage:node` writes Node and workspace LCOV, then checks package
+floors with `scripts/coverage-summary.mjs`. The workspace coverage runner also
+sets `NODE_V8_COVERAGE` and merges child-process V8 coverage for shipped
+subprocess boundaries owned by CI/release engineering: the standalone gateway
+CLI (`apps/standalone-gateway/dist`) and bundled MCP handlers (`mcps/*/dist`).
+When a new shipped subprocess entrypoint is added, update
+`WORKSPACE_SUBPROCESS_COVERAGE_PREFIXES` in
+`scripts/subprocess-v8-coverage.mjs` and add or adjust the matching
+package-specific coverage ratchet.
+
 `pnpm cloud:dev` starts the TypeScript source entrypoint for local iteration. It
 serves the unified renderer at `GET /` from `packages/app/dist-browser`; build
 that first with `pnpm --filter @open-cowork/app build:browser`.

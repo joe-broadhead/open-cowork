@@ -41,12 +41,21 @@ import { CapabilitySkillDetailView, CapabilityToolDetailView } from './Capabilit
 import { CapabilityMapView } from './CapabilityMapView'
 import { CapabilityRelationshipView } from './CapabilityRelationshipView'
 
+export type CapabilityNavigationTarget = {
+  kind: 'tool' | 'skill'
+  id: string
+}
+
 export function CapabilitiesPage({
   onClose,
   onCreateAgent,
+  initialTarget = null,
+  onInitialTargetHandled,
 }: {
   onClose: () => void
   onCreateAgent: (seed: Partial<CustomAgentConfig>) => void
+  initialTarget?: CapabilityNavigationTarget | null
+  onInitialTargetHandled?: () => void
 }) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
@@ -129,6 +138,17 @@ export function CapabilitiesPage({
     const unsubscribe = window.coworkApi.on.runtimeReady(() => loadAll())
     return unsubscribe
   }, [loadAll])
+
+  useEffect(() => {
+    if (!initialTarget || loading) return
+    if (initialTarget.kind === 'tool') {
+      setSelection({ type: 'tool', id: initialTarget.id })
+    } else {
+      setTab('skills')
+      setSelection({ type: 'skill', name: initialTarget.id })
+    }
+    onInitialTargetHandled?.()
+  }, [initialTarget, loading, onInitialTargetHandled])
 
   useEffect(() => {
     if (selection?.type !== 'tool') {

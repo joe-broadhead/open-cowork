@@ -60,7 +60,7 @@ roles and shared Postgres/object storage.
 Compose files in this repo are local/demo references. They intentionally ship
 loopback URLs, local MinIO, local Postgres, insecure auth overrides, fake/demo
 tokens, and `build:` blocks for fast validation. Production downstream
-overlays must pin OCI images by release tag or digest, replace every demo
+overlays must pin OCI images by immutable digest, replace every demo
 secret, use HTTPS public URLs, and move Postgres/object storage/secrets to the
 provider control plane.
 
@@ -207,6 +207,10 @@ provider control plane.
   production-strength or resolved from a managed secret ref, auth is enabled,
   the web role has a canonical HTTPS public URL, web does not process commands
   inline, and workers have checkpoints enabled.
+- For Kubernetes, keep `networkPolicy.enabled=true`. Public production Cloud
+  and public Gateway chart renders force egress isolation; an empty allowlist is
+  deny-all, and each opened dependency should use a typed
+  `networkPolicy.egress.allow[]` entry with explicit peers and ports.
 - Use `/livez` for process liveness and `/readyz` for dependency readiness.
   `/healthz` remains backward-compatible, but Kubernetes readiness probes should
   not use it for public production.
@@ -324,6 +328,14 @@ provider control plane.
 - Configure `OPEN_COWORK_CLOUD_OTLP_ENDPOINT`, scrape authenticated
   `GET /api/metrics` for Cloud where Prometheus is used, and scrape Gateway
   `/metrics` with the Gateway admin token.
+- Metrics exposure is operator-only across all public surfaces:
+
+  | Surface | Endpoint | Required auth |
+  | --- | --- | --- |
+  | Cloud | `GET /api/metrics` | Authenticated operator principal or API token with `operator` scope. |
+  | Cloud Channel Gateway | `GET /metrics` | `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`, except explicit local loopback bypass where the bind host, socket peer, and `Host` header are loopback and no forwarded headers are present. |
+  | Standalone Gateway | `GET /metrics` | `OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN`; there is no loopback bypass. |
+
 - Include request ids, org ids, session ids, run ids, worker ids, scheduler ids,
   and gateway delivery ids.
 - Redact BYOK keys, API tokens, cookies, OAuth tokens, webhook secrets,
@@ -671,7 +683,7 @@ clears the redacted product state.
 Provider recipes under `deploy/gcp`, `deploy/aws`, `deploy/azure`, and
 `deploy/digitalocean` must stay thin. They should define:
 
-- image repository plus immutable release tag or digest,
+- image repository plus immutable digest,
 - public HTTPS origins,
 - OIDC or trusted header auth,
 - Postgres control-plane URL,

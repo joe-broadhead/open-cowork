@@ -1,4 +1,7 @@
-import { loadSettings } from '@open-cowork/runtime-host/settings'
+import {
+  loadSettings,
+  saveSettings,
+} from '@open-cowork/runtime-host/settings'
 import { writeE2EWindowReadyProbe } from '@open-cowork/runtime-host'
 import type { App } from 'electron'
 import { BrowserWindow } from 'electron'
@@ -14,6 +17,11 @@ import {
 } from './main-window-lifecycle.ts'
 import { resolveStartupSplashTemplatePath, writeStartupSplashFile } from './startup-splash.ts'
 import { createWindowState } from './window-state.ts'
+import {
+  clampWindowZoomFactor,
+  nextWindowZoomFactor,
+  windowZoomDirectionForInput,
+} from './window-zoom.ts'
 
 export function createMainWindowController(options: {
   app: App
@@ -266,6 +274,18 @@ export function createMainWindowController(options: {
     mainWindow = window
     mainWindowState.manage(window)
 
+    const applyWindowZoomFactor = () => {
+      if (window.isDestroyed()) return
+      window.webContents.setZoomFactor(clampWindowZoomFactor(loadSettings().windowZoomFactor))
+    }
+
+    const persistWindowZoomFactor = (factor: number) => {
+      if (window.isDestroyed()) return
+      const nextFactor = clampWindowZoomFactor(factor)
+      saveSettings({ windowZoomFactor: nextFactor })
+      window.webContents.setZoomFactor(nextFactor)
+    }
+
     const revealCurrentWindow = (source: string) => {
       if (mainWindow !== window || window.isDestroyed()) return
       const bounds = window.getBounds()
@@ -276,11 +296,19 @@ export function createMainWindowController(options: {
       revealMainWindow(window, source)
     }
 
-    window.webContents.setZoomFactor(1)
-    window.webContents.on('zoom-changed', () => {
-      window.webContents.setZoomFactor(1)
+    applyWindowZoomFactor()
+    window.webContents.on('zoom-changed', (event, zoomDirection) => {
+      event.preventDefault()
+      persistWindowZoomFactor(nextWindowZoomFactor(window.webContents.getZoomFactor(), zoomDirection))
+    })
+    window.webContents.on('before-input-event', (event, input) => {
+      const zoomDirection = windowZoomDirectionForInput(input)
+      if (!zoomDirection) return
+      event.preventDefault()
+      persistWindowZoomFactor(nextWindowZoomFactor(window.webContents.getZoomFactor(), zoomDirection))
     })
     window.webContents.on('did-finish-load', () => {
+      applyWindowZoomFactor()
       options.log('renderer', 'Renderer did-finish-load')
       void writeE2EWindowReadyProbe(window.webContents, process.env, { isPackaged: options.app.isPackaged }).catch((error: unknown) => {
         options.log('error', `E2E ready probe failed: ${error instanceof Error ? error.message : String(error)}`)

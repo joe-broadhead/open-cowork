@@ -23,18 +23,18 @@ export function WorkflowSettingsPanel({
     {
       key: 'workflowRunInBackground' as const,
       title: t('settings.workflows.runInBackgroundTitle', 'Run in background'),
-      description: t('settings.workflows.runInBackgroundDescription', 'Hide the window instead of quitting when you close it, so workflows and scheduled work can keep running.'),
+      description: t('settings.workflows.runInBackgroundDescription', 'Hide the window instead of quitting when you close it, so playbooks and scheduled work can keep running.'),
     },
     {
       key: 'workflowDesktopNotifications' as const,
       title: t('settings.workflows.notificationsTitle', 'Desktop notifications'),
-      description: t('settings.workflows.notificationsDescription', 'Show native notifications when a scheduled or webhook workflow needs attention, fails, or finishes a run.'),
+      description: t('settings.workflows.notificationsDescription', 'Show native notifications when a scheduled or webhook playbook needs attention, fails, or finishes a run.'),
     },
   ]
 
   return (
     <div className="flex flex-col gap-5">
-      <span className={sectionLabelCls}>{t('settings.workflows.header', 'Workflow Preferences')}</span>
+      <span className={sectionLabelCls}>{t('settings.workflows.header', 'Playbook Preferences')}</span>
       <div className={panelCardCls}>
         {toggles.map((toggle) => {
           const enabled = settings[toggle.key]

@@ -36,6 +36,7 @@ function baseSettings(): AppSettings {
     enableFileWrite: false,
     runtimeConfigSource: 'app',
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,
@@ -48,7 +49,7 @@ async function withRemoteMcpConfig(
   fn: () => Promise<void>,
   mcpOverrides: Partial<BundleMcp> = {},
 ) {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mcp-preflight-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-preflight-'))
   const configDir = join(tempRoot, 'config')
   const userDataDir = join(tempRoot, 'user-data')
   mkdirSync(configDir, { recursive: true })

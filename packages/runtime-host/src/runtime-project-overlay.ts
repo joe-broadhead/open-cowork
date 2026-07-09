@@ -11,6 +11,12 @@ import {
   getRuntimeHomeDir,
 } from './runtime-paths.js'
 import { getProjectNamespace, getSidecarJsonSuffix } from './config-loader-core.js'
+import { getActiveManagedPolicy, isManagedPolicyExtensionClassEnabled } from './managed-policy.js'
+
+type ProjectOverlaySyncOptions = {
+  includeSkills?: boolean
+}
+
 function agentOverlayFileSuffixes() {
   return ['.md', '.disabled.md', getSidecarJsonSuffix()]
 }
@@ -41,7 +47,10 @@ export function projectHasOverlayContent(directory?: string | null): boolean {
   if (!normalized) return false
   const skillMatch = (entry: { scope: string; directory?: string | null }) =>
     entry.scope === 'project' && normalizeDirectory(entry.directory) === normalized
-  if (listCustomSkills({ directory: normalized }).some(skillMatch)) return true
+  if (
+    isManagedPolicyExtensionClassEnabled(getActiveManagedPolicy(), 'customSkills')
+    && listCustomSkills({ directory: normalized }).some(skillMatch)
+  ) return true
   if (listCustomAgents({ directory: normalized }).some(skillMatch)) return true
   if (listCustomMcps({ directory: normalized }).some(skillMatch)) return true
   return false
@@ -133,7 +142,7 @@ export function clearProjectOverlayCopies() {
   })
 }
 
-export function syncProjectOverlayToRuntime(projectDirectory?: string | null) {
+export function syncProjectOverlayToRuntime(projectDirectory?: string | null, options: ProjectOverlaySyncOptions = {}) {
   clearProjectOverlayCopies()
 
   const normalized = normalizeDirectory(projectDirectory)
@@ -151,9 +160,12 @@ export function syncProjectOverlayToRuntime(projectDirectory?: string | null) {
   mkdirSync(backupSkillsRoot, { recursive: true })
   mkdirSync(backupAgentsRoot, { recursive: true })
 
-  const projectSkills = listCustomSkills({ directory: normalized })
-    .filter((skill) => skill.scope === 'project' && skill.directory === normalized)
-    .map((skill) => skill.name)
+  const includeSkills = options.includeSkills !== false
+  const projectSkills = includeSkills
+    ? listCustomSkills({ directory: normalized })
+      .filter((skill) => skill.scope === 'project' && skill.directory === normalized)
+      .map((skill) => skill.name)
+    : []
   const projectAgents = listCustomAgents({ directory: normalized })
     .filter((agent) => agent.scope === 'project' && agent.directory === normalized)
     .map((agent) => agent.name)

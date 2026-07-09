@@ -8,7 +8,7 @@ import type {
   ChannelTarget,
   IncomingChannelMessage,
 } from '@open-cowork/gateway-channel'
-import { WebhookProviderNotFoundError } from '@open-cowork/gateway-channel'
+import { ChannelWebhookError, WebhookProviderNotFoundError } from '@open-cowork/gateway-channel'
 import { CliProvider } from '@open-cowork/gateway-provider-cli'
 import { DiscordProvider } from '@open-cowork/gateway-provider-discord'
 import { EmailProvider } from '@open-cowork/gateway-provider-email'
@@ -67,22 +67,31 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
     registrations,
     async start(handler) {
       for (const registration of registrations) {
-        await registration.provider.start((message) => handler(registration.config, message))
-        registration.started = true
-        registration.healthy = providerHealthy(registration.provider)
-        registration.lastError = providerHealthError(registration.provider)
-        if (registration.config.kind === 'telegram') {
-          const provider = registration.provider as TelegramProvider
-          await provider.configureWebhook()
+        registration.started = false
+        registration.healthy = false
+        registration.lastError = null
+        try {
+          await registration.provider.start((message) => handler(registration.config, message))
+          registration.started = true
           registration.healthy = providerHealthy(registration.provider)
           registration.lastError = providerHealthError(registration.provider)
+          if (registration.config.kind === 'telegram') {
+            const provider = registration.provider as TelegramProvider
+            await provider.configureWebhook()
+            registration.healthy = providerHealthy(registration.provider)
+            registration.lastError = providerHealthError(registration.provider)
+          }
+        } catch (error) {
+          registration.started = false
+          registration.healthy = false
+          registration.lastError = error instanceof Error ? error.message : String(error)
+          await registration.provider.stop().catch(() => {})
         }
       }
     },
     async stop() {
       for (const registration of [...registrations].reverse()) {
-        if (!registration.started) continue
-        await registration.provider.stop()
+        if (registration.started) await registration.provider.stop()
         registration.started = false
         registration.healthy = false
         registration.lastError = null
@@ -94,6 +103,9 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
     async handleWebhook(id, payload, headers, rawBody) {
       const registration = this.get(id)
       if (!registration) throw new WebhookProviderNotFoundError(`Unknown gateway provider ${id}.`)
+      if (!registration.started || !registration.healthy) {
+        throw new ChannelWebhookError('upstream', `Gateway provider ${id} is not started or healthy.`)
+      }
       if (registration.config.kind === 'telegram') {
         await (registration.provider as TelegramProvider).handleWebhookUpdate(payload, {
           headers,

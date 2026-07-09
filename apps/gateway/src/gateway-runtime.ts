@@ -15,6 +15,7 @@ import {
   ensureGatewayProviderMetrics,
   observeGatewayDeliveryLatency,
   setGatewayProviderState,
+  type GatewayProviderMetricState,
   type GatewayMetrics,
 } from './metrics.js'
 import { classifyProviderFailure } from './provider-errors.js'
@@ -329,7 +330,7 @@ export function createGatewayRuntime(
       }
       await providers.start((providerConfig, message) => handleMessage(providerConfig, message, cloud, providers, streams, metrics, claimedBy))
       for (const registration of providers.registrations) {
-        setGatewayProviderState(metrics, registration.config, registration.healthy ? 'healthy' : 'unhealthy')
+        setGatewayProviderState(metrics, registration.config, providerMetricState(registration))
       }
       started = true
       if (options.subscribeDeliveries !== false) {
@@ -388,7 +389,7 @@ export function createGatewayRuntime(
     ready() {
       refreshProviderHealth(providers, metrics)
       const cloudReachable = options.subscribeDeliveries === false || cloudDeliveriesHealthy
-      return started && cloudReachable && providers.registrations.every((registration) => registration.started && registration.healthy)
+      return started && cloudReachable && providers.registrations.some((registration) => registration.started && registration.healthy)
     },
     refreshProviderHealth() {
       refreshProviderHealth(providers, metrics)
@@ -400,11 +401,21 @@ export function createGatewayRuntime(
 
 function refreshProviderHealth(providers: GatewayProviderRegistry, metrics: GatewayMetrics) {
   for (const registration of providers.registrations) {
+    if (!registration.started) {
+      registration.healthy = false
+      setGatewayProviderState(metrics, registration.config, providerMetricState(registration))
+      continue
+    }
     const health = registration.provider.health?.()
     registration.healthy = health?.ok ?? registration.healthy
     registration.lastError = health?.error || null
-    setGatewayProviderState(metrics, registration.config, registration.healthy ? 'healthy' : 'unhealthy')
+    setGatewayProviderState(metrics, registration.config, providerMetricState(registration))
   }
+}
+
+function providerMetricState(registration: ProviderRegistration): GatewayProviderMetricState {
+  if (!registration.started) return registration.lastError ? 'failed' : 'stopped'
+  return registration.healthy ? 'healthy' : 'unhealthy'
 }
 
 async function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
@@ -584,6 +595,9 @@ async function handleDelivery(
   providerMetrics.deliveriesReceived += 1
 
   try {
+    if (!registration.started || !registration.healthy) {
+      throw new Error(`Gateway provider ${registration.config.id} is not started or healthy.`)
+    }
     await sendDelivery(registration.provider, delivery)
     // Record the send before acking: if the 'sent' ack fails the cloud will re-serve this id, and
     // the dedupe cache must already know the message reached the provider (audit #857).

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 
@@ -53,7 +53,7 @@ async function withGoogleAuthFixture<T>(
   label: string,
   callback: (paths: { root: string; configDir: string; userDataDir: string }) => Promise<T> | T,
 ) {
-  const root = testTempDir(`opencowork-auth-${label}-`)
+  const root = testTempDir(`open-cowork-auth-${label}-`)
   const configDir = join(root, 'config')
   const userDataDir = join(root, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -117,32 +117,6 @@ test('Google OAuth state stays authenticated with expired access token but does 
 
     assert.deepEqual(auth.getAuthState(), { authenticated: true, email: 'user@example.com' })
     assert.equal(auth.getCachedAccessToken(), null)
-  })
-})
-
-test('Google OAuth tokens migrate legacy encrypted development storage to plaintext', async () => {
-  await withGoogleAuthFixture('legacy-encrypted-dev-tokens', async ({ userDataDir }) => {
-    const tokens = {
-      access_token: 'access-token',
-      refresh_token: 'refresh-token',
-      expiry_date: Date.now() + 3_600_000,
-      email: 'user@example.com',
-    }
-    mkdirSync(userDataDir, { recursive: true })
-    writeFileSync(join(userDataDir, 'google-tokens.json'), `sealed:${JSON.stringify(tokens)}`)
-
-    const auth = await importFreshAuthModule('legacy-encrypted-dev-tokens')
-    auth.setAuthSecretStorageForTests({
-      mode: 'plaintext',
-      encryptString: (value: string) => Buffer.from(`sealed:${value}`),
-      decryptString: (raw: Buffer) => raw.toString('utf-8').replace(/^sealed:/, ''),
-    })
-
-    assert.deepEqual(auth.getAuthState(), { authenticated: true, email: 'user@example.com' })
-
-    const persisted = JSON.parse(readFileSync(join(userDataDir, 'google-tokens.json'), 'utf-8'))
-    assert.deepEqual(persisted, tokens)
-    auth.setAuthSecretStorageForTests(null)
   })
 })
 

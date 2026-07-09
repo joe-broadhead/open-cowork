@@ -33,6 +33,7 @@ const BASE_SETTINGS: AppSettings = {
   enableFileWrite: false,
   runtimeConfigSource: 'app',
   runtimeToolingBridgeEnabled: true,
+  windowZoomFactor: 1,
   workflowLaunchAtLogin: false,
   workflowRunInBackground: false,
   workflowDesktopNotifications: true,
@@ -41,7 +42,7 @@ const BASE_SETTINGS: AppSettings = {
 }
 
 function withConfigDir(configJson: Record<string, unknown>, fn: () => void) {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mcp-optin-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-mcp-optin-'))
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   mkdirSync(configDir, { recursive: true })

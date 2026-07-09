@@ -450,9 +450,8 @@ That split is deliberate compatibility policy, not drift. Changing those
 values creates a distinct downstream distribution and requires an explicit
 state-migration plan.
 
-Renderer-only preference keys use the public `open-cowork.*` prefix.
-The app reads the earlier `opencowork.*` keys during v0.x migrations and
-rewrites them to the public prefix on the next preference save.
+Renderer-only preference keys use the public `open-cowork.*` prefix. The app
+does not read unhyphenated preview preference keys.
 
 ## Sandbox artifacts
 

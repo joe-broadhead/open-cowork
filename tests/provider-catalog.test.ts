@@ -124,7 +124,7 @@ describe('mapResponseToModels', () => {
   })
 
   it('fetches dynamic catalogs only over HTTPS and verifies optional SHA-256 pins', async () => {
-    const tempRoot = testTempDir('opencowork-provider-catalog-')
+    const tempRoot = testTempDir('open-cowork-provider-catalog-')
     const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
     const previousFetch = globalThis.fetch
     process.env.OPEN_COWORK_USER_DATA_DIR = join(tempRoot, 'user-data')
@@ -178,7 +178,7 @@ describe('mapResponseToModels', () => {
       return
     }
 
-    const tempRoot = testTempDir('opencowork-provider-catalog-mode-')
+    const tempRoot = testTempDir('open-cowork-provider-catalog-mode-')
     const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
     const previousFetch = globalThis.fetch
     const userDataDir = join(tempRoot, 'user-data')

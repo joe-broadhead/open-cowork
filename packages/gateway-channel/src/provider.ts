@@ -9,8 +9,7 @@ export type ChannelProviderKind =
   | "cli";
 
 export type ChannelProviderInstanceId = `${ChannelProviderKind}-${string}`;
-export type ChannelProviderLegacyInstanceId = `${string}-${string}`;
-export type ChannelProviderId = ChannelProviderKind | ChannelProviderInstanceId | ChannelProviderLegacyInstanceId;
+export type ChannelProviderId = ChannelProviderKind | ChannelProviderInstanceId;
 export type ChannelFileInputMode = "provider_file_id" | "download_url" | "inline_buffer";
 export type ChannelFileOutputMode = "local_path" | "inline_buffer" | "provider_file_id";
 export type ChannelParseMode = "plain" | "markdown" | "html";
@@ -70,7 +69,7 @@ export function isChannelProviderInstanceId(value: unknown): value is ChannelPro
 }
 
 export function isChannelProviderId(value: unknown): value is ChannelProviderId {
-  return isChannelProviderKind(value) || isSafeChannelProviderInstanceId(value);
+  return isChannelProviderKind(value) || isChannelProviderInstanceId(value);
 }
 
 export function isChannelProviderInstanceIdForKind(
@@ -99,16 +98,9 @@ export function normalizeChannelProviderIdentity(
     return { providerId: kind, providerKind: kind };
   }
   if (!isChannelProviderInstanceIdForKind(id, kind)) {
-    if (isSafeChannelProviderInstanceId(id)) {
-      return { providerId: id, providerKind: kind };
-    }
-    throw new Error(`Channel provider id ${id} must equal ${kind}, start with ${kind}-, or be a safe legacy provider id.`);
+    throw new Error(`Channel provider id ${id} must equal ${kind} or start with ${kind}-.`);
   }
   return { providerId: id, providerKind: kind };
-}
-
-function isSafeChannelProviderInstanceId(value: unknown): value is ChannelProviderLegacyInstanceId {
-  return typeof value === "string" && /^[a-z][a-z0-9_-]{1,63}$/.test(value) && value.includes("-");
 }
 
 export interface ChannelCapabilities {

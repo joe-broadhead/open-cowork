@@ -1,10 +1,11 @@
 import {
   SessionTaskStateStore,
+  type ReplayedChildSessionLineageSeed,
   type TaskRunMeta,
   type TaskStatus,
 } from './session-task-state-store.ts'
 
-export type { TaskRunMeta, TaskStatus }
+export type { ReplayedChildSessionLineageSeed, TaskRunMeta, TaskStatus }
 
 const hierarchyStore = new SessionTaskStateStore()
 
@@ -22,6 +23,13 @@ export function untrackParentSession(sessionId: string) {
 
 export function registerSession(sessionId?: string | null, parentId?: string | null) {
   hierarchyStore.registerSession(sessionId, parentId)
+}
+
+export function seedReplayedChildSessionLineage(
+  rootSessionId: string,
+  children: ReplayedChildSessionLineageSeed[],
+) {
+  hierarchyStore.seedReplayedChildSessionLineage(rootSessionId, children)
 }
 
 // Returns the immediate parent session id for a child session, or null if

@@ -46,6 +46,7 @@ const privateSdkAccessAllowlist = new Set([
 ])
 const legacyNamingAllowlist = new Set([
   'AGENTS.md',
+  '.github/workflows/release.yml',
   'docs/architecture.md',
   'docs/configuration.md',
   'docs/custom-mcps.md',
@@ -54,24 +55,26 @@ const legacyNamingAllowlist = new Set([
   'open-cowork.config.json',
   'scripts/desktop-dist.mjs',
   'scripts/lint.mjs',
-  'scripts/perf/suite.ts',
-  '.github/workflows/release.yml',
-  'packages/runtime-host/src/agent-config.ts',
-  'packages/runtime-host/src/config-layer-utils.ts',
   'packages/runtime-host/src/config-loader-core.ts',
-  'packages/runtime-host/src/config-public.ts',
-  'packages/shared/src/config-types.ts',
   'packages/runtime-host/src/custom-agent-store.ts',
-  'packages/runtime-host/src/runtime-config-builder.ts',
-  'packages/app/src/helpers/i18n.ts',
-  'packages/app/src/components/chat/useTaskDrillInLayout.ts',
+  'packages/shared/src/config-types.ts',
+  'apps/desktop/tests/smoke-helpers.ts',
+  'packages/app/src/App.test.tsx',
+  'packages/app/src/components/HomePage.test.tsx',
+  'packages/app/src/components/agents/AgentBuilderPage.test.tsx',
+  'packages/app/src/components/chat/ChatInput.test.tsx',
+  'packages/app/src/components/sidebar/SettingsPanel.test.tsx',
+  'packages/app/src/test/setup.ts',
+  'tests/agent-config.test.ts',
+  'tests/cloud-deployment-artifacts.test.ts',
+  'tests/custom-agents.test.ts',
+  'tests/downstream-config.test.ts',
+  'tests/i18n-runtime.test.ts',
+  'tests/native-customizations.test.ts',
+  'tests/runtime-config-builder.test.ts',
+  'tests/runtime-permissions.test.ts',
+  'tests/runtime-skill-catalog.test.ts',
 ])
-const legacyNamingAllowlistPatterns = [
-  /^tests\//,
-  /^apps\/desktop\/tests\//,
-  /^packages\/app\/src\/.*\.test\.tsx$/,
-  /^packages\/app\/src\/test\//,
-]
 const ignoredFiles = new Set([
   'docs/javascripts/vendor/mermaid.min.js',
 ])
@@ -163,7 +166,7 @@ function lintFile(fullPath) {
     if (ext === '.tsx') validateIconButtonLabels(relPath, content)
   }
 
-  if (/\b(?:opencowork|OpenCowork)\b/.test(content) && !isLegacyNamingAllowed(relPath)) {
+  if (/\bopencowork\b/.test(content) && !isLegacyNamingAllowed(relPath)) {
     errors.push(`${relPath}: use "open-cowork" publicly; legacy "opencowork" is allowed only for documented back-compat namespaces`)
   }
 
@@ -211,7 +214,6 @@ function shouldScanSecretPath(relPath) {
 
 function isLegacyNamingAllowed(relPath) {
   return legacyNamingAllowlist.has(relPath)
-    || legacyNamingAllowlistPatterns.some((pattern) => pattern.test(relPath))
 }
 
 function validateArchitectureSdkVersionPolicy() {

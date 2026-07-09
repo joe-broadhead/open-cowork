@@ -34,6 +34,7 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
       const begun = await options.artifacts.presignSessionArtifactUpload(context.principal, sessionId, {
         filename: tools.readString(beginBody.filename) || '',
         contentType: tools.readString(beginBody.contentType),
+        expectedSize: readOptionalNumber(beginBody.expectedSize),
       })
       if (begun) {
         tools.writeJson(res, 200, {
@@ -140,4 +141,11 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
   }
   tools.writeError(res, 404, 'Not found.', options.corsOrigin)
   return true
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') return Number(value.trim())
+  return Number.NaN
 }

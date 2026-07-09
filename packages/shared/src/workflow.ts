@@ -98,6 +98,13 @@ export interface WorkflowDetail extends WorkflowSummary {
 export interface WorkflowListPayload {
   workflows: WorkflowSummary[]
   runs: WorkflowRun[]
+  nextCursor?: string | null
+  totalEstimate?: number
+}
+
+export interface WorkflowListRequest {
+  limit?: number | null
+  cursor?: string | null
 }
 
 export interface WorkflowToolPreview {

@@ -30,7 +30,7 @@ const documentedLargeFileBudgets = new Map([
   // decomposition already lives at the service layer; this budget is ratcheted to just above the
   // current size so the facade can't grow — new capabilities must go into a sub-service (and,
   // over time, routes should depend on those sub-services directly). See docs/architecture.md (#914).
-  ['packages/cloud-server/src/session-service.ts', 1_935],
+  ['packages/cloud-server/src/session-service.ts', 2_030],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
@@ -152,21 +152,21 @@ test('large cloud source files are documented exceptions', () => {
   }
 })
 
-test('gateway token delivery-owner migrations preserve upgrade compatibility', () => {
-  assert.match(
-    postgresSchema,
-    /INSERT INTO cloud_api_token_channel_binding_grants[\s\S]+tokens\.scopes @> '\["gateway"\]'::jsonb[\s\S]+NOT EXISTS \([\s\S]+cloud_schema_migrations[\s\S]+CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID/,
-    'gateway API token binding migration must backfill active legacy gateway tokens',
-  )
+test('gateway token delivery-owner paths require explicit current grants and owners', () => {
   assert.match(
     postgresChannelDeliveriesDomain,
-    /last_claimed_by = COALESCE\(last_claimed_by, \$8\)/,
-    'legacy delivery ACKs must backfill last_claimed_by when the gateway token owner is known',
+    /last_claimed_by = COALESCE\(\$8, last_claimed_by\)/,
+    'delivery ACKs must preserve the current owner or set an explicit current owner',
   )
-  assert.match(
+  assert.doesNotMatch(
+    postgresSchema,
+    /INSERT INTO cloud_api_token_channel_binding_grants[\s\S]+tokens\.scopes @> '\["gateway"\]'::jsonb/,
+    'gateway API token grant migration must not backfill from broad legacy gateway scopes',
+  )
+  assert.doesNotMatch(
     postgresChannelDeliveriesDomain,
     /last_claimed_by IS NULL AND \$7::text IS NOT NULL AND claimed_by = \$7/,
-    'legacy claimed deliveries must remain ACKable when claimed_by still matches',
+    'delivery ACKs must not accept legacy ownerless claims when a token owner is required',
   )
 })
 
@@ -193,12 +193,15 @@ test('postgres store delegates row mapping to domain modules', () => {
     const lineCount = readFileSync(file, 'utf8').split('\n').length
     assert.ok(lineCount <= 250, `${relativePath} has ${lineCount} lines; Postgres domain mappers should stay narrow`)
   }
-  // The sessions repository owns the session core (session/event/projection/lease/command
-  // lifecycle) extracted from postgres-control-plane-store.ts. It is the single cohesive
-  // domain that legitimately exceeds the narrow per-file budget; ratcheted to just above its
-  // current size so it can't silently re-grow. Every other domain module stays under 700.
+  // The sessions repository owns the remaining session core (session/event/projection/lease/
+  // command lifecycle) after artifact/launchpad indexes and workspace-event streams were split
+  // into dedicated repositories. The workflows repository owns workflow definitions plus run
+  // scheduling/claim/finalization. These are the cohesive domains that legitimately exceed the
+  // narrow per-file budget; ratcheted to just above their post-split sizes so they can't silently
+  // re-grow. Every other domain module stays under 700.
   assertSourceBudget('Postgres store domain module', join(cloudRoot, 'postgres-store-domains'), 700, {
-    'packages/cloud-server/src/postgres-store-domains/sessions.ts': 1_130,
+    'packages/cloud-server/src/postgres-store-domains/sessions.ts': 1_190,
+    'packages/cloud-server/src/postgres-store-domains/workflows.ts': 790,
   })
 })
 

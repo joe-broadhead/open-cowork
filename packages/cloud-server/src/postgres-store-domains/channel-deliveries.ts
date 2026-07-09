@@ -192,7 +192,7 @@ export class PostgresChannelDeliveriesRepository {
       `UPDATE cloud_channel_deliveries
        SET status = $3,
            claimed_by = NULL,
-           last_claimed_by = COALESCE(last_claimed_by, $8),
+           last_claimed_by = COALESCE($8, last_claimed_by),
            claim_expires_at = NULL,
            last_error = $4,
            next_attempt_at = $5,
@@ -204,7 +204,6 @@ export class PostgresChannelDeliveriesRepository {
          AND (
            $8::text IS NULL
            OR last_claimed_by = $8
-           OR (last_claimed_by IS NULL AND $7::text IS NOT NULL AND claimed_by = $7)
          )
        RETURNING *`,
       [

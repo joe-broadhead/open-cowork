@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRovingMenuKeyboard } from './use-roving-menu-keyboard'
 import { useDismissOnOutsidePointer } from './use-dismiss-on-outside-pointer'
-import type { SessionPromptOptions } from '@open-cowork/shared'
 import { useSessionStore, type PrimaryAgentMode } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { ChatInputAttachments } from '../chat/ChatInputAttachments'
@@ -18,6 +17,7 @@ import { useChatRuntimeSelection, useReasoningVariantSelection } from '../chat/u
 import type { Attachment, InlinePickerState, MentionableAgent } from '../chat/chat-input-types'
 import { Icon } from '../ui'
 import { constrainedPrimaryAgentMode, nextAllowedPrimaryAgentMode } from '../../helpers/primary-agent-mode'
+import type { HomePromptOptions } from './home-prompt-options'
 
 // Upper bound on the composer's auto-grow. Past ~220px the textarea
 // starts to dominate the landing page and push everything below the
@@ -43,7 +43,7 @@ export function HomeComposer({
   modelControlsManaged = false,
   modelControlsReason = null,
 }: {
-  onSubmit: (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => void | Promise<void>
+  onSubmit: (text: string, attachments: Attachment[], agent?: string, options?: HomePromptOptions) => void | Promise<void>
   disabled: boolean
   placeholder: string
   specialistAgents: MentionableAgent[]
@@ -186,9 +186,15 @@ export function HomeComposer({
       addGlobalError(t('home.assign.noAllowedAgent', 'This cloud profile does not expose an allowed coworker for Home prompts.'))
       return
     }
-    const promptOptions = modelControlsManaged ? undefined : reasoningSelection.promptOptions
-    if (promptOptions) {
-      await onSubmit(promptText, currentAttachments, promptAgent, promptOptions)
+    const promptOptions = modelControlsManaged
+      ? undefined
+      : {
+          ...(currentModel ? { modelId: currentModel } : {}),
+          ...(reasoningSelection.promptOptions || {}),
+        }
+    const homeOptions = promptOptions && Object.keys(promptOptions).length > 0 ? promptOptions : undefined
+    if (homeOptions) {
+      await onSubmit(promptText, currentAttachments, promptAgent, homeOptions)
     } else {
       await onSubmit(promptText, currentAttachments, promptAgent)
     }
@@ -196,7 +202,7 @@ export function HomeComposer({
     setAttachments([])
     setInlinePicker(null)
     autosize()
-  }, [text, attachments, disabled, canPrompt, attachmentsAllowed, specialistAgents, allowedAgentNames, activeAgentMode, primaryLeadAvailable, fallbackAgent, modelControlsManaged, reasoningSelection.promptOptions, onSubmit, addGlobalError, promptPolicyReason, attachmentPolicyReason])
+  }, [text, attachments, disabled, canPrompt, attachmentsAllowed, specialistAgents, allowedAgentNames, activeAgentMode, primaryLeadAvailable, fallbackAgent, currentModel, modelControlsManaged, reasoningSelection.promptOptions, onSubmit, addGlobalError, promptPolicyReason, attachmentPolicyReason])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []

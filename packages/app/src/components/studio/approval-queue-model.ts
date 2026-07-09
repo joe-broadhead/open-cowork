@@ -19,6 +19,12 @@ type QueueStateInput = {
   pendingAction?: string | null
 }
 
+type QueueStateSnapshot = {
+  sessionId: string
+  workspaceId: string
+  state: Pick<SessionViewState, 'pendingApprovals' | 'pendingQuestions'>
+}
+
 export function approvalQueueActionKey(item: Pick<ApprovalsQueueItem, 'kind' | 'sessionId' | 'id'>) {
   return `${item.kind}:${item.sessionId}:${item.id}`
 }
@@ -126,14 +132,13 @@ function questionItem(
   }
 }
 
-export function buildDesktopApprovalQueueItems({
+function collectDesktopApprovalQueueStates({
   activeWorkspaceId,
   sessionsByWorkspace,
   sessionStateById,
   currentSessionId,
   currentView,
-  pendingAction,
-}: QueueStateInput): ApprovalsQueueItem[] {
+}: Omit<QueueStateInput, 'pendingAction'>) {
   const workspaceId = normalizeWorkspaceId(activeWorkspaceId)
   const sessions = sessionsByWorkspace[workspaceId] || []
   const sessionsById = new Map(sessions.map((session) => [session.id, session]))
@@ -151,20 +156,62 @@ export function buildDesktopApprovalQueueItems({
     queueStates.set(sessionWorkspaceKey(workspaceId, currentSessionId), currentView)
   }
 
-  const items: ApprovalsQueueItem[] = []
+  const states: QueueStateSnapshot[] = []
   for (const [key, state] of queueStates) {
     const parsed = parseSessionWorkspaceKey(key)
-    const stateWorkspaceId = normalizeWorkspaceId(parsed.workspaceId)
-    const session = sessionsById.get(parsed.sessionId)
-    for (const approval of state.pendingApprovals) {
-      const approvalWorkspaceId = normalizeWorkspaceId(approval.workspaceId || stateWorkspaceId)
+    states.push({
+      sessionId: parsed.sessionId,
+      workspaceId: normalizeWorkspaceId(parsed.workspaceId),
+      state,
+    })
+  }
+
+  return { workspaceId, sessionsById, states }
+}
+
+export function countDesktopApprovalQueueItems(input: Omit<QueueStateInput, 'pendingAction'>): number {
+  const { workspaceId, states } = collectDesktopApprovalQueueStates(input)
+  let count = 0
+  for (const entry of states) {
+    for (const approval of entry.state.pendingApprovals) {
+      const approvalWorkspaceId = normalizeWorkspaceId(approval.workspaceId || entry.workspaceId)
+      if (approvalWorkspaceId === workspaceId) count += 1
+    }
+    for (const question of entry.state.pendingQuestions) {
+      const questionWorkspaceId = normalizeWorkspaceId(question.workspaceId || entry.workspaceId)
+      if (questionWorkspaceId === workspaceId) count += 1
+    }
+  }
+  return count
+}
+
+export function buildDesktopApprovalQueueItems({
+  activeWorkspaceId,
+  sessionsByWorkspace,
+  sessionStateById,
+  currentSessionId,
+  currentView,
+  pendingAction,
+}: QueueStateInput): ApprovalsQueueItem[] {
+  const { workspaceId, sessionsById, states } = collectDesktopApprovalQueueStates({
+    activeWorkspaceId,
+    sessionsByWorkspace,
+    sessionStateById,
+    currentSessionId,
+    currentView,
+  })
+  const items: ApprovalsQueueItem[] = []
+  for (const entry of states) {
+    const session = sessionsById.get(entry.sessionId)
+    for (const approval of entry.state.pendingApprovals) {
+      const approvalWorkspaceId = normalizeWorkspaceId(approval.workspaceId || entry.workspaceId)
       if (approvalWorkspaceId !== workspaceId) continue
       items.push(permissionItem({ ...approval, workspaceId: approvalWorkspaceId }, session, approvalWorkspaceId, pendingAction))
     }
-    for (const question of state.pendingQuestions) {
-      const questionWorkspaceId = normalizeWorkspaceId(question.workspaceId || stateWorkspaceId)
+    for (const question of entry.state.pendingQuestions) {
+      const questionWorkspaceId = normalizeWorkspaceId(question.workspaceId || entry.workspaceId)
       if (questionWorkspaceId !== workspaceId) continue
-      const sessionId = question.sessionId || parsed.sessionId
+      const sessionId = question.sessionId || entry.sessionId
       items.push(questionItem({ ...question, sessionId, workspaceId: questionWorkspaceId }, sessionsById.get(sessionId) || session, questionWorkspaceId, pendingAction))
     }
   }

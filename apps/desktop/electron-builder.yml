@@ -161,9 +161,7 @@ win:
   # so electron-updater can verify it. When the cert secrets are absent
   # electron-builder emits an unsigned installer instead of failing, so
   # PR/preview CI still produces an artifact. Public v1.0+ Windows
-  # releases must provide the cert secrets. See docs for the SignPath
-  # Foundation (free-for-OSS) post-build alternative and the required
-  # `latest.yml` regeneration step it needs.
+  # releases must provide the cert secrets.
   signtoolOptions:
     signingHashAlgorithms:
       - sha256

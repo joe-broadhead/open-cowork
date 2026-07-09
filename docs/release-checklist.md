@@ -4,7 +4,7 @@ This checklist is intended for the first public tagged releases and later releas
 
 Reference workflows in the repository root:
 
-- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS unpackaged smoke validation, macOS/Linux packaged smoke validation, and macOS/Linux packaging validation.
+- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS unpackaged smoke validation, Windows pre-package targeted validation, macOS/Windows/Linux packaged smoke validation, and macOS/Windows/Linux packaging validation.
 - [`.github/workflows/docs.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/docs.yml) — strict MkDocs build + GitHub Pages deploy.
 - [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release.yml) — tag-driven release, signing preflight, checksums, provenance.
 - [`.github/workflows/monthly-maintenance.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/monthly-maintenance.yml) — monthly drift checks for dependencies and SDK compatibility.
@@ -29,6 +29,8 @@ and linked from the release Go/No-Go report.
 - [ ] `pnpm test`
 - [ ] `pnpm test:cloud-continuation`
 - [ ] `pnpm test:renderer`
+- [ ] `pnpm test:windows-prepackage` if packaging, preload, updater, path handling,
+      or runtime-spawn behavior changed
 - [ ] `pnpm typecheck`
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`
@@ -69,7 +71,7 @@ and linked from the release Go/No-Go report.
       release
 - [ ] `docs/architecture.md` OpenCode SDK policy points to `apps/desktop/package.json` and `pnpm-lock.yaml`
 - [ ] `SECURITY.md` and `SUPPORT.md` are current
-- [ ] medium-severity `pnpm audit --prod` output has been reviewed manually if CI stayed green
+- [ ] `pnpm audit:prod` and `pnpm audit:full` output has been reviewed if CI stayed green only because of an explicit audit exception
 
 ### Desktop app
 
@@ -124,7 +126,7 @@ and linked from the release Go/No-Go report.
 - [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.x` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
 - [ ] if `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` was enabled for an unsigned preview tag, the repository variable is scheduled to be unset immediately after the GitHub Release publishes
 - [ ] the release repo or fork has the macOS signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
-- [ ] the release repo or fork has the Windows signing inputs expected by the `build-windows` job: either the native certificate (`WIN_CERTIFICATE_PFX_BASE64` + `WIN_CERTIFICATE_PASSWORD`) or the SignPath trio (`SIGNPATH_API_TOKEN` secret + `SIGNPATH_ORGANIZATION_ID`/`SIGNPATH_PROJECT_SLUG` variables); a `v1.0.0`+ tag fails without one of these unless the unsigned preview override is enabled
+- [ ] the release repo or fork has the Windows signing inputs expected by the `build-windows` job: native Authenticode certificate secrets (`WIN_CERTIFICATE_PFX_BASE64` + `WIN_CERTIFICATE_PASSWORD`); a `v1.0.0`+ tag fails without them unless the unsigned preview override is enabled
 - [ ] all three OS build checks (`macos-build`, `windows-package`, `linux-package`) are green on the tag commit; `scripts/verify-release-checks.mjs` blocks publishing otherwise
 - [ ] Linux artifacts are either covered by a detached `SHA256SUMS.txt.asc` signature (`OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`, optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) or explicitly documented as unsigned `v0.x` artifacts verified through `SHA256SUMS.txt` plus GitHub provenance
 - [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES.tar.gz`, SBOMs, and provenance attestation
@@ -159,7 +161,7 @@ and linked from the release Go/No-Go report.
       -- --tier private-hosted-beta --manifest <private-record>`, and summarized in
       `deploy/private-beta/private-beta-go-no-go.public.md` without private
       values.
-- [ ] worker images are pinned by release tag or digest; no deployment uses
+- [ ] worker images are pinned by immutable digest; no deployment uses
       `latest`, mutable aliases, or public repo project/account/customer
       values.
 - [ ] worker drain, rolling update, rollback, and emergency revoke drills have

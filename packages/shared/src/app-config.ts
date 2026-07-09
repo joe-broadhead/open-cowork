@@ -449,12 +449,13 @@ export interface AppSettings {
   notificationSounds: boolean
   privacyKeepConversationHistory: boolean
   privacyShareAnonymizedUsage: boolean
-  // Back-compat booleans retained for older renderer payloads and settings
-  // migrations. New UI should use bashPermission/fileWritePermission.
+  // Derived booleans retained for current renderer payloads and runtime gates.
+  // New UI should treat bashPermission/fileWritePermission as the source of truth.
   enableBash: boolean
   enableFileWrite: boolean
   runtimeConfigSource?: 'app' | 'machine'
   runtimeToolingBridgeEnabled: boolean
+  windowZoomFactor: number
   workflowLaunchAtLogin: boolean
   workflowRunInBackground: boolean
   workflowDesktopNotifications: boolean

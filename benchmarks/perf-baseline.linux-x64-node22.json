@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-04T13:40:10.000Z",
+  "generatedAt": "2026-07-09T10:45:57.000Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
-    "node": "v22.12.0"
+    "node": "v22.13.0"
   },
   "suiteRuns": 5,
   "regressionThresholds": {
@@ -62,11 +62,11 @@
     {
       "name": "agents.catalog.downstreamCatalog",
       "iterations": 18,
-      "minMs": 1.95,
-      "maxMs": 3.88,
-      "avgMs": 2.15,
-      "p50Ms": 2.15,
-      "p95Ms": 3.1
+      "minMs": 5.65,
+      "maxMs": 8.81,
+      "avgMs": 5.94,
+      "p50Ms": 5.94,
+      "p95Ms": 7.84
     },
     {
       "name": "capabilities.map.downstreamCatalog",

@@ -474,7 +474,9 @@ Gateway health endpoints:
 - `GET /health` reports process liveness.
 - `GET /ready` reports provider readiness.
 - `GET /metrics` exposes Prometheus metrics when enabled. Public binds require
-  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; local loopback bypass must be explicit.
+  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; local loopback bypass must be explicit and
+  only applies when the bind host, socket peer, and `Host` header are loopback
+  with no forwarded headers.
 - `GET /diagnostics` returns redacted gateway config, provider state, and
   counters for support. It requires the same admin token unless explicit local
   loopback bypass is enabled.
@@ -500,6 +502,7 @@ point:
 ```bash
 helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-cloud \
+  --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.deploymentTier=public_production \
   --set cloud.profile=full \
   --set cloud.auth.mode=oidc \
@@ -562,6 +565,36 @@ secret-bearing Helm values without `gateway.existingSecret`, when loopback
 operator bypass is combined with public exposure, when placeholder secrets are
 still present, or when generic webhook ingress is configured without a shared
 secret.
+
+Kubernetes public production deployments force NetworkPolicy egress isolation.
+For Cloud, `cloud.deploymentTier=public_production` renders an Egress policy
+even when `networkPolicy.egress.enabled=false`; for Gateway, public exposure
+does the same. Public Cloud and public Gateway renders also fail when
+`networkPolicy.ingress.from` is empty, because Kubernetes treats an ingress rule
+without `from` as all sources. Production overlays should name the ingress
+controller or private caller explicitly:
+
+```yaml
+networkPolicy:
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+```
+
+For private/internal topologies, use the namespace and pod labels for the
+Gateway release, service mesh, or internal workload that is allowed to call the
+service. Cloud L7 controllers without in-cluster pods should use
+provider-approved `ipBlock` peers in a private overlay. An empty egress
+allowlist renders `egress: []`. Add one `networkPolicy.egress.allow[]` entry per
+approved dependency, with explicit `to` peers and `ports`, when the cluster
+needs outbound access to Cloud, object-store, identity, provider API, or
+telemetry endpoints.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and
@@ -725,12 +758,13 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
+| `OPEN_COWORK_CLOUD_PUBLISHED_ADDR` | Docker compose host-side bind address for local/demo references. Defaults to `127.0.0.1`; when `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH=true`, non-loopback values fail startup. |
 | `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
 | `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
 | `OPEN_COWORK_CLOUD_BRAND_LOGO_URL` | HTTPS logo URL for the browser dashboard. |
 | `OPEN_COWORK_CLOUD_SUPPORT_URL` / `OPEN_COWORK_CLOUD_PRIVACY_URL` / `OPEN_COWORK_CLOUD_SECURITY_URL` / `OPEN_COWORK_CLOUD_LEGAL_URL` | Optional public footer links. |
 | `OPEN_COWORK_CLOUD_AUTH_MODE` | `none` for loopback/local demos, `header` for a trusted identity proxy, or `oidc` for public browser/JWT auth. |
-| `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH` | Explicit local/demo override that permits `auth.mode=none` on a non-loopback bind. Do not use for public deployments. |
+| `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH` | Explicit local/demo override for unauthenticated Cloud demos. It only starts when the published address and public URL are loopback-local; use `oidc` or `header` auth before exposing Cloud beyond localhost. |
 | `OPEN_COWORK_CLOUD_OIDC_ISSUER_URL` | HTTPS OIDC issuer used for discovery and JWT verification. |
 | `OPEN_COWORK_CLOUD_OIDC_CLIENT_ID` | OIDC audience/client id expected in browser login and bearer tokens. |
 | `OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET` | Optional OIDC confidential-client secret; config `clientSecretRef` can point at a platform secret env var instead. |
@@ -844,7 +878,7 @@ Gateway variables:
 | `OPEN_COWORK_CLOUD_BASE_URL` | Cloud web base URL used by the gateway HTTP/SSE client. |
 | `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` | Scoped cloud API token with gateway access. Store it as a secret. |
 | `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` | Required for operator endpoints in shared/public deployments. Send as bearer auth or `x-open-cowork-gateway-admin-token`. |
-| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Runtime rejects public URLs and proxy-forwarded requests for this bypass. |
+| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Runtime rejects public URLs, public/forwarded `Host` headers, proxy-forwarded requests, and public binds for this bypass. |
 | `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` | Allows non-loopback HTTP cloud URLs for local Docker networks only. |
 | `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public HTTPS gateway URL for channel webhook registration. Non-HTTPS and loopback values fail closed. |
@@ -1130,8 +1164,10 @@ browser is not the only protection.
 - `GET /api/workers/heartbeats` exposes worker and scheduler heartbeat state
   for authenticated operators.
 - `GET /api/metrics` exposes operator-scoped Prometheus metrics from the
-  in-process cloud observability adapter. Use OTLP for provider-managed
-  tracing/metrics and this endpoint for scrape-based dashboards.
+  in-process cloud observability adapter. API-token callers need `operator`
+  scope; desktop/gateway tokens and non-operator users are rejected. Use OTLP
+  for provider-managed tracing/metrics and this endpoint for scrape-based
+  dashboards.
 - Cloud HTTP requests emit structured request logs with request ids, role,
   profile, status, and duration. When `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` is
   set, the same request observations are exported as OTLP HTTP traces and

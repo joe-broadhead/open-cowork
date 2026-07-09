@@ -14,9 +14,11 @@ Use these invariants across every provider:
   credentials and long-poll/webhook connections, not OpenCode execution.
 - Use Postgres for the control plane.
 - Use object storage for artifacts and runtime/workspace checkpoints.
-- Pin `open-cowork-cloud` and `open-cowork-gateway` images by release tag or
-  digest. Do not use `latest`, `stable`, mutable registry aliases, or a local
-  Compose build as a production image source.
+- Pin production `open-cowork-cloud` and `open-cowork-gateway` images by
+  immutable OCI digest. Release tags are acceptable only for local/internal
+  evaluation when the registry enforces tag immutability. Do not use `latest`,
+  `stable`, mutable registry aliases, or a local Compose build as a production
+  image source.
 - Use OIDC or explicit `OPEN_COWORK_CLOUD_AUTH_MODE=header` behind a trusted
   reverse-proxy identity layer before exposing the web role publicly;
   `OPEN_COWORK_CLOUD_AUTH_MODE=none` requires an explicit insecure local/demo
@@ -177,8 +179,9 @@ secret, and self-host deployments can keep `cloud.billing.provider` set to
 ## Image Strategy
 
 Helm charts default to the chart app version placeholder and fail closed when
-`image.tag=latest`. Production overlays must set either a release `image.tag`
-or `image.digest`. Prefer immutable digests for regulated environments:
+`image.tag=latest`. Public-production Cloud and public Gateway renders require
+`image.digest`; production overlays should pin the immutable digest captured in
+the release evidence:
 
 ```bash
 helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
@@ -189,11 +192,38 @@ helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
   --set cloud.auth.oidcClientId=open-cowork-cloud
 ```
 
-Release tags are acceptable when your registry prevents tag mutation:
+Release tags are acceptable only for local/internal evaluation when your
+registry prevents tag mutation:
 
 ```bash
 --set image.tag=v0.1.0
 ```
+
+Public-production Cloud and public Gateway Helm renders force NetworkPolicy
+ingress allowlists and egress isolation. Public renders fail when
+`networkPolicy.ingress.from` is empty; select your ingress controller or private
+caller peers explicitly:
+
+```yaml
+networkPolicy:
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+```
+
+For private/internal topologies, replace the ingress-controller labels with the
+namespace and pod labels for the internal caller, gateway, or service mesh
+sidecar that is allowed to reach the Cloud/Gateway service. Cloud-provider L7
+controllers that do not run in-cluster pods should use provider-approved
+`ipBlock` peers in a private overlay. With an empty
+`networkPolicy.egress.allow` list the rendered policy is deny-all; add one typed
+egress allow entry per approved destination with explicit peers and ports.
 
 The Compose files expose `OPEN_COWORK_CLOUD_IMAGE` and
 `OPEN_COWORK_GATEWAY_IMAGE` for local image-name overrides, but they still

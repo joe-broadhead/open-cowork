@@ -8,6 +8,7 @@ import {
   type SemanticUiActionResult,
 } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './ipc/context.ts'
+import { buildDiagnosticsBundle } from './diagnostics-export.ts'
 import { clearPermission, getPermissionSession } from './permission-tracker.ts'
 import { normalizeQuestionAnswers, normalizeQuestionRequestId } from './question-normalization.ts'
 import { startSessionStatusReconciliation } from './session-status-reconciler.ts'
@@ -253,7 +254,6 @@ export async function executeSemanticUiLocalAction(
     if (Object.keys(input).length > 0) {
       return actionError(actionId, 'semantic-ui-action-input-unsupported', 'This action does not accept input.')
     }
-    const { buildDiagnosticsBundle } = await import('./diagnostics-export.ts')
     log('audit', 'diagnostics.export semantic-ui')
     return createSemanticUiActionResult({
       capturedAt: nowIso(),

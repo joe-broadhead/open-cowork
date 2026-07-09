@@ -8,6 +8,7 @@ import {
 } from '../apps/desktop/src/main/event-runtime-handlers.ts'
 import {
   createSessionScopedMessageState,
+  handleMessagePartDeltaEvent,
   handleMessageUpdatedEvent,
   handleMessagePartUpdatedEvent,
 } from '../apps/desktop/src/main/event-message-handlers.ts'
@@ -17,6 +18,7 @@ import {
   registerTaskRun,
   resetEventTaskState,
   resolveRootSession,
+  seedReplayedChildSessionLineage,
   trackParentSession,
 } from '../apps/desktop/src/main/event-task-state.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
@@ -114,6 +116,64 @@ test('permission.asked emits an approval event for the resolved root session', (
       tool: 'Run shell command',
       input: { command: 'echo hello' },
       description: 'Sub-Agent: Run shell command',
+    },
+  }])
+})
+
+test('replayed child lineage routes live child deltas into the parent task lane', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+  const messageState = createSessionScopedMessageState()
+
+  seedReplayedChildSessionLineage('root-session', [{
+    id: 'child-session',
+    parentSessionId: 'root-session',
+    title: 'Research docs',
+    agent: 'researcher',
+    status: 'running',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    finishedAt: null,
+  }])
+
+  assert.equal(resolveRootSession('child-session'), 'root-session')
+  assert.deepEqual(getTaskRun('child:child-session'), {
+    id: 'child:child-session',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Research docs',
+    agent: 'researcher',
+    childSessionId: 'child-session',
+    status: 'running',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    finishedAt: null,
+  })
+
+  handleMessageUpdatedEvent(win, collector.dispatch, {
+    info: {
+      id: 'message-1',
+      sessionID: 'child-session',
+      role: 'assistant',
+    },
+  }, messageState)
+  handleMessagePartDeltaEvent(win, collector.dispatch, {
+    sessionID: 'child-session',
+    messageID: 'message-1',
+    partID: 'part-1',
+    delta: 'hello from replayed child',
+    part: { type: 'text' },
+  }, messageState)
+
+  assert.deepEqual(collector.events, [{
+    type: 'text',
+    sessionId: 'root-session',
+    data: {
+      type: 'text',
+      mode: 'append',
+      content: 'hello from replayed child',
+      taskRunId: 'child:child-session',
+      sourceSessionId: 'child-session',
+      messageId: 'message-1',
+      partId: 'part-1',
     },
   }])
 })
@@ -540,6 +600,121 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
       sourceSessionId: 'child-session',
     },
   })
+})
+
+test('subtask parts do not derive live agent identity from prompt or raw text', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'subtask-1',
+        type: 'subtask',
+        description: 'Investigate live projection parity',
+        prompt: 'Ask @spurious to summarize the result.',
+        raw: '@spurious should not become the task agent',
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const task = getTaskRun('subtask-1')
+  assert.equal(task?.agent, null)
+  assert.equal(task?.title, 'Investigate live projection parity')
+})
+
+test('task tool descriptors do not derive live agent identity from prompt or raw text', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Start task',
+        raw: '@spurious should not become the task agent',
+        state: {
+          status: 'running',
+          input: {
+            description: 'Investigate task tool parity',
+            prompt: 'Ask @spurious to inspect this.',
+          },
+          metadata: {},
+          raw: '@spurious should not become the task agent',
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const task = getTaskRun('call-task-1')
+  assert.equal(task?.agent, null)
+  assert.equal(task?.title, 'Investigate task tool parity')
+})
+
+test('child tool updates do not derive live agent identity from prompt or raw text', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'child-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-1',
+        type: 'tool',
+        tool: 'read',
+        title: 'Read notes',
+        state: {
+          status: 'running',
+          input: {
+            prompt: 'Ask @spurious to read this.',
+          },
+          metadata: {},
+          raw: '@spurious should not become the task agent',
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const task = getTaskRun('child:child-session')
+  assert.equal(task?.agent, null)
+  assert.equal(collector.events.length, 1)
+  assert.equal((collector.events[0] as { data?: { agent?: string | null } }).data?.agent, null)
 })
 
 test('message.part.updated fallback tool ids do not collide within one session', () => {

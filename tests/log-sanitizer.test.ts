@@ -1,6 +1,8 @@
 import { sanitizeForExport, sanitizeLogMessage, shortSessionId } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { assertNoSecretFixtureLeaks, redactionFixtureCorpus } from './fixtures/secret-redaction-fixtures.ts'
+
 test('sanitizeLogMessage redacts env-backed secrets, emails, and token-like values', () => {
   process.env.DATABRICKS_TOKEN = 'super-secret-token'
 
@@ -12,6 +14,12 @@ test('sanitizeLogMessage redacts env-backed secrets, emails, and token-like valu
     sanitized,
     'email [REDACTED_EMAIL] token [REDACTED_SECRET] bearer [REDACTED_TOKEN] [REDACTED_TOKEN]',
   )
+})
+
+test('sanitizeLogMessage redacts the provider token fixture matrix', () => {
+  const sanitized = sanitizeLogMessage(redactionFixtureCorpus())
+  assertNoSecretFixtureLeaks(sanitized)
+  assert.match(sanitized, /\[REDACTED_TOKEN\]/)
 })
 
 test('sanitizeLogMessage stays linear on adversarial input (ReDoS regression)', () => {
@@ -60,8 +68,9 @@ test('sanitizeForExport keeps a top-level platform hint so the log stays readabl
 })
 
 test('sanitizeForExport still applies token redaction', () => {
-  const input = '/Users/dev/repo used ghp_0123456789ABCDEFGHIJKLMNOPQRSTUV to push'
+  const input = `/Users/dev/repo used ${redactionFixtureCorpus()} to push`
   const exported = sanitizeForExport(input)
+  assertNoSecretFixtureLeaks(exported)
   assert.match(exported, /\[REDACTED_TOKEN\]/)
   assert.ok(!exported.includes('dev'))
 })

@@ -35,7 +35,7 @@ test('built-in capabilities expose discoverable metadata without source parsing'
 test('capability skills exclude invalid custom bundles that the OpenCode runtime would not discover', async () => {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })
-  const tempUserData = mkdtempSync(join(parent, 'opencowork-capability-skills-'))
+  const tempUserData = mkdtempSync(join(parent, 'open-cowork-capability-skills-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData

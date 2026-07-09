@@ -1,14 +1,6 @@
-import { extractManagedSessionIdsFromLogContents, normalizeStoredSessionRecord } from '@open-cowork/runtime-host/session-registry-utils'
+import { normalizeStoredSessionRecord } from '@open-cowork/runtime-host/session-registry-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-test('extractManagedSessionIdsFromLogContents finds created and forked Cowork sessions', () => {
-  const ids = extractManagedSessionIdsFromLogContents([
-    '[2026-04-11T14:35:24.993Z] [session] Created session ses_aaa111\n',
-    '[2026-04-11T14:35:24.994Z] [session] Forked ses_aaa111 -> ses_bbb222 at message\n',
-  ])
-
-  assert.deepEqual(Array.from(ids).sort(), ['ses_aaa111', 'ses_bbb222'])
-})
 
 test('normalizeStoredSessionRecord keeps Cowork-managed records and drops external ones', () => {
   const normalizeDirectory = (value: string) => value
@@ -19,14 +11,15 @@ test('normalizeStoredSessionRecord keeps Cowork-managed records and drops extern
     opencodeDirectory: '/runtime-home',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:01.000Z',
-  }, normalizeDirectory, toDisplayDirectory, new Set(['ses_managed']))
+    managedByCowork: true,
+  }, normalizeDirectory, toDisplayDirectory)
 
   const external = normalizeStoredSessionRecord({
     id: 'ses_external',
     opencodeDirectory: '/external',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:01.000Z',
-  }, normalizeDirectory, toDisplayDirectory, new Set(['ses_managed']))
+  }, normalizeDirectory, toDisplayDirectory)
 
   assert.deepEqual(managed, {
     id: 'ses_managed',

@@ -4,6 +4,7 @@
 image:
   repository: REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud
   tag: IMAGE_TAG
+  digest: sha256:REPLACE_WITH_CLOUD_DIGEST
   pullPolicy: IfNotPresent
 
 cloud:
@@ -56,6 +57,8 @@ cloud:
 
 cloudSqlProxy:
   enabled: true
+  image:
+    digest: sha256:REPLACE_WITH_CLOUD_SQL_PROXY_DIGEST
   instanceConnectionName: PROJECT:REGION:INSTANCE
   address: 127.0.0.1
   port: 5432
@@ -175,3 +178,26 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+networkPolicy:
+  enabled: true
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      # Replace with the labels for the ingress controller or provider-approved
+      # source peers used by your GKE ingress class.
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+  egress:
+    allow:
+      - name: google-apis
+        to:
+          - ipBlock:
+              cidr: 203.0.113.0/24 # replace with approved Google API/provider ranges
+        ports:
+          - protocol: TCP
+            port: 443

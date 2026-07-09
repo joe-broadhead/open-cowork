@@ -27,8 +27,10 @@ const TOKEN_PATTERNS = [
   /\bsk-or(?:-[a-z0-9]+)?-[A-Za-z0-9]{20,}\b/g,
   // Anthropic API keys (direct, not via OpenRouter).
   /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g,
-  // OpenAI and compatible vendors (Azure OpenAI, Together, etc.).
-  /\bsk-[A-Za-z0-9]{32,}\b/g,
+  // OpenAI and compatible vendors (Azure OpenAI, Together, etc.). Keep this
+  // intentionally broad so `sk-proj-*`, `sk-admin-*`, service-account-style,
+  // and future hyphenated key families redact before provider docs catch up.
+  /\bsk-[A-Za-z0-9_-]{20,}\b/g,
   // Databricks personal access tokens — `dapi` prefix followed by a
   // 32-char hex string.
   /\bdapi[0-9a-f]{32}\b/g,

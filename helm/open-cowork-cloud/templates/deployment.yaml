@@ -40,12 +40,6 @@
 {{- if not $.Values.networkPolicy.enabled }}
 {{- fail "cloud.deploymentTier=public_production requires networkPolicy.enabled=true." }}
 {{- end }}
-{{- if not $.Values.networkPolicy.egress.enabled }}
-{{- fail "cloud.deploymentTier=public_production requires networkPolicy.egress.enabled=true with explicit egress destinations." }}
-{{- end }}
-{{- if empty $.Values.networkPolicy.egress.to }}
-{{- fail "cloud.deploymentTier=public_production requires networkPolicy.egress.to entries for approved control-plane, object-store, identity, and telemetry destinations." }}
-{{- end }}
 {{- if $.Values.cloud.allowInsecureAuth }}
 {{- fail "cloud.deploymentTier=public_production rejects cloud.allowInsecureAuth=true; insecure auth overrides are local/demo-only." }}
 {{- end }}

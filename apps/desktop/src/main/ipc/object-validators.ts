@@ -63,6 +63,7 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'enableFileWrite',
   'runtimeConfigSource',
   'runtimeToolingBridgeEnabled',
+  'windowZoomFactor',
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
   'workflowDesktopNotifications',
@@ -419,6 +420,7 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
     update.runtimeConfigSource = record.runtimeConfigSource as 'app' | 'machine'
   }
   update.runtimeToolingBridgeEnabled = optionalBoolean(record, 'runtimeToolingBridgeEnabled', 'Runtime tooling bridge enabled')
+  update.windowZoomFactor = optionalNumber(record, 'windowZoomFactor', 'Window zoom factor') ?? undefined
   update.workflowLaunchAtLogin = optionalBoolean(record, 'workflowLaunchAtLogin', 'Workflow launch at login')
   update.workflowRunInBackground = optionalBoolean(record, 'workflowRunInBackground', 'Workflow run in background')
   update.workflowDesktopNotifications = optionalBoolean(record, 'workflowDesktopNotifications', 'Workflow desktop notifications')

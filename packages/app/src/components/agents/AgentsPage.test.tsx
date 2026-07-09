@@ -119,13 +119,25 @@ function renderAgentsPage(overrides: {
   customAgents?: CustomAgentSummary[]
   builtInAgents?: BuiltInAgentDetail[]
   runtimeAgents?: RuntimeAgentDescriptor[]
+  customAgentsError?: Error
+  catalogError?: Error
 } = {}) {
-  const list = vi.fn(async () => overrides.customAgents ?? [customAgent])
-  const listCatalog = vi.fn(async () => catalog)
+  const list = vi.fn(async () => {
+    if (overrides.customAgentsError) throw overrides.customAgentsError
+    return overrides.customAgents ?? [customAgent]
+  })
+  const listCatalog = vi.fn(async () => {
+    if (overrides.catalogError) throw overrides.catalogError
+    return catalog
+  })
   const runtime = vi.fn(async () => overrides.runtimeAgents ?? [runtimeAgent])
   const builtinAgents = vi.fn(async () => overrides.builtInAgents ?? [builtInAgent, openCodeAgent])
   const unsubscribeRuntimeReady = vi.fn()
-  const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
+  let runtimeReadyHandler: (() => void) | null = null
+  const runtimeReady = vi.fn((handler: () => void) => {
+    runtimeReadyHandler = handler
+    return unsubscribeRuntimeReady
+  })
 
   installRendererTestCoworkApi({
     agents: {
@@ -164,6 +176,7 @@ function renderAgentsPage(overrides: {
     builtinAgents,
     runtimeReady,
     unsubscribeRuntimeReady,
+    triggerRuntimeReady: () => runtimeReadyHandler?.(),
     unmount: view.unmount,
     ...props,
   }
@@ -202,6 +215,25 @@ describe('AgentsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument()
     expect(screen.getByDisplayValue('market-analyst')).toBeInTheDocument()
+  })
+
+  it('shows a recoverable error instead of empty coworker sections when loading fails', async () => {
+    renderAgentsPage({ catalogError: new Error('catalog unavailable') })
+
+    expect(await screen.findByText('Couldn’t load coworkers')).toBeInTheDocument()
+    expect(screen.getByText('catalog unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('No custom coworkers yet. Create one to package a repeatable role, instructions, skills, and tools.')).not.toBeInTheDocument()
+  })
+
+  it('keeps stale coworkers visible when a runtime refresh fails', async () => {
+    const api = renderAgentsPage()
+
+    expect(await screen.findByText('market-analyst')).toBeInTheDocument()
+    api.list.mockRejectedValueOnce(new Error('refresh unavailable'))
+    api.triggerRuntimeReady()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh coworkers.')
+    expect(screen.getByText('market-analyst')).toBeInTheDocument()
   })
 
   it('opens the builder with starter choices before creating a new agent and cleans up runtime listeners', async () => {

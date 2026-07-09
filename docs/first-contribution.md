@@ -7,8 +7,8 @@ a small change. Five minutes end-to-end.
 
 You need:
 
-- Node `>= 22.12` (tracked in `.nvmrc`).
-- pnpm `>= 10` (install via Corepack).
+- Node `>= 22.13` (tracked in `.nvmrc`).
+- pnpm `10.32.1` (install via Corepack).
 - macOS, Linux, or Windows.
 
 No API keys required to run the dev server. Actual LLM calls need
@@ -21,7 +21,7 @@ entered through the in-app Settings panel.
 git clone https://github.com/joe-broadhead/open-cowork.git
 cd open-cowork
 node -v
-# Expected: v22.12.0 or newer
+# Expected: v22.13.0 or newer
 corepack enable
 corepack prepare pnpm@10.32.1 --activate
 pnpm -v
@@ -81,8 +81,10 @@ change is on a smoke-tested flow.
 
 Packaged-app smoke tests live in
 `apps/desktop/tests/*.packaged.test.ts`. They run after
-`pnpm --dir apps/desktop dist:ci:mac` in CI and validate the actual
-packaged bundle, not just the unpackaged Electron dev build.
+macOS, Windows, and Linux packaging in CI and validate the actual
+packaged bundle, not just the unpackaged Electron dev build. The Windows
+package job also runs `pnpm test:windows-prepackage` before NSIS packaging to
+catch path handling, preload, updater, and runtime-spawn regressions earlier.
 
 ## Commit style
 
@@ -123,8 +125,8 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm test:renderer && pnpm perf:chec
 ```
 
 That covers the main repository quality gates. Release tags also run
-platform packaging, packaged-app smoke validation on macOS, and
-artifact publication.
+platform packaging, packaged-app smoke validation on macOS, Windows, and
+Linux, and artifact publication.
 
 ## Questions
 

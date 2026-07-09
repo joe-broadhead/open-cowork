@@ -109,13 +109,12 @@ describe('i18n runtime', () => {
     assert.equal(getLocale(), 'pt')
   })
 
-  it('reads legacy user preference from localStorage during migration', async () => {
+  it('ignores unhyphenated locale keys from older previews', async () => {
     storage.set('opencowork.locale.v1', 'ja')
     navLanguage = 'en-US'
     await configureI18n(undefined)
-    assert.equal(getLocale(), 'ja')
-    // And the catalog actually loaded — `common.save` is translated
-    assert.equal(t('common.save', 'Save'), '保存')
+    assert.equal(getLocale(), 'en-US')
+    assert.equal(t('common.save', 'Save'), 'Save')
   })
 
   it('merges downstream config.i18n.strings on top of the built-in catalog', async () => {

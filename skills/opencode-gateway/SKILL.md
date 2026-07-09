@@ -11,29 +11,45 @@ should be able to inspect later in Mission Control.
 
 ## Core loop
 
-1. Orient first: `mcp__opencode-gateway__gateway_briefing` and
-   `mcp__opencode-gateway__gateway_attention` show changed work, active runs,
-   blockers, and pending gates before you act.
+1. Orient first: `mcp__opencode-gateway__gateway_catalog`,
+   `mcp__opencode-gateway__gateway_triage`,
+   `mcp__opencode-gateway__gateway_briefing`, and
+   `mcp__opencode-gateway__gateway_attention` show the available surface,
+   changed work, active runs, blockers, alerts, and pending gates before you
+   act. Use `mcp__opencode-gateway__gateway_doctor`,
+   `mcp__opencode-gateway__gateway_logs`, and
+   `mcp__opencode-gateway__gateway_incident_report` for diagnostics.
 2. Structure work as Issues under Initiatives:
    `mcp__opencode-gateway__gateway_roadmap_list` to find the right Initiative, then
-   `mcp__opencode-gateway__gateway_task_create` (asks for approval by design) with
-   a clear title, priority, and pipeline.
+   `mcp__opencode-gateway__gateway_task_create`,
+   `mcp__opencode-gateway__gateway_plan_initiative`, or
+   `mcp__opencode-gateway__gateway_project_create` (all ask for approval by
+   design) with clear titles, priority, and evidence.
 3. Watch execution with `mcp__opencode-gateway__gateway_run_list` /
-   `mcp__opencode-gateway__gateway_run_get`; explain run outcomes from their
-   receipts rather than guessing.
+   `mcp__opencode-gateway__gateway_run_get`,
+   `mcp__opencode-gateway__gateway_active_run_list`,
+   `mcp__opencode-gateway__gateway_environment_list`, and artifact manifests;
+   explain run outcomes from their receipts rather than guessing.
 4. Route human decisions honestly: `mcp__opencode-gateway__gateway_permission_list`
    and `mcp__opencode-gateway__gateway_question_list` show pending OpenCode
    requests — surface them to the user; replies require approval.
+5. Use team, blueprint, promotion, scheduler, task lifecycle, environment,
+   channel-send, and roadmap/project control tools only when the user has asked
+   for that mutation. These operate-tier tools ask before execution.
 
 ## Boundaries
 
 - Gateway coordinates; OpenCode executes. Never describe Gateway as a
   second agent runtime.
 - This deployment runs the **operate** tier: scheduler configuration,
-  profile/team mutation, OpenCode asset management, restore, and restart
-  are admin-tier tools that are not exposed here.
-- Mutations (task/roadmap creation, delegation, channel sends, gate
-  decisions, scheduler pause/resume) ask for the user's approval by
-  design — propose, do not accumulate unreviewed state.
+  profile upsert/delete, agent-team apply/bind/delete, project binding
+  mutation, task deletion, OpenCode asset mutation, OpenCode session abort or
+  message reads, backup verification/restore/export, and restart are admin-tier
+  tools that are not exposed here.
+- Read-tier inspection is auto-allowed. Operate-tier mutations (task/roadmap
+  lifecycle, delegation, teams, blueprints, promotions, channel sends, gate
+  decisions, scheduler pause/resume/dispatch, active-run control, and
+  environment actions) ask for the user's approval by design — propose, do not
+  accumulate unreviewed state.
 - The daemon must be running (`opencode-gateway start`); if tools fail with
   connection errors, say so and suggest `opencode-gateway doctor`.

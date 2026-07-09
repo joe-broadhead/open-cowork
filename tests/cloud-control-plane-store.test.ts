@@ -1269,14 +1269,7 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     status: 'dead',
     updatedAt: new Date('2026-01-01T00:00:03.000Z'),
   }), null)
-  const legacyDeliveryRecord = (store as unknown as {
-    channelDeliveriesDomain: {
-      deliveries: Map<string, { lastClaimedBy: string | null }>
-    }
-  }).channelDeliveriesDomain.deliveries.get(delivery.deliveryId)
-  assert.ok(legacyDeliveryRecord)
-  legacyDeliveryRecord.lastClaimedBy = null
-  const legacyAck = store.ackChannelDelivery({
+  const ack = store.ackChannelDelivery({
     orgId: org.orgId,
     deliveryId: delivery.deliveryId,
     claimedBy: 'gateway-instance-1',
@@ -1284,8 +1277,8 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     status: 'sent',
     updatedAt: new Date('2026-01-01T00:00:03.000Z'),
   })
-  assert.equal(legacyAck?.status, 'sent')
-  assert.equal(legacyAck?.lastClaimedBy, 'gateway-token-1')
+  assert.equal(ack?.status, 'sent')
+  assert.equal(ack?.lastClaimedBy, 'gateway-token-1')
 
   const firstProviderEvent = store.claimChannelProviderEvent({
     orgId: org.orgId,
@@ -1636,10 +1629,10 @@ test('cloud control plane persists workflow runs and finalizes workflow state du
     tenantId: 'tenant-1',
     workflowId: 'workflow-1',
     runId: 'run-1',
-    sessionId: 'session-1',
+    sessionId: run.sessionId!,
     startedAt: new Date('2026-01-01T00:02:00.000Z'),
   })
-  assert.equal(store.getWorkflowRunBySession('tenant-1', 'session-1')?.status, 'running')
+  assert.equal(store.getWorkflowRunBySession('tenant-1', run.sessionId!)?.status, 'running')
 
   const completed = store.completeWorkflowRun({
     tenantId: 'tenant-1',
@@ -1675,22 +1668,23 @@ test('cloud control plane fences workflow finalization by active worker lease', 
       triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
     },
   })
-  store.createWorkflowRun({
+  const run = store.createWorkflowRun({
     tenantId: 'tenant-1',
     userId: 'user-1',
     workflowId: 'workflow-fenced-finalize',
     runId: 'run-fenced-finalize',
+    sessionId: 'session-1',
     triggerType: 'manual',
   })
   store.attachWorkflowRunSession({
     tenantId: 'tenant-1',
     workflowId: 'workflow-fenced-finalize',
     runId: 'run-fenced-finalize',
-    sessionId: 'session-1',
+    sessionId: run.sessionId!,
   })
   const staleLease = store.claimSessionLease(
     'tenant-1',
-    'session-1',
+    run.sessionId!,
     'worker-stale',
     new Date('2030-01-01T09:00:00.000Z'),
     1,
@@ -1698,7 +1692,7 @@ test('cloud control plane fences workflow finalization by active worker lease', 
   assert.ok(staleLease)
   const currentLease = store.claimSessionLease(
     'tenant-1',
-    'session-1',
+    run.sessionId!,
     'worker-current',
     new Date('2030-01-01T09:00:00.002Z'),
     30_000,
@@ -1834,7 +1828,7 @@ test('cloud control plane reaps and retries expired scheduled workflow claims', 
     tenantId: 'tenant-1',
     workflowId: 'workflow-retry',
     runId: 'workflow-run-retry',
-    sessionId: 'session-1',
+    sessionId: first.run.sessionId!,
     claimToken: firstToken,
   }), /stale/)
 
@@ -1975,7 +1969,7 @@ test('cloud control plane rejects stale workflow attaches after expired claims a
     tenantId: 'tenant-1',
     workflowId: 'workflow-stale-attach',
     runId: 'stale-attach-run',
-    sessionId: 'session-1',
+    sessionId: first.sessionId!,
     claimToken: first.claimToken,
   }), /stale/)
 
@@ -2060,7 +2054,7 @@ test('cloud control plane recovers workflow starts stranded after session attach
     tenantId: 'tenant-1',
     workflowId: 'workflow-attached-retry',
     runId: 'attached-run-retry',
-    sessionId: 'session-1',
+    sessionId: first.sessionId!,
     claimToken: first.claimToken,
     startedAt: new Date('2030-01-01T09:00:00.001Z'),
   })
@@ -2074,7 +2068,7 @@ test('cloud control plane recovers workflow starts stranded after session attach
   })
   assert.equal(claimed?.run.id, 'attached-run-retry')
   assert.equal(claimed?.run.status, 'running')
-  assert.equal(claimed?.run.sessionId, 'session-1')
+  assert.equal(claimed?.run.sessionId, first.sessionId)
   assert.equal(claimed?.run.attemptCount, 2)
   assert.ok(claimed?.run.claimToken)
 

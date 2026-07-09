@@ -46,8 +46,10 @@
     "typecheck:mcps": "pnpm --filter=./mcps/* typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
     "lint": "eslint . --max-warnings 0 && pnpm design-tokens:check && node scripts/lint.mjs && node scripts/check-design-token-usage.mjs && node scripts/check-import-cycles.mjs && node scripts/build-docs-mermaid-vendor.mjs --check && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs",
-    "lint:dead-code": "knip --production --files",
+    "lint:dead-code": "knip --production --files --exports",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'packages/app/src/**/*.tsx' 'packages/ui/src/**/*.tsx'",
+    "audit:prod": "node scripts/pnpm-audit.mjs --prod --audit-level moderate",
+    "audit:full": "node scripts/pnpm-audit.mjs --audit-level high",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "i18n:check": "node scripts/i18n-coverage.mjs",
     "test": "pnpm test:prepare && pnpm --workspace-concurrency=1 --filter=./packages/* test && pnpm --filter=./mcps/* test && pnpm --filter @open-cowork/gateway test && pnpm --filter @open-cowork/standalone-gateway test && node scripts/run-node-tests.mjs",
@@ -61,6 +63,7 @@
     "test:e2e": "pnpm --filter @open-cowork/desktop test:e2e",
     "test:e2e:packaged": "pnpm --filter @open-cowork/desktop test:e2e:packaged",
     "test:e2e:packaged:optional": "pnpm --filter @open-cowork/desktop test:e2e:packaged:optional",
+    "test:windows-prepackage": "pnpm test:prepare && pnpm --filter @open-cowork/cloud-client build && node scripts/check-preload-channels.mjs && node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/regenerate-windows-update-metadata.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts",
     "test:e2e:evals": "pnpm --filter @open-cowork/desktop test:e2e:evals",
     "screenshots": "pnpm --filter @open-cowork/desktop screenshots",
     "cloud:dev": "node --no-warnings --experimental-strip-types scripts/open-cowork-cloud.ts",
@@ -109,9 +112,15 @@
     "clean": "pnpm -r exec rm -rf dist"
   },
   "engines": {
-    "node": ">=22.12",
+    "node": ">=22.13",
     "pnpm": "10.32.1",
     "npm": "0"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreCves": [],
+      "ignoreGhsas": []
+    }
   },
   "dependencies": {
     "@open-cowork/runtime-host": "workspace:*",

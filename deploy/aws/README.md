@@ -20,13 +20,14 @@ EKS and connect it to RDS, S3, and Secrets Manager through External Secrets or
 IRSA.
 
 Example Helm overrides. Keep real AWS account IDs, cluster names, image tags,
-domains, and secret values in a private deployment repo or AWS-native config,
-not in this recipe:
+image digests, domains, and secret values in a private deployment repo or
+AWS-native config, not in this recipe:
 
 ```bash
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-cloud \
   --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.profile=full \
   --set cloud.publicUrl=https://cowork.example.com \
   --set cloud.auth.mode=oidc \
@@ -45,6 +46,7 @@ Install the gateway as a separate ECS service or EKS Deployment:
 helm upgrade --install open-cowork-gateway ../../helm/open-cowork-gateway \
   --set image.repository=ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-gateway \
   --set image.tag=IMAGE_TAG \
+  --set image.digest=sha256:REPLACE_WITH_GATEWAY_DIGEST \
   --set gateway.cloudBaseUrl=https://cowork.example.com \
   --set gateway.publicUrl=https://gateway.example.com \
   --set gateway.existingSecret=open-cowork-gateway-secrets

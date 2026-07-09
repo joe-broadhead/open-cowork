@@ -20,8 +20,9 @@ import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
 import { installRendererTestCoworkApi } from './test/setup'
 import { App } from './App'
 import type { AppNavigationTarget } from './app-types'
+import type { HomePromptOptions } from './components/home/home-prompt-options'
 
-const mockLoadSessionMessages = vi.hoisted(() => vi.fn(async (_sessionId: string) => undefined))
+const mockLoadSessionMessages = vi.hoisted(() => vi.fn(async (_sessionId: string) => 'opened'))
 const mockUseOpenCodeEvents = vi.hoisted(() => vi.fn())
 const mockSetBrandName = vi.hoisted(() => vi.fn())
 const mockConfigureI18n = vi.hoisted(() => vi.fn())
@@ -143,7 +144,7 @@ vi.mock('./components/HomePage', () => ({
     onOpenThread,
   }: {
     brandName: string
-    onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>, agent?: string) => void
+    onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>, agent?: string, options?: HomePromptOptions) => void
     onOpenThread: (sessionId: string) => void
   }) => (
     <div data-testid="home-page">
@@ -153,6 +154,12 @@ vi.mock('./components/HomePage', () => ({
         onClick={() => onStartThread('Summarize this', [{ mime: 'text/plain', url: 'data:text/plain;base64,abc', filename: 'note.txt' }])}
       >
         Start from home
+      </button>
+      <button
+        type="button"
+        onClick={() => onStartThread('Analyze deeply', [], 'build', { modelId: 'anthropic/claude-sonnet-4', variant: 'xhigh' })}
+      >
+        Start from home with preferences
       </button>
       <button type="button" onClick={() => onOpenThread('existing-session')}>Open existing thread</button>
     </div>
@@ -164,8 +171,14 @@ vi.mock('./components/chat/ChatView', () => ({
 }))
 
 vi.mock('./components/workflows/WorkflowsPage', () => ({
-  WorkflowsPage: ({ onOpenThread }: { onOpenThread: (sessionId: string) => void }) => (
-    <div data-testid="workflows-page">
+  WorkflowsPage: ({
+    onOpenThread,
+    initialTarget,
+  }: {
+    onOpenThread: (sessionId: string) => void
+    initialTarget?: { workflowId: string; runId?: string | null } | null
+  }) => (
+    <div data-testid="workflows-page" data-target={JSON.stringify(initialTarget ?? null)}>
       <button type="button" onClick={() => onOpenThread('workflow-session')}>Open workflow thread</button>
     </div>
   ),
@@ -184,11 +197,13 @@ vi.mock('./components/capabilities/CapabilitiesPage', () => ({
   CapabilitiesPage: ({
     onClose,
     onCreateAgent,
+    initialTarget,
   }: {
     onClose: () => void
     onCreateAgent: (seed: { name: string }) => void
+    initialTarget?: { kind: 'tool' | 'skill'; id: string } | null
   }) => (
-    <div data-testid="capabilities-page">
+    <div data-testid="capabilities-page" data-target={JSON.stringify(initialTarget ?? null)}>
       <button type="button" onClick={onClose}>Close capabilities</button>
       <button type="button" onClick={() => onCreateAgent({ name: 'Seeded agent' })}>Create agent from capability</button>
     </div>
@@ -268,6 +283,7 @@ const completeSettings: EffectiveAppSettings = {
   enableBash: false,
   enableFileWrite: false,
   runtimeToolingBridgeEnabled: true,
+  windowZoomFactor: 1,
   workflowLaunchAtLogin: false,
   workflowRunInBackground: false,
   workflowDesktopNotifications: true,
@@ -491,13 +507,19 @@ function installMatchMedia(matchesInitial: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.history.replaceState(null, '', '/')
   Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: undefined,
+  })
+  Object.defineProperty(window, '__coworkBrowserRuntime', {
     configurable: true,
     value: undefined,
   })
   resetSessionStore()
   mockLoadSessionMessages.mockImplementation(async (sessionId: string) => {
     useSessionStore.getState().setCurrentSession(sessionId)
+    return 'opened'
   })
 })
 
@@ -702,6 +724,31 @@ describe('App', () => {
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
   })
 
+  it('persists Home model and reasoning selections to the created session before prompting', async () => {
+    const user = userEvent.setup()
+    const { api } = installAppApi()
+
+    render(<App />)
+
+    await screen.findByTestId('home-page')
+    await user.click(screen.getByRole('button', { name: 'Start from home with preferences' }))
+
+    await waitFor(() => expect(api.session.setComposerPreferences).toHaveBeenCalledWith('new-session', {
+      modelId: 'anthropic/claude-sonnet-4',
+      reasoningVariant: 'xhigh',
+    }))
+    const createdSession = useSessionStore.getState().sessions.find((session) => session.id === 'new-session')
+    expect(createdSession?.composerModelId).toBe('anthropic/claude-sonnet-4')
+    expect(createdSession?.composerReasoningVariant).toBe('xhigh')
+    expect(api.session.prompt).toHaveBeenCalledWith(
+      'new-session',
+      'Analyze deeply',
+      undefined,
+      'build',
+      { variant: 'xhigh' },
+    )
+  })
+
   it('surfaces recoverable Home prompt failures through the app error notice', async () => {
     const user = userEvent.setup()
     const { api } = installAppApi()
@@ -842,6 +889,43 @@ describe('App', () => {
 
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
     expect(mockLoadSessionMessages).toHaveBeenCalledWith('existing-session')
+  })
+
+  it('opens browser chat deep links from a cold boot without overwriting the hash', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    window.history.replaceState(null, '', '#/chat/deep-session')
+    installAppApi()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('deep-session'))
+    expect(useSessionStore.getState().currentSessionId).toBe('deep-session')
+    expect(window.location.hash).toBe('#/chat/deep-session')
+  })
+
+  it('returns stale browser chat deep links home when activation fails', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    mockLoadSessionMessages.mockResolvedValueOnce('failed')
+    installAppApi()
+
+    render(<App />)
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+
+    window.location.hash = '#/chat/stale-session'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('stale-session'))
+    expect(useSessionStore.getState().currentSessionId).toBeNull()
+    expect(screen.getByTestId('home-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-view')).not.toBeInTheDocument()
+    await waitFor(() => expect(window.location.hash).toBe('#/home'))
   })
 
   it('opens exact local session resource links without falling back across workspaces', async () => {
@@ -1115,6 +1199,58 @@ describe('App', () => {
     })))
 
     await waitFor(() => expect(api.workflows.get).toHaveBeenCalledWith('workflow-1', undefined))
-    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('workflows-page')).toHaveAttribute('data-target', JSON.stringify({
+      workflowId: 'workflow-1',
+      runId: 'run-1',
+    }))
+  })
+
+  it('opens exact tool capability resource links to the targeted capability surface', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.capabilities.tool).mockResolvedValueOnce({
+      id: 'charts',
+      name: 'Charts',
+    } as Awaited<ReturnType<typeof api.capabilities.tool>>)
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'capability',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      capabilityKind: 'tool',
+      capabilityId: 'charts',
+    })))
+
+    await waitFor(() => expect(api.capabilities.tool).toHaveBeenCalledWith('charts', undefined))
+    expect(await screen.findByTestId('capabilities-page')).toHaveAttribute('data-target', JSON.stringify({
+      kind: 'tool',
+      id: 'charts',
+    }))
+  })
+
+  it('opens exact skill capability resource links to the targeted capability surface', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.capabilities.skillBundle).mockResolvedValueOnce({
+      name: 'research',
+    } as Awaited<ReturnType<typeof api.capabilities.skillBundle>>)
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'capability',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      capabilityKind: 'skill',
+      capabilityId: 'research',
+    })))
+
+    await waitFor(() => expect(api.capabilities.skillBundle).toHaveBeenCalledWith('research', undefined))
+    expect(await screen.findByTestId('capabilities-page')).toHaveAttribute('data-target', JSON.stringify({
+      kind: 'skill',
+      id: 'research',
+    }))
   })
 })

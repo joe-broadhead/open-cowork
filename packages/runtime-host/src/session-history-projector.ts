@@ -20,7 +20,6 @@ import {
   type ChildSessionRecord,
   type TaskStatus,
 } from './session-history-task-binding.js'
-import { findOnlyIndexedCandidate } from './task-binding-policy.js'
 
 type TaskRunSnapshot = {
   title: string
@@ -183,6 +182,23 @@ function childCreatedSortTime(child: ChildSessionRecord) {
   return created === null || created === undefined ? null : toHistorySortTime(created, 0)
 }
 
+type IndexedChildSession = {
+  child: ChildSessionRecord
+  sortTime: number
+}
+
+function lowerBoundChildSortTime(entries: IndexedChildSession[], target: number) {
+  let low = 0
+  let high = entries.length
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    const entry = entries[mid]
+    if (entry && entry.sortTime < target) low = mid + 1
+    else high = mid
+  }
+  return low
+}
+
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
@@ -190,11 +206,23 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const normalizedRootMessages = rootMessages
     .map((rawMsg) => normalizeSessionMessages([rawMsg])[0])
     .filter((msg): msg is NonNullable<ReturnType<typeof normalizeSessionMessages>[number]> => Boolean(msg))
-  const rootDelegationBoundaries = normalizedRootMessages
-    .map((msg, index) => msg.parts.some(isDelegationPart)
-      ? { index, sortTime: messageCreatedSortTime(msg) }
-      : null)
-    .filter((boundary): boundary is { index: number; sortTime: number | null } => Boolean(boundary))
+  type RootDelegationBoundary = {
+    sortTime: number | null
+    slotCount: number
+  }
+  const nextRootDelegationBoundaryByMessageIndex: Array<RootDelegationBoundary | null> = []
+  let nextRootDelegationBoundary: RootDelegationBoundary | null = null
+  for (let index = normalizedRootMessages.length - 1; index >= 0; index -= 1) {
+    const msg = normalizedRootMessages[index]
+    nextRootDelegationBoundaryByMessageIndex[index] = nextRootDelegationBoundary
+    const slotCount = msg?.parts.filter(isDelegationPart).length || 0
+    if (msg && slotCount > 0) {
+      nextRootDelegationBoundary = {
+        sortTime: messageCreatedSortTime(msg),
+        slotCount,
+      }
+    }
+  }
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
@@ -202,7 +230,28 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     .slice()
     .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
   const childrenById = new Map(children.map((child) => [child.id, child]))
-  const directChildren = children.filter((child) => (child.parentSessionId || sessionId) === sessionId)
+  const childSortTimesById = new Map<string, number | null>()
+  const childrenByParentId = new Map<string, ChildSessionRecord[]>()
+  const timedChildrenByParentId = new Map<string, IndexedChildSession[]>()
+  const parentIdForChild = (child: ChildSessionRecord) => child.parentSessionId || sessionId
+  for (const child of children) {
+    const parentSessionId = parentIdForChild(child)
+    const parentChildren = childrenByParentId.get(parentSessionId)
+    if (parentChildren) parentChildren.push(child)
+    else childrenByParentId.set(parentSessionId, [child])
+
+    const sortTime = childCreatedSortTime(child)
+    childSortTimesById.set(child.id, sortTime)
+    if (sortTime !== null) {
+      const timedChildren = timedChildrenByParentId.get(parentSessionId)
+      const entry = { child, sortTime }
+      if (timedChildren) timedChildren.push(entry)
+      else timedChildrenByParentId.set(parentSessionId, [entry])
+    }
+  }
+  const childrenForParent = (parentSessionId: string) => childrenByParentId.get(parentSessionId) || []
+  const timedChildrenForParent = (parentSessionId: string) => timedChildrenByParentId.get(parentSessionId) || []
+  const directChildren = childrenForParent(sessionId)
   const rootStatus = statusFor(sessionId).type || null
   const childCompletesById = new Map<string, boolean>()
 
@@ -228,20 +277,15 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   }
 
   const taskToolBindingWindow = (messageIndex: number, after: number | null): TaskToolBindingWindow | null => {
-    const nextBoundary = rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)
+    const nextBoundary = nextRootDelegationBoundaryByMessageIndex[messageIndex]
     if (!nextBoundary) return { after: after ?? undefined }
     if (nextBoundary.sortTime === null) {
       // An untimed later delegation is still a real ordering boundary. Without
       // an upper timestamp, implicit binding would be allowed to consume that
       // later child session and leave the actual delegation pending on replay.
       if (after === null) return null
-      const laterDelegationSlotCount = normalizedRootMessages[nextBoundary.index]?.parts.filter(isDelegationPart).length || 0
-      const availableDirectChildCount = directChildren.filter((child) => {
-        if (matchedChildIds.has(child.id)) return false
-        const created = childCreatedSortTime(child)
-        return created === null || created >= after
-      }).length
-      return availableDirectChildCount > laterDelegationSlotCount
+      const availableDirectChildCount = countCandidateChildrenForTaskTool(sessionId, { after })
+      return availableDirectChildCount > nextBoundary.slotCount
         ? { after, excludeUntimed: true }
         : null
     }
@@ -296,7 +340,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   }
 
   const childBelongsToParent = (child: ChildSessionRecord, parentSessionId: string) => {
-    return (child.parentSessionId || sessionId) === parentSessionId
+    return parentIdForChild(child) === parentSessionId
   }
 
   const takeExplicitChildForTaskTool = (parentSessionId: string, part: NormalizedMessagePart) => {
@@ -315,16 +359,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     options: TaskToolBindingWindow = {},
     excludedChildIds = new Set<string>(),
   ) => {
-    return children.filter((child) => {
-      if (matchedChildIds.has(child.id) || excludedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) {
-        return false
-      }
-      const created = childCreatedSortTime(child)
-      if (created === null && (options.before !== undefined || options.excludeUntimed)) return false
-      if (created !== null && options.after !== undefined && created < options.after) return false
-      if (created !== null && options.before !== undefined && created >= options.before) return false
-      return true
-    })
+    const candidates: ChildSessionRecord[] = []
+    for (const child of candidatePoolForTaskTool(parentSessionId, options)) {
+      if (isCandidateChildForTaskTool(child, options, excludedChildIds)) candidates.push(child)
+    }
+    return candidates
   }
 
   const takeOnlyChildForTaskTool = (
@@ -332,15 +371,65 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     options: TaskToolBindingWindow = {},
     excludedChildIds = new Set<string>(),
   ) => {
-    const candidates = candidateChildrenForTaskTool(parentSessionId, options, excludedChildIds)
-    const candidateIndex = findOnlyIndexedCandidate(candidates)
-    if (candidateIndex >= 0) {
-      const child = candidates[candidateIndex]
-      if (!child) return null
-      matchedChildIds.add(child.id)
-      return child
+    let onlyCandidate: ChildSessionRecord | null = null
+    for (const child of candidatePoolForTaskTool(parentSessionId, options)) {
+      if (!isCandidateChildForTaskTool(child, options, excludedChildIds)) continue
+      if (onlyCandidate) return null
+      onlyCandidate = child
+    }
+    if (onlyCandidate) {
+      matchedChildIds.add(onlyCandidate.id)
+      return onlyCandidate
     }
     return null
+  }
+
+  function candidatePoolForTaskTool(
+    parentSessionId: string,
+    options: TaskToolBindingWindow,
+  ): ChildSessionRecord[] {
+    if (options.before === undefined && !options.excludeUntimed) {
+      return childrenForParent(parentSessionId)
+    }
+
+    const timedChildren = timedChildrenForParent(parentSessionId)
+    const start = options.after === undefined
+      ? 0
+      : lowerBoundChildSortTime(timedChildren, options.after)
+    const end = options.before === undefined
+      ? timedChildren.length
+      : lowerBoundChildSortTime(timedChildren, options.before)
+    const candidates: ChildSessionRecord[] = []
+    for (let index = start; index < end; index += 1) {
+      const entry = timedChildren[index]
+      if (entry) candidates.push(entry.child)
+    }
+    return candidates
+  }
+
+  function isCandidateChildForTaskTool(
+    child: ChildSessionRecord,
+    options: TaskToolBindingWindow,
+    excludedChildIds = new Set<string>(),
+  ) {
+    if (matchedChildIds.has(child.id) || excludedChildIds.has(child.id)) return false
+    const created = childSortTimesById.get(child.id) ?? null
+    if (created === null && (options.before !== undefined || options.excludeUntimed)) return false
+    if (created !== null && options.after !== undefined && created < options.after) return false
+    if (created !== null && options.before !== undefined && created >= options.before) return false
+    return true
+  }
+
+  function countCandidateChildrenForTaskTool(
+    parentSessionId: string,
+    options: TaskToolBindingWindow = {},
+    excludedChildIds = new Set<string>(),
+  ) {
+    let count = 0
+    for (const child of candidatePoolForTaskTool(parentSessionId, options)) {
+      if (isCandidateChildForTaskTool(child, options, excludedChildIds)) count += 1
+    }
+    return count
   }
 
   const explicitChildIdsForTaskTools = (parts: NormalizedMessagePart[]) => {
@@ -379,28 +468,28 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     let slotIndex = 0
     let candidateIndex = 0
     const candidates = candidateChildrenForTaskTool(parentSessionId, options, explicitChildIds)
+    const remainingTaskToolSlotsFromIndex = new Array<number>(orderedImplicitBindingParts.length + 1).fill(0)
+    for (let index = orderedImplicitBindingParts.length - 1; index >= 0; index -= 1) {
+      const part = orderedImplicitBindingParts[index]
+      remainingTaskToolSlotsFromIndex[index] = remainingTaskToolSlotsFromIndex[index + 1]!
+        + (part?.type === 'tool' && part.tool === 'task' && !taskToolChildSessionId(part) ? 1 : 0)
+    }
+    let remainingCandidateCount = candidates.length
     const skipMatchedCandidates = () => {
       while (candidateIndex < candidates.length) {
         const child = candidates[candidateIndex]
         if (child && !matchedChildIds.has(child.id)) return
         candidateIndex += 1
+        remainingCandidateCount -= 1
       }
     }
-    const remainingUnmatchedCandidateCount = () => {
-      let count = 0
-      for (let index = candidateIndex; index < candidates.length; index += 1) {
-        const child = candidates[index]
-        if (child && !matchedChildIds.has(child.id)) count += 1
-      }
-      return count
-    }
-    const remainingTaskToolSlotCount = () => {
-      let count = 0
-      for (let index = slotIndex; index < orderedImplicitBindingParts.length; index += 1) {
-        const part = orderedImplicitBindingParts[index]
-        if (part?.type === 'tool' && part.tool === 'task' && !taskToolChildSessionId(part)) count += 1
-      }
-      return count
+    const consumeNextCandidate = () => {
+      skipMatchedCandidates()
+      if (candidateIndex >= candidates.length) return null
+      const child = candidates[candidateIndex]
+      candidateIndex += 1
+      remainingCandidateCount -= 1
+      return child && !matchedChildIds.has(child.id) ? child : null
     }
     return {
       usesOrderedImplicitBindings: true,
@@ -411,10 +500,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           if (part?.type !== 'subtask') return null
           slotIndex += 1
           skipMatchedCandidates()
-          if (remainingUnmatchedCandidateCount() <= remainingTaskToolSlotCount()) return null
-          const child = candidates[candidateIndex]
-          candidateIndex += 1
-          return child && !matchedChildIds.has(child.id) ? child : null
+          if (remainingCandidateCount <= remainingTaskToolSlotsFromIndex[slotIndex]!) return null
+          return consumeNextCandidate()
         }
         return null
       },
@@ -423,10 +510,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           const part = orderedImplicitBindingParts[slotIndex]
           slotIndex += 1
           if (part?.type !== 'tool' || part.tool !== 'task' || taskToolChildSessionId(part)) continue
-          skipMatchedCandidates()
-          const child = candidates[candidateIndex]
-          candidateIndex += 1
-          if (!child || matchedChildIds.has(child.id)) return null
+          const child = consumeNextCandidate()
+          if (!child) return null
           matchedChildIds.add(child.id)
           return child
         }
@@ -436,9 +521,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   }
 
   const enqueueUnmatchedChildren = (parentSessionId?: string) => {
-    for (const child of children) {
+    const candidateChildren = parentSessionId ? childrenForParent(parentSessionId) : children
+    for (const child of candidateChildren) {
       if (matchedChildIds.has(child.id)) continue
-      if (parentSessionId && !childBelongsToParent(child, parentSessionId)) continue
       const taskId = `child:${child.id}`
       const agent = extractAgentName(child.title)
       const sortTime = toHistorySortTime(child.time?.created, fallbackSortTime)

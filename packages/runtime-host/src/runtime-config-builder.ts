@@ -56,6 +56,17 @@ type RuntimeConfigBuildDiagnostic = {
   message: string
 }
 
+type OpenCodeSkillsConfigWithCustomDiscovery = NonNullable<Config['skills']> & {
+  customSkills?: boolean
+}
+
+function setNativeCustomSkillDiscovery(config: Config, enabled: boolean) {
+  config.skills = {
+    ...(config.skills || {}),
+    customSkills: enabled,
+  } as OpenCodeSkillsConfigWithCustomDiscovery
+}
+
 function emitRuntimeConfigBuildDiagnostics(diagnostics: readonly RuntimeConfigBuildDiagnostic[]) {
   for (const diagnostic of diagnostics) {
     log(diagnostic.scope, diagnostic.message)
@@ -446,11 +457,17 @@ function buildRuntimeConfigWithCustomMcpsResult(
   // policy disables their class. Emptying these lists removes them from MCP
   // registration, delegation-agent descriptors, and permission patterns alike.
   const scopedCustomMcps = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customMcps') ? customMcps : []
-  const customSkills = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customSkills')
+  const allowCustomSkills = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customSkills')
+  setNativeCustomSkillDiscovery(config, false)
+  if (!allowCustomSkills) {
+    diagnostics.push({ scope: 'runtime', message: 'Skipping custom skill discovery because managed policy disables customSkills.' })
+  }
+  const skillContextOptions = { ...contextOptions, includeCustomSkills: allowCustomSkills }
+  const customSkills = allowCustomSkills
     ? listCustomSkills(contextOptions)
     : []
   const customAgentsRaw = listCustomAgents(contextOptions)
-  const availableSkills = listEffectiveSkillsSync(contextOptions).map((skill) => ({
+  const availableSkills = listEffectiveSkillsSync(skillContextOptions).map((skill) => ({
     name: skill.name,
     label: skill.label,
     description: skill.description,

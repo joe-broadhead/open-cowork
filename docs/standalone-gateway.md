@@ -155,7 +155,8 @@ curl -H "Authorization: Bearer $OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   http://127.0.0.1:8795/dashboard
 ```
 
-Operator metrics are also admin-token protected:
+Operator metrics are also admin-token protected. Standalone Gateway has no
+loopback bypass for `/metrics`; forwarded headers never grant operator access:
 
 ```bash
 curl -H "Authorization: Bearer $OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \

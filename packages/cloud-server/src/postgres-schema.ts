@@ -54,6 +54,49 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_session_events_sequence_idx
     ON cloud_session_events (tenant_id, session_id, sequence)`,
+  `CREATE TABLE IF NOT EXISTS cloud_artifact_index (
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    session_id text NOT NULL,
+    artifact_id text NOT NULL,
+    filename text NOT NULL,
+    content_type text,
+    size_bytes bigint NOT NULL,
+    object_key text NOT NULL,
+    kind text NOT NULL,
+    status text NOT NULL,
+    author_agent_id text,
+    project_id text,
+    task_id text,
+    status_updated_by text,
+    status_updated_at timestamptz,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, session_id, artifact_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_user_updated_idx
+    ON cloud_artifact_index (tenant_id, user_id, updated_at DESC, session_id, artifact_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_session_updated_idx
+    ON cloud_artifact_index (tenant_id, user_id, session_id, updated_at DESC, artifact_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_project_idx
+    ON cloud_artifact_index (tenant_id, user_id, project_id, task_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_kind_status_idx
+    ON cloud_artifact_index (tenant_id, user_id, kind, status, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_launchpad_session_summaries (
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    session_id text NOT NULL,
+    pending_approvals jsonb NOT NULL,
+    pending_questions jsonb NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, session_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_launchpad_session_summaries_user_updated_idx
+    ON cloud_launchpad_session_summaries (tenant_id, user_id, updated_at DESC, session_id)`,
   `CREATE TABLE IF NOT EXISTS cloud_workspace_event_counters (
     tenant_id text NOT NULL,
     user_id text NOT NULL,
@@ -758,20 +801,6 @@ export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS = [
     created_at timestamptz NOT NULL,
     PRIMARY KEY (org_id, token_id, channel_binding_id)
   )`,
-  `INSERT INTO cloud_api_token_channel_binding_grants (
-    org_id, token_id, channel_binding_id, created_at
-   )
-   SELECT tokens.org_id, tokens.token_id, bindings.binding_id, now()
-   FROM cloud_api_tokens tokens
-   JOIN cloud_channel_bindings bindings ON bindings.org_id = tokens.org_id
-   WHERE tokens.revoked_at IS NULL
-     AND tokens.scopes @> '["gateway"]'::jsonb
-     AND NOT EXISTS (
-       SELECT 1
-       FROM cloud_schema_migrations
-       WHERE id = '${CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID}'
-     )
-   ON CONFLICT (org_id, token_id, channel_binding_id) DO NOTHING`,
   `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_token_idx
     ON cloud_api_token_channel_binding_grants (org_id, token_id, channel_binding_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_binding_idx
@@ -1296,6 +1325,35 @@ const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS = [
     WHERE next_event_sequence > 0`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID = '030_artifact_upload_reservations'
+const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_artifact_upload_reservations (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    session_id text NOT NULL,
+    artifact_id text NOT NULL,
+    object_key text NOT NULL,
+    filename text NOT NULL,
+    content_type text,
+    quota_key text,
+    quota_window_ms bigint,
+    quota_window_started_at_ms bigint,
+    reserved_bytes bigint NOT NULL,
+    settled_bytes bigint,
+    status text NOT NULL,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, tenant_id, session_id, artifact_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_upload_reservations_expiry_idx
+    ON cloud_artifact_upload_reservations (org_id, status, expires_at)
+    WHERE status = 'reserved'`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1430,5 +1488,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     statements: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS,
     concurrentIndexes: ['cloud_sessions_projection_lag_idx'],
     transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS,
   },
 ] as const

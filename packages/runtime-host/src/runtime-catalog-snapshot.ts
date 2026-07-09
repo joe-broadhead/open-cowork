@@ -12,6 +12,7 @@ import { currentRuntimeToolCacheGeneration } from './runtime-tool-cache.js'
 import { listRuntimeToolsForContext, toRuntimeToolMetadata, type RuntimeToolMetadata } from './runtime-tools.js'
 import { getEffectiveSettings } from './settings.js'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.js'
+import { getActiveManagedPolicy, isManagedPolicyExtensionClassEnabled } from './managed-policy.js'
 
 const RUNTIME_CATALOG_SNAPSHOT_TTL_MS = 30_000
 const RUNTIME_CATALOG_SNAPSHOT_MAX_ENTRIES = 64
@@ -54,6 +55,7 @@ function normalizeContext(options?: RuntimeContextOptions): RuntimeContextOption
 
 function snapshotCacheKey(options?: RuntimeContextOptions) {
   const settings = getEffectiveSettings()
+  const policy = getActiveManagedPolicy()
   const directory = resolveProjectDirectory(options?.directory) || getRuntimeHomeDir()
   return JSON.stringify({
     generation: runtimeCatalogSnapshotGeneration,
@@ -61,6 +63,7 @@ function snapshotCacheKey(options?: RuntimeContextOptions) {
     directory,
     provider: settings.effectiveProviderId || '',
     model: settings.effectiveModel || '',
+    customSkills: isManagedPolicyExtensionClassEnabled(policy, 'customSkills'),
   })
 }
 
@@ -113,17 +116,19 @@ function buildAgentRelationshipMaps(
 async function buildRuntimeCatalogSnapshot(options?: RuntimeContextOptions): Promise<RuntimeCatalogSnapshot> {
   return measureAsyncPerf('catalog.snapshot.build', async () => {
     const context = normalizeContext(options)
+    const allowCustomSkills = isManagedPolicyExtensionClassEnabled(getActiveManagedPolicy(), 'customSkills')
+    const skillContext = { ...context, includeCustomSkills: allowCustomSkills }
     const [
       effectiveSkills,
       runtimeToolEntries,
     ] = await Promise.all([
-      listEffectiveSkills(context),
+      listEffectiveSkills(skillContext),
       listRuntimeToolsForContext(context),
     ])
     const builtinTools = getConfiguredToolsFromConfig()
     const builtinSkills = getConfiguredSkillsFromConfig()
     const customMcps = listCustomMcps(context)
-    const customSkills = listCustomSkills(context)
+    const customSkills = allowCustomSkills ? listCustomSkills(context) : []
     const customAgents = listCustomAgents(context)
     const runtimeTools = runtimeToolEntries
       .map(toRuntimeToolMetadata)

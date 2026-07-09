@@ -6,6 +6,7 @@ import { syncSessionView } from '@open-cowork/runtime-host/session-history-loade
 import { publishSessionMetadata, publishSessionView } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { getClient, getClientForDirectory, getModelInfoAsync } from '@open-cowork/runtime-host/runtime'
+import { invalidateRuntimeCatalogSnapshotCache } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
 import { getRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
 import { getPerfSnapshot } from '@open-cowork/runtime-host/perf-metrics'
 import { normalizeSessionInfo } from '@open-cowork/runtime-host'
@@ -95,6 +96,7 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'enableFileWrite',
   'runtimeConfigSource',
   'runtimeToolingBridgeEnabled',
+  'windowZoomFactor',
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
 ])
@@ -369,7 +371,6 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       return buildCloudEffectiveSettings(base, nextValue)
     }
     const result = saveSettings(updates)
-    const { invalidateRuntimeCatalogSnapshotCache } = await import('@open-cowork/runtime-host/runtime-catalog-snapshot')
     invalidateRuntimeCatalogSnapshotCache()
     const runtimeSensitiveUpdate = hasRuntimeSensitiveSettingsUpdate(updates)
 

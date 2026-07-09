@@ -1,6 +1,7 @@
-import { mkdirSync, readdirSync, statSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { mergeSubprocessV8Coverage } from './subprocess-v8-coverage.mjs'
 
 const inputArgs = process.argv.slice(2)
 const coverage = inputArgs.includes('--coverage')
@@ -12,6 +13,8 @@ const testRoots = [
   'mcps/agents/tests',
   'mcps/charts/tests',
   'mcps/clock/tests',
+  'mcps/knowledge/tests',
+  'mcps/semantic-ui/tests',
   'mcps/skills/tests',
   'mcps/workflows/tests',
   'packages/gateway-channel/src',
@@ -24,6 +27,7 @@ const testRoots = [
   'packages/gateway-provider-webhook/src',
   'packages/gateway-provider-whatsapp/src',
   'packages/gateway-testing/src',
+  'packages/cloud-client/src',
 ]
 
 function collectTests(directory) {
@@ -60,6 +64,8 @@ const args = [
 
 if (coverage) {
   mkdirSync('coverage/workspace', { recursive: true })
+  rmSync('coverage/workspace/v8-subprocess', { recursive: true, force: true })
+  mkdirSync('coverage/workspace/v8-subprocess', { recursive: true })
   args.push(
     '--experimental-test-coverage',
     '--test-reporter=spec',
@@ -71,9 +77,27 @@ if (coverage) {
 
 args.push('--test', ...testFiles)
 
-const result = spawnSync(process.execPath, args, { stdio: 'inherit' })
+const result = spawnSync(process.execPath, args, {
+  stdio: 'inherit',
+  env: coverage
+    ? {
+        ...process.env,
+        NODE_V8_COVERAGE: join(process.cwd(), 'coverage/workspace/v8-subprocess'),
+      }
+    : process.env,
+})
 if (result.error) {
   console.error(result.error)
   process.exit(1)
 }
-process.exit(result.status ?? 1)
+if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1)
+
+if (coverage) {
+  const merged = mergeSubprocessV8Coverage({
+    coverageDir: join(process.cwd(), 'coverage/workspace/v8-subprocess'),
+    lcovPath: join(process.cwd(), 'coverage/workspace/lcov.info'),
+  })
+  process.stdout.write(`[workspace-coverage] merged ${merged.files} subprocess V8 files (${merged.lines} lines) from ${merged.v8Files} coverage payloads\n`)
+}
+
+process.exit(0)

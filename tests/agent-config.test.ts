@@ -403,7 +403,7 @@ test('buildOpenCoworkAgentConfig lets downstream permission policy cap native we
 })
 
 test('configured agents inherit enabled native bash and file-write policy for selected native tools', () => {
-  const tempRoot = testTempDir('opencowork-configured-agent-native-tools-')
+  const tempRoot = testTempDir('open-cowork-configured-agent-native-tools-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
 

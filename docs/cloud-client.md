@@ -112,6 +112,21 @@ Browser clients use cookie auth and CSRF for mutating requests. Operator-only
 APIs should remain behind operator auth or private networking and must not be
 called from ordinary browser workbench code.
 
+## Workflow Listing
+
+Workflow lists are keyset-paged. Omit options for the default first page, or
+pass the returned `nextCursor` to continue without issuing one run query per
+workflow:
+
+```ts
+let cursor: string | null | undefined
+do {
+  const page = await client.listWorkflows({ limit: 100, cursor })
+  renderWorkflows(page.workflows, page.runs)
+  cursor = page.nextCursor
+} while (cursor)
+```
+
 ## Auth Modes
 
 | Mode | Caller | Transport |
@@ -186,6 +201,14 @@ Gateway have different UI and delivery semantics.
 The client exports `CloudTransportError`, `CloudTransportErrorKind`, and
 `isCloudTransportError`. Clients should branch on typed fields instead of
 parsing strings.
+
+HTTP non-2xx responses are parsed as JSON when possible. Bodies shaped like
+`{ "error": "...", "code": "..." }` set the error `message` and `code`; raw
+non-JSON bodies are preserved on `body` and still classified by HTTP status.
+Fetch rejections are `network` unless caused by caller cancellation (`abort`) or
+the request timeout (`timeout`). SSE fetch streams reuse the HTTP status
+taxonomy for non-2xx responses, malformed event payloads are `parse`, and
+EventSource/fetch stream startup or runtime failures are `sse`.
 
 | Kind | Meaning |
 | --- | --- |

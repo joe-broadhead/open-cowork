@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { launchSmokeApp, waitForAppShell, waitForRuntimeReady } from './smoke-helpers.ts'
+import { assertRuntimeComponentProvenance, launchSmokeApp, waitForAppShell, waitForRuntimeReady } from './smoke-helpers.ts'
 
 test('preload exposes the expected coworkApi surface', async () => {
   const { page, cleanup } = await launchSmokeApp()
@@ -127,6 +127,7 @@ test('rapid abort and prompt keeps the session event stream usable', async () =>
   try {
     await waitForAppShell(page, 30_000)
     await waitForRuntimeReady(page, 30_000)
+    await assertRuntimeComponentProvenance(page)
 
     const result = await page.evaluate(async () => {
       const timeout = <T,>(promise: Promise<T>, label: string) => Promise.race([

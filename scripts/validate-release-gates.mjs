@@ -131,9 +131,9 @@ function assertIncludes(path, text) {
   if (!contents.includes(text)) throw new Error(`${path} must include ${text}`)
 }
 
-function assertNotIncludes(path, text) {
+function assertNotIncludes(path, text, label = `${path} must not include ${text}`) {
   const contents = read(path)
-  if (contents.includes(text)) throw new Error(`${path} must not include ${text}`)
+  if (contents.includes(text)) throw new Error(label)
 }
 
 function assertMatches(path, pattern, label = String(pattern)) {
@@ -336,14 +336,17 @@ function assertCiContract() {
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
+    'pnpm test:windows-prepackage',
     'pnpm docs:build',
     'pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
+    'node scripts/find-windows-packaged-executable.mjs',
   ]) {
     assertIncludes(ciWorkflowPath, command)
   }
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}')
+  assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.windows-packaged-executable.outputs.path }}')
 }
 
 function assertReleaseWorkflowContract() {
@@ -362,6 +365,7 @@ function assertReleaseWorkflowContract() {
     'pnpm --dir apps/desktop test:e2e:packaged',
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
+    'node scripts/find-windows-packaged-executable.mjs',
     'pnpm proof:sandbox:opencode-session -- --json',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
@@ -455,6 +459,8 @@ function assertReleaseWorkflowContract() {
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}')
   assertIncludes(releaseWorkflowPath, 'sudo apt-get install -y libarchive-tools rpm xvfb')
+  assertNotIncludes(releaseWorkflowPath, 'SIGNPATH_', 'release workflow must not accept SignPath inputs unless a real signing action and tests are added')
+  assertNotIncludes(releaseWorkflowPath, 'Reconcile update metadata after post-build signing', 'release workflow must not carry a placeholder post-build signing step')
   assertNotIncludes(releaseWorkflowPath, 'find dist-artifacts/release-macos -type f')
   assertNotIncludes(releaseWorkflowPath, 'find dist-artifacts/release-linux -type f')
   assertNotIncludes(releaseWorkflowPath, 'test:e2e:packaged:optional')
@@ -479,7 +485,8 @@ function assertReleaseChecklistContract() {
     'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64',
     '--require-private-pass',
     'Go/No-Go',
-    'macOS/Linux packaged smoke validation',
+    'macOS/Windows/Linux packaged smoke validation',
+    'pnpm test:windows-prepackage',
   ]) {
     assertIncludes(releaseChecklistPath, phrase)
   }
@@ -488,6 +495,7 @@ function assertReleaseChecklistContract() {
 function assertPackagingDocsContract() {
   for (const phrase of [
     'packaged desktop smoke tests on Linux under `xvfb`',
+    'Windows pre-package targeted tests for path handling, preload bridge, updater, and runtime spawn',
     'runs packaged desktop smoke tests for macOS, Windows, and Linux release',
   ]) {
     assertIncludes(packagingDocsPath, phrase)

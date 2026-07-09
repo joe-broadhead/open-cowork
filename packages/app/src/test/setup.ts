@@ -31,6 +31,7 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,
@@ -295,6 +296,12 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       resume: vi.fn(async () => null),
       archive: vi.fn(async () => null),
       regenerateWebhookSecret: vi.fn(async () => null),
+    },
+    capabilities: {
+      tools: vi.fn(async () => []),
+      tool: vi.fn(async () => null),
+      skills: vi.fn(async () => []),
+      skillBundle: vi.fn(async () => null),
     },
     coordination: {
       board: vi.fn(async () => ({ projects: [], tasks: [] })),

@@ -146,6 +146,44 @@ class SlowPromptRuntime extends FakeRuntime {
   }
 }
 
+class ShutdownAwareSlowPromptRuntime extends FakeRuntime {
+  private startedResolve!: () => void
+  readonly started = new Promise<void>((resolve) => {
+    this.startedResolve = resolve
+  })
+  abortCalls = 0
+  observedAbort = false
+
+  async promptSession(input: {
+    sessionId: string
+    parts: CloudRuntimePromptPart[]
+    agent: string
+    signal?: AbortSignal
+  }) {
+    this.startedResolve()
+    await new Promise<void>((_resolve, reject) => {
+      if (!input.signal) {
+        reject(new Error('Expected shutdown signal.'))
+        return
+      }
+      if (input.signal.aborted) {
+        this.observedAbort = true
+        reject(input.signal.reason)
+        return
+      }
+      input.signal.addEventListener('abort', () => {
+        this.observedAbort = true
+        reject(input.signal?.reason instanceof Error ? input.signal.reason : new Error('Worker command aborted.'))
+      }, { once: true })
+    })
+    return super.promptSession(input)
+  }
+
+  async abortSession() {
+    this.abortCalls += 1
+  }
+}
+
 test('cloud BYOK defaults include only provider descriptors with secret credentials', () => {
   const appConfig = getAppConfig()
   const providerIds = new Set(listConfiguredByokProviderIds(appConfig) || [])
@@ -218,6 +256,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: 'true',
     OPEN_COWORK_CLOUD_COOKIE_SECURE: 'false',
     OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cloud.example.test',
+    OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '127.0.0.1',
     OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS: '127.0.0.0/8, ::1',
     OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'private_beta',
   }), {
@@ -243,6 +282,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     checkpointsEnabled: true,
     cookieSecure: false,
     publicUrl: 'https://cloud.example.test',
+    publishedAddr: '127.0.0.1',
     trustProxyHeaders: false,
     trustedProxyCidrs: ['127.0.0.0/8', '::1'],
   })
@@ -581,7 +621,7 @@ test('cloud auth mode none is local-only and ignores caller identity headers', a
   assert.equal(principal.email, 'local@example.test')
 })
 
-test('cloud auth mode none refuses non-loopback web binds without explicit local override', () => {
+test('cloud auth mode none is local-only and insecure override refuses public exposure', () => {
   assert.throws(() => assertCloudAuthDeploymentSafe({
     role: 'web',
     hostname: '0.0.0.0',
@@ -600,8 +640,40 @@ test('cloud auth mode none refuses non-loopback web binds without explicit local
     role: 'web',
     hostname: '0.0.0.0',
     auth: DEFAULT_CONFIG.cloud.auth,
-    env: { OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+    publicUrl: 'http://localhost:8787',
+    env: {
+      OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true',
+      OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '127.0.0.1',
+    },
   }))
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: { OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+  }), /OPEN_COWORK_CLOUD_HOST\/HOST/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: {
+      OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true',
+      OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '0.0.0.0',
+    },
+  }), /OPEN_COWORK_CLOUD_PUBLISHED_ADDR/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    publicUrl: 'https://cloud.example.test',
+    env: {
+      OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true',
+      OPEN_COWORK_CLOUD_PUBLISHED_ADDR: '127.0.0.1',
+    },
+  }), /OPEN_COWORK_CLOUD_PUBLIC_URL/)
 })
 
 test('cloud public header and OIDC auth require spoofing-resistant deployment settings', () => {
@@ -1271,6 +1343,82 @@ test('cloud worker shutdown waits for an active command loop before closing runt
     assert.equal(runtime.prompts.length, 1)
   } finally {
     runtime.release()
+    if (!workerClosed) await worker.close()
+    await web.close()
+  }
+})
+
+test('cloud worker shutdown aborts and recovers active commands after drain grace', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const runtime = new ShutdownAwareSlowPromptRuntime()
+  const web = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    store,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+  const worker = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    store,
+    runtime,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+      OPEN_COWORK_CLOUD_WORKER_ID: 'worker-forced-shutdown',
+    },
+    workerPollMs: 1,
+    shutdownGraceMs: 25,
+  })
+  let workerClosed = false
+
+  try {
+    const created = await readJson(await fetch(`${web.url}/api/sessions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-tenant-id': 'tenant-forced-shutdown',
+        'x-open-cowork-user-id': 'user-forced-shutdown',
+        'x-open-cowork-user-email': 'forced-shutdown@example.test',
+      },
+      body: JSON.stringify({}),
+    }))
+    const coworkSessionId = String(asRecord(created.session).sessionId)
+
+    await fetch(`${web.url}/api/sessions/${coworkSessionId}/prompt`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-tenant-id': 'tenant-forced-shutdown',
+        'x-open-cowork-user-id': 'user-forced-shutdown',
+        'x-open-cowork-user-email': 'forced-shutdown@example.test',
+      },
+      body: JSON.stringify({ text: 'force close during active worker loop', agent: 'build' }),
+    })
+
+    await runtime.started
+    await worker.close()
+    workerClosed = true
+
+    assert.equal(runtime.observedAbort, true)
+    assert.equal(runtime.abortCalls, 1)
+    assert.equal(runtime.closed, true)
+    const replacementLease = store.claimSessionLease(
+      'tenant-forced-shutdown',
+      coworkSessionId,
+      'replacement-worker',
+      new Date('2030-01-01T00:00:00.000Z'),
+    )
+    assert.ok(replacementLease)
+    const recoveredCommand = store.claimNextSessionCommand(replacementLease, new Date('2030-01-01T00:00:00.000Z'))
+    assert.equal(recoveredCommand?.kind, 'prompt')
+    assert.equal(recoveredCommand?.attemptCount, 2)
+  } finally {
     if (!workerClosed) await worker.close()
     await web.close()
   }

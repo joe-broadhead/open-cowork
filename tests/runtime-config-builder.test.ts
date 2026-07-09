@@ -2,7 +2,7 @@ import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/run
 import { getMachineSkillsDir, getProjectCoworkAgentsDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
 import { copySkillsAndAgents } from '@open-cowork/runtime-host/runtime-content'
 import { buildProviderRuntimeConfig, buildRuntimeConfig, buildRuntimeConfigForRuntime } from '@open-cowork/runtime-host/runtime-config-builder'
-import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '@open-cowork/runtime-host/native-customizations'
+import { removeCustomAgent, removeCustomMcp, removeCustomSkill, saveCustomAgent, saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
 import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog } from '@open-cowork/runtime-host/custom-agents-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -21,8 +21,17 @@ function testTempDir(prefix: string) {
   return mkdtempSync(join(parent, prefix))
 }
 
+function writeSkillBundle(root: string, name: string, description: string) {
+  const directory = join(root, name)
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(
+    join(directory, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: ${description}\n---\n# ${description}\n`,
+  )
+}
+
 test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', () => {
-  const tempRoot = testTempDir('opencowork-runtime-config-')
+  const tempRoot = testTempDir('open-cowork-runtime-config-')
   const configDir = join(tempRoot, 'downstream')
   const projectRoot = join(tempRoot, 'project')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -168,59 +177,92 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
 })
 
 test('buildRuntimeConfig applies the org managed policy: tightens permissions and disables extension classes', () => {
-  const tempRoot = testTempDir('opencowork-runtime-policy-')
+  const tempRoot = testTempDir('open-cowork-runtime-policy-')
   const configDir = join(tempRoot, 'downstream')
+  const downstreamRoot = join(tempRoot, 'downstream-root')
+  const downstreamSkills = join(downstreamRoot, 'skills')
   const projectRoot = join(tempRoot, 'project')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
   const originalSettings = loadSettings()
   mkdirSync(configDir, { recursive: true })
+  mkdirSync(downstreamSkills, { recursive: true })
   mkdirSync(projectRoot, { recursive: true })
   // App-config ceiling leaves bash + custom extensions fully enabled.
   writeFileSync(join(configDir, 'config.jsonc'), `{
   "providers": { "available": ["openrouter"], "defaultProvider": "openrouter", "defaultModel": "auto" },
+  "skills": [
+    { "name": "Managed Skill", "description": "Managed bundle", "badge": "Skill", "sourceName": "managed-skill", "toolIds": [] }
+  ],
   "permissions": { "bash": "allow", "fileWrite": "allow", "task": "allow", "web": "allow", "webSearch": true }
 }
 `)
+  writeSkillBundle(downstreamSkills, 'managed-skill', 'Managed bundle')
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
   clearConfigCaches()
   saveSettings({ selectedProviderId: 'openrouter', selectedModelId: 'auto', bashPermission: 'allow', enableBash: true })
   saveCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse', type: 'http', url: 'https://warehouse.example.test/mcp' })
+  saveCustomSkill({
+    scope: 'project',
+    directory: projectRoot,
+    name: 'custom-review',
+    content: `---\ndescription: Custom review\n---\n# Custom review\n`,
+  })
   try {
-    // Baseline (no policy): bash allowed, the custom MCP is registered.
+    // Baseline (no policy): bash allowed, custom MCP/skill are registered through
+    // Cowork-owned config and skill catalog. Native ambient skill discovery stays off.
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
+    copySkillsAndAgents(projectRoot)
     const baseline = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(baseline.permission.bash, 'allow')
     assert.equal(baseline.mcp.warehouse?.url, 'https://warehouse.example.test/mcp')
+    assert.equal(baseline.skills.customSkills, false)
+    assert.equal(baseline.permission.skill['managed-skill'], 'allow')
+    assert.equal(baseline.permission.skill['custom-review'], 'allow')
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'custom-review', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'custom-review', 'SKILL.md')), false)
 
-    // Org policy TIGHTENS bash to deny (never loosens) and disables custom MCPs.
+    // Org policy TIGHTENS bash to deny (never loosens) and disables custom MCPs/skills.
     const policy: ManagedDesktopPolicy = {
       ...EMPTY_MANAGED_POLICY,
       allowedProviders: ['openrouter'],
-      extensions: { customProviders: true, customMcps: false, customSkills: true },
+      extensions: { customProviders: true, customMcps: false, customSkills: false },
       permissionCeilings: { ...EMPTY_MANAGED_POLICY.permissionCeilings, bash: 'deny' },
     }
     setActiveManagedPolicy(policy)
+    copySkillsAndAgents(projectRoot)
     const governed = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(governed.permission.bash, 'deny')
     // The custom MCP is dropped entirely by the extension-class gate.
     assert.equal(governed.mcp.warehouse, undefined)
+    assert.equal(governed.skills.customSkills, false)
+    assert.equal(governed.permission.skill['managed-skill'], 'allow')
+    assert.equal(governed.permission.skill['custom-review'], undefined)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'custom-review', 'SKILL.md')), false)
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'custom-review', 'SKILL.md')), false)
     // The provider allow-list still permits the configured provider.
     assert.deepEqual(governed.enabled_providers, ['openrouter'])
   } finally {
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
     removeCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse' })
+    removeCustomSkill({ scope: 'project', directory: projectRoot, name: 'custom-review' })
     saveSettings(originalSettings)
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
 
 test('buildRuntimeConfigForRuntime omits HTTP MCPs rejected by the runtime DNS policy', async () => {
-  const tempRoot = testTempDir('opencowork-runtime-mcp-policy-')
+  const tempRoot = testTempDir('open-cowork-runtime-mcp-policy-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
@@ -251,7 +293,7 @@ test('buildRuntimeConfigForRuntime omits HTTP MCPs rejected by the runtime DNS p
 })
 
 test('buildRuntimeConfig treats disabled bash and file-write toggles as hard denies', () => {
-  const tempRoot = testTempDir('opencowork-runtime-permission-toggle-')
+  const tempRoot = testTempDir('open-cowork-runtime-permission-toggle-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -329,7 +371,7 @@ test('buildProviderRuntimeConfig preserves configured custom provider options', 
 })
 
 test('buildRuntimeConfig uses a custom provider local default when the saved model is stale', () => {
-  const tempRoot = testTempDir('opencowork-runtime-provider-default-')
+  const tempRoot = testTempDir('open-cowork-runtime-provider-default-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -378,7 +420,7 @@ test('buildRuntimeConfig uses a custom provider local default when the saved mod
 })
 
 test('buildRuntimeConfig delegates to project-scoped custom agents without duplicating native agent files in config.agent', () => {
-  const projectRoot = testTempDir('opencowork-custom-agent-')
+  const projectRoot = testTempDir('open-cowork-custom-agent-')
   const originalSettings = loadSettings()
 
   saveCustomAgent(
@@ -414,7 +456,7 @@ test('buildRuntimeConfig delegates to project-scoped custom agents without dupli
 })
 
 test('runtime custom-agent markdown is capped by effective global permissions before OpenCode discovery', () => {
-  const tempRoot = testTempDir('opencowork-custom-agent-ceiling-')
+  const tempRoot = testTempDir('open-cowork-custom-agent-ceiling-')
   const projectRoot = join(tempRoot, 'project')
   const userDataDir = join(tempRoot, 'user-data')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
@@ -536,7 +578,7 @@ test('runtime custom-agent markdown is capped by effective global permissions be
 })
 
 test('custom agent permission overrides preserve nested guardrails and exact legacy tool rules', () => {
-  const tempRoot = testTempDir('opencowork-custom-agent-permission-rules-')
+  const tempRoot = testTempDir('open-cowork-custom-agent-permission-rules-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
   clearSettingsCache()
@@ -596,7 +638,7 @@ test('custom agent permission overrides preserve nested guardrails and exact leg
 })
 
 test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules', () => {
-  const tempUserData = testTempDir('opencowork-runtime-skills-')
+  const tempUserData = testTempDir('open-cowork-runtime-skills-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
@@ -619,7 +661,7 @@ test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules
 })
 
 test('built-in all-skill permission is bounded by the managed runtime skill catalog', () => {
-  const tempRoot = testTempDir('opencowork-runtime-skill-boundary-')
+  const tempRoot = testTempDir('open-cowork-runtime-skill-boundary-')
   const tempUserData = join(tempRoot, 'user-data')
   const downstreamRoot = join(tempRoot, 'downstream')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
@@ -677,7 +719,7 @@ test('buildRuntimeConfig gives the charts agent explicit access to the managed c
 })
 
 test('buildRuntimeConfig delegates to custom agents whose app-owned skills need frontmatter healing', () => {
-  const tempUserData = testTempDir('opencowork-runtime-skill-heal-')
+  const tempUserData = testTempDir('open-cowork-runtime-skill-heal-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
@@ -737,7 +779,7 @@ test('buildProviderRuntimeConfig bridges custom provider credentials into env pl
   // bridge that was missing before: custom providers ignored credentials
   // entirely and only saw `process.env`, which broke the Settings UI for
   // GUI-launched apps.
-  const tempRoot = testTempDir('opencowork-cred-bridge-')
+  const tempRoot = testTempDir('open-cowork-cred-bridge-')
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -817,7 +859,7 @@ test('buildRuntimeConfig does NOT fall back to process.env for custom provider c
   // resolves to empty string — never to a matching shell env var. A
   // stale `DATABRICKS_TOKEN` sitting in a teammate's shell must not
   // get picked up silently in place of the user's Settings entry.
-  const tempRoot = testTempDir('opencowork-cred-noenvleak-')
+  const tempRoot = testTempDir('open-cowork-cred-noenvleak-')
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -877,7 +919,7 @@ test('buildRuntimeConfig mixes credential-scoped and non-credential placeholders
   //   - `baseUrl` NOT in credentials[] (the shell export is a
   //     legitimate escape hatch for power users tweaking endpoints).
   // Asserts the two rules coexist in the same provider.
-  const tempRoot = testTempDir('opencowork-mixed-placeholders-')
+  const tempRoot = testTempDir('open-cowork-mixed-placeholders-')
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -1011,7 +1053,7 @@ test('buildRuntimeConfig uses the user-selected small model for OpenCode lightwe
 })
 
 test('buildRuntimeConfig supports OpenCode-native providers without required app-stored API keys', () => {
-  const tempRoot = testTempDir('opencowork-runtime-native-provider-')
+  const tempRoot = testTempDir('open-cowork-runtime-native-provider-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -1183,7 +1225,7 @@ test('buildRuntimeConfig accepts already-prefixed direct built-in model ids with
 })
 
 test('buildRuntimeConfig supports downstream OpenCode-native providers with runtime-owned model catalogs', () => {
-  const tempRoot = testTempDir('opencowork-runtime-builtin-provider-')
+  const tempRoot = testTempDir('open-cowork-runtime-builtin-provider-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -1234,7 +1276,7 @@ test('buildRuntimeConfig supports downstream OpenCode-native providers with runt
 })
 
 test('buildRuntimeConfig can activate dormant OpenCode-native providers without credentials', () => {
-  const tempRoot = testTempDir('opencowork-runtime-activated-provider-')
+  const tempRoot = testTempDir('open-cowork-runtime-activated-provider-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()

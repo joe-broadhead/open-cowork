@@ -245,6 +245,280 @@ function runControlPlaneDomainContracts(
       // Aggregate stats (used by projection-status) match the event log without loading it.
       assert.deepEqual(await store.getSessionEventStats(tenantId, sessionId), { count: 3, latestSequence: 3 })
 
+      await store.upsertCloudArtifactIndex({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-artifact-old`,
+        filename: 'old.txt',
+        contentType: 'text/plain',
+        size: 3,
+        key: `${tenantId}/${sessionId}/private-old-key`,
+        kind: 'document',
+        status: 'draft',
+        authorAgentId: 'writer',
+        projectId: `${prefix}-project`,
+        taskId: `${prefix}-task`,
+        statusUpdatedBy: null,
+        statusUpdatedAt: null,
+        createdAt: '2026-01-02T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      })
+      await store.upsertCloudArtifactIndex({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-artifact-new`,
+        filename: 'new.txt',
+        contentType: 'text/plain',
+        size: 4,
+        key: `${tenantId}/${sessionId}/private-new-key`,
+        kind: 'document',
+        status: 'final',
+        authorAgentId: 'writer',
+        projectId: `${prefix}-project`,
+        taskId: `${prefix}-task`,
+        statusUpdatedBy: 'reviewer',
+        statusUpdatedAt: '2026-01-02T00:03:00.000Z',
+        createdAt: '2026-01-02T00:01:00.000Z',
+        updatedAt: '2026-01-02T00:03:00.000Z',
+      })
+      const artifactPage = await store.listCloudArtifactIndex({
+        tenantId,
+        userId,
+        projectId: `${prefix}-other-project`,
+        taskIds: [`${prefix}-task`],
+        limit: 1,
+      })
+      assert.deepEqual(artifactPage.items.map((artifact) => artifact.artifactId), [`${prefix}-artifact-new`])
+      assert.equal(artifactPage.items[0]?.sessionTitle, 'Contract session')
+      assert.equal(artifactPage.items[0]?.key, `${tenantId}/${sessionId}/private-new-key`)
+      assert.equal(artifactPage.totalEstimate, 2)
+      assert.equal(artifactPage.truncated, true)
+      const exactArtifact = await store.getCloudArtifactIndexRecord({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-artifact-new`,
+      })
+      assert.equal(exactArtifact?.status, 'final')
+
+      const quotaNow = new Date('2026-01-02T00:05:00.000Z')
+      const quotaInput = {
+        orgId: org.orgId,
+        quotaKey: `${prefix}:artifact-bytes`,
+        limit: 100,
+        quantity: 10,
+        windowMs: 86_400_000,
+        now: quotaNow,
+        policyCode: 'quota.artifact_bytes_per_day_exceeded',
+      } as const
+      const reservation = await store.createArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        objectKey: `${tenantId}/${sessionId}/reserved.txt`,
+        filename: 'reserved.txt',
+        contentType: 'text/plain',
+        reservedBytes: 10,
+        expiresAt: '2026-01-02T00:20:00.000Z',
+        quota: quotaInput,
+        createdAt: quotaNow,
+      })
+      assert.equal(reservation.reservation?.status, 'reserved')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
+      const duplicateReservation = await store.createArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        objectKey: `${tenantId}/${sessionId}/reserved.txt`,
+        filename: 'reserved.txt',
+        contentType: 'text/plain',
+        reservedBytes: 10,
+        expiresAt: '2026-01-02T00:20:00.000Z',
+        quota: quotaInput,
+        createdAt: quotaNow,
+      })
+      assert.equal(duplicateReservation.reservation?.status, 'reserved')
+      assert.equal(duplicateReservation.quota, null)
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
+      const settledReservation = await store.settleArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        actualBytes: 6,
+        quota: { ...quotaInput, quantity: 6 },
+        now: new Date('2026-01-02T00:06:00.000Z'),
+      })
+      assert.equal(settledReservation.settled, true)
+      assert.equal(settledReservation.reservation?.status, 'settled')
+      assert.equal(settledReservation.reservation?.settledBytes, 6)
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+      const settledRetry = await store.settleArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        actualBytes: 6,
+        quota: { ...quotaInput, quantity: 6 },
+        now: new Date('2026-01-02T00:07:00.000Z'),
+      })
+      assert.equal(settledRetry.settled, true)
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+      await store.createArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-expired-artifact`,
+        objectKey: `${tenantId}/${sessionId}/expired.txt`,
+        filename: 'expired.txt',
+        contentType: 'text/plain',
+        reservedBytes: 5,
+        expiresAt: '2026-01-02T00:05:30.000Z',
+        quota: { ...quotaInput, quantity: 5 },
+        createdAt: quotaNow,
+      })
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 11)
+      const expiredReservation = await store.releaseArtifactUploadReservation({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-expired-artifact`,
+        status: 'expired',
+        now: new Date('2026-01-02T00:06:00.000Z'),
+      })
+      assert.equal(expiredReservation?.status, 'expired')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+
+      await store.upsertCloudLaunchpadSessionSummary({
+        tenantId,
+        userId,
+        sessionId,
+        pendingApprovals: [{
+          id: `${prefix}-approval`,
+          sessionId,
+          taskRunId: null,
+          tool: 'bash',
+          input: {},
+          description: 'Approve command',
+          order: 7,
+        }],
+        pendingQuestions: [],
+        updatedAt: '2026-01-02T00:04:00.000Z',
+      })
+      const launchpadSummaries = await store.listCloudLaunchpadSessionSummaries({
+        tenantId,
+        userId,
+        limit: 1,
+      })
+      assert.deepEqual(launchpadSummaries.items.map((summary) => summary.sessionId), [sessionId])
+      assert.equal(launchpadSummaries.items[0]?.sessionTitle, 'Contract session')
+      assert.equal(launchpadSummaries.items[0]?.pendingApprovals[0]?.description, 'Approve command')
+      assert.equal(launchpadSummaries.totalEstimate, 1)
+      assert.equal(launchpadSummaries.truncated, false)
+
+      const projectedWorkspace = (projectedEvent: { eventId: string, sequence: number }) => ({
+        eventId: projectedEvent.eventId.startsWith(`${sessionId}:`) ? projectedEvent.eventId : `${sessionId}:${projectedEvent.eventId}`,
+        entityType: 'session',
+        entityId: sessionId,
+        operation: 'update',
+        projectionVersion: projectedEvent.sequence,
+      })
+      const projectedView = (projectedEvent: { sequence: number }) => ({
+        messages: [],
+        taskRuns: [],
+        pendingQuestions: [],
+        pendingPermissions: [],
+        artifacts: [],
+        todos: [],
+        errors: [],
+        status: 'idle',
+        usage: { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, costUsd: 0 },
+        projectedSequence: projectedEvent.sequence,
+      })
+      const appendProjected = (eventId: string, project = ({ event: projectedEvent }: { event: { sequence: number } }) => ({
+        view: projectedView(projectedEvent),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      })) => store.appendProjectedSessionEvent({
+        tenantId,
+        sessionId,
+        eventId,
+        type: 'assistant.message',
+        payload: { messageId: eventId, content: `content ${eventId}` },
+        workspace: ({ event: projectedEvent }) => projectedWorkspace(projectedEvent),
+        project,
+      })
+      const fullProjected = await appendProjected(`${prefix}-projected-full`)
+      assert.equal(fullProjected.sessionEventCreated, true)
+      assert.equal(fullProjected.workspaceEventCreated, true)
+      assert.equal(fullProjected.projectionAdvanced, true)
+      const fullReplay = await appendProjected(`${prefix}-projected-full`, () => {
+        throw new Error('project should not run when the event is already projected')
+      })
+      assert.equal(fullReplay.sessionEventCreated, false)
+      assert.equal(fullReplay.workspaceEventCreated, false)
+      assert.equal(fullReplay.projectionAdvanced, false)
+      assert.equal(fullReplay.projection.sequence, fullProjected.projection.sequence)
+
+      const sessionOnly = await store.appendSessionEvent({
+        tenantId,
+        sessionId,
+        eventId: `${prefix}-projected-session-only`,
+        type: 'assistant.message',
+        payload: { messageId: `${prefix}-projected-session-only`, content: `content ${prefix}-projected-session-only` },
+      })
+      const repairedSessionOnly = await appendProjected(sessionOnly.eventId)
+      assert.equal(repairedSessionOnly.sessionEventCreated, false)
+      assert.equal(repairedSessionOnly.workspaceEventCreated, true)
+      assert.equal(repairedSessionOnly.projectionAdvanced, true)
+
+      const sessionWorkspaceOnly = await store.appendSessionEvent({
+        tenantId,
+        sessionId,
+        eventId: `${prefix}-projected-session-workspace`,
+        type: 'assistant.message',
+        payload: { messageId: `${prefix}-projected-session-workspace`, content: `content ${prefix}-projected-session-workspace` },
+      })
+      await store.appendWorkspaceEvent({
+        tenantId,
+        userId,
+        sessionId,
+        ...projectedWorkspace(sessionWorkspaceOnly),
+        type: sessionWorkspaceOnly.type,
+        payload: sessionWorkspaceOnly.payload,
+        createdAt: new Date(sessionWorkspaceOnly.createdAt),
+      })
+      const repairedSessionWorkspace = await appendProjected(sessionWorkspaceOnly.eventId)
+      assert.equal(repairedSessionWorkspace.sessionEventCreated, false)
+      assert.equal(repairedSessionWorkspace.workspaceEventCreated, false)
+      assert.equal(repairedSessionWorkspace.projectionAdvanced, true)
+
+      const sessionProjectionOnly = await store.appendSessionEvent({
+        tenantId,
+        sessionId,
+        eventId: `${prefix}-projected-session-projection`,
+        type: 'assistant.message',
+        payload: { messageId: `${prefix}-projected-session-projection`, content: `content ${prefix}-projected-session-projection` },
+      })
+      await store.writeSessionProjection({
+        tenantId,
+        sessionId,
+        sequence: sessionProjectionOnly.sequence,
+        view: projectedView(sessionProjectionOnly),
+      })
+      const repairedSessionProjection = await appendProjected(sessionProjectionOnly.eventId, () => {
+        throw new Error('project should not run when projection is already current')
+      })
+      assert.equal(repairedSessionProjection.sessionEventCreated, false)
+      assert.equal(repairedSessionProjection.workspaceEventCreated, true)
+      assert.equal(repairedSessionProjection.projectionAdvanced, false)
+
       const command = await store.enqueueSessionCommand({
         commandId: `${prefix}-command`,
         tenantId,
@@ -273,28 +547,96 @@ function runControlPlaneDomainContracts(
       // Claim/fencing parity (audit P1-O6): these are exactly the lease-fenced/atomic-claim methods
       // where a subtle SQL difference causes prod double-claims, yet they were exercised by neither the
       // always-on contract nor (un-skipped) the postgres concurrency proofs. Run them on both stores.
-      const commandLease = await store.claimSessionLease(tenantId, sessionId, `${prefix}-worker`, new Date('2026-01-01T00:00:00.000Z'), 30_000)
+      const commandLease = await store.claimSessionLease(tenantId, sessionId, `${prefix}-worker`, new Date('2030-01-01T00:00:00.000Z'), 30_000)
       assert.ok(commandLease)
       // The lease-fenced command claim hands the pending command to exactly one holder, once.
-      const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z'))
+      const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2030-01-01T00:00:05.000Z'))
       assert.equal(claimedCommand?.commandId, `${prefix}-command`)
       assert.equal(claimedCommand?.claimedLeaseToken, commandLease!.leaseToken)
-      assert.equal(await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z')), null)
+      const checkpointAcked = await store.checkpointAndAckSessionCommand(commandLease!, `${prefix}-command`, new Date('2030-01-01T00:00:06.000Z'))
+      assert.equal(checkpointAcked.command.status, 'acked')
+      assert.equal(checkpointAcked.command.ackedAt, '2030-01-01T00:00:06.000Z')
+      assert.equal(checkpointAcked.lease.checkpointVersion, commandLease!.checkpointVersion + 1)
+      assert.equal(checkpointAcked.checkpointAdvanced, true)
+      assert.equal(checkpointAcked.commandAcked, true)
+      const checkpointAckReplay = await store.checkpointAndAckSessionCommand(commandLease!, `${prefix}-command`, new Date('2030-01-01T00:00:07.000Z'))
+      assert.equal(checkpointAckReplay.command.status, 'acked')
+      assert.equal(checkpointAckReplay.lease.checkpointVersion, checkpointAcked.lease.checkpointVersion)
+      assert.equal(checkpointAckReplay.checkpointAdvanced, false)
+      assert.equal(checkpointAckReplay.commandAcked, false)
+      assert.equal(await store.claimNextSessionCommand(commandLease!, new Date('2030-01-01T00:00:05.000Z')), null)
+
+      await store.enqueueSessionCommand({
+        commandId: `${prefix}-command-stale-checkpoint`,
+        tenantId,
+        userId,
+        sessionId,
+        kind: 'abort',
+      })
+      const staleCheckpointClaim = await store.claimNextSessionCommand(checkpointAcked.lease, new Date('2030-01-01T00:00:08.000Z'))
+      assert.equal(staleCheckpointClaim?.commandId, `${prefix}-command-stale-checkpoint`)
+      const advancedLease = await store.checkpointSession(checkpointAcked.lease)
+      await assert.rejects(
+        Promise.resolve().then(() => store.checkpointAndAckSessionCommand(checkpointAcked.lease, `${prefix}-command-stale-checkpoint`)),
+        /checkpoint version is stale/i,
+      )
+      const staleRecovered = await store.checkpointAndAckSessionCommand(advancedLease, `${prefix}-command-stale-checkpoint`)
+      assert.equal(staleRecovered.command.status, 'acked')
 
       // listRunnableSessions (previously untested anywhere) returns the same well-formed shape on both.
-      const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2026-01-01T00:00:05.000Z') })
+      const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2030-01-01T00:00:05.000Z') })
       assert.equal(Array.isArray(runnableList.sessions), true)
       assert.equal(Number.isFinite(runnableList.pendingSessionCountEstimate), true)
       // pendingSessionCountEstimate is bounded to limit+1 identically on both stores (P2 parity).
-      const boundedList = await store.listRunnableSessions({ limit: 1, now: new Date('2026-01-01T00:00:05.000Z') })
+      const boundedList = await store.listRunnableSessions({ limit: 1, now: new Date('2030-01-01T00:00:05.000Z') })
       assert.ok(boundedList.pendingSessionCountEstimate <= 2, 'estimate must be bounded to limit+1')
 
       // reapExpiredSessionLeases (P1-D — previously exercised by neither the always-on contract nor an
       // un-skipped concurrency proof): the lease claimed above (ttl 30s from 00:00:00) is expired by
       // 00:01:00 and is reaped identically on both stores.
-      const reaped = await store.reapExpiredSessionLeases({ now: new Date('2026-01-01T00:01:00.000Z'), limit: 10 })
+      const reaped = await store.reapExpiredSessionLeases({ now: new Date('2030-01-01T00:01:00.000Z'), limit: 10 })
       assert.ok(Array.isArray(reaped))
       assert.equal(reaped.some((entry) => entry.sessionId === sessionId), true, 'expected the expired session lease reaped')
+
+      await store.enqueueSessionCommand({
+        commandId: `${prefix}-command-shutdown-recover`,
+        tenantId,
+        userId,
+        sessionId,
+        kind: 'prompt',
+        payload: { text: 'recover me', agent: 'build' },
+      })
+      const shutdownLease = await store.claimSessionLease(
+        tenantId,
+        sessionId,
+        `${prefix}-shutdown-worker`,
+        new Date('2030-01-01T00:02:00.000Z'),
+        30_000,
+      )
+      assert.ok(shutdownLease)
+      const shutdownClaim = await store.claimNextSessionCommand(shutdownLease, new Date('2030-01-01T00:02:00.000Z'))
+      assert.equal(shutdownClaim?.commandId, `${prefix}-command-shutdown-recover`)
+      assert.equal(shutdownClaim?.attemptCount, 1)
+      const recoveredLease = await store.recoverSessionLease(shutdownLease, {
+        now: new Date('2030-01-01T00:02:05.000Z'),
+      })
+      assert.equal(recoveredLease?.action, 'retried')
+      assert.deepEqual(recoveredLease?.retriedCommandIds, [`${prefix}-command-shutdown-recover`])
+      assert.equal(
+        await store.recoverSessionLease(shutdownLease, { now: new Date('2030-01-01T00:02:06.000Z') }),
+        null,
+      )
+      const replacementShutdownLease = await store.claimSessionLease(
+        tenantId,
+        sessionId,
+        `${prefix}-replacement-worker`,
+        new Date('2030-01-01T00:02:06.000Z'),
+        30_000,
+      )
+      assert.ok(replacementShutdownLease)
+      const replacementShutdownClaim = await store.claimNextSessionCommand(replacementShutdownLease, new Date('2030-01-01T00:02:06.000Z'))
+      assert.equal(replacementShutdownClaim?.commandId, `${prefix}-command-shutdown-recover`)
+      assert.equal(replacementShutdownClaim?.attemptCount, 2)
 
       // The provider-event claim is atomic: the first claim wins, a re-claim of the same event id is a
       // no-op duplicate (the prod cross-gateway dedup guarantee).
@@ -794,6 +1136,23 @@ function runControlPlaneDomainContracts(
       })
       assert.equal((await store.getWorkflow(tenantId, userId, workflowId))?.id, workflowId)
       assert.deepEqual((await store.listWorkflows(tenantId, userId)).map((entry) => entry.id), [workflowId])
+      const pagedWorkflowIds = [`${prefix}-workflow-page-a`, `${prefix}-workflow-page-b`, `${prefix}-workflow-page-c`]
+      for (let index = 0; index < pagedWorkflowIds.length; index += 1) {
+        await store.createWorkflow({
+          tenantId,
+          userId,
+          workflowId: pagedWorkflowIds[index]!,
+          draft: { title: `Contract workflow page ${index}`, instructions: 'Page it', agentName: 'default', triggers: [] },
+          createdAt: new Date(Date.UTC(2030, 0, 1, 0, 0, index)),
+        })
+      }
+      const firstWorkflowPage = await store.listWorkflowsPage({ tenantId, userId, limit: 2 })
+      assert.deepEqual(firstWorkflowPage.items.map((entry) => entry.id), [pagedWorkflowIds[2], pagedWorkflowIds[1]])
+      assert.equal(firstWorkflowPage.totalEstimate, 3)
+      assert.ok(firstWorkflowPage.nextCursor)
+      const secondWorkflowPage = await store.listWorkflowsPage({ tenantId, userId, limit: 2, cursor: firstWorkflowPage.nextCursor })
+      assert.deepEqual(secondWorkflowPage.items.map((entry) => entry.id).slice(0, 2), [pagedWorkflowIds[0], workflowId])
+      assert.equal(secondWorkflowPage.nextCursor, null)
       const workflowRun = await store.createWorkflowRun({
         tenantId,
         userId,
@@ -802,14 +1161,16 @@ function runControlPlaneDomainContracts(
         triggerType: 'manual',
       })
       assert.equal(workflowRun.status, 'queued')
+      assert.match(workflowRun.sessionId || '', /^workflow_session_/)
       const claimedRun = await store.claimDueWorkflowRun({ runId: `${prefix}-run`, claimedBy: `${prefix}-wf-worker`, leaseTtlMs: 30_000 })
       assert.equal(claimedRun?.run.id, `${prefix}-run`)
       assert.ok(claimedRun?.run.claimToken)
+      assert.equal(claimedRun?.run.sessionId, workflowRun.sessionId)
       await store.attachWorkflowRunSession({
         tenantId,
         workflowId,
         runId: `${prefix}-run`,
-        sessionId,
+        sessionId: workflowRun.sessionId!,
         claimToken: claimedRun?.run.claimToken,
       })
       const completedRun = await store.completeWorkflowRun({
@@ -822,6 +1183,34 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(completedRun?.status, 'completed')
       assert.equal((await store.getWorkflowRun(tenantId, `${prefix}-run`))?.status, 'completed')
+      for (let index = 0; index < pagedWorkflowIds.length; index += 1) {
+        const runId = `${pagedWorkflowIds[index]}-run`
+        await store.createWorkflowRun({
+          tenantId,
+          userId,
+          workflowId: pagedWorkflowIds[index]!,
+          runId,
+          triggerType: 'manual',
+          createdAt: new Date(Date.UTC(2030, 0, 2, 0, 0, index)),
+        })
+        await store.completeWorkflowRun({
+          tenantId,
+          workflowId: pagedWorkflowIds[index]!,
+          runId,
+          summary: `done ${index}`,
+          nextStatus: 'active',
+          nextRunAt: null,
+          finishedAt: new Date(Date.UTC(2030, 0, 2, 0, 1, index)),
+        })
+      }
+      const batchedRuns = await store.listWorkflowRunsForWorkflows({
+        tenantId,
+        userId,
+        workflowIds: [workflowId, ...pagedWorkflowIds],
+        limitPerWorkflow: 1,
+        limit: 3,
+      })
+      assert.deepEqual(batchedRuns.map((run) => run.workflowId), [pagedWorkflowIds[2], pagedWorkflowIds[1], pagedWorkflowIds[0]])
 
       const byok = await store.createByokSecret({
         secretId: `${prefix}-secret`,

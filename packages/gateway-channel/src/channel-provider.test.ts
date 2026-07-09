@@ -124,7 +124,7 @@ describe("channel provider utilities", () => {
     expect(isChannelProviderId("telegram-main")).toBe(true);
     expect(isChannelProviderInstanceIdForKind("telegram-main", "telegram")).toBe(true);
     expect(channelProviderKindFromId("slack-work")).toBe("slack");
-    expect(isChannelProviderId("acme-telegram")).toBe(true);
+    expect(isChannelProviderId("acme-telegram")).toBe(false);
     expect(channelProviderKindFromId("acme-telegram")).toBe(null);
     expect(isChannelProviderId("whatsapp")).toBe(true);
     expect(isChannelProviderId("matrix")).toBe(false);

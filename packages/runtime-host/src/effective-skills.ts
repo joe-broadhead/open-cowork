@@ -30,6 +30,10 @@ export type EffectiveSkillBundle = Omit<CapabilitySkillBundle, 'files'> & {
   files: Array<{ path: string; content?: string }>
 }
 
+export type EffectiveSkillContextOptions = RuntimeContextOptions & {
+  includeCustomSkills?: boolean
+}
+
 type ConfiguredSkill = ReturnType<typeof getConfiguredSkillsFromConfig>[number]
 type ManagedCustomSkill = ReturnType<typeof listCustomSkills>[number]
 
@@ -198,11 +202,17 @@ function readBundledSkillBundle(
   }
 }
 
-export function listEffectiveSkillsSync(context?: RuntimeContextOptions): EffectiveSkillDefinition[] {
+function shouldIncludeCustomSkills(context?: EffectiveSkillContextOptions) {
+  return context?.includeCustomSkills !== false
+}
+
+export function listEffectiveSkillsSync(context?: EffectiveSkillContextOptions): EffectiveSkillDefinition[] {
   return measurePerf('skills.effective.list', () => {
     const configuredSkills = buildConfiguredSkillMap()
     const managedCustomSkills = new Map(
-      listCustomSkills(context).map((skill) => [skill.name, skill] as const),
+      shouldIncludeCustomSkills(context)
+        ? listCustomSkills(context).map((skill) => [skill.name, skill] as const)
+        : [],
     )
     const bundledSkillIndex = getBundledSkillIndex(getBundledSkillRoots())
     const skills = new Map<string, EffectiveSkillDefinition>()
@@ -241,22 +251,22 @@ export function listEffectiveSkillsSync(context?: RuntimeContextOptions): Effect
   })
 }
 
-export async function listEffectiveSkills(context?: RuntimeContextOptions): Promise<EffectiveSkillDefinition[]> {
+export async function listEffectiveSkills(context?: EffectiveSkillContextOptions): Promise<EffectiveSkillDefinition[]> {
   return listEffectiveSkillsSync(context)
 }
 
 export async function getEffectiveSkillBundle(
   skillName: string,
-  context?: RuntimeContextOptions,
+  context?: EffectiveSkillContextOptions,
 ): Promise<EffectiveSkillBundle | null> {
   return getEffectiveSkillBundleSync(skillName, context)
 }
 
 export function getEffectiveSkillBundleSync(
   skillName: string,
-  context?: RuntimeContextOptions,
+  context?: EffectiveSkillContextOptions,
 ): EffectiveSkillBundle | null {
-  const managed = getCustomSkill(skillName, context)
+  const managed = shouldIncludeCustomSkills(context) ? getCustomSkill(skillName, context) : null
   if (managed && customSkillIsValid(managed)) {
     return {
       name: managed.name,
@@ -274,6 +284,12 @@ export function getEffectiveSkillBundleSync(
   const entry = findBundledSkillEntry(skillName)
   const skill = buildBundledSkillDefinition(skillName, configured, entry)
   return skill && entry ? readBundledSkillBundle(skill, entry) : null
+}
+
+export function listEffectiveSkillBundlesSync(context?: EffectiveSkillContextOptions): EffectiveSkillBundle[] {
+  return listEffectiveSkillsSync(context)
+    .map((skill) => getEffectiveSkillBundleSync(skill.name, context))
+    .filter((bundle): bundle is EffectiveSkillBundle => Boolean(bundle))
 }
 
 export function listEffectiveBuiltInSkillBundlesSync(context?: RuntimeContextOptions): EffectiveSkillBundle[] {
@@ -318,11 +334,11 @@ export function listEffectiveBuiltInSkillBundlesSync(context?: RuntimeContextOpt
 export async function readEffectiveSkillBundleFile(
   skillName: string,
   filePath: string,
-  context?: RuntimeContextOptions,
+  context?: EffectiveSkillContextOptions,
 ): Promise<string | null> {
   if (!filePath || filePath.trim().length === 0) return null
 
-  const managed = getCustomSkill(skillName, context)
+  const managed = shouldIncludeCustomSkills(context) ? getCustomSkill(skillName, context) : null
   if (managed && customSkillIsValid(managed)) {
     // Custom skills carry their file list in memory already; we can't
     // expand arbitrary content from disk because the custom-skill

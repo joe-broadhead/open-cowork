@@ -255,7 +255,7 @@ describe('Sidebar', () => {
     expect(onExpandSidebar).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a live approvals alert count in the Studio nav', () => {
+  it('shows a live approvals alert count in the Studio nav', async () => {
     const baseView = useSessionStore.getInitialState().currentView
     const sessions = [{ id: 'active-session', title: 'Active chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }]
     useSessionStore.setState({
@@ -288,7 +288,7 @@ describe('Sidebar', () => {
       />,
     )
 
-    const approvalsButton = screen.getByRole('button', { name: /Approvals.*2/i })
+    const approvalsButton = await screen.findByRole('button', { name: /Approvals.*2/i })
     expect(approvalsButton).toBeTruthy()
     expect(screen.getByLabelText('2 pending approvals and questions')).toBeTruthy()
   })

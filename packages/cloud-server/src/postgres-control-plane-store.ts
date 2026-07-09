@@ -29,6 +29,7 @@ import type {
   AppendWorkspaceEventInput,
   AuditEventRecord,
   AckChannelDeliveryInput,
+  AppendProjectedSessionEventInput,
   BindChannelSessionInput,
   ChannelProviderId,
   ClaimDueWorkflowRunInput,
@@ -43,7 +44,9 @@ import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
+  ArtifactUploadReservationRecord,
   CreateCustomRoleInput,
+  CreateArtifactUploadReservationInput,
   CustomRoleRecord,
   MemberPermissionResolution,
   RevokeApiTokensForAccountInput,
@@ -71,6 +74,8 @@ import type {
   ListApiTokenChannelBindingGrantsInput,
   ListCloudCoordinationWatchesInput,
   ListMatchingCloudCoordinationWatchesInput,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
   ListSessionsPageInput,
   ManagedWorkerCredentialRecord,
   ManagedWorkerHeartbeatRecord,
@@ -82,21 +87,25 @@ import type {
   PrincipalMembershipRecord,
   QueryAuditEventsInput,
   QueryAuditEventsResult,
+  QuotaConsumptionRecord,
   RecordManagedWorkerHeartbeatInput,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
+  RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapedSessionLeaseRecord,
   ReapExpiredWorkflowClaimsInput,
   ReapedWorkflowClaimRecord,
+  ReleaseArtifactUploadReservationInput,
   RevokeApiTokenInput,
   RevokeManagedWorkerCredentialInput,
   ResolvedManagedWorkerCredentialRecord,
   ResolveChannelInteractionInput,
   ResolveChannelInteractionWithCommandInput,
   SessionCommandRecord,
+  SettleArtifactUploadReservationInput,
   ThreadMetadataRecord,
   ThreadTagLinkInput,
   UsageEventRecord,
@@ -144,6 +153,7 @@ import { PostgresApiTokensRepository } from './postgres-store-domains/api-tokens
 import { PostgresAuthBackoffRepository } from './postgres-store-domains/auth-backoff.ts'
 import { PostgresRateLimitsRepository } from './postgres-store-domains/rate-limits.ts'
 import { PostgresSessionsRepository } from './postgres-store-domains/sessions.ts'
+import { PostgresSessionIndexesRepository } from './postgres-store-domains/session-indexes.ts'
 import { PostgresThreadIndexRepository } from './postgres-store-domains/thread-index.ts'
 import { PostgresWebhooksRepository } from './postgres-store-domains/webhooks.ts'
 import { PostgresWorkflowsRepository } from './postgres-store-domains/workflows.ts'
@@ -172,6 +182,8 @@ import { PostgresManagedWorkersRepository } from './postgres-store-domains/worke
 import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/channel-deliveries.ts'
 import { PostgresCoordinationWatchesRepository } from './postgres-store-domains/coordination-watches.ts'
+import { PostgresArtifactUploadReservationsRepository } from './postgres-store-domains/artifact-upload-reservations.ts'
+import { PostgresWorkspaceEventsRepository } from './postgres-store-domains/workspace-events.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -222,6 +234,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly authBackoff: PostgresAuthBackoffRepository
   private readonly workerHeartbeats: PostgresWorkerHeartbeatsRepository
   private readonly sessions: PostgresSessionsRepository
+  private readonly sessionIndexes: PostgresSessionIndexesRepository
   private readonly threadIndex: PostgresThreadIndexRepository
   private readonly webhooks: PostgresWebhooksRepository
   private readonly workflows: PostgresWorkflowsRepository
@@ -235,6 +248,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly channelProviderEvents: PostgresChannelProviderEventsRepository
   private readonly channelDeliveries: PostgresChannelDeliveriesRepository
   private readonly coordinationWatches: PostgresCoordinationWatchesRepository
+  private readonly artifactUploadReservations: PostgresArtifactUploadReservationsRepository
+  private readonly workspaceEvents: PostgresWorkspaceEventsRepository
   private readonly quotaDeps = {
     lockQuota: (executor: PgExecutor, orgId: string, quotaKey: string, now?: Date) => this.lockQuota(executor, orgId, quotaKey, now),
     consumeUsageQuota: (executor: PgExecutor, input: ConsumeUsageQuotaInput) => this.consumeUsageQuotaWithExecutor(executor, input),
@@ -286,6 +301,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       emitSseNotify: (payload) => this.emitSseNotify(payload),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       quotaDeps: this.quotaDeps,
+    })
+    this.sessionIndexes = new PostgresSessionIndexesRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
     })
     this.threadIndex = new PostgresThreadIndexRepository({
       pool: this.pool,
@@ -342,6 +362,19 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       consumeUsageQuota: (executor, input) => this.consumeUsageQuotaWithExecutor(executor, input),
     })
     this.coordinationWatches = new PostgresCoordinationWatchesRepository(this.pool)
+    this.artifactUploadReservations = new PostgresArtifactUploadReservationsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      consumeUsageQuota: (executor, input) => this.consumeUsageQuotaWithExecutor(executor, input),
+      adjustUsageQuota: (executor, input) => this.adjustUsageQuotaWithExecutor(executor, input),
+    })
+    this.workspaceEvents = new PostgresWorkspaceEventsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+      requireSession: (tenantId, sessionId, executor) => this.sessions.requireSession(tenantId, sessionId, executor, true),
+      emitSseNotify: (payload) => this.emitSseNotify(payload),
+    })
   }
 
   static async connect(options: PostgresControlPlaneStoreOptions) {
@@ -664,6 +697,34 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       windowStartedAtMs: numberValue(row.window_started_at_ms),
       quantity: numberValue(row.quantity),
     }))
+  }
+
+  async createArtifactUploadReservation(input: CreateArtifactUploadReservationInput): Promise<{
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+  }> {
+    return this.artifactUploadReservations.create(input)
+  }
+
+  async getArtifactUploadReservation(input: {
+    orgId: string
+    tenantId: string
+    sessionId: string
+    artifactId: string
+  }): Promise<ArtifactUploadReservationRecord | null> {
+    return this.artifactUploadReservations.get(input)
+  }
+
+  async settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): Promise<{
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+    settled: boolean
+  }> {
+    return this.artifactUploadReservations.settle(input)
+  }
+
+  async releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): Promise<ArtifactUploadReservationRecord | null> {
+    return this.artifactUploadReservations.release(input)
   }
 
   async recordUsageEvent(input: RecordUsageEventInput) {
@@ -1337,6 +1398,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.appendSessionEvent(input)
   }
 
+  async appendProjectedSessionEvent(input: AppendProjectedSessionEventInput) {
+    return this.sessions.appendProjectedSessionEvent(input)
+  }
+
   async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
     return this.sessions.listSessionEvents(tenantId, sessionId, afterSequence, limit)
   }
@@ -1348,20 +1413,40 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.getSessionEventStats(tenantId, sessionId)
   }
 
+  async upsertCloudArtifactIndex(input: Parameters<PostgresSessionIndexesRepository['upsertCloudArtifactIndex']>[0]) {
+    return this.sessionIndexes.upsertCloudArtifactIndex(input)
+  }
+
+  async getCloudArtifactIndexRecord(input: Parameters<PostgresSessionIndexesRepository['getCloudArtifactIndexRecord']>[0]) {
+    return this.sessionIndexes.getCloudArtifactIndexRecord(input)
+  }
+
+  async listCloudArtifactIndex(input: Parameters<PostgresSessionIndexesRepository['listCloudArtifactIndex']>[0]) {
+    return this.sessionIndexes.listCloudArtifactIndex(input)
+  }
+
+  async upsertCloudLaunchpadSessionSummary(input: Parameters<PostgresSessionIndexesRepository['upsertCloudLaunchpadSessionSummary']>[0]) {
+    return this.sessionIndexes.upsertCloudLaunchpadSessionSummary(input)
+  }
+
+  async listCloudLaunchpadSessionSummaries(input: Parameters<PostgresSessionIndexesRepository['listCloudLaunchpadSessionSummaries']>[0]) {
+    return this.sessionIndexes.listCloudLaunchpadSessionSummaries(input)
+  }
+
   async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
-    return this.sessions.appendWorkspaceEvent(input)
+    return this.workspaceEvents.appendWorkspaceEvent(input)
   }
 
   async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    return this.sessions.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
+    return this.workspaceEvents.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
   }
 
   async listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    return this.sessions.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
+    return this.workspaceEvents.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
   }
 
   async getWorkspaceEventCursor(tenantId: string, userId: string): Promise<WorkspaceEventCursorRecord> {
-    return this.sessions.getWorkspaceEventCursor(tenantId, userId)
+    return this.workspaceEvents.getWorkspaceEventCursor(tenantId, userId)
   }
 
   async writeSessionProjection(input: {
@@ -1402,6 +1487,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.releaseSessionLease(lease, now)
   }
 
+  async recoverSessionLease(lease: WorkerLeaseRecord, input: RecoverSessionLeaseInput = {}) {
+    return this.sessions.recoverSessionLease(lease, input)
+  }
+
   async renewSessionLease(lease: WorkerLeaseRecord, now = new Date(), ttlMs = 30_000) {
     return this.sessions.renewSessionLease(lease, now, ttlMs)
   }
@@ -1428,6 +1517,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now = new Date()) {
     return this.sessions.ackSessionCommand(lease, commandId, now)
+  }
+
+  async checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now = new Date()) {
+    return this.sessions.checkpointAndAckSessionCommand(lease, commandId, now)
   }
 
   async failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string) {
@@ -1477,6 +1570,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.workflows.listWorkflows(tenantId, userId)
   }
 
+  async listWorkflowsPage(input: ListWorkflowsPageInput) {
+    return this.workflows.listWorkflowsPage(input)
+  }
+
   async getWorkflow(tenantId: string, userId: string, workflowId: string) {
     return this.workflows.getWorkflow(tenantId, userId, workflowId)
   }
@@ -1491,6 +1588,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listWorkflowRuns(tenantId: string, workflowId: string, limit = 25) {
     return this.workflows.listWorkflowRuns(tenantId, workflowId, limit)
+  }
+
+  async listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput) {
+    return this.workflows.listWorkflowRunsForWorkflows(input)
   }
 
   async createWorkflowRun(input: CreateWorkflowRunInput) {
@@ -1763,6 +1864,24 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       retryAfterMs: resetMs,
       policyCode: input.policyCode,
     }
+  }
+
+  private async adjustUsageQuotaWithExecutor(
+    executor: PgExecutor,
+    input: {
+      orgId: string
+      quotaKey: string
+      windowStartedAtMs: number
+      quantityDelta: number
+    },
+  ) {
+    if (!Number.isInteger(input.quantityDelta) || input.quantityDelta === 0) return
+    await executor.query(
+      `UPDATE cloud_usage_counters
+       SET quantity = GREATEST(0, quantity + $4)
+       WHERE org_id = $1 AND quota_key = $2 AND window_started_at_ms = $3`,
+      [input.orgId, input.quotaKey, input.windowStartedAtMs, input.quantityDelta],
+    )
   }
 
   private async lockQuota(

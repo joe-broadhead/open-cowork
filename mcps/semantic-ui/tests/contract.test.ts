@@ -7,7 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
-const serverEntry = resolve(packageRoot, 'src/index.ts')
+const serverEntry = resolve(packageRoot, 'dist/index.js')
 const contractToken = 'contract-token-with-enough-entropy-for-tests'
 
 async function withBridge<T>(fn: (baseUrl: string, seen: string[]) => Promise<T>) {
@@ -43,7 +43,7 @@ async function withSemanticUiClient<T>(baseUrl: string, fn: (client: Client) => 
   const client = new Client({ name: 'semantic-ui-contract-test', version: '1.0.0' }, { capabilities: {} })
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['--no-warnings', '--experimental-strip-types', serverEntry],
+    args: [serverEntry],
     env: {
       ...process.env,
       OPEN_COWORK_SEMANTIC_UI_URL: baseUrl,

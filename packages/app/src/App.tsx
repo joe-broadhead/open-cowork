@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
-import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionComposerPreferences, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
-import { RuntimeOfflineBanner } from './components/layout/RuntimeOfflineBanner'
+import { AppShellNotices } from './components/layout/AppShellNotices'
 import { Toaster } from './components/ui/Toaster'
-import { Button } from './components/ui'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
@@ -21,7 +20,6 @@ import {
   browserUrlRoutingEnabled,
   canUseViewTransition,
   describeError,
-  dismissPreview,
   errorStack,
   initialAppView,
   previewDismissed,
@@ -29,6 +27,8 @@ import {
 } from './app-helpers'
 import { PaletteFallback, RouteFallback } from './components/layout/RouteFallback'
 import { isDesktopRuntime } from './runtime-env'
+import type { WorkflowNavigationTarget } from './components/workflows/WorkflowsPage'
+import type { CapabilityNavigationTarget } from './components/capabilities/CapabilitiesPage'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const ProjectsBoardPage = lazy(() => import('./components/projects/ProjectsBoardPage').then((m) => ({ default: m.ProjectsBoardPage })))
@@ -62,12 +62,28 @@ import {
   resolveDesktopResourceNavigationAction,
   type ResourceNavigationAction,
 } from './resource-navigation'
+import {
+  composerPreferencesFromHomeOptions,
+  homePromptOptionsForRuntime,
+  type HomePromptOptions,
+} from './components/home/home-prompt-options'
 
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 type ResourceNavigationNotice = {
   status: ResourceNavigationAction['status'] | 'invalid'
   message: string
+}
+
+function hasComposerPreference(preferences: SessionComposerPreferences, key: keyof SessionComposerPreferences) {
+  return Object.prototype.hasOwnProperty.call(preferences, key)
+}
+
+function previousHomeComposerPreferences(session: SessionInfo | undefined, preferences: SessionComposerPreferences): SessionComposerPreferences {
+  const previous: SessionComposerPreferences = {}
+  if (hasComposerPreference(preferences, 'modelId')) previous.modelId = session?.composerModelId ?? null
+  if (hasComposerPreference(preferences, 'reasoningVariant')) previous.reasoningVariant = session?.composerReasoningVariant ?? null
+  return previous
 }
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
@@ -87,6 +103,7 @@ export function App() {
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const setSessionComposerPreferences = useSessionStore((s) => s.setSessionComposerPreferences)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const setActiveWorkspace = useSessionStore((s) => s.setActiveWorkspace)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -105,6 +122,14 @@ export function App() {
   const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
   const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
   const [resourceNavigationNotice, setResourceNavigationNotice] = useState<ResourceNavigationNotice | null>(null)
+  const [workflowNavigationTarget, setWorkflowNavigationTarget] = useState<WorkflowNavigationTarget | null>(null)
+  const [capabilityNavigationTarget, setCapabilityNavigationTarget] = useState<CapabilityNavigationTarget | null>(null)
+  const initialBrowserHashRef = useRef(typeof window === 'undefined' ? '' : window.location.hash)
+  const [bootChatDeepLinkPending, setBootChatDeepLinkPending] = useState(() => {
+    if (!browserUrlRoutingEnabled()) return false
+    const parsed = parseAppHash(initialBrowserHashRef.current, { devMode: UI_PRIMITIVES_ENABLED })
+    return parsed.view === 'chat' && Boolean(parsed.sessionId)
+  })
   // Force the whole tree to re-render when the active locale changes.
   // Every `t(key, fallback)` is resolved at render time from the i18n
   // module's module-level cache, so bumping this counter is enough to
@@ -211,11 +236,16 @@ export function App() {
   }, [addSession, navigateView, reportAppError, setCurrentSession])
 
   const openExistingThread = useCallback(async (sessionId: string, workspaceId?: string) => {
-    navigateView('chat')
-    if (workspaceId) {
-      await switchToSession(sessionId, { workspaceId })
-    } else {
-      await switchToSession(sessionId)
+    const result = workspaceId
+      ? await switchToSession(sessionId, { workspaceId })
+      : await switchToSession(sessionId)
+    if (result === 'opened') {
+      navigateView('chat')
+    } else if (result === 'failed') {
+      if (browserUrlRoutingEnabled()) {
+        window.history.replaceState(window.history.state, '', appHashFor('home'))
+      }
+      navigateView('home')
     }
   }, [navigateView])
 
@@ -279,6 +309,13 @@ export function App() {
     }
 
     if (action.routeKey === 'workflow' || action.routeKey === 'workflow-run') {
+      const workflowId = action.routeParams.workflowId
+      if (workflowId) {
+        setWorkflowNavigationTarget({
+          workflowId,
+          runId: action.routeKey === 'workflow-run' ? action.routeParams.runId || null : null,
+        })
+      }
       navigateView('playbooks')
       return
     }
@@ -294,6 +331,15 @@ export function App() {
     }
 
     if (action.routeKey === 'capability') {
+      const value = action.value
+      if (value && typeof value === 'object' && 'kind' in value) {
+        const capability = value as { kind?: unknown; id?: unknown }
+        if (capability.kind === 'capability-tool' && typeof capability.id === 'string') {
+          setCapabilityNavigationTarget({ kind: 'tool', id: capability.id })
+        } else if (capability.kind === 'capability-skill' && typeof capability.id === 'string') {
+          setCapabilityNavigationTarget({ kind: 'skill', id: capability.id })
+        }
+      }
       navigateView('tools')
       return
     }
@@ -328,9 +374,10 @@ export function App() {
     text: string,
     attachments?: Array<{ mime: string; url: string; filename: string }>,
     agent?: string,
-    options?: SessionPromptOptions,
+    options?: HomePromptOptions,
   ) => {
-    const session = await createAndActivateSession(undefined, options)
+    const runtimeOptions = homePromptOptionsForRuntime(options)
+    const session = await createAndActivateSession(undefined, runtimeOptions)
     if (!session) return
     try {
       const files = attachments && attachments.length > 0
@@ -347,15 +394,33 @@ export function App() {
       // thread after.
       const promptText = text.trim() || (files ? 'Describe this image.' : text)
       const promptAgent = agent || useSessionStore.getState().agentMode
-      if (options) {
-        await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent, options)
+      const composerPreferences = composerPreferencesFromHomeOptions(options)
+      if (Object.keys(composerPreferences).length > 0) {
+        const previousSession = useSessionStore.getState().sessions.find((candidate) => candidate.id === session.id)
+        const previousPreferences = previousHomeComposerPreferences(previousSession, composerPreferences)
+        setSessionComposerPreferences(session.id, composerPreferences)
+        if (!runtimeOptions?.workspaceId) {
+          try {
+            await window.coworkApi.session.setComposerPreferences(session.id, composerPreferences)
+          } catch (error) {
+            setSessionComposerPreferences(session.id, previousPreferences)
+            reportAppError(
+              "Could not save this thread's composer settings. Follow-up prompts may use the default model settings.",
+              error,
+              'home',
+            )
+          }
+        }
+      }
+      if (runtimeOptions) {
+        await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent, runtimeOptions)
       } else {
         await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent)
       }
     } catch (err) {
       reportAppError('Could not send the Home prompt. Try again from the thread.', err, 'home')
     }
-  }, [createAndActivateSession, reportAppError])
+  }, [createAndActivateSession, reportAppError, setSessionComposerPreferences])
 
   const ensureActiveSession = useCallback(async (): Promise<boolean> => {
     if (useSessionStore.getState().currentSessionId) return true
@@ -453,6 +518,7 @@ export function App() {
   // empty-hash entry instead of stacking a redundant one.
   useEffect(() => {
     if (!browserUrlRoutingEnabled()) return
+    if (bootChatDeepLinkPending) return
     const next = appHashFor(view, view === 'chat' ? currentSessionId : null)
     if (window.location.hash === next) return
     if (!window.location.hash) {
@@ -460,7 +526,7 @@ export function App() {
       return
     }
     window.location.hash = next
-  }, [view, currentSessionId])
+  }, [bootChatDeepLinkPending, view, currentSessionId])
 
   // Browser runtime, one-shot after auth/config resolve: apply a chat deep
   // link (#/chat/<id> — the session had to load before the thread could open)
@@ -473,14 +539,18 @@ export function App() {
     if (!config || !authChecked) return
     if (config.auth.enabled && !authenticated) return
     bootHashAppliedRef.current = true
-    if (!isDesktopFeatureEnabled(config.features, view as DesktopFeatureKey)) {
+    const parsed = parseAppHash(initialBrowserHashRef.current || window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
+    const bootView = parsed.view || view
+    if (!isDesktopFeatureEnabled(config.features, bootView as DesktopFeatureKey)) {
+      setBootChatDeepLinkPending(false)
       navigateView('home')
       return
     }
-    const parsed = parseAppHash(window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
     if (parsed.view === 'chat' && parsed.sessionId) {
-      void openExistingThread(parsed.sessionId)
+      void openExistingThread(parsed.sessionId).finally(() => setBootChatDeepLinkPending(false))
+      return
     }
+    setBootChatDeepLinkPending(false)
   }, [authChecked, authenticated, config, navigateView, openExistingThread, view])
 
   // If the current thread disappears while the chat view is active —
@@ -489,10 +559,11 @@ export function App() {
   // ChatView returns null in that state, so without this nudge the
   // user would see a blank pane with no way back.
   useEffect(() => {
+    if (bootChatDeepLinkPending) return
     if (view === 'chat' && !currentSessionId) {
       navigateView('home')
     }
-  }, [currentSessionId, navigateView, view])
+  }, [bootChatDeepLinkPending, currentSessionId, navigateView, view])
 
   useEffect(() => {
     if (view !== 'chat' || !pendingComposerInsert) return
@@ -650,72 +721,21 @@ export function App() {
   // Sidebar), which was the bug this replaced.
   void localeVersion
   const showPreviewNotice = Boolean(metadata?.preview && !previewNoticeDismissed)
-  const previewNoticeStyle = {
-    borderColor: 'color-mix(in srgb, var(--color-amber) 34%, var(--color-border-subtle))',
-    background: 'color-mix(in srgb, var(--color-amber) 10%, var(--color-surface))',
-    color: 'var(--color-text)',
-  }
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       {isDesktopRuntime() ? <TitleBar view={view} /> : null}
-      {showPreviewNotice && metadata ? (
-        <div className="flex items-center gap-3 border-b px-4 py-2 text-xs" style={previewNoticeStyle}>
-          <span className="font-semibold">Public preview {metadata.version}</span>
-          <span className="min-w-0 flex-1 text-text-muted">
-            This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              dismissPreview(metadata.version)
-              setPreviewNoticeDismissed(true)
-            }}
-          >
-            {t('common.dismiss', 'Dismiss')}
-          </Button>
-        </div>
-      ) : null}
-      {runtimeWasReady && runtimeError ? (
-        <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
-      ) : null}
-      {rendererErrorNotice ? (
-        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red/30 bg-red/10 px-3 py-2 text-xs text-red shadow-card">
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">App error</div>
-            <div className="mt-0.5 text-red/85">{rendererErrorNotice}</div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="no-drag"
-            onClick={() => setRendererErrorNotice(null)}
-          >
-            {t('common.dismiss', 'Dismiss')}
-          </Button>
-        </div>
-      ) : null}
-      {resourceNavigationNotice ? (
-        <div
-          role="alert"
-          data-testid="resource-navigation-notice"
-          data-status={resourceNavigationNotice.status}
-          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber/30 bg-amber/10 px-3 py-2 text-xs text-amber shadow-card"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">Resource unavailable</div>
-            <div className="mt-0.5 text-amber/85">{resourceNavigationNotice.message}</div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="no-drag"
-            onClick={() => setResourceNavigationNotice(null)}
-          >
-            {t('common.dismiss', 'Dismiss')}
-          </Button>
-        </div>
-      ) : null}
+      <AppShellNotices
+        metadata={metadata}
+        showPreviewNotice={showPreviewNotice}
+        onPreviewDismiss={() => setPreviewNoticeDismissed(true)}
+        runtimeWasReady={runtimeWasReady}
+        runtimeError={runtimeError}
+        onRuntimeRestart={handleRuntimeRestart}
+        rendererErrorNotice={rendererErrorNotice}
+        onRendererErrorDismiss={() => setRendererErrorNotice(null)}
+        resourceNavigationNotice={resourceNavigationNotice}
+        onResourceNavigationDismiss={() => setResourceNavigationNotice(null)}
+      />
       <div className="flex flex-1 min-h-0">
         <Sidebar
           currentView={view}
@@ -761,7 +781,11 @@ export function App() {
             )}
             {view === 'playbooks' && (
               <Suspense fallback={<RouteFallback />}>
-                <WorkflowsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
+                <WorkflowsPage
+                  onOpenThread={(sessionId) => void openExistingThread(sessionId)}
+                  initialTarget={workflowNavigationTarget}
+                  onInitialTargetHandled={() => setWorkflowNavigationTarget(null)}
+                />
               </Suspense>
             )}
             {view === 'team' && (
@@ -785,6 +809,8 @@ export function App() {
               <Suspense fallback={<RouteFallback />}>
                 <CapabilitiesPage
                   onClose={() => navigateView('chat')}
+                  initialTarget={capabilityNavigationTarget}
+                  onInitialTargetHandled={() => setCapabilityNavigationTarget(null)}
                   onCreateAgent={(seed) => {
                     setAgentBuilderSeed(seed)
                     navigateView('team')

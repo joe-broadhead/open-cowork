@@ -86,6 +86,7 @@ function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean
         enableFileWrite: settings.enableFileWrite,
         runtimeConfigSource: settings.runtimeConfigSource,
         runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
+        windowZoomFactor: settings.windowZoomFactor,
         workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
         workflowRunInBackground: settings.workflowRunInBackground,
         workflowDesktopNotifications: settings.workflowDesktopNotifications,
@@ -214,7 +215,7 @@ function SettingsNotificationsPanel({
         />
       </div>
       <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4 text-xs leading-relaxed text-text-muted">
-        {t('settings.notifications.workflowHint', 'Workflow-specific background, desktop notification, and quiet-hour controls remain under Automations.')}
+        {t('settings.notifications.workflowHint', 'Playbook-specific background, desktop notification, and quiet-hour controls remain under Playbooks.')}
       </div>
     </div>
   )
@@ -393,7 +394,7 @@ export function SettingsPanel({
         { id: 'notifications' as const, label: t('settings.tab.notifications', 'Notifications'), description: t('settings.tab.notificationsDescription', 'Suggestions, digests, and sounds') },
         { id: 'privacy' as const, label: t('settings.tab.privacy', 'Privacy'), description: t('settings.tab.privacyDescription', 'History, data use, and policy links') },
         { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime bridge') },
-        { id: 'workflows' as const, label: t('settings.tab.workflows', 'Automations'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
+        { id: 'workflows' as const, label: t('settings.tab.workflows', 'Playbooks'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
         ...(activeWorkspaceIsLocal ? [{ id: 'pairing' as const, label: t('settings.tab.pairing', 'Pairing'), description: t('settings.tab.pairingDescription', 'Gateway and mobile access') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
       ],
@@ -417,7 +418,7 @@ export function SettingsPanel({
       ] : []),
       { id: 'settings-notifications', tab: 'notifications', label: t('settings.tab.notifications', 'Notifications'), keywords: 'notifications voice suggestions digest sounds chime' },
       { id: 'settings-privacy', tab: 'privacy', label: t('settings.tab.privacy', 'Privacy'), keywords: 'privacy history usage anonymized policy security legal data' },
-      { id: 'settings-workflows', tab: 'workflows', label: t('settings.search.automations', 'Automation notifications'), keywords: 'workflow automation run background launch login notifications quiet hours' },
+      { id: 'settings-workflows', tab: 'workflows', label: t('settings.search.playbooks', 'Playbook notifications'), keywords: 'playbook workflow run background launch login notifications quiet hours' },
       ...(activeWorkspaceIsLocal ? [
         { id: 'settings-pairing', tab: 'pairing' as const, label: t('settings.search.pairing', 'Pairing'), keywords: 'gateway mobile pairing qr code desktop' },
         { id: 'settings-storage', tab: 'storage' as const, label: t('settings.search.storage', 'Storage cleanup'), keywords: 'storage sandbox artifacts cleanup disk' },

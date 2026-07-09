@@ -200,7 +200,12 @@ describe('HomePage', () => {
     await user.keyboard('{Enter}')
 
     await waitFor(() => {
-      expect(onStartThread).toHaveBeenCalledWith('Draft a release note', [], 'plan')
+      expect(onStartThread).toHaveBeenCalledWith(
+        'Draft a release note',
+        [],
+        'plan',
+        { modelId: 'anthropic/claude-sonnet-4' },
+      )
     })
   })
 
@@ -245,7 +250,12 @@ describe('HomePage', () => {
     await user.keyboard('{Enter}')
 
     await waitFor(() => {
-      expect(onStartThread).toHaveBeenCalledWith('Map the market', [], 'research')
+      expect(onStartThread).toHaveBeenCalledWith(
+        'Map the market',
+        [],
+        'research',
+        { modelId: 'anthropic/claude-sonnet-4' },
+      )
     })
   })
 
@@ -298,7 +308,7 @@ describe('HomePage', () => {
         'Analyze this with more reasoning',
         [],
         'build',
-        { variant: 'xhigh' },
+        { modelId: 'anthropic/claude-sonnet-4', variant: 'xhigh' },
       )
     })
   })
@@ -609,7 +619,12 @@ describe('HomePage', () => {
 
     await user.keyboard('{Enter}')
     await waitFor(() => {
-      expect(onStartThread).toHaveBeenCalledWith('Help me turn a repeated task into a saved workflow.', [], 'chief-of-staff')
+      expect(onStartThread).toHaveBeenCalledWith(
+        'Help me turn a repeated task into a saved workflow.',
+        [],
+        'chief-of-staff',
+        { modelId: 'anthropic/claude-sonnet-4' },
+      )
     })
   })
 

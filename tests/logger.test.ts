@@ -23,8 +23,8 @@ function writeLog(dir: string, file: string, size: number, mtime: string) {
 }
 
 test('log pruning includes rotated archives in retention cleanup', () => withTempDir((dir) => {
-  const oldArchive = writeLog(dir, 'cowork-2026-04-01.log.1', 4, '2026-04-01T00:00:00.000Z')
-  const recentArchive = writeLog(dir, 'cowork-2026-05-06.log.1', 4, '2026-05-06T00:00:00.000Z')
+  const oldArchive = writeLog(dir, 'open-cowork-2026-04-01.log.1', 4, '2026-04-01T00:00:00.000Z')
+  const recentArchive = writeLog(dir, 'open-cowork-2026-05-06.log.1', 4, '2026-05-06T00:00:00.000Z')
 
   pruneLogDirectory(dir, {
     nowMs: Date.parse('2026-05-07T00:00:00.000Z'),

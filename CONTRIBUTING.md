@@ -24,8 +24,8 @@ Bad changes usually:
 ## Development setup
 
 Requirements:
-- Node `>=22.12`
-- pnpm `>=10`
+- Node `>=22.13`
+- pnpm `10.32.1` via Corepack
 - Python `>=3.11` for docs work
 
 Install:
@@ -100,9 +100,11 @@ pnpm --dir apps/desktop dist:ci:linux
 Build docs:
 
 ```bash
-python -m pip install -r docs/requirements.txt
-mkdocs build --strict
+pnpm docs:build
 ```
+
+`pnpm docs:build` prepares the docs Python environment, checks the vendored
+Mermaid bundle, and then runs the strict MkDocs build.
 
 ## Contribution guidelines
 

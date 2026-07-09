@@ -1144,6 +1144,7 @@ async function handleApiRequest(
     if (!workflowId && req.method === 'GET') {
       writeJson(res, 200, await options.service.listWorkflows(context.principal, {
         limit: parseLimit(context.url),
+        cursor: context.url.searchParams.get('cursor'),
       }), options.corsOrigin)
       return
     }

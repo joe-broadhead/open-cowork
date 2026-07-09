@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-04T13:29:56.561Z",
+  "generatedAt": "2026-07-09T10:50:33.000Z",
   "environment": {
     "platform": "darwin",
     "arch": "arm64",
@@ -62,11 +62,11 @@
     {
       "name": "agents.catalog.downstreamCatalog",
       "iterations": 18,
-      "minMs": 0.96,
-      "maxMs": 1.21,
-      "avgMs": 1.05,
-      "p50Ms": 1.03,
-      "p95Ms": 1.14
+      "minMs": 2.28,
+      "maxMs": 4.63,
+      "avgMs": 2.42,
+      "p50Ms": 2.42,
+      "p95Ms": 2.54
     },
     {
       "name": "capabilities.map.downstreamCatalog",

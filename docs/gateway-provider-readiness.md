@@ -29,12 +29,10 @@ Gateway provider configuration separates provider kind from provider instance:
 - `channelBindingId` is the Cloud control-plane binding that maps the provider
   instance to a headless agent and delivery route.
 
-Kind-only ids such as `telegram` remain supported for existing self-hosted
-configs. New production configs should use explicit instance ids so multiple
-providers of the same kind can coexist without sharing cursors, health,
-deliveries, or channel-thread bindings. Legacy downstream ids such as
-`acme-telegram` are accepted for compatibility, but kind-prefixed ids are the
-recommended convention for new deployments.
+Kind-only ids such as `telegram` are supported for single-provider deployments.
+Production configs with named instances should use kind-prefixed ids such as
+`telegram-acme` so multiple providers of the same kind can coexist without
+sharing cursors, health, deliveries, or channel-thread bindings.
 
 Every provider exposes `id`, `kind`, and capabilities, and may expose runtime
 health. Provider readiness and diagnostics use the instance id for routing and

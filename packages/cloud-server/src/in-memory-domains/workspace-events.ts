@@ -13,12 +13,25 @@ type InMemoryWorkspaceEventsHost = {
   assertSessionBelongsToUser(tenantId: string, sessionId: string, userId: string): void
 }
 
+type WorkspaceEventState = { nextSequence: number, events: WorkspaceEventRecord[] }
+
 export class InMemoryWorkspaceEventsDomain {
-  private readonly workspaceEvents = new Map<string, { nextSequence: number, events: WorkspaceEventRecord[] }>()
+  private readonly workspaceEvents = new Map<string, WorkspaceEventState>()
   private readonly host: InMemoryWorkspaceEventsHost
 
   constructor(host: InMemoryWorkspaceEventsHost) {
     this.host = host
+  }
+
+  snapshot(): Map<string, WorkspaceEventState> {
+    const snapshot = new Map<string, WorkspaceEventState>()
+    for (const [key, value] of this.workspaceEvents) snapshot.set(key, clone(value))
+    return snapshot
+  }
+
+  restore(snapshot: Map<string, WorkspaceEventState>) {
+    this.workspaceEvents.clear()
+    for (const [key, value] of snapshot) this.workspaceEvents.set(key, clone(value))
   }
 
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {
@@ -73,6 +86,10 @@ export class InMemoryWorkspaceEventsDomain {
     state.events.push(event)
     this.workspaceEvents.set(workspaceKey, state)
     return clone(event)
+  }
+
+  findWorkspaceEvent(tenantId: string, userId: string, eventId: string): WorkspaceEventRecord | null {
+    return clone(this.workspaceEvents.get(`${tenantId}:${userId}`)?.events.find((event) => event.eventId === eventId) || null)
   }
 
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {

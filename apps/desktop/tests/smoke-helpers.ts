@@ -102,6 +102,7 @@ export interface LaunchSmokeSessionOptions {
 
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
 const DEFAULT_APP_SHELL_TIMEOUT_MS = 90_000
+const SMOKE_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON = 'desktop smoke test uses source checkout runtime components'
 
 function smokeAppShellTimeoutMs() {
   const raw = process.env.OPEN_COWORK_DESKTOP_SMOKE_APP_SHELL_TIMEOUT_MS
@@ -182,6 +183,30 @@ export async function waitForRuntimeReady(page: Page, timeout = 20_000) {
     const diagnostics = await getAppShellDiagnostics(page)
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`Timed out waiting for runtime readiness: ${message}\nDiagnostics: ${JSON.stringify(diagnostics)}`, { cause: error })
+  }
+}
+
+export async function assertRuntimeComponentProvenance(page: Page) {
+  const status = await page.evaluate(async () => window.coworkApi.runtime.status())
+  const report = status.components
+  if (!report) {
+    throw new Error(`Runtime status did not include component verification: ${JSON.stringify(status)}`)
+  }
+  if (report.format !== 'open-cowork-runtime-component-manifest-v1') {
+    throw new Error(`Runtime component verification used an unexpected format: ${JSON.stringify(report)}`)
+  }
+  if (!report.ok || report.issues.some((issue) => issue.severity === 'error')) {
+    throw new Error(`Runtime component verification failed in smoke: ${JSON.stringify(report)}`)
+  }
+  if (!report.developmentOverride) {
+    throw new Error(`Runtime smoke must use an explicit development component override: ${JSON.stringify(report)}`)
+  }
+
+  const ids = new Set(report.components.map((component) => component.id))
+  for (const requiredId of ['opencode-cli', 'opencode-sdk', 'semantic-ui-mcp', 'workflow-mcp', 'agent-tool-mcp']) {
+    if (!ids.has(requiredId)) {
+      throw new Error(`Runtime component verification did not include ${requiredId}: ${JSON.stringify(report)}`)
+    }
   }
 }
 
@@ -269,6 +294,7 @@ function getSmokeEnvironment(paths: SmokePaths) {
     OPEN_COWORK_SANDBOX_DIR: paths.sandboxDir,
     OPEN_COWORK_CHART_TIMEOUT_MS: '1500',
     OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON: SMOKE_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON,
   }
 }
 

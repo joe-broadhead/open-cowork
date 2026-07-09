@@ -1,5 +1,6 @@
 import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/runtime-host/settings'
 import { saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
+import { EMPTY_MANAGED_POLICY, resetActiveManagedPolicyCache, setActiveManagedPolicy } from '@open-cowork/runtime-host/managed-policy'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
@@ -8,7 +9,7 @@ import { tmpdir } from 'os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getRuntimeInputDiagnostics } from '../apps/desktop/src/main/runtime-input-diagnostics.ts'
 test('getRuntimeInputDiagnostics reports effective provider inputs and override sources', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-inputs-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-inputs-'))
   const configDir = join(tempRoot, 'config')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -155,7 +156,7 @@ test('getRuntimeInputDiagnostics reports built-in provider credential overrides 
 })
 
 test('getRuntimeInputDiagnostics reports auth-pending and override conflicts with stable reason codes', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-provenance-conflicts-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-provenance-conflicts-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const previousConfigPath = process.env.OPEN_COWORK_CONFIG_PATH
@@ -242,7 +243,7 @@ Custom override.
 })
 
 test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking command details', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-provenance-'))
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-provenance-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
@@ -273,6 +274,52 @@ test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking c
     assert.equal(unsafe?.reasonCode, 'mcp.stdio-policy-blocked')
     assert.doesNotMatch(JSON.stringify(diagnostics), /secret-token-value/)
   } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    clearSettingsCache()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('getRuntimeInputDiagnostics explains custom skills disabled by managed policy', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-custom-skill-policy-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
+  clearConfigCaches()
+  clearSettingsCache()
+  resetActiveManagedPolicyCache()
+
+  try {
+    saveCustomSkill({
+      scope: 'machine',
+      directory: null,
+      name: 'policy-disabled-skill',
+      content: `---\ndescription: Disabled by policy\n---\n# Disabled by policy\n`,
+    })
+    setActiveManagedPolicy({
+      ...EMPTY_MANAGED_POLICY,
+      extensions: { ...EMPTY_MANAGED_POLICY.extensions, customSkills: false },
+    })
+
+    const diagnostics = getRuntimeInputDiagnostics()
+    const disabledSkill = diagnostics.capabilities?.find((capability) => (
+      capability.kind === 'skill'
+      && capability.id === 'policy-disabled-skill'
+    ))
+
+    assert.equal(disabledSkill?.status, 'disabled')
+    assert.equal(disabledSkill?.reasonCode, 'skill.custom-disabled-by-policy')
+    assert.equal(disabledSkill?.source, 'custom')
+    assert.equal(diagnostics.capabilities?.some((capability) => (
+      capability.kind === 'skill'
+      && capability.id === 'policy-disabled-skill'
+      && capability.status === 'active'
+    )), false)
+  } finally {
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()

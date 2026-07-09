@@ -43,17 +43,22 @@ import type {
   ChannelProviderEventType,
   ChannelProviderId,
   ChannelSessionBindingRecord,
+  CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
   ControlPlaneMembershipStatus,
   ControlPlaneRole,
   ControlPlaneStore,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
+  ListCloudArtifactIndexInput,
+  ListCloudLaunchpadSessionSummariesInput,
   ManagedWorkerPoolStatus,
   ManagedWorkerStatus,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  UpsertCloudArtifactIndexInput,
   ListSessionsPageInput,
   ListSessionsPageRecord,
   ThreadSmartFilterRecord,
@@ -319,6 +324,7 @@ export class CloudSessionService {
     this.byokService = new CloudByokService({
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
       byokSecrets,
       byokPolicy,
       assertBillingAllowed: (input) => this.assertBillingAllowed(input),
@@ -929,6 +935,60 @@ export class CloudSessionService {
     return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence, limit)
   }
 
+  async upsertCloudArtifactIndex(principal: CloudPrincipal, input: Omit<UpsertCloudArtifactIndexInput, 'tenantId' | 'userId'>): Promise<CloudArtifactIndexRecord> {
+    await this.ensurePrincipal(principal)
+    await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
+    return this.store.upsertCloudArtifactIndex({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
+  }
+
+  async getCloudArtifactIndexRecord(
+    principal: CloudPrincipal,
+    sessionId: string,
+    artifactId: string,
+  ): Promise<CloudArtifactIndexRecord | null> {
+    await this.ensurePrincipal(principal)
+    await this.assertGatewayTokenCanReadSession(principal, sessionId)
+    return this.store.getCloudArtifactIndexRecord({
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      sessionId,
+      artifactId,
+    })
+  }
+
+  async listCloudArtifactIndex(
+    principal: CloudPrincipal,
+    input: Omit<ListCloudArtifactIndexInput, 'tenantId' | 'userId'> = {},
+  ) {
+    await this.ensurePrincipal(principal)
+    if (input.sessionId) await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
+    return this.store.listCloudArtifactIndex({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
+  }
+
+  async listCloudLaunchpadSessionSummaries(
+    principal: CloudPrincipal,
+    input: Omit<ListCloudLaunchpadSessionSummariesInput, 'tenantId' | 'userId'> = {},
+  ): Promise<{
+    items: CloudLaunchpadSessionSummaryRecord[]
+    totalEstimate: number
+    truncated: boolean
+  }> {
+    await this.ensurePrincipal(principal)
+    return this.store.listCloudLaunchpadSessionSummaries({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
+  }
+
   // Read paths for the SSE replay poll, which runs every pollMs for the life of a
   // connection. The connection authorized the principal+session ONCE at connect; re-running
   // the full membership/session/projection authorization on every poll was the dominant
@@ -1461,7 +1521,7 @@ export class CloudSessionService {
     return this.threadOrganization.deleteThreadSmartFilter(principal, filterId)
   }
 
-  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<WorkflowListPayload> {
+  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null, cursor?: string | null } = {}): Promise<WorkflowListPayload> {
     return this.workflowOperations.listWorkflows(principal, input)
   }
 
@@ -1510,6 +1570,7 @@ export class CloudSessionService {
     principal: CloudPrincipal,
     sessionId: string,
     input: {
+      eventId?: string
       type: CloudProjectedSessionEventType
       payload?: Record<string, unknown>
       createdAt?: Date
@@ -1520,6 +1581,41 @@ export class CloudSessionService {
 
   async assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number) {
     return this.usageOperations.assertArtifactUploadAllowed(principal, bytes)
+  }
+
+  async reserveArtifactUploadQuota(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    objectKey: string
+    filename: string
+    contentType: string | null
+    expectedBytes: number
+    expiresAt: string
+  }) {
+    return this.usageOperations.reserveArtifactUploadQuota(principal, input)
+  }
+
+  async getArtifactUploadReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+  }) {
+    return this.usageOperations.getArtifactUploadReservation(principal, input)
+  }
+
+  async settleArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    actualBytes: number
+  }) {
+    return this.usageOperations.settleArtifactUploadQuotaReservation(principal, input)
+  }
+
+  async releaseArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
+    sessionId: string
+    artifactId: string
+    status: 'expired' | 'failed'
+  }) {
+    return this.usageOperations.releaseArtifactUploadQuotaReservation(principal, input)
   }
 
   async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
@@ -1757,7 +1853,7 @@ export class CloudSessionService {
   async executeCommand(
     lease: WorkerLeaseRecord,
     command: SessionCommandRecord,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal, deferAck?: boolean } = {},
   ): Promise<void> {
     return this.sessionExecution.executeCommand(lease, command, options)
   }

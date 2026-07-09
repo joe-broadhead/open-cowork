@@ -27,13 +27,14 @@ function reportSessionLoadError(sessionId: string, error: unknown) {
 // only the latest switch's response wins.
 let activateToken = 0
 
+export type SwitchToSessionResult = 'opened' | 'failed' | 'stale'
+
 /**
  * Switch to a session and hydrate it from history on first load.
  */
-export async function switchToSession(sessionId: string, options?: { force?: boolean; workspaceId?: string }) {
+export async function switchToSession(sessionId: string, options?: { force?: boolean; workspaceId?: string }): Promise<SwitchToSessionResult> {
   const store = useSessionStore.getState()
   const requestedWorkspaceId = normalizeWorkspaceId(options?.workspaceId || store.activeWorkspaceId)
-  store.setCurrentSession(sessionId)
   const myToken = ++activateToken
 
   try {
@@ -41,11 +42,15 @@ export async function switchToSession(sessionId: string, options?: { force?: boo
       ...options,
       workspaceId: requestedWorkspaceId,
     })
-    if (myToken !== activateToken) return
-    if (normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId) !== requestedWorkspaceId) return
-    store.setSessionView(sessionId, view, requestedWorkspaceId)
+    if (myToken !== activateToken) return 'stale'
+    const latestStore = useSessionStore.getState()
+    if (normalizeWorkspaceId(latestStore.activeWorkspaceId) !== requestedWorkspaceId) return 'stale'
+    latestStore.setCurrentSession(sessionId)
+    latestStore.setSessionView(sessionId, view, requestedWorkspaceId)
+    return 'opened'
   } catch (err) {
-    if (myToken !== activateToken) return
+    if (myToken !== activateToken) return 'stale'
     reportSessionLoadError(sessionId, err)
+    return 'failed'
   }
 }

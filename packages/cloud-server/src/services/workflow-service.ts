@@ -10,7 +10,7 @@ export type CloudWorkflowWebhookInput = {
 }
 
 export type CloudWorkflowServiceDelegate = {
-  listWorkflows(principal: CloudPrincipal): Promise<WorkflowListPayload>
+  listWorkflows(principal: CloudPrincipal, input?: { limit?: number | null, cursor?: string | null }): Promise<WorkflowListPayload>
   getWorkflow(principal: CloudPrincipal, workflowId: string): Promise<WorkflowDetail | null>
   createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowDetail>
   updateWorkflowStatus(principal: CloudPrincipal, workflowId: string, status: WorkflowStatus): Promise<WorkflowDetail | null>
@@ -29,7 +29,7 @@ export class CloudWorkflowService {
     this.delegate = delegate
   }
 
-  list(principal: CloudPrincipal) { return this.delegate.listWorkflows(principal) }
+  list(principal: CloudPrincipal, input?: { limit?: number | null, cursor?: string | null }) { return this.delegate.listWorkflows(principal, input) }
   get(principal: CloudPrincipal, workflowId: string) { return this.delegate.getWorkflow(principal, workflowId) }
   create(principal: CloudPrincipal, draft: WorkflowDraft) { return this.delegate.createWorkflow(principal, draft) }
   updateStatus(principal: CloudPrincipal, workflowId: string, status: WorkflowStatus) {

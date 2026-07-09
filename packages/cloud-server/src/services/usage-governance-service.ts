@@ -222,6 +222,7 @@ export class CloudUsageGovernanceService {
   }
 
   async recordUsage(input: {
+    eventId?: string
     orgId: string
     accountId?: string | null
     eventType: UsageEventRecord['eventType']

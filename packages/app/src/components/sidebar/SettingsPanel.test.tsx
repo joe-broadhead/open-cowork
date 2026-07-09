@@ -31,6 +31,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,
@@ -416,7 +417,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Automations/ }))
+    await user.click(screen.getByRole('button', { name: /Playbooks/ }))
 
     expect(screen.queryByRole('switch', { name: 'Improvement proposals' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: 'Scheduled consolidation' })).not.toBeInTheDocument()

@@ -66,6 +66,7 @@ import type {
 } from './control-plane-scim.ts'
 import type {
   BillingSubscriptionRecord,
+  ArtifactUploadReservationRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
   RateLimitClaimRecord,
@@ -91,9 +92,17 @@ import type {
 import type {
   ListSessionsPageInput,
   ListSessionsPageRecord,
+  ListCloudArtifactIndexInput,
+  ListCloudArtifactIndexResult,
+  CloudArtifactIndexRecord,
+  CloudLaunchpadSessionSummaryRecord,
+  ListCloudLaunchpadSessionSummariesInput,
+  ListCloudLaunchpadSessionSummariesResult,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  UpsertCloudArtifactIndexInput,
+  UpsertCloudLaunchpadSessionSummaryInput,
   WorkerLeaseRecord,
   WorkspaceEventRecord,
 } from './control-plane-session-records.ts'
@@ -101,6 +110,9 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  ListWorkflowRunsForWorkflowsInput,
+  ListWorkflowsPageInput,
+  ListWorkflowsPageRecord,
   SchemaMigrationRecord,
   SettingMetadataRecord,
   ThreadMetadataRecord,
@@ -109,6 +121,7 @@ import type {
 } from './control-plane-workspace-records.ts'
 import type {
   ListRunnableSessionsInput,
+  RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
@@ -135,14 +148,20 @@ import type {
   CheckCloudAuthBackoffInput,
   ClaimRateLimitInput,
   ConsumeUsageQuotaInput,
+  CreateArtifactUploadReservationInput,
   CreateSessionInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
+  ReleaseArtifactUploadReservationInput,
+  SettleArtifactUploadReservationInput,
   UpsertBillingSubscriptionInput,
 } from './control-plane-usage-inputs.ts'
 import type {
   AppendEventInput,
+  AppendProjectedSessionEventInput,
+  AppendProjectedSessionEventResult,
   AppendWorkspaceEventInput,
+  CheckpointAndAckSessionCommandResult,
   CommandQueueQuota,
   EnqueueCommandInput,
   WriteProjectionInput,
@@ -271,6 +290,22 @@ export type ControlPlaneStore = {
   queryAuditEvents(input: QueryAuditEventsInput): MaybePromise<QueryAuditEventsResult>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
   listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
+  createArtifactUploadReservation(input: CreateArtifactUploadReservationInput): MaybePromise<{
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+  }>
+  getArtifactUploadReservation(input: {
+    orgId: string
+    tenantId: string
+    sessionId: string
+    artifactId: string
+  }): MaybePromise<ArtifactUploadReservationRecord | null>
+  settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): MaybePromise<{
+    reservation: ArtifactUploadReservationRecord | null
+    quota: QuotaConsumptionRecord | null
+    settled: boolean
+  }>
+  releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): MaybePromise<ArtifactUploadReservationRecord | null>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
   listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
   upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>
@@ -382,6 +417,7 @@ export type ControlPlaneStore = {
     updatedAt?: Date
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
+  appendProjectedSessionEvent(input: AppendProjectedSessionEventInput): MaybePromise<AppendProjectedSessionEventResult>
   listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
   // SSE replay hot-path read. Identical scoped query/ordering to listSessionEvents but skips
   // the requireSession existence pre-check: the WHERE clause is already scoped by
@@ -393,6 +429,16 @@ export type ControlPlaneStore = {
   // Aggregate count + max sequence for projection-status, so it never loads the whole
   // event log just to compute lag (index-served on the postgres backend).
   getSessionEventStats(tenantId: string, sessionId: string): MaybePromise<{ count: number; latestSequence: number }>
+  upsertCloudArtifactIndex(input: UpsertCloudArtifactIndexInput): MaybePromise<CloudArtifactIndexRecord>
+  getCloudArtifactIndexRecord(input: {
+    tenantId: string
+    userId: string
+    sessionId: string
+    artifactId: string
+  }): MaybePromise<CloudArtifactIndexRecord | null>
+  listCloudArtifactIndex(input: ListCloudArtifactIndexInput): MaybePromise<ListCloudArtifactIndexResult>
+  upsertCloudLaunchpadSessionSummary(input: UpsertCloudLaunchpadSessionSummaryInput): MaybePromise<CloudLaunchpadSessionSummaryRecord>
+  listCloudLaunchpadSessionSummaries(input: ListCloudLaunchpadSessionSummariesInput): MaybePromise<ListCloudLaunchpadSessionSummariesResult>
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
   getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number, limit?: number): MaybePromise<WorkspaceEventRecord[]>
@@ -418,6 +464,7 @@ export type ControlPlaneStore = {
     } | null,
   ): MaybePromise<WorkerLeaseRecord | null>
   releaseSessionLease(lease: WorkerLeaseRecord, now?: Date): MaybePromise<boolean>
+  recoverSessionLease(lease: WorkerLeaseRecord, input?: RecoverSessionLeaseInput): MaybePromise<ReapedSessionLeaseRecord | null>
   renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
   checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
   reapExpiredSessionLeases(input?: ReapExpiredSessionLeasesInput): MaybePromise<ReapedSessionLeaseRecord[]>
@@ -425,6 +472,7 @@ export type ControlPlaneStore = {
   enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
   claimNextSessionCommand(lease: WorkerLeaseRecord, now?: Date): MaybePromise<SessionCommandRecord | null>
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
+  checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<CheckpointAndAckSessionCommandResult>
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): MaybePromise<SessionCommandRecord>
   recordWorkerHeartbeat(input: {
     workerId: string
@@ -445,10 +493,12 @@ export type ControlPlaneStore = {
   createWorkflow(input: CreateWorkflowInput): MaybePromise<CloudWorkflowRecord>
   findWorkflow(workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   listWorkflows(tenantId: string, userId: string): MaybePromise<CloudWorkflowRecord[]>
+  listWorkflowsPage(input: ListWorkflowsPageInput): MaybePromise<ListWorkflowsPageRecord>
   getWorkflow(tenantId: string, userId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   getWorkflowForTenant(tenantId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   updateWorkflowStatus(input: UpdateWorkflowStatusInput): MaybePromise<CloudWorkflowRecord | null>
   listWorkflowRuns(tenantId: string, workflowId: string, limit?: number): MaybePromise<CloudWorkflowRunRecord[]>
+  listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput): MaybePromise<CloudWorkflowRunRecord[]>
   createWorkflowRun(input: CreateWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord>
   claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): MaybePromise<ClaimedWorkflowRunRecord | null>
   reapExpiredWorkflowClaims(input?: ReapExpiredWorkflowClaimsInput): MaybePromise<ReapedWorkflowClaimRecord[]>

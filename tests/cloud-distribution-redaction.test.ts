@@ -4,6 +4,11 @@ import assert from 'node:assert/strict'
 
 import { sanitizeCloudObservabilityAttributes } from '@open-cowork/cloud-server/observability'
 import { redactGatewayConfig, resolveGatewayConfig } from '../apps/gateway/dist/config.js'
+import { redactAuditMetadata, redactAuditMetadataForExport } from '../packages/cloud-server/src/audit-redaction.ts'
+import {
+  assertNoSecretFixtureLeaks,
+  redactionFixtureCorpus,
+} from './fixtures/secret-redaction-fixtures.ts'
 
 test('cloud and gateway distribution diagnostics redact secrets, signed URLs, and local paths', () => {
   const rawByok = ['sk', 'distributionsecretvalue1234567890abcdef123456'].join('-')
@@ -11,6 +16,7 @@ test('cloud and gateway distribution diagnostics redact secrets, signed URLs, an
   const telegramToken = ['123456', 'telegram-secret-token-abcdefghijklmnopqrstuvwxyz'].join(':')
   const objectStoreSecret = ['object-store-secret', 'abcdefghijklmnopqrstuvwxyz'].join('-')
   const signedUrlSecret = ['object-store-url', 'secret'].join('-')
+  const fixtureCorpus = redactionFixtureCorpus()
   const bundle = [
     `OPEN_COWORK_GATEWAY_SERVICE_TOKEN=${gatewayToken}`,
     `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN=${telegramToken}`,
@@ -19,9 +25,11 @@ test('cloud and gateway distribution diagnostics redact secrets, signed URLs, an
     'artifact=https://bucket.s3.amazonaws.com/private/output.txt?X-Amz-Signature=abcdef&X-Amz-Credential=secret',
     'workspace=/Users/alice/acme-private-project',
     'linuxWorkspace=/home/bob/customer-repo',
+    fixtureCorpus,
   ].join('\n')
 
   const redactedBundle = sanitizeForExport(bundle)
+  assertNoSecretFixtureLeaks(redactedBundle)
   for (const forbidden of [
     rawByok,
     gatewayToken,
@@ -53,6 +61,7 @@ test('cloud and gateway distribution diagnostics redact secrets, signed URLs, an
       settings: {
         deliveryUrl: `https://object-store.example.test/private/file.txt?token=${signedUrlSecret}`,
         localPath: '/Users/alice/acme-private-project',
+        lastError: fixtureCorpus,
       },
     }],
   }, {
@@ -64,14 +73,30 @@ test('cloud and gateway distribution diagnostics redact secrets, signed URLs, an
   assert.equal(gatewayDiagnostics.includes(telegramToken), false)
   assert.equal(gatewayDiagnostics.includes(signedUrlSecret), false)
   assert.equal(gatewayDiagnostics.includes('acme-private-project'), false)
+  assertNoSecretFixtureLeaks(gatewayDiagnostics)
 
-  assert.deepEqual(sanitizeCloudObservabilityAttributes({
+  const cloudAttributes = sanitizeCloudObservabilityAttributes({
     token: gatewayToken,
     object_store_url: 'https://bucket.s3.amazonaws.com/private/output.txt?X-Amz-Signature=abcdef',
     local_path: '/home/bob/customer-repo',
-  }), {
+    provider_error: fixtureCorpus,
+  })
+  assertNoSecretFixtureLeaks(cloudAttributes)
+  assert.deepEqual({
+    token: cloudAttributes.token,
+    object_store_url: cloudAttributes.object_store_url,
+    local_path: cloudAttributes.local_path,
+  }, {
     token: '[redacted]',
     object_store_url: 'https://bucket.s3.amazonaws.com/private/output.txt?[redacted]',
     local_path: '/home/[redacted]',
   })
+
+  const auditMetadata = redactAuditMetadata({
+    detail: fixtureCorpus,
+    localPath: '/Users/alice/acme-private-project',
+  })
+  const auditExport = redactAuditMetadataForExport(auditMetadata)
+  assertNoSecretFixtureLeaks(auditExport)
+  assert.equal(JSON.stringify(auditExport).includes('acme-private-project'), false)
 })

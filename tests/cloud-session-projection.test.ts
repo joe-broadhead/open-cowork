@@ -39,8 +39,9 @@ function asArray(value: unknown): unknown[] {
 }
 
 test('cloud session projection persists approvals questions tools todos costs and resolution state', async () => {
+  const store = new InMemoryControlPlaneStore()
   const service = new CloudSessionService(
-    new InMemoryControlPlaneStore(),
+    store,
     new FakeRuntime(),
     resolveCloudRuntimePolicy(DEFAULT_CONFIG),
   )
@@ -163,6 +164,14 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(sessionView.artifacts[0]?.cloudArtifactId, 'artifact-1')
   assert.equal(sessionView.artifacts[0]?.status, 'in-review')
   assert.equal(sessionView.sessionTokens.cacheRead, 2)
+  const pendingSummaries = await store.listCloudLaunchpadSessionSummaries({
+    tenantId: principal.tenantId,
+    userId: principal.userId,
+    limit: 10,
+  })
+  assert.deepEqual(pendingSummaries.items.map((summary) => summary.sessionId), [sessionId])
+  assert.equal(pendingSummaries.items[0]?.pendingApprovals[0]?.description, 'Run git status')
+  assert.equal(pendingSummaries.items[0]?.pendingQuestions[0]?.id, 'question-1')
 
   await service.appendProductEvent(principal, sessionId, {
     type: 'permission.resolved',
@@ -180,6 +189,12 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(asRecord(asArray(resolved.resolvedApprovals)[0]).description, 'Run git status')
   assert.equal(asRecord(asArray(resolved.resolvedQuestions)[0]).rejected, false)
   assert.deepEqual(asArray(asRecord(asArray(resolved.resolvedQuestions)[0]).answers), ['Yes'])
+  const resolvedSummaries = await store.listCloudLaunchpadSessionSummaries({
+    tenantId: principal.tenantId,
+    userId: principal.userId,
+    limit: 10,
+  })
+  assert.equal(resolvedSummaries.items.length, 0)
 })
 
 test('cloud assistant chunks keep projection running until explicit idle event', async () => {
@@ -289,6 +304,7 @@ test('cloud session projection repair rebuilds durable view from ordered event l
     createdAt: new Date('2026-05-27T10:02:00.000Z'),
   })
   assert.equal(await store.getSessionProjection('tenant-1', 'repair-session'), null)
+  assert.deepEqual(await store.listWorkspaceEvents('tenant-1', 'user-1'), [])
   const statusBeforeRepair = await service.getSessionProjectionStatus(principal, 'repair-session')
   assert.equal(statusBeforeRepair.latestEventSequence, 2)
   assert.equal(statusBeforeRepair.projectionSequence, 0)
@@ -297,6 +313,7 @@ test('cloud session projection repair rebuilds durable view from ordered event l
   const repaired = await service.repairSessionProjection(principal, 'repair-session')
   assert.equal(repaired.repaired, true)
   assert.equal(repaired.eventCount, 2)
+  assert.equal(repaired.workspaceEventCount, 2)
   assert.equal(repaired.latestEventSequence, 2)
   assert.equal(repaired.projectionSequence, 2)
   assert.equal(repaired.lag, 0)
@@ -309,5 +326,11 @@ test('cloud session projection repair rebuilds durable view from ordered event l
 
   const secondPass = await service.repairSessionProjection(principal, 'repair-session')
   assert.equal(secondPass.repaired, false)
+  assert.equal(secondPass.workspaceEventCount, 2)
   assert.equal(secondPass.projectionSequence, 2)
+  const workspaceEvents = await store.listWorkspaceEvents('tenant-1', 'user-1')
+  assert.deepEqual(workspaceEvents.map((event) => event.eventId), [
+    'repair-session:1',
+    'repair-session:2',
+  ])
 })

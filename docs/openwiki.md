@@ -18,11 +18,15 @@ product side of that contract.
   on the machine. Until the CLI is present the tool simply reports as
   unavailable; nothing else in the app depends on it.
 - **Trust posture, enforced by permissions** (mirroring the OpenWiki pack):
-    - *Read tier auto-allowed*: search, ask, think, page/claim/source reads,
-      proposal reads, history, diffs, and every graph query.
-    - *Proposal tier asks*: `wiki.propose_edit`, `wiki.propose_synthesis`,
-      `wiki.propose_source`, and `wiki.comment_on_proposal` require your
-      approval in the transcript.
+    - *Read tier auto-allowed*: search/recall, ask, think, page/claim/source
+      reads, facts/takes reads, proposal reads, history, diffs, git/event/run
+      status, dream status, inbox reads, governance detection, and every graph
+      query.
+    - *Proposal tier asks*: `wiki.propose_edit`,
+      `wiki.propose_synthesis`, `wiki.propose_fact`, `wiki.propose_take`,
+      `wiki.resolve_take`, `wiki.forget_fact`, `wiki.propose_source`,
+      `wiki.comment_on_proposal`, `wiki.dream_run`, and
+      `wiki.inbox_submit` require your approval in the transcript.
     - *Write tier absent*: the bundled MCP runs in proposal mode, so apply/
       publish/commit tools are never exposed to coworkers. Publishing stays a
       human (or explicitly trusted maintainer) decision inside OpenWiki.
@@ -52,10 +56,16 @@ Playbook-shaped work that pairs well with the wiki coworkers:
 
 - **Search the company wiki** — Wiki Researcher + `wiki.ask` with
   `include_explain`, returning a cited answer.
+- **Inspect memory records** — Wiki Researcher can use `wiki.recall`,
+  `wiki.list_facts`, `wiki.read_fact`, `wiki.list_takes`, and
+  `wiki.read_take` before answering from memory-shaped records.
 - **Propose a wiki edit** — Wiki Editor reads the target page, drafts a
   scoped replacement, and files `wiki.propose_edit` for your approval.
 - **Ingest a new source** — Wiki Ingestor proposes a source manifest, then
   page updates whose claims link back to it.
+- **Triage wiki inbox/governance** — Wiki Editor can read inbox items,
+  recent events/runs, dream status, and governance detector output; inbox
+  submissions and dream runs still ask before execution.
 - **Create a research brief** — Wiki Researcher synthesizes with
   `wiki.think`, listing supporting records and open gaps.
 

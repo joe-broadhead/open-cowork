@@ -640,14 +640,18 @@ test('createSessionHistoryService forwards forced refresh syncs without caller-m
   }])
 })
 
-test('createSessionHistoryService can hydrate root history before child transcripts', async () => {
+test('createSessionHistoryService hydrates root history after loading child ids but before child transcripts', async () => {
   const view = createEmptySessionView()
   const calls = {
     children: 0,
     childSnapshot: 0,
     diff: 0,
+    seedLineage: 0,
     setHistory: 0,
   }
+  const syncOrder: string[] = []
+  let writtenQuestions: SessionView['pendingQuestions'] = []
+  let writtenApprovals: Array<Omit<SessionView['pendingApprovals'][number], 'order'>> = []
   const updates: Array<Record<string, unknown>> = []
 
   const service = createSessionHistoryService({
@@ -659,9 +663,13 @@ test('createSessionHistoryService can hydrate root history before child transcri
             return { data: [] }
           },
           todo: async () => ({ data: [] }),
-          children: async () => {
+          children: async ({ sessionID }: { sessionID: string }) => {
             calls.children += 1
-            return { data: [{ id: 'child-1', title: 'Analyst', parentID: 'session-progressive', time: { created: 1 } }] }
+            return {
+              data: sessionID === 'session-progressive'
+                ? [{ id: 'child-1', title: 'Analyst', parentID: 'session-progressive', time: { created: 1 } }]
+                : [],
+            }
           },
           diff: async () => {
             calls.diff += 1
@@ -674,8 +682,27 @@ test('createSessionHistoryService can hydrate root history before child transcri
       questionClient: {},
       record: null,
     }),
-    listPendingQuestions: async () => ({ data: [] }),
-    listPendingPermissions: async () => ({ data: [] }),
+    listPendingQuestions: async () => ({
+      data: [{
+        id: 'question-child',
+        sessionID: 'child-1',
+        questions: [{
+          header: 'Child question',
+          question: 'Need child context?',
+          options: [{ label: 'Yes', description: 'Continue' }],
+        }],
+        tool: { messageID: 'message-child', callID: 'call-child' },
+      }],
+    }),
+    listPendingPermissions: async () => ({
+      data: [{
+        id: 'approval-child',
+        sessionID: 'child-1',
+        permission: 'bash',
+        tool: 'bash',
+        metadata: { command: 'pwd' },
+      }],
+    }),
     projectSessionHistory: async (input) => {
       assert.deepEqual(input.children, [])
       return []
@@ -684,6 +711,20 @@ test('createSessionHistoryService can hydrate root history before child transcri
     updateSessionRecord: (_sessionId, patch) => {
       updates.push(patch)
       return null
+    },
+    seedChildSessionLineage: (rootSessionId, children) => {
+      calls.seedLineage += 1
+      syncOrder.push('seedLineage')
+      assert.equal(rootSessionId, 'session-progressive')
+      assert.deepEqual(children, [{
+        id: 'child-1',
+        parentSessionId: 'session-progressive',
+        title: 'Analyst',
+        agent: null,
+        status: 'queued',
+        startedAt: '1970-01-01T00:16:40.000Z',
+        finishedAt: null,
+      }])
     },
     buildSessionUsageSummary: () => ({
       messages: 0,
@@ -705,9 +746,14 @@ test('createSessionHistoryService can hydrate root history before child transcri
       activateSession: () => {},
       setSessionFromHistory: () => {
         calls.setHistory += 1
+        syncOrder.push('setHistory')
       },
-      setPendingQuestions: () => {},
-      setPendingApprovals: () => {},
+      setPendingQuestions: (_sessionId, questions) => {
+        writtenQuestions = questions
+      },
+      setPendingApprovals: (_sessionId, approvals) => {
+        writtenApprovals = approvals
+      },
       getSessionView: () => view,
     },
   })
@@ -718,10 +764,14 @@ test('createSessionHistoryService can hydrate root history before child transcri
   })
 
   assert.equal(result, view)
-  assert.equal(calls.children, 0)
+  assert.equal(calls.children, 2)
   assert.equal(calls.childSnapshot, 0)
   assert.equal(calls.diff, 0)
+  assert.equal(calls.seedLineage, 1)
   assert.equal(calls.setHistory, 1)
+  assert.deepEqual(syncOrder, ['seedLineage', 'setHistory'])
+  assert.equal(writtenQuestions[0]?.sourceSessionId, 'child-1')
+  assert.equal(writtenApprovals[0]?.taskRunId, 'child:child-1')
   assert.equal(service.isSessionPartiallyHydrated('session-progressive'), true)
   assert.deepEqual(updates[0], {
     summary: {
@@ -740,6 +790,142 @@ test('createSessionHistoryService can hydrate root history before child transcri
       },
     },
   })
+})
+
+test('createSessionHistoryService preserves existing child pending state when child graph refresh fails', async () => {
+  const existingQuestion: SessionView['pendingQuestions'][number] = {
+    id: 'question-child-existing',
+    sessionId: 'session-incomplete-graph',
+    sourceSessionId: 'child-missing',
+    questions: [{
+      header: 'Existing child question',
+      question: 'Still waiting?',
+      options: [{ label: 'Keep waiting', description: 'Preserve child prompt' }],
+    }],
+  }
+  const existingApproval: SessionView['pendingApprovals'][number] = {
+    id: 'approval-child-existing',
+    sessionId: 'session-incomplete-graph',
+    taskRunId: 'child:child-missing',
+    tool: 'bash',
+    input: { command: 'pnpm test' },
+    description: 'Sub-Agent: bash',
+    order: 7,
+  }
+  const view: SessionView = {
+    ...createEmptySessionView(),
+    pendingQuestions: [existingQuestion],
+    pendingApprovals: [existingApproval],
+  }
+  let writtenQuestions: SessionView['pendingQuestions'] = []
+  let writtenApprovals: Array<Omit<SessionView['pendingApprovals'][number], 'order'>> = []
+  let childrenCalls = 0
+
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({ data: [] }),
+          todo: async () => ({ data: [] }),
+          children: async () => {
+            childrenCalls += 1
+            throw new Error('child graph unavailable')
+          },
+          diff: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+          get: async () => ({ data: null }),
+        },
+      },
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({
+      data: [{
+        id: 'question-root',
+        sessionID: 'session-incomplete-graph',
+        questions: [{
+          header: 'Root question',
+          question: 'Proceed?',
+          options: [{ label: 'Yes', description: 'Continue root work' }],
+        }],
+      }],
+    }),
+    listPendingPermissions: async () => ({
+      data: [{
+        id: 'approval-root',
+        sessionID: 'session-incomplete-graph',
+        permission: 'bash',
+        tool: 'bash',
+        metadata: { command: 'pwd' },
+      }],
+    }),
+    projectSessionHistory: async (input) => {
+      assert.deepEqual(input.children, [])
+      return []
+    },
+    getCachedModelId: () => '',
+    updateSessionRecord: () => null,
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {},
+      setPendingQuestions: (_sessionId, questions) => {
+        writtenQuestions = questions
+      },
+      setPendingApprovals: (_sessionId, approvals) => {
+        writtenApprovals = approvals
+      },
+      getSessionView: () => view,
+    },
+  })
+
+  await service.syncSessionView('session-incomplete-graph', {
+    activate: true,
+    progressive: true,
+  })
+
+  assert.equal(childrenCalls, 1)
+  assert.deepEqual(writtenQuestions.map((question) => question.id), [
+    'question-root',
+    'question-child-existing',
+  ])
+  assert.deepEqual(writtenApprovals.map((approval) => approval.id), [
+    'approval-root',
+    'approval-child-existing',
+  ])
+  assert.equal('order' in (writtenApprovals[1] || {}), false)
+  assert.equal(service.isSessionPartiallyHydrated('session-incomplete-graph'), true)
+
+  await service.syncSessionView('session-incomplete-graph', {
+    force: true,
+    activate: false,
+  })
+
+  assert.equal(childrenCalls, 2)
+  assert.deepEqual(writtenQuestions.map((question) => question.id), [
+    'question-root',
+    'question-child-existing',
+  ])
+  assert.deepEqual(writtenApprovals.map((approval) => approval.id), [
+    'approval-root',
+    'approval-child-existing',
+  ])
+  assert.equal(service.isSessionPartiallyHydrated('session-incomplete-graph'), true)
 })
 
 test('createSessionHistoryService keeps partial hydration retryable until a full sync succeeds', async () => {
@@ -815,7 +1001,7 @@ test('createSessionHistoryService keeps partial hydration retryable until a full
   })
   assert.equal(service.isSessionPartiallyHydrated('session-partial'), true)
   assert.equal(calls.setHistory, 1)
-  assert.equal(calls.children, 0)
+  assert.equal(calls.children, 2)
   assert.deepEqual(projectedChildren, [[]])
 
   await service.syncSessionView('session-partial', {
@@ -824,7 +1010,7 @@ test('createSessionHistoryService keeps partial hydration retryable until a full
   })
   assert.equal(service.isSessionPartiallyHydrated('session-partial'), true)
   assert.equal(calls.setHistory, 1)
-  assert.equal(calls.children, 0)
+  assert.equal(calls.children, 2)
   assert.deepEqual(projectedChildren, [[]])
 
   await service.syncSessionView('session-partial', {
@@ -833,7 +1019,7 @@ test('createSessionHistoryService keeps partial hydration retryable until a full
   })
   assert.equal(service.isSessionPartiallyHydrated('session-partial'), false)
   assert.equal(calls.setHistory, 2)
-  assert.equal(calls.children, 2)
+  assert.equal(calls.children, 4)
   assert.deepEqual(projectedChildren, [[], ['child-1']])
 })
 

@@ -354,7 +354,9 @@ test('managed opencode server env spills oversized config to a file (Linux E2BIG
   const fd = fs.openSync(real.OPENCODE_CONFIG!, 'r')
   try {
     const stat = fs.fstatSync(fd)
-    assert.equal(stat.mode & 0o777, 0o600)
+    if (process.platform !== 'win32') {
+      assert.equal(stat.mode & 0o777, 0o600)
+    }
     const parsed = JSON.parse(fs.readFileSync(fd, 'utf8'))
     assert.equal(parsed.instructions[0].length, 150_000)
   } finally {

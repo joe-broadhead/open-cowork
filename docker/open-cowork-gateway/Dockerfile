@@ -18,6 +18,10 @@ COPY THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @open-cowork/shared build
 RUN pnpm --filter @open-cowork/gateway build
+# Prune to the runtime tree: root manifests/config/license material plus the
+# Gateway app and runtime package package.json + dist pairs. No source trees,
+# tests, MCPs, desktop artifacts, or release scripts ship in the public image.
+RUN node scripts/prune-gateway-runtime.mjs /runtime
 
 FROM node:26-bookworm-slim@sha256:b16ca7b4dcfb20184e1c70f9ee30c6a75ed1da669cfafd6d2add4761b123d79f
 
@@ -25,18 +29,11 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-# .npmrc (public-hoist-pattern) must reach the runtime --prod install too.
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
-COPY --from=build /app/apps ./apps
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/mcps ./mcps
-COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/open-cowork.config.json /app/open-cowork.config.schema.json ./
-COPY --from=build /app/tsconfig.base.json ./
-# Carry the MIT license + curated third-party attribution into the redistributed
-# image, matching what the desktop app bundles (LIC-03).
-COPY --from=build /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
-COPY --from=build /app/THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
+# The pruned runtime tree carries the root manifests (.npmrc's public-hoist
+# patterns must reach the --prod install), the per-package package.json + dist
+# pairs, config + schema, and the MIT license + curated third-party attribution
+# set. Source, tests, MCPs, and release scripts stay behind in the build stage.
+COPY --from=build /runtime ./
 
 RUN pnpm install --frozen-lockfile --prod
 

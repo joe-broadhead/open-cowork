@@ -1,12 +1,12 @@
 import { writeFileAtomic } from '@open-cowork/shared/node'
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
-import { getAppDataDir, getBrandName } from './config-loader-core.js'
+import { getAppDataDir } from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
 import { getRuntimeHomeDir } from './runtime.js'
 import { isSandboxWorkspaceDir } from './runtime-paths.js'
-import { extractManagedSessionIdsFromLogContents, normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils.js'
+import { normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils.js'
 
 export interface SessionRecord {
   id: string
@@ -46,10 +46,6 @@ function getRegistryPath() {
   return join(getRegistryDir(), 'sessions.json')
 }
 
-function getLogDir() {
-  return join(getRegistryDir(), 'logs')
-}
-
 function normalizeOpencodeDirectory(directory: string) {
   return resolve(directory)
 }
@@ -80,27 +76,6 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
   }
 }
 
-function getManagedSessionIdsFromLogs() {
-  const logDir = getLogDir()
-  if (!existsSync(logDir)) return new Set<string>()
-
-  const files = readdirSync(logDir)
-    .filter((name) => /^open-cowork-\d{4}-\d{2}-\d{2}\.log$/.test(name) || /^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(name))
-    .sort()
-
-  const contents: string[] = []
-
-  for (const file of files) {
-    try {
-      contents.push(readFileSync(join(logDir, file), 'utf-8'))
-    } catch (err: unknown) {
-      log('session', `Failed to read log file ${file} during registry migration: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
-  return extractManagedSessionIdsFromLogContents(contents)
-}
-
 function loadRegistryMap() {
   if (registryCache) return registryCache
 
@@ -113,32 +88,15 @@ function loadRegistryMap() {
 
   try {
     const raw = JSON.parse(readFileSync(path, 'utf-8')) as StoredSessionRecord[]
-    const needsMigration = (raw || []).some((item) => item?.managedByCowork !== true)
-    const managedSessionIds = needsMigration ? getManagedSessionIdsFromLogs() : undefined
-    let droppedExternal = 0
-    let adoptedLegacy = 0
 
     for (const item of raw || []) {
       const record = normalizeStoredSessionRecord(
         item,
         normalizeOpencodeDirectory,
         toDisplayDirectory,
-        managedSessionIds,
       )
-      if (!record) {
-        if (item?.id) droppedExternal += 1
-        continue
-      }
-      if (item.managedByCowork !== true) adoptedLegacy += 1
+      if (!record) continue
       next.set(record.id, record)
-    }
-
-    if (needsMigration) {
-      log(
-        'session',
-        `Migrated session registry: kept ${next.size} ${getBrandName()} sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
-      )
-      writeRegistryMap(next)
     }
   } catch (err: unknown) {
     log('session', `Failed to load session registry: ${err instanceof Error ? err.message : String(err)}`)

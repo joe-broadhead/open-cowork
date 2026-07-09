@@ -12,7 +12,6 @@ import type {
   LaunchpadWaitingItem,
   SessionView,
 } from '@open-cowork/shared'
-import { cloudSessionViewToSessionView, type CloudSessionViewRecord } from '@open-cowork/shared'
 import { listLocalArtifactIndex } from '../artifact-index.js'
 import {
   listCoordinationBoard,
@@ -35,7 +34,7 @@ export type LaunchpadSessionSnapshot = {
   createdAt?: string | null
   updatedAt?: string | null
   runId?: string | null
-  view: SessionView | null
+  view: Pick<SessionView, 'pendingApprovals' | 'pendingQuestions'> | null
 }
 
 type LaunchpadSourceInput = {
@@ -385,11 +384,7 @@ async function sessionSnapshot(record: SessionRecord, deps: LaunchpadRuntimeDeps
   if (deps.isHydrated(record.id)) {
     view = deps.getSessionView(record.id)
   } else {
-    try {
-      view = await deps.syncSessionView(record.id, { activate: false })
-    } catch {
-      view = null
-    }
+    view = null
   }
   return {
     sessionId: record.id,
@@ -430,35 +425,4 @@ export async function listLocalLaunchpadFeed(request: LaunchpadFeedRequest = {})
     artifactTruncated: artifactIndex.truncated,
     generatedAt: deps.nowIso(),
   })
-}
-
-export async function cloudLaunchpadSessionSnapshots(input: {
-  sessions: Array<{ sessionId: string; title?: string | null; createdAt?: string | null; updatedAt?: string | null }>
-  getSessionView: (sessionId: string) => Promise<CloudSessionViewRecord>
-  limit?: number
-}): Promise<LaunchpadSessionSnapshot[]> {
-  const sessions = input.sessions.slice(0, input.limit || DEFAULT_SESSION_SCAN_LIMIT)
-  const snapshots = await Promise.all(sessions.map(async (session) => {
-    try {
-      const cloudView = await input.getSessionView(session.sessionId)
-      return {
-        sessionId: session.sessionId,
-        title: session.title || null,
-        createdAt: session.createdAt || null,
-        updatedAt: session.updatedAt || null,
-        runId: null,
-        view: cloudSessionViewToSessionView(cloudView),
-      }
-    } catch {
-      return {
-        sessionId: session.sessionId,
-        title: session.title || null,
-        createdAt: session.createdAt || null,
-        updatedAt: session.updatedAt || null,
-        runId: null,
-        view: null,
-      }
-    }
-  }))
-  return snapshots
 }

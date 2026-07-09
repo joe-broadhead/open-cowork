@@ -8,14 +8,15 @@ export type {
 import type {
   WorkflowDetail,
   WorkflowListPayload,
+  WorkflowListRequest,
   WorkflowRun,
   WorkflowTriggerType,
 } from '../contracts.js'
 import type { CloudDomainClientContext } from './shared.js'
-import { encodePath } from './shared.js'
+import { encodePath, queryString } from './shared.js'
 
 export type CloudWorkflowsClient = {
-  listWorkflows(): Promise<WorkflowListPayload>
+  listWorkflows(input?: WorkflowListRequest): Promise<WorkflowListPayload>
   getWorkflow(workflowId: string): Promise<WorkflowDetail | null>
   runWorkflow(workflowId: string, input?: { triggerType?: WorkflowTriggerType, triggerPayload?: Record<string, unknown> | null }): Promise<WorkflowRun | null>
   pauseWorkflow(workflowId: string): Promise<WorkflowDetail | null>
@@ -25,8 +26,11 @@ export type CloudWorkflowsClient = {
 
 export function createCloudWorkflowsClient({ request }: CloudDomainClientContext): CloudWorkflowsClient {
   return {
-    listWorkflows() {
-      return request<WorkflowListPayload>('/api/workflows')
+    listWorkflows(input = {}) {
+      return request<WorkflowListPayload>(`/api/workflows${queryString({
+        limit: input.limit,
+        cursor: input.cursor,
+      })}`)
     },
     async getWorkflow(workflowId) {
       return (await request<{ workflow: WorkflowDetail | null }>(`/api/workflows/${encodePath(workflowId)}`)).workflow

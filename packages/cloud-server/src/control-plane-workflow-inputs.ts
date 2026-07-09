@@ -45,6 +45,7 @@ export type CreateWorkflowRunInput = {
   userId: string
   workflowId: string
   runId: string
+  sessionId?: string | null
   triggerType: WorkflowTriggerType
   triggerPayload?: Record<string, unknown> | null
   claimedBy?: string | null
@@ -64,6 +65,7 @@ export type UpdateWorkflowStatusInput = {
 
 export type ClaimDueWorkflowRunInput = {
   runId: string
+  sessionId?: string | null
   claimedBy?: string | null
   leaseTtlMs?: number | null
   now?: Date

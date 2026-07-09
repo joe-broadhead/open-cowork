@@ -1,7 +1,6 @@
-import { nowIso, stableJson, workspaceOperationFromType } from '../postgres-store-id-helpers.ts'
-import { optionalTrimmedText, redactOperationalText } from '../postgres-store-normalizers.ts'
+import { nowIso, stableJson } from '../postgres-store-id-helpers.ts'
+import { redactOperationalText } from '../postgres-store-normalizers.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from '../control-plane-store.ts'
-import { workspaceEventCursorFromRow } from '../workspace-event-cursor.ts'
 import {
   commandFromRow,
   eventFromRow,
@@ -20,20 +19,25 @@ import {
   listPostgresRunnableSessions,
   type PostgresQuotaDomainDeps,
 } from './quotas.ts'
+import {
+  findPostgresWorkspaceEvent,
+  replayOrRejectPostgresWorkspaceEvent,
+} from './workspace-events.ts'
 import { encodeSsePgNotifyPayload } from '../sse-pg-notify.ts'
 import type {
-  AppendWorkspaceEventInput,
+  AppendProjectedSessionEventInput,
+  AppendProjectedSessionEventResult,
   AuditEventRecord,
   CommandQueueQuota,
   ControlPlaneSessionStatus,
   EnqueueCommandInput,
   ListSessionsPageInput,
   RecordAuditEventInput,
+  RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapedSessionLeaseRecord,
   SessionEventRecord,
   WorkerLeaseRecord,
-  WorkspaceEventCursorRecord,
   WorkspaceEventRecord,
 } from '../control-plane-store.ts'
 
@@ -348,6 +352,150 @@ export class PostgresSessionsRepository {
     return record
   }
 
+  async appendProjectedSessionEvent(input: AppendProjectedSessionEventInput): Promise<AppendProjectedSessionEventResult> {
+    const result = await this.options.withTransaction(async (client) => {
+      const sessionRow = await this.requireSession(input.tenantId, input.sessionId, client, true)
+      await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
+      const session = sessionFromRow(sessionRow)
+      const payload = input.payload || {}
+      let sessionEventCreated = false
+      let event: SessionEventRecord | null = null
+      if (input.eventId) {
+        const existing = await this.findEvent(input.tenantId, input.sessionId, input.eventId, client)
+        if (existing) event = this.replayOrRejectEvent(existing, input.type, payload)
+      }
+      if (!event) {
+        const createdAt = nowIso(input.createdAt)
+        const sequence = await this.incrementSessionCounter(
+          client,
+          input.tenantId,
+          input.sessionId,
+          'next_event_sequence',
+          createdAt,
+        )
+        const eventId = input.eventId || `${input.sessionId}:${sequence}`
+        const inserted = await client.query(
+          `INSERT INTO cloud_session_events (
+            tenant_id, session_id, event_id, sequence, type, payload, created_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+           RETURNING *`,
+          [input.tenantId, input.sessionId, eventId, sequence, input.type, JSON.stringify(payload), createdAt],
+        )
+        event = eventFromRow(inserted.rows[0]!)
+        sessionEventCreated = true
+      }
+
+      await this.options.requireTenantUser(input.tenantId, session.userId, client)
+      const workspace = input.workspace({ session, event })
+      const workspacePayload = payload
+      let workspaceEventCreated = false
+      let workspaceEvent: WorkspaceEventRecord
+      const existingWorkspaceEvent = await findPostgresWorkspaceEvent(client, input.tenantId, session.userId, workspace.eventId)
+      if (existingWorkspaceEvent) {
+        workspaceEvent = replayOrRejectPostgresWorkspaceEvent(existingWorkspaceEvent, input.type, workspacePayload, {
+          sessionId: input.sessionId,
+          entityType: workspace.entityType,
+          entityId: workspace.entityId,
+          operation: workspace.operation,
+          projectionVersion: workspace.projectionVersion,
+        })
+      } else {
+        await client.query(
+          `INSERT INTO cloud_workspace_event_counters (tenant_id, user_id, next_sequence)
+           VALUES ($1, $2, 0)
+           ON CONFLICT (tenant_id, user_id) DO NOTHING`,
+          [input.tenantId, session.userId],
+        )
+        const counter = await this.one(
+          `SELECT next_sequence
+           FROM cloud_workspace_event_counters
+           WHERE tenant_id = $1 AND user_id = $2
+           FOR UPDATE`,
+          [input.tenantId, session.userId],
+          client,
+        )
+        const sequence = numberValue(counter.next_sequence) + 1
+        await client.query(
+          `UPDATE cloud_workspace_event_counters
+           SET next_sequence = $3
+           WHERE tenant_id = $1 AND user_id = $2`,
+          [input.tenantId, session.userId, sequence],
+        )
+        const inserted = await client.query(
+          `INSERT INTO cloud_workspace_events (
+            tenant_id, user_id, event_id, sequence, session_id,
+            entity_type, entity_id, operation, projection_version,
+            type, payload, created_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+           RETURNING *`,
+          [
+            input.tenantId,
+            session.userId,
+            workspace.eventId,
+            sequence,
+            input.sessionId,
+            workspace.entityType,
+            workspace.entityId,
+            workspace.operation,
+            workspace.projectionVersion,
+            input.type,
+            JSON.stringify(workspacePayload),
+            nowIso(new Date(event.createdAt)),
+          ],
+        )
+        workspaceEvent = workspaceEventFromRow(inserted.rows[0]!)
+        workspaceEventCreated = true
+      }
+
+      const currentRow = await this.maybeOne(
+        `SELECT * FROM cloud_session_projections WHERE tenant_id = $1 AND session_id = $2`,
+        [input.tenantId, input.sessionId],
+        client,
+      )
+      const currentProjection = currentRow ? projectionFromRow(currentRow) : null
+      if ((currentProjection?.sequence || 0) >= event.sequence) {
+        return {
+          event,
+          workspaceEvent,
+          projection: currentProjection!,
+          session,
+          sessionEventCreated,
+          workspaceEventCreated,
+          projectionAdvanced: false,
+        }
+      }
+
+      const projected = input.project({ session, event, currentProjection })
+      const updatedAt = nowIso(projected.updatedAt ?? new Date(event.createdAt))
+      const projectionResult = await client.query(
+        `INSERT INTO cloud_session_projections (tenant_id, session_id, sequence, view, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5)
+         ON CONFLICT (tenant_id, session_id) DO UPDATE
+         SET sequence = EXCLUDED.sequence, view = EXCLUDED.view, updated_at = EXCLUDED.updated_at
+         RETURNING *`,
+        [input.tenantId, input.sessionId, event.sequence, JSON.stringify(projected.view), updatedAt],
+      )
+      await client.query(
+        `UPDATE cloud_sessions SET updated_at = $3 WHERE tenant_id = $1 AND session_id = $2`,
+        [input.tenantId, input.sessionId, updatedAt],
+      )
+      return {
+        event,
+        workspaceEvent,
+        projection: projectionFromRow(projectionResult.rows[0]!),
+        session,
+        sessionEventCreated,
+        workspaceEventCreated,
+        projectionAdvanced: true,
+      }
+    })
+    if (result.sessionEventCreated) this.options.emitSseNotify({ kind: 'session', tenantId: result.event.tenantId, sessionId: result.event.sessionId })
+    if (result.workspaceEventCreated) this.options.emitSseNotify({ kind: 'workspace', tenantId: result.workspaceEvent.tenantId, userId: result.workspaceEvent.userId })
+    return result
+  }
+
   async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
     await this.requireSession(tenantId, sessionId)
     return this.listSessionEventsForStream(tenantId, sessionId, afterSequence, limit)
@@ -371,119 +519,6 @@ export class PostgresSessionsRepository {
       [tenantId, sessionId],
     )
     return { count: Number(row.count), latestSequence: Number(row.latest) }
-  }
-
-  async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
-    const record = await this.options.withTransaction(async (client) => {
-      await this.options.requireTenantUser(input.tenantId, input.userId, client)
-      if (input.sessionId) {
-        const session = await this.requireSession(input.tenantId, input.sessionId, client, true)
-        if (String(session.user_id) !== input.userId) {
-          throw new Error(`Session ${input.sessionId} does not belong to user ${input.userId}.`)
-        }
-      }
-
-      const payload = input.payload || {}
-      const sessionId = input.sessionId || null
-      const entityType = optionalTrimmedText(input.entityType) || (sessionId ? 'session' : 'workspace')
-      const entityId = optionalTrimmedText(input.entityId) || sessionId || input.userId
-      const operation = optionalTrimmedText(input.operation) || workspaceOperationFromType(input.type)
-      await client.query(
-        `INSERT INTO cloud_workspace_event_counters (tenant_id, user_id, next_sequence)
-         VALUES ($1, $2, 0)
-         ON CONFLICT (tenant_id, user_id) DO NOTHING`,
-        [input.tenantId, input.userId],
-      )
-      const counter = await this.one(
-        `SELECT next_sequence
-         FROM cloud_workspace_event_counters
-         WHERE tenant_id = $1 AND user_id = $2
-         FOR UPDATE`,
-        [input.tenantId, input.userId],
-        client,
-      )
-      if (input.eventId) {
-        const existing = await this.findWorkspaceEvent(input.tenantId, input.userId, input.eventId, client)
-        if (existing) {
-          const projectionVersion = Number.isFinite(input.projectionVersion)
-            ? Math.max(0, Math.floor(input.projectionVersion || 0))
-            : existing.projectionVersion
-          return this.replayOrRejectWorkspaceEvent(existing, input.type, payload, {
-            sessionId,
-            entityType,
-            entityId,
-            operation,
-            projectionVersion,
-          })
-        }
-      }
-
-      const sequence = numberValue(counter.next_sequence) + 1
-      const eventId = input.eventId || `${input.userId}:${sequence}`
-      const projectionVersion = Number.isFinite(input.projectionVersion)
-        ? Math.max(0, Math.floor(input.projectionVersion || 0))
-        : sequence
-      await client.query(
-        `UPDATE cloud_workspace_event_counters
-         SET next_sequence = $3
-         WHERE tenant_id = $1 AND user_id = $2`,
-        [input.tenantId, input.userId, sequence],
-      )
-      const createdAt = nowIso(input.createdAt)
-      const inserted = await client.query(
-        `INSERT INTO cloud_workspace_events (
-          tenant_id, user_id, event_id, sequence, session_id,
-          entity_type, entity_id, operation, projection_version,
-          type, payload, created_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
-         RETURNING *`,
-        [
-          input.tenantId,
-          input.userId,
-          eventId,
-          sequence,
-          sessionId,
-          entityType,
-          entityId,
-          operation,
-          projectionVersion,
-          input.type,
-          JSON.stringify(payload),
-          createdAt,
-        ],
-      )
-      return workspaceEventFromRow(inserted.rows[0]!)
-    })
-    this.options.emitSseNotify({ kind: 'workspace', tenantId: record.tenantId, userId: record.userId })
-    return record
-  }
-
-  async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    await this.options.requireTenantUser(tenantId, userId)
-    return this.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
-  }
-
-  async listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    const bounded = Number.isInteger(limit) && (limit as number) > 0
-    const result = await this.options.pool.query(
-      `SELECT * FROM cloud_workspace_events
-       WHERE tenant_id = $1 AND user_id = $2 AND sequence > $3
-       ORDER BY sequence${bounded ? ' LIMIT $4' : ''}`,
-      bounded ? [tenantId, userId, afterSequence, limit] : [tenantId, userId, afterSequence],
-    )
-    return result.rows.map(workspaceEventFromRow)
-  }
-
-  async getWorkspaceEventCursor(tenantId: string, userId: string): Promise<WorkspaceEventCursorRecord> {
-    await this.options.requireTenantUser(tenantId, userId)
-    const result = await this.options.pool.query(
-      `SELECT min(sequence) AS earliest_sequence, max(sequence) AS latest_sequence
-       FROM cloud_workspace_events
-       WHERE tenant_id = $1 AND user_id = $2`,
-      [tenantId, userId],
-    )
-    return workspaceEventCursorFromRow(result.rows[0])
   }
 
   async writeSessionProjection(input: {
@@ -670,7 +705,6 @@ export class PostgresSessionsRepository {
   async reapExpiredSessionLeases(input: ReapExpiredSessionLeasesInput = {}): Promise<ReapedSessionLeaseRecord[]> {
     const now = input.now || new Date()
     const nowMs = now.getTime()
-    const nowIsoValue = now.toISOString()
     const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
     const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     return this.options.withTransaction(async (client) => {
@@ -686,107 +720,19 @@ export class PostgresSessionsRepository {
       const reaped: ReapedSessionLeaseRecord[] = []
       for (const row of expired.rows) {
         const lease = leaseFromRow(row)
-        const commands = await client.query(
-          `SELECT *
-           FROM cloud_session_commands
-           WHERE tenant_id = $1
-             AND session_id = $2
-             AND status = 'running'
-             AND claimed_lease_token = $3
-           ORDER BY created_sequence
-           FOR UPDATE`,
-          [lease.tenantId, lease.sessionId, lease.leaseToken],
-        )
-        const retriedCommandIds: string[] = []
-        const failedCommandIds: string[] = []
-        for (const commandRow of commands.rows) {
-          const command = commandFromRow(commandRow)
-          if (command.attemptCount >= maxAttempts) {
-            const summary = 'Worker lease expired after the maximum retry attempts.'
-            await client.query(
-              `UPDATE cloud_session_commands
-               SET status = 'failed',
-                   error = $2,
-                   last_error_code = 'lease_expired_max_attempts',
-                   last_error_summary = $2
-               WHERE command_id = $1`,
-              [command.commandId, summary],
-            )
-            failedCommandIds.push(command.commandId)
-          } else {
-            await client.query(
-              `UPDATE cloud_session_commands
-               SET status = 'pending',
-                   claimed_by = NULL,
-                   claimed_lease_token = NULL,
-                   available_at = $2,
-                   error = NULL,
-                   last_error_code = 'lease_expired',
-                   last_error_summary = 'Worker lease expired before command completion.'
-               WHERE command_id = $1`,
-              [command.commandId, nowIsoValue],
-            )
-            retriedCommandIds.push(command.commandId)
-          }
-        }
-        await client.query(
-          `DELETE FROM cloud_worker_leases
-           WHERE tenant_id = $1 AND session_id = $2 AND lease_token = $3`,
-          [lease.tenantId, lease.sessionId, lease.leaseToken],
-        )
-        const action: ReapedSessionLeaseRecord['action'] = failedCommandIds.length > 0 && retriedCommandIds.length === 0
-          ? 'failed'
-          : retriedCommandIds.length > 0
-            ? 'retried'
-            : 'released'
-        await client.query(
-          `UPDATE cloud_sessions
-           SET status = $3, updated_at = $4
-           WHERE tenant_id = $1 AND session_id = $2`,
-          [
-            lease.tenantId,
-            lease.sessionId,
-            action === 'failed' ? 'errored' : 'idle',
-            nowIsoValue,
-          ],
-        )
-        // lease.tenantId is unambiguously a tenant id, so resolve the org by the tenant
-        // relationship only. The prior `OR org_id = $1` could match a different org whose org_id
-        // coincided with this tenant id, mis-attributing the audit event (#924).
-        const org = await this.maybeOne(
-          `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 LIMIT 1`,
-          [lease.tenantId],
-          client,
-        )
-        if (org) {
-          await this.options.recordAuditEvent(client, {
-            orgId: String(org.org_id),
-            actorType: 'system',
-            actorId: 'managed-work-reaper',
-            eventType: 'managed_work.session_lease_reaped',
-            targetType: 'session',
-            targetId: lease.sessionId,
-            metadata: {
-              action,
-              leasedBy: lease.leasedBy,
-              retriedCommandIds,
-              failedCommandIds,
-            },
-            createdAt: now,
-          })
-        }
-        reaped.push({
-          tenantId: lease.tenantId,
-          sessionId: lease.sessionId,
-          leaseToken: lease.leaseToken,
-          leasedBy: lease.leasedBy,
-          action,
-          retriedCommandIds,
-          failedCommandIds,
-          reapedAt: nowIsoValue,
-        })
+        reaped.push(await this.recoverSessionLeaseWithClient(client, lease, now, maxAttempts))
       }
       return reaped
+    })
+  }
+
+  async recoverSessionLease(lease: WorkerLeaseRecord, input: RecoverSessionLeaseInput = {}): Promise<ReapedSessionLeaseRecord | null> {
+    const now = input.now || new Date()
+    const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
+    return this.options.withTransaction(async (client) => {
+      const current = await this.getLease(lease.tenantId, lease.sessionId, client, true)
+      if (!current || current.leaseToken !== lease.leaseToken) return null
+      return this.recoverSessionLeaseWithClient(client, current, now, maxAttempts)
     })
   }
 
@@ -916,6 +862,51 @@ export class PostgresSessionsRepository {
     })
   }
 
+  async checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now = new Date()) {
+    return this.options.withTransaction(async (client) => {
+      const current = await this.assertCurrentLease(lease, client)
+      const command = await this.requireCommand(commandId, client, true)
+      if (command.status === 'acked') {
+        return {
+          lease: current,
+          command,
+          checkpointAdvanced: false,
+          commandAcked: false,
+        }
+      }
+      if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
+        throw new Error(`Command ${commandId} is not owned by this worker.`)
+      }
+      if (lease.checkpointVersion !== current.checkpointVersion) {
+        throw new Error('Checkpoint version is stale.')
+      }
+      const leaseResult = await client.query(
+        `UPDATE cloud_worker_leases
+         SET checkpoint_version = checkpoint_version + 1
+         WHERE tenant_id = $1 AND session_id = $2
+         RETURNING *`,
+        [lease.tenantId, lease.sessionId],
+      )
+      const commandResult = await client.query(
+        `UPDATE cloud_session_commands
+         SET status = 'acked',
+             acked_at = $2,
+             error = NULL,
+             last_error_code = NULL,
+             last_error_summary = NULL
+         WHERE command_id = $1
+         RETURNING *`,
+        [commandId, now.toISOString()],
+      )
+      return {
+        lease: leaseFromRow(leaseResult.rows[0]!),
+        command: commandFromRow(commandResult.rows[0]!),
+        checkpointAdvanced: true,
+        commandAcked: true,
+      }
+    })
+  }
+
   async failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string) {
     return this.options.withTransaction(async (client) => {
       await this.assertCurrentLease(lease, client)
@@ -989,6 +980,114 @@ export class PostgresSessionsRepository {
     return current
   }
 
+  private async recoverSessionLeaseWithClient(
+    client: PgExecutor,
+    lease: WorkerLeaseRecord,
+    now: Date,
+    maxAttempts: number,
+  ): Promise<ReapedSessionLeaseRecord> {
+    const nowIsoValue = now.toISOString()
+    const commands = await client.query(
+      `SELECT *
+       FROM cloud_session_commands
+       WHERE tenant_id = $1
+         AND session_id = $2
+         AND status = 'running'
+         AND claimed_lease_token = $3
+       ORDER BY created_sequence
+       FOR UPDATE`,
+      [lease.tenantId, lease.sessionId, lease.leaseToken],
+    )
+    const retriedCommandIds: string[] = []
+    const failedCommandIds: string[] = []
+    for (const commandRow of commands.rows) {
+      const command = commandFromRow(commandRow)
+      if (command.attemptCount >= maxAttempts) {
+        const summary = 'Worker lease expired after the maximum retry attempts.'
+        await client.query(
+          `UPDATE cloud_session_commands
+           SET status = 'failed',
+               error = $2,
+               last_error_code = 'lease_expired_max_attempts',
+               last_error_summary = $2
+           WHERE command_id = $1`,
+          [command.commandId, summary],
+        )
+        failedCommandIds.push(command.commandId)
+      } else {
+        await client.query(
+          `UPDATE cloud_session_commands
+           SET status = 'pending',
+               claimed_by = NULL,
+               claimed_lease_token = NULL,
+               available_at = $2,
+               error = NULL,
+               last_error_code = 'lease_expired',
+               last_error_summary = 'Worker lease expired before command completion.'
+           WHERE command_id = $1`,
+          [command.commandId, nowIsoValue],
+        )
+        retriedCommandIds.push(command.commandId)
+      }
+    }
+    await client.query(
+      `DELETE FROM cloud_worker_leases
+       WHERE tenant_id = $1 AND session_id = $2 AND lease_token = $3`,
+      [lease.tenantId, lease.sessionId, lease.leaseToken],
+    )
+    const action: ReapedSessionLeaseRecord['action'] = failedCommandIds.length > 0 && retriedCommandIds.length === 0
+      ? 'failed'
+      : retriedCommandIds.length > 0
+        ? 'retried'
+        : 'released'
+    await client.query(
+      `UPDATE cloud_sessions
+       SET status = $3, updated_at = $4
+       WHERE tenant_id = $1 AND session_id = $2`,
+      [
+        lease.tenantId,
+        lease.sessionId,
+        action === 'failed' ? 'errored' : 'idle',
+        nowIsoValue,
+      ],
+    )
+    // lease.tenantId is unambiguously a tenant id, so resolve the org by the tenant
+    // relationship only. The prior `OR org_id = $1` could match a different org whose org_id
+    // coincided with this tenant id, mis-attributing the audit event (#924).
+    const org = await this.maybeOne(
+      `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 LIMIT 1`,
+      [lease.tenantId],
+      client,
+    )
+    if (org) {
+      await this.options.recordAuditEvent(client, {
+        orgId: String(org.org_id),
+        actorType: 'system',
+        actorId: 'managed-work-reaper',
+        eventType: 'managed_work.session_lease_reaped',
+        targetType: 'session',
+        targetId: lease.sessionId,
+        metadata: {
+          action,
+          leasedBy: lease.leasedBy,
+          retriedCommandIds,
+          failedCommandIds,
+        },
+        createdAt: now,
+      })
+    }
+    return {
+      tenantId: lease.tenantId,
+      sessionId: lease.sessionId,
+      leaseToken: lease.leaseToken,
+      leasedBy: lease.leasedBy,
+      action,
+      retriedCommandIds,
+      failedCommandIds,
+      reapedAt: nowIsoValue,
+    }
+  }
+
   async assertLeaseTokenIfPresent(
     tenantId: string,
     sessionId: string,
@@ -1032,21 +1131,6 @@ export class PostgresSessionsRepository {
     return row ? eventFromRow(row) : null
   }
 
-  private async findWorkspaceEvent(
-    tenantId: string,
-    userId: string,
-    eventId: string,
-    executor: PgExecutor,
-  ) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workspace_events
-       WHERE tenant_id = $1 AND user_id = $2 AND event_id = $3`,
-      [tenantId, userId, eventId],
-      executor,
-    )
-    return row ? workspaceEventFromRow(row) : null
-  }
-
   private replayOrRejectEvent(
     existing: SessionEventRecord,
     type: string,
@@ -1054,32 +1138,6 @@ export class PostgresSessionsRepository {
   ) {
     if (existing.type !== type || stableJson(existing.payload) !== stableJson(payload)) {
       throw new Error(`Event id ${existing.eventId} was reused with different content.`)
-    }
-    return existing
-  }
-
-  private replayOrRejectWorkspaceEvent(
-    existing: WorkspaceEventRecord,
-    type: string,
-    payload: Record<string, unknown>,
-    expected: {
-      sessionId: string | null
-      entityType: string
-      entityId: string
-      operation: string
-      projectionVersion: number
-    },
-  ) {
-    if (
-      existing.type !== type
-      || stableJson(existing.payload) !== stableJson(payload)
-      || existing.sessionId !== expected.sessionId
-      || existing.entityType !== expected.entityType
-      || existing.entityId !== expected.entityId
-      || existing.operation !== expected.operation
-      || existing.projectionVersion !== expected.projectionVersion
-    ) {
-      throw new Error(`Workspace event id ${existing.eventId} was reused with different content.`)
     }
     return existing
   }

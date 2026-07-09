@@ -4,7 +4,6 @@ import type {
   BrandingHomeConfig,
   LaunchpadFeedPayload,
   LaunchpadFreshArtifactItem,
-  SessionPromptOptions,
 } from '@open-cowork/shared'
 import { useSessionStore, type PrimaryAgentMode } from '../stores/session'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
@@ -16,6 +15,7 @@ import { summarizeMcpConnections } from '../helpers/mcp-status-summary'
 import { allowedPrimaryAgentModes, constrainedPrimaryAgentMode, PRIMARY_AGENT_MODES, primaryAgentLeadLabel } from '../helpers/primary-agent-mode'
 import { useMentionableAgents } from './chat/useChatInputRuntime'
 import type { Attachment } from './chat/chat-input-types'
+import type { HomePromptOptions } from './home/home-prompt-options'
 import {
   Card,
   EmptyState,
@@ -33,7 +33,7 @@ import { LaunchpadMotionGrid, MAX_MOTION_ITEMS } from './launchpad/LaunchpadMoti
 interface Props {
   brandName: string
   homeBranding?: BrandingHomeConfig
-  onStartThread: (text: string, attachments?: Attachment[], agent?: string, options?: SessionPromptOptions) => Promise<void>
+  onStartThread: (text: string, attachments?: Attachment[], agent?: string, options?: HomePromptOptions) => Promise<void>
   onOpenThread: (sessionId: string) => void | Promise<void>
   onNavigate: (target: AppNavigationTarget) => void
 }
@@ -469,7 +469,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
     launchpadRefreshNonce,
   ])
 
-  const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => {
+  const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: HomePromptOptions) => {
     if (submitting) return
     if (attachments.length > 0 && !workspaceSupport.flags.canAttachFiles) {
       useSessionStore.getState().addGlobalError(workspaceSupport.flags.reasons.attachFiles)

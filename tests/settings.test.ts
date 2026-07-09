@@ -108,7 +108,7 @@ async function importFreshSettingsModule(label: string) {
 }
 
 test('native permission ask defaults initialize fresh profiles with toggles enabled', async () => {
-  const tempRoot = testTempDir('opencowork-settings-ask-defaults-')
+  const tempRoot = testTempDir('open-cowork-settings-ask-defaults-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -143,7 +143,7 @@ test('native permission ask defaults initialize fresh profiles with toggles enab
 })
 
 test('default public config initializes native permission toggles enabled', async () => {
-  const tempRoot = testTempDir('opencowork-settings-public-defaults-')
+  const tempRoot = testTempDir('open-cowork-settings-public-defaults-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -182,7 +182,7 @@ test('default public config initializes native permission toggles enabled', asyn
 })
 
 test('saveSettings normalizes renderer updates before persistence', async () => {
-  const tempRoot = testTempDir('opencowork-settings-normalize-')
+  const tempRoot = testTempDir('open-cowork-settings-normalize-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -244,7 +244,7 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
 })
 
 test('saveSettings persists explicit native permission modes and clamps to downstream maximums', async () => {
-  const tempRoot = testTempDir('opencowork-settings-permission-modes-')
+  const tempRoot = testTempDir('open-cowork-settings-permission-modes-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -278,7 +278,7 @@ test('saveSettings persists explicit native permission modes and clamps to downs
 })
 
 test('saveSettings records an explicit persisted schema version', async () => {
-  const tempRoot = testTempDir('opencowork-settings-schema-version-')
+  const tempRoot = testTempDir('open-cowork-settings-schema-version-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -305,8 +305,45 @@ test('saveSettings records an explicit persisted schema version', async () => {
   }
 })
 
+test('window zoom defaults and persists within the accessible desktop range', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-window-zoom-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, saveSettings } = await importFreshSettingsModule('window-zoom')
+    assert.equal(loadSettings().windowZoomFactor, 1)
+
+    saveSettings({ windowZoomFactor: 1.234 })
+    assert.equal(loadSettings().windowZoomFactor, 1.23)
+
+    saveSettings({ windowZoomFactor: 12 })
+    assert.equal(loadSettings().windowZoomFactor, 1.5)
+
+    saveSettings({ windowZoomFactor: 0.1 })
+    assert.equal(loadSettings().windowZoomFactor, 0.8)
+
+    saveSettings({ windowZoomFactor: Number.NaN })
+    assert.equal(loadSettings().windowZoomFactor, 0.8)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('loadSettings rejects settings from a newer schema version', async () => {
-  const tempRoot = testTempDir('opencowork-settings-future-schema-')
+  const tempRoot = testTempDir('open-cowork-settings-future-schema-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -340,8 +377,8 @@ test('loadSettings rejects settings from a newer schema version', async () => {
   }
 })
 
-test('loadSettings migrates legacy encrypted development settings to plaintext', async () => {
-  const tempRoot = testTempDir('opencowork-settings-legacy-encrypted-dev-')
+test('loadSettings reads plaintext development settings without encrypted-storage migration', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-plaintext-dev-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -349,7 +386,7 @@ test('loadSettings migrates legacy encrypted development settings to plaintext',
 
   writeEmptyConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
-  const encryptedSettings = {
+  const plaintextSettings = {
     selectedProviderId: 'openrouter',
     selectedModelId: 'openrouter/auto',
     providerCredentials: {
@@ -358,13 +395,13 @@ test('loadSettings migrates legacy encrypted development settings to plaintext',
       },
     },
   }
-  writeFileSync(join(userDataDir, 'settings.enc'), `sealed:${JSON.stringify(encryptedSettings)}`)
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify(plaintextSettings))
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
 
   try {
-    const settingsModule = await importFreshSettingsModule('legacy-encrypted-dev-settings')
+    const settingsModule = await importFreshSettingsModule('plaintext-dev-settings')
     settingsModule.setSettingsSecretStorageForTests({
       mode: 'plaintext',
       encryptString: (value: string) => Buffer.from(`sealed:${value}`),
@@ -390,7 +427,7 @@ test('loadSettings migrates legacy encrypted development settings to plaintext',
 })
 
 test('credential reads return descriptor-aware masks while default effective settings can be masked', async () => {
-  const tempRoot = testTempDir('opencowork-settings-scoped-credentials-')
+  const tempRoot = testTempDir('open-cowork-settings-scoped-credentials-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -443,8 +480,8 @@ test('credential reads return descriptor-aware masks while default effective set
   }
 })
 
-test('legacy settings without native toggles inherit downstream ask defaults', async () => {
-  const tempRoot = testTempDir('opencowork-settings-legacy-ask-defaults-')
+test('stored settings without optional permission fields inherit downstream ask defaults', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-stored-ask-defaults-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -461,7 +498,7 @@ test('legacy settings without native toggles inherit downstream ask defaults', a
   clearConfigCaches()
 
   try {
-    const { loadSettings } = await importFreshSettingsModule('legacy-ask-defaults')
+    const { loadSettings } = await importFreshSettingsModule('stored-ask-defaults')
     const settings = loadSettings()
     assert.equal(settings.bashPermission, 'ask')
     assert.equal(settings.fileWritePermission, 'ask')
@@ -478,7 +515,7 @@ test('legacy settings without native toggles inherit downstream ask defaults', a
 })
 
 test('fresh settings initialize to the default provider local default model', async () => {
-  const tempRoot = testTempDir('opencowork-settings-provider-default-')
+  const tempRoot = testTempDir('open-cowork-settings-provider-default-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -509,7 +546,7 @@ test('fresh settings initialize to the default provider local default model', as
 })
 
 test('effective settings use a selected provider local default when the saved model belongs to another provider', async () => {
-  const tempRoot = testTempDir('opencowork-settings-provider-switch-default-')
+  const tempRoot = testTempDir('open-cowork-settings-provider-switch-default-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -542,7 +579,7 @@ test('effective settings use a selected provider local default when the saved mo
 })
 
 test('effective settings accept provider-prefixed model ids for configured provider catalogs', async () => {
-  const tempRoot = testTempDir('opencowork-settings-prefixed-provider-model-')
+  const tempRoot = testTempDir('open-cowork-settings-prefixed-provider-model-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -575,7 +612,7 @@ test('effective settings accept provider-prefixed model ids for configured provi
 })
 
 test('effective settings accept an explicit provider-prefixed small model', async () => {
-  const tempRoot = testTempDir('opencowork-settings-small-model-')
+  const tempRoot = testTempDir('open-cowork-settings-small-model-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -609,7 +646,7 @@ test('effective settings accept an explicit provider-prefixed small model', asyn
 })
 
 test('effective settings let small model explicitly follow the selected main model', async () => {
-  const tempRoot = testTempDir('opencowork-settings-small-model-main-')
+  const tempRoot = testTempDir('open-cowork-settings-small-model-main-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -643,7 +680,7 @@ test('effective settings let small model explicitly follow the selected main mod
 })
 
 test('effective settings fall back to the first provider model when the provider local default is unavailable', async () => {
-  const tempRoot = testTempDir('opencowork-settings-provider-default-missing-')
+  const tempRoot = testTempDir('open-cowork-settings-provider-default-missing-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
