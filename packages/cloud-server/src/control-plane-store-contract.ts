@@ -121,6 +121,7 @@ import type {
 } from './control-plane-workspace-records.ts'
 import type {
   ListRunnableSessionsInput,
+  RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
@@ -463,6 +464,7 @@ export type ControlPlaneStore = {
     } | null,
   ): MaybePromise<WorkerLeaseRecord | null>
   releaseSessionLease(lease: WorkerLeaseRecord, now?: Date): MaybePromise<boolean>
+  recoverSessionLease(lease: WorkerLeaseRecord, input?: RecoverSessionLeaseInput): MaybePromise<ReapedSessionLeaseRecord | null>
   renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
   checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
   reapExpiredSessionLeases(input?: ReapExpiredSessionLeasesInput): MaybePromise<ReapedSessionLeaseRecord[]>

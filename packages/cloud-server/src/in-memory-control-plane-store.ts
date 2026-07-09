@@ -162,6 +162,7 @@ import type {
 } from './control-plane-workspace-records.ts'
 import type {
   ListRunnableSessionsInput,
+  RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedSessionLeaseRecord,
@@ -1787,7 +1788,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   reapExpiredSessionLeases(input: ReapExpiredSessionLeasesInput = {}): ReapedSessionLeaseRecord[] {
     const now = input.now || new Date()
     const nowMs = now.getTime()
-    const nowIsoValue = now.toISOString()
     const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
     const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     const reaped: ReapedSessionLeaseRecord[] = []
@@ -1797,69 +1797,17 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .slice(0, limit)
     for (const session of candidates) {
       const lease = session.lease!
-      const runningCommands = session.commands.filter((command) => (
-        command.status === 'running'
-        && command.claimedLeaseToken === lease.leaseToken
-      ))
-      const retriedCommandIds: string[] = []
-      const failedCommandIds: string[] = []
-      for (const command of runningCommands) {
-        if (command.attemptCount >= maxAttempts) {
-          command.status = 'failed'
-          command.error = 'Worker lease expired after the maximum retry attempts.'
-          command.lastErrorCode = 'lease_expired_max_attempts'
-          command.lastErrorSummary = command.error
-          failedCommandIds.push(command.commandId)
-        } else {
-          command.status = 'pending'
-          command.claimedBy = null
-          command.claimedLeaseToken = null
-          command.availableAt = nowIsoValue
-          command.error = null
-          command.lastErrorCode = 'lease_expired'
-          command.lastErrorSummary = 'Worker lease expired before command completion.'
-          retriedCommandIds.push(command.commandId)
-        }
-      }
-      session.lease = null
-      session.record.status = failedCommandIds.length > 0 && retriedCommandIds.length === 0 ? 'errored' : 'idle'
-      session.record.updatedAt = nowIsoValue
-      const action: WorkReaperAction = failedCommandIds.length > 0 && retriedCommandIds.length === 0
-        ? 'failed'
-        : retriedCommandIds.length > 0
-          ? 'retried'
-          : 'released'
-      const record: ReapedSessionLeaseRecord = {
-        tenantId: lease.tenantId,
-        sessionId: lease.sessionId,
-        leaseToken: lease.leaseToken,
-        leasedBy: lease.leasedBy,
-        action,
-        retriedCommandIds,
-        failedCommandIds,
-        reapedAt: nowIsoValue,
-      }
-      const orgId = this.resolveOrgIdOrNull(lease.tenantId)
-      if (orgId) {
-        this.recordAuditEvent({
-          orgId,
-          actorType: 'system',
-          actorId: 'managed-work-reaper',
-          eventType: 'managed_work.session_lease_reaped',
-          targetType: 'session',
-          targetId: lease.sessionId,
-          metadata: {
-            action,
-            leasedBy: lease.leasedBy,
-            retriedCommandIds,
-            failedCommandIds,
-          },
-          createdAt: now,
-        })
-      }
-      reaped.push(record)
+      reaped.push(this.recoverSessionLeaseRecord(session, lease, now, maxAttempts))
     }
     return reaped
+  }
+
+  recoverSessionLease(lease: WorkerLeaseRecord, input: RecoverSessionLeaseInput = {}): ReapedSessionLeaseRecord | null {
+    const session = this.requireSession(lease.tenantId, lease.sessionId)
+    if (!session.lease || session.lease.leaseToken !== lease.leaseToken) return null
+    const now = input.now || new Date()
+    const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
+    return this.recoverSessionLeaseRecord(session, session.lease, now, maxAttempts)
   }
 
   assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): void {
@@ -2256,6 +2204,76 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private sessionHasCommands(tenantId: string, sessionId: string) {
     const session = this.sessions.get(key(tenantId, sessionId))
     return Boolean(session?.commands.length)
+  }
+
+  private recoverSessionLeaseRecord(
+    session: SessionState,
+    lease: WorkerLeaseRecord,
+    now: Date,
+    maxAttempts: number,
+  ): ReapedSessionLeaseRecord {
+    const nowIsoValue = now.toISOString()
+    const runningCommands = session.commands.filter((command) => (
+      command.status === 'running'
+      && command.claimedLeaseToken === lease.leaseToken
+    ))
+    const retriedCommandIds: string[] = []
+    const failedCommandIds: string[] = []
+    for (const command of runningCommands) {
+      if (command.attemptCount >= maxAttempts) {
+        command.status = 'failed'
+        command.error = 'Worker lease expired after the maximum retry attempts.'
+        command.lastErrorCode = 'lease_expired_max_attempts'
+        command.lastErrorSummary = command.error
+        failedCommandIds.push(command.commandId)
+      } else {
+        command.status = 'pending'
+        command.claimedBy = null
+        command.claimedLeaseToken = null
+        command.availableAt = nowIsoValue
+        command.error = null
+        command.lastErrorCode = 'lease_expired'
+        command.lastErrorSummary = 'Worker lease expired before command completion.'
+        retriedCommandIds.push(command.commandId)
+      }
+    }
+    session.lease = null
+    session.record.status = failedCommandIds.length > 0 && retriedCommandIds.length === 0 ? 'errored' : 'idle'
+    session.record.updatedAt = nowIsoValue
+    const action: WorkReaperAction = failedCommandIds.length > 0 && retriedCommandIds.length === 0
+      ? 'failed'
+      : retriedCommandIds.length > 0
+        ? 'retried'
+        : 'released'
+    const record: ReapedSessionLeaseRecord = {
+      tenantId: lease.tenantId,
+      sessionId: lease.sessionId,
+      leaseToken: lease.leaseToken,
+      leasedBy: lease.leasedBy,
+      action,
+      retriedCommandIds,
+      failedCommandIds,
+      reapedAt: nowIsoValue,
+    }
+    const orgId = this.resolveOrgIdOrNull(lease.tenantId)
+    if (orgId) {
+      this.recordAuditEvent({
+        orgId,
+        actorType: 'system',
+        actorId: 'managed-work-reaper',
+        eventType: 'managed_work.session_lease_reaped',
+        targetType: 'session',
+        targetId: lease.sessionId,
+        metadata: {
+          action,
+          leasedBy: lease.leasedBy,
+          retriedCommandIds,
+          failedCommandIds,
+        },
+        createdAt: now,
+      })
+    }
+    return record
   }
 
   // The raw tag-id link set for a session, for session-listing's tag filter —

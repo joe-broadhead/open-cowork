@@ -1164,7 +1164,7 @@ async function recordLoopError(
   })
 }
 
-type LoopStopper = () => Promise<void>
+type LoopStopper = () => Promise<boolean>
 
 async function waitForLoopDrain(
   loopName: 'worker' | 'scheduler',
@@ -1172,7 +1172,7 @@ async function waitForLoopDrain(
   graceMs: number,
   observability: CloudObservabilityAdapter | null,
 ) {
-  if (!current) return
+  if (!current) return true
   let timeout: ReturnType<typeof setTimeout> | null = null
   const timeoutMarker = Symbol('shutdown-timeout')
   const result = await Promise.race([
@@ -1189,7 +1189,9 @@ async function waitForLoopDrain(
       message: `Cloud ${loopName} loop did not finish before shutdown grace elapsed.`,
       attributes: { grace_ms: graceMs },
     })
+    return false
   }
+  return true
 }
 
 // Liveness heartbeat for the worker/scheduler loops. Beaten at the TOP of each timer
@@ -1268,7 +1270,7 @@ function startWorkerLoop(
   return async () => {
     stopping = true
     clearInterval(timer)
-    await waitForLoopDrain('worker', current, shutdownGraceMs, observability)
+    return waitForLoopDrain('worker', current, shutdownGraceMs, observability)
   }
 }
 
@@ -1304,7 +1306,7 @@ function startSchedulerLoop(
   return async () => {
     stopping = true
     clearInterval(timer)
-    await waitForLoopDrain('scheduler', current, shutdownGraceMs, observability)
+    return waitForLoopDrain('scheduler', current, shutdownGraceMs, observability)
   }
 }
 
@@ -1824,9 +1826,10 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     observability,
     url,
     async close() {
-      await Promise.all([
-        stopWorkerLoop?.(),
-        stopSchedulerLoop?.(),
+      worker?.beginShutdown()
+      const [workerLoopDrained] = await Promise.all([
+        stopWorkerLoop?.() ?? Promise.resolve(true),
+        stopSchedulerLoop?.() ?? Promise.resolve(true),
       ])
       await livenessServer?.close()
       runtimeUnsubscribe?.()
@@ -1835,6 +1838,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       // Stop waking before the server (which owns/closes the shared hub) shuts down.
       await ssePgNotifyListener?.close()
       await server?.close()
+      await worker?.completeShutdown({
+        drained: workerLoopDrained && worker.getActiveCommandCount() === 0,
+      })
       try {
         await observability?.close?.()
       } catch {

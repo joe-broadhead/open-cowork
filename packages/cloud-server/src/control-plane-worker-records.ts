@@ -20,6 +20,11 @@ export type ReapExpiredSessionLeasesInput = {
   limit?: number | null
 }
 
+export type RecoverSessionLeaseInput = {
+  now?: Date
+  maxCommandAttempts?: number | null
+}
+
 export type ReapedSessionLeaseRecord = {
   tenantId: string
   sessionId: string

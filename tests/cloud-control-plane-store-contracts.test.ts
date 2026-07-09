@@ -598,6 +598,46 @@ function runControlPlaneDomainContracts(
       assert.ok(Array.isArray(reaped))
       assert.equal(reaped.some((entry) => entry.sessionId === sessionId), true, 'expected the expired session lease reaped')
 
+      await store.enqueueSessionCommand({
+        commandId: `${prefix}-command-shutdown-recover`,
+        tenantId,
+        userId,
+        sessionId,
+        kind: 'prompt',
+        payload: { text: 'recover me', agent: 'build' },
+      })
+      const shutdownLease = await store.claimSessionLease(
+        tenantId,
+        sessionId,
+        `${prefix}-shutdown-worker`,
+        new Date('2030-01-01T00:02:00.000Z'),
+        30_000,
+      )
+      assert.ok(shutdownLease)
+      const shutdownClaim = await store.claimNextSessionCommand(shutdownLease, new Date('2030-01-01T00:02:00.000Z'))
+      assert.equal(shutdownClaim?.commandId, `${prefix}-command-shutdown-recover`)
+      assert.equal(shutdownClaim?.attemptCount, 1)
+      const recoveredLease = await store.recoverSessionLease(shutdownLease, {
+        now: new Date('2030-01-01T00:02:05.000Z'),
+      })
+      assert.equal(recoveredLease?.action, 'retried')
+      assert.deepEqual(recoveredLease?.retriedCommandIds, [`${prefix}-command-shutdown-recover`])
+      assert.equal(
+        await store.recoverSessionLease(shutdownLease, { now: new Date('2030-01-01T00:02:06.000Z') }),
+        null,
+      )
+      const replacementShutdownLease = await store.claimSessionLease(
+        tenantId,
+        sessionId,
+        `${prefix}-replacement-worker`,
+        new Date('2030-01-01T00:02:06.000Z'),
+        30_000,
+      )
+      assert.ok(replacementShutdownLease)
+      const replacementShutdownClaim = await store.claimNextSessionCommand(replacementShutdownLease, new Date('2030-01-01T00:02:06.000Z'))
+      assert.equal(replacementShutdownClaim?.commandId, `${prefix}-command-shutdown-recover`)
+      assert.equal(replacementShutdownClaim?.attemptCount, 2)
+
       // The provider-event claim is atomic: the first claim wins, a re-claim of the same event id is a
       // no-op duplicate (the prod cross-gateway dedup guarantee).
       const providerEventClaim = await store.claimChannelProviderEvent({

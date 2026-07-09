@@ -22,6 +22,7 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'getSessionProjection'
   | 'claimSessionLease'
   | 'releaseSessionLease'
+  | 'recoverSessionLease'
   | 'renewSessionLease'
   | 'checkpointSession'
   | 'reapExpiredSessionLeases'

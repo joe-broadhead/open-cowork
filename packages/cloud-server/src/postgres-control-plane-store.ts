@@ -93,6 +93,7 @@ import type {
   RecordByokSecretValidationInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
+  RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapedSessionLeaseRecord,
   ReapExpiredWorkflowClaimsInput,
@@ -1565,6 +1566,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async releaseSessionLease(lease: WorkerLeaseRecord, now = new Date()) {
     return this.sessions.releaseSessionLease(lease, now)
+  }
+
+  async recoverSessionLease(lease: WorkerLeaseRecord, input: RecoverSessionLeaseInput = {}) {
+    return this.sessions.recoverSessionLease(lease, input)
   }
 
   async renewSessionLease(lease: WorkerLeaseRecord, now = new Date(), ttlMs = 30_000) {
