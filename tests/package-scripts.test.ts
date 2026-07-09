@@ -139,12 +139,12 @@ test('dead-code gate covers every source workspace package', () => {
 })
 
 test('contributor setup docs and dependency update governance match enforced engines', () => {
-  assert.equal(nvmrc, '22.12.0')
+  assert.equal(nvmrc, '22.13.0')
   assert.equal(packageJson.packageManager, 'pnpm@10.32.1')
-  assert.equal(packageJson.engines?.node, '>=22.12')
+  assert.equal(packageJson.engines?.node, '>=22.13')
   assert.equal(packageJson.engines?.pnpm, '10.32.1')
   assert.match(npmrc, /^engine-strict=true$/m)
-  assert.match(contributingDocs, /Node `>=22\.12`/)
+  assert.match(contributingDocs, /Node `>=22\.13`/)
   assert.doesNotMatch(contributingDocs, /Node `>=22`[^.]/)
   for (const docs of [readmeDocs, contributingDocs, gettingStartedDocs, firstContributionDocs]) {
     assert.match(docs, /pnpm `10\.32\.1`/)

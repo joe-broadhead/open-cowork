@@ -112,7 +112,7 @@
     "clean": "pnpm -r exec rm -rf dist"
   },
   "engines": {
-    "node": ">=22.12",
+    "node": ">=22.13",
     "pnpm": "10.32.1",
     "npm": "0"
   },

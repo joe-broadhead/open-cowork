@@ -7,7 +7,7 @@ a small change. Five minutes end-to-end.
 
 You need:
 
-- Node `>= 22.12` (tracked in `.nvmrc`).
+- Node `>= 22.13` (tracked in `.nvmrc`).
 - pnpm `10.32.1` (install via Corepack).
 - macOS, Linux, or Windows.
 
@@ -21,7 +21,7 @@ entered through the in-app Settings panel.
 git clone https://github.com/joe-broadhead/open-cowork.git
 cd open-cowork
 node -v
-# Expected: v22.12.0 or newer
+# Expected: v22.13.0 or newer
 corepack enable
 corepack prepare pnpm@10.32.1 --activate
 pnpm -v

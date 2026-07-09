@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node `>=22.12`
+- Node `>=22.13`
 - pnpm `10.32.1` via Corepack
 - Python `>=3.11` for documentation work
 
@@ -33,7 +33,7 @@ Before installing dependencies, verify Node and install `pnpm` via Corepack:
 
 ```bash
 node -v
-# Expected: v22.12.0 or newer
+# Expected: v22.13.0 or newer
 
 corepack enable
 corepack prepare pnpm@10.32.1 --activate

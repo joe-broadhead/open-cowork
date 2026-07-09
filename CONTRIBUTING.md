@@ -24,7 +24,7 @@ Bad changes usually:
 ## Development setup
 
 Requirements:
-- Node `>=22.12`
+- Node `>=22.13`
 - pnpm `10.32.1` via Corepack
 - Python `>=3.11` for docs work
 
