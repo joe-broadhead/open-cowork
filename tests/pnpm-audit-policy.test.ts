@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   auditLevelFromArgs,
+  auditResultRequiresFailure,
   summarizeAuditReport,
 } from '../scripts/pnpm-audit.mjs'
 
@@ -44,4 +45,20 @@ test('pnpm audit argument parser supports separated and equals audit-level forms
   assert.equal(auditLevelFromArgs(['--prod', '--audit-level', 'moderate']), 'moderate')
   assert.equal(auditLevelFromArgs(['--audit-level=high']), 'high')
   assert.equal(auditLevelFromArgs([]), 'low')
+})
+
+test('pnpm audit subprocess failures fail closed without ignored advisory proof', () => {
+  assert.equal(auditResultRequiresFailure(1, { ignored: [], failures: [] }), true)
+  assert.equal(auditResultRequiresFailure(1, { ignored: [], failures: [{ advisory: { id: 1 }, ids: new Set() }] }), true)
+})
+
+test('pnpm audit subprocess failure may pass only when every threshold advisory is ignored', () => {
+  assert.equal(
+    auditResultRequiresFailure(1, {
+      ignored: [{ advisory: { id: 1 }, ids: new Set(['GHSA-AAAA-BBBB-CCCC']) }],
+      failures: [],
+    }),
+    false,
+  )
+  assert.equal(auditResultRequiresFailure(0, { ignored: [], failures: [] }), false)
 })
