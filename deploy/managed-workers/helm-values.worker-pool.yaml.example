@@ -124,3 +124,14 @@ ingress:
     - secretName: open-cowork-cloud-tls
       hosts:
         - cowork.example.com
+
+networkPolicy:
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx

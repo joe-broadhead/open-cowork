@@ -105,6 +105,19 @@ containerSecurityContext:
 networkPolicy:
   enabled: true
   ingress:
+    # Local/demo installs explicitly allow all sources to the gateway port so
+    # the chart remains usable in throwaway namespaces. Public Gateway exposure
+    # always ignores this and requires explicit ingress.from peers.
+    allowAllSourcesForLocalOnly: true
+    # Production/public overlays must select ingress-controller or private
+    # caller peers explicitly. Example:
+    # from:
+    #   - namespaceSelector:
+    #       matchLabels:
+    #         kubernetes.io/metadata.name: ingress-nginx
+    #     podSelector:
+    #       matchLabels:
+    #         app.kubernetes.io/name: ingress-nginx
     from: []
   egress:
     # Local defaults stay ingress-isolated but outbound-unrestricted for simple

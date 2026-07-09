@@ -70,3 +70,14 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
+
+networkPolicy:
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx

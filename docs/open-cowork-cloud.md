@@ -566,10 +566,32 @@ secret.
 Kubernetes public production deployments force NetworkPolicy egress isolation.
 For Cloud, `cloud.deploymentTier=public_production` renders an Egress policy
 even when `networkPolicy.egress.enabled=false`; for Gateway, public exposure
-does the same. An empty allowlist renders `egress: []`. Add one
-`networkPolicy.egress.allow[]` entry per approved dependency, with explicit
-`to` peers and `ports`, when the cluster needs outbound access to Cloud,
-object-store, identity, provider API, or telemetry endpoints.
+does the same. Public Cloud and public Gateway renders also fail when
+`networkPolicy.ingress.from` is empty, because Kubernetes treats an ingress rule
+without `from` as all sources. Production overlays should name the ingress
+controller or private caller explicitly:
+
+```yaml
+networkPolicy:
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+```
+
+For private/internal topologies, use the namespace and pod labels for the
+Gateway release, service mesh, or internal workload that is allowed to call the
+service. Cloud L7 controllers without in-cluster pods should use
+provider-approved `ipBlock` peers in a private overlay. An empty egress
+allowlist renders `egress: []`. Add one `networkPolicy.egress.allow[]` entry per
+approved dependency, with explicit `to` peers and `ports`, when the cluster
+needs outbound access to Cloud, object-store, identity, provider API, or
+telemetry endpoints.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and

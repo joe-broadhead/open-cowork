@@ -16,13 +16,21 @@ const gatewayOnlyComposeFiles = [
   'docker-compose.gateway-remote.yml',
 ]
 const testImageDigest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
-const publicHelmPrerequisites = [
+const publicHelmImagePrerequisites = [
   '--set',
   `image.digest=${testImageDigest}`,
 ]
 const typedEgressAllowlist = [
   '--set-json',
   'networkPolicy.egress.allow=[{"name":"approved-api","to":[{"ipBlock":{"cidr":"203.0.113.0/24"}}],"ports":[{"protocol":"TCP","port":443}]}]',
+]
+const typedIngressAllowlist = [
+  '--set-json',
+  'networkPolicy.ingress.from=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"ingress-nginx"}},"podSelector":{"matchLabels":{"app.kubernetes.io/name":"ingress-nginx"}}}]',
+]
+const publicHelmPrerequisites = [
+  ...publicHelmImagePrerequisites,
+  ...typedIngressAllowlist,
 ]
 
 function log(message) {
@@ -279,8 +287,13 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production with cloudSqlProxy.enabled=true requires cloudSqlProxy.image.digest')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires networkPolicy.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', '$egressEnabled := or $egress.enabled $publicProduction')
+  assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'cloud.deploymentTier=public_production requires networkPolicy.ingress.from[]')
+  assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'networkPolicy.ingress.from[%d] must select explicit sources')
+  assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'empty namespaceSelector allows all namespaces')
+  assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'allowAllSourcesForLocalOnly=false')
   assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'networkPolicy.egress.allow[%d].to is required')
   assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'networkPolicy.egress.allow[%d].ports is required')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'allowAllSourcesForLocalOnly: true')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'allow: []')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.worker.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.scheduler.enabled=true')
@@ -331,8 +344,13 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments require image.digest')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments require networkPolicy.enabled=true')
   assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', '$egressEnabled := or $egress.enabled $publicGateway')
+  assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', 'public Gateway deployments require networkPolicy.ingress.from[]')
+  assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', 'networkPolicy.ingress.from[%d] must select explicit sources')
+  assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', 'empty namespaceSelector allows all namespaces')
+  assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', 'allowAllSourcesForLocalOnly=false')
   assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', 'networkPolicy.egress.allow[%d].to is required')
   assertIncludes('helm/open-cowork-gateway/templates/networkpolicy.yaml', 'networkPolicy.egress.allow[%d].ports is required')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'allowAllSourcesForLocalOnly: true')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'allow: []')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'topologySpreadConstraints')
   assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
@@ -536,6 +554,61 @@ function validateHelm() {
       '--set',
       'cloudSqlProxy.runConnectionTest=true',
     ])
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'public-cloud-empty-ingress-allowlist',
+        cloudChart,
+        ...publicHelmImagePrerequisites,
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.publicUrl=https://cloud.example.com',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.scheduler.enabled=true',
+        '--set',
+        'cloud.existingSecret=open-cowork-cloud-secrets',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production requires networkPolicy.ingress.from[]'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'strict-local-cloud-empty-ingress-allowlist',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.auth.mode=oidc',
+        '--set',
+        'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
+        '--set',
+        'cloud.auth.oidcClientId=open-cowork-cloud-ci',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'cloud.secretKey=ci-secret-key',
+        '--set',
+        'cloud.cookieSecret=ci-cookie-secret',
+        '--set',
+        'networkPolicy.ingress.allowAllSourcesForLocalOnly=false',
+      ],
+      'networkPolicy.ingress.from[] is required when networkPolicy.ingress.allowAllSourcesForLocalOnly=false'
+    )
     const publicCloudDenyEgressRender = runCapture('helm', [
       'template',
       'public-cloud-deny-egress',
@@ -564,6 +637,8 @@ function validateHelm() {
     ])
     assertRenderedIncludes('public Cloud default egress policy', publicCloudDenyEgressRender, 'policyTypes:\n    - Ingress\n    - Egress')
     assertRenderedIncludes('public Cloud default egress policy', publicCloudDenyEgressRender, 'egress: []')
+    assertRenderedIncludes('public Cloud ingress allowlist', publicCloudDenyEgressRender, 'kubernetes.io/metadata.name: ingress-nginx')
+    assertRenderedIncludes('public Cloud ingress allowlist', publicCloudDenyEgressRender, 'app.kubernetes.io/name: ingress-nginx')
     const publicCloudAllowedEgressRender = runCapture('helm', [
       'template',
       'public-cloud-allowed-egress',
@@ -1021,6 +1096,41 @@ function validateHelm() {
       '--set',
       'gateway.configPath=/etc/open-cowork/open-cowork.config.json',
     ])
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'public-gateway-empty-ingress-allowlist',
+        gatewayChart,
+        ...publicHelmImagePrerequisites,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.publicUrl=https://gateway.example.com',
+        '--set',
+        'gateway.existingSecret=open-cowork-gateway-secrets',
+      ],
+      'public Gateway deployments require networkPolicy.ingress.from[]'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'strict-local-gateway-empty-ingress-allowlist',
+        gatewayChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'networkPolicy.ingress.allowAllSourcesForLocalOnly=false',
+      ],
+      'networkPolicy.ingress.from[] is required when networkPolicy.ingress.allowAllSourcesForLocalOnly=false'
+    )
     const publicGatewayDenyEgressRender = runCapture('helm', [
       'template',
       'public-gateway-deny-egress',
@@ -1035,6 +1145,8 @@ function validateHelm() {
     ])
     assertRenderedIncludes('public Gateway default egress policy', publicGatewayDenyEgressRender, 'policyTypes:\n    - Ingress\n    - Egress')
     assertRenderedIncludes('public Gateway default egress policy', publicGatewayDenyEgressRender, 'egress: []')
+    assertRenderedIncludes('public Gateway ingress allowlist', publicGatewayDenyEgressRender, 'kubernetes.io/metadata.name: ingress-nginx')
+    assertRenderedIncludes('public Gateway ingress allowlist', publicGatewayDenyEgressRender, 'app.kubernetes.io/name: ingress-nginx')
     const publicGatewayAllowedEgressRender = runCapture('helm', [
       'template',
       'public-gateway-allowed-egress',

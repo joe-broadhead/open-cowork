@@ -178,6 +178,17 @@ ingress:
 
 networkPolicy:
   enabled: true
+  ingress:
+    allowAllSourcesForLocalOnly: false
+    from:
+      # Replace with the labels for the ingress controller or provider-approved
+      # source peers used by your GKE ingress class.
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
   egress:
     allow:
       - name: google-apis
