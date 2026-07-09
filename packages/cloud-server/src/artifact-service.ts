@@ -507,6 +507,7 @@ export class CloudArtifactService {
       statusUpdatedAt: fields.statusUpdatedAt,
     }
     await this.sessionService.appendProductEvent(principal, sessionId, {
+      eventId: `${sessionId}:artifact.created:${fields.artifactId}`,
       type: 'artifact.created',
       payload: record,
     })

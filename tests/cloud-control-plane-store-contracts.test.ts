@@ -245,6 +245,102 @@ function runControlPlaneDomainContracts(
       // Aggregate stats (used by projection-status) match the event log without loading it.
       assert.deepEqual(await store.getSessionEventStats(tenantId, sessionId), { count: 3, latestSequence: 3 })
 
+      const projectedWorkspace = (projectedEvent: { eventId: string, sequence: number }) => ({
+        eventId: projectedEvent.eventId.startsWith(`${sessionId}:`) ? projectedEvent.eventId : `${sessionId}:${projectedEvent.eventId}`,
+        entityType: 'session',
+        entityId: sessionId,
+        operation: 'update',
+        projectionVersion: projectedEvent.sequence,
+      })
+      const projectedView = (projectedEvent: { sequence: number }) => ({
+        messages: [],
+        taskRuns: [],
+        pendingQuestions: [],
+        pendingPermissions: [],
+        artifacts: [],
+        todos: [],
+        errors: [],
+        status: 'idle',
+        usage: { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, costUsd: 0 },
+        projectedSequence: projectedEvent.sequence,
+      })
+      const appendProjected = (eventId: string, project = ({ event: projectedEvent }: { event: { sequence: number } }) => ({
+        view: projectedView(projectedEvent),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      })) => store.appendProjectedSessionEvent({
+        tenantId,
+        sessionId,
+        eventId,
+        type: 'assistant.message',
+        payload: { messageId: eventId, content: `content ${eventId}` },
+        workspace: ({ event: projectedEvent }) => projectedWorkspace(projectedEvent),
+        project,
+      })
+      const fullProjected = await appendProjected(`${prefix}-projected-full`)
+      assert.equal(fullProjected.sessionEventCreated, true)
+      assert.equal(fullProjected.workspaceEventCreated, true)
+      assert.equal(fullProjected.projectionAdvanced, true)
+      const fullReplay = await appendProjected(`${prefix}-projected-full`, () => {
+        throw new Error('project should not run when the event is already projected')
+      })
+      assert.equal(fullReplay.sessionEventCreated, false)
+      assert.equal(fullReplay.workspaceEventCreated, false)
+      assert.equal(fullReplay.projectionAdvanced, false)
+      assert.equal(fullReplay.projection.sequence, fullProjected.projection.sequence)
+
+      const sessionOnly = await store.appendSessionEvent({
+        tenantId,
+        sessionId,
+        eventId: `${prefix}-projected-session-only`,
+        type: 'assistant.message',
+        payload: { messageId: `${prefix}-projected-session-only`, content: `content ${prefix}-projected-session-only` },
+      })
+      const repairedSessionOnly = await appendProjected(sessionOnly.eventId)
+      assert.equal(repairedSessionOnly.sessionEventCreated, false)
+      assert.equal(repairedSessionOnly.workspaceEventCreated, true)
+      assert.equal(repairedSessionOnly.projectionAdvanced, true)
+
+      const sessionWorkspaceOnly = await store.appendSessionEvent({
+        tenantId,
+        sessionId,
+        eventId: `${prefix}-projected-session-workspace`,
+        type: 'assistant.message',
+        payload: { messageId: `${prefix}-projected-session-workspace`, content: `content ${prefix}-projected-session-workspace` },
+      })
+      await store.appendWorkspaceEvent({
+        tenantId,
+        userId,
+        sessionId,
+        ...projectedWorkspace(sessionWorkspaceOnly),
+        type: sessionWorkspaceOnly.type,
+        payload: sessionWorkspaceOnly.payload,
+        createdAt: new Date(sessionWorkspaceOnly.createdAt),
+      })
+      const repairedSessionWorkspace = await appendProjected(sessionWorkspaceOnly.eventId)
+      assert.equal(repairedSessionWorkspace.sessionEventCreated, false)
+      assert.equal(repairedSessionWorkspace.workspaceEventCreated, false)
+      assert.equal(repairedSessionWorkspace.projectionAdvanced, true)
+
+      const sessionProjectionOnly = await store.appendSessionEvent({
+        tenantId,
+        sessionId,
+        eventId: `${prefix}-projected-session-projection`,
+        type: 'assistant.message',
+        payload: { messageId: `${prefix}-projected-session-projection`, content: `content ${prefix}-projected-session-projection` },
+      })
+      await store.writeSessionProjection({
+        tenantId,
+        sessionId,
+        sequence: sessionProjectionOnly.sequence,
+        view: projectedView(sessionProjectionOnly),
+      })
+      const repairedSessionProjection = await appendProjected(sessionProjectionOnly.eventId, () => {
+        throw new Error('project should not run when projection is already current')
+      })
+      assert.equal(repairedSessionProjection.sessionEventCreated, false)
+      assert.equal(repairedSessionProjection.workspaceEventCreated, true)
+      assert.equal(repairedSessionProjection.projectionAdvanced, false)
+
       const command = await store.enqueueSessionCommand({
         commandId: `${prefix}-command`,
         tenantId,

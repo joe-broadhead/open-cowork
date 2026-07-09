@@ -22,6 +22,8 @@ import {
 } from './quotas.ts'
 import { encodeSsePgNotifyPayload } from '../sse-pg-notify.ts'
 import type {
+  AppendProjectedSessionEventInput,
+  AppendProjectedSessionEventResult,
   AppendWorkspaceEventInput,
   AuditEventRecord,
   CommandQueueQuota,
@@ -346,6 +348,150 @@ export class PostgresSessionsRepository {
     })
     this.options.emitSseNotify({ kind: 'session', tenantId: record.tenantId, sessionId: record.sessionId })
     return record
+  }
+
+  async appendProjectedSessionEvent(input: AppendProjectedSessionEventInput): Promise<AppendProjectedSessionEventResult> {
+    const result = await this.options.withTransaction(async (client) => {
+      const sessionRow = await this.requireSession(input.tenantId, input.sessionId, client, true)
+      await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
+      const session = sessionFromRow(sessionRow)
+      const payload = input.payload || {}
+      let sessionEventCreated = false
+      let event: SessionEventRecord | null = null
+      if (input.eventId) {
+        const existing = await this.findEvent(input.tenantId, input.sessionId, input.eventId, client)
+        if (existing) event = this.replayOrRejectEvent(existing, input.type, payload)
+      }
+      if (!event) {
+        const createdAt = nowIso(input.createdAt)
+        const sequence = await this.incrementSessionCounter(
+          client,
+          input.tenantId,
+          input.sessionId,
+          'next_event_sequence',
+          createdAt,
+        )
+        const eventId = input.eventId || `${input.sessionId}:${sequence}`
+        const inserted = await client.query(
+          `INSERT INTO cloud_session_events (
+            tenant_id, session_id, event_id, sequence, type, payload, created_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+           RETURNING *`,
+          [input.tenantId, input.sessionId, eventId, sequence, input.type, JSON.stringify(payload), createdAt],
+        )
+        event = eventFromRow(inserted.rows[0]!)
+        sessionEventCreated = true
+      }
+
+      await this.options.requireTenantUser(input.tenantId, session.userId, client)
+      const workspace = input.workspace({ session, event })
+      const workspacePayload = payload
+      let workspaceEventCreated = false
+      let workspaceEvent: WorkspaceEventRecord
+      const existingWorkspaceEvent = await this.findWorkspaceEvent(input.tenantId, session.userId, workspace.eventId, client)
+      if (existingWorkspaceEvent) {
+        workspaceEvent = this.replayOrRejectWorkspaceEvent(existingWorkspaceEvent, input.type, workspacePayload, {
+          sessionId: input.sessionId,
+          entityType: workspace.entityType,
+          entityId: workspace.entityId,
+          operation: workspace.operation,
+          projectionVersion: workspace.projectionVersion,
+        })
+      } else {
+        await client.query(
+          `INSERT INTO cloud_workspace_event_counters (tenant_id, user_id, next_sequence)
+           VALUES ($1, $2, 0)
+           ON CONFLICT (tenant_id, user_id) DO NOTHING`,
+          [input.tenantId, session.userId],
+        )
+        const counter = await this.one(
+          `SELECT next_sequence
+           FROM cloud_workspace_event_counters
+           WHERE tenant_id = $1 AND user_id = $2
+           FOR UPDATE`,
+          [input.tenantId, session.userId],
+          client,
+        )
+        const sequence = numberValue(counter.next_sequence) + 1
+        await client.query(
+          `UPDATE cloud_workspace_event_counters
+           SET next_sequence = $3
+           WHERE tenant_id = $1 AND user_id = $2`,
+          [input.tenantId, session.userId, sequence],
+        )
+        const inserted = await client.query(
+          `INSERT INTO cloud_workspace_events (
+            tenant_id, user_id, event_id, sequence, session_id,
+            entity_type, entity_id, operation, projection_version,
+            type, payload, created_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+           RETURNING *`,
+          [
+            input.tenantId,
+            session.userId,
+            workspace.eventId,
+            sequence,
+            input.sessionId,
+            workspace.entityType,
+            workspace.entityId,
+            workspace.operation,
+            workspace.projectionVersion,
+            input.type,
+            JSON.stringify(workspacePayload),
+            nowIso(new Date(event.createdAt)),
+          ],
+        )
+        workspaceEvent = workspaceEventFromRow(inserted.rows[0]!)
+        workspaceEventCreated = true
+      }
+
+      const currentRow = await this.maybeOne(
+        `SELECT * FROM cloud_session_projections WHERE tenant_id = $1 AND session_id = $2`,
+        [input.tenantId, input.sessionId],
+        client,
+      )
+      const currentProjection = currentRow ? projectionFromRow(currentRow) : null
+      if ((currentProjection?.sequence || 0) >= event.sequence) {
+        return {
+          event,
+          workspaceEvent,
+          projection: currentProjection!,
+          session,
+          sessionEventCreated,
+          workspaceEventCreated,
+          projectionAdvanced: false,
+        }
+      }
+
+      const projected = input.project({ session, event, currentProjection })
+      const updatedAt = nowIso(projected.updatedAt ?? new Date(event.createdAt))
+      const projectionResult = await client.query(
+        `INSERT INTO cloud_session_projections (tenant_id, session_id, sequence, view, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5)
+         ON CONFLICT (tenant_id, session_id) DO UPDATE
+         SET sequence = EXCLUDED.sequence, view = EXCLUDED.view, updated_at = EXCLUDED.updated_at
+         RETURNING *`,
+        [input.tenantId, input.sessionId, event.sequence, JSON.stringify(projected.view), updatedAt],
+      )
+      await client.query(
+        `UPDATE cloud_sessions SET updated_at = $3 WHERE tenant_id = $1 AND session_id = $2`,
+        [input.tenantId, input.sessionId, updatedAt],
+      )
+      return {
+        event,
+        workspaceEvent,
+        projection: projectionFromRow(projectionResult.rows[0]!),
+        session,
+        sessionEventCreated,
+        workspaceEventCreated,
+        projectionAdvanced: true,
+      }
+    })
+    if (result.sessionEventCreated) this.options.emitSseNotify({ kind: 'session', tenantId: result.event.tenantId, sessionId: result.event.sessionId })
+    if (result.workspaceEventCreated) this.options.emitSseNotify({ kind: 'workspace', tenantId: result.workspaceEvent.tenantId, userId: result.workspaceEvent.userId })
+    return result
   }
 
   async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {

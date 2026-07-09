@@ -183,6 +183,8 @@ import type {
 } from './control-plane-usage-inputs.ts'
 import type {
   AppendEventInput,
+  AppendProjectedSessionEventInput,
+  AppendProjectedSessionEventResult,
   AppendWorkspaceEventInput,
   CommandQueueQuota,
   EnqueueCommandInput,
@@ -1297,6 +1299,74 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     session.events.push(event)
     session.record.updatedAt = event.createdAt
     return clone(event)
+  }
+
+  appendProjectedSessionEvent(input: AppendProjectedSessionEventInput): AppendProjectedSessionEventResult {
+    const sessionKey = key(input.tenantId, input.sessionId)
+    const session = this.requireSession(input.tenantId, input.sessionId)
+    const sessionBefore = clone(session)
+    const workspaceBefore = this.workspaceEventsDomain.snapshot()
+    try {
+      const eventExisted = Boolean(input.eventId && session.events.some((event) => event.eventId === input.eventId))
+      const event = this.appendSessionEvent(input)
+      const workspace = input.workspace({ session: clone(session.record), event })
+      const workspaceExisted = Boolean(this.workspaceEventsDomain.findWorkspaceEvent(
+        input.tenantId,
+        session.record.userId,
+        workspace.eventId,
+      ))
+      const workspaceEvent = this.appendWorkspaceEvent({
+        tenantId: input.tenantId,
+        userId: session.record.userId,
+        sessionId: input.sessionId,
+        eventId: workspace.eventId,
+        entityType: workspace.entityType,
+        entityId: workspace.entityId,
+        operation: workspace.operation,
+        projectionVersion: workspace.projectionVersion,
+        type: input.type,
+        payload: input.payload || {},
+        createdAt: new Date(event.createdAt),
+      })
+      const currentProjection = session.projection ? clone(session.projection) : null
+      if ((currentProjection?.sequence || 0) >= event.sequence) {
+        return {
+          event,
+          workspaceEvent,
+          projection: currentProjection!,
+          session: clone(session.record),
+          sessionEventCreated: !eventExisted,
+          workspaceEventCreated: !workspaceExisted,
+          projectionAdvanced: false,
+        }
+      }
+      const projected = input.project({
+        session: clone(session.record),
+        event,
+        currentProjection,
+      })
+      const projection = this.writeSessionProjection({
+        tenantId: input.tenantId,
+        sessionId: input.sessionId,
+        sequence: event.sequence,
+        view: projected.view,
+        leaseToken: input.leaseToken,
+        updatedAt: projected.updatedAt ?? new Date(event.createdAt),
+      })
+      return {
+        event,
+        workspaceEvent,
+        projection,
+        session: clone(session.record),
+        sessionEventCreated: !eventExisted,
+        workspaceEventCreated: !workspaceExisted,
+        projectionAdvanced: true,
+      }
+    } catch (error) {
+      this.sessions.set(sessionKey, sessionBefore)
+      this.workspaceEventsDomain.restore(workspaceBefore)
+      throw error
+    }
   }
 
   listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number): SessionEventRecord[] {

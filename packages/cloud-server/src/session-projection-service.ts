@@ -20,6 +20,7 @@ const PROJECTION_REBUILD_BATCH = 1000
 export type AppendProjectedEventInput = {
   tenantId: string
   sessionId: string
+  eventId?: string
   type: CloudProjectedSessionEventType
   payload?: Record<string, unknown>
   leaseToken?: string | null
@@ -37,6 +38,7 @@ export type RepairSessionProjectionInput = {
 export type RepairSessionProjectionResult = {
   repaired: boolean
   eventCount: number
+  workspaceEventCount: number
   latestEventSequence: number
   priorProjectionSequence: number
   projectionSequence: number
@@ -125,52 +127,48 @@ export class CloudSessionProjectionService {
     if (!isCloudProjectedSessionEventType(input.type)) {
       throw new Error(`Unsupported cloud projection event type: ${input.type}`)
     }
-    const event = await this.store.appendSessionEvent({
+    const cacheKey = `${input.tenantId}\0${input.sessionId}`
+    let projectedView: CloudSessionProjectionView | null = null
+    const result = await this.store.appendProjectedSessionEvent({
       tenantId: input.tenantId,
       sessionId: input.sessionId,
+      eventId: input.eventId,
       type: input.type,
       payload: input.payload || {},
       leaseToken: input.leaseToken,
       createdAt: input.createdAt,
+      workspace: ({ event }) => {
+        const workspaceEntity = workspaceEntityForProjectedEvent(input, event)
+        return {
+          eventId: event.eventId.startsWith(`${input.sessionId}:`)
+            ? event.eventId
+            : `${input.sessionId}:${event.eventId}`,
+          ...workspaceEntity,
+        }
+      },
+      project: ({ session, event, currentProjection }) => {
+        const cached = this.viewCache.get(cacheKey)
+        // Reuse the cached, already-normalized view when it matches the stored sequence (the common
+        // case: one worker folds a session's events in order). Otherwise re-normalize the stored view
+        // — cold cache, or another instance advanced the projection.
+        const currentView = cached && currentProjection && cached.sequence === currentProjection.sequence
+          ? cached.view
+          : normalizeCloudSessionProjectionView(currentProjection?.view, session)
+        projectedView = reduceCloudSessionProjectionEvent(session, currentView, event)
+        return {
+          view: projectedView,
+          updatedAt: new Date(event.createdAt),
+        }
+      },
     })
-    const session = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
-    if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
-    const workspaceEntity = workspaceEntityForProjectedEvent(input, event)
-    const workspaceEvent = await this.store.appendWorkspaceEvent({
-      tenantId: input.tenantId,
-      userId: session.userId,
-      sessionId: input.sessionId,
-      eventId: event.eventId.startsWith(`${input.sessionId}:`)
-        ? event.eventId
-        : `${input.sessionId}:${event.eventId}`,
-      ...workspaceEntity,
-      type: input.type,
-      payload: input.payload || {},
-      createdAt: new Date(event.createdAt),
-    })
-    const currentProjection = await this.store.getSessionProjection(input.tenantId, input.sessionId)
-    const cacheKey = `${input.tenantId}\0${input.sessionId}`
-    const cached = this.viewCache.get(cacheKey)
-    // Reuse the cached, already-normalized view when it matches the stored sequence (the common
-    // case: one worker folds a session's events in order). Otherwise re-normalize the stored view
-    // — cold cache, or another instance advanced the projection.
-    const currentView = cached && currentProjection && cached.sequence === currentProjection.sequence
-      ? cached.view
-      : normalizeCloudSessionProjectionView(currentProjection?.view, session)
-    const nextView = reduceCloudSessionProjectionEvent(session, currentView, event)
-    await this.store.writeSessionProjection({
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      sequence: event.sequence,
-      view: nextView,
-      leaseToken: input.leaseToken,
-      updatedAt: new Date(event.createdAt),
-    })
-    // Cache only after a durable write, so a rejected/out-of-order write can't poison the cache.
-    this.cacheView(cacheKey, event.sequence, nextView)
-    this.sessionEvents.publish(event)
-    this.workspaceEvents.publish(workspaceEvent)
-    return event
+    this.cacheView(
+      cacheKey,
+      result.projection.sequence,
+      projectedView || normalizeCloudSessionProjectionView(result.projection.view, result.session),
+    )
+    if (result.sessionEventCreated) this.sessionEvents.publish(result.event)
+    if (result.workspaceEventCreated) this.workspaceEvents.publish(result.workspaceEvent)
+    return result.event
   }
 
   async repairSessionProjection(input: RepairSessionProjectionInput): Promise<RepairSessionProjectionResult> {
@@ -189,6 +187,7 @@ export class CloudSessionProjectionService {
     let latestEventSequence = 0
     let latestCreatedAt: SessionEventRecord['createdAt'] | null = null
     let eventCount = 0
+    let workspaceEventCount = 0
     for (;;) {
       const batch = await this.store.listSessionEvents(input.tenantId, input.sessionId, afterSequence, PROJECTION_REBUILD_BATCH)
       if (batch.length === 0) break
@@ -197,6 +196,27 @@ export class CloudSessionProjectionService {
         latestEventSequence = event.sequence
         latestCreatedAt = event.createdAt
         if (!isCloudProjectedSessionEventType(event.type)) continue
+        const projectedEventInput = {
+          tenantId: input.tenantId,
+          sessionId: input.sessionId,
+          type: event.type,
+          payload: event.payload,
+          leaseToken: input.leaseToken,
+        }
+        const workspaceEntity = workspaceEntityForProjectedEvent(projectedEventInput, event)
+        await this.store.appendWorkspaceEvent({
+          tenantId: input.tenantId,
+          userId: session.userId,
+          sessionId: input.sessionId,
+          eventId: event.eventId.startsWith(`${input.sessionId}:`)
+            ? event.eventId
+            : `${input.sessionId}:${event.eventId}`,
+          ...workspaceEntity,
+          type: event.type,
+          payload: event.payload,
+          createdAt: new Date(event.createdAt),
+        })
+        workspaceEventCount += 1
         view = reduceCloudSessionProjectionEvent(session, view, event)
       }
       afterSequence = batch[batch.length - 1]!.sequence
@@ -207,6 +227,7 @@ export class CloudSessionProjectionService {
       return {
         repaired: false,
         eventCount: 0,
+        workspaceEventCount: 0,
         latestEventSequence: 0,
         priorProjectionSequence,
         projectionSequence: priorProjectionSequence,
@@ -226,6 +247,7 @@ export class CloudSessionProjectionService {
     return {
       repaired: projection.sequence > priorProjectionSequence,
       eventCount,
+      workspaceEventCount,
       latestEventSequence,
       priorProjectionSequence,
       projectionSequence: projection.sequence,

@@ -289,6 +289,7 @@ test('cloud session projection repair rebuilds durable view from ordered event l
     createdAt: new Date('2026-05-27T10:02:00.000Z'),
   })
   assert.equal(await store.getSessionProjection('tenant-1', 'repair-session'), null)
+  assert.deepEqual(await store.listWorkspaceEvents('tenant-1', 'user-1'), [])
   const statusBeforeRepair = await service.getSessionProjectionStatus(principal, 'repair-session')
   assert.equal(statusBeforeRepair.latestEventSequence, 2)
   assert.equal(statusBeforeRepair.projectionSequence, 0)
@@ -297,6 +298,7 @@ test('cloud session projection repair rebuilds durable view from ordered event l
   const repaired = await service.repairSessionProjection(principal, 'repair-session')
   assert.equal(repaired.repaired, true)
   assert.equal(repaired.eventCount, 2)
+  assert.equal(repaired.workspaceEventCount, 2)
   assert.equal(repaired.latestEventSequence, 2)
   assert.equal(repaired.projectionSequence, 2)
   assert.equal(repaired.lag, 0)
@@ -309,5 +311,11 @@ test('cloud session projection repair rebuilds durable view from ordered event l
 
   const secondPass = await service.repairSessionProjection(principal, 'repair-session')
   assert.equal(secondPass.repaired, false)
+  assert.equal(secondPass.workspaceEventCount, 2)
   assert.equal(secondPass.projectionSequence, 2)
+  const workspaceEvents = await store.listWorkspaceEvents('tenant-1', 'user-1')
+  assert.deepEqual(workspaceEvents.map((event) => event.eventId), [
+    'repair-session:1',
+    'repair-session:2',
+  ])
 })

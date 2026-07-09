@@ -29,6 +29,7 @@ import type {
   AppendWorkspaceEventInput,
   AuditEventRecord,
   AckChannelDeliveryInput,
+  AppendProjectedSessionEventInput,
   BindChannelSessionInput,
   ChannelProviderId,
   ClaimDueWorkflowRunInput,
@@ -1335,6 +1336,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     createdAt?: Date
   }) {
     return this.sessions.appendSessionEvent(input)
+  }
+
+  async appendProjectedSessionEvent(input: AppendProjectedSessionEventInput) {
+    return this.sessions.appendProjectedSessionEvent(input)
   }
 
   async listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {

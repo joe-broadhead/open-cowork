@@ -60,6 +60,7 @@ export class CloudUsageOperationsService {
     principal: CloudPrincipal,
     sessionId: string,
     input: {
+      eventId?: string
       type: CloudProjectedSessionEventType
       payload?: Record<string, unknown>
       createdAt?: Date
@@ -69,6 +70,7 @@ export class CloudUsageOperationsService {
     return this.appendProjectedEvent({
       tenantId: principal.tenantId,
       sessionId,
+      eventId: input.eventId,
       type: input.type,
       payload: input.payload || {},
       createdAt: input.createdAt,

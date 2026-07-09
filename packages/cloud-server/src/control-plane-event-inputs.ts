@@ -1,5 +1,11 @@
 import type { QuotaPolicyCode } from './control-plane-errors.ts'
 import type { ControlPlaneCommandKind } from './control-plane-enums.ts'
+import type {
+  SessionEventRecord,
+  SessionProjectionRecord,
+  SessionRecord,
+  WorkspaceEventRecord,
+} from './control-plane-session-records.ts'
 import type { ConsumeUsageQuotaInput } from './control-plane-usage-inputs.ts'
 
 // The control-plane's event-append / projection / command-enqueue input shapes
@@ -38,6 +44,37 @@ export type WriteProjectionInput = {
   view: Record<string, unknown>
   leaseToken?: string | null
   updatedAt?: Date
+}
+
+export type AppendProjectedSessionEventInput = AppendEventInput & {
+  workspace: (input: {
+    session: SessionRecord
+    event: SessionEventRecord
+  }) => {
+    eventId: string
+    entityType: string
+    entityId: string
+    operation: string
+    projectionVersion: number
+  }
+  project: (input: {
+    session: SessionRecord
+    event: SessionEventRecord
+    currentProjection: SessionProjectionRecord | null
+  }) => {
+    view: Record<string, unknown>
+    updatedAt?: Date
+  }
+}
+
+export type AppendProjectedSessionEventResult = {
+  event: SessionEventRecord
+  workspaceEvent: WorkspaceEventRecord
+  projection: SessionProjectionRecord
+  session: SessionRecord
+  sessionEventCreated: boolean
+  workspaceEventCreated: boolean
+  projectionAdvanced: boolean
 }
 
 export type CommandQueueQuota = {

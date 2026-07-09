@@ -142,6 +142,8 @@ import type {
 } from './control-plane-usage-inputs.ts'
 import type {
   AppendEventInput,
+  AppendProjectedSessionEventInput,
+  AppendProjectedSessionEventResult,
   AppendWorkspaceEventInput,
   CommandQueueQuota,
   EnqueueCommandInput,
@@ -382,6 +384,7 @@ export type ControlPlaneStore = {
     updatedAt?: Date
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
+  appendProjectedSessionEvent(input: AppendProjectedSessionEventInput): MaybePromise<AppendProjectedSessionEventResult>
   listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
   // SSE replay hot-path read. Identical scoped query/ordering to listSessionEvents but skips
   // the requireSession existence pre-check: the WHERE clause is already scoped by

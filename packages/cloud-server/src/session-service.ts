@@ -1510,6 +1510,7 @@ export class CloudSessionService {
     principal: CloudPrincipal,
     sessionId: string,
     input: {
+      eventId?: string
       type: CloudProjectedSessionEventType
       payload?: Record<string, unknown>
       createdAt?: Date
