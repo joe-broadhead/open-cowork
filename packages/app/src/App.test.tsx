@@ -21,7 +21,7 @@ import { installRendererTestCoworkApi } from './test/setup'
 import { App } from './App'
 import type { AppNavigationTarget } from './app-types'
 
-const mockLoadSessionMessages = vi.hoisted(() => vi.fn(async (_sessionId: string) => undefined))
+const mockLoadSessionMessages = vi.hoisted(() => vi.fn(async (_sessionId: string) => 'opened'))
 const mockUseOpenCodeEvents = vi.hoisted(() => vi.fn())
 const mockSetBrandName = vi.hoisted(() => vi.fn())
 const mockConfigureI18n = vi.hoisted(() => vi.fn())
@@ -491,13 +491,19 @@ function installMatchMedia(matchesInitial: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.history.replaceState(null, '', '/')
   Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: undefined,
+  })
+  Object.defineProperty(window, '__coworkBrowserRuntime', {
     configurable: true,
     value: undefined,
   })
   resetSessionStore()
   mockLoadSessionMessages.mockImplementation(async (sessionId: string) => {
     useSessionStore.getState().setCurrentSession(sessionId)
+    return 'opened'
   })
 })
 
@@ -842,6 +848,27 @@ describe('App', () => {
 
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
     expect(mockLoadSessionMessages).toHaveBeenCalledWith('existing-session')
+  })
+
+  it('returns stale browser chat deep links home when activation fails', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    mockLoadSessionMessages.mockResolvedValueOnce('failed')
+    installAppApi()
+
+    render(<App />)
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+
+    window.location.hash = '#/chat/stale-session'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('stale-session'))
+    expect(useSessionStore.getState().currentSessionId).toBeNull()
+    expect(screen.getByTestId('home-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-view')).not.toBeInTheDocument()
+    await waitFor(() => expect(window.location.hash).toBe('#/home'))
   })
 
   it('opens exact local session resource links without falling back across workspaces', async () => {

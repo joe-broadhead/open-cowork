@@ -211,11 +211,16 @@ export function App() {
   }, [addSession, navigateView, reportAppError, setCurrentSession])
 
   const openExistingThread = useCallback(async (sessionId: string, workspaceId?: string) => {
-    navigateView('chat')
-    if (workspaceId) {
-      await switchToSession(sessionId, { workspaceId })
-    } else {
-      await switchToSession(sessionId)
+    const result = workspaceId
+      ? await switchToSession(sessionId, { workspaceId })
+      : await switchToSession(sessionId)
+    if (result === 'opened') {
+      navigateView('chat')
+    } else if (result === 'failed') {
+      if (browserUrlRoutingEnabled()) {
+        window.history.replaceState(window.history.state, '', appHashFor('home'))
+      }
+      navigateView('home')
     }
   }, [navigateView])
 
