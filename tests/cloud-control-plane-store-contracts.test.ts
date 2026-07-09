@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 import {
   ControlPlaneQuotaExceededError,
@@ -33,7 +33,8 @@ runControlPlaneDomainContracts('postgres', async () => {
 // (no in-memory peer), so it gets its own pglite-backed contract. `nowMs` is a real
 // epoch-ms (> int32) to guard the bigint blocked-until regression.
 test('pglite webhook security store enforces fail-closed rate limit / auth backoff / replay claims', async () => {
-  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool: createPglitePool() })
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
   try {
     const prefix = `webhook-${randomUUID()}`
     const nowMs = 1_781_000_000_000
@@ -53,6 +54,49 @@ test('pglite webhook security store enforces fail-closed rate limit / auth backo
     const reclaim = await store.claimSignature({ key: `${prefix}-sig`, nowMs, windowMs: 60_000, cacheLimit: 100 })
     assert.ok(reclaim)
     await reclaim?.accept()
+
+    const rawSignatureReplayKey = `${prefix}:2026-01-01T00:00:00.000Z:sha256=${'a'.repeat(64)}`
+    const signatureClaim = await store.claimSignature({
+      key: rawSignatureReplayKey,
+      nowMs,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    })
+    assert.ok(signatureClaim)
+    await signatureClaim.accept()
+    const persisted = await pool.query<{ replay_key: string }>(
+      `SELECT replay_key FROM cloud_webhook_replay_claims ORDER BY replay_key`,
+    )
+    const replayKeys = persisted.rows.map((row) => row.replay_key)
+    assert.equal(replayKeys.includes(rawSignatureReplayKey), false)
+    assert.equal(replayKeys.some((key) => key.includes('sha256=')), false)
+    assert.ok(replayKeys.includes(createHash('sha256').update(rawSignatureReplayKey).digest('hex')))
+    assert.equal(replayKeys.every((key) => /^[a-f0-9]{64}$/.test(key)), true)
+
+    const legacyRawReplayKey = `${prefix}:legacy:sha256=${'b'.repeat(64)}`
+    await pool.query(
+      `INSERT INTO cloud_webhook_replay_claims (replay_key, seen_at_ms, status)
+       VALUES ($1, $2, 'accepted')`,
+      [legacyRawReplayKey, nowMs],
+    )
+    assert.equal(await store.claimSignature({
+      key: legacyRawReplayKey,
+      nowMs: nowMs + 1,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    }), null)
+    const expiredLegacyClaim = await store.claimSignature({
+      key: legacyRawReplayKey,
+      nowMs: nowMs + 60_001,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    })
+    assert.ok(expiredLegacyClaim)
+    const legacyRows = await pool.query<{ replay_key: string }>(
+      `SELECT replay_key FROM cloud_webhook_replay_claims WHERE replay_key = $1`,
+      [legacyRawReplayKey],
+    )
+    assert.equal(legacyRows.rows.length, 0)
   } finally {
     await store.close?.()
   }
