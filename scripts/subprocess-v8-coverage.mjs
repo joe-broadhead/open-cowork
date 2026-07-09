@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readdirSync, readSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -50,13 +50,28 @@ export function mergeSubprocessV8Coverage({
 
   const lcovRecords = renderLcovRecords(fileLineHits)
   if (lcovRecords) {
-    const existing = existsSync(lcovPath) ? readFileSync(lcovPath, 'utf8').trimEnd() : ''
-    writeFileSync(lcovPath, `${existing}${existing ? '\n' : ''}${lcovRecords}\n`)
+    appendLcovRecords(lcovPath, lcovRecords)
   }
 
   let lines = 0
   for (const lineHits of fileLineHits.values()) lines += lineHits.size
   return { v8Files, files: fileLineHits.size, lines }
+}
+
+function appendLcovRecords(path, records) {
+  const fd = openSync(path, 'a+')
+  try {
+    const { size } = fstatSync(fd)
+    let separator = ''
+    if (size > 0) {
+      const lastByte = Buffer.alloc(1)
+      readSync(fd, lastByte, 0, 1, size - 1)
+      separator = lastByte[0] === 0x0a ? '' : '\n'
+    }
+    appendFileSync(fd, `${separator}${records}\n`)
+  } finally {
+    closeSync(fd)
+  }
 }
 
 function collectCoverageFiles(directory) {

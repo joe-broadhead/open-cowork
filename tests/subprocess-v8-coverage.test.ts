@@ -26,7 +26,14 @@ test('subprocess V8 coverage merge emits deterministic LCOV line records', () =>
     mkdirSync(coverageDir, { recursive: true })
     mkdirSync(join(root, 'dist'), { recursive: true })
     writeFileSync(sourcePath, source)
-    writeFileSync(lcovPath, '')
+    writeFileSync(lcovPath, [
+      'TN:node',
+      'SF:unrelated.js',
+      'DA:1,1',
+      'LF:1',
+      'LH:1',
+      'end_of_record',
+    ].join('\n'))
 
     const missedStart = source.indexOf('function missed')
     const missedEnd = source.lastIndexOf('covered()')
@@ -52,6 +59,10 @@ test('subprocess V8 coverage merge emits deterministic LCOV line records', () =>
     })
 
     assert.deepEqual(result, { v8Files: 1, files: 1, lines: 7 })
+    assert.match(
+      readText(lcovPath),
+      /end_of_record\nTN:subprocess-v8\nSF:\.open-cowork-test\/subprocess-v8-coverage\/dist\/example\.js/,
+    )
     const totals = parseLcovInfo(
       readText(lcovPath),
       { includePathPrefixes: ['.open-cowork-test/subprocess-v8-coverage/dist/'] },
