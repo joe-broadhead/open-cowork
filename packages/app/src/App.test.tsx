@@ -20,6 +20,7 @@ import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
 import { installRendererTestCoworkApi } from './test/setup'
 import { App } from './App'
 import type { AppNavigationTarget } from './app-types'
+import type { HomePromptOptions } from './components/home/home-prompt-options'
 
 const mockLoadSessionMessages = vi.hoisted(() => vi.fn(async (_sessionId: string) => 'opened'))
 const mockUseOpenCodeEvents = vi.hoisted(() => vi.fn())
@@ -143,7 +144,7 @@ vi.mock('./components/HomePage', () => ({
     onOpenThread,
   }: {
     brandName: string
-    onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>, agent?: string) => void
+    onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>, agent?: string, options?: HomePromptOptions) => void
     onOpenThread: (sessionId: string) => void
   }) => (
     <div data-testid="home-page">
@@ -153,6 +154,12 @@ vi.mock('./components/HomePage', () => ({
         onClick={() => onStartThread('Summarize this', [{ mime: 'text/plain', url: 'data:text/plain;base64,abc', filename: 'note.txt' }])}
       >
         Start from home
+      </button>
+      <button
+        type="button"
+        onClick={() => onStartThread('Analyze deeply', [], 'build', { modelId: 'anthropic/claude-sonnet-4', variant: 'xhigh' })}
+      >
+        Start from home with preferences
       </button>
       <button type="button" onClick={() => onOpenThread('existing-session')}>Open existing thread</button>
     </div>
@@ -706,6 +713,31 @@ describe('App', () => {
       },
     ], 'build')
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+  })
+
+  it('persists Home model and reasoning selections to the created session before prompting', async () => {
+    const user = userEvent.setup()
+    const { api } = installAppApi()
+
+    render(<App />)
+
+    await screen.findByTestId('home-page')
+    await user.click(screen.getByRole('button', { name: 'Start from home with preferences' }))
+
+    await waitFor(() => expect(api.session.setComposerPreferences).toHaveBeenCalledWith('new-session', {
+      modelId: 'anthropic/claude-sonnet-4',
+      reasoningVariant: 'xhigh',
+    }))
+    const createdSession = useSessionStore.getState().sessions.find((session) => session.id === 'new-session')
+    expect(createdSession?.composerModelId).toBe('anthropic/claude-sonnet-4')
+    expect(createdSession?.composerReasoningVariant).toBe('xhigh')
+    expect(api.session.prompt).toHaveBeenCalledWith(
+      'new-session',
+      'Analyze deeply',
+      undefined,
+      'build',
+      { variant: 'xhigh' },
+    )
   })
 
   it('surfaces recoverable Home prompt failures through the app error notice', async () => {

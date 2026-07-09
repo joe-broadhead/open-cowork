@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
-import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionComposerPreferences, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
@@ -62,12 +62,28 @@ import {
   resolveDesktopResourceNavigationAction,
   type ResourceNavigationAction,
 } from './resource-navigation'
+import {
+  composerPreferencesFromHomeOptions,
+  homePromptOptionsForRuntime,
+  type HomePromptOptions,
+} from './components/home/home-prompt-options'
 
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 type ResourceNavigationNotice = {
   status: ResourceNavigationAction['status'] | 'invalid'
   message: string
+}
+
+function hasComposerPreference(preferences: SessionComposerPreferences, key: keyof SessionComposerPreferences) {
+  return Object.prototype.hasOwnProperty.call(preferences, key)
+}
+
+function previousHomeComposerPreferences(session: SessionInfo | undefined, preferences: SessionComposerPreferences): SessionComposerPreferences {
+  const previous: SessionComposerPreferences = {}
+  if (hasComposerPreference(preferences, 'modelId')) previous.modelId = session?.composerModelId ?? null
+  if (hasComposerPreference(preferences, 'reasoningVariant')) previous.reasoningVariant = session?.composerReasoningVariant ?? null
+  return previous
 }
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
@@ -87,6 +103,7 @@ export function App() {
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const setSessionComposerPreferences = useSessionStore((s) => s.setSessionComposerPreferences)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const setActiveWorkspace = useSessionStore((s) => s.setActiveWorkspace)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -339,9 +356,10 @@ export function App() {
     text: string,
     attachments?: Array<{ mime: string; url: string; filename: string }>,
     agent?: string,
-    options?: SessionPromptOptions,
+    options?: HomePromptOptions,
   ) => {
-    const session = await createAndActivateSession(undefined, options)
+    const runtimeOptions = homePromptOptionsForRuntime(options)
+    const session = await createAndActivateSession(undefined, runtimeOptions)
     if (!session) return
     try {
       const files = attachments && attachments.length > 0
@@ -358,15 +376,33 @@ export function App() {
       // thread after.
       const promptText = text.trim() || (files ? 'Describe this image.' : text)
       const promptAgent = agent || useSessionStore.getState().agentMode
-      if (options) {
-        await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent, options)
+      const composerPreferences = composerPreferencesFromHomeOptions(options)
+      if (Object.keys(composerPreferences).length > 0) {
+        const previousSession = useSessionStore.getState().sessions.find((candidate) => candidate.id === session.id)
+        const previousPreferences = previousHomeComposerPreferences(previousSession, composerPreferences)
+        setSessionComposerPreferences(session.id, composerPreferences)
+        if (!runtimeOptions?.workspaceId) {
+          try {
+            await window.coworkApi.session.setComposerPreferences(session.id, composerPreferences)
+          } catch (error) {
+            setSessionComposerPreferences(session.id, previousPreferences)
+            reportAppError(
+              "Could not save this thread's composer settings. Follow-up prompts may use the default model settings.",
+              error,
+              'home',
+            )
+          }
+        }
+      }
+      if (runtimeOptions) {
+        await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent, runtimeOptions)
       } else {
         await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent)
       }
     } catch (err) {
       reportAppError('Could not send the Home prompt. Try again from the thread.', err, 'home')
     }
-  }, [createAndActivateSession, reportAppError])
+  }, [createAndActivateSession, reportAppError, setSessionComposerPreferences])
 
   const ensureActiveSession = useCallback(async (): Promise<boolean> => {
     if (useSessionStore.getState().currentSessionId) return true
