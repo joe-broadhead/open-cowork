@@ -94,7 +94,12 @@ test("standalone OpenCode adapter throws on prompt network failure", async () =>
     opencodeSessionId: "oc-1",
     text: "hello",
     onEvent: () => undefined,
-  }), /OpenCode prompt request failed: connect ECONNREFUSED authorization=Bearer \[redacted\]/);
+  }), (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    assert.match(message, /OpenCode prompt request failed: connect ECONNREFUSED authorization=Bearer \[REDACTED_TOKEN\]/);
+    assert.equal(message.includes("abc123456789"), false);
+    return true;
+  });
 });
 
 test("standalone OpenCode adapter projects SDK fields-response parts", async () => {
