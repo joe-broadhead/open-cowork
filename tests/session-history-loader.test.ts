@@ -646,8 +646,10 @@ test('createSessionHistoryService hydrates root history after loading child ids 
     children: 0,
     childSnapshot: 0,
     diff: 0,
+    seedLineage: 0,
     setHistory: 0,
   }
+  const syncOrder: string[] = []
   let writtenQuestions: SessionView['pendingQuestions'] = []
   let writtenApprovals: Array<Omit<SessionView['pendingApprovals'][number], 'order'>> = []
   const updates: Array<Record<string, unknown>> = []
@@ -710,6 +712,20 @@ test('createSessionHistoryService hydrates root history after loading child ids 
       updates.push(patch)
       return null
     },
+    seedChildSessionLineage: (rootSessionId, children) => {
+      calls.seedLineage += 1
+      syncOrder.push('seedLineage')
+      assert.equal(rootSessionId, 'session-progressive')
+      assert.deepEqual(children, [{
+        id: 'child-1',
+        parentSessionId: 'session-progressive',
+        title: 'Analyst',
+        agent: null,
+        status: 'queued',
+        startedAt: '1970-01-01T00:16:40.000Z',
+        finishedAt: null,
+      }])
+    },
     buildSessionUsageSummary: () => ({
       messages: 0,
       userMessages: 0,
@@ -730,6 +746,7 @@ test('createSessionHistoryService hydrates root history after loading child ids 
       activateSession: () => {},
       setSessionFromHistory: () => {
         calls.setHistory += 1
+        syncOrder.push('setHistory')
       },
       setPendingQuestions: (_sessionId, questions) => {
         writtenQuestions = questions
@@ -750,7 +767,9 @@ test('createSessionHistoryService hydrates root history after loading child ids 
   assert.equal(calls.children, 2)
   assert.equal(calls.childSnapshot, 0)
   assert.equal(calls.diff, 0)
+  assert.equal(calls.seedLineage, 1)
   assert.equal(calls.setHistory, 1)
+  assert.deepEqual(syncOrder, ['seedLineage', 'setHistory'])
   assert.equal(writtenQuestions[0]?.sourceSessionId, 'child-1')
   assert.equal(writtenApprovals[0]?.taskRunId, 'child:child-1')
   assert.equal(service.isSessionPartiallyHydrated('session-progressive'), true)

@@ -8,6 +8,7 @@ import {
 } from '../apps/desktop/src/main/event-runtime-handlers.ts'
 import {
   createSessionScopedMessageState,
+  handleMessagePartDeltaEvent,
   handleMessageUpdatedEvent,
   handleMessagePartUpdatedEvent,
 } from '../apps/desktop/src/main/event-message-handlers.ts'
@@ -17,6 +18,7 @@ import {
   registerTaskRun,
   resetEventTaskState,
   resolveRootSession,
+  seedReplayedChildSessionLineage,
   trackParentSession,
 } from '../apps/desktop/src/main/event-task-state.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
@@ -114,6 +116,64 @@ test('permission.asked emits an approval event for the resolved root session', (
       tool: 'Run shell command',
       input: { command: 'echo hello' },
       description: 'Sub-Agent: Run shell command',
+    },
+  }])
+})
+
+test('replayed child lineage routes live child deltas into the parent task lane', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+  const messageState = createSessionScopedMessageState()
+
+  seedReplayedChildSessionLineage('root-session', [{
+    id: 'child-session',
+    parentSessionId: 'root-session',
+    title: 'Research docs',
+    agent: 'researcher',
+    status: 'running',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    finishedAt: null,
+  }])
+
+  assert.equal(resolveRootSession('child-session'), 'root-session')
+  assert.deepEqual(getTaskRun('child:child-session'), {
+    id: 'child:child-session',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Research docs',
+    agent: 'researcher',
+    childSessionId: 'child-session',
+    status: 'running',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    finishedAt: null,
+  })
+
+  handleMessageUpdatedEvent(win, collector.dispatch, {
+    info: {
+      id: 'message-1',
+      sessionID: 'child-session',
+      role: 'assistant',
+    },
+  }, messageState)
+  handleMessagePartDeltaEvent(win, collector.dispatch, {
+    sessionID: 'child-session',
+    messageID: 'message-1',
+    partID: 'part-1',
+    delta: 'hello from replayed child',
+    part: { type: 'text' },
+  }, messageState)
+
+  assert.deepEqual(collector.events, [{
+    type: 'text',
+    sessionId: 'root-session',
+    data: {
+      type: 'text',
+      mode: 'append',
+      content: 'hello from replayed child',
+      taskRunId: 'child:child-session',
+      sourceSessionId: 'child-session',
+      messageId: 'message-1',
+      partId: 'part-1',
     },
   }])
 })

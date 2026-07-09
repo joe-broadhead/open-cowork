@@ -16,6 +16,11 @@ import { createSessionSyncCoordinator } from './session-sync-coordinator.js'
 import { buildSessionUsageSummary } from './session-usage-summary.js'
 import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs, summarizeSessionDiffs } from './session-diff-fallback.js'
 import { sdkErrorMessage } from './sdk-error.js'
+import {
+  timingFromChild,
+  type ChildSessionRecord,
+  type TaskStatus,
+} from './session-history-task-binding.js'
 
 type QuestionListResult = { data?: QuestionRequest[] }
 type PermissionListResult = { data?: PermissionRequest[] }
@@ -39,19 +44,30 @@ type LoadSessionHistoryOptions = {
   includeChildTranscripts?: boolean
 }
 
-const CHILD_SNAPSHOT_PREFETCH_CONCURRENCY = 8
-
-type ChildSessionRecord = {
+export type SessionHistoryChildLineageSeed = {
   id: string
-  title?: string
-  time?: {
-    created?: number
-    updated?: number
-  }
   parentSessionId?: string | null
+  title?: string | null
+  agent?: string | null
+  status?: TaskStatus | null
+  startedAt?: string | null
+  finishedAt?: string | null
 }
 
+export type SessionHistoryChildLineageSeedHandler = (input: {
+  rootSessionId: string
+  children: SessionHistoryChildLineageSeed[]
+}) => void
+
+const CHILD_SNAPSHOT_PREFETCH_CONCURRENCY = 8
+
 type ChildSnapshot = { messages: unknown[]; todos: unknown[] }
+
+let sessionHistoryChildLineageSeedHandler: SessionHistoryChildLineageSeedHandler | null = null
+
+export function setSessionHistoryChildLineageSeedHandler(handler: SessionHistoryChildLineageSeedHandler | null) {
+  sessionHistoryChildLineageSeedHandler = handler
+}
 
 export function createBoundedChildSnapshotLoader(options: {
   ids: string[]
@@ -276,6 +292,44 @@ function logHistoryError(scope: string, sessionId: string, err: unknown) {
   log('error', `${scope} ${shortSessionId(sessionId)} failed: ${message}`)
 }
 
+function seedSessionHistoryChildLineage(rootSessionId: string, children: SessionHistoryChildLineageSeed[]) {
+  if (children.length === 0 || !sessionHistoryChildLineageSeedHandler) return
+  try {
+    sessionHistoryChildLineageSeedHandler({ rootSessionId, children })
+  } catch (err) {
+    logHistoryError('session:history child lineage seed', rootSessionId, err)
+  }
+}
+
+function buildChildLineageSeeds(
+  rootSessionId: string,
+  children: ChildSessionRecord[],
+  items: Awaited<ReturnType<typeof projectSessionHistory>>,
+): SessionHistoryChildLineageSeed[] {
+  if (children.length === 0) return []
+  const childIds = new Set(children.map((child) => child.id))
+  const taskRunByChildId = new Map<string, NonNullable<(typeof items)[number]['taskRun']>>()
+  for (const item of items) {
+    const taskRun = item.taskRun
+    if (!taskRun?.sourceSessionId || !childIds.has(taskRun.sourceSessionId)) continue
+    taskRunByChildId.set(taskRun.sourceSessionId, taskRun)
+  }
+  return children.map((child) => {
+    const taskRun = taskRunByChildId.get(child.id)
+    const status = taskRun?.status || 'queued'
+    const fallbackTiming = timingFromChild(child, status)
+    return {
+      id: child.id,
+      parentSessionId: child.parentSessionId || rootSessionId,
+      title: taskRun?.title || child.title || null,
+      agent: taskRun?.agent || null,
+      status,
+      startedAt: taskRun?.startedAt ?? fallbackTiming.startedAt,
+      finishedAt: taskRun?.finishedAt ?? fallbackTiming.finishedAt,
+    }
+  })
+}
+
 function normalizeChildSessionRecord(entry: unknown, parentSessionId: string): ChildSessionRecord | null {
   const info = normalizeSessionInfo(entry)
   if (info?.id) {
@@ -326,6 +380,7 @@ type SessionHistoryServiceDeps = {
   getCachedModelId: () => string
   updateSessionRecord: typeof updateSessionRecord
   buildSessionUsageSummary: typeof buildSessionUsageSummary
+  seedChildSessionLineage?: (rootSessionId: string, children: SessionHistoryChildLineageSeed[]) => void
   sessionEngine: Pick<
     typeof sessionEngine,
     'isHydrated' | 'activateSession' | 'setSessionFromHistory' | 'setPendingQuestions' | 'setPendingApprovals' | 'getSessionView'
@@ -340,6 +395,7 @@ const defaultSessionHistoryServiceDeps: SessionHistoryServiceDeps = {
   getCachedModelId: () => getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || '',
   updateSessionRecord,
   buildSessionUsageSummary,
+  seedChildSessionLineage: seedSessionHistoryChildLineage,
   sessionEngine,
 }
 
@@ -476,6 +532,7 @@ export function createSessionHistoryService(
         loadChildSnapshot: childSnapshotLoader.load,
         fallbackTimestampMs: record ? Date.parse(record.createdAt) : 0,
       })
+      const childLineage = buildChildLineageSeeds(sessionId, children, items)
       const latestModeledItem = [...items]
         .reverse()
         .find((item) => item.providerId || item.modelId) || null
@@ -518,6 +575,7 @@ export function createSessionHistoryService(
         childGraphComplete: childGraph.complete,
         pendingQuestionsComplete: questionResult.complete,
         pendingApprovalsComplete: permissionResult.complete,
+        childLineage,
       }
     }, {
       slowThresholdMs: includeChildTranscripts ? 250 : 100,
@@ -552,10 +610,12 @@ export function createSessionHistoryService(
           childGraphComplete,
           pendingQuestionsComplete,
           pendingApprovalsComplete,
+          childLineage,
         } = await loadSessionHistory(sessionId, {
           includeChildren: true,
           includeChildTranscripts: !progressive,
         })
+        deps.seedChildSessionLineage?.(sessionId, childLineage)
         deps.sessionEngine.setSessionFromHistory(sessionId, items, {
           force: options?.force,
         })

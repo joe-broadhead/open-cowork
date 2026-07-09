@@ -2,7 +2,7 @@ import { listWorkflows as listWorkflowState } from '@open-cowork/runtime-host/wo
 import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 import { getSessionRecord, listSessionRecords } from '@open-cowork/runtime-host/session-registry'
-import { syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
+import { setSessionHistoryChildLineageSeedHandler, syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
 import { addRuntimeSessionEventObserver, dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { configureSemanticUiBridge } from '@open-cowork/runtime-host/semantic-ui-bridge'
 import { buildDiagnosticsBundle } from './diagnostics-export.ts'
@@ -63,6 +63,7 @@ import {
   createSemanticUiLocalActionList,
   executeSemanticUiLocalAction,
 } from './semantic-ui-local-actions.ts'
+import { seedReplayedChildSessionLineage } from './event-task-state.ts'
 
 export { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
 
@@ -104,6 +105,10 @@ export function setupIpcHandlers(
   getMainWindow: () => BrowserWindow | null,
   handlerOptions: { devServerUrl?: string | null } = {},
 ) {
+  setSessionHistoryChildLineageSeedHandler(({ rootSessionId, children }) => {
+    seedReplayedChildSessionLineage(rootSessionId, children)
+  })
+
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
     await syncSessionView(sessionId, {
       force: true,
