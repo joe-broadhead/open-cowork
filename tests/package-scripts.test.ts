@@ -39,6 +39,13 @@ const firstContributionDocs = readFileSync(new URL('../docs/first-contribution.m
 const securityModelDocs = readFileSync(new URL('../docs/security-model.md', import.meta.url), 'utf8')
 const releaseChecklistDocs = readFileSync(new URL('../docs/release-checklist.md', import.meta.url), 'utf8')
 const mkdocsConfig = readFileSync(new URL('../mkdocs.yml', import.meta.url), 'utf8')
+const linuxNode22PerfBaseline = JSON.parse(readFileSync(new URL('../benchmarks/perf-baseline.linux-x64-node22.json', import.meta.url), 'utf8')) as {
+  environment?: {
+    platform?: string
+    arch?: string
+    node?: string
+  }
+}
 const nvmrc = readFileSync(new URL('../.nvmrc', import.meta.url), 'utf8').trim()
 const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
 const smokeHelpers = readFileSync(new URL('../apps/desktop/tests/smoke-helpers.ts', import.meta.url), 'utf8')
@@ -144,6 +151,11 @@ test('contributor setup docs and dependency update governance match enforced eng
   assert.equal(packageJson.packageManager, 'pnpm@10.32.1')
   assert.equal(packageJson.engines?.node, '>=22.13')
   assert.equal(packageJson.engines?.pnpm, '10.32.1')
+  assert.deepEqual(linuxNode22PerfBaseline.environment, {
+    platform: 'linux',
+    arch: 'x64',
+    node: `v${nvmrc}`,
+  })
   assert.match(npmrc, /^engine-strict=true$/m)
   assert.match(contributingDocs, /Node `>=22\.13`/)
   assert.doesNotMatch(contributingDocs, /Node `>=22`[^.]/)
