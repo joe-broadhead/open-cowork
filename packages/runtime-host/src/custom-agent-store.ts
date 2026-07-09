@@ -6,6 +6,7 @@ import {
 } from 'node:path'
 import { existsSync, type Dirent, readdirSync, rmSync, statSync } from 'node:fs'
 import {
+  isMcpPermissionRulePattern,
   VALID_CUSTOM_AGENT_NAME,
   type AgentColor,
   type CustomAgentConfig,
@@ -38,7 +39,6 @@ import { createAttachedSkillDirective } from './agent-prompts.js'
 import {
   buildCustomAgentCatalog,
   buildCustomAgentPermissionFromCatalog,
-  isLegacyMcpAliasPermissionKey,
 } from './custom-agents-utils.js'
 
 type ManagedAgentMetadata = {
@@ -564,13 +564,6 @@ function strongestPermissionAction(actions: Array<CustomAgentPermissionAction | 
   return strongest
 }
 
-function isMcpPermissionPattern(pattern: string) {
-  if (pattern.startsWith('mcp__')) {
-    return /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.test(pattern)
-  }
-  return isLegacyMcpAliasPermissionKey(pattern)
-}
-
 function readPermissionRuleMap(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -636,7 +629,7 @@ function overrideFromRuleMap(
 function deriveMcpPermissionOverride(permission: Record<string, unknown>): CustomAgentPermissionOverride | null {
   const rules = Object.entries(permission).flatMap(([pattern, rawAction]) => {
     if (pattern === 'mcp__*') return []
-    if (!isMcpPermissionPattern(pattern)) return []
+    if (!isMcpPermissionRulePattern(pattern)) return []
     const action = readPermissionActionValue(rawAction)
     return action ? [{ pattern, action }] : []
   })

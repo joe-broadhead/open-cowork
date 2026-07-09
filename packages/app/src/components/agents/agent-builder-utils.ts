@@ -1,4 +1,6 @@
 import {
+  isLegacyMcpAliasPermissionKey,
+  isMcpPermissionRulePattern,
   validateCustomAgentDraft,
   VALID_CUSTOM_AGENT_NAME,
 } from '@open-cowork/shared'
@@ -19,6 +21,8 @@ import { getBrandName } from '../../helpers/brand.ts'
 // grid + the builder page, and easy to reason about.
 
 export const VALID_AGENT_NAME = VALID_CUSTOM_AGENT_NAME
+
+export { isMcpPermissionRulePattern }
 
 // Two-letter initials from an agent name. Splits on hyphens and spaces so
 // "sales-analyst" → "SA", "analyst" → "AN", "x" → "X". Used by the
@@ -86,7 +90,7 @@ function permissionFamilyForPattern(pattern: string): CustomAgentPermissionKey |
   if (pattern === 'external_directory') return 'external_directory'
   if (pattern === 'edit' || pattern === 'write' || pattern === 'apply_patch') return 'edit'
   if (pattern.startsWith('mcp__')) return 'mcp'
-  if (!pattern.startsWith('repo_') && /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(pattern)) return 'mcp'
+  if (isLegacyMcpAliasPermissionKey(pattern)) return 'mcp'
   return null
 }
 
@@ -207,33 +211,6 @@ const PERMISSION_LABELS: Record<CustomAgentPermissionKey, string> = {
   task: 'Delegate work',
   external_directory: 'External directories',
   mcp: 'MCP tools',
-}
-
-const NON_MCP_PERMISSION_KEYS = new Set([
-  'bash',
-  'edit',
-  'write',
-  'apply_patch',
-  'read',
-  'task',
-  'webfetch',
-  'websearch',
-  'codesearch',
-  'external_directory',
-])
-
-function isLegacyMcpAliasPermissionKey(pattern: string) {
-  if (NON_MCP_PERMISSION_KEYS.has(pattern)) return false
-  if (pattern.startsWith('repo_')) return false
-  if (pattern.startsWith('mcp__')) return false
-  return /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(pattern)
-}
-
-export function isMcpPermissionRulePattern(pattern: string) {
-  if (pattern.startsWith('mcp__')) {
-    return /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.test(pattern)
-  }
-  return isLegacyMcpAliasPermissionKey(pattern)
 }
 
 function validatePermissionOverrideRules(draft: CustomAgentConfig): AgentDraftIssue[] {

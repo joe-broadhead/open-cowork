@@ -1,12 +1,14 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AgentCatalog, CustomAgentConfig } from '../packages/shared/src/index.ts'
+import { isMcpPermissionRulePattern as runtimeIsMcpPermissionRulePattern } from '@open-cowork/runtime-host/custom-agents-utils'
 import {
   agentInitials,
   applyTemplate,
   compileAgentPreview,
   computeAgentAttributes,
   computeAgentScope,
+  isMcpPermissionRulePattern,
   linkedSkillNamesForTool,
   resolveMissingSkillTools,
   scopeLabel,
@@ -195,6 +197,25 @@ describe('validateAgentDraft', () => {
     })
     assert.ok(issues.map((issue) => issue.code).includes('missing_tool'))
     assert.ok(issues.map((issue) => issue.code).includes('missing_skill'))
+  })
+
+  it('uses the same MCP permission pattern rules as the runtime', () => {
+    const cases: Array<[string, boolean]> = [
+      ['mcp__github__pull_request_read', true],
+      ['mcp__github_api__repos_*', true],
+      ['github_pull_request_read', true],
+      ['github_*', true],
+      ['mcp__github/delete_repo', false],
+      ['mcp__github_', false],
+      ['mcp___github__delete_repo', false],
+      ['repo_clone', false],
+      ['bash', false],
+    ]
+
+    for (const [pattern, expected] of cases) {
+      assert.equal(isMcpPermissionRulePattern(pattern), expected, `renderer mismatch for ${pattern}`)
+      assert.equal(runtimeIsMcpPermissionRulePattern(pattern), expected, `runtime mismatch for ${pattern}`)
+    }
   })
 })
 

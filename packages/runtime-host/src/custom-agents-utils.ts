@@ -10,6 +10,8 @@ import {
   type ConfiguredTool,
 } from './config-loader-core.js'
 import {
+  isLegacyMcpAliasPermissionKey,
+  isMcpPermissionRulePattern,
   validateCustomAgentDraft,
   type AgentColor,
   type CustomAgentIssue,
@@ -23,6 +25,8 @@ import type { NativeConfigScope } from './runtime-paths.js'
 import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.js'
 import { validateCustomAgentContentLimits } from './custom-content-limits.js'
 import { getEffectiveSettings } from './settings.js'
+
+export { isLegacyMcpAliasPermissionKey, isMcpPermissionRulePattern } from '@open-cowork/shared'
 
 export type CustomSkillLike = {
   name: string
@@ -212,77 +216,6 @@ function clampPermissionAction(
 ): CustomAgentPermissionAction {
   if (!maximum) return action
   return PERMISSION_ACTION_RANK[action] <= PERMISSION_ACTION_RANK[maximum] ? action : maximum
-}
-
-const NON_MCP_PERMISSION_KEYS = new Set([
-  'skill',
-  'question',
-  'task',
-  'external_directory',
-  'doom_loop',
-  'todowrite',
-  'codesearch',
-  'webfetch',
-  'websearch',
-  'lsp',
-  'bash',
-  'edit',
-  'write',
-  'apply_patch',
-  'read',
-  'grep',
-  'glob',
-  'list',
-])
-
-const isAliasAlnum = (code: number) =>
-  (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
-const isAliasPrefixChar = (code: number) => isAliasAlnum(code) || code === 95 /* _ */ || code === 45 /* - */
-const isAliasSuffixChar = (code: number) =>
-  isAliasAlnum(code) || code === 95 /* _ */ || code === 42 /* * */ || code === 45 /* - */
-
-// Linear (no-backtracking) equivalent of /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.
-// That regex's two overlapping quantifiers around the '_' separator, anchored by $, are
-// polynomial-ReDoS. Accepts: alnum start, a '_' separator, then a suffix that is exactly
-// '*' or alnum-then-[a-z0-9_*-]. A bool result needs only that SOME valid separator exists.
-function isLegacyAliasShape(key: string): boolean {
-  const n = key.length
-  if (n === 0 || !isAliasAlnum(key.charCodeAt(0))) return false
-  let prefixEnd = 0
-  while (prefixEnd < n && isAliasPrefixChar(key.charCodeAt(prefixEnd))) prefixEnd += 1
-  for (let s = 1; s < prefixEnd; s += 1) {
-    if (key.charCodeAt(s) !== 95 /* _ */) continue
-    const start = s + 1
-    if (start >= n) continue
-    if (n - start === 1 && key.charCodeAt(start) === 42 /* * */) return true
-    if (!isAliasAlnum(key.charCodeAt(start))) continue
-    let suffixOk = true
-    for (let i = start + 1; i < n; i += 1) {
-      if (!isAliasSuffixChar(key.charCodeAt(i))) { suffixOk = false; break }
-    }
-    if (suffixOk) return true
-  }
-  return false
-}
-
-// Shared canonical check for a legacy flat `provider_tool`-shaped MCP permission
-// key. Single source of truth: custom-agent-store re-imports this so the two
-// modules can never disagree. Uses the ReDoS-safe linear `isLegacyAliasShape`
-// (behaviorally equivalent to the old
-// /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i regex) and only rejects the
-// fixed set of built-in non-MCP tool keys, so it never rejects a valid modern key.
-export function isLegacyMcpAliasPermissionKey(key: string) {
-  if (NON_MCP_PERMISSION_KEYS.has(key)) return false
-  if (key.startsWith('repo_')) return false
-  if (key.startsWith('mcp__')) return false
-  return isLegacyAliasShape(key)
-}
-
-function isMcpPermissionRulePattern(pattern: string) {
-  if (pattern.startsWith('mcp__')) {
-    return /^mcp__[a-z0-9][a-z0-9-]*(?:_[a-z0-9-]+)*__[^/]+$/i.test(pattern)
-  }
-  return isLegacyMcpAliasPermissionKey(pattern)
 }
 
 function normalizePermissionRule(key: CustomAgentPermissionKey, rule: CustomAgentPermissionRule): CustomAgentPermissionRule | null {
@@ -742,9 +675,7 @@ function overrideGrantsWriteAccess(override: CustomAgentPermissionOverride): boo
 }
 
 function legacyAliasForMcpPermissionPattern(pattern: string) {
-  const match = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i)
-  if (!match?.[1] || !match[2]) return null
-  return `${match[1]}_${match[2]}`
+  return expandMcpToolPermissionPatterns([pattern]).find((entry) => entry !== pattern) || null
 }
 
 function mcpPermissionKeysForDefaultOverride(permission: Record<string, unknown>) {
