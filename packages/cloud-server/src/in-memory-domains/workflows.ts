@@ -158,12 +158,13 @@ export class InMemoryWorkflowsDomain {
     const claimedBy = input.claimedBy?.trim() || null
     const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
     const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
+    const plannedSessionId = input.sessionId?.trim() || workflowRunSessionId(input.tenantId, input.workflowId, input.runId)
     const run: CloudWorkflowRunRecord = {
       tenantId: input.tenantId,
       userId: input.userId,
       id: input.runId,
       workflowId: input.workflowId,
-      sessionId: null,
+      sessionId: plannedSessionId,
       triggerType: input.triggerType,
       triggerPayload: input.triggerPayload || null,
       status: 'queued',
@@ -187,6 +188,7 @@ export class InMemoryWorkflowsDomain {
     workflow.record.status = 'running'
     workflow.record.latestRunId = run.id
     workflow.record.latestRunStatus = run.status
+    workflow.record.latestRunSessionId = run.sessionId
     workflow.record.updatedAt = createdAt
     return clone(run)
   }
@@ -201,7 +203,7 @@ export class InMemoryWorkflowsDomain {
         this.workflows.get(key(run.tenantId, run.workflowId))?.record.status === 'running'
         &&
         (
-          (run.status === 'queued' && run.sessionId === null)
+          (run.status === 'queued' && (run.sessionId === null || !this.host.sessionHasCommands(run.tenantId, run.sessionId)))
           || (run.status === 'running' && run.sessionId !== null && !this.host.sessionHasCommands(run.tenantId, run.sessionId))
         )
         && run.claimToken === null
@@ -236,12 +238,13 @@ export class InMemoryWorkflowsDomain {
     const scheduledFor = workflow.record.nextRunAt
     this.host.assertWorkflowRunQuota({ tenantId: workflow.record.tenantId, quota: input.quota, now })
     const claimToken = createWorkClaimToken(workflow.record.tenantId, input.runId, claimedBy)
+    const plannedSessionId = input.sessionId?.trim() || workflowRunSessionId(workflow.record.tenantId, workflow.record.id, input.runId)
     const run: CloudWorkflowRunRecord = {
       tenantId: workflow.record.tenantId,
       userId: workflow.record.userId,
       id: input.runId,
       workflowId: workflow.record.id,
-      sessionId: null,
+      sessionId: plannedSessionId,
       triggerType: 'schedule',
       triggerPayload: {
         source: 'schedule',
@@ -268,6 +271,7 @@ export class InMemoryWorkflowsDomain {
     workflow.record.status = 'running'
     workflow.record.latestRunId = run.id
     workflow.record.latestRunStatus = run.status
+    workflow.record.latestRunSessionId = run.sessionId
     workflow.record.updatedAt = claimedAt
     return {
       workflow: clone(workflow.record),
@@ -285,7 +289,10 @@ export class InMemoryWorkflowsDomain {
       .filter((run) => (
         Boolean(run.claimToken) && Boolean(run.claimExpiresAt)
         && Date.parse(run.claimExpiresAt || '') <= now.getTime()
-        && ((run.status === 'queued' && run.sessionId === null) || (run.status === 'running' && run.sessionId !== null && !this.host.sessionHasCommands(run.tenantId, run.sessionId)))
+        && (
+          (run.status === 'queued' && (run.sessionId === null || !this.host.sessionHasCommands(run.tenantId, run.sessionId)))
+          || (run.status === 'running' && run.sessionId !== null && !this.host.sessionHasCommands(run.tenantId, run.sessionId))
+        )
       ))
       .sort((left, right) => (
         Date.parse(left.claimExpiresAt || '') - Date.parse(right.claimExpiresAt || '')
@@ -317,7 +324,7 @@ export class InMemoryWorkflowsDomain {
         run.claimToken = null
         run.claimExpiresAt = null
         run.lastErrorCode = 'claim_expired'
-        run.lastErrorSummary = run.sessionId
+        run.lastErrorSummary = run.status === 'running'
           ? 'Workflow run claim expired before command enqueue.'
           : 'Workflow run claim expired before session attachment.'
         workflow.record.status = 'running'
@@ -464,6 +471,10 @@ export class InMemoryWorkflowsDomain {
 }
 
 const WORKFLOW_RUN_LIST_LIMIT = 100
+
+function workflowRunSessionId(tenantId: string, workflowId: string, runId: string) {
+  return stableId('workflow_session', tenantId, workflowId, runId)
+}
 
 function stableId(prefix: string, ...parts: string[]) {
   return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`

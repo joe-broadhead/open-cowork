@@ -7262,7 +7262,7 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
 
     const run = asRecord(runBody.run)
     assert.equal(run.status, 'completed')
-    assert.equal(run.sessionId, 'oc-session-1')
+    assert.match(String(run.sessionId), /^workflow_session_/)
     assert.equal(run.summary, 'echo: Summarize revenue for today.')
 
     const workflow = asRecord(runBody.workflow)
@@ -7812,6 +7812,7 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
     userId: 'user-1',
     workflowId: workflow.id,
     runId: 'workflow-attached-recovery-run',
+    sessionId: 'workflow-stranded-session',
     triggerType: 'manual',
     triggerPayload: { source: 'test' },
     claimedBy: 'workflow-api:user-1',
@@ -7862,6 +7863,82 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
     'scheduler-recovery',
   )
   assert.equal(second, null)
+})
+
+test('cloud workflow recovery reuses planned sessions across pre-attach crash windows', async () => {
+  const fixture = createFixture({ autoProcessCommands: false })
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.test', role: 'owner' })
+
+  const createWorkflow = (workflowId: string, title: string) => fixture.store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId,
+    draft: {
+      title,
+      instructions: `Recover ${title}.`,
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+
+  const noSessionWorkflow = createWorkflow('workflow-no-session-recovery', 'No session recovery')
+  const noSessionRun = fixture.store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: noSessionWorkflow.id,
+    runId: 'workflow-no-session-run',
+    triggerType: 'manual',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 30_000,
+    createdAt: new Date('2030-01-01T10:00:00.000Z'),
+  })
+  assert.match(noSessionRun.sessionId || '', /^workflow_session_/)
+  fixture.store.reapExpiredWorkflowClaims({ now: new Date('2030-01-01T10:00:31.000Z') })
+  const recoveredNoSession = await fixture.service.claimAndStartDueWorkflow(
+    new Date('2030-01-01T10:00:32.000Z'),
+    'scheduler-recovery',
+  )
+  assert.equal(recoveredNoSession?.run.id, noSessionRun.id)
+  assert.equal(recoveredNoSession?.sessionId, noSessionRun.sessionId)
+  assert.equal(recoveredNoSession?.command.commandId, `workflow:tenant-1:${noSessionWorkflow.id}:${noSessionRun.id}:prompt`)
+
+  const preAttachWorkflow = createWorkflow('workflow-pre-attach-recovery', 'Pre attach recovery')
+  const preAttachRun = fixture.store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: preAttachWorkflow.id,
+    runId: 'workflow-pre-attach-run',
+    triggerType: 'manual',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 30_000,
+    createdAt: new Date('2030-01-01T11:00:00.000Z'),
+  })
+  assert.ok(preAttachRun.sessionId)
+  fixture.store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: preAttachRun.sessionId!,
+    opencodeSessionId: '',
+    profileName: 'full',
+    title: 'Run Pre attach recovery',
+    createdAt: new Date('2030-01-01T11:00:01.000Z'),
+  })
+  fixture.store.reapExpiredWorkflowClaims({ now: new Date('2030-01-01T11:00:31.000Z') })
+  const recoveredPreAttach = await fixture.service.claimAndStartDueWorkflow(
+    new Date('2030-01-01T11:00:32.000Z'),
+    'scheduler-recovery',
+  )
+  assert.equal(recoveredPreAttach?.run.id, preAttachRun.id)
+  assert.equal(recoveredPreAttach?.sessionId, preAttachRun.sessionId)
+  assert.equal((await fixture.store.getSessionForTenant('tenant-1', preAttachRun.sessionId!))?.createdAt, '2030-01-01T11:00:01.000Z')
+  assert.equal(recoveredPreAttach?.command.commandId, `workflow:tenant-1:${preAttachWorkflow.id}:${preAttachRun.id}:prompt`)
 })
 
 test('cloud HTTP rejects workflow APIs when the cloud profile disables them', async () => {

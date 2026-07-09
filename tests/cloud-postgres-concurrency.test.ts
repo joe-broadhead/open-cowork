@@ -1057,7 +1057,7 @@ test('real Postgres cloud store retries and fails expired workflow start claims'
         tenantId: ids.tenantId,
         workflowId,
         runId: retryRunId,
-        sessionId: ids.sessionId,
+        sessionId: first.run.sessionId!,
         claimToken: firstToken,
       }),
       /stale/,
@@ -1145,22 +1145,23 @@ test('real Postgres cloud store fences workflow finalization by active worker le
         triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
       },
     })
-    await store.createWorkflowRun({
+    const run = await store.createWorkflowRun({
       tenantId: ids.tenantId,
       userId: ids.userId,
       workflowId,
       runId,
+      sessionId: ids.sessionId,
       triggerType: 'manual',
     })
     await store.attachWorkflowRunSession({
       tenantId: ids.tenantId,
       workflowId,
       runId,
-      sessionId: ids.sessionId,
+      sessionId: run.sessionId!,
     })
     const staleLease = await store.claimSessionLease(
       ids.tenantId,
-      ids.sessionId,
+      run.sessionId!,
       'pg-worker-stale',
       new Date('2030-01-01T09:00:00.000Z'),
       1,
@@ -1168,7 +1169,7 @@ test('real Postgres cloud store fences workflow finalization by active worker le
     assert.ok(staleLease)
     const currentLease = await store.claimSessionLease(
       ids.tenantId,
-      ids.sessionId,
+      run.sessionId!,
       'pg-worker-current',
       new Date('2030-01-01T09:00:00.002Z'),
       30_000,
@@ -1306,7 +1307,7 @@ test('real Postgres cloud store rejects stale workflow attaches after expired cl
         tenantId: ids.tenantId,
         workflowId,
         runId,
-        sessionId: ids.sessionId,
+        sessionId: first.sessionId!,
         claimToken: first.claimToken,
       }),
       /stale/,
@@ -1404,7 +1405,7 @@ test('real Postgres cloud store recovers workflow starts stranded after session 
       tenantId: ids.tenantId,
       workflowId,
       runId: retryRunId,
-      sessionId: ids.sessionId,
+      sessionId: first.sessionId!,
       claimToken: first.claimToken,
       startedAt: new Date('2030-01-01T09:00:00.001Z'),
     })

@@ -1,4 +1,4 @@
-import { createWorkClaimToken, nowIso } from '../postgres-store-id-helpers.ts'
+import { createWorkClaimToken, nowIso, stableId } from '../postgres-store-id-helpers.ts'
 import { workflowFromRow, workflowRunFromRow } from '../postgres-domains/workflows.ts'
 import type { QueryResult, QueryRow } from '../postgres-domains/shared.ts'
 import { assertPostgresWorkflowRunQuota, type PostgresQuotaDomainDeps } from './quotas.ts'
@@ -28,6 +28,10 @@ import type {
 
 const WORKFLOW_RUN_LIST_LIMIT = 100
 const WORKFLOW_LIST_LIMIT = 500
+
+function workflowRunSessionId(tenantId: string, workflowId: string, runId: string) {
+  return stableId('workflow_session', tenantId, workflowId, runId)
+}
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -196,6 +200,7 @@ export class PostgresWorkflowsRepository {
       const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
       const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
       const claimExpiresAt = claimToken ? new Date(new Date(createdAt).getTime() + leaseTtlMs).toISOString() : null
+      const plannedSessionId = input.sessionId?.trim() || workflowRunSessionId(input.tenantId, input.workflowId, input.runId)
       const result = await client.query(
         `INSERT INTO cloud_workflow_runs (
           tenant_id, run_id, workflow_id, user_id, session_id, trigger_type,
@@ -204,8 +209,8 @@ export class PostgresWorkflowsRepository {
           checkpoint_version, last_error_code, last_error_summary
          )
          VALUES (
-          $1, $2, $3, $4, NULL, $5, $6::jsonb, 'queued', $7, NULL, NULL, $8, NULL, NULL,
-          $9, $10, $11, $12, NULL, 0, NULL, NULL
+          $1, $2, $3, $4, $5, $6, $7::jsonb, 'queued', $8, NULL, NULL, $9, NULL, NULL,
+          $10, $11, $12, $13, NULL, 0, NULL, NULL
          )
          RETURNING *`,
         [
@@ -213,6 +218,7 @@ export class PostgresWorkflowsRepository {
           input.runId,
           input.workflowId,
           input.userId,
+          plannedSessionId,
           input.triggerType,
           input.triggerPayload ? JSON.stringify(input.triggerPayload) : null,
           `Run ${workflow.title}`,
@@ -228,9 +234,10 @@ export class PostgresWorkflowsRepository {
          SET status = 'running',
              latest_run_id = $3,
              latest_run_status = 'queued',
-             updated_at = $4
+             latest_run_session_id = $4,
+             updated_at = $5
          WHERE tenant_id = $1 AND workflow_id = $2`,
-        [input.tenantId, input.workflowId, input.runId, createdAt],
+        [input.tenantId, input.workflowId, input.runId, plannedSessionId, createdAt],
       )
       return workflowRunFromRow(result.rows[0]!)
     })
@@ -251,7 +258,18 @@ export class PostgresWorkflowsRepository {
           AND workflows.workflow_id = runs.workflow_id
          WHERE runs.claim_token IS NULL
            AND (
-             (runs.status = 'queued' AND runs.session_id IS NULL)
+             (
+               runs.status = 'queued'
+               AND (
+                 runs.session_id IS NULL
+                 OR NOT EXISTS (
+                   SELECT 1
+                   FROM cloud_session_commands commands
+                   WHERE commands.tenant_id = runs.tenant_id
+                     AND commands.session_id = runs.session_id
+                 )
+               )
+             )
              OR (
                runs.status = 'running'
                AND runs.session_id IS NOT NULL
@@ -324,6 +342,7 @@ export class PostgresWorkflowsRepository {
         now,
       }, this.options.quotaDeps)
       const claimToken = createWorkClaimToken(workflow.tenantId, input.runId, claimedBy)
+      const plannedSessionId = input.sessionId?.trim() || workflowRunSessionId(workflow.tenantId, workflow.id, input.runId)
       const result = await client.query(
         `INSERT INTO cloud_workflow_runs (
           tenant_id, run_id, workflow_id, user_id, session_id, trigger_type,
@@ -332,9 +351,9 @@ export class PostgresWorkflowsRepository {
           checkpoint_version, last_error_code, last_error_summary
          )
          VALUES (
-          $1, $2, $3, $4, NULL, 'schedule',
-          $5::jsonb, 'queued', $6, NULL, NULL, $7, NULL, NULL,
-          $8, $9, $10, 1, $11, 0, NULL, NULL
+          $1, $2, $3, $4, $5, 'schedule',
+          $6::jsonb, 'queued', $7, NULL, NULL, $8, NULL, NULL,
+          $9, $10, $11, 1, $12, 0, NULL, NULL
          )
          RETURNING *`,
         [
@@ -342,6 +361,7 @@ export class PostgresWorkflowsRepository {
           input.runId,
           workflow.id,
           workflow.userId,
+          plannedSessionId,
           JSON.stringify({ source: 'schedule', scheduledFor: workflow.nextRunAt }),
           `Run ${workflow.title}`,
           claimedAt,
@@ -356,10 +376,11 @@ export class PostgresWorkflowsRepository {
          SET status = 'running',
              latest_run_id = $3,
              latest_run_status = 'queued',
-             updated_at = $4
+             latest_run_session_id = $4,
+             updated_at = $5
          WHERE tenant_id = $1 AND workflow_id = $2
          RETURNING *`,
-        [workflow.tenantId, workflow.id, input.runId, claimedAt],
+        [workflow.tenantId, workflow.id, input.runId, plannedSessionId, claimedAt],
       )
       return {
         workflow: workflowFromRow(updatedWorkflow.rows[0]!),
@@ -381,7 +402,18 @@ export class PostgresWorkflowsRepository {
            AND claim_expires_at IS NOT NULL
            AND claim_expires_at <= $1
            AND (
-             (status = 'queued' AND session_id IS NULL)
+             (
+               status = 'queued'
+               AND (
+                 session_id IS NULL
+                 OR NOT EXISTS (
+                   SELECT 1
+                   FROM cloud_session_commands commands
+                   WHERE commands.tenant_id = cloud_workflow_runs.tenant_id
+                     AND commands.session_id = cloud_workflow_runs.session_id
+                 )
+               )
+             )
              OR (
                status = 'running'
                AND session_id IS NOT NULL
@@ -446,7 +478,7 @@ export class PostgresWorkflowsRepository {
               run.tenantId,
               run.workflowId,
               run.id,
-              run.sessionId
+              run.status === 'running'
                 ? 'Workflow run claim expired before command enqueue.'
                 : 'Workflow run claim expired before session attachment.',
             ],

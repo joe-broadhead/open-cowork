@@ -1104,14 +1104,16 @@ function runControlPlaneDomainContracts(
         triggerType: 'manual',
       })
       assert.equal(workflowRun.status, 'queued')
+      assert.match(workflowRun.sessionId || '', /^workflow_session_/)
       const claimedRun = await store.claimDueWorkflowRun({ runId: `${prefix}-run`, claimedBy: `${prefix}-wf-worker`, leaseTtlMs: 30_000 })
       assert.equal(claimedRun?.run.id, `${prefix}-run`)
       assert.ok(claimedRun?.run.claimToken)
+      assert.equal(claimedRun?.run.sessionId, workflowRun.sessionId)
       await store.attachWorkflowRunSession({
         tenantId,
         workflowId,
         runId: `${prefix}-run`,
-        sessionId,
+        sessionId: workflowRun.sessionId!,
         claimToken: claimedRun?.run.claimToken,
       })
       const completedRun = await store.completeWorkflowRun({
