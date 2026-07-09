@@ -154,10 +154,15 @@ test('request timeouts are clamped and abort the underlying fetch signal', async
     requestTimeoutMs: 1,
   })
 
-  const error = await expectCloudTransportError(client.listSessions(), 'timeout')
+  const keepAlive = setTimeout(() => undefined, 250)
+  try {
+    const error = await expectCloudTransportError(client.listSessions(), 'timeout')
 
-  assert.match(error.message, /100ms/)
-  assert.equal(observedSignal?.aborted, true)
+    assert.match(error.message, /100ms/)
+    assert.equal(observedSignal?.aborted, true)
+  } finally {
+    clearTimeout(keepAlive)
+  }
 })
 
 test('caller aborts propagate to fetch and classify as abort', async () => {
