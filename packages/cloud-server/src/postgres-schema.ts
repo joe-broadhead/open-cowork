@@ -235,8 +235,8 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     PRIMARY KEY (tenant_id, run_id),
     FOREIGN KEY (tenant_id, workflow_id) REFERENCES cloud_workflows(tenant_id, workflow_id) ON DELETE CASCADE
   )`,
-  `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_workflow_idx
-    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_workflow_recent_idx
+    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC, run_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_session_idx
     ON cloud_workflow_runs (tenant_id, session_id)`,
   `CREATE TABLE IF NOT EXISTS cloud_thread_tags (
@@ -1371,6 +1371,13 @@ const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS = [
     WHERE task_id IS NOT NULL`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID = '033_workflow_run_recent_index'
+const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflow_runs_workflow_recent_idx
+    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC, run_id)`,
+  `DROP INDEX CONCURRENTLY IF EXISTS cloud_workflow_runs_workflow_idx`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1518,6 +1525,12 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     id: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS,
     concurrentIndexes: ['cloud_artifact_index_task_idx'],
+    transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_workflow_runs_workflow_recent_idx'],
     transactional: false,
   },
 ] as const

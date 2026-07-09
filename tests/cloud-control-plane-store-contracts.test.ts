@@ -1369,6 +1369,76 @@ function runControlPlaneDomainContracts(
       await store.close?.()
     }
   })
+
+  test(`${name} control plane batch-lists recent workflow runs from deep histories`, { skip }, async () => {
+    const store = await createStore()
+    const prefix = `${name}-workflow-history-${randomUUID()}`
+    const tenantId = `${prefix}-tenant`
+    const userId = `${prefix}-user`
+    const workflowIds = Array.from({ length: 6 }, (_, index) => `${prefix}-workflow-${index}`)
+    const runCount = 36
+
+    try {
+      await store.createTenant({ tenantId, name: 'Workflow history tenant' })
+      await store.ensureUser({ tenantId, userId, email: `${userId}@example.test`, role: 'owner' })
+      for (const [workflowIndex, workflowId] of workflowIds.entries()) {
+        await store.createWorkflow({
+          tenantId,
+          userId,
+          workflowId,
+          draft: {
+            title: `Workflow ${workflowIndex}`,
+            instructions: 'Exercise recent-run listing.',
+            agentName: 'runner',
+            skillNames: [],
+            toolIds: [],
+            projectDirectory: null,
+            draftSessionId: null,
+            triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+          },
+          createdAt: new Date(Date.UTC(2031, 0, 1, 0, 0, workflowIndex)),
+        })
+        for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
+          const runId = `${workflowId}-run-${String(runIndex).padStart(2, '0')}`
+          await store.createWorkflowRun({
+            tenantId,
+            userId,
+            workflowId,
+            runId,
+            triggerType: 'manual',
+            createdAt: new Date(Date.UTC(2031, 0, 2, 0, runIndex, workflowIndex)),
+          })
+          await store.completeWorkflowRun({
+            tenantId,
+            workflowId,
+            runId,
+            summary: `done ${runIndex}`,
+            nextStatus: 'active',
+            nextRunAt: null,
+            finishedAt: new Date(Date.UTC(2031, 0, 2, 0, runIndex, workflowIndex + 1)),
+          })
+        }
+      }
+
+      const runs = await store.listWorkflowRunsForWorkflows({
+        tenantId,
+        userId,
+        workflowIds,
+        limitPerWorkflow: 3,
+        limit: workflowIds.length * 3,
+      })
+      const expectedIds = [35, 34, 33].flatMap((runIndex) => workflowIds
+        .slice()
+        .reverse()
+        .map((workflowId) => `${workflowId}-run-${String(runIndex).padStart(2, '0')}`))
+      assert.deepEqual(runs.map((run) => run.id), expectedIds)
+      for (const workflowId of workflowIds) {
+        assert.equal(runs.filter((run) => run.workflowId === workflowId).length, 3)
+      }
+    } finally {
+      await store.close?.()
+    }
+  })
 }
 
 test('cloud_workflow_runs concurrency gauge trigger stays consistent with the COUNT', async () => {
