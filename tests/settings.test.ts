@@ -305,6 +305,43 @@ test('saveSettings records an explicit persisted schema version', async () => {
   }
 })
 
+test('window zoom defaults and persists within the accessible desktop range', async () => {
+  const tempRoot = testTempDir('opencowork-settings-window-zoom-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, saveSettings } = await importFreshSettingsModule('window-zoom')
+    assert.equal(loadSettings().windowZoomFactor, 1)
+
+    saveSettings({ windowZoomFactor: 1.234 })
+    assert.equal(loadSettings().windowZoomFactor, 1.23)
+
+    saveSettings({ windowZoomFactor: 12 })
+    assert.equal(loadSettings().windowZoomFactor, 1.5)
+
+    saveSettings({ windowZoomFactor: 0.1 })
+    assert.equal(loadSettings().windowZoomFactor, 0.8)
+
+    saveSettings({ windowZoomFactor: Number.NaN })
+    assert.equal(loadSettings().windowZoomFactor, 0.8)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('loadSettings rejects settings from a newer schema version', async () => {
   const tempRoot = testTempDir('opencowork-settings-future-schema-')
   const configDir = join(tempRoot, 'downstream')

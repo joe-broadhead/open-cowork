@@ -37,7 +37,10 @@ export type { AgentColor }
 let settingsCache: AppSettings | null = null
 let settingsSecretStorageForTests: SecretStorageAdapter | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 9
+export const SETTINGS_SCHEMA_VERSION = 10
+export const DEFAULT_WINDOW_ZOOM_FACTOR = 1
+export const MIN_WINDOW_ZOOM_FACTOR = 0.8
+export const MAX_WINDOW_ZOOM_FACTOR = 1.5
 
 type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
@@ -155,6 +158,7 @@ function createDefaults(): AppSettings {
     enableFileWrite: nativePermissionEnabledByDefault(fileWritePermission),
     runtimeConfigSource: 'app',
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: DEFAULT_WINDOW_ZOOM_FACTOR,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,
@@ -232,6 +236,15 @@ function normalizeRuntimeConfigSource(value: unknown) {
   return RUNTIME_CONFIG_SOURCES.has(value as string) ? value as AppSettings['runtimeConfigSource'] : undefined
 }
 
+function roundWindowZoomFactor(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+export function normalizeWindowZoomFactor(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return roundWindowZoomFactor(Math.min(MAX_WINDOW_ZOOM_FACTOR, Math.max(MIN_WINDOW_ZOOM_FACTOR, value)))
+}
+
 function asSettingsRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
@@ -285,6 +298,8 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (typeof settings.privacyKeepConversationHistory === 'boolean') update.privacyKeepConversationHistory = settings.privacyKeepConversationHistory
   if (typeof settings.privacyShareAnonymizedUsage === 'boolean') update.privacyShareAnonymizedUsage = settings.privacyShareAnonymizedUsage
   if (typeof settings.runtimeToolingBridgeEnabled === 'boolean') update.runtimeToolingBridgeEnabled = settings.runtimeToolingBridgeEnabled
+  const windowZoomFactor = normalizeWindowZoomFactor(settings.windowZoomFactor)
+  if (windowZoomFactor !== undefined) update.windowZoomFactor = windowZoomFactor
   const runtimeConfigSource = normalizeRuntimeConfigSource(settings.runtimeConfigSource)
   if (runtimeConfigSource) update.runtimeConfigSource = runtimeConfigSource
   if (typeof settings.workflowLaunchAtLogin === 'boolean') update.workflowLaunchAtLogin = settings.workflowLaunchAtLogin
@@ -377,6 +392,7 @@ function migrateLegacySettings(rawInput: unknown): AppSettings {
     enableFileWrite: fileWritePermission !== 'deny',
     runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
     runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
+    windowZoomFactor: normalizeWindowZoomFactor(raw?.windowZoomFactor) ?? defaults.windowZoomFactor,
     workflowLaunchAtLogin: raw?.workflowLaunchAtLogin === true || raw?.automationLaunchAtLogin === true,
     workflowRunInBackground: raw?.workflowRunInBackground === true || raw?.automationRunInBackground === true,
     workflowDesktopNotifications: raw?.workflowDesktopNotifications !== false && raw?.automationDesktopNotifications !== false,

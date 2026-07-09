@@ -31,6 +31,7 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,

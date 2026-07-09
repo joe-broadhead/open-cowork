@@ -95,6 +95,7 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'enableFileWrite',
   'runtimeConfigSource',
   'runtimeToolingBridgeEnabled',
+  'windowZoomFactor',
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
 ])

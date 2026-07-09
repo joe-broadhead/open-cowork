@@ -455,6 +455,7 @@ export interface AppSettings {
   enableFileWrite: boolean
   runtimeConfigSource?: 'app' | 'machine'
   runtimeToolingBridgeEnabled: boolean
+  windowZoomFactor: number
   workflowLaunchAtLogin: boolean
   workflowRunInBackground: boolean
   workflowDesktopNotifications: boolean

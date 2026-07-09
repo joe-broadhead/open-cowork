@@ -36,6 +36,7 @@ function baseSettings(): AppSettings {
     enableFileWrite: false,
     runtimeConfigSource: 'app',
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,

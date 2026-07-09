@@ -31,6 +31,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
+    windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,

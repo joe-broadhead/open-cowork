@@ -86,6 +86,7 @@ function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean
         enableFileWrite: settings.enableFileWrite,
         runtimeConfigSource: settings.runtimeConfigSource,
         runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
+        windowZoomFactor: settings.windowZoomFactor,
         workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
         workflowRunInBackground: settings.workflowRunInBackground,
         workflowDesktopNotifications: settings.workflowDesktopNotifications,
