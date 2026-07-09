@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, uti
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { CustomMcpConfig, DesktopPairingPublicRecord } from '@open-cowork/shared'
+import { CLOUD_PROJECTED_SESSION_EVENT_TYPES, type CloudProjectedSessionEventType, type CustomMcpConfig, type DesktopPairingPublicRecord } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import {
@@ -404,6 +404,53 @@ function emptySessionView(overrides: Record<string, unknown> = {}) {
     isAwaitingPermission: false,
     isAwaitingQuestion: false,
     ...overrides,
+  }
+}
+
+function minimalCloudEventPayloadFor(type: CloudProjectedSessionEventType): Record<string, unknown> {
+  switch (type) {
+    case 'session.created':
+      return { title: 'Projected session' }
+    case 'session.imported':
+      return {
+        sourceFingerprint: 'sha256:source',
+        importedAt: '2026-05-28T10:00:00.000Z',
+        itemCounts: { messages: 1 },
+      }
+    case 'session.project_source.bound':
+      return { projectSource: { kind: 'snapshot', snapshotId: 'snapshot-1' } }
+    case 'prompt.submitted':
+      return { messageId: 'user-1', text: 'run checks' }
+    case 'assistant.message':
+      return { messageId: 'assistant-1', content: 'ok' }
+    case 'tool.call':
+      return { id: 'tool-1', name: 'bash', status: 'running' }
+    case 'task.run':
+      return { id: 'task-1', title: 'Task', status: 'running' }
+    case 'permission.requested':
+      return { permissionId: 'permission-1', tool: 'bash', description: 'Approve' }
+    case 'permission.resolved':
+      return { permissionId: 'permission-1', allowed: true }
+    case 'question.asked':
+      return { requestId: 'question-1', questions: [{ question: 'Continue?' }] }
+    case 'question.resolved':
+      return { requestId: 'question-1', answers: ['Yes'] }
+    case 'todos.updated':
+      return { todos: [{ id: 'todo-1', content: 'Ship it' }] }
+    case 'cost.updated':
+      return { cost: 0.01, tokens: { input: 1, output: 2 } }
+    case 'artifact.created':
+      return { artifactId: 'artifact-1', filename: 'result.txt' }
+    case 'artifact.updated':
+      return { artifactId: 'artifact-1', filename: 'result.txt', status: 'available' }
+    case 'session.status':
+      return { statusType: 'running' }
+    case 'session.idle':
+      return {}
+    case 'session.aborted':
+      return { reason: 'user' }
+    case 'runtime.error':
+      return { message: 'Runtime failed' }
   }
 }
 
@@ -812,6 +859,8 @@ test('session handlers route cloud workspace calls through the workspace gateway
 test('cloud session SSE publishes authoritative cloud projections instead of local views', async () => {
   const { context, handlers } = createBaseContext()
   const sentViews: unknown[] = []
+  const sentPatches: unknown[] = []
+  const sentNotifications: unknown[] = []
   let subscribedEventHandler: ((event: any) => void) | null = null
   let projectionFetches = 0
   const adapter: CloudWorkspaceSessionAdapter = {
@@ -882,6 +931,8 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
       id: 202,
       send: (channel: string, payload: unknown) => {
         if (channel === 'session:view') sentViews.push(payload)
+        if (channel === 'session:patch') sentPatches.push(payload)
+        if (channel === 'runtime:notification') sentNotifications.push(payload)
       },
     },
   } as any)
@@ -935,6 +986,8 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
 
   assert.equal(sentViews.length, 1)
   assert.equal(projectionFetches, 1)
+  assert.equal(sentPatches.length, 0)
+  assert.equal(sentNotifications.length, 0)
   assert.deepEqual(sentViews[0], {
     sessionId: 'cloud-session-1',
     workspaceId: 'cloud:test',
@@ -950,6 +1003,98 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
   })
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert.equal(sentViews.length, 1)
+})
+
+test('cloud session SSE refreshes durable projections for every projected event type', async () => {
+  const { context, handlers } = createBaseContext()
+  const sentViews: unknown[] = []
+  let subscribedEventHandler: ((event: any) => void) | null = null
+  let latestProjectionRevision = 0
+  let projectionFetches = 0
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      projectionFetches += 1
+      return emptySessionView({
+        revision: latestProjectionRevision,
+        lastEventAt: latestProjectionRevision,
+      })
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    subscribeSessionEvents: (_sessionId, input) => {
+      subscribedEventHandler = input.onEvent
+      return { close: () => {} }
+    },
+  }
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 205,
+      send: (channel: string, payload: unknown) => {
+        if (channel === 'session:view') sentViews.push(payload)
+      },
+    },
+  } as any)
+  installCloudWorkspace(context, adapter)
+
+  registerSessionHandlers(context)
+  const invokeEvent = { sender: { id: 205 } }
+  context.workspaceGateway.activate(invokeEvent, 'cloud:test')
+  await handlers.get('session:activate')?.(invokeEvent, 'cloud-session-projection-contract')
+  assert.ok(subscribedEventHandler, 'expected cloud session event subscription')
+  projectionFetches = 0
+  sentViews.length = 0
+
+  for (const type of CLOUD_PROJECTED_SESSION_EVENT_TYPES) {
+    latestProjectionRevision += 1
+    subscribedEventHandler({
+      type,
+      sessionId: 'cloud-session-projection-contract',
+      sequence: latestProjectionRevision,
+      payload: minimalCloudEventPayloadFor(type),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    assert.equal(
+      sentViews.length,
+      latestProjectionRevision,
+      `${type} should publish the durable cloud projection`,
+    )
+    assert.deepEqual(sentViews[sentViews.length - 1], {
+      sessionId: 'cloud-session-projection-contract',
+      workspaceId: 'cloud:test',
+      view: emptySessionView({
+        revision: latestProjectionRevision,
+        lastEventAt: latestProjectionRevision,
+      }),
+    })
+  }
+
+  const fetchesAfterProjectedEvents = projectionFetches
+  subscribedEventHandler({
+    type: 'snapshot.required',
+    sessionId: 'cloud-session-projection-contract',
+    sequence: latestProjectionRevision + 1,
+    payload: {},
+  })
+  await new Promise((resolve) => setTimeout(resolve, 80))
+
+  assert.equal(sentViews.length, CLOUD_PROJECTED_SESSION_EVENT_TYPES.length)
+  assert.equal(projectionFetches, fetchesAfterProjectedEvents)
 })
 
 test('cloud session SSE waits for projection revision to catch up before publishing full views', async () => {
