@@ -179,6 +179,14 @@ The client exports `CloudTransportError`, `CloudTransportErrorKind`, and
 `isCloudTransportError`. Callers should branch on `kind`, `status`, and `code`
 rather than parsing human-readable messages.
 
+HTTP non-2xx responses are parsed as JSON when possible. A response body with
+`{ "error": "...", "code": "..." }` becomes the error `message` and `code`;
+non-JSON bodies are preserved on `body` and still classified by HTTP status.
+Fetch rejections are `network` unless they come from caller cancellation
+(`abort`) or the client timeout (`timeout`). SSE uses the same status taxonomy
+for non-2xx fetch streams, reports malformed event payloads as `parse`, and
+reports EventSource/fetch stream startup or runtime failures as `sse`.
+
 | Kind | Typical source |
 | --- | --- |
 | `unauthorized` | HTTP 401, expired or missing auth |

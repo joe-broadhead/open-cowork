@@ -249,6 +249,7 @@ export default [
     ignores: [
       'apps/gateway/src/**/*.test.ts',
       'apps/standalone-gateway/src/**/*.test.ts',
+      'packages/cloud-client/src/**/*.test.ts',
       'packages/gateway-*/src/**/*.test.ts',
     ],
     languageOptions: {

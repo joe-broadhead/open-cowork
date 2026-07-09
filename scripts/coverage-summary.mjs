@@ -47,6 +47,7 @@ const WORKSPACE_SOURCE_INVENTORY = {
     { path: 'packages/gateway-provider-webhook/dist', extensions: ['.js', '.mjs'] },
     { path: 'packages/gateway-provider-whatsapp/dist', extensions: ['.js', '.mjs'] },
     { path: 'packages/gateway-testing/dist', extensions: ['.js', '.mjs'] },
+    { path: 'packages/cloud-client/src', extensions: ['.ts'] },
   ],
 }
 
@@ -88,6 +89,7 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
     'packages/gateway-provider-webhook/dist/',
     'packages/gateway-provider-whatsapp/dist/',
     'packages/gateway-testing/dist/',
+    'packages/cloud-client/src/',
   ],
   sourceInventory: WORKSPACE_SOURCE_INVENTORY,
   // This is a COMBINED floor across every shipped workspace package. It reads low

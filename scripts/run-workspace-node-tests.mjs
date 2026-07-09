@@ -24,6 +24,7 @@ const testRoots = [
   'packages/gateway-provider-webhook/src',
   'packages/gateway-provider-whatsapp/src',
   'packages/gateway-testing/src',
+  'packages/cloud-client/src',
 ]
 
 function collectTests(directory) {
