@@ -1,12 +1,9 @@
-import { nowIso, stableJson, workspaceOperationFromType } from '../postgres-store-id-helpers.ts'
-import { optionalTrimmedText, redactOperationalText } from '../postgres-store-normalizers.ts'
+import { nowIso, stableJson } from '../postgres-store-id-helpers.ts'
+import { redactOperationalText } from '../postgres-store-normalizers.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from '../control-plane-store.ts'
-import { workspaceEventCursorFromRow } from '../workspace-event-cursor.ts'
 import {
   commandFromRow,
-  artifactIndexFromRow,
   eventFromRow,
-  launchpadSessionSummaryFromRow,
   leaseFromRow,
   projectionFromRow,
   sessionFromRow,
@@ -22,31 +19,25 @@ import {
   listPostgresRunnableSessions,
   type PostgresQuotaDomainDeps,
 } from './quotas.ts'
+import {
+  findPostgresWorkspaceEvent,
+  replayOrRejectPostgresWorkspaceEvent,
+} from './workspace-events.ts'
 import { encodeSsePgNotifyPayload } from '../sse-pg-notify.ts'
 import type {
   AppendProjectedSessionEventInput,
   AppendProjectedSessionEventResult,
-  AppendWorkspaceEventInput,
   AuditEventRecord,
-  CloudArtifactIndexRecord,
-  CloudLaunchpadSessionSummaryRecord,
   CommandQueueQuota,
   ControlPlaneSessionStatus,
   EnqueueCommandInput,
-  ListCloudArtifactIndexInput,
-  ListCloudArtifactIndexResult,
-  ListCloudLaunchpadSessionSummariesInput,
-  ListCloudLaunchpadSessionSummariesResult,
   ListSessionsPageInput,
   RecordAuditEventInput,
   RecoverSessionLeaseInput,
   ReapExpiredSessionLeasesInput,
   ReapedSessionLeaseRecord,
   SessionEventRecord,
-  UpsertCloudArtifactIndexInput,
-  UpsertCloudLaunchpadSessionSummaryInput,
   WorkerLeaseRecord,
-  WorkspaceEventCursorRecord,
   WorkspaceEventRecord,
 } from '../control-plane-store.ts'
 
@@ -400,9 +391,9 @@ export class PostgresSessionsRepository {
       const workspacePayload = payload
       let workspaceEventCreated = false
       let workspaceEvent: WorkspaceEventRecord
-      const existingWorkspaceEvent = await this.findWorkspaceEvent(input.tenantId, session.userId, workspace.eventId, client)
+      const existingWorkspaceEvent = await findPostgresWorkspaceEvent(client, input.tenantId, session.userId, workspace.eventId)
       if (existingWorkspaceEvent) {
-        workspaceEvent = this.replayOrRejectWorkspaceEvent(existingWorkspaceEvent, input.type, workspacePayload, {
+        workspaceEvent = replayOrRejectPostgresWorkspaceEvent(existingWorkspaceEvent, input.type, workspacePayload, {
           sessionId: input.sessionId,
           entityType: workspace.entityType,
           entityId: workspace.entityId,
@@ -528,345 +519,6 @@ export class PostgresSessionsRepository {
       [tenantId, sessionId],
     )
     return { count: Number(row.count), latestSequence: Number(row.latest) }
-  }
-
-  async upsertCloudArtifactIndex(input: UpsertCloudArtifactIndexInput): Promise<CloudArtifactIndexRecord> {
-    return this.options.withTransaction(async (client) => {
-      await this.options.requireTenantUser(input.tenantId, input.userId, client)
-      const session = await this.maybeOne(
-        `SELECT * FROM cloud_sessions
-         WHERE tenant_id = $1 AND user_id = $2 AND session_id = $3
-         FOR UPDATE`,
-        [input.tenantId, input.userId, input.sessionId],
-        client,
-      )
-      if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
-      const result = await client.query(
-        `INSERT INTO cloud_artifact_index (
-          tenant_id,
-          user_id,
-          session_id,
-          artifact_id,
-          filename,
-          content_type,
-          size_bytes,
-          object_key,
-          kind,
-          status,
-          author_agent_id,
-          project_id,
-          task_id,
-          status_updated_by,
-          status_updated_at,
-          created_at,
-          updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
-        )
-        ON CONFLICT (tenant_id, session_id, artifact_id) DO UPDATE SET
-          user_id = EXCLUDED.user_id,
-          filename = EXCLUDED.filename,
-          content_type = EXCLUDED.content_type,
-          size_bytes = EXCLUDED.size_bytes,
-          object_key = EXCLUDED.object_key,
-          kind = EXCLUDED.kind,
-          status = EXCLUDED.status,
-          author_agent_id = EXCLUDED.author_agent_id,
-          project_id = EXCLUDED.project_id,
-          task_id = EXCLUDED.task_id,
-          status_updated_by = EXCLUDED.status_updated_by,
-          status_updated_at = EXCLUDED.status_updated_at,
-          updated_at = EXCLUDED.updated_at
-        RETURNING *, (SELECT title FROM cloud_sessions s WHERE s.tenant_id = cloud_artifact_index.tenant_id AND s.session_id = cloud_artifact_index.session_id) AS session_title`,
-        [
-          input.tenantId,
-          input.userId,
-          input.sessionId,
-          input.artifactId,
-          input.filename,
-          input.contentType,
-          input.size,
-          input.key,
-          input.kind,
-          input.status,
-          input.authorAgentId,
-          input.projectId,
-          input.taskId,
-          input.statusUpdatedBy,
-          input.statusUpdatedAt,
-          input.createdAt,
-          input.updatedAt,
-        ],
-      )
-      return artifactIndexFromRow(result.rows[0]!)
-    })
-  }
-
-  async getCloudArtifactIndexRecord(input: {
-    tenantId: string
-    userId: string
-    sessionId: string
-    artifactId: string
-  }): Promise<CloudArtifactIndexRecord | null> {
-    await this.options.requireTenantUser(input.tenantId, input.userId)
-    const row = await this.maybeOne(
-      `SELECT a.*, s.title AS session_title
-       FROM cloud_artifact_index a
-       JOIN cloud_sessions s
-         ON s.tenant_id = a.tenant_id
-        AND s.session_id = a.session_id
-       WHERE a.tenant_id = $1
-         AND a.user_id = $2
-         AND a.session_id = $3
-         AND a.artifact_id = $4`,
-      [input.tenantId, input.userId, input.sessionId, input.artifactId],
-    )
-    return row ? artifactIndexFromRow(row) : null
-  }
-
-  async listCloudArtifactIndex(input: ListCloudArtifactIndexInput): Promise<ListCloudArtifactIndexResult> {
-    await this.options.requireTenantUser(input.tenantId, input.userId)
-    if (input.sessionId) {
-      const session = await this.maybeOne(
-        `SELECT session_id FROM cloud_sessions
-         WHERE tenant_id = $1 AND user_id = $2 AND session_id = $3`,
-        [input.tenantId, input.userId, input.sessionId],
-      )
-      if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
-    }
-    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
-    const params: unknown[] = [input.tenantId, input.userId]
-    const where = ['a.tenant_id = $1', 'a.user_id = $2']
-    if (input.sessionId) {
-      params.push(input.sessionId)
-      where.push(`a.session_id = $${params.length}`)
-    }
-    const taskIds = [...new Set((input.taskIds || []).filter(Boolean))]
-    if (input.projectId) {
-      params.push(input.projectId)
-      const projectParam = params.length
-      if (taskIds.length > 0) {
-        params.push(taskIds)
-        where.push(`(a.project_id = $${projectParam} OR a.task_id = ANY($${params.length}::text[]))`)
-      } else {
-        where.push(`a.project_id = $${projectParam}`)
-      }
-    } else if (taskIds.length > 0) {
-      params.push(taskIds)
-      where.push(`a.task_id = ANY($${params.length}::text[])`)
-    }
-    if (input.taskId) {
-      params.push(input.taskId)
-      where.push(`a.task_id = $${params.length}`)
-    }
-    if (input.status) {
-      params.push(input.status)
-      where.push(`a.status = $${params.length}`)
-    }
-    if (input.kind) {
-      params.push(input.kind)
-      where.push(`a.kind = $${params.length}`)
-    }
-    params.push(limit + 1)
-    const result = await this.options.pool.query(
-      `SELECT a.*, s.title AS session_title
-       FROM cloud_artifact_index a
-       JOIN cloud_sessions s
-         ON s.tenant_id = a.tenant_id
-        AND s.session_id = a.session_id
-       WHERE ${where.join(' AND ')}
-       ORDER BY a.updated_at DESC, a.session_id, a.artifact_id
-       LIMIT $${params.length}`,
-      params,
-    )
-    const rows = result.rows.map(artifactIndexFromRow)
-    const items = rows.slice(0, limit)
-    return {
-      items,
-      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
-      truncated: rows.length > limit,
-    }
-  }
-
-  async upsertCloudLaunchpadSessionSummary(input: UpsertCloudLaunchpadSessionSummaryInput): Promise<CloudLaunchpadSessionSummaryRecord> {
-    return this.options.withTransaction(async (client) => {
-      await this.options.requireTenantUser(input.tenantId, input.userId, client)
-      const session = await this.maybeOne(
-        `SELECT * FROM cloud_sessions
-         WHERE tenant_id = $1 AND user_id = $2 AND session_id = $3
-         FOR UPDATE`,
-        [input.tenantId, input.userId, input.sessionId],
-        client,
-      )
-      if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
-      const result = await client.query(
-        `INSERT INTO cloud_launchpad_session_summaries (
-          tenant_id,
-          user_id,
-          session_id,
-          pending_approvals,
-          pending_questions,
-          updated_at
-        ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
-        ON CONFLICT (tenant_id, session_id) DO UPDATE SET
-          user_id = EXCLUDED.user_id,
-          pending_approvals = EXCLUDED.pending_approvals,
-          pending_questions = EXCLUDED.pending_questions,
-          updated_at = EXCLUDED.updated_at
-        RETURNING *, (SELECT created_at FROM cloud_sessions s WHERE s.tenant_id = cloud_launchpad_session_summaries.tenant_id AND s.session_id = cloud_launchpad_session_summaries.session_id) AS created_at,
-          (SELECT title FROM cloud_sessions s WHERE s.tenant_id = cloud_launchpad_session_summaries.tenant_id AND s.session_id = cloud_launchpad_session_summaries.session_id) AS session_title`,
-        [
-          input.tenantId,
-          input.userId,
-          input.sessionId,
-          JSON.stringify(input.pendingApprovals),
-          JSON.stringify(input.pendingQuestions),
-          input.updatedAt,
-        ],
-      )
-      return launchpadSessionSummaryFromRow(result.rows[0]!)
-    })
-  }
-
-  async listCloudLaunchpadSessionSummaries(input: ListCloudLaunchpadSessionSummariesInput): Promise<ListCloudLaunchpadSessionSummariesResult> {
-    await this.options.requireTenantUser(input.tenantId, input.userId)
-    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
-    const result = await this.options.pool.query(
-      `SELECT l.*, s.title AS session_title, s.created_at AS created_at
-       FROM cloud_launchpad_session_summaries l
-       JOIN cloud_sessions s
-         ON s.tenant_id = l.tenant_id
-        AND s.session_id = l.session_id
-       WHERE l.tenant_id = $1
-         AND l.user_id = $2
-         AND (
-           jsonb_array_length(l.pending_approvals) > 0
-           OR jsonb_array_length(l.pending_questions) > 0
-         )
-       ORDER BY l.updated_at DESC, l.session_id
-       LIMIT $3`,
-      [input.tenantId, input.userId, limit + 1],
-    )
-    const rows = result.rows.map(launchpadSessionSummaryFromRow)
-    const items = rows.slice(0, limit)
-    return {
-      items,
-      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
-      truncated: rows.length > limit,
-    }
-  }
-
-  async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
-    const record = await this.options.withTransaction(async (client) => {
-      await this.options.requireTenantUser(input.tenantId, input.userId, client)
-      if (input.sessionId) {
-        const session = await this.requireSession(input.tenantId, input.sessionId, client, true)
-        if (String(session.user_id) !== input.userId) {
-          throw new Error(`Session ${input.sessionId} does not belong to user ${input.userId}.`)
-        }
-      }
-
-      const payload = input.payload || {}
-      const sessionId = input.sessionId || null
-      const entityType = optionalTrimmedText(input.entityType) || (sessionId ? 'session' : 'workspace')
-      const entityId = optionalTrimmedText(input.entityId) || sessionId || input.userId
-      const operation = optionalTrimmedText(input.operation) || workspaceOperationFromType(input.type)
-      await client.query(
-        `INSERT INTO cloud_workspace_event_counters (tenant_id, user_id, next_sequence)
-         VALUES ($1, $2, 0)
-         ON CONFLICT (tenant_id, user_id) DO NOTHING`,
-        [input.tenantId, input.userId],
-      )
-      const counter = await this.one(
-        `SELECT next_sequence
-         FROM cloud_workspace_event_counters
-         WHERE tenant_id = $1 AND user_id = $2
-         FOR UPDATE`,
-        [input.tenantId, input.userId],
-        client,
-      )
-      if (input.eventId) {
-        const existing = await this.findWorkspaceEvent(input.tenantId, input.userId, input.eventId, client)
-        if (existing) {
-          const projectionVersion = Number.isFinite(input.projectionVersion)
-            ? Math.max(0, Math.floor(input.projectionVersion || 0))
-            : existing.projectionVersion
-          return this.replayOrRejectWorkspaceEvent(existing, input.type, payload, {
-            sessionId,
-            entityType,
-            entityId,
-            operation,
-            projectionVersion,
-          })
-        }
-      }
-
-      const sequence = numberValue(counter.next_sequence) + 1
-      const eventId = input.eventId || `${input.userId}:${sequence}`
-      const projectionVersion = Number.isFinite(input.projectionVersion)
-        ? Math.max(0, Math.floor(input.projectionVersion || 0))
-        : sequence
-      await client.query(
-        `UPDATE cloud_workspace_event_counters
-         SET next_sequence = $3
-         WHERE tenant_id = $1 AND user_id = $2`,
-        [input.tenantId, input.userId, sequence],
-      )
-      const createdAt = nowIso(input.createdAt)
-      const inserted = await client.query(
-        `INSERT INTO cloud_workspace_events (
-          tenant_id, user_id, event_id, sequence, session_id,
-          entity_type, entity_id, operation, projection_version,
-          type, payload, created_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
-         RETURNING *`,
-        [
-          input.tenantId,
-          input.userId,
-          eventId,
-          sequence,
-          sessionId,
-          entityType,
-          entityId,
-          operation,
-          projectionVersion,
-          input.type,
-          JSON.stringify(payload),
-          createdAt,
-        ],
-      )
-      return workspaceEventFromRow(inserted.rows[0]!)
-    })
-    this.options.emitSseNotify({ kind: 'workspace', tenantId: record.tenantId, userId: record.userId })
-    return record
-  }
-
-  async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    await this.options.requireTenantUser(tenantId, userId)
-    return this.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
-  }
-
-  async listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    const bounded = Number.isInteger(limit) && (limit as number) > 0
-    const result = await this.options.pool.query(
-      `SELECT * FROM cloud_workspace_events
-       WHERE tenant_id = $1 AND user_id = $2 AND sequence > $3
-       ORDER BY sequence${bounded ? ' LIMIT $4' : ''}`,
-      bounded ? [tenantId, userId, afterSequence, limit] : [tenantId, userId, afterSequence],
-    )
-    return result.rows.map(workspaceEventFromRow)
-  }
-
-  async getWorkspaceEventCursor(tenantId: string, userId: string): Promise<WorkspaceEventCursorRecord> {
-    await this.options.requireTenantUser(tenantId, userId)
-    const result = await this.options.pool.query(
-      `SELECT min(sequence) AS earliest_sequence, max(sequence) AS latest_sequence
-       FROM cloud_workspace_events
-       WHERE tenant_id = $1 AND user_id = $2`,
-      [tenantId, userId],
-    )
-    return workspaceEventCursorFromRow(result.rows[0])
   }
 
   async writeSessionProjection(input: {
@@ -1479,21 +1131,6 @@ export class PostgresSessionsRepository {
     return row ? eventFromRow(row) : null
   }
 
-  private async findWorkspaceEvent(
-    tenantId: string,
-    userId: string,
-    eventId: string,
-    executor: PgExecutor,
-  ) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workspace_events
-       WHERE tenant_id = $1 AND user_id = $2 AND event_id = $3`,
-      [tenantId, userId, eventId],
-      executor,
-    )
-    return row ? workspaceEventFromRow(row) : null
-  }
-
   private replayOrRejectEvent(
     existing: SessionEventRecord,
     type: string,
@@ -1501,32 +1138,6 @@ export class PostgresSessionsRepository {
   ) {
     if (existing.type !== type || stableJson(existing.payload) !== stableJson(payload)) {
       throw new Error(`Event id ${existing.eventId} was reused with different content.`)
-    }
-    return existing
-  }
-
-  private replayOrRejectWorkspaceEvent(
-    existing: WorkspaceEventRecord,
-    type: string,
-    payload: Record<string, unknown>,
-    expected: {
-      sessionId: string | null
-      entityType: string
-      entityId: string
-      operation: string
-      projectionVersion: number
-    },
-  ) {
-    if (
-      existing.type !== type
-      || stableJson(existing.payload) !== stableJson(payload)
-      || existing.sessionId !== expected.sessionId
-      || existing.entityType !== expected.entityType
-      || existing.entityId !== expected.entityId
-      || existing.operation !== expected.operation
-      || existing.projectionVersion !== expected.projectionVersion
-    ) {
-      throw new Error(`Workspace event id ${existing.eventId} was reused with different content.`)
     }
     return existing
   }

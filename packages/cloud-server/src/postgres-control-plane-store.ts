@@ -153,6 +153,7 @@ import { PostgresApiTokensRepository } from './postgres-store-domains/api-tokens
 import { PostgresAuthBackoffRepository } from './postgres-store-domains/auth-backoff.ts'
 import { PostgresRateLimitsRepository } from './postgres-store-domains/rate-limits.ts'
 import { PostgresSessionsRepository } from './postgres-store-domains/sessions.ts'
+import { PostgresSessionIndexesRepository } from './postgres-store-domains/session-indexes.ts'
 import { PostgresThreadIndexRepository } from './postgres-store-domains/thread-index.ts'
 import { PostgresWebhooksRepository } from './postgres-store-domains/webhooks.ts'
 import { PostgresWorkflowsRepository } from './postgres-store-domains/workflows.ts'
@@ -181,6 +182,8 @@ import { PostgresManagedWorkersRepository } from './postgres-store-domains/worke
 import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/channel-deliveries.ts'
 import { PostgresCoordinationWatchesRepository } from './postgres-store-domains/coordination-watches.ts'
+import { PostgresArtifactUploadReservationsRepository } from './postgres-store-domains/artifact-upload-reservations.ts'
+import { PostgresWorkspaceEventsRepository } from './postgres-store-domains/workspace-events.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -231,6 +234,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly authBackoff: PostgresAuthBackoffRepository
   private readonly workerHeartbeats: PostgresWorkerHeartbeatsRepository
   private readonly sessions: PostgresSessionsRepository
+  private readonly sessionIndexes: PostgresSessionIndexesRepository
   private readonly threadIndex: PostgresThreadIndexRepository
   private readonly webhooks: PostgresWebhooksRepository
   private readonly workflows: PostgresWorkflowsRepository
@@ -244,6 +248,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly channelProviderEvents: PostgresChannelProviderEventsRepository
   private readonly channelDeliveries: PostgresChannelDeliveriesRepository
   private readonly coordinationWatches: PostgresCoordinationWatchesRepository
+  private readonly artifactUploadReservations: PostgresArtifactUploadReservationsRepository
+  private readonly workspaceEvents: PostgresWorkspaceEventsRepository
   private readonly quotaDeps = {
     lockQuota: (executor: PgExecutor, orgId: string, quotaKey: string, now?: Date) => this.lockQuota(executor, orgId, quotaKey, now),
     consumeUsageQuota: (executor: PgExecutor, input: ConsumeUsageQuotaInput) => this.consumeUsageQuotaWithExecutor(executor, input),
@@ -295,6 +301,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       emitSseNotify: (payload) => this.emitSseNotify(payload),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       quotaDeps: this.quotaDeps,
+    })
+    this.sessionIndexes = new PostgresSessionIndexesRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
     })
     this.threadIndex = new PostgresThreadIndexRepository({
       pool: this.pool,
@@ -351,6 +362,19 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       consumeUsageQuota: (executor, input) => this.consumeUsageQuotaWithExecutor(executor, input),
     })
     this.coordinationWatches = new PostgresCoordinationWatchesRepository(this.pool)
+    this.artifactUploadReservations = new PostgresArtifactUploadReservationsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      consumeUsageQuota: (executor, input) => this.consumeUsageQuotaWithExecutor(executor, input),
+      adjustUsageQuota: (executor, input) => this.adjustUsageQuotaWithExecutor(executor, input),
+    })
+    this.workspaceEvents = new PostgresWorkspaceEventsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      requireTenantUser: (tenantId, userId, executor) => this.requireTenantUser(tenantId, userId, executor),
+      requireSession: (tenantId, sessionId, executor) => this.sessions.requireSession(tenantId, sessionId, executor, true),
+      emitSseNotify: (payload) => this.emitSseNotify(payload),
+    })
   }
 
   static async connect(options: PostgresControlPlaneStoreOptions) {
@@ -679,65 +703,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     reservation: ArtifactUploadReservationRecord | null
     quota: QuotaConsumptionRecord | null
   }> {
-    return this.withTransaction(async (client) => {
-      const existing = await this.findArtifactUploadReservation(input.orgId, input.tenantId, input.sessionId, input.artifactId, client)
-      if (existing) return { reservation: existing, quota: null }
-      const now = input.createdAt || input.quota?.now || new Date()
-      const quotaNow = input.quota?.now || now
-      const quotaWindowMs = input.quota?.windowMs ?? null
-      const quotaWindowStartedAtMs = input.quota ? windowStart(quotaNow.getTime(), input.quota.windowMs) : null
-      const result = await client.query(
-        `INSERT INTO cloud_artifact_upload_reservations (
-          org_id, tenant_id, user_id, session_id, artifact_id, object_key, filename,
-          content_type, quota_key, quota_window_ms, quota_window_started_at_ms,
-          reserved_bytes, settled_bytes, status, expires_at, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, 'reserved', $13, $14, $14)
-        ON CONFLICT (org_id, tenant_id, session_id, artifact_id) DO NOTHING
-        RETURNING *`,
-        [
-          input.orgId,
-          input.tenantId,
-          input.userId,
-          input.sessionId,
-          input.artifactId,
-          input.objectKey,
-          input.filename,
-          input.contentType || null,
-          input.quota?.quotaKey || null,
-          quotaWindowMs,
-          quotaWindowStartedAtMs,
-          normalizeNonNegativeInteger(input.reservedBytes, 'Reserved artifact bytes'),
-          nowIso(input.expiresAt instanceof Date ? input.expiresAt : new Date(input.expiresAt)),
-          nowIso(now),
-        ],
-      )
-      if (!result.rows[0]) {
-        const raced = await this.one(
-          `SELECT * FROM cloud_artifact_upload_reservations
-           WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4`,
-          [input.orgId, input.tenantId, input.sessionId, input.artifactId],
-          client,
-        )
-        return { reservation: artifactUploadReservationFromRow(raced), quota: null }
-      }
-      const quota = input.quota ? await this.consumeUsageQuotaWithExecutor(client, input.quota) : null
-      if (quota && !quota.allowed) {
-        await client.query(
-          `DELETE FROM cloud_artifact_upload_reservations
-           WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4`,
-          [input.orgId, input.tenantId, input.sessionId, input.artifactId],
-        )
-        return { reservation: null, quota }
-      }
-      const row = await this.one(
-        `SELECT * FROM cloud_artifact_upload_reservations
-         WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4`,
-        [input.orgId, input.tenantId, input.sessionId, input.artifactId],
-        client,
-      )
-      return { reservation: artifactUploadReservationFromRow(row), quota }
-    })
+    return this.artifactUploadReservations.create(input)
   }
 
   async getArtifactUploadReservation(input: {
@@ -746,7 +712,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     sessionId: string
     artifactId: string
   }): Promise<ArtifactUploadReservationRecord | null> {
-    return this.findArtifactUploadReservation(input.orgId, input.tenantId, input.sessionId, input.artifactId)
+    return this.artifactUploadReservations.get(input)
   }
 
   async settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): Promise<{
@@ -754,58 +720,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     quota: QuotaConsumptionRecord | null
     settled: boolean
   }> {
-    return this.withTransaction(async (client) => {
-      const reservation = await this.lockArtifactUploadReservation(input.orgId, input.tenantId, input.sessionId, input.artifactId, client)
-      if (!reservation) return { reservation: null, quota: null, settled: false }
-      if (reservation.status !== 'reserved') return { reservation, quota: null, settled: reservation.status === 'settled' }
-      const actualBytes = normalizeNonNegativeInteger(input.actualBytes, 'Artifact upload size')
-      const delta = actualBytes - reservation.reservedBytes
-      const quota = delta > 0 && input.quota
-        ? await this.consumeUsageQuotaWithExecutor(client, { ...input.quota, quantity: delta })
-        : null
-      if (quota && !quota.allowed) return { reservation, quota, settled: false }
-      if (delta < 0 && reservation.quotaKey && reservation.quotaWindowStartedAtMs !== null) {
-        await this.adjustUsageQuotaWithExecutor(client, {
-          orgId: reservation.orgId,
-          quotaKey: reservation.quotaKey,
-          windowStartedAtMs: reservation.quotaWindowStartedAtMs,
-          quantityDelta: delta,
-        })
-      }
-      const now = nowIso(input.now)
-      const result = await client.query(
-        `UPDATE cloud_artifact_upload_reservations
-         SET status = 'settled', settled_bytes = $5, updated_at = $6
-         WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4
-         RETURNING *`,
-        [input.orgId, input.tenantId, input.sessionId, input.artifactId, actualBytes, now],
-      )
-      return { reservation: artifactUploadReservationFromRow(result.rows[0]!), quota, settled: true }
-    })
+    return this.artifactUploadReservations.settle(input)
   }
 
   async releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): Promise<ArtifactUploadReservationRecord | null> {
-    return this.withTransaction(async (client) => {
-      const reservation = await this.lockArtifactUploadReservation(input.orgId, input.tenantId, input.sessionId, input.artifactId, client)
-      if (!reservation) return null
-      if (reservation.status === 'reserved' && reservation.quotaKey && reservation.quotaWindowStartedAtMs !== null) {
-        await this.adjustUsageQuotaWithExecutor(client, {
-          orgId: reservation.orgId,
-          quotaKey: reservation.quotaKey,
-          windowStartedAtMs: reservation.quotaWindowStartedAtMs,
-          quantityDelta: -reservation.reservedBytes,
-        })
-      }
-      const result = await client.query(
-        `UPDATE cloud_artifact_upload_reservations
-         SET status = CASE WHEN status = 'reserved' THEN $5 ELSE status END,
-             updated_at = $6
-         WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4
-         RETURNING *`,
-        [input.orgId, input.tenantId, input.sessionId, input.artifactId, input.status, nowIso(input.now)],
-      )
-      return result.rows[0] ? artifactUploadReservationFromRow(result.rows[0]) : null
-    })
+    return this.artifactUploadReservations.release(input)
   }
 
   async recordUsageEvent(input: RecordUsageEventInput) {
@@ -1494,40 +1413,40 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.getSessionEventStats(tenantId, sessionId)
   }
 
-  async upsertCloudArtifactIndex(input: Parameters<PostgresSessionsRepository['upsertCloudArtifactIndex']>[0]) {
-    return this.sessions.upsertCloudArtifactIndex(input)
+  async upsertCloudArtifactIndex(input: Parameters<PostgresSessionIndexesRepository['upsertCloudArtifactIndex']>[0]) {
+    return this.sessionIndexes.upsertCloudArtifactIndex(input)
   }
 
-  async getCloudArtifactIndexRecord(input: Parameters<PostgresSessionsRepository['getCloudArtifactIndexRecord']>[0]) {
-    return this.sessions.getCloudArtifactIndexRecord(input)
+  async getCloudArtifactIndexRecord(input: Parameters<PostgresSessionIndexesRepository['getCloudArtifactIndexRecord']>[0]) {
+    return this.sessionIndexes.getCloudArtifactIndexRecord(input)
   }
 
-  async listCloudArtifactIndex(input: Parameters<PostgresSessionsRepository['listCloudArtifactIndex']>[0]) {
-    return this.sessions.listCloudArtifactIndex(input)
+  async listCloudArtifactIndex(input: Parameters<PostgresSessionIndexesRepository['listCloudArtifactIndex']>[0]) {
+    return this.sessionIndexes.listCloudArtifactIndex(input)
   }
 
-  async upsertCloudLaunchpadSessionSummary(input: Parameters<PostgresSessionsRepository['upsertCloudLaunchpadSessionSummary']>[0]) {
-    return this.sessions.upsertCloudLaunchpadSessionSummary(input)
+  async upsertCloudLaunchpadSessionSummary(input: Parameters<PostgresSessionIndexesRepository['upsertCloudLaunchpadSessionSummary']>[0]) {
+    return this.sessionIndexes.upsertCloudLaunchpadSessionSummary(input)
   }
 
-  async listCloudLaunchpadSessionSummaries(input: Parameters<PostgresSessionsRepository['listCloudLaunchpadSessionSummaries']>[0]) {
-    return this.sessions.listCloudLaunchpadSessionSummaries(input)
+  async listCloudLaunchpadSessionSummaries(input: Parameters<PostgresSessionIndexesRepository['listCloudLaunchpadSessionSummaries']>[0]) {
+    return this.sessionIndexes.listCloudLaunchpadSessionSummaries(input)
   }
 
   async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
-    return this.sessions.appendWorkspaceEvent(input)
+    return this.workspaceEvents.appendWorkspaceEvent(input)
   }
 
   async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    return this.sessions.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
+    return this.workspaceEvents.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
   }
 
   async listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
-    return this.sessions.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
+    return this.workspaceEvents.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
   }
 
   async getWorkspaceEventCursor(tenantId: string, userId: string): Promise<WorkspaceEventCursorRecord> {
-    return this.sessions.getWorkspaceEventCursor(tenantId, userId)
+    return this.workspaceEvents.getWorkspaceEventCursor(tenantId, userId)
   }
 
   async writeSessionProjection(input: {
@@ -1965,39 +1884,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     )
   }
 
-  private async findArtifactUploadReservation(
-    orgId: string,
-    tenantId: string,
-    sessionId: string,
-    artifactId: string,
-    executor: PgExecutor = this.pool,
-  ): Promise<ArtifactUploadReservationRecord | null> {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_artifact_upload_reservations
-       WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4`,
-      [orgId, tenantId, sessionId, artifactId],
-      executor,
-    )
-    return row ? artifactUploadReservationFromRow(row) : null
-  }
-
-  private async lockArtifactUploadReservation(
-    orgId: string,
-    tenantId: string,
-    sessionId: string,
-    artifactId: string,
-    executor: PgExecutor,
-  ): Promise<ArtifactUploadReservationRecord | null> {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_artifact_upload_reservations
-       WHERE org_id = $1 AND tenant_id = $2 AND session_id = $3 AND artifact_id = $4
-       FOR UPDATE`,
-      [orgId, tenantId, sessionId, artifactId],
-      executor,
-    )
-    return row ? artifactUploadReservationFromRow(row) : null
-  }
-
   private async lockQuota(
     executor: PgExecutor,
     orgId: string,
@@ -2087,32 +1973,6 @@ function randomRecordId(prefix: string) {
 // ESCAPE '\\' in the query.
 function likePrefixEscape(value: string) {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`)
-}
-
-function rowIso(value: unknown): string {
-  return value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString()
-}
-
-function artifactUploadReservationFromRow(row: QueryRow): ArtifactUploadReservationRecord {
-  return {
-    orgId: String(row.org_id),
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    sessionId: String(row.session_id),
-    artifactId: String(row.artifact_id),
-    objectKey: String(row.object_key),
-    filename: String(row.filename),
-    contentType: normalizeNullableText(row.content_type, 512, 'Artifact content type'),
-    quotaKey: normalizeNullableText(row.quota_key, 256, 'Artifact quota key'),
-    quotaWindowMs: row.quota_window_ms === null || row.quota_window_ms === undefined ? null : numberValue(row.quota_window_ms),
-    quotaWindowStartedAtMs: row.quota_window_started_at_ms === null || row.quota_window_started_at_ms === undefined ? null : numberValue(row.quota_window_started_at_ms),
-    reservedBytes: numberValue(row.reserved_bytes),
-    settledBytes: row.settled_bytes === null || row.settled_bytes === undefined ? null : numberValue(row.settled_bytes),
-    status: String(row.status) as ArtifactUploadReservationRecord['status'],
-    expiresAt: rowIso(row.expires_at),
-    createdAt: rowIso(row.created_at),
-    updatedAt: rowIso(row.updated_at),
-  }
 }
 
 export async function createPostgresControlPlaneStore(options: PostgresControlPlaneStoreOptions) {

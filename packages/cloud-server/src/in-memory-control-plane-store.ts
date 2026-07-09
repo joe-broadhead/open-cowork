@@ -1,6 +1,5 @@
-import { redactOperationalText } from './operational-text-redaction.ts'
-import { normalizeCloudProjectSource, summarizeCloudProjectSource, type CoordinationWatch } from '@open-cowork/shared'
-import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
+import type { CoordinationWatch } from '@open-cowork/shared'
+import type { QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
   CreateManagedWorkerPoolInput,
   IssueManagedWorkerCredentialInput,
@@ -68,16 +67,14 @@ import type {
 } from './control-plane-permissions.ts'
 import { InMemorySettingsDomain } from './in-memory-domains/settings.ts'
 import { InMemoryWorkflowsDomain } from './in-memory-domains/workflows.ts'
+import { InMemorySessionsDomain, type SessionState } from './in-memory-domains/sessions.ts'
 import {
   clone,
   key,
-  normalizeListLimit,
   normalizeNonNegativeInteger,
   normalizeNullableText,
   normalizeText,
   nowIso,
-  sliceEventsAfter,
-  stableJson,
 } from './in-memory-domains/store-helpers.ts'
 import {
   generateChannelInteractionToken,
@@ -85,7 +82,6 @@ import {
   plaintextMatchesChannelInteractionId,
   verifyChannelInteractionTokenHash,
 } from './control-plane-tokens.ts'
-import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page-cursor.ts'
 import type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 import { channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import type { ChannelProviderEventClaimResult, ChannelProviderEventRecord, ChannelProviderId, ClaimChannelProviderEventInput, CompleteChannelProviderEventInput } from './channel-provider-types.ts'
@@ -93,7 +89,6 @@ import type { CreateCloudCoordinationWatchInput, ListCloudCoordinationWatchesInp
 import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
-  WorkReaperAction,
   WorkerRole,
 } from './control-plane-enums.ts'
 import type {
@@ -275,17 +270,6 @@ export {
 } from './control-plane-tokens.ts'
 export type { InMemoryChannelStateSnapshot } from './in-memory-channel-state-snapshot.ts'
 
-type SessionState = {
-  record: SessionRecord
-  nextEventSequence: number
-  nextCommandSequence: number
-  nextLeaseAttempt: number
-  lease: WorkerLeaseRecord | null
-  events: SessionEventRecord[]
-  projection: SessionProjectionRecord | null
-  commands: SessionCommandRecord[]
-}
-
 const THREAD_FILTER_MAX_VALUES = 50
 const THREAD_BULK_MAX_SESSION_IDS = 500
 const CHANNEL_TEXT_MAX_LENGTH = 256
@@ -297,51 +281,12 @@ function normalizeIdList(values: readonly unknown[], label: string, maxLength: n
   return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
 }
 
-function artifactIndexKey(tenantId: string, sessionId: string, artifactId: string) {
-  return key(tenantId, sessionId, artifactId)
-}
-
 function artifactUploadReservationKey(orgId: string, tenantId: string, sessionId: string, artifactId: string) {
   return key(orgId, tenantId, sessionId, artifactId)
 }
 
 function quotaWindowStart(nowMs: number, windowMs: number) {
   return Math.floor(nowMs / windowMs) * windowMs
-}
-
-function cloudArtifactMatchesIndexInput(record: CloudArtifactIndexRecord, input: ListCloudArtifactIndexInput) {
-  if (record.tenantId !== input.tenantId || record.userId !== input.userId) return false
-  if (input.sessionId && record.sessionId !== input.sessionId) return false
-  const taskIds = new Set((input.taskIds || []).filter(Boolean))
-  if (input.projectId && record.projectId !== input.projectId && (!record.taskId || !taskIds.has(record.taskId))) return false
-  if (input.taskId && record.taskId !== input.taskId) return false
-  if (!input.projectId && taskIds.size > 0 && (!record.taskId || !taskIds.has(record.taskId))) return false
-  if (input.status && record.status !== input.status) return false
-  if (input.kind && record.kind !== input.kind) return false
-  return true
-}
-
-function compareCloudArtifacts(left: CloudArtifactIndexRecord, right: CloudArtifactIndexRecord) {
-  return (
-    right.updatedAt.localeCompare(left.updatedAt)
-    || left.sessionId.localeCompare(right.sessionId)
-    || left.artifactId.localeCompare(right.artifactId)
-  )
-}
-
-function launchpadSummaryKey(tenantId: string, sessionId: string) {
-  return key(tenantId, sessionId)
-}
-
-function hasPendingLaunchpadWork(record: CloudLaunchpadSessionSummaryRecord) {
-  return record.pendingApprovals.length > 0 || record.pendingQuestions.length > 0
-}
-
-function compareLaunchpadSummaries(left: CloudLaunchpadSessionSummaryRecord, right: CloudLaunchpadSessionSummaryRecord) {
-  return (
-    right.updatedAt.localeCompare(left.updatedAt)
-    || left.sessionId.localeCompare(right.sessionId)
-  )
 }
 
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
@@ -430,6 +375,29 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   })
   private readonly usageQuotaDomain = new InMemoryUsageQuotaDomain({
     orgExists: (orgId) => this.orgExists(orgId),
+  })
+  private readonly sessionsDomain = new InMemorySessionsDomain({
+    sessions: this.sessions,
+    artifactIndex: this.artifactIndex,
+    launchpadSessionSummaries: this.launchpadSessionSummaries,
+  }, {
+    requireTenant: (tenantId) => { this.requireTenant(tenantId) },
+    requireTenantUser: (tenantId, userId) => { this.requireTenantUser(tenantId, userId) },
+    resolveOrgId: (tenantId) => this.orgIdForTenant(tenantId),
+    resolveOrgIdOrNull: (tenantId) => this.resolveOrgIdOrNull(tenantId),
+    appendWorkspaceEvent: (input) => this.appendWorkspaceEvent(input),
+    findWorkspaceEvent: (tenantId, userId, eventId) => this.workspaceEventsDomain.findWorkspaceEvent(tenantId, userId, eventId),
+    snapshotWorkspaceEvents: () => this.workspaceEventsDomain.snapshot(),
+    restoreWorkspaceEvents: (snapshot) => {
+      this.workspaceEventsDomain.restore(snapshot as Parameters<InMemoryWorkspaceEventsDomain['restore']>[0])
+    },
+    assertCommandQueueQuota: (input) => { this.quotaDomain.assertCommandQueueQuota(input) },
+    consumeUsageQuota: (input) => this.consumeUsageQuota(input),
+    snapshotUsageQuotaCounters: () => this.usageQuotaDomain.snapshotCounters(),
+    restoreUsageQuotaCounters: (snapshot) => {
+      this.usageQuotaDomain.restoreCounters(snapshot as Parameters<InMemoryUsageQuotaDomain['restoreCounters']>[0])
+    },
+    recordAuditEvent: (input) => { this.recordAuditEvent(input) },
   })
   private readonly threadTagsDomain = new InMemoryThreadTagsDomain({
     requireTenant: (tenantId) => { this.requireTenant(tenantId) },
@@ -1233,179 +1201,39 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   createSession(input: CreateSessionInput): SessionRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const sessionKey = key(input.tenantId, input.sessionId)
-    const existing = this.sessions.get(sessionKey)
-    if (existing) return clone(existing.record)
-    const maxConcurrentSessions = input.quota?.maxConcurrentSessionsPerOrg
-    if (maxConcurrentSessions && maxConcurrentSessions > 0) {
-      const orgId = input.quota?.orgId || this.orgIdForTenant(input.tenantId)
-      const activeSessions = Array.from(this.sessions.values())
-        .filter((session) => this.orgIdForTenant(session.record.tenantId) === orgId && session.record.status !== 'closed')
-        .length
-      if (activeSessions >= maxConcurrentSessions) {
-        quotaExceeded({
-          message: 'Concurrent cloud session quota exceeded.',
-          policyCode: input.quota?.policyCode || 'quota.concurrent_sessions_exceeded',
-          retryAfterMs: 60_000,
-          limit: maxConcurrentSessions,
-          used: activeSessions,
-          resetAt: new Date(Date.now() + 60_000).toISOString(),
-        })
-      }
-    }
-    const createdAt = nowIso(input.createdAt)
-    const record: SessionRecord = {
-      tenantId: input.tenantId,
-      userId: input.userId,
-      sessionId: input.sessionId,
-      opencodeSessionId: input.opencodeSessionId,
-      profileName: input.profileName,
-      status: 'idle',
-      title: input.title || null,
-      createdAt,
-      updatedAt: createdAt,
-    }
-    this.sessions.set(sessionKey, {
-      record,
-      nextEventSequence: 0,
-      nextCommandSequence: 0,
-      nextLeaseAttempt: 0,
-      lease: null,
-      events: [],
-      projection: null,
-      commands: [],
-    })
-    return clone(record)
+    return this.sessionsDomain.createSession(input)
   }
 
   getSession(tenantId: string, userId: string, sessionId: string): SessionRecord | null {
-    this.requireTenantUser(tenantId, userId)
-    const record = this.sessions.get(key(tenantId, sessionId))?.record || null
-    if (!record || record.userId !== userId) return null
-    return clone(record)
+    return this.sessionsDomain.getSession(tenantId, userId, sessionId)
   }
 
   getOwnedSessionIds(tenantId: string, userId: string, sessionIds: string[]): Set<string> {
-    this.requireTenantUser(tenantId, userId)
-    const owned = new Set<string>()
-    for (const sessionId of sessionIds) {
-      const record = this.sessions.get(key(tenantId, sessionId))?.record
-      if (record && record.userId === userId) owned.add(sessionId)
-    }
-    return owned
+    return this.sessionsDomain.getOwnedSessionIds(tenantId, userId, sessionIds)
   }
 
   getSessionForTenant(tenantId: string, sessionId: string): SessionRecord | null {
-    this.requireTenant(tenantId)
-    return clone(this.sessions.get(key(tenantId, sessionId))?.record || null)
+    return this.sessionsDomain.getSessionForTenant(tenantId, sessionId)
   }
 
   findSession(sessionId: string): SessionRecord | null {
-    for (const session of this.sessions.values()) {
-      if (session.record.sessionId === sessionId || session.record.opencodeSessionId === sessionId) {
-        return clone(session.record)
-      }
-    }
-    return null
+    return this.sessionsDomain.findSession(sessionId)
   }
 
   listSessions(tenantId: string, userId: string): SessionRecord[] {
-    this.requireTenantUser(tenantId, userId)
-    return Array.from(this.sessions.values())
-      .filter((session) => session.record.tenantId === tenantId && session.record.userId === userId)
-      .sort((left, right) => (
-        right.record.updatedAt.localeCompare(left.record.updatedAt)
-        || left.record.sessionId.localeCompare(right.record.sessionId)
-      ))
-      // Mirror the postgres listSessions bound (most-recent-first, capped at 1000);
-      // callers needing more page via listSessionsPage.
-      .slice(0, 1000)
-      .map((session) => this.sessionRecordWithProjectSource(session.record))
-  }
-
-  private sessionRecordWithProjectSource(record: SessionRecord): SessionRecord {
-    const stored = this.sessions.get(key(record.tenantId, record.sessionId))
-    const source = normalizeCloudProjectSource(stored?.projection?.view?.projectSource)
-    return {
-      ...clone(record),
-      projectSource: summarizeCloudProjectSource(source),
-    }
+    return this.sessionsDomain.listSessions(tenantId, userId)
   }
 
   listSessionsPage(input: ListSessionsPageInput): ListSessionsPageRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const limit = normalizeListLimit(input.limit)
-    const cursor = decodeSessionPageCursor(input.cursor, input)
-    const query = input.query?.trim().toLowerCase() || null
-    const filtered = Array.from(this.sessions.values())
-      .map((session) => session.record)
-      .filter((session) => session.tenantId === input.tenantId && session.userId === input.userId)
-      .filter((session) => !input.status || session.status === input.status)
-      .filter((session) => !input.profileName || session.profileName === input.profileName)
-      .filter((session) => !query || [
-        session.title || '',
-        session.sessionId,
-        session.opencodeSessionId,
-        session.profileName,
-      ].some((field) => field.toLowerCase().includes(query)))
-      .sort((left, right) => (
-        right.updatedAt.localeCompare(left.updatedAt)
-        || left.sessionId.localeCompare(right.sessionId)
-      ))
-      .filter((session) => !cursor
-        || session.updatedAt < cursor.updatedAt
-        || (session.updatedAt === cursor.updatedAt && session.sessionId > cursor.sessionId))
-    const page = filtered.slice(0, limit)
-    const hasMore = filtered.length > limit
-    return {
-      items: page.map((session) => this.sessionRecordWithProjectSource(session)),
-      nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!, input) : null,
-      // Bounded has-more probe capped at limit + 1, matching the Postgres store (#915) — not the
-      // full post-cursor count, which would diverge from production and grow unbounded.
-      totalEstimate: hasMore ? limit + 1 : filtered.length,
-    }
+    return this.sessionsDomain.listSessionsPage(input)
   }
 
   listAllSessions(): SessionRecord[] {
-    return Array.from(this.sessions.values()).map((session) => clone(session.record))
+    return this.sessionsDomain.listAllSessions()
   }
 
   listRunnableSessions(input: ListRunnableSessionsInput = {}): RunnableSessionListRecord {
-    const nowMs = (input.now || new Date()).getTime()
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    const candidates = this.runnableSessionCandidates(nowMs)
-    return {
-      sessions: candidates.slice(0, limit).map((candidate) => ({
-        tenantId: candidate.session.record.tenantId,
-        sessionId: candidate.session.record.sessionId,
-      })),
-      // Bound the estimate like the postgres backend (which probes limit+1), so the
-      // command_queue_depth_estimate gauge reads the same shape across stores (P2 store parity).
-      pendingSessionCountEstimate: candidates.length > limit ? limit + 1 : candidates.length,
-    }
-  }
-
-  private runnableSessionCandidates(nowMs: number) {
-    return Array.from(this.sessions.values())
-      .map((session) => {
-        if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
-        const runnable = session.commands
-          .filter((command) => command.targetLeaseToken === null)
-          .filter((command) => command.status === 'pending' || command.status === 'running')
-          // The delay gate applies only to 'pending' commands, matching postgres
-          // (status <> 'pending' OR available_at IS NULL OR available_at <= now); a 'running' command
-          // is already in flight and must stay runnable regardless of a stale availableAt.
-          .filter((command) => command.status !== 'pending' || !command.availableAt || Date.parse(command.availableAt) <= nowMs)
-          .sort((a, b) => a.createdSequence - b.createdSequence)[0]
-        return runnable ? { session, firstSequence: runnable.createdSequence } : null
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
-      .sort((a, b) => (
-        a.firstSequence - b.firstSequence
-        || a.session.record.tenantId.localeCompare(b.session.record.tenantId)
-        || a.session.record.sessionId.localeCompare(b.session.record.sessionId)
-      ))
+    return this.sessionsDomain.listRunnableSessions(input)
   }
 
   bindSessionRuntime(input: {
@@ -1416,12 +1244,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     leaseToken?: string | null
     updatedAt?: Date
   }): SessionRecord {
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    this.assertLeaseTokenIfPresent(session, input.leaseToken)
-    session.record.opencodeSessionId = input.opencodeSessionId
-    if (input.title !== undefined) session.record.title = input.title
-    session.record.updatedAt = nowIso(input.updatedAt)
-    return clone(session.record)
+    return this.sessionsDomain.bindSessionRuntime(input)
   }
 
   updateSessionStatus(input: {
@@ -1432,143 +1255,31 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     leaseToken?: string | null
     updatedAt?: Date
   }): SessionRecord {
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    this.assertLeaseTokenIfPresent(session, input.leaseToken)
-    session.record.status = input.status
-    if (input.title !== undefined) session.record.title = input.title
-    session.record.updatedAt = nowIso(input.updatedAt)
-    return clone(session.record)
+    return this.sessionsDomain.updateSessionStatus(input)
   }
 
   appendSessionEvent(input: AppendEventInput): SessionEventRecord {
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    this.assertLeaseTokenIfPresent(session, input.leaseToken)
-    const payload = input.payload || {}
-    const eventId = input.eventId || `${input.sessionId}:${session.nextEventSequence + 1}`
-    const existing = session.events.find((event) => event.eventId === eventId)
-    if (existing) {
-      if (
-        existing.type !== input.type
-        || stableJson(existing.payload) !== stableJson(payload)
-      ) {
-        throw new Error(`Event id ${eventId} was reused with different content.`)
-      }
-      return clone(existing)
-    }
-    const event: SessionEventRecord = {
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      eventId,
-      sequence: session.nextEventSequence += 1,
-      type: input.type,
-      payload,
-      createdAt: nowIso(input.createdAt),
-    }
-    session.events.push(event)
-    session.record.updatedAt = event.createdAt
-    return clone(event)
+    return this.sessionsDomain.appendSessionEvent(input)
   }
 
   appendProjectedSessionEvent(input: AppendProjectedSessionEventInput): AppendProjectedSessionEventResult {
-    const sessionKey = key(input.tenantId, input.sessionId)
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    const sessionBefore = clone(session)
-    const workspaceBefore = this.workspaceEventsDomain.snapshot()
-    try {
-      const eventExisted = Boolean(input.eventId && session.events.some((event) => event.eventId === input.eventId))
-      const event = this.appendSessionEvent(input)
-      const workspace = input.workspace({ session: clone(session.record), event })
-      const workspaceExisted = Boolean(this.workspaceEventsDomain.findWorkspaceEvent(
-        input.tenantId,
-        session.record.userId,
-        workspace.eventId,
-      ))
-      const workspaceEvent = this.appendWorkspaceEvent({
-        tenantId: input.tenantId,
-        userId: session.record.userId,
-        sessionId: input.sessionId,
-        eventId: workspace.eventId,
-        entityType: workspace.entityType,
-        entityId: workspace.entityId,
-        operation: workspace.operation,
-        projectionVersion: workspace.projectionVersion,
-        type: input.type,
-        payload: input.payload || {},
-        createdAt: new Date(event.createdAt),
-      })
-      const currentProjection = session.projection ? clone(session.projection) : null
-      if ((currentProjection?.sequence || 0) >= event.sequence) {
-        return {
-          event,
-          workspaceEvent,
-          projection: currentProjection!,
-          session: clone(session.record),
-          sessionEventCreated: !eventExisted,
-          workspaceEventCreated: !workspaceExisted,
-          projectionAdvanced: false,
-        }
-      }
-      const projected = input.project({
-        session: clone(session.record),
-        event,
-        currentProjection,
-      })
-      const projection = this.writeSessionProjection({
-        tenantId: input.tenantId,
-        sessionId: input.sessionId,
-        sequence: event.sequence,
-        view: projected.view,
-        leaseToken: input.leaseToken,
-        updatedAt: projected.updatedAt ?? new Date(event.createdAt),
-      })
-      return {
-        event,
-        workspaceEvent,
-        projection,
-        session: clone(session.record),
-        sessionEventCreated: !eventExisted,
-        workspaceEventCreated: !workspaceExisted,
-        projectionAdvanced: true,
-      }
-    } catch (error) {
-      this.sessions.set(sessionKey, sessionBefore)
-      this.workspaceEventsDomain.restore(workspaceBefore)
-      throw error
-    }
+    return this.sessionsDomain.appendProjectedSessionEvent(input)
   }
 
   listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0, limit?: number): SessionEventRecord[] {
-    return sliceEventsAfter(this.requireSession(tenantId, sessionId).events, afterSequence, limit)
+    return this.sessionsDomain.listSessionEvents(tenantId, sessionId, afterSequence, limit)
   }
 
-  // SSE replay hot path: skip the requireSession existence check. Missing/unauthorized
-  // (tenantId, sessionId) returns [] instead of throwing, mirroring the tenant-scoped
-  // postgres query. See ControlPlaneStore.listSessionEventsForStream.
   listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence = 0, limit?: number): SessionEventRecord[] {
-    const session = this.sessions.get(key(tenantId, sessionId))
-    if (!session) return []
-    return sliceEventsAfter(session.events, afterSequence, limit)
+    return this.sessionsDomain.listSessionEventsForStream(tenantId, sessionId, afterSequence, limit)
   }
 
   getSessionEventStats(tenantId: string, sessionId: string): { count: number; latestSequence: number } {
-    const session = this.requireSession(tenantId, sessionId)
-    let latestSequence = 0
-    for (const event of session.events) {
-      if (event.sequence > latestSequence) latestSequence = event.sequence
-    }
-    return { count: session.events.length, latestSequence }
+    return this.sessionsDomain.getSessionEventStats(tenantId, sessionId)
   }
 
   upsertCloudArtifactIndex(input: UpsertCloudArtifactIndexInput): CloudArtifactIndexRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    this.assertSessionBelongsToUser(input.tenantId, input.sessionId, input.userId)
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    const record: CloudArtifactIndexRecord = {
-      ...clone(input),
-      sessionTitle: session.record.title || null,
-    }
-    this.artifactIndex.set(artifactIndexKey(input.tenantId, input.sessionId, input.artifactId), record)
-    return clone(record)
+    return this.sessionsDomain.upsertCloudArtifactIndex(input)
   }
 
   getCloudArtifactIndexRecord(input: {
@@ -1577,72 +1288,19 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     sessionId: string
     artifactId: string
   }): CloudArtifactIndexRecord | null {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const record = this.artifactIndex.get(artifactIndexKey(input.tenantId, input.sessionId, input.artifactId))
-    if (!record || record.userId !== input.userId) return null
-    const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
-    return clone({
-      ...record,
-      sessionTitle: session?.title || null,
-    })
+    return this.sessionsDomain.getCloudArtifactIndexRecord(input)
   }
 
   listCloudArtifactIndex(input: ListCloudArtifactIndexInput): ListCloudArtifactIndexResult {
-    this.requireTenantUser(input.tenantId, input.userId)
-    if (input.sessionId) this.assertSessionBelongsToUser(input.tenantId, input.sessionId, input.userId)
-    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
-    const rows = Array.from(this.artifactIndex.values())
-      .filter((record) => cloudArtifactMatchesIndexInput(record, input))
-      .map((record) => {
-        const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
-        return {
-          ...record,
-          sessionTitle: session?.title || null,
-        }
-      })
-      .sort(compareCloudArtifacts)
-    const items = rows.slice(0, limit)
-    return {
-      items: clone(items),
-      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
-      truncated: rows.length > limit,
-    }
+    return this.sessionsDomain.listCloudArtifactIndex(input)
   }
 
   upsertCloudLaunchpadSessionSummary(input: UpsertCloudLaunchpadSessionSummaryInput): CloudLaunchpadSessionSummaryRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    this.assertSessionBelongsToUser(input.tenantId, input.sessionId, input.userId)
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    const record: CloudLaunchpadSessionSummaryRecord = {
-      ...clone(input),
-      sessionTitle: session.record.title || null,
-      createdAt: session.record.createdAt,
-    }
-    this.launchpadSessionSummaries.set(launchpadSummaryKey(input.tenantId, input.sessionId), record)
-    return clone(record)
+    return this.sessionsDomain.upsertCloudLaunchpadSessionSummary(input)
   }
 
   listCloudLaunchpadSessionSummaries(input: ListCloudLaunchpadSessionSummariesInput): ListCloudLaunchpadSessionSummariesResult {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
-    const rows = Array.from(this.launchpadSessionSummaries.values())
-      .filter((record) => record.tenantId === input.tenantId && record.userId === input.userId)
-      .filter(hasPendingLaunchpadWork)
-      .map((record) => {
-        const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
-        return {
-          ...record,
-          sessionTitle: session?.title || null,
-          createdAt: session?.createdAt || record.createdAt,
-        }
-      })
-      .sort(compareLaunchpadSummaries)
-    const items = rows.slice(0, limit)
-    return {
-      items: clone(items),
-      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
-      truncated: rows.length > limit,
-    }
+    return this.sessionsDomain.listCloudLaunchpadSessionSummaries(input)
   }
 
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {
@@ -1653,7 +1311,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.workspaceEventsDomain.listWorkspaceEvents(tenantId, userId, afterSequence, limit)
   }
 
-  // SSE replay hot path: skip the requireTenantUser check (returns [] for a bad pair).
   listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number): WorkspaceEventRecord[] {
     return this.workspaceEventsDomain.listWorkspaceEventsForStream(tenantId, userId, afterSequence, limit)
   }
@@ -1667,49 +1324,15 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   writeSessionProjection(input: WriteProjectionInput): SessionProjectionRecord {
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    if (session.lease && session.lease.leaseToken !== input.leaseToken) {
-      throw new Error('Projection write used a stale worker lease.')
-    }
-    if (input.sequence < (session.projection?.sequence || 0)) {
-      throw new Error('Projection sequence must be monotonic.')
-    }
-    if (input.sequence === session.projection?.sequence) {
-      if (stableJson(session.projection.view) !== stableJson(input.view)) {
-        throw new Error('Projection sequence was reused with different content.')
-      }
-      return clone(session.projection)
-    }
-    const projection: SessionProjectionRecord = {
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      sequence: input.sequence,
-      view: input.view,
-      updatedAt: nowIso(input.updatedAt),
-    }
-    session.projection = projection
-    session.record.updatedAt = projection.updatedAt
-    return clone(projection)
+    return this.sessionsDomain.writeSessionProjection(input)
   }
 
   getSessionProjection(tenantId: string, sessionId: string): SessionProjectionRecord | null {
-    const session = this.requireSession(tenantId, sessionId)
-    return clone(session.projection)
+    return this.sessionsDomain.getSessionProjection(tenantId, sessionId)
   }
 
   getMaxProjectionLag(): number {
-    // Match the Postgres bound: only sessions active within the last hour count toward the live
-    // lag gauge, so both stores report the same "recently-active projection lag" semantics (#911).
-    const windowStartMs = Date.now() - 60 * 60 * 1000
-    let maxLag = 0
-    for (const session of this.sessions.values()) {
-      if (session.nextEventSequence <= 0) continue
-      if (new Date(session.record.updatedAt).getTime() <= windowStartMs) continue
-      const latest = session.nextEventSequence - 1
-      const projected = session.projection?.sequence ?? 0
-      maxLag = Math.max(maxLag, latest - projected)
-    }
-    return maxLag
+    return this.sessionsDomain.getMaxProjectionLag()
   }
 
   claimSessionLease(
@@ -1724,208 +1347,43 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       policyCode?: QuotaPolicyCode | string
     } | null = null,
   ): WorkerLeaseRecord | null {
-    const session = this.requireSession(tenantId, sessionId)
-    const nowMs = now.getTime()
-    if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
-    const maxActiveWorkers = quota?.maxActiveWorkersPerOrg
-    if (maxActiveWorkers && maxActiveWorkers > 0) {
-      const orgId = quota?.orgId || this.orgIdForTenant(tenantId)
-      const activeLeases = Array.from(this.sessions.values())
-        .filter((state) => this.orgIdForTenant(state.record.tenantId) === orgId)
-        .filter((state) => state.lease && state.lease.leaseExpiresAt > nowMs)
-        .length
-      if (activeLeases >= maxActiveWorkers) {
-        return null
-      }
-    }
-    const attempt = session.nextLeaseAttempt += 1
-    const lease: WorkerLeaseRecord = {
-      tenantId,
-      sessionId,
-      leasedBy: workerId,
-      leaseToken: `${tenantId}:${sessionId}:${attempt}:${workerId}`,
-      leaseExpiresAt: nowMs + ttlMs,
-      checkpointVersion: session.lease?.checkpointVersion || 0,
-    }
-    session.lease = lease
-    session.record.status = 'running'
-    session.record.updatedAt = now.toISOString()
-    return clone(lease)
+    return this.sessionsDomain.claimSessionLease(tenantId, sessionId, workerId, now, ttlMs, quota)
   }
 
   releaseSessionLease(lease: WorkerLeaseRecord, now = new Date()): boolean {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    if (!session.lease || session.lease.leaseToken !== lease.leaseToken) return false
-    session.lease = null
-    session.record.status = 'idle'
-    session.record.updatedAt = now.toISOString()
-    return true
+    return this.sessionsDomain.releaseSessionLease(lease, now)
   }
 
   renewSessionLease(lease: WorkerLeaseRecord, now = new Date(), ttlMs = 30_000): WorkerLeaseRecord {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    this.assertCurrentLease(session, lease)
-    session.lease = {
-      ...session.lease!,
-      leaseExpiresAt: now.getTime() + ttlMs,
-    }
-    return clone(session.lease)
+    return this.sessionsDomain.renewSessionLease(lease, now, ttlMs)
   }
 
   checkpointSession(lease: WorkerLeaseRecord): WorkerLeaseRecord {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    this.assertCurrentLease(session, lease)
-    if (lease.checkpointVersion !== session.lease?.checkpointVersion) {
-      throw new Error('Checkpoint version is stale.')
-    }
-    session.lease = {
-      ...session.lease!,
-      checkpointVersion: session.lease!.checkpointVersion + 1,
-    }
-    return clone(session.lease)
+    return this.sessionsDomain.checkpointSession(lease)
   }
 
   reapExpiredSessionLeases(input: ReapExpiredSessionLeasesInput = {}): ReapedSessionLeaseRecord[] {
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
-    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    const reaped: ReapedSessionLeaseRecord[] = []
-    const candidates = Array.from(this.sessions.values())
-      .filter((session) => Boolean(session.lease) && session.lease!.leaseExpiresAt <= nowMs)
-      .sort((left, right) => left.lease!.leaseExpiresAt - right.lease!.leaseExpiresAt || left.record.tenantId.localeCompare(right.record.tenantId) || left.record.sessionId.localeCompare(right.record.sessionId))
-      .slice(0, limit)
-    for (const session of candidates) {
-      const lease = session.lease!
-      reaped.push(this.recoverSessionLeaseRecord(session, lease, now, maxAttempts))
-    }
-    return reaped
+    return this.sessionsDomain.reapExpiredSessionLeases(input)
   }
 
   recoverSessionLease(lease: WorkerLeaseRecord, input: RecoverSessionLeaseInput = {}): ReapedSessionLeaseRecord | null {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    if (!session.lease || session.lease.leaseToken !== lease.leaseToken) return null
-    const now = input.now || new Date()
-    const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
-    return this.recoverSessionLeaseRecord(session, session.lease, now, maxAttempts)
+    return this.sessionsDomain.recoverSessionLease(lease, input)
   }
 
   assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): void {
-    this.quotaDomain.assertCommandQueueQuota(input)
-  }
-
-  private findSessionCommandById(commandId: string): SessionCommandRecord | undefined {
-    for (const session of this.sessions.values()) {
-      const command = session.commands.find((entry) => entry.commandId === commandId)
-      if (command) return command
-    }
-    return undefined
+    return this.sessionsDomain.assertSessionCommandQueueQuota(input)
   }
 
   enqueueSessionCommand(input: EnqueueCommandInput): SessionCommandRecord {
-    this.requireTenantUser(input.tenantId, input.userId)
-    const session = this.requireSession(input.tenantId, input.sessionId)
-    const payload = input.payload || {}
-    // command_id is globally unique (PRIMARY KEY in postgres), so resolve it across
-    // ALL sessions — not just this one — and compare tenant/session on reuse, exactly
-    // like the postgres store. Scoping the lookup to the session let the same
-    // command_id be re-created in a different session, which postgres rejects.
-    const existing = this.findSessionCommandById(input.commandId)
-    if (existing) {
-      if (
-        existing.tenantId !== input.tenantId
-        || existing.userId !== input.userId
-        || existing.sessionId !== input.sessionId
-        || existing.kind !== input.kind
-        || existing.targetLeaseToken !== (input.targetLeaseToken ?? null)
-        || stableJson(existing.payload) !== stableJson(payload)
-      ) {
-        throw new Error(`Command id ${input.commandId} was reused with different content.`)
-      }
-      return clone(existing)
-    }
-    this.assertSessionCommandQueueQuota({ tenantId: input.tenantId, quota: input.quota, now: input.createdAt })
-    if (input.usageQuotas?.length) {
-      const countersSnapshot = this.usageQuotaDomain.snapshotCounters()
-      try {
-        for (const quota of input.usageQuotas) {
-          const result = this.consumeUsageQuota(quota)
-          if (!result.allowed) {
-            quotaExceeded({
-              message: publicQuotaMessage(result.policyCode),
-              policyCode: result.policyCode || 'quota.prompts_per_hour_exceeded',
-              retryAfterMs: result.retryAfterMs,
-              limit: result.limit,
-              used: result.used,
-              resetAt: result.resetAt,
-            })
-          }
-        }
-      } catch (error) {
-        this.usageQuotaDomain.restoreCounters(countersSnapshot); throw error
-      }
-    }
-    const command: SessionCommandRecord = {
-      commandId: input.commandId,
-      tenantId: input.tenantId,
-      userId: input.userId,
-      sessionId: input.sessionId,
-      kind: input.kind,
-      payload,
-      targetLeaseToken: input.targetLeaseToken ?? null,
-      createdSequence: session.nextCommandSequence += 1,
-      createdAt: nowIso(input.createdAt),
-      status: 'pending',
-      claimedBy: null,
-      claimedLeaseToken: null,
-      attemptCount: 0,
-      availableAt: null,
-      lastErrorCode: null,
-      lastErrorSummary: null,
-      ackedAt: null,
-      error: null,
-    }
-    session.commands.push(command)
-    return clone(command)
+    return this.sessionsDomain.enqueueSessionCommand(input)
   }
 
   claimNextSessionCommand(lease: WorkerLeaseRecord, now = new Date()): SessionCommandRecord | null {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    const nowMs = now.getTime()
-    this.assertCurrentLease(session, lease, nowMs)
-    const command = session.commands.find((entry) => (
-      (entry.status === 'pending'
-        && (!entry.availableAt || Date.parse(entry.availableAt) <= nowMs)
-        && (entry.targetLeaseToken === null || entry.targetLeaseToken === lease.leaseToken))
-      || (entry.status === 'running'
-        && entry.claimedLeaseToken !== lease.leaseToken
-        && entry.targetLeaseToken === null)
-    ))
-    if (!command) return null
-    command.status = 'running'
-    command.claimedBy = lease.leasedBy
-    command.claimedLeaseToken = lease.leaseToken
-    command.attemptCount += 1
-    // Clear the delay gate on claim to match postgres (sets available_at = NULL). A future-dated
-    // availableAt that survived the claim would wrongly re-gate the command on a later requeue.
-    command.availableAt = null
-    command.lastErrorCode = null
-    command.lastErrorSummary = null
-    return clone(command)
+    return this.sessionsDomain.claimNextSessionCommand(lease, now)
   }
 
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now = new Date()): SessionCommandRecord {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    this.assertCurrentLease(session, lease)
-    const command = this.requireCommand(session, commandId)
-    if (command.status === 'acked') return clone(command)
-    if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
-      throw new Error(`Command ${commandId} is not owned by this worker.`)
-    }
-    command.status = 'acked'
-    command.ackedAt = now.toISOString()
-    command.error = null
-    return clone(command)
+    return this.sessionsDomain.ackSessionCommand(lease, commandId, now)
   }
 
   checkpointAndAckSessionCommand(
@@ -1933,52 +1391,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     commandId: string,
     now = new Date(),
   ): CheckpointAndAckSessionCommandResult {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    this.assertCurrentLease(session, lease)
-    const command = this.requireCommand(session, commandId)
-    if (command.status === 'acked') {
-      return {
-        lease: clone(session.lease!),
-        command: clone(command),
-        checkpointAdvanced: false,
-        commandAcked: false,
-      }
-    }
-    if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
-      throw new Error(`Command ${commandId} is not owned by this worker.`)
-    }
-    if (lease.checkpointVersion !== session.lease?.checkpointVersion) {
-      throw new Error('Checkpoint version is stale.')
-    }
-    session.lease = {
-      ...session.lease!,
-      checkpointVersion: session.lease!.checkpointVersion + 1,
-    }
-    command.status = 'acked'
-    command.ackedAt = now.toISOString()
-    command.error = null
-    command.lastErrorCode = null
-    command.lastErrorSummary = null
-    return {
-      lease: clone(session.lease),
-      command: clone(command),
-      checkpointAdvanced: true,
-      commandAcked: true,
-    }
+    return this.sessionsDomain.checkpointAndAckSessionCommand(lease, commandId, now)
   }
 
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): SessionCommandRecord {
-    const session = this.requireSession(lease.tenantId, lease.sessionId)
-    this.assertCurrentLease(session, lease)
-    const command = this.requireCommand(session, commandId)
-    if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
-      throw new Error(`Command ${commandId} is not owned by this worker.`)
-    }
-    command.status = 'failed'
-    command.error = error
-    command.lastErrorCode = 'execution_failed'
-    command.lastErrorSummary = redactOperationalText(error, 512, 'Command error')
-    return clone(command)
+    return this.sessionsDomain.failSessionCommand(lease, commandId, error)
   }
 
   recordWorkerHeartbeat(input: {
@@ -2171,125 +1588,19 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.schemaMigrationsDomain.listSchemaMigrations()
   }
 
-  // Centralized identity-existence checks — the single abstraction every domain's
-  // host wiring and the store's own methods call, so the org/account maps can later
-  // move into an identity domain behind these (delegate) methods.
-  private requireCommand(session: SessionState, commandId: string) {
-    const command = session.commands.find((entry) => entry.commandId === commandId)
-    if (!command) throw new Error(`Unknown command ${commandId}.`)
-    return command
-  }
-
   private requireSession(tenantId: string, sessionId: string) {
-    this.requireTenant(tenantId)
-    const session = this.sessions.get(key(tenantId, sessionId))
-    if (!session) throw new Error(`Unknown session ${sessionId}.`)
-    return session
+    return this.sessionsDomain.requireSession(tenantId, sessionId)
   }
 
-  // Resolve a session and (if a lease token is supplied) fence it.
   private assertSessionLease(tenantId: string, sessionId: string, leaseToken: string | null | undefined) {
-    const session = this.requireSession(tenantId, sessionId)
-    this.assertLeaseTokenIfPresent(session, leaseToken)
+    this.sessionsDomain.assertSessionLease(tenantId, sessionId, leaseToken)
   }
 
-  // Assert a session exists and belongs to the user (no SessionState leak to callers).
   private assertSessionBelongsToUser(tenantId: string, sessionId: string, userId: string) {
-    const session = this.requireSession(tenantId, sessionId)
-    if (session.record.userId !== userId) {
-      throw new Error(`Session ${sessionId} does not belong to user ${userId}.`)
-    }
+    this.sessionsDomain.assertSessionBelongsToUser(tenantId, sessionId, userId)
   }
 
   private sessionHasCommands(tenantId: string, sessionId: string) {
-    const session = this.sessions.get(key(tenantId, sessionId))
-    return Boolean(session?.commands.length)
-  }
-
-  private recoverSessionLeaseRecord(
-    session: SessionState,
-    lease: WorkerLeaseRecord,
-    now: Date,
-    maxAttempts: number,
-  ): ReapedSessionLeaseRecord {
-    const nowIsoValue = now.toISOString()
-    const runningCommands = session.commands.filter((command) => (
-      command.status === 'running'
-      && command.claimedLeaseToken === lease.leaseToken
-    ))
-    const retriedCommandIds: string[] = []
-    const failedCommandIds: string[] = []
-    for (const command of runningCommands) {
-      if (command.attemptCount >= maxAttempts) {
-        command.status = 'failed'
-        command.error = 'Worker lease expired after the maximum retry attempts.'
-        command.lastErrorCode = 'lease_expired_max_attempts'
-        command.lastErrorSummary = command.error
-        failedCommandIds.push(command.commandId)
-      } else {
-        command.status = 'pending'
-        command.claimedBy = null
-        command.claimedLeaseToken = null
-        command.availableAt = nowIsoValue
-        command.error = null
-        command.lastErrorCode = 'lease_expired'
-        command.lastErrorSummary = 'Worker lease expired before command completion.'
-        retriedCommandIds.push(command.commandId)
-      }
-    }
-    session.lease = null
-    session.record.status = failedCommandIds.length > 0 && retriedCommandIds.length === 0 ? 'errored' : 'idle'
-    session.record.updatedAt = nowIsoValue
-    const action: WorkReaperAction = failedCommandIds.length > 0 && retriedCommandIds.length === 0
-      ? 'failed'
-      : retriedCommandIds.length > 0
-        ? 'retried'
-        : 'released'
-    const record: ReapedSessionLeaseRecord = {
-      tenantId: lease.tenantId,
-      sessionId: lease.sessionId,
-      leaseToken: lease.leaseToken,
-      leasedBy: lease.leasedBy,
-      action,
-      retriedCommandIds,
-      failedCommandIds,
-      reapedAt: nowIsoValue,
-    }
-    const orgId = this.resolveOrgIdOrNull(lease.tenantId)
-    if (orgId) {
-      this.recordAuditEvent({
-        orgId,
-        actorType: 'system',
-        actorId: 'managed-work-reaper',
-        eventType: 'managed_work.session_lease_reaped',
-        targetType: 'session',
-        targetId: lease.sessionId,
-        metadata: {
-          action,
-          leasedBy: lease.leasedBy,
-          retriedCommandIds,
-          failedCommandIds,
-        },
-        createdAt: now,
-      })
-    }
-    return record
-  }
-
-  // The raw tag-id link set for a session, for session-listing's tag filter —
-  // lets the session methods query thread-tag links without reaching into the
-  // thread-tags map directly (so that map can move to its own domain).
-
-  private assertCurrentLease(session: SessionState, lease: WorkerLeaseRecord, nowMs = Date.now()) {
-    if (!session.lease || session.lease.leaseToken !== lease.leaseToken || session.lease.leaseExpiresAt <= nowMs) {
-      throw new Error('Worker lease is stale.')
-    }
-  }
-
-  private assertLeaseTokenIfPresent(session: SessionState, leaseToken: string | null | undefined) {
-    if (leaseToken === undefined) return
-    if (!session.lease || session.lease.leaseToken !== leaseToken || session.lease.leaseExpiresAt <= Date.now()) {
-      throw new Error('Worker lease is stale.')
-    }
+    return this.sessionsDomain.sessionHasCommands(tenantId, sessionId)
   }
 }
