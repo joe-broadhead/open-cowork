@@ -1,17 +1,19 @@
 ---
-title: Claw-Like Agent Operations
+title: Supervised Agent Operations
 description: Product plan for supervised agent-team operations in Open Cowork without replacing OpenCode.
 ---
 
-# Claw-Like Agent Operations
+# Supervised Agent Operations
 
-This note translates OpenClaw and ZeroClaw patterns into concrete Open Cowork features.
+This note defines Open Cowork's supervised agent-operations roadmap: durable
+intake, scoped agents, workflows, traces, approvals, evaluations, and reviewed
+improvement loops layered on top of OpenCode-native execution.
 
 The product target is:
 
 > A beautiful desktop-first operations desk for supervised agent teams: agents and crews can run many tasks through OpenCode, use carefully-scoped capabilities, produce inspectable traces and evaluated outcomes, and improve through reviewed memory and SOP updates.
 
-The architectural constraint is unchanged: **OpenCode executes; Open Cowork composes**. Open Cowork should become claw-like as a product and operations layer, not by building a second agent runtime.
+The architectural constraint is unchanged: **OpenCode executes; Open Cowork composes**. Open Cowork should become an accountable operations layer for agent teams, not a second agent runtime.
 
 
 ## Operating Loop
@@ -807,9 +809,9 @@ type PolicyDecision = {
 
 ### HR-Ready Product Bar
 
- Open Cowork should not be positioned as a regulated HR automation platform until an organization can answer:
+Open Cowork should not be positioned as a regulated HR automation platform until an organization can answer:
 
- 1. Which human owns this agent or crew?
+1. Which human owns this agent or crew?
 2. What cases is it allowed to touch?
 3. What data classes can it read, quote, store, or send?
 4. What external systems can it change?
@@ -822,8 +824,8 @@ type PolicyDecision = {
 
 ## Non-Goals
 
- - Do not build a second runtime beside OpenCode.
-- Do not copy OpenClaw or ZeroClaw's daemon semantics into Open Cowork when OpenCode already owns session execution.
+- Do not build a second runtime beside OpenCode.
+- Do not copy another project's daemon semantics into Open Cowork when OpenCode already owns session execution.
 - Do not auto-edit identity, memory, skills, or SOPs without a visible approval path.
 - Do not expose unrestricted host shell or filesystem access to remote channel input.
 - Do not make "self-learning" mean background model fine-tuning.
@@ -831,9 +833,9 @@ type PolicyDecision = {
 
 ## Product Bar
 
- Open Cowork becomes claw-like when a user can:
+Open Cowork reaches the supervised operations bar when a user can:
 
- 1. Create agents and crews with identity, ownership, scoped capabilities, evals, memory boundaries, budgets, and autonomy policy.
+1. Create agents and crews with identity, ownership, scoped capabilities, evals, memory boundaries, budgets, and autonomy policy.
 2. Route work items into agents, crews, SOPs, inboxes, or drafts.
 3. See who did what through durable traces, artifact lineage, policy decisions, approvals, and eval results.
 4. Let repeatable work run through durable schedules, queues, retries, and supervised background execution.
