@@ -82,6 +82,9 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     ON cloud_artifact_index (tenant_id, user_id, session_id, updated_at DESC, artifact_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_project_idx
     ON cloud_artifact_index (tenant_id, user_id, project_id, task_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_task_idx
+    ON cloud_artifact_index (tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id)
+    WHERE task_id IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_kind_status_idx
     ON cloud_artifact_index (tenant_id, user_id, kind, status, updated_at DESC)`,
   `CREATE TABLE IF NOT EXISTS cloud_launchpad_session_summaries (
@@ -1361,6 +1364,13 @@ const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS = [
       AND pending_questions = '[]'::jsonb`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID = '032_artifact_task_index'
+const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_artifact_index_task_idx
+    ON cloud_artifact_index (tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id)
+    WHERE task_id IS NOT NULL`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1503,5 +1513,11 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_artifact_index_task_idx'],
+    transactional: false,
   },
 ] as const

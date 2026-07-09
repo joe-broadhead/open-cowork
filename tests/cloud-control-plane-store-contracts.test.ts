@@ -404,6 +404,18 @@ function runControlPlaneDomainContracts(
       assert.equal(artifactPage.items[0]?.key, `${tenantId}/${sessionId}/private-new-key`)
       assert.equal(artifactPage.totalEstimate, 2)
       assert.equal(artifactPage.truncated, true)
+      const taskOnlyArtifactPage = await store.listCloudArtifactIndex({
+        tenantId,
+        userId,
+        taskIds: [`${prefix}-task`],
+        limit: 10,
+      })
+      assert.deepEqual(taskOnlyArtifactPage.items.map((artifact) => artifact.artifactId), [
+        `${prefix}-artifact-new`,
+        `${prefix}-artifact-old`,
+      ])
+      assert.equal(taskOnlyArtifactPage.totalEstimate, 2)
+      assert.equal(taskOnlyArtifactPage.truncated, false)
       const exactArtifact = await store.getCloudArtifactIndexRecord({
         tenantId,
         userId,

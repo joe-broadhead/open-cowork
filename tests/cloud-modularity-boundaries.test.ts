@@ -287,6 +287,8 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_webhook_replay_claims_seen_idx', 'cloud_webhook_replay_claims', 'seen_at_ms')
   assertIndexShape('cloud_memberships_account_idx', 'cloud_memberships', 'account_id, updated_at DESC')
   assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
+  assertIndexShape('cloud_artifact_index_task_idx', 'cloud_artifact_index', 'tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id', 'WHERE task_id IS NOT NULL')
+  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID[\s\S]*transactional: false/)
   assertIndexShape('cloud_session_events_sequence_idx', 'cloud_session_events', 'tenant_id, session_id, sequence')
   assertIndexShape('cloud_workspace_events_sequence_idx', 'cloud_workspace_events', 'tenant_id, user_id, sequence')
   assertIndexShape('cloud_session_commands_available_idx', 'cloud_session_commands', 'status, available_at, tenant_id, session_id, created_sequence')
