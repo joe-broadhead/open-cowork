@@ -594,8 +594,6 @@ function handleUpdatedSubtaskPart(ctx: MessagePartUpdatedContext) {
     || extractAgentName(
       ctx.part.description,
       ctx.part.title,
-      ctx.part.prompt,
-      ctx.part.raw,
     )
     || null
   const fallback = findFallbackTaskRun(ctx.rootSessionId, parentSessionId)
@@ -676,11 +674,20 @@ function resolveTaskToolDescriptor(
     state.raw,
     ctx.part.raw,
   ]
+  const agentCandidates = [
+    ctx.part.description,
+    inputDescription,
+    argsDescription,
+    title,
+    state.title,
+    inputTitle,
+    argsTitle,
+  ]
   const agentName = normalizeAgentName(ctx.part.agent)
     || normalizeAgentName(inputAgent)
     || normalizeAgentName(argsAgent)
     || normalizeAgentName(metadataAgent)
-    || extractAgentName(...titleCandidates)
+    || extractAgentName(...agentCandidates)
     || null
 
   return {
@@ -805,9 +812,6 @@ function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
       || extractAgentName(
         title,
         state.title,
-        state.raw,
-        typeof state.input?.prompt === 'string' ? state.input.prompt : null,
-        typeof state.args?.prompt === 'string' ? state.args.prompt : null,
       )
       || null
     const taskRun = ensureTaskRunForChild(ctx.rootSessionId, ctx.actualSessionId, inferredAgent)
@@ -852,7 +856,7 @@ function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
       status,
       output: state.output ?? state.result,
       agent: normalizeAgentName(typeof metadata.agent === 'string' ? metadata.agent : null)
-        || extractAgentName(title, state.title, state.raw)
+        || extractAgentName(title, state.title)
         || null,
       attachments: attachments.length > 0 ? attachments : undefined,
       taskRunId,
