@@ -371,8 +371,10 @@ describe('CapabilitiesPage', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
-    expect(api.tool).toHaveBeenCalledWith('charts', { sessionId: 'session-1' })
-    expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(api.tool).toHaveBeenCalledWith('charts', { sessionId: 'session-1' })
+      expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('opens exact skill navigation targets in the detail view', async () => {
@@ -383,8 +385,10 @@ describe('CapabilitiesPage', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()
-    expect(api.getSkillBundle).toHaveBeenCalledWith('research', { directory: '/work/project' })
-    expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(api.getSkillBundle).toHaveBeenCalledWith('research', { directory: '/work/project' })
+      expect(onInitialTargetHandled).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('renders the gated relationship graph, consumer matrix, and remediation entry points', async () => {
