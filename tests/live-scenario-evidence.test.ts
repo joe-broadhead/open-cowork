@@ -62,6 +62,22 @@ test('release live scenario node tests use the repo node runtime contract', () =
   }
 })
 
+test('live scenario suite validation rejects missing node test file paths', () => {
+  assert.throws(
+    () => validateScenarioSuite(suite([
+      scenario({
+        id: 'missing-test-path',
+        command: ['node', '--test', 'tests/missing-live-scenario.test.ts'],
+      }),
+      scenario({ id: 'two' }),
+      scenario({ id: 'three' }),
+      scenario({ id: 'four' }),
+      scenario({ id: 'five' }),
+    ])),
+    /references missing test file: tests\/missing-live-scenario\.test\.ts/,
+  )
+})
+
 test('live scenario evidence runner writes redacted structured reports', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-live-scenarios-'))
   try {
