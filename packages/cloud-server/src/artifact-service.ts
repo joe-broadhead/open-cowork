@@ -13,6 +13,7 @@ import {
   type ArtifactStatus,
   type ArtifactStatusUpdateRequest,
 } from '@open-cowork/shared'
+import type { CloudArtifactIndexRecord } from './control-plane-store.ts'
 import type { ObjectStoreAdapter, ObjectStorePresignedRequest } from './object-store.ts'
 import { artifactObjectKey } from './object-store.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
@@ -104,8 +105,8 @@ export type CloudArtifactFinalizeUploadInput = {
 }
 
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
-const ARTIFACT_INDEX_SESSION_PAGE_SIZE = 100
-const MAX_ARTIFACT_INDEX_SESSION_SCAN = 5_000
+const MAX_ARTIFACT_INDEX_LIMIT = 500
+const MAX_SESSION_ARTIFACT_INDEX_LIMIT = 500
 
 function boundedFilename(value: unknown) {
   if (typeof value !== 'string') throw new CloudServiceError(400, 'Artifact filename is required.')
@@ -325,6 +326,26 @@ function publicArtifactRecord(record: CloudArtifactRecord, options: {
   }
 }
 
+function artifactRecordFromIndex(record: CloudArtifactIndexRecord): CloudArtifactRecord {
+  return {
+    artifactId: record.artifactId,
+    sessionId: record.sessionId,
+    filename: record.filename,
+    contentType: record.contentType,
+    size: record.size,
+    key: record.key,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    kind: record.kind,
+    status: record.status,
+    authorAgentId: record.authorAgentId,
+    projectId: record.projectId,
+    taskId: record.taskId,
+    statusUpdatedBy: record.statusUpdatedBy,
+    statusUpdatedAt: record.statusUpdatedAt,
+  }
+}
+
 function artifactUpdatedMs(artifact: Pick<ArtifactIndexEntry, 'updatedAt' | 'createdAt'>) {
   const value = artifact.updatedAt || artifact.createdAt
   const ms = value ? Date.parse(value) : NaN
@@ -511,6 +532,7 @@ export class CloudArtifactService {
       type: 'artifact.created',
       payload: record,
     })
+    await this.sessionService.upsertCloudArtifactIndex(principal, record)
     await this.sessionService.recordArtifactUploaded(principal, sessionId, fields.artifactId, fields.size)
     this.sessionService.auditPrincipalAction(principal, {
       eventType: 'artifact.uploaded',
@@ -522,7 +544,17 @@ export class CloudArtifactService {
   }
 
   async listSessionArtifacts(principal: CloudPrincipal, sessionId: string): Promise<CloudArtifactRecord[]> {
-    await this.sessionService.getSessionView(principal, sessionId)
+    const indexed = await this.sessionService.listCloudArtifactIndex(principal, {
+      sessionId,
+      limit: MAX_SESSION_ARTIFACT_INDEX_LIMIT,
+    })
+    if (indexed.items.length > 0 || indexed.truncated) {
+      return indexed.items.map(artifactRecordFromIndex)
+    }
+    return this.rebuildSessionArtifactIndex(principal, sessionId)
+  }
+
+  private async rebuildSessionArtifactIndex(principal: CloudPrincipal, sessionId: string): Promise<CloudArtifactRecord[]> {
     const events = await this.sessionService.listEvents(principal, sessionId)
     const artifacts = new Map<string, CloudArtifactRecord>()
     for (const event of events) {
@@ -539,7 +571,11 @@ export class CloudArtifactService {
       if (!existing) continue
       artifacts.set(patch.artifactId, mergeArtifactUpdate(existing, patch))
     }
-    return Array.from(artifacts.values())
+    const records = Array.from(artifacts.values())
+    for (const record of records) {
+      await this.sessionService.upsertCloudArtifactIndex(principal, record)
+    }
+    return records
   }
 
   async listPublicSessionArtifacts(principal: CloudPrincipal, sessionId: string): Promise<Array<ReturnType<typeof publicArtifactRecord>>> {
@@ -551,68 +587,51 @@ export class CloudArtifactService {
   }
 
   async listArtifactIndex(principal: CloudPrincipal, request: ArtifactIndexRequest = {}): Promise<ArtifactIndexPayload> {
-    const limit = Math.min(Math.max(Math.floor(Number(request.limit) || 100), 1), 500)
-    const artifacts: ArtifactIndexEntry[] = []
-
+    const limit = Math.min(Math.max(Math.floor(Number(request.limit) || 100), 1), MAX_ARTIFACT_INDEX_LIMIT)
     if (request.sessionId) {
-      const sessionView = await this.sessionService.getSessionView(principal, request.sessionId)
-      const truncated = await this.collectIndexArtifactsForSession(principal, sessionView, request, artifacts, limit)
-      return { artifacts, total: artifacts.length, scannedSessions: 1, truncated }
+      const records = await this.listSessionArtifacts(principal, request.sessionId)
+      const artifacts = records
+        .map((record, index) => publicArtifactRecord(record, {
+          order: index,
+          workspaceId: `cloud:${principal.tenantId}`,
+        }))
+        .filter((entry) => artifactMatchesIndexRequest(entry, request))
+        .sort((left, right) => artifactUpdatedMs(right) - artifactUpdatedMs(left))
+        .slice(0, limit)
+      return { artifacts, total: artifacts.length, scannedSessions: 1, truncated: records.length > artifacts.length }
     }
 
-    let cursor: string | null = null
-    let scannedSessions = 0
-    let truncated = false
-    do {
-      const remainingScanBudget = MAX_ARTIFACT_INDEX_SESSION_SCAN - scannedSessions
-      if (remainingScanBudget <= 0) {
-        truncated = Boolean(cursor)
-        break
-      }
-      const page = await this.sessionService.listSessionsPage(principal, {
-        cursor: cursor || undefined,
-        limit: Math.min(ARTIFACT_INDEX_SESSION_PAGE_SIZE, remainingScanBudget),
-      })
-      if (page.items.length === 0) {
-        truncated = Boolean(page.nextCursor)
-        break
-      }
-      scannedSessions += page.items.length
-      for (const session of page.items) {
-        const stoppedAtLimit = await this.collectIndexArtifactsForSession(principal, { session, projection: null }, request, artifacts, limit)
-        if (stoppedAtLimit) {
-          return { artifacts, total: artifacts.length, scannedSessions, truncated: true }
-        }
-      }
-      cursor = page.nextCursor
-    } while (cursor)
-    return { artifacts, total: artifacts.length, scannedSessions, truncated }
+    const page = await this.sessionService.listCloudArtifactIndex(principal, {
+      sessionId: request.sessionId,
+      projectId: request.projectId,
+      taskId: request.taskId,
+      taskIds: request.taskIds,
+      status: request.status,
+      kind: request.kind,
+      limit,
+    })
+    const artifacts = page.items.map((record, index) => publicArtifactRecord(artifactRecordFromIndex(record), {
+      order: index,
+      sessionTitle: record.sessionTitle,
+      workspaceId: `cloud:${principal.tenantId}`,
+    }))
+    return {
+      artifacts,
+      total: page.totalEstimate,
+      scannedSessions: 0,
+      truncated: page.truncated,
+    }
   }
 
-  private async collectIndexArtifactsForSession(
+  private async findSessionArtifact(
     principal: CloudPrincipal,
-    sessionView: Awaited<ReturnType<CloudSessionService['getSessionView']>>,
-    request: ArtifactIndexRequest,
-    artifacts: ArtifactIndexEntry[],
-    limit: number,
-  ): Promise<boolean> {
-    const records = await this.listSessionArtifacts(principal, sessionView.session.sessionId)
-    const sessionArtifacts: ArtifactIndexEntry[] = []
-    for (const [index, record] of records.entries()) {
-      const entry = publicArtifactRecord(record, {
-        order: index,
-        sessionTitle: sessionView.session.title,
-        workspaceId: `cloud:${principal.tenantId}`,
-      })
-      if (!artifactMatchesIndexRequest(entry, request)) continue
-      sessionArtifacts.push(entry)
-    }
-    sessionArtifacts.sort((left, right) => artifactUpdatedMs(right) - artifactUpdatedMs(left))
-    for (const entry of sessionArtifacts) {
-      if (artifacts.length >= limit) return true
-      artifacts.push(entry)
-    }
-    return artifacts.length >= limit && sessionArtifacts.length > 0
+    sessionId: string,
+    artifactId: string,
+  ): Promise<CloudArtifactRecord | null> {
+    const indexed = await this.sessionService.getCloudArtifactIndexRecord(principal, sessionId, artifactId)
+    if (indexed) return artifactRecordFromIndex(indexed)
+    return (await this.rebuildSessionArtifactIndex(principal, sessionId))
+      .find((entry) => entry.artifactId === artifactId) || null
   }
 
   async updateSessionArtifactStatus(
@@ -621,8 +640,7 @@ export class CloudArtifactService {
     artifactId: string,
     input: Pick<ArtifactStatusUpdateRequest, 'status' | 'updatedBy' | 'authorAgentId' | 'projectId' | 'taskId' | 'kind'>,
   ): Promise<CloudArtifactRecord> {
-    const existing = (await this.listSessionArtifacts(principal, sessionId))
-      .find((entry) => entry.artifactId === artifactId)
+    const existing = await this.findSessionArtifact(principal, sessionId, artifactId)
     if (!existing) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const status = boundedStatus(input.status, existing.status)
     if (!canAdvanceArtifactStatus(existing.status, status)) {
@@ -645,12 +663,12 @@ export class CloudArtifactService {
       type: 'artifact.updated',
       payload: { ...publicArtifactRecord(next) },
     })
+    await this.sessionService.upsertCloudArtifactIndex(principal, next)
     return next
   }
 
   async readSessionArtifact(principal: CloudPrincipal, sessionId: string, artifactId: string) {
-    const artifact = (await this.listSessionArtifacts(principal, sessionId))
-      .find((entry) => entry.artifactId === artifactId)
+    const artifact = await this.findSessionArtifact(principal, sessionId, artifactId)
     if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const object = await this.objectStore.getObject(artifact.key)
     if (!object) throw new CloudServiceError(404, 'Cloud artifact object was not found.')
@@ -681,8 +699,7 @@ export class CloudArtifactService {
     options?: { expiresSeconds?: number },
   ): Promise<{ artifact: CloudArtifactRecord, presigned: ObjectStorePresignedRequest } | null> {
     if (!this.objectStore.presignGet) return null
-    const artifact = (await this.listSessionArtifacts(principal, sessionId))
-      .find((entry) => entry.artifactId === artifactId)
+    const artifact = await this.findSessionArtifact(principal, sessionId, artifactId)
     if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const presigned = await this.objectStore.presignGet(artifact.key, options)
     if (!presigned) return null

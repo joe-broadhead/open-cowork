@@ -23,9 +23,9 @@ import { getAppDataDir } from './config-loader-core.js'
 import { listCoordinationTasks } from './coordination/coordination-service.js'
 import { sessionEngine } from './session-engine.js'
 import { listSessionRecords, type SessionRecord } from './session-registry.js'
-import { syncSessionView } from './session-history-loader.js'
+import { setSessionHistoryViewIndexHandler, syncSessionView } from './session-history-loader.js'
 
-const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 1
+const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 2
 const ARTIFACT_LIFECYCLE_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
 const DEFAULT_INDEX_LIMIT = 100
@@ -118,6 +118,42 @@ function initDb(db: DatabaseSync) {
       on artifact_lifecycle(workspace_id, project_id, task_id, updated_at);
     create index if not exists idx_artifact_lifecycle_kind_status
       on artifact_lifecycle(workspace_id, kind, status, updated_at);
+    create table if not exists artifact_index (
+      workspace_id text not null,
+      session_id text not null,
+      artifact_id text not null,
+      id text not null,
+      tool_id text not null,
+      tool_name text not null,
+      file_path text not null,
+      filename text not null,
+      order_value integer not null,
+      source text,
+      cloud_artifact_id text,
+      task_run_id text,
+      mime text,
+      size_bytes integer,
+      chart_json text,
+      session_title text,
+      kind text not null,
+      status text not null,
+      author_agent_id text,
+      project_id text,
+      task_id text,
+      status_updated_by text,
+      status_updated_at text,
+      created_at text not null,
+      updated_at text not null,
+      primary key(workspace_id, session_id, artifact_id)
+    );
+    create index if not exists idx_artifact_index_workspace_updated
+      on artifact_index(workspace_id, updated_at);
+    create index if not exists idx_artifact_index_project
+      on artifact_index(workspace_id, project_id, task_id, updated_at);
+    create index if not exists idx_artifact_index_kind_status
+      on artifact_index(workspace_id, kind, status, updated_at);
+    create index if not exists idx_artifact_index_session_updated
+      on artifact_index(workspace_id, session_id, updated_at);
   `)
   db.prepare(`
     insert into artifact_lifecycle_meta (key, value)
@@ -188,6 +224,12 @@ function rowString(row: Record<string, unknown>, key: string) {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
+function rowNumber(row: Record<string, unknown>, key: string) {
+  const value = row[key]
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function lifecycleFromRow(row: unknown): ArtifactLifecycleRecord | null {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return null
   const record = row as Record<string, unknown>
@@ -204,6 +246,62 @@ function lifecycleFromRow(row: unknown): ArtifactLifecycleRecord | null {
     workspaceId: workspace,
     sessionId,
     artifactId,
+    kind,
+    status,
+    authorAgentId: rowString(record, 'author_agent_id'),
+    projectId: rowString(record, 'project_id'),
+    taskId: rowString(record, 'task_id'),
+    statusUpdatedBy: rowString(record, 'status_updated_by'),
+    statusUpdatedAt: rowString(record, 'status_updated_at'),
+    createdAt,
+    updatedAt,
+  }
+}
+
+function artifactIndexEntryFromRow(row: unknown): ArtifactIndexEntry | null {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+  const record = row as Record<string, unknown>
+  const kind = rowString(record, 'kind')
+  const status = rowString(record, 'status')
+  const id = rowString(record, 'id')
+  const sessionId = rowString(record, 'session_id')
+  const workspace = rowString(record, 'workspace_id')
+  const toolId = rowString(record, 'tool_id')
+  const toolName = rowString(record, 'tool_name')
+  const filePath = rowString(record, 'file_path')
+  const filename = rowString(record, 'filename')
+  const createdAt = rowString(record, 'created_at')
+  const updatedAt = rowString(record, 'updated_at')
+  const order = rowNumber(record, 'order_value')
+  if (!isArtifactKind(kind) || !isArtifactStatus(status)) return null
+  if (!id || !sessionId || !workspace || !toolId || !toolName || !filePath || !filename || !createdAt || !updatedAt || order === null) return null
+  let chart: SessionArtifact['chart'] | null = null
+  const chartJson = rowString(record, 'chart_json')
+  if (chartJson) {
+    try {
+      const parsed = JSON.parse(chartJson)
+      if (parsed && typeof parsed === 'object') chart = parsed as SessionArtifact['chart']
+    } catch {
+      chart = null
+    }
+  }
+  const size = rowNumber(record, 'size_bytes')
+  return {
+    id,
+    toolId,
+    toolName,
+    filePath,
+    filename,
+    order,
+    source: rowString(record, 'source') === 'cloud' ? 'cloud' : rowString(record, 'source') === 'local' ? 'local' : undefined,
+    cloudArtifactId: rowString(record, 'cloud_artifact_id') || undefined,
+    taskRunId: rowString(record, 'task_run_id'),
+    mime: rowString(record, 'mime') || undefined,
+    size: size === null ? undefined : size,
+    chart,
+    sessionId,
+    sessionTitle: rowString(record, 'session_title'),
+    workspaceId: workspace,
     kind,
     status,
     authorAgentId: rowString(record, 'author_agent_id'),
@@ -284,6 +382,98 @@ function upsertLifecycle(record: ArtifactLifecycleRecord) {
       record.statusUpdatedAt,
       record.createdAt,
       record.updatedAt,
+    )
+  })
+}
+
+function artifactIndexStorageKey(artifact: Pick<SessionArtifact, 'id' | 'filePath' | 'source'>) {
+  return artifactLifecycleStorageKey(artifact)
+}
+
+function upsertArtifactIndexEntry(entry: ArtifactIndexEntry) {
+  const artifactId = artifactIndexStorageKey(entry)
+  withTransaction((db) => {
+    db.prepare(`
+      insert into artifact_index (
+        workspace_id,
+        session_id,
+        artifact_id,
+        id,
+        tool_id,
+        tool_name,
+        file_path,
+        filename,
+        order_value,
+        source,
+        cloud_artifact_id,
+        task_run_id,
+        mime,
+        size_bytes,
+        chart_json,
+        session_title,
+        kind,
+        status,
+        author_agent_id,
+        project_id,
+        task_id,
+        status_updated_by,
+        status_updated_at,
+        created_at,
+        updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(workspace_id, session_id, artifact_id) do update set
+        id = excluded.id,
+        tool_id = excluded.tool_id,
+        tool_name = excluded.tool_name,
+        file_path = excluded.file_path,
+        filename = excluded.filename,
+        order_value = excluded.order_value,
+        source = excluded.source,
+        cloud_artifact_id = excluded.cloud_artifact_id,
+        task_run_id = excluded.task_run_id,
+        mime = excluded.mime,
+        size_bytes = excluded.size_bytes,
+        chart_json = excluded.chart_json,
+        session_title = excluded.session_title,
+        kind = excluded.kind,
+        status = excluded.status,
+        author_agent_id = excluded.author_agent_id,
+        project_id = excluded.project_id,
+        task_id = excluded.task_id,
+        status_updated_by = excluded.status_updated_by,
+        status_updated_at = excluded.status_updated_at,
+        updated_at = excluded.updated_at
+    `).run(
+      workspaceId(entry.workspaceId),
+      entry.sessionId,
+      artifactId,
+      entry.id,
+      entry.toolId,
+      entry.toolName,
+      entry.filePath,
+      entry.filename,
+      entry.order,
+      entry.source || null,
+      entry.cloudArtifactId || null,
+      entry.taskRunId || null,
+      entry.mime || null,
+      entry.size ?? null,
+      entry.chart ? JSON.stringify(entry.chart) : null,
+      entry.sessionTitle || null,
+      entry.kind || inferArtifactKind({
+        kind: entry.kind,
+        filename: entry.filename,
+        mime: entry.mime,
+        chart: entry.chart,
+      }),
+      entry.status || defaultArtifactStatusForKind(entry.kind || 'draft'),
+      entry.authorAgentId || null,
+      entry.projectId || null,
+      entry.taskId || null,
+      entry.statusUpdatedBy || null,
+      entry.statusUpdatedAt || null,
+      entry.createdAt || new Date().toISOString(),
+      entry.updatedAt || entry.createdAt || new Date().toISOString(),
     )
   })
 }
@@ -418,50 +608,124 @@ async function sessionView(record: SessionRecord): Promise<SessionView | null> {
 async function artifactsForRecord(record: SessionRecord, workspace: string, tasks: CoordinationTaskCandidate[]) {
   const view = await sessionView(record)
   if (!view) return []
-  return artifactsFromView(view).map((artifact) => {
-    const lifecycle = findLifecycleForArtifact(workspace, record.id, artifact)
+  return indexLocalSessionArtifactsFromView({
+    workspaceId: workspace,
+    sessionId: record.id,
+    sessionTitle: record.title || null,
+    view,
+    tasks,
+  })
+}
+
+export function indexLocalSessionArtifactsFromView(input: {
+  workspaceId?: string | null
+  sessionId: string
+  sessionTitle?: string | null
+  view: SessionView
+  tasks?: CoordinationTaskCandidate[]
+}): ArtifactIndexEntry[] {
+  const workspace = workspaceId(input.workspaceId)
+  const tasks = input.tasks || listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
+  const entries = artifactsFromView(input.view).map((artifact) => {
+    const lifecycle = findLifecycleForArtifact(workspace, input.sessionId, artifact)
     return normalizeArtifactLifecycleEntry({
       workspaceId: workspace,
-      sessionId: record.id,
-      sessionTitle: record.title || null,
+      sessionId: input.sessionId,
+      sessionTitle: input.sessionTitle || null,
       artifact,
       lifecycle,
-      provenance: taskProvenanceForArtifact(tasks, record.id, artifact),
+      provenance: taskProvenanceForArtifact(tasks, input.sessionId, artifact),
     })
   })
+  const keys = entries.map(artifactIndexStorageKey)
+  withTransaction((db) => {
+    if (keys.length === 0) {
+      db.prepare(`delete from artifact_index where workspace_id = ? and session_id = ?`).run(workspace, input.sessionId)
+      return
+    }
+    const placeholders = keys.map(() => '?').join(', ')
+    db.prepare(`
+      delete from artifact_index
+      where workspace_id = ?
+        and session_id = ?
+        and artifact_id not in (${placeholders})
+    `).run(workspace, input.sessionId, ...keys)
+  })
+  for (const entry of entries) upsertArtifactIndexEntry(entry)
+  return entries
+}
+
+export async function rebuildLocalArtifactIndexForSession(sessionId: string, workspaceIdInput?: string | null): Promise<ArtifactIndexEntry[]> {
+  const workspace = workspaceId(workspaceIdInput)
+  const record = listSessionRecords().find((candidate) => candidate.id === sessionId)
+  if (!record) return []
+  const tasks = listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
+  return artifactsForRecord(record, workspace, tasks)
 }
 
 export async function listLocalArtifactIndex(request: ArtifactIndexRequest = {}): Promise<ArtifactIndexPayload> {
   const workspace = workspaceId(request.workspaceId)
   const limit = indexLimit(request)
-  const records = request.sessionId
-    ? listSessionRecords().filter((record) => record.id === request.sessionId)
-    : listSessionRecords()
-  const artifacts: ArtifactIndexEntry[] = []
-  // The coordination-task list is workspace-scoped, not per-record — fetch it once and reuse it for
-  // every record instead of re-reading up to 1000 tasks once per session in the loop.
-  const tasks = listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
-  for (const record of records) {
-    const entries = await artifactsForRecord(record, workspace, tasks)
-    for (const entry of entries) {
-      if (!matchesIndexRequest(entry, request)) continue
-      artifacts.push(entry)
-      if (artifacts.length >= limit) {
-        return { artifacts, total: artifacts.length }
-      }
-    }
+  const params: Array<string | number> = [workspace]
+  const where = ['workspace_id = ?']
+  if (request.sessionId) {
+    params.push(request.sessionId)
+    where.push('session_id = ?')
   }
-  return { artifacts, total: artifacts.length }
+  const taskIds = [...new Set((request.taskIds || []).filter(Boolean))]
+  if (request.projectId) {
+    params.push(request.projectId)
+    if (taskIds.length > 0) {
+      where.push(`(project_id = ? or task_id in (${taskIds.map(() => '?').join(', ')}))`)
+      params.push(...taskIds)
+    } else {
+      where.push('project_id = ?')
+    }
+  } else if (taskIds.length > 0) {
+    where.push(`task_id in (${taskIds.map(() => '?').join(', ')})`)
+    params.push(...taskIds)
+  }
+  if (request.taskId) {
+    params.push(request.taskId)
+    where.push('task_id = ?')
+  }
+  if (request.status) {
+    params.push(request.status)
+    where.push('status = ?')
+  }
+  if (request.kind) {
+    params.push(request.kind)
+    where.push('kind = ?')
+  }
+  params.push(limit + 1)
+  const rows = getArtifactLifecycleDb().prepare(`
+    select *
+    from artifact_index
+    where ${where.join(' and ')}
+    order by updated_at desc, session_id asc, artifact_id asc
+    limit ?
+  `).all(...params)
+  const artifacts = rows.map(artifactIndexEntryFromRow).filter((entry): entry is ArtifactIndexEntry => Boolean(entry))
+  const limited = artifacts.slice(0, limit)
+  return {
+    artifacts: limited,
+    total: artifacts.length > limit ? limit + 1 : artifacts.length,
+    truncated: artifacts.length > limit,
+  }
 }
 
 export async function listLocalSessionArtifacts(sessionId: string, workspaceIdInput?: string | null): Promise<SessionArtifact[]> {
-  const index = await listLocalArtifactIndex({ sessionId, workspaceId: workspaceIdInput || undefined, limit: MAX_INDEX_LIMIT })
+  let index = await listLocalArtifactIndex({ sessionId, workspaceId: workspaceIdInput || undefined, limit: MAX_INDEX_LIMIT })
+  if (index.artifacts.length === 0) {
+    await rebuildLocalArtifactIndexForSession(sessionId, workspaceIdInput)
+    index = await listLocalArtifactIndex({ sessionId, workspaceId: workspaceIdInput || undefined, limit: MAX_INDEX_LIMIT })
+  }
   return index.artifacts
 }
 
 export async function updateLocalArtifactStatus(request: ArtifactStatusUpdateRequest): Promise<SessionArtifact> {
   const workspace = workspaceId(request.workspaceId)
-  const artifact = (await listLocalArtifactIndex({
+  let artifact = (await listLocalArtifactIndex({
     workspaceId: workspace,
     sessionId: request.sessionId,
     limit: MAX_INDEX_LIMIT,
@@ -470,6 +734,18 @@ export async function updateLocalArtifactStatus(request: ArtifactStatusUpdateReq
     || entry.cloudArtifactId === request.artifactId
     || entry.filePath === request.artifactId,
   )
+  if (!artifact) {
+    await rebuildLocalArtifactIndexForSession(request.sessionId, workspace)
+    artifact = (await listLocalArtifactIndex({
+      workspaceId: workspace,
+      sessionId: request.sessionId,
+      limit: MAX_INDEX_LIMIT,
+    })).artifacts.find((entry) =>
+      entry.id === request.artifactId
+      || entry.cloudArtifactId === request.artifactId
+      || entry.filePath === request.artifactId,
+    )
+  }
   if (!artifact) throw new Error('Artifact was not found.')
   if (!canAdvanceArtifactStatus(artifact.status || 'draft', request.status)) {
     throw new Error('Artifact status cannot move backwards.')
@@ -495,11 +771,23 @@ export async function updateLocalArtifactStatus(request: ArtifactStatusUpdateReq
     updatedAt: now,
   }
   upsertLifecycle(next)
-  return normalizeArtifactLifecycleEntry({
+  const updated = normalizeArtifactLifecycleEntry({
     workspaceId: workspace,
     sessionId: request.sessionId,
     sessionTitle: artifact.sessionTitle || null,
     artifact,
     lifecycle: next,
   })
+  upsertArtifactIndexEntry(updated)
+  return updated
 }
+
+setSessionHistoryViewIndexHandler(({ sessionId, view }) => {
+  const record = listSessionRecords().find((candidate) => candidate.id === sessionId)
+  indexLocalSessionArtifactsFromView({
+    workspaceId: LOCAL_WORKSPACE_ID,
+    sessionId,
+    sessionTitle: record?.title || null,
+    view,
+  })
+})

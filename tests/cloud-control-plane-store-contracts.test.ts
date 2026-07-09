@@ -245,6 +245,64 @@ function runControlPlaneDomainContracts(
       // Aggregate stats (used by projection-status) match the event log without loading it.
       assert.deepEqual(await store.getSessionEventStats(tenantId, sessionId), { count: 3, latestSequence: 3 })
 
+      await store.upsertCloudArtifactIndex({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-artifact-old`,
+        filename: 'old.txt',
+        contentType: 'text/plain',
+        size: 3,
+        key: `${tenantId}/${sessionId}/private-old-key`,
+        kind: 'document',
+        status: 'draft',
+        authorAgentId: 'writer',
+        projectId: `${prefix}-project`,
+        taskId: `${prefix}-task`,
+        statusUpdatedBy: null,
+        statusUpdatedAt: null,
+        createdAt: '2026-01-02T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      })
+      await store.upsertCloudArtifactIndex({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-artifact-new`,
+        filename: 'new.txt',
+        contentType: 'text/plain',
+        size: 4,
+        key: `${tenantId}/${sessionId}/private-new-key`,
+        kind: 'document',
+        status: 'final',
+        authorAgentId: 'writer',
+        projectId: `${prefix}-project`,
+        taskId: `${prefix}-task`,
+        statusUpdatedBy: 'reviewer',
+        statusUpdatedAt: '2026-01-02T00:03:00.000Z',
+        createdAt: '2026-01-02T00:01:00.000Z',
+        updatedAt: '2026-01-02T00:03:00.000Z',
+      })
+      const artifactPage = await store.listCloudArtifactIndex({
+        tenantId,
+        userId,
+        projectId: `${prefix}-other-project`,
+        taskIds: [`${prefix}-task`],
+        limit: 1,
+      })
+      assert.deepEqual(artifactPage.items.map((artifact) => artifact.artifactId), [`${prefix}-artifact-new`])
+      assert.equal(artifactPage.items[0]?.sessionTitle, 'Contract session')
+      assert.equal(artifactPage.items[0]?.key, `${tenantId}/${sessionId}/private-new-key`)
+      assert.equal(artifactPage.totalEstimate, 2)
+      assert.equal(artifactPage.truncated, true)
+      const exactArtifact = await store.getCloudArtifactIndexRecord({
+        tenantId,
+        userId,
+        sessionId,
+        artifactId: `${prefix}-artifact-new`,
+      })
+      assert.equal(exactArtifact?.status, 'final')
+
       const projectedWorkspace = (projectedEvent: { eventId: string, sequence: number }) => ({
         eventId: projectedEvent.eventId.startsWith(`${sessionId}:`) ? projectedEvent.eventId : `${sessionId}:${projectedEvent.eventId}`,
         entityType: 'session',

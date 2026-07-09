@@ -2,6 +2,7 @@ import { normalizeCloudProjectSource, summarizeCloudProjectSource } from '@open-
 import type {
   ControlPlaneSessionStatus,
   ControlPlaneCommandStatus,
+  CloudArtifactIndexRecord,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
@@ -12,7 +13,7 @@ import type {
   WorkerRole,
   WorkspaceEventRecord,
 } from '../control-plane-store.ts'
-import { iso, jsonRecord, numberValue, stringOrNull, type QueryRow } from './shared.ts'
+import { iso, isoOrNull, jsonRecord, numberValue, stringOrNull, type QueryRow } from './shared.ts'
 
 export function sessionFromRow(row: QueryRow): SessionRecord {
   return {
@@ -72,6 +73,29 @@ export function projectionFromRow(row: QueryRow): SessionProjectionRecord {
     sessionId: String(row.session_id),
     sequence: numberValue(row.sequence),
     view: jsonRecord(row.view),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+export function artifactIndexFromRow(row: QueryRow): CloudArtifactIndexRecord {
+  return {
+    tenantId: String(row.tenant_id),
+    userId: String(row.user_id),
+    sessionId: String(row.session_id),
+    sessionTitle: stringOrNull(row.session_title),
+    artifactId: String(row.artifact_id),
+    filename: String(row.filename),
+    contentType: stringOrNull(row.content_type),
+    size: numberValue(row.size_bytes),
+    key: String(row.object_key),
+    kind: String(row.kind) as CloudArtifactIndexRecord['kind'],
+    status: String(row.status) as CloudArtifactIndexRecord['status'],
+    authorAgentId: stringOrNull(row.author_agent_id),
+    projectId: stringOrNull(row.project_id),
+    taskId: stringOrNull(row.task_id),
+    statusUpdatedBy: stringOrNull(row.status_updated_by),
+    statusUpdatedAt: isoOrNull(row.status_updated_at),
+    createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   }
 }

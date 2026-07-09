@@ -1,4 +1,4 @@
-import type { CloudProjectSourceSummary } from '@open-cowork/shared'
+import type { ArtifactKind, ArtifactStatus, CloudProjectSourceSummary } from '@open-cowork/shared'
 import type { ControlPlaneSessionStatus } from './control-plane-enums.ts'
 
 // The control-plane's session / event / projection / lease record shapes,
@@ -69,6 +69,47 @@ export type SessionProjectionRecord = {
   sequence: number
   view: Record<string, unknown>
   updatedAt: string
+}
+
+export type CloudArtifactIndexRecord = {
+  tenantId: string
+  userId: string
+  sessionId: string
+  sessionTitle: string | null
+  artifactId: string
+  filename: string
+  contentType: string | null
+  size: number
+  key: string
+  kind: ArtifactKind
+  status: ArtifactStatus
+  authorAgentId: string | null
+  projectId: string | null
+  taskId: string | null
+  statusUpdatedBy: string | null
+  statusUpdatedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type UpsertCloudArtifactIndexInput = Omit<CloudArtifactIndexRecord, 'sessionTitle'>
+
+export type ListCloudArtifactIndexInput = {
+  tenantId: string
+  userId: string
+  sessionId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  taskIds?: string[] | null
+  status?: ArtifactStatus | null
+  kind?: ArtifactKind | null
+  limit?: number | null
+}
+
+export type ListCloudArtifactIndexResult = {
+  items: CloudArtifactIndexRecord[]
+  totalEstimate: number
+  truncated: boolean
 }
 
 export type WorkerLeaseRecord = {

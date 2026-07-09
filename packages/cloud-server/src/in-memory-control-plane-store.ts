@@ -130,11 +130,15 @@ import type {
   IssuedApiTokenRecord,
 } from './control-plane-auth-records.ts'
 import type {
+  CloudArtifactIndexRecord,
+  ListCloudArtifactIndexInput,
+  ListCloudArtifactIndexResult,
   ListSessionsPageInput,
   ListSessionsPageRecord,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  UpsertCloudArtifactIndexInput,
   WorkerLeaseRecord,
   WorkspaceEventRecord,
 } from './control-plane-session-records.ts'
@@ -281,12 +285,37 @@ function normalizeIdList(values: readonly unknown[], label: string, maxLength: n
   return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
 }
 
+function artifactIndexKey(tenantId: string, sessionId: string, artifactId: string) {
+  return key(tenantId, sessionId, artifactId)
+}
+
+function cloudArtifactMatchesIndexInput(record: CloudArtifactIndexRecord, input: ListCloudArtifactIndexInput) {
+  if (record.tenantId !== input.tenantId || record.userId !== input.userId) return false
+  if (input.sessionId && record.sessionId !== input.sessionId) return false
+  const taskIds = new Set((input.taskIds || []).filter(Boolean))
+  if (input.projectId && record.projectId !== input.projectId && (!record.taskId || !taskIds.has(record.taskId))) return false
+  if (input.taskId && record.taskId !== input.taskId) return false
+  if (!input.projectId && taskIds.size > 0 && (!record.taskId || !taskIds.has(record.taskId))) return false
+  if (input.status && record.status !== input.status) return false
+  if (input.kind && record.kind !== input.kind) return false
+  return true
+}
+
+function compareCloudArtifacts(left: CloudArtifactIndexRecord, right: CloudArtifactIndexRecord) {
+  return (
+    right.updatedAt.localeCompare(left.updatedAt)
+    || left.sessionId.localeCompare(right.sessionId)
+    || left.artifactId.localeCompare(right.artifactId)
+  )
+}
+
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
   private readonly channelInteractionsByExternal = new Map<string, string>()
   private readonly sessions = new Map<string, SessionState>()
+  private readonly artifactIndex = new Map<string, CloudArtifactIndexRecord>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
     orgTenantId: (orgId) => this.orgTenantId(orgId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
@@ -1390,6 +1419,56 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       if (event.sequence > latestSequence) latestSequence = event.sequence
     }
     return { count: session.events.length, latestSequence }
+  }
+
+  upsertCloudArtifactIndex(input: UpsertCloudArtifactIndexInput): CloudArtifactIndexRecord {
+    this.requireTenantUser(input.tenantId, input.userId)
+    this.assertSessionBelongsToUser(input.tenantId, input.sessionId, input.userId)
+    const session = this.requireSession(input.tenantId, input.sessionId)
+    const record: CloudArtifactIndexRecord = {
+      ...clone(input),
+      sessionTitle: session.record.title || null,
+    }
+    this.artifactIndex.set(artifactIndexKey(input.tenantId, input.sessionId, input.artifactId), record)
+    return clone(record)
+  }
+
+  getCloudArtifactIndexRecord(input: {
+    tenantId: string
+    userId: string
+    sessionId: string
+    artifactId: string
+  }): CloudArtifactIndexRecord | null {
+    this.requireTenantUser(input.tenantId, input.userId)
+    const record = this.artifactIndex.get(artifactIndexKey(input.tenantId, input.sessionId, input.artifactId))
+    if (!record || record.userId !== input.userId) return null
+    const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
+    return clone({
+      ...record,
+      sessionTitle: session?.title || null,
+    })
+  }
+
+  listCloudArtifactIndex(input: ListCloudArtifactIndexInput): ListCloudArtifactIndexResult {
+    this.requireTenantUser(input.tenantId, input.userId)
+    if (input.sessionId) this.assertSessionBelongsToUser(input.tenantId, input.sessionId, input.userId)
+    const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
+    const rows = Array.from(this.artifactIndex.values())
+      .filter((record) => cloudArtifactMatchesIndexInput(record, input))
+      .map((record) => {
+        const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
+        return {
+          ...record,
+          sessionTitle: session?.title || null,
+        }
+      })
+      .sort(compareCloudArtifacts)
+    const items = rows.slice(0, limit)
+    return {
+      items: clone(items),
+      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
+      truncated: rows.length > limit,
+    }
   }
 
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {

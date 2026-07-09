@@ -1,6 +1,6 @@
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { createCoordinationProject, createCoordinationTask, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
-import { artifactLifecycleStorageKey, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
+import { artifactLifecycleStorageKey, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -147,7 +147,7 @@ test('local artifact paths support POSIX, Windows drive, and UNC absolute paths'
   }), windowsDrivePath)
 })
 
-test('local artifact index hydrates cold registry sessions before extracting artifacts', async () => {
+test('local artifact index reads persisted rows and rebuilds a single session explicitly', async () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-artifacts-cold-'))
   const sessionId = `artifact-cold-${Date.now()}`
@@ -194,11 +194,17 @@ test('local artifact index hydrates cold registry sessions before extracting art
       },
     })
 
+    const emptyIndex = await listLocalArtifactIndex({ sessionId, limit: 10 })
+    assert.equal(emptyIndex.artifacts.length, 0)
+    assert.equal(calls.getSessionView, 0)
+    assert.equal(calls.syncSessionView, 0)
+
+    const rebuilt = await rebuildLocalArtifactIndexForSession(sessionId)
+    assert.equal(rebuilt.length, 1)
     const index = await listLocalArtifactIndex({ sessionId, limit: 10 })
     assert.equal(index.artifacts.length, 1)
     assert.equal(index.artifacts[0]?.filePath, '/tmp/cold-report.md')
     assert.equal(index.artifacts[0]?.sessionTitle, 'Cold artifact session')
-    assert.equal(calls.getSessionView, 0)
     assert.equal(calls.syncSessionView, 1)
     assert.equal(calls.activate, false)
   } finally {
@@ -285,6 +291,7 @@ test('local artifact provenance prefers exact task-run matches over session-leve
       syncSessionView: async () => sessionViewWithArtifacts([]),
     })
 
+    await rebuildLocalArtifactIndexForSession(sessionId)
     const index = await listLocalArtifactIndex({ sessionId, limit: 10 })
     assert.equal(index.artifacts.length, 1)
     assert.equal(index.artifacts[0]?.taskRunId, 'run-exact')
@@ -303,6 +310,50 @@ test('local artifact provenance prefers exact task-run matches over session-leve
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('local artifact index lists persisted artifacts without hydrating sessions', async () => {
+  const db = new DatabaseSync(':memory:')
+  try {
+    setArtifactLifecycleDatabaseForTests(db)
+    setArtifactIndexRuntimeDepsForTests({
+      isHydrated: () => {
+        throw new Error('artifact index read must not inspect session hydration')
+      },
+      getSessionView: () => {
+        throw new Error('artifact index read must not materialize session views')
+      },
+      syncSessionView: async () => {
+        throw new Error('artifact index read must not sync session history')
+      },
+    })
+
+    for (let index = 0; index < 1200; index += 1) {
+      indexLocalSessionArtifactsFromView({
+        sessionId: `session-${index}`,
+        sessionTitle: `Session ${index}`,
+        view: sessionViewWithArtifacts([{
+          id: `session-${index}:tool-${index}:/tmp/report-${index}.md`,
+          toolId: `tool-${index}`,
+          toolName: 'write',
+          filePath: `/tmp/report-${index}.md`,
+          filename: `report-${index}.md`,
+          order: index,
+          createdAt: `2026-05-27T10:${String(index % 60).padStart(2, '0')}:00.000Z`,
+          updatedAt: `2026-05-27T10:${String(index % 60).padStart(2, '0')}:00.000Z`,
+        }]),
+      })
+    }
+
+    const index = await listLocalArtifactIndex({ limit: 25 })
+    assert.equal(index.artifacts.length, 25)
+    assert.equal(index.total, 26)
+    assert.equal(index.truncated, true)
+  } finally {
+    setArtifactIndexRuntimeDepsForTests(null)
+    setArtifactLifecycleDatabaseForTests(null)
+    db.close()
   }
 })
 

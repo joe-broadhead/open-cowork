@@ -8242,7 +8242,7 @@ test('cloud HTTP artifact upload begin signals unsupported when the store cannot
   }
 })
 
-test('cloud artifact index scans paged sessions until matching artifacts are found', async () => {
+test('cloud artifact index reads persisted rows without paging sessions', async () => {
   const principal: CloudPrincipal = {
     tenantId: 'tenant-1',
     tenantName: 'Tenant 1',
@@ -8253,63 +8253,26 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
     role: 'owner',
     authSource: 'user',
   }
-  const sessions = [
-    ...Array.from({ length: 100 }, (_value, index) => ({
-      sessionId: `session-empty-${index + 1}`,
-      title: `Empty session ${index + 1}`,
-      updatedAt: '2026-01-02T00:00:00.000Z',
-    })),
-    { sessionId: 'session-artifact', title: 'Artifact session', updatedAt: '2026-01-01T00:00:00.000Z' },
-  ]
-  const eventCalls: string[] = []
-  const requestedLimits: Array<number | undefined> = []
+  const indexRequests: unknown[] = []
   const sessionService = {
-    async listSessions() {
-      assert.fail('Artifact index must use paged session listing.')
+    async listSessionsPage() {
+      assert.fail('Artifact index must not page sessions.')
     },
-    async listSessionsPage(_principal: CloudPrincipal, input: { limit?: number, cursor?: string | null } = {}) {
-      requestedLimits.push(input.limit)
-      const offset = input.cursor ? Number(input.cursor) : 0
-      const limit = input.limit ?? sessions.length
-      const nextOffset = offset + limit
+    async getSessionView() {
+      assert.fail('Artifact index must not hydrate session projections.')
+    },
+    async listEvents() {
+      assert.fail('Artifact index must not replay session events.')
+    },
+    async listCloudArtifactIndex(_principal: CloudPrincipal, request: Record<string, unknown>) {
+      indexRequests.push(request)
       return {
-        items: sessions.slice(offset, nextOffset),
-        nextCursor: nextOffset < sessions.length ? String(nextOffset) : null,
-        totalEstimate: sessions.length,
-      }
-    },
-    async getSessionView(_principal: CloudPrincipal, sessionId: string) {
-      const session = sessions.find((entry) => entry.sessionId === sessionId)
-      if (!session) throw new Error(`Unknown session ${sessionId}`)
-      return { session, projection: null }
-    },
-    async listEvents(_principal: CloudPrincipal, sessionId: string) {
-      eventCalls.push(sessionId)
-      if (sessionId !== 'session-artifact') return []
-      return [{
-        type: 'artifact.created',
-        payload: {
-          artifactId: 'artifact-older',
-          sessionId,
-          filename: 'older.txt',
-          contentType: 'text/plain',
-          size: 6,
-          key: 'tenants/tenant-1/private-object-key-older',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-          kind: 'document',
-          status: 'draft',
-          authorAgentId: 'agent-writer',
-          projectId: 'project-1',
-          taskId: 'task-1',
-          statusUpdatedBy: null,
-          statusUpdatedAt: null,
-        },
-      }, {
-        type: 'artifact.created',
-        payload: {
+        items: [{
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          sessionId: 'session-artifact',
+          sessionTitle: 'Artifact session',
           artifactId: 'artifact-newer',
-          sessionId,
           filename: 'newer.txt',
           contentType: 'text/plain',
           size: 7,
@@ -8323,44 +8286,35 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
           taskId: 'task-1',
           statusUpdatedBy: null,
           statusUpdatedAt: null,
-        },
-      }]
+        }],
+        totalEstimate: 2,
+        truncated: true,
+      }
     },
   } as unknown as CloudSessionService
   const artifacts = new CloudArtifactService(sessionService, createInMemoryObjectStore())
 
-  const indexed = await artifacts.listArtifactIndex(principal, { limit: 1 })
-  assert.equal(indexed.artifacts.length, 1)
-  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-newer')
-  assert.equal('key' in indexed.artifacts[0]!, false)
-  assert.equal(indexed.scannedSessions, 101)
-  assert.equal(indexed.truncated, true)
-  assert.deepEqual(requestedLimits, [100, 100])
-  assert.equal(eventCalls.length, 101)
-  assert.equal(eventCalls[0], 'session-empty-1')
-  assert.equal(eventCalls.at(-1), 'session-artifact')
-
-  requestedLimits.length = 0
-  eventCalls.length = 0
-  const complete = await artifacts.listArtifactIndex(principal, { limit: 2 })
-  assert.equal(complete.artifacts.length, 2)
-  assert.deepEqual(complete.artifacts.map((artifact) => artifact.artifactId), ['artifact-newer', 'artifact-older'])
-  assert.equal(complete.scannedSessions, 101)
-  assert.equal(complete.truncated, true)
-  assert.deepEqual(requestedLimits, [100, 100])
-  assert.equal(eventCalls.length, 101)
-
-  requestedLimits.length = 0
-  eventCalls.length = 0
-  const linkedByTask = await artifacts.listArtifactIndex(principal, {
+  const indexed = await artifacts.listArtifactIndex(principal, {
     projectId: 'project-with-task-only-artifacts',
     taskIds: ['task-1'],
     limit: 1,
   })
-  assert.equal(linkedByTask.artifacts.length, 1)
-  assert.equal(linkedByTask.artifacts[0]?.artifactId, 'artifact-newer')
-  assert.equal(linkedByTask.truncated, true)
-  assert.deepEqual(requestedLimits, [100, 100])
+  assert.equal(indexed.artifacts.length, 1)
+  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-newer')
+  assert.equal(indexed.artifacts[0]?.sessionTitle, 'Artifact session')
+  assert.equal(indexed.total, 2)
+  assert.equal(indexed.scannedSessions, 0)
+  assert.equal('key' in indexed.artifacts[0]!, false)
+  assert.equal(indexed.truncated, true)
+  assert.deepEqual(indexRequests, [{
+    sessionId: undefined,
+    projectId: 'project-with-task-only-artifacts',
+    taskId: undefined,
+    taskIds: ['task-1'],
+    status: undefined,
+    kind: undefined,
+    limit: 1,
+  }])
 })
 
 test('cloud HTTP returns policy verdicts when artifacts are disabled', async () => {

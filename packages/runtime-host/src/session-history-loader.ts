@@ -59,14 +59,24 @@ export type SessionHistoryChildLineageSeedHandler = (input: {
   children: SessionHistoryChildLineageSeed[]
 }) => void
 
+export type SessionHistoryViewIndexHandler = (input: {
+  sessionId: string
+  view: SessionView
+}) => void | Promise<void>
+
 const CHILD_SNAPSHOT_PREFETCH_CONCURRENCY = 8
 
 type ChildSnapshot = { messages: unknown[]; todos: unknown[] }
 
 let sessionHistoryChildLineageSeedHandler: SessionHistoryChildLineageSeedHandler | null = null
+let sessionHistoryViewIndexHandler: SessionHistoryViewIndexHandler | null = null
 
 export function setSessionHistoryChildLineageSeedHandler(handler: SessionHistoryChildLineageSeedHandler | null) {
   sessionHistoryChildLineageSeedHandler = handler
+}
+
+export function setSessionHistoryViewIndexHandler(handler: SessionHistoryViewIndexHandler | null) {
+  sessionHistoryViewIndexHandler = handler
 }
 
 export function createBoundedChildSnapshotLoader(options: {
@@ -668,6 +678,11 @@ export function createSessionHistoryService(
       }
 
       deps.updateSessionRecord(sessionId, patch)
+      try {
+        await sessionHistoryViewIndexHandler?.({ sessionId, view })
+      } catch (err) {
+        logHistoryError('session:index artifacts', sessionId, err)
+      }
       return view
     }, {
       slowThresholdMs: options?.force ? 300 : 150,

@@ -54,6 +54,36 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_session_events_sequence_idx
     ON cloud_session_events (tenant_id, session_id, sequence)`,
+  `CREATE TABLE IF NOT EXISTS cloud_artifact_index (
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    session_id text NOT NULL,
+    artifact_id text NOT NULL,
+    filename text NOT NULL,
+    content_type text,
+    size_bytes bigint NOT NULL,
+    object_key text NOT NULL,
+    kind text NOT NULL,
+    status text NOT NULL,
+    author_agent_id text,
+    project_id text,
+    task_id text,
+    status_updated_by text,
+    status_updated_at timestamptz,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, session_id, artifact_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_user_updated_idx
+    ON cloud_artifact_index (tenant_id, user_id, updated_at DESC, session_id, artifact_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_session_updated_idx
+    ON cloud_artifact_index (tenant_id, user_id, session_id, updated_at DESC, artifact_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_project_idx
+    ON cloud_artifact_index (tenant_id, user_id, project_id, task_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_kind_status_idx
+    ON cloud_artifact_index (tenant_id, user_id, kind, status, updated_at DESC)`,
   `CREATE TABLE IF NOT EXISTS cloud_workspace_event_counters (
     tenant_id text NOT NULL,
     user_id text NOT NULL,

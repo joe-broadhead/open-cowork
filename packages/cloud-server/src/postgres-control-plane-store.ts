@@ -1353,6 +1353,18 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.getSessionEventStats(tenantId, sessionId)
   }
 
+  async upsertCloudArtifactIndex(input: Parameters<PostgresSessionsRepository['upsertCloudArtifactIndex']>[0]) {
+    return this.sessions.upsertCloudArtifactIndex(input)
+  }
+
+  async getCloudArtifactIndexRecord(input: Parameters<PostgresSessionsRepository['getCloudArtifactIndexRecord']>[0]) {
+    return this.sessions.getCloudArtifactIndexRecord(input)
+  }
+
+  async listCloudArtifactIndex(input: Parameters<PostgresSessionsRepository['listCloudArtifactIndex']>[0]) {
+    return this.sessions.listCloudArtifactIndex(input)
+  }
+
   async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
     return this.sessions.appendWorkspaceEvent(input)
   }

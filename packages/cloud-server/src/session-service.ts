@@ -43,17 +43,20 @@ import type {
   ChannelProviderEventType,
   ChannelProviderId,
   ChannelSessionBindingRecord,
+  CloudArtifactIndexRecord,
   ControlPlaneMembershipStatus,
   ControlPlaneRole,
   ControlPlaneStore,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
+  ListCloudArtifactIndexInput,
   ManagedWorkerPoolStatus,
   ManagedWorkerStatus,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  UpsertCloudArtifactIndexInput,
   ListSessionsPageInput,
   ListSessionsPageRecord,
   ThreadSmartFilterRecord,
@@ -928,6 +931,44 @@ export class CloudSessionService {
   async listEvents(principal: CloudPrincipal, sessionId: string, afterSequence = 0, limit?: number): Promise<SessionEventRecord[]> {
     await this.getSessionView(principal, sessionId)
     return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence, limit)
+  }
+
+  async upsertCloudArtifactIndex(principal: CloudPrincipal, input: Omit<UpsertCloudArtifactIndexInput, 'tenantId' | 'userId'>): Promise<CloudArtifactIndexRecord> {
+    await this.ensurePrincipal(principal)
+    await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
+    return this.store.upsertCloudArtifactIndex({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
+  }
+
+  async getCloudArtifactIndexRecord(
+    principal: CloudPrincipal,
+    sessionId: string,
+    artifactId: string,
+  ): Promise<CloudArtifactIndexRecord | null> {
+    await this.ensurePrincipal(principal)
+    await this.assertGatewayTokenCanReadSession(principal, sessionId)
+    return this.store.getCloudArtifactIndexRecord({
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      sessionId,
+      artifactId,
+    })
+  }
+
+  async listCloudArtifactIndex(
+    principal: CloudPrincipal,
+    input: Omit<ListCloudArtifactIndexInput, 'tenantId' | 'userId'> = {},
+  ) {
+    await this.ensurePrincipal(principal)
+    if (input.sessionId) await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
+    return this.store.listCloudArtifactIndex({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
   }
 
   // Read paths for the SSE replay poll, which runs every pollMs for the life of a
