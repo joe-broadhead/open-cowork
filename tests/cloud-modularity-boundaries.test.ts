@@ -15,6 +15,7 @@ const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store
 const postgresChannelDeliveriesDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/channel-deliveries.ts'), 'utf8')
 const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
 const postgresWorkflowsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/workflows.ts'), 'utf8')
+const postgresSessionsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/sessions.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
 const lineThreshold = 2_000
@@ -24,12 +25,6 @@ const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
   ['packages/cloud-server/src/http-server.ts', 1_800],
   ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
-  // Delegates ~13 domain families to Postgres*Repository sub-stores already; the residual inline
-  // bulk (sessions/commands/leases/workflows/coordination) is the top remaining extraction target.
-  // Ratcheted to just above current size: the +29 over the prior 2690 is the batch session
-  // ownership/existence probes (getOwnedSessionIds/requireSessions) that removed the bulk
-  // thread-tag validation N+1. New capabilities must extract a sub-store, not grow this file.
-  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_719],
   // session-service is a thin facade: ~156 of its ~168 methods are one-line delegators to the
   // ~30 cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). The real
   // decomposition already lives at the service layer; this budget is ratcheted to just above the
@@ -198,7 +193,13 @@ test('postgres store delegates row mapping to domain modules', () => {
     const lineCount = readFileSync(file, 'utf8').split('\n').length
     assert.ok(lineCount <= 250, `${relativePath} has ${lineCount} lines; Postgres domain mappers should stay narrow`)
   }
-  assertSourceBudget('Postgres store domain module', join(cloudRoot, 'postgres-store-domains'), 700)
+  // The sessions repository owns the session core (session/event/projection/lease/command
+  // lifecycle) extracted from postgres-control-plane-store.ts. It is the single cohesive
+  // domain that legitimately exceeds the narrow per-file budget; ratcheted to just above its
+  // current size so it can't silently re-grow. Every other domain module stays under 700.
+  assertSourceBudget('Postgres store domain module', join(cloudRoot, 'postgres-store-domains'), 700, {
+    'packages/cloud-server/src/postgres-store-domains/sessions.ts': 1_130,
+  })
 })
 
 test('control plane store contract barrel does not export concrete stores', () => {
@@ -301,8 +302,10 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_managed_workers_org_status_idx', 'cloud_managed_workers', 'org_id, status, updated_at DESC')
   assertIndexShape('cloud_managed_worker_heartbeats_org_idx', 'cloud_managed_worker_heartbeats', 'org_id, received_at DESC')
 
-  assert.match(postgresStore, /async listSessionsPage[\s\S]*LIMIT \$\$\{params\.length\}/)
-  assert.match(postgresStore, /async listSessions\b[\s\S]*WHERE s\.tenant_id = \$1 AND s\.user_id = \$2[\s\S]*LIMIT 1000/)
+  // The session core (session/event/projection/lease/command SQL) now lives in the extracted
+  // sessions repository; assert the bounded query shapes there.
+  assert.match(postgresSessionsDomain, /async listSessionsPage[\s\S]*LIMIT \$\$\{params\.length\}/)
+  assert.match(postgresSessionsDomain, /async listSessions\b[\s\S]*WHERE s\.tenant_id = \$1 AND s\.user_id = \$2[\s\S]*LIMIT 1000/)
   assert.match(postgresStore, /async pruneExpiredChannelInteractions[\s\S]*DELETE FROM cloud_channel_interactions[\s\S]*WHERE ctid IN \([\s\S]*WHERE expires_at < \$1[\s\S]*LIMIT \$2/)
   assert.match(postgresStore, /async pruneStaleThrottleState[\s\S]*DELETE FROM cloud_rate_limits[\s\S]*window_started_at_ms < \$1[\s\S]*DELETE FROM cloud_auth_failures[\s\S]*blocked_until_ms < \$1/)
   // Event-log retention (P1-C3) deletes via a ctid-keyed, ORDER BY created_at bounded subselect.
@@ -317,7 +320,7 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assert.match(postgresQuotaDomain, /export async function reconcilePostgresConcurrencyCounters/)
   assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
   assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
-  assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
+  assert.match(postgresSessionsDomain, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresChannelDeliveriesDomain, /async claimNext[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresWorkflowsDomain, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
 })
@@ -403,11 +406,17 @@ function productionSourceFiles(directory: string): string[] {
   return files
 }
 
-function assertSourceBudget(label: string, directory: string, maxLines: number) {
+function assertSourceBudget(
+  label: string,
+  directory: string,
+  maxLines: number,
+  overrides: Record<string, number> = {},
+) {
   for (const file of productionSourceFiles(directory)) {
     const relativePath = relative(root, file)
+    const budget = overrides[relativePath] ?? maxLines
     const lineCount = readFileSync(file, 'utf8').split('\n').length
-    assert.ok(lineCount <= maxLines, `${label} ${relativePath} has ${lineCount} lines; budget is ${maxLines}`)
+    assert.ok(lineCount <= budget, `${label} ${relativePath} has ${lineCount} lines; budget is ${budget}`)
   }
 }
 
