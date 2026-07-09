@@ -63,10 +63,13 @@
     "gateway_opencode_session_get",
     "gateway_opencode_session_children",
     "gateway_opencode_session_web_url",
+    "gateway_agent_presence_list",
+    "gateway_agent_presence_get",
     "gateway_opencode_mcp_list",
     "gateway_opencode_tool_list",
     "gateway_opencode_agent_list",
     "gateway_opencode_skill_list",
+    "gateway_persona_list",
     "gateway_channel_connector_status",
     "gateway_channel_binding_list",
     "gateway_channel_binding_get"
@@ -123,6 +126,9 @@
     "gateway_active_run_control",
     "gateway_environment_action",
     "gateway_environment_reconcile",
+    "gateway_agent_presence_create",
+    "gateway_agent_presence_update",
+    "gateway_session_admit",
     "gateway_channel_send",
     "gateway_channel_send_to_task",
     "gateway_channel_send_to_roadmap"
@@ -156,6 +162,7 @@
     "gateway_opencode_agent_delete",
     "gateway_opencode_skill_upsert",
     "gateway_opencode_skill_delete",
+    "gateway_persona_create",
     "gateway_channel_binding_upsert",
     "gateway_channel_binding_delete"
   ]

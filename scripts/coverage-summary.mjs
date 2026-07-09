@@ -35,6 +35,8 @@ const WORKSPACE_SOURCE_INVENTORY = {
     { path: 'mcps/agents/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/charts/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/clock/dist', extensions: ['.js', '.mjs'] },
+    { path: 'mcps/knowledge/dist', extensions: ['.js', '.mjs'] },
+    { path: 'mcps/semantic-ui/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/skills/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/workflows/dist', extensions: ['.js', '.mjs'] },
     { path: 'packages/gateway-channel/dist', extensions: ['.js', '.mjs'] },
@@ -77,6 +79,8 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
     'mcps/agents/dist/',
     'mcps/charts/dist/',
     'mcps/clock/dist/',
+    'mcps/knowledge/dist/',
+    'mcps/semantic-ui/dist/',
     'mcps/skills/dist/',
     'mcps/workflows/dist/',
     'packages/gateway-channel/dist/',
@@ -92,14 +96,12 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
     'packages/cloud-client/src/',
   ],
   sourceInventory: WORKSPACE_SOURCE_INVENTORY,
-  // This is a COMBINED floor across every shipped workspace package. It reads low
-  // because it is dominated by the standalone-gateway appliance and the bundled MCPs,
-  // whose contract tests spawn `dist/index.js` as a subprocess — their in-process line
-  // coverage is ~0 by design, not because the code is untested. The internet-facing
-  // gateway delivery path is NOT what holds this number down: it is enforced separately
-  // and at a high bar by GATEWAY_COVERAGE_INPUT below (~94% lines). Do not raise this
-  // combined floor without first backfilling standalone-gateway/MCP in-process tests.
-  thresholds: { lines: 38, functions: 28, branches: 68 },
+  // This is a COMBINED floor across every shipped workspace package. Subprocess
+  // V8 coverage is merged into this LCOV for the standalone-gateway CLI and MCP
+  // handlers before this summary runs, but the bundled MCP dist files are still
+  // large enough to dominate the aggregate. The package-specific ratchets below
+  // are the authoritative floors for those shipped surfaces.
+  thresholds: { lines: 38, functions: 27, branches: 67 },
 }
 // Dedicated ratchet for the internet-facing gateway delivery path (webhook ingress auth,
 // SMTP client, delivery retry/dedupe, dispatcher fairness). The combined workspace floor
@@ -111,8 +113,106 @@ export const GATEWAY_COVERAGE_INPUT = {
   includePathPrefixes: ['apps/gateway/dist/'],
   thresholds: { lines: 90, functions: 88, branches: 72 },
 }
+export const STANDALONE_GATEWAY_COVERAGE_INPUT = {
+  name: 'Standalone Gateway',
+  path: 'coverage/workspace/lcov.info',
+  includePathPrefixes: ['apps/standalone-gateway/dist/'],
+  sourceInventory: {
+    minimumPercent: 95,
+    roots: [
+      { path: 'apps/standalone-gateway/dist', extensions: ['.js', '.mjs'], excludeFileNames: ['main.js', 'types.js'] },
+    ],
+  },
+  thresholds: { lines: 82, functions: 80, branches: 78 },
+}
+export const MCP_HANDLER_COVERAGE_INPUT = {
+  name: 'MCP Handlers',
+  path: 'coverage/workspace/lcov.info',
+  includePathPrefixes: [
+    'mcps/agents/dist/',
+    'mcps/charts/dist/',
+    'mcps/clock/dist/',
+    'mcps/knowledge/dist/',
+    'mcps/semantic-ui/dist/',
+    'mcps/skills/dist/',
+    'mcps/workflows/dist/',
+  ],
+  sourceInventory: {
+    minimumPercent: 100,
+    roots: [
+      { path: 'mcps/agents/dist', extensions: ['.js', '.mjs'] },
+      { path: 'mcps/charts/dist', extensions: ['.js', '.mjs'] },
+      { path: 'mcps/clock/dist', extensions: ['.js', '.mjs'] },
+      { path: 'mcps/knowledge/dist', extensions: ['.js', '.mjs'] },
+      { path: 'mcps/semantic-ui/dist', extensions: ['.js', '.mjs'] },
+      { path: 'mcps/skills/dist', extensions: ['.js', '.mjs'] },
+      { path: 'mcps/workflows/dist', extensions: ['.js', '.mjs'] },
+    ],
+  },
+  thresholds: { lines: 35, functions: 25, branches: 67 },
+}
+export const GATEWAY_PROVIDER_COVERAGE_INPUT = {
+  name: 'Gateway Providers',
+  path: 'coverage/workspace/lcov.info',
+  includePathPrefixes: [
+    'packages/gateway-channel/dist/',
+    'packages/gateway-provider-cli/dist/',
+    'packages/gateway-provider-discord/dist/',
+    'packages/gateway-provider-email/dist/',
+    'packages/gateway-provider-signal/dist/',
+    'packages/gateway-provider-slack/dist/',
+    'packages/gateway-provider-telegram/dist/',
+    'packages/gateway-provider-webhook/dist/',
+    'packages/gateway-provider-whatsapp/dist/',
+    'packages/gateway-testing/dist/',
+  ],
+  sourceInventory: {
+    minimumPercent: 95,
+    roots: [
+      { path: 'packages/gateway-channel/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-cli/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-discord/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-email/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-signal/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-slack/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-telegram/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-webhook/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-provider-whatsapp/dist', extensions: ['.js', '.mjs'] },
+      { path: 'packages/gateway-testing/dist', extensions: ['.js', '.mjs'] },
+    ],
+  },
+  thresholds: { lines: 85, functions: 87, branches: 69 },
+}
+export const CLOUD_CLIENT_COVERAGE_INPUT = {
+  name: 'Cloud Client',
+  path: 'coverage/workspace/lcov.info',
+  includePathPrefixes: ['packages/cloud-client/src/'],
+  sourceInventory: {
+    minimumPercent: 100,
+    roots: [
+      // `index.ts` is a pure barrel and `contracts.ts` is intentionally
+      // type-only: neither emits meaningful runtime coverage, so keep the
+      // executable cloud-client surface at 100% inventory instead.
+      { path: 'packages/cloud-client/src', extensions: ['.ts'], excludeFileNames: ['contracts.ts', 'index.ts'] },
+    ],
+  },
+  thresholds: { lines: 70, functions: 30, branches: 72 },
+}
 export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 58 } }
-export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, GATEWAY_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
+export const NODE_ONLY_INPUTS = [
+  NODE_COVERAGE_INPUT,
+  SHARED_COVERAGE_INPUT,
+  WORKSPACE_NODE_COVERAGE_INPUT,
+  GATEWAY_COVERAGE_INPUT,
+  STANDALONE_GATEWAY_COVERAGE_INPUT,
+  MCP_HANDLER_COVERAGE_INPUT,
+  GATEWAY_PROVIDER_COVERAGE_INPUT,
+  CLOUD_CLIENT_COVERAGE_INPUT,
+]
+export const DEFAULT_INPUTS = [
+  ...NODE_ONLY_INPUTS,
+  RENDERER_COVERAGE_INPUT,
+]
 
 function normalizeCoveragePath(path, includePathPrefixes = []) {
   const normalized = path.replace(/\\/g, '/')
@@ -387,7 +487,7 @@ export function renderCoverageMarkdown(summary) {
 }
 
 function inputsFromArgs(args) {
-  if (args.includes('--node-only')) return [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT]
+  if (args.includes('--node-only')) return NODE_ONLY_INPUTS
   if (args.includes('--renderer-only')) return [RENDERER_COVERAGE_INPUT]
   return DEFAULT_INPUTS
 }

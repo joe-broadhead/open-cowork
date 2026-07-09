@@ -6,9 +6,8 @@ import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
-import { RuntimeOfflineBanner } from './components/layout/RuntimeOfflineBanner'
+import { AppShellNotices } from './components/layout/AppShellNotices'
 import { Toaster } from './components/ui/Toaster'
-import { Button } from './components/ui'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
@@ -21,7 +20,6 @@ import {
   browserUrlRoutingEnabled,
   canUseViewTransition,
   describeError,
-  dismissPreview,
   errorStack,
   initialAppView,
   previewDismissed,
@@ -703,72 +701,21 @@ export function App() {
   // Sidebar), which was the bug this replaced.
   void localeVersion
   const showPreviewNotice = Boolean(metadata?.preview && !previewNoticeDismissed)
-  const previewNoticeStyle = {
-    borderColor: 'color-mix(in srgb, var(--color-amber) 34%, var(--color-border-subtle))',
-    background: 'color-mix(in srgb, var(--color-amber) 10%, var(--color-surface))',
-    color: 'var(--color-text)',
-  }
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       {isDesktopRuntime() ? <TitleBar view={view} /> : null}
-      {showPreviewNotice && metadata ? (
-        <div className="flex items-center gap-3 border-b px-4 py-2 text-xs" style={previewNoticeStyle}>
-          <span className="font-semibold">Public preview {metadata.version}</span>
-          <span className="min-w-0 flex-1 text-text-muted">
-            This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              dismissPreview(metadata.version)
-              setPreviewNoticeDismissed(true)
-            }}
-          >
-            {t('common.dismiss', 'Dismiss')}
-          </Button>
-        </div>
-      ) : null}
-      {runtimeWasReady && runtimeError ? (
-        <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
-      ) : null}
-      {rendererErrorNotice ? (
-        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red/30 bg-red/10 px-3 py-2 text-xs text-red shadow-card">
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">App error</div>
-            <div className="mt-0.5 text-red/85">{rendererErrorNotice}</div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="no-drag"
-            onClick={() => setRendererErrorNotice(null)}
-          >
-            {t('common.dismiss', 'Dismiss')}
-          </Button>
-        </div>
-      ) : null}
-      {resourceNavigationNotice ? (
-        <div
-          role="alert"
-          data-testid="resource-navigation-notice"
-          data-status={resourceNavigationNotice.status}
-          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber/30 bg-amber/10 px-3 py-2 text-xs text-amber shadow-card"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">Resource unavailable</div>
-            <div className="mt-0.5 text-amber/85">{resourceNavigationNotice.message}</div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="no-drag"
-            onClick={() => setResourceNavigationNotice(null)}
-          >
-            {t('common.dismiss', 'Dismiss')}
-          </Button>
-        </div>
-      ) : null}
+      <AppShellNotices
+        metadata={metadata}
+        showPreviewNotice={showPreviewNotice}
+        onPreviewDismiss={() => setPreviewNoticeDismissed(true)}
+        runtimeWasReady={runtimeWasReady}
+        runtimeError={runtimeError}
+        onRuntimeRestart={handleRuntimeRestart}
+        rendererErrorNotice={rendererErrorNotice}
+        onRendererErrorDismiss={() => setRendererErrorNotice(null)}
+        resourceNavigationNotice={resourceNavigationNotice}
+        onResourceNavigationDismiss={() => setResourceNavigationNotice(null)}
+      />
       <div className="flex flex-1 min-h-0">
         <Sidebar
           currentView={view}

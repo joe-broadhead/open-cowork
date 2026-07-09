@@ -324,10 +324,13 @@
         "mcp__opencode-gateway__gateway_opencode_session_get",
         "mcp__opencode-gateway__gateway_opencode_session_children",
         "mcp__opencode-gateway__gateway_opencode_session_web_url",
+        "mcp__opencode-gateway__gateway_agent_presence_list",
+        "mcp__opencode-gateway__gateway_agent_presence_get",
         "mcp__opencode-gateway__gateway_opencode_mcp_list",
         "mcp__opencode-gateway__gateway_opencode_tool_list",
         "mcp__opencode-gateway__gateway_opencode_agent_list",
         "mcp__opencode-gateway__gateway_opencode_skill_list",
+        "mcp__opencode-gateway__gateway_persona_list",
         "mcp__opencode-gateway__gateway_channel_connector_status",
         "mcp__opencode-gateway__gateway_channel_binding_list",
         "mcp__opencode-gateway__gateway_channel_binding_get"
@@ -384,6 +387,9 @@
         "mcp__opencode-gateway__gateway_active_run_control",
         "mcp__opencode-gateway__gateway_environment_action",
         "mcp__opencode-gateway__gateway_environment_reconcile",
+        "mcp__opencode-gateway__gateway_agent_presence_create",
+        "mcp__opencode-gateway__gateway_agent_presence_update",
+        "mcp__opencode-gateway__gateway_session_admit",
         "mcp__opencode-gateway__gateway_channel_send",
         "mcp__opencode-gateway__gateway_channel_send_to_task",
         "mcp__opencode-gateway__gateway_channel_send_to_roadmap"

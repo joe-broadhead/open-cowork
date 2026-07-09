@@ -3,6 +3,7 @@ import { expect } from "../../../tests/gateway-test-expect.ts";
 import {
   isCloudMetadataHost,
   mapWebhookPayload,
+  resolveWebhookDeliveryAddresses,
   signWebhookDeliveryPayload,
   signWebhookIngressPayload,
   validateWebhookButtons,
@@ -29,6 +30,15 @@ describe("webhook delivery URL policy", () => {
   it("blocks NAT64-embedded private targets by default and allows public ones", () => {
     expect(() => validateWebhookDeliveryUrl("https://[64:ff9b::127.0.0.1]/")).toThrow();
     expect(() => validateWebhookDeliveryUrl("https://[64:ff9b::8.8.8.8]/")).not.toThrow();
+  });
+
+  it("accepts string DNS resolver records from Node-compatible resolvers", async () => {
+    const url = validateWebhookDeliveryUrl("https://bridge.example.test/gateway");
+
+    const addresses = await resolveWebhookDeliveryAddresses(url, {
+      resolveHostname: async () => ["93.184.216.34"]
+    });
+    expect(addresses).toEqual([{ address: "93.184.216.34", family: 4 }]);
   });
 });
 

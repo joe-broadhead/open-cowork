@@ -3,7 +3,7 @@ import test from 'node:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_INPUTS, GATEWAY_COVERAGE_INPUT, NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovFilePaths, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
+import { CLOUD_CLIENT_COVERAGE_INPUT, DEFAULT_INPUTS, GATEWAY_COVERAGE_INPUT, GATEWAY_PROVIDER_COVERAGE_INPUT, MCP_HANDLER_COVERAGE_INPUT, NODE_COVERAGE_INPUT, NODE_ONLY_INPUTS, SHARED_COVERAGE_INPUT, STANDALONE_GATEWAY_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovFilePaths, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
 
 test('coverage summary parses lcov totals and renders a PR-safe table', () => {
   const totals = parseLcovInfo([
@@ -301,8 +301,8 @@ test('coverage summary enforces a dedicated high-bar ratchet for the gateway del
 test('coverage summary reports the enforced shipped workspace ratchet', () => {
   assert.deepEqual(WORKSPACE_NODE_COVERAGE_INPUT.thresholds, {
     lines: 38,
-    functions: 28,
-    branches: 68,
+    functions: 27,
+    branches: 67,
   })
   assert.ok(DEFAULT_INPUTS.includes(WORKSPACE_NODE_COVERAGE_INPUT))
   assert.equal(WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
@@ -314,6 +314,8 @@ test('coverage summary reports the enforced shipped workspace ratchet', () => {
     'apps/gateway/dist/',
     'apps/standalone-gateway/dist/',
     'mcps/workflows/dist/',
+    'mcps/knowledge/dist/',
+    'mcps/semantic-ui/dist/',
     'packages/gateway-channel/dist/',
     'packages/gateway-provider-slack/dist/',
   ]) {
@@ -322,4 +324,40 @@ test('coverage summary reports the enforced shipped workspace ratchet', () => {
       `workspace coverage includes ${expectedPrefix}`,
     )
   }
+})
+
+test('coverage summary enforces package ratchets for subprocess and shipped runtime packages', () => {
+  for (const input of [
+    STANDALONE_GATEWAY_COVERAGE_INPUT,
+    MCP_HANDLER_COVERAGE_INPUT,
+    GATEWAY_PROVIDER_COVERAGE_INPUT,
+    CLOUD_CLIENT_COVERAGE_INPUT,
+  ]) {
+    assert.ok(DEFAULT_INPUTS.includes(input), `${input.name} is part of the default coverage gate`)
+    assert.ok(input.sourceInventory?.minimumPercent >= 95, `${input.name} must have a source-inventory ratchet`)
+    assert.ok(NODE_ONLY_INPUTS.includes(input), `${input.name} must run during test:coverage:node`)
+  }
+
+  assert.deepEqual(STANDALONE_GATEWAY_COVERAGE_INPUT.thresholds, {
+    lines: 82,
+    functions: 80,
+    branches: 78,
+  })
+  assert.deepEqual(MCP_HANDLER_COVERAGE_INPUT.thresholds, {
+    lines: 35,
+    functions: 25,
+    branches: 67,
+  })
+  assert.deepEqual(GATEWAY_PROVIDER_COVERAGE_INPUT.thresholds, {
+    lines: 85,
+    functions: 87,
+    branches: 69,
+  })
+  assert.deepEqual(CLOUD_CLIENT_COVERAGE_INPUT.thresholds, {
+    lines: 70,
+    functions: 30,
+    branches: 72,
+  })
+  assert.ok(MCP_HANDLER_COVERAGE_INPUT.includePathPrefixes.includes('mcps/knowledge/dist/'))
+  assert.ok(MCP_HANDLER_COVERAGE_INPUT.includePathPrefixes.includes('mcps/semantic-ui/dist/'))
 })
