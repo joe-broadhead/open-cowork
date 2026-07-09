@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeNotification, SessionPatch, SessionView, WorkspaceSessionsUpdatedEvent } from '@open-cowork/shared'
+import type { EffectiveAppSettings, RuntimeNotification, SessionPatch, SessionView, WorkspaceSessionsUpdatedEvent } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { useSessionStore } from '../stores/session'
 import { useOpenCodeEvents } from './useOpenCodeEvents'
@@ -22,6 +22,8 @@ describe('useOpenCodeEvents', () => {
   let sessionDeleted: ((event: { id: string; workspaceId?: string | null }) => void) | null = null
   let workspaceSessionsUpdated: ((event: WorkspaceSessionsUpdatedEvent) => void) | null = null
   let closeAudioContext: ReturnType<typeof vi.fn>
+  let createdAudioContextCount: number
+  let startOscillator: ReturnType<typeof vi.fn>
 
   const tokens = {
     input: 0,
@@ -88,6 +90,8 @@ describe('useOpenCodeEvents', () => {
     sessionDeleted = null
     workspaceSessionsUpdated = null
     closeAudioContext = vi.fn(async () => undefined)
+    createdAudioContextCount = 0
+    startOscillator = vi.fn()
     resetSessionStore()
 
     class TestAudioContext {
@@ -95,11 +99,15 @@ describe('useOpenCodeEvents', () => {
       destination = {}
       close = closeAudioContext
 
+      constructor() {
+        createdAudioContextCount += 1
+      }
+
       createOscillator() {
         return {
           connect: vi.fn(),
           frequency: { value: 0 },
-          start: vi.fn(),
+          start: startOscillator,
           stop: vi.fn(),
           type: 'sine',
         }
@@ -161,13 +169,105 @@ describe('useOpenCodeEvents', () => {
     })
   })
 
-  it('closes the notification AudioContext after the final hook unmounts', () => {
+  function soundSettings(notificationSounds: boolean): EffectiveAppSettings {
+    return {
+      selectedProviderId: null,
+      selectedModelId: null,
+      providerCredentials: {},
+      integrationCredentials: {},
+      integrationEnabled: {},
+      bashPermission: 'deny',
+      fileWritePermission: 'deny',
+      webPermission: 'allow',
+      webSearchEnabled: true,
+      taskPermission: 'allow',
+      externalDirectoryPermission: 'allow',
+      mcpPermission: 'allow',
+      requireApprovalBeforeSending: true,
+      notificationVoiceReplies: true,
+      notificationSmartSuggestions: true,
+      notificationDailyDigest: false,
+      notificationSounds,
+      privacyKeepConversationHistory: true,
+      privacyShareAnonymizedUsage: false,
+      enableBash: false,
+      enableFileWrite: false,
+      runtimeToolingBridgeEnabled: true,
+      workflowLaunchAtLogin: false,
+      workflowRunInBackground: false,
+      workflowDesktopNotifications: true,
+      workflowQuietHoursStart: null,
+      workflowQuietHoursEnd: null,
+      effectiveProviderId: null,
+      effectiveModel: null,
+    }
+  }
+
+  async function emitDoneNotification(event: RuntimeNotification = { type: 'done' }) {
+    await act(async () => {
+      notify?.(event)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  it('plays done notification chimes when notification sounds are enabled', async () => {
+    render(<Harness />)
+    vi.mocked(window.coworkApi.settings.get).mockResolvedValue(soundSettings(true))
+
+    await emitDoneNotification()
+
+    expect(createdAudioContextCount).toBe(1)
+    expect(startOscillator).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not play done notification chimes when notification sounds are disabled', async () => {
+    render(<Harness />)
+    vi.mocked(window.coworkApi.settings.get).mockResolvedValue(soundSettings(false))
+
+    await emitDoneNotification()
+
+    expect(createdAudioContextCount).toBe(0)
+    expect(startOscillator).not.toHaveBeenCalled()
+  })
+
+  it('defaults missing notification sound preferences to enabled', async () => {
+    render(<Harness />)
+    vi.mocked(window.coworkApi.settings.get).mockResolvedValue({} as EffectiveAppSettings)
+
+    await emitDoneNotification()
+
+    expect(createdAudioContextCount).toBe(1)
+    expect(startOscillator).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the latest notification sound preference for each done notification', async () => {
+    render(<Harness />)
+    vi.mocked(window.coworkApi.settings.get)
+      .mockResolvedValueOnce(soundSettings(false))
+      .mockResolvedValueOnce(soundSettings(true))
+
+    await emitDoneNotification()
+    await emitDoneNotification()
+
+    expect(createdAudioContextCount).toBe(1)
+    expect(startOscillator).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps synthetic done notifications silent', async () => {
+    render(<Harness />)
+
+    await emitDoneNotification({ type: 'done', synthetic: true })
+
+    expect(window.coworkApi.settings.get).not.toHaveBeenCalled()
+    expect(createdAudioContextCount).toBe(0)
+  })
+
+  it('closes the notification AudioContext after the final hook unmounts', async () => {
     const first = render(<Harness />)
     const second = render(<Harness />)
 
-    act(() => {
-      notify?.({ type: 'done' })
-    })
+    await emitDoneNotification()
 
     expect(closeAudioContext).not.toHaveBeenCalled()
 

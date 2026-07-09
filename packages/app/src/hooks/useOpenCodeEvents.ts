@@ -32,6 +32,15 @@ function combineSubscriptions(...subscriptions: Array<(() => void) | undefined>)
   }
 }
 
+async function shouldPlayNotificationSound() {
+  try {
+    const settings = await window.coworkApi.settings.get()
+    return settings.notificationSounds !== false
+  } catch {
+    return false
+  }
+}
+
 export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
   // Highest workspace-event sequence whose session snapshot we've already applied, per workspace
@@ -40,6 +49,7 @@ export function useOpenCodeEvents() {
 
   useEffect(() => {
     activeHookMounts += 1
+    let disposed = false
     let textBuffers: SessionPatch[] = []
     let frameHandle: number | null = null
     let flushTimer: number | null = null
@@ -171,7 +181,11 @@ export function useOpenCodeEvents() {
       if (!isActiveWorkspaceEvent(event.workspaceId)) return
       switch (event.type) {
         case 'done':
-          if (!event.synthetic) playDoneSound()
+          if (!event.synthetic) {
+            void shouldPlayNotificationSound().then((enabled) => {
+              if (enabled && !disposed) playDoneSound()
+            })
+          }
           break
         case 'error':
           useSessionStore.getState().addGlobalError(event.message || 'An error occurred')
@@ -253,6 +267,7 @@ export function useOpenCodeEvents() {
     )
 
     return () => {
+      disposed = true
       if (frameHandle !== null) {
         cancelAnimationFrame(frameHandle)
       }
