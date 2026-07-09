@@ -194,6 +194,10 @@ export function clearArtifactLifecycleStoreCache() {
   transactionCounter = 0
 }
 
+export function getArtifactLifecycleTransactionCountForTests() {
+  return transactionCounter
+}
+
 function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
   const db = getArtifactLifecycleDb()
   const savepoint = `artifact_lifecycle_tx_${transactionCounter += 1}`
@@ -314,14 +318,6 @@ function artifactIndexEntryFromRow(row: unknown): ArtifactIndexEntry | null {
   }
 }
 
-function findLifecycle(workspace: string, sessionId: string, artifactId: string): ArtifactLifecycleRecord | null {
-  return lifecycleFromRow(getArtifactLifecycleDb().prepare(`
-    select *
-    from artifact_lifecycle
-    where workspace_id = ? and session_id = ? and artifact_id = ?
-  `).get(workspace, sessionId, artifactId))
-}
-
 export function artifactLifecycleStorageKey(artifact: Pick<SessionArtifact, 'id' | 'filePath' | 'source'>) {
   if (artifact.source !== 'cloud' && isLocalArtifactFilePath(artifact.filePath)) return artifact.filePath
   return artifact.id
@@ -337,10 +333,33 @@ export function localArtifactFilename(filePath: string) {
     : basename(filePath) || filePath
 }
 
-function findLifecycleForArtifact(workspace: string, sessionId: string, artifact: SessionArtifact): ArtifactLifecycleRecord | null {
+function lifecycleKeysForArtifact(artifact: SessionArtifact) {
   const key = artifactLifecycleStorageKey(artifact)
-  return findLifecycle(workspace, sessionId, key)
-    || (key !== artifact.id ? findLifecycle(workspace, sessionId, artifact.id) : null)
+  return key === artifact.id ? [key] : [key, artifact.id]
+}
+
+function findLifecycleForArtifactFromMap(lifecycles: Map<string, ArtifactLifecycleRecord>, artifact: SessionArtifact) {
+  for (const key of lifecycleKeysForArtifact(artifact)) {
+    const lifecycle = lifecycles.get(key)
+    if (lifecycle) return lifecycle
+  }
+  return null
+}
+
+function loadLifecyclesForArtifacts(workspace: string, sessionId: string, artifacts: SessionArtifact[]) {
+  const keys = [...new Set(artifacts.flatMap(lifecycleKeysForArtifact))]
+  const lifecycles = new Map<string, ArtifactLifecycleRecord>()
+  if (keys.length === 0) return lifecycles
+  const rows = getArtifactLifecycleDb().prepare(`
+    select *
+    from artifact_lifecycle
+    where workspace_id = ? and session_id = ? and artifact_id in (${keys.map(() => '?').join(', ')})
+  `).all(workspace, sessionId, ...keys)
+  for (const row of rows) {
+    const lifecycle = lifecycleFromRow(row)
+    if (lifecycle) lifecycles.set(lifecycle.artifactId, lifecycle)
+  }
+  return lifecycles
 }
 
 function upsertLifecycle(record: ArtifactLifecycleRecord) {
@@ -390,10 +409,8 @@ function artifactIndexStorageKey(artifact: Pick<SessionArtifact, 'id' | 'filePat
   return artifactLifecycleStorageKey(artifact)
 }
 
-function upsertArtifactIndexEntry(entry: ArtifactIndexEntry) {
-  const artifactId = artifactIndexStorageKey(entry)
-  withTransaction((db) => {
-    db.prepare(`
+function artifactIndexUpsertStatement(db: DatabaseSync) {
+  return db.prepare(`
       insert into artifact_index (
         workspace_id,
         session_id,
@@ -443,10 +460,14 @@ function upsertArtifactIndexEntry(entry: ArtifactIndexEntry) {
         status_updated_by = excluded.status_updated_by,
         status_updated_at = excluded.status_updated_at,
         updated_at = excluded.updated_at
-    `).run(
-      workspaceId(entry.workspaceId),
-      entry.sessionId,
-      artifactId,
+    `)
+}
+
+function runArtifactIndexEntryUpsert(statement: ReturnType<DatabaseSync['prepare']>, entry: ArtifactIndexEntry) {
+  statement.run(
+    workspaceId(entry.workspaceId),
+    entry.sessionId,
+    artifactIndexStorageKey(entry),
       entry.id,
       entry.toolId,
       entry.toolName,
@@ -474,7 +495,12 @@ function upsertArtifactIndexEntry(entry: ArtifactIndexEntry) {
       entry.statusUpdatedAt || null,
       entry.createdAt || new Date().toISOString(),
       entry.updatedAt || entry.createdAt || new Date().toISOString(),
-    )
+  )
+}
+
+function upsertArtifactIndexEntry(entry: ArtifactIndexEntry) {
+  withTransaction((db) => {
+    runArtifactIndexEntryUpsert(artifactIndexUpsertStatement(db), entry)
   })
 }
 
@@ -528,16 +554,36 @@ function artifactsFromView(view: SessionView): SessionArtifact[] {
   ])
 }
 
-function taskProvenanceForArtifact(tasks: CoordinationTaskCandidate[], sessionId: string, artifact: SessionArtifact): TaskProvenance {
-  const task = artifact.taskRunId
-    ? tasks.find((candidate) => candidate.assignedRunId === artifact.taskRunId)
-      || tasks.find((candidate) => candidate.assignedSessionId === sessionId)
-    : tasks.find((candidate) => candidate.assignedSessionId === sessionId)
+type TaskProvenanceIndex = {
+  byRunId: Map<string, TaskProvenance>
+  bySessionId: Map<string, TaskProvenance>
+}
+
+function provenanceFromTask(task: CoordinationTaskCandidate): TaskProvenance {
   return {
     projectId: task?.projectId || null,
     taskId: task?.id || null,
     authorAgentId: task?.assigneeAgent || null,
   }
+}
+
+function buildTaskProvenanceIndex(tasks: CoordinationTaskCandidate[]): TaskProvenanceIndex {
+  const byRunId = new Map<string, TaskProvenance>()
+  const bySessionId = new Map<string, TaskProvenance>()
+  for (const task of tasks) {
+    const provenance = provenanceFromTask(task)
+    const assignedRunId = task.assignedRunId
+    const assignedSessionId = task.assignedSessionId
+    if (assignedRunId && !byRunId.has(assignedRunId)) byRunId.set(assignedRunId, provenance)
+    if (assignedSessionId && !bySessionId.has(assignedSessionId)) bySessionId.set(assignedSessionId, provenance)
+  }
+  return { byRunId, bySessionId }
+}
+
+function taskProvenanceForArtifact(index: TaskProvenanceIndex, sessionId: string, artifact: SessionArtifact): TaskProvenance {
+  return (artifact.taskRunId ? index.byRunId.get(artifact.taskRunId) : null)
+    || index.bySessionId.get(sessionId)
+    || { projectId: null, taskId: null, authorAgentId: null }
 }
 
 export function normalizeArtifactLifecycleEntry(input: {
@@ -615,17 +661,17 @@ export function indexLocalSessionArtifactsFromView(input: {
 }): ArtifactIndexEntry[] {
   const workspace = workspaceId(input.workspaceId)
   const tasks = input.tasks || listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
-  const entries = artifactsFromView(input.view).map((artifact) => {
-    const lifecycle = findLifecycleForArtifact(workspace, input.sessionId, artifact)
-    return normalizeArtifactLifecycleEntry({
+  const taskIndex = buildTaskProvenanceIndex(tasks)
+  const artifacts = artifactsFromView(input.view)
+  const lifecycles = loadLifecyclesForArtifacts(workspace, input.sessionId, artifacts)
+  const entries = artifacts.map((artifact) => normalizeArtifactLifecycleEntry({
       workspaceId: workspace,
       sessionId: input.sessionId,
       sessionTitle: input.sessionTitle || null,
       artifact,
-      lifecycle,
-      provenance: taskProvenanceForArtifact(tasks, input.sessionId, artifact),
-    })
-  })
+      lifecycle: findLifecycleForArtifactFromMap(lifecycles, artifact),
+      provenance: taskProvenanceForArtifact(taskIndex, input.sessionId, artifact),
+    }))
   const keys = entries.map(artifactIndexStorageKey)
   withTransaction((db) => {
     if (keys.length === 0) {
@@ -639,8 +685,9 @@ export function indexLocalSessionArtifactsFromView(input: {
         and session_id = ?
         and artifact_id not in (${placeholders})
     `).run(workspace, input.sessionId, ...keys)
+    const upsert = artifactIndexUpsertStatement(db)
+    for (const entry of entries) runArtifactIndexEntryUpsert(upsert, entry)
   })
-  for (const entry of entries) upsertArtifactIndexEntry(entry)
   return entries
 }
 
