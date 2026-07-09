@@ -24,10 +24,10 @@ const documentedLargeFileBudgets = new Map([
   ['packages/app/src/browser/cowork-api.ts', 1_446],
   // components/HomePage.tsx — the launchpad shell. Backlog: extract feed,
   // quick-actions, and hero sections into feature components.
-  // Backlog: HomeComposer still lives inline here. #920 extracted the shared composer menu/dismiss
-  // hooks (lowering this below the pre-#918 budget); further extraction of the inline HomeComposer
-  // will lower it more. See docs/frontend-architecture.md.
-  ['packages/app/src/components/HomePage.tsx', 1_190],
+  // #920 extracted the shared composer menu/dismiss hooks; the inline HomeComposer has now
+  // been extracted to components/home/HomeComposer.tsx (with shared primary-agent-mode helpers
+  // in components/home/primary-agent-mode.ts), lowering this budget. See docs/frontend-architecture.md.
+  ['packages/app/src/components/HomePage.tsx', 630],
   // components/layout/Sidebar.tsx — the primary nav shell. Backlog: extract the
   // per-section nav groups into dedicated components. Grew by the RBAC-gated Admin
   // control-plane nav entry (#896); still a decomposition backlog.
