@@ -99,6 +99,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
 
   assert.deepEqual(splitScriptSteps(requireScript('test:windows-prepackage')), [
     'pnpm test:prepare',
+    'pnpm --filter @open-cowork/cloud-client build',
     'node scripts/check-preload-channels.mjs',
     'node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/regenerate-windows-update-metadata.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts',
   ])

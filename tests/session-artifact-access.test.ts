@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
 import { isReadableSessionArtifact, listKnownSessionArtifactPaths } from '../apps/desktop/src/main/session-artifact-access.ts'
 
@@ -74,7 +74,10 @@ test('listKnownSessionArtifactPaths includes surfaced write/edit outputs across 
 
   const known = listKnownSessionArtifactPaths(view)
 
-  assert.deepEqual(Array.from(known).sort(), ['/tmp/from-task.csv', '/tmp/report.txt'])
+  assert.deepEqual(Array.from(known).sort(), [
+    resolve('/tmp/from-task.csv'),
+    resolve('/tmp/report.txt'),
+  ].sort())
 })
 
 test('isReadableSessionArtifact rejects arbitrary files that were not surfaced as artifacts', () => {

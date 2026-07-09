@@ -1,6 +1,6 @@
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { createCoordinationProject, createCoordinationTask, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
-import { artifactLifecycleStorageKey, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
+import { artifactLifecycleStorageKey, clearArtifactLifecycleStoreCache, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -209,6 +209,7 @@ test('local artifact index reads persisted rows and rebuilds a single session ex
     assert.equal(calls.activate, false)
   } finally {
     setArtifactIndexRuntimeDepsForTests(null)
+    clearArtifactLifecycleStoreCache()
     clearSessionRegistryCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
