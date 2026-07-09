@@ -1,5 +1,6 @@
 import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/runtime-host/settings'
 import { saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
+import { EMPTY_MANAGED_POLICY, resetActiveManagedPolicyCache, setActiveManagedPolicy } from '@open-cowork/runtime-host/managed-policy'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
@@ -273,6 +274,52 @@ test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking c
     assert.equal(unsafe?.reasonCode, 'mcp.stdio-policy-blocked')
     assert.doesNotMatch(JSON.stringify(diagnostics), /secret-token-value/)
   } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    clearSettingsCache()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('getRuntimeInputDiagnostics explains custom skills disabled by managed policy', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-custom-skill-policy-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
+  clearConfigCaches()
+  clearSettingsCache()
+  resetActiveManagedPolicyCache()
+
+  try {
+    saveCustomSkill({
+      scope: 'machine',
+      directory: null,
+      name: 'policy-disabled-skill',
+      content: `---\ndescription: Disabled by policy\n---\n# Disabled by policy\n`,
+    })
+    setActiveManagedPolicy({
+      ...EMPTY_MANAGED_POLICY,
+      extensions: { ...EMPTY_MANAGED_POLICY.extensions, customSkills: false },
+    })
+
+    const diagnostics = getRuntimeInputDiagnostics()
+    const disabledSkill = diagnostics.capabilities?.find((capability) => (
+      capability.kind === 'skill'
+      && capability.id === 'policy-disabled-skill'
+    ))
+
+    assert.equal(disabledSkill?.status, 'disabled')
+    assert.equal(disabledSkill?.reasonCode, 'skill.custom-disabled-by-policy')
+    assert.equal(disabledSkill?.source, 'custom')
+    assert.equal(diagnostics.capabilities?.some((capability) => (
+      capability.kind === 'skill'
+      && capability.id === 'policy-disabled-skill'
+      && capability.status === 'active'
+    )), false)
+  } finally {
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()

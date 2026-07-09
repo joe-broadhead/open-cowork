@@ -1,5 +1,6 @@
 import { clearProjectOverlayCopies, projectHasOverlayContent, syncProjectOverlayToRuntime } from '@open-cowork/runtime-host/runtime-project-overlay'
 import { getMachineAgentsDir, getMachineSkillsDir, getProjectCoworkAgentsDir, getProjectCoworkSkillsDir, getRuntimeEnvPaths } from '@open-cowork/runtime-host/runtime-paths'
+import { EMPTY_MANAGED_POLICY, resetActiveManagedPolicyCache, setActiveManagedPolicy } from '@open-cowork/runtime-host/managed-policy'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
@@ -29,12 +30,15 @@ test('project overlay copies project-scoped skills and agents then restores mach
     const machineAgentDir = getMachineAgentsDir()
     const projectSkillDir = join(getProjectCoworkSkillsDir(projectDir), 'brief-maker')
     const projectAgentDir = getProjectCoworkAgentsDir(projectDir)
+    const skillOnlyDir = join(root, 'skill-only-project')
+    const skillOnlySkillDir = join(getProjectCoworkSkillsDir(skillOnlyDir), 'policy-skill')
     const sidecarName = `brief-writer${getSidecarJsonSuffix()}`
 
     await mkdir(machineSkillDir, { recursive: true })
     await mkdir(machineAgentDir, { recursive: true })
     await mkdir(projectSkillDir, { recursive: true })
     await mkdir(projectAgentDir, { recursive: true })
+    await mkdir(skillOnlySkillDir, { recursive: true })
 
     writeFileSync(join(machineSkillDir, 'SKILL.md'), skillContent('machine skill'))
     writeFileSync(join(machineAgentDir, 'brief-writer.md'), agentContent('machine agent'))
@@ -43,8 +47,17 @@ test('project overlay copies project-scoped skills and agents then restores mach
     writeFileSync(join(projectSkillDir, 'SKILL.md'), skillContent('project skill'))
     writeFileSync(join(projectAgentDir, 'brief-writer.md'), agentContent('project agent'))
     writeFileSync(join(projectAgentDir, sidecarName), `${JSON.stringify({ color: 'green' }, null, 2)}\n`)
+    writeFileSync(join(skillOnlySkillDir, 'SKILL.md'), skillContent('policy skill'))
 
     assert.equal(projectHasOverlayContent(projectDir), true)
+    assert.equal(projectHasOverlayContent(skillOnlyDir), true)
+    setActiveManagedPolicy({
+      ...EMPTY_MANAGED_POLICY,
+      extensions: { ...EMPTY_MANAGED_POLICY.extensions, customSkills: false },
+    })
+    assert.equal(projectHasOverlayContent(skillOnlyDir), false)
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
     assert.equal(projectHasOverlayContent(join(root, 'empty-project')), false)
 
     assert.equal(syncProjectOverlayToRuntime(projectDir), projectDir)
@@ -63,6 +76,8 @@ test('project overlay copies project-scoped skills and agents then restores mach
     assert.match(readFileSync(join(machineAgentDir, 'brief-writer.md'), 'utf-8'), /machine agent/)
     assert.match(readFileSync(join(machineAgentDir, sidecarName), 'utf-8'), /blue/)
   } finally {
+    setActiveManagedPolicy(null)
+    resetActiveManagedPolicyCache()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()

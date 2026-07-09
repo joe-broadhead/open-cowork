@@ -2,7 +2,7 @@ import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/run
 import { getMachineSkillsDir, getProjectCoworkAgentsDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
 import { copySkillsAndAgents } from '@open-cowork/runtime-host/runtime-content'
 import { buildProviderRuntimeConfig, buildRuntimeConfig, buildRuntimeConfigForRuntime } from '@open-cowork/runtime-host/runtime-config-builder'
-import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '@open-cowork/runtime-host/native-customizations'
+import { removeCustomAgent, removeCustomMcp, removeCustomSkill, saveCustomAgent, saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
 import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog } from '@open-cowork/runtime-host/custom-agents-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -19,6 +19,15 @@ function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })
   return mkdtempSync(join(parent, prefix))
+}
+
+function writeSkillBundle(root: string, name: string, description: string) {
+  const directory = join(root, name)
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(
+    join(directory, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: ${description}\n---\n# ${description}\n`,
+  )
 }
 
 test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', () => {
@@ -170,50 +179,83 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
 test('buildRuntimeConfig applies the org managed policy: tightens permissions and disables extension classes', () => {
   const tempRoot = testTempDir('opencowork-runtime-policy-')
   const configDir = join(tempRoot, 'downstream')
+  const downstreamRoot = join(tempRoot, 'downstream-root')
+  const downstreamSkills = join(downstreamRoot, 'skills')
   const projectRoot = join(tempRoot, 'project')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
   const originalSettings = loadSettings()
   mkdirSync(configDir, { recursive: true })
+  mkdirSync(downstreamSkills, { recursive: true })
   mkdirSync(projectRoot, { recursive: true })
   // App-config ceiling leaves bash + custom extensions fully enabled.
   writeFileSync(join(configDir, 'config.jsonc'), `{
   "providers": { "available": ["openrouter"], "defaultProvider": "openrouter", "defaultModel": "auto" },
+  "skills": [
+    { "name": "Managed Skill", "description": "Managed bundle", "badge": "Skill", "sourceName": "managed-skill", "toolIds": [] }
+  ],
   "permissions": { "bash": "allow", "fileWrite": "allow", "task": "allow", "web": "allow", "webSearch": true }
 }
 `)
+  writeSkillBundle(downstreamSkills, 'managed-skill', 'Managed bundle')
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
   clearConfigCaches()
   saveSettings({ selectedProviderId: 'openrouter', selectedModelId: 'auto', bashPermission: 'allow', enableBash: true })
   saveCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse', type: 'http', url: 'https://warehouse.example.test/mcp' })
+  saveCustomSkill({
+    scope: 'project',
+    directory: projectRoot,
+    name: 'custom-review',
+    content: `---\ndescription: Custom review\n---\n# Custom review\n`,
+  })
   try {
-    // Baseline (no policy): bash allowed, the custom MCP is registered.
+    // Baseline (no policy): bash allowed, custom MCP/skill are registered through
+    // Cowork-owned config and skill catalog. Native ambient skill discovery stays off.
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
+    copySkillsAndAgents(projectRoot)
     const baseline = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(baseline.permission.bash, 'allow')
     assert.equal(baseline.mcp.warehouse?.url, 'https://warehouse.example.test/mcp')
+    assert.equal(baseline.skills.customSkills, false)
+    assert.equal(baseline.permission.skill['managed-skill'], 'allow')
+    assert.equal(baseline.permission.skill['custom-review'], 'allow')
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'custom-review', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'custom-review', 'SKILL.md')), false)
 
-    // Org policy TIGHTENS bash to deny (never loosens) and disables custom MCPs.
+    // Org policy TIGHTENS bash to deny (never loosens) and disables custom MCPs/skills.
     const policy: ManagedDesktopPolicy = {
       ...EMPTY_MANAGED_POLICY,
       allowedProviders: ['openrouter'],
-      extensions: { customProviders: true, customMcps: false, customSkills: true },
+      extensions: { customProviders: true, customMcps: false, customSkills: false },
       permissionCeilings: { ...EMPTY_MANAGED_POLICY.permissionCeilings, bash: 'deny' },
     }
     setActiveManagedPolicy(policy)
+    copySkillsAndAgents(projectRoot)
     const governed = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(governed.permission.bash, 'deny')
     // The custom MCP is dropped entirely by the extension-class gate.
     assert.equal(governed.mcp.warehouse, undefined)
+    assert.equal(governed.skills.customSkills, false)
+    assert.equal(governed.permission.skill['managed-skill'], 'allow')
+    assert.equal(governed.permission.skill['custom-review'], undefined)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'custom-review', 'SKILL.md')), false)
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'custom-review', 'SKILL.md')), false)
     // The provider allow-list still permits the configured provider.
     assert.deepEqual(governed.enabled_providers, ['openrouter'])
   } finally {
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
     removeCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse' })
+    removeCustomSkill({ scope: 'project', directory: projectRoot, name: 'custom-review' })
     saveSettings(originalSettings)
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }

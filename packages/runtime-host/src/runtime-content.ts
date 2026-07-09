@@ -9,6 +9,7 @@ import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.js'
 import { pruneManagedSkillMirror } from './runtime-skill-mirror.js'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.js'
 import { findBundledSkillDirInRoot, getBundledSkillIndex } from './bundled-skill-index.js'
+import { getActiveManagedPolicy, isManagedPolicyExtensionClassEnabled } from './managed-policy.js'
 
 
 function copySkillDirectory(source: string, destination: string) {
@@ -93,6 +94,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   const skillsDst = getManagedSkillsDir()
   const customSkillsDst = getMachineSkillsDir()
   const runtimeSkillCatalog = getRuntimeSkillCatalogDir()
+  const allowCustomSkills = isManagedPolicyExtensionClassEnabled(getActiveManagedPolicy(), 'customSkills')
   const skillSourceRoots = getBundledSkillRoots()
   const bundledSkillIndex = getBundledSkillIndex(skillSourceRoots)
   const configuredSkillNames = new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName))
@@ -130,7 +132,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   }
 
   syncCustomAgentRuntimeGuidance({ directory: projectDirectory || undefined })
-  const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory)
-  buildRuntimeSkillCatalog({ directory: activeOverlayDirectory })
+  const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory, { includeSkills: false })
+  buildRuntimeSkillCatalog({ directory: activeOverlayDirectory, includeCustomSkills: allowCustomSkills })
   return activeOverlayDirectory
 }

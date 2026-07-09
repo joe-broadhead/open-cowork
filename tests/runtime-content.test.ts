@@ -139,7 +139,8 @@ test('custom skills shadow configured bundles without duplicate runtime catalog 
     assert.equal(effectiveAnalyst?.description, 'Custom analyst')
     assert.equal(existsSync(join(getMachineSkillsDir(), 'analyst', 'SKILL.md')), true)
     assert.equal(existsSync(join(getManagedSkillsDir(), 'analyst', 'SKILL.md')), true)
-    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'analyst')), false)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'analyst', 'SKILL.md')), true)
+    assert.match(readFileSync(join(getRuntimeSkillCatalogDir(), 'analyst', 'SKILL.md'), 'utf-8'), /Custom analyst/)
   } finally {
     await new Promise((resolve) => setTimeout(resolve, 25))
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR

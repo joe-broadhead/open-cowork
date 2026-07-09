@@ -6,6 +6,7 @@ import { listCustomMcps, listCustomSkills } from '@open-cowork/runtime-host/nati
 import { evaluateHttpMcpUrl } from '@open-cowork/runtime-host/mcp-url-policy'
 import { validateCustomMcpStdioCommand } from '@open-cowork/runtime-host/mcp-stdio-policy'
 import { listEffectiveSkillsSync } from '@open-cowork/runtime-host/effective-skills'
+import { getActiveManagedPolicy, isManagedPolicyExtensionClassEnabled } from '@open-cowork/runtime-host/managed-policy'
 import type {
   RuntimeCapabilityConflictRecord,
   RuntimeCapabilityProvenanceRecord,
@@ -213,7 +214,8 @@ function buildCustomMcpCapabilityRecords(): RuntimeCapabilityProvenanceRecord[] 
 }
 
 function buildSkillCapabilityRecords(): RuntimeCapabilityProvenanceRecord[] {
-  const activeSkills = listEffectiveSkillsSync()
+  const allowCustomSkills = isManagedPolicyExtensionClassEnabled(getActiveManagedPolicy(), 'customSkills')
+  const activeSkills = listEffectiveSkillsSync({ includeCustomSkills: allowCustomSkills })
   const activeNames = new Set(activeSkills.map((skill) => skill.name))
   const active = activeSkills.map((skill): RuntimeCapabilityProvenanceRecord => ({
     id: skill.name,
@@ -243,7 +245,20 @@ function buildSkillCapabilityRecords(): RuntimeCapabilityProvenanceRecord[] {
       },
       redacted: true,
     }))
-  return [...active, ...missing]
+  const disabledCustom = allowCustomSkills ? [] : listCustomSkills()
+    .map((skill): RuntimeCapabilityProvenanceRecord => ({
+      id: skill.name,
+      kind: 'skill',
+      status: 'disabled',
+      reasonCode: 'skill.custom-disabled-by-policy',
+      source: 'custom',
+      productMode: 'desktop-local',
+      evidence: {
+        scope: skill.scope,
+      },
+      redacted: true,
+    }))
+  return [...active, ...missing, ...disabledCustom]
 }
 
 function buildCapabilityConflictRecords(input: {
@@ -279,6 +294,8 @@ function buildCapabilityConflictRecords(input: {
   }
 
   const configuredSkillNames = new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName))
+  const allowCustomSkills = isManagedPolicyExtensionClassEnabled(getActiveManagedPolicy(), 'customSkills')
+  if (!allowCustomSkills) return conflicts
   for (const customSkill of listCustomSkills()) {
     if (!configuredSkillNames.has(customSkill.name)) continue
     conflicts.push({
