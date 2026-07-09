@@ -1,5 +1,5 @@
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
-import { createCoordinationProject, createCoordinationTask, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
+import { clearCoordinationStoreCache, createCoordinationProject, createCoordinationTask, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
 import { artifactLifecycleStorageKey, clearArtifactLifecycleStoreCache, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -210,6 +210,7 @@ test('local artifact index reads persisted rows and rebuilds a single session ex
   } finally {
     setArtifactIndexRuntimeDepsForTests(null)
     clearArtifactLifecycleStoreCache()
+    clearCoordinationStoreCache()
     clearSessionRegistryCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -304,6 +305,7 @@ test('local artifact provenance prefers exact task-run matches over session-leve
     assert.equal(broadProjectIndex.artifacts.length, 0)
   } finally {
     setArtifactIndexRuntimeDepsForTests(null)
+    clearArtifactLifecycleStoreCache()
     setCoordinationDatabaseForTests(null)
     coordinationDb.close()
     clearSessionRegistryCache()
