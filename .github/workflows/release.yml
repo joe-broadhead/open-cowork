@@ -105,6 +105,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Dead code check
+        run: pnpm lint:dead-code
+
       - name: Accessibility lint
         run: pnpm lint:a11y --max-warnings=0
 

@@ -108,6 +108,8 @@ test('root lint script runs all release gate checks', () => {
 })
 
 test('dead-code gate covers every source workspace package', () => {
+  assert.equal(requireScript('lint:dead-code'), 'knip --production --files --exports')
+
   const workspaces = knipJson.workspaces || {}
   const expected = sourceWorkspacePackageDirs()
   const missing = expected.filter((workspace) => !workspaces[workspace])
@@ -324,6 +326,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
     'pnpm license:check',
+    'pnpm lint:dead-code',
   ]) {
     assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
   }
@@ -358,6 +361,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
+    'pnpm lint:dead-code',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
     'node scripts/verify-release-actor.mjs',
