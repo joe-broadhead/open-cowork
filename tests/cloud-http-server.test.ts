@@ -3145,6 +3145,117 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
   }
 })
 
+test('cloud HTTP BYOK APIs enforce effective policy permissions and explicit token scope', async () => {
+  const rawKey = 'credential-http-rbac-1234567890'
+  let currentPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'policy-manager',
+    accountId: 'policy-manager',
+    email: 'policy-manager@example.test',
+    role: 'member',
+    authSource: 'user',
+  }
+  const fixture = createFixture({
+    auth: () => ({
+      ...currentPrincipal,
+      tokenScopes: currentPrincipal.tokenScopes ? [...currentPrincipal.tokenScopes] : undefined,
+    }),
+  })
+  await fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1', orgId: 'tenant-1' })
+  await fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1', orgId: 'tenant-1' })
+  await fixture.store.createAccount({ accountId: 'policy-manager', email: 'policy-manager@example.test' })
+  await fixture.store.createCustomRole({
+    orgId: 'tenant-1',
+    roleKey: 'provider-key-admin',
+    name: 'Provider Key Admin',
+    baseRole: 'member',
+    permissions: ['org:read', 'policy:manage'],
+  })
+  await fixture.store.upsertMembership({
+    orgId: 'tenant-1',
+    accountId: 'policy-manager',
+    role: 'member',
+    customRoleKey: 'provider-key-admin',
+    status: 'active',
+  })
+  await fixture.store.createAccount({ accountId: 'limited-admin', email: 'limited-admin@example.test' })
+  await fixture.store.createCustomRole({
+    orgId: 'tenant-1',
+    roleKey: 'limited-admin',
+    name: 'Limited Admin',
+    baseRole: 'admin',
+    permissions: ['org:read', 'members:read'],
+  })
+  await fixture.store.upsertMembership({
+    orgId: 'tenant-1',
+    accountId: 'limited-admin',
+    role: 'admin',
+    customRoleKey: 'limited-admin',
+    status: 'active',
+  })
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const delegatedCreate = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: rawKey }),
+    })
+    assert.equal(delegatedCreate.status, 201)
+    assert.equal(asRecord((await readJson(delegatedCreate)).secret).providerId, 'anthropic')
+
+    currentPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'limited-admin',
+      accountId: 'limited-admin',
+      email: 'limited-admin@example.test',
+      role: 'admin',
+      authSource: 'user',
+    }
+    const strippedAdminRead = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(strippedAdminRead.status, 403)
+    assert.match(JSON.stringify(await readJson(strippedAdminRead)), /policy:manage/)
+
+    currentPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'token-admin',
+      accountId: 'token-admin',
+      email: 'token-admin@example.test',
+      role: 'owner',
+      authSource: 'api_token',
+      tokenId: 'token-desktop',
+      tokenScopes: ['desktop'],
+    }
+    const desktopTokenRead = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(desktopTokenRead.status, 403)
+    assert.match(JSON.stringify(await readJson(desktopTokenRead)), /admin token scope/)
+
+    currentPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'token-admin',
+      accountId: 'token-admin',
+      email: 'token-admin@example.test',
+      role: 'owner',
+      authSource: 'api_token',
+      tokenId: 'token-admin',
+      tokenScopes: ['admin'],
+    }
+    const adminTokenRead = await fetch(`${baseUrl}/api/byok`)
+    assert.equal(adminTokenRead.status, 200)
+    assert.equal(asArray((await readJson(adminTokenRead)).secrets).length, 1)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP BYOK APIs enforce provider availability and org entitlement policy', async () => {
   const unavailableProviderKey = ['credential', 'policy', 'openai', '1234567890'].join('-')
   const blockedProviderKey = ['credential', 'policy', 'anthropic', '1234567890'].join('-')

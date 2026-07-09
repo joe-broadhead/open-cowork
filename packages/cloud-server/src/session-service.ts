@@ -319,6 +319,7 @@ export class CloudSessionService {
     this.byokService = new CloudByokService({
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
       byokSecrets,
       byokPolicy,
       assertBillingAllowed: (input) => this.assertBillingAllowed(input),
