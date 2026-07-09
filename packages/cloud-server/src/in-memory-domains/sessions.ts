@@ -445,7 +445,12 @@ export class InMemorySessionsDomain {
       sessionTitle: session.record.title || null,
       createdAt: session.record.createdAt,
     }
-    this.launchpadSessionSummaries.set(launchpadSummaryKey(input.tenantId, input.sessionId), record)
+    const summaryKey = launchpadSummaryKey(input.tenantId, input.sessionId)
+    if (hasPendingLaunchpadWork(record)) {
+      this.launchpadSessionSummaries.set(summaryKey, record)
+    } else {
+      this.launchpadSessionSummaries.delete(summaryKey)
+    }
     return clone(record)
   }
 
@@ -454,7 +459,6 @@ export class InMemorySessionsDomain {
     const limit = Math.max(1, Math.min(500, Math.floor(Number(input.limit) || 100)))
     const rows = Array.from(this.launchpadSessionSummaries.values())
       .filter((record) => record.tenantId === input.tenantId && record.userId === input.userId)
-      .filter(hasPendingLaunchpadWork)
       .map((record) => {
         const session = this.sessions.get(key(record.tenantId, record.sessionId))?.record
         return {

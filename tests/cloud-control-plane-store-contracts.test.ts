@@ -146,6 +146,71 @@ test('pglite concurrency gauge keeps a true running sum, clamps reads, and recon
   }
 })
 
+test('pglite launchpad summaries delete empty rows on write', async () => {
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
+  try {
+    const prefix = `launchpad-${randomUUID()}`
+    const tenantId = `${prefix}-tenant`
+    const userId = `${prefix}-user`
+    await store.createTenant({ tenantId, name: 'Launchpad tenant' })
+    await store.ensureUser({ tenantId, userId, email: `${userId}@example.test`, role: 'owner' })
+    for (let index = 0; index < 25; index += 1) {
+      const sessionId = `${prefix}-empty-${index}`
+      await store.createSession({
+        tenantId,
+        userId,
+        sessionId,
+        opencodeSessionId: `${sessionId}-runtime`,
+        profileName: 'default',
+        title: `Empty ${index}`,
+      })
+      await store.upsertCloudLaunchpadSessionSummary({
+        tenantId,
+        userId,
+        sessionId,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      })
+    }
+    const pendingSessionId = `${prefix}-pending`
+    await store.createSession({
+      tenantId,
+      userId,
+      sessionId: pendingSessionId,
+      opencodeSessionId: `${pendingSessionId}-runtime`,
+      profileName: 'default',
+      title: 'Pending launchpad work',
+    })
+    await store.upsertCloudLaunchpadSessionSummary({
+      tenantId,
+      userId,
+      sessionId: pendingSessionId,
+      pendingApprovals: [],
+      pendingQuestions: [{
+        id: `${prefix}-question`,
+        sessionId: pendingSessionId,
+        sourceSessionId: pendingSessionId,
+        questions: [{ header: 'Confirm', question: 'Proceed?', options: [] }],
+      }],
+      updatedAt: '2026-01-02T00:01:00.000Z',
+    })
+
+    const stored = await pool.query<{ session_id: string }>(
+      `SELECT session_id FROM cloud_launchpad_session_summaries WHERE tenant_id = $1 ORDER BY session_id`,
+      [tenantId],
+    )
+    assert.deepEqual(stored.rows.map((row) => row.session_id), [pendingSessionId])
+    const listed = await store.listCloudLaunchpadSessionSummaries({ tenantId, userId, limit: 5 })
+    assert.deepEqual(listed.items.map((summary) => summary.sessionId), [pendingSessionId])
+    assert.equal(listed.totalEstimate, 1)
+    assert.equal(listed.truncated, false)
+  } finally {
+    await store.close?.()
+  }
+})
+
 function runControlPlaneDomainContracts(
   name: string,
   createStore: () => Promise<ControlPlaneStore> | ControlPlaneStore,

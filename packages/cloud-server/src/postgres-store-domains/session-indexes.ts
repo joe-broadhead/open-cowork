@@ -25,6 +25,10 @@ type PostgresSessionIndexesRepositoryOptions = {
   requireTenantUser(tenantId: string, userId: string, executor?: PgExecutor): Promise<unknown>
 }
 
+function hasPendingLaunchpadWork(input: Pick<UpsertCloudLaunchpadSessionSummaryInput, 'pendingApprovals' | 'pendingQuestions'>) {
+  return input.pendingApprovals.length > 0 || input.pendingQuestions.length > 0
+}
+
 // Derived session read models extracted from the core sessions repository.
 // These tables are maintained from projection output and are intentionally
 // separate from the hot session event/command/lease path.
@@ -204,6 +208,23 @@ export class PostgresSessionIndexesRepository {
         client,
       )
       if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
+      if (!hasPendingLaunchpadWork(input)) {
+        await client.query(
+          `DELETE FROM cloud_launchpad_session_summaries
+           WHERE tenant_id = $1 AND session_id = $2`,
+          [input.tenantId, input.sessionId],
+        )
+        return launchpadSessionSummaryFromRow({
+          tenant_id: input.tenantId,
+          user_id: input.userId,
+          session_id: input.sessionId,
+          pending_approvals: input.pendingApprovals,
+          pending_questions: input.pendingQuestions,
+          updated_at: input.updatedAt,
+          created_at: session.created_at,
+          session_title: session.title,
+        })
+      }
       const result = await client.query(
         `INSERT INTO cloud_launchpad_session_summaries (
           tenant_id,
@@ -244,10 +265,6 @@ export class PostgresSessionIndexesRepository {
         AND s.session_id = l.session_id
        WHERE l.tenant_id = $1
          AND l.user_id = $2
-         AND (
-           jsonb_array_length(l.pending_approvals) > 0
-           OR jsonb_array_length(l.pending_questions) > 0
-         )
        ORDER BY l.updated_at DESC, l.session_id
        LIMIT $3`,
       [input.tenantId, input.userId, limit + 1],

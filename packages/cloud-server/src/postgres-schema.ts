@@ -1354,6 +1354,13 @@ const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
     WHERE status = 'reserved'`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID = '031_launchpad_empty_summary_purge'
+const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS = [
+  `DELETE FROM cloud_launchpad_session_summaries
+    WHERE pending_approvals = '[]'::jsonb
+      AND pending_questions = '[]'::jsonb`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1492,5 +1499,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS,
   },
 ] as const
