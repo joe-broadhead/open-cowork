@@ -1062,6 +1062,51 @@ export class PostgresSessionsRepository {
     })
   }
 
+  async checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now = new Date()) {
+    return this.options.withTransaction(async (client) => {
+      const current = await this.assertCurrentLease(lease, client)
+      const command = await this.requireCommand(commandId, client, true)
+      if (command.status === 'acked') {
+        return {
+          lease: current,
+          command,
+          checkpointAdvanced: false,
+          commandAcked: false,
+        }
+      }
+      if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
+        throw new Error(`Command ${commandId} is not owned by this worker.`)
+      }
+      if (lease.checkpointVersion !== current.checkpointVersion) {
+        throw new Error('Checkpoint version is stale.')
+      }
+      const leaseResult = await client.query(
+        `UPDATE cloud_worker_leases
+         SET checkpoint_version = checkpoint_version + 1
+         WHERE tenant_id = $1 AND session_id = $2
+         RETURNING *`,
+        [lease.tenantId, lease.sessionId],
+      )
+      const commandResult = await client.query(
+        `UPDATE cloud_session_commands
+         SET status = 'acked',
+             acked_at = $2,
+             error = NULL,
+             last_error_code = NULL,
+             last_error_summary = NULL
+         WHERE command_id = $1
+         RETURNING *`,
+        [commandId, now.toISOString()],
+      )
+      return {
+        lease: leaseFromRow(leaseResult.rows[0]!),
+        command: commandFromRow(commandResult.rows[0]!),
+        checkpointAdvanced: true,
+        commandAcked: true,
+      }
+    })
+  }
+
   async failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string) {
     return this.options.withTransaction(async (client) => {
       await this.assertCurrentLease(lease, client)

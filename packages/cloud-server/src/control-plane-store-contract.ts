@@ -145,6 +145,7 @@ import type {
   AppendProjectedSessionEventInput,
   AppendProjectedSessionEventResult,
   AppendWorkspaceEventInput,
+  CheckpointAndAckSessionCommandResult,
   CommandQueueQuota,
   EnqueueCommandInput,
   WriteProjectionInput,
@@ -428,6 +429,7 @@ export type ControlPlaneStore = {
   enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
   claimNextSessionCommand(lease: WorkerLeaseRecord, now?: Date): MaybePromise<SessionCommandRecord | null>
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
+  checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<CheckpointAndAckSessionCommandResult>
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): MaybePromise<SessionCommandRecord>
   recordWorkerHeartbeat(input: {
     workerId: string

@@ -369,26 +369,54 @@ function runControlPlaneDomainContracts(
       // Claim/fencing parity (audit P1-O6): these are exactly the lease-fenced/atomic-claim methods
       // where a subtle SQL difference causes prod double-claims, yet they were exercised by neither the
       // always-on contract nor (un-skipped) the postgres concurrency proofs. Run them on both stores.
-      const commandLease = await store.claimSessionLease(tenantId, sessionId, `${prefix}-worker`, new Date('2026-01-01T00:00:00.000Z'), 30_000)
+      const commandLease = await store.claimSessionLease(tenantId, sessionId, `${prefix}-worker`, new Date('2030-01-01T00:00:00.000Z'), 30_000)
       assert.ok(commandLease)
       // The lease-fenced command claim hands the pending command to exactly one holder, once.
-      const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z'))
+      const claimedCommand = await store.claimNextSessionCommand(commandLease!, new Date('2030-01-01T00:00:05.000Z'))
       assert.equal(claimedCommand?.commandId, `${prefix}-command`)
       assert.equal(claimedCommand?.claimedLeaseToken, commandLease!.leaseToken)
-      assert.equal(await store.claimNextSessionCommand(commandLease!, new Date('2026-01-01T00:00:05.000Z')), null)
+      const checkpointAcked = await store.checkpointAndAckSessionCommand(commandLease!, `${prefix}-command`, new Date('2030-01-01T00:00:06.000Z'))
+      assert.equal(checkpointAcked.command.status, 'acked')
+      assert.equal(checkpointAcked.command.ackedAt, '2030-01-01T00:00:06.000Z')
+      assert.equal(checkpointAcked.lease.checkpointVersion, commandLease!.checkpointVersion + 1)
+      assert.equal(checkpointAcked.checkpointAdvanced, true)
+      assert.equal(checkpointAcked.commandAcked, true)
+      const checkpointAckReplay = await store.checkpointAndAckSessionCommand(commandLease!, `${prefix}-command`, new Date('2030-01-01T00:00:07.000Z'))
+      assert.equal(checkpointAckReplay.command.status, 'acked')
+      assert.equal(checkpointAckReplay.lease.checkpointVersion, checkpointAcked.lease.checkpointVersion)
+      assert.equal(checkpointAckReplay.checkpointAdvanced, false)
+      assert.equal(checkpointAckReplay.commandAcked, false)
+      assert.equal(await store.claimNextSessionCommand(commandLease!, new Date('2030-01-01T00:00:05.000Z')), null)
+
+      await store.enqueueSessionCommand({
+        commandId: `${prefix}-command-stale-checkpoint`,
+        tenantId,
+        userId,
+        sessionId,
+        kind: 'abort',
+      })
+      const staleCheckpointClaim = await store.claimNextSessionCommand(checkpointAcked.lease, new Date('2030-01-01T00:00:08.000Z'))
+      assert.equal(staleCheckpointClaim?.commandId, `${prefix}-command-stale-checkpoint`)
+      const advancedLease = await store.checkpointSession(checkpointAcked.lease)
+      await assert.rejects(
+        Promise.resolve().then(() => store.checkpointAndAckSessionCommand(checkpointAcked.lease, `${prefix}-command-stale-checkpoint`)),
+        /checkpoint version is stale/i,
+      )
+      const staleRecovered = await store.checkpointAndAckSessionCommand(advancedLease, `${prefix}-command-stale-checkpoint`)
+      assert.equal(staleRecovered.command.status, 'acked')
 
       // listRunnableSessions (previously untested anywhere) returns the same well-formed shape on both.
-      const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2026-01-01T00:00:05.000Z') })
+      const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2030-01-01T00:00:05.000Z') })
       assert.equal(Array.isArray(runnableList.sessions), true)
       assert.equal(Number.isFinite(runnableList.pendingSessionCountEstimate), true)
       // pendingSessionCountEstimate is bounded to limit+1 identically on both stores (P2 parity).
-      const boundedList = await store.listRunnableSessions({ limit: 1, now: new Date('2026-01-01T00:00:05.000Z') })
+      const boundedList = await store.listRunnableSessions({ limit: 1, now: new Date('2030-01-01T00:00:05.000Z') })
       assert.ok(boundedList.pendingSessionCountEstimate <= 2, 'estimate must be bounded to limit+1')
 
       // reapExpiredSessionLeases (P1-D — previously exercised by neither the always-on contract nor an
       // un-skipped concurrency proof): the lease claimed above (ttl 30s from 00:00:00) is expired by
       // 00:01:00 and is reaped identically on both stores.
-      const reaped = await store.reapExpiredSessionLeases({ now: new Date('2026-01-01T00:01:00.000Z'), limit: 10 })
+      const reaped = await store.reapExpiredSessionLeases({ now: new Date('2030-01-01T00:01:00.000Z'), limit: 10 })
       assert.ok(Array.isArray(reaped))
       assert.equal(reaped.some((entry) => entry.sessionId === sessionId), true, 'expected the expired session lease reaped')
 

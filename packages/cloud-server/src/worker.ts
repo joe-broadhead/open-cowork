@@ -123,7 +123,8 @@ export class CloudWorker {
       })
       try {
         const commandLease = lease
-        lease = await this.executeWithLeaseRenewal(commandLease, (signal) => this.service.executeCommand(commandLease, command, { signal }))
+        lease = await this.executeWithLeaseRenewal(commandLease, (signal) => this.service.executeCommand(commandLease, command, { signal, deferAck: true }))
+        lease = await this.checkpointAndAckCommand(lease, command.commandId)
         await this.service.recordManagedExecutionEvent({
           tenantId,
           sessionId,
@@ -185,8 +186,6 @@ export class CloudWorker {
           reservedMinutes: 1,
         })
       }
-      lease = await this.checkpointLease(lease)
-      await this.checkpointHooks.saveAfterCommand?.(lease)
       this.touchLease(this.leaseKey(tenantId, sessionId), lease)
       processed += 1
       // Yield the lane after a bounded run so one session's backlog cannot monopolise
@@ -320,17 +319,42 @@ export class CloudWorker {
 
   private async reapExpiredSessionLeases(now: Date) {
     let reapedCount = 0
+    let retriedCommandCount = 0
+    let failedCommandCount = 0
     for (let batch = 0; batch < this.maxExpiredLeaseReapBatches; batch += 1) {
       const reaped = await this.store.reapExpiredSessionLeases({
         now,
         limit: this.expiredLeaseReapBatchSize,
       })
       reapedCount += reaped.length
+      retriedCommandCount += reaped.reduce((sum, entry) => sum + entry.retriedCommandIds.length, 0)
+      failedCommandCount += reaped.reduce((sum, entry) => sum + entry.failedCommandIds.length, 0)
       if (reaped.length < this.expiredLeaseReapBatchSize) {
+        await this.recordCommandRecoveryMetrics(retriedCommandCount, failedCommandCount)
         return { reapedCount, drainCapHit: false }
       }
     }
+    await this.recordCommandRecoveryMetrics(retriedCommandCount, failedCommandCount)
     return { reapedCount, drainCapHit: true }
+  }
+
+  private async recordCommandRecoveryMetrics(retriedCommandCount: number, failedCommandCount: number) {
+    if (retriedCommandCount > 0) {
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_worker_command_recoveries_total',
+        value: retriedCommandCount,
+        workerId: this.workerId,
+        status: 'retried',
+      })
+    }
+    if (failedCommandCount > 0) {
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_worker_command_recoveries_total',
+        value: failedCommandCount,
+        workerId: this.workerId,
+        status: 'failed',
+      })
+    }
   }
 
   private async restoreCheckpointOnce(lease: WorkerLeaseRecord) {
@@ -364,6 +388,49 @@ export class CloudWorker {
       }
     }
     return current
+  }
+
+  private async checkpointAndAckCommand(lease: WorkerLeaseRecord, commandId: string): Promise<WorkerLeaseRecord> {
+    let current = lease
+    for (let attempt = 0; attempt < MAX_STALE_CHECKPOINT_RETRIES; attempt += 1) {
+      const checkpointed = {
+        ...current,
+        checkpointVersion: current.checkpointVersion + 1,
+      }
+      await this.saveCheckpointBeforeAck(checkpointed)
+      try {
+        const result = await this.store.checkpointAndAckSessionCommand(current, commandId)
+        return result.lease
+      } catch (error) {
+        if (!isStaleCheckpointError(error) || attempt === MAX_STALE_CHECKPOINT_RETRIES - 1) {
+          throw error
+        }
+        await recordCloudWorkerMetric(this.observability, {
+          name: 'open_cowork_cloud_worker_checkpoint_stale_retries_total',
+          workerId: this.workerId,
+          tenantId: current.tenantId,
+          sessionId: current.sessionId,
+          status: 'retry',
+        })
+        current = await this.store.renewSessionLease(current, new Date(), this.leaseTtlMs)
+      }
+    }
+    return current
+  }
+
+  private async saveCheckpointBeforeAck(lease: WorkerLeaseRecord) {
+    try {
+      await this.checkpointHooks.saveAfterCommand?.(lease)
+    } catch (error) {
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_worker_checkpoint_pending_command_failures_total',
+        workerId: this.workerId,
+        tenantId: lease.tenantId,
+        sessionId: lease.sessionId,
+        status: 'save_failed',
+      })
+      throw error
+    }
   }
 
   private async getOrClaimLease(tenantId: string, sessionId: string): Promise<WorkerLeaseRecord | null> {

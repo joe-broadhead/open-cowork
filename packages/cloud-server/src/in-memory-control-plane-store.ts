@@ -186,6 +186,7 @@ import type {
   AppendProjectedSessionEventInput,
   AppendProjectedSessionEventResult,
   AppendWorkspaceEventInput,
+  CheckpointAndAckSessionCommandResult,
   CommandQueueQuota,
   EnqueueCommandInput,
   WriteProjectionInput,
@@ -1725,6 +1726,45 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     command.ackedAt = now.toISOString()
     command.error = null
     return clone(command)
+  }
+
+  checkpointAndAckSessionCommand(
+    lease: WorkerLeaseRecord,
+    commandId: string,
+    now = new Date(),
+  ): CheckpointAndAckSessionCommandResult {
+    const session = this.requireSession(lease.tenantId, lease.sessionId)
+    this.assertCurrentLease(session, lease)
+    const command = this.requireCommand(session, commandId)
+    if (command.status === 'acked') {
+      return {
+        lease: clone(session.lease!),
+        command: clone(command),
+        checkpointAdvanced: false,
+        commandAcked: false,
+      }
+    }
+    if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
+      throw new Error(`Command ${commandId} is not owned by this worker.`)
+    }
+    if (lease.checkpointVersion !== session.lease?.checkpointVersion) {
+      throw new Error('Checkpoint version is stale.')
+    }
+    session.lease = {
+      ...session.lease!,
+      checkpointVersion: session.lease!.checkpointVersion + 1,
+    }
+    command.status = 'acked'
+    command.ackedAt = now.toISOString()
+    command.error = null
+    command.lastErrorCode = null
+    command.lastErrorSummary = null
+    return {
+      lease: clone(session.lease),
+      command: clone(command),
+      checkpointAdvanced: true,
+      commandAcked: true,
+    }
   }
 
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): SessionCommandRecord {

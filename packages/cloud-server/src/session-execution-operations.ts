@@ -245,7 +245,7 @@ export class CloudSessionExecutionService {
   async executeCommand(
     lease: WorkerLeaseRecord,
     command: SessionCommandRecord,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal, deferAck?: boolean } = {},
   ): Promise<void> {
     try {
       throwIfAborted(options.signal)
@@ -271,7 +271,7 @@ export class CloudSessionExecutionService {
         }
       }
       throwIfAborted(options.signal)
-      await this.store.ackSessionCommand(lease, command.commandId)
+      if (!options.deferAck) await this.store.ackSessionCommand(lease, command.commandId)
     } catch (error) {
       if (options.signal?.aborted) throw error
       const message = error instanceof Error ? error.message : String(error)

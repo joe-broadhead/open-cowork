@@ -1758,7 +1758,7 @@ export class CloudSessionService {
   async executeCommand(
     lease: WorkerLeaseRecord,
     command: SessionCommandRecord,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal, deferAck?: boolean } = {},
   ): Promise<void> {
     return this.sessionExecution.executeCommand(lease, command, options)
   }

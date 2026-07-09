@@ -1435,6 +1435,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.ackSessionCommand(lease, commandId, now)
   }
 
+  async checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now = new Date()) {
+    return this.sessions.checkpointAndAckSessionCommand(lease, commandId, now)
+  }
+
   async failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string) {
     return this.sessions.failSessionCommand(lease, commandId, error)
   }

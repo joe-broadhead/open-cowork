@@ -4,8 +4,10 @@ import type {
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  WorkerLeaseRecord,
   WorkspaceEventRecord,
 } from './control-plane-session-records.ts'
+import type { SessionCommandRecord } from './control-plane-worker-records.ts'
 import type { ConsumeUsageQuotaInput } from './control-plane-usage-inputs.ts'
 
 // The control-plane's event-append / projection / command-enqueue input shapes
@@ -75,6 +77,13 @@ export type AppendProjectedSessionEventResult = {
   sessionEventCreated: boolean
   workspaceEventCreated: boolean
   projectionAdvanced: boolean
+}
+
+export type CheckpointAndAckSessionCommandResult = {
+  lease: WorkerLeaseRecord
+  command: SessionCommandRecord
+  checkpointAdvanced: boolean
+  commandAcked: boolean
 }
 
 export type CommandQueueQuota = {

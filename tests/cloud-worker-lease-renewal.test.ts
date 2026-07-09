@@ -234,6 +234,111 @@ test('cloud worker does not treat renewal metric failures as lease loss', async 
   assert.equal(store.claimNextSessionCommand(lease, new Date(Date.now() + 60_000)), null)
 })
 
+test('cloud worker saves checkpoint before atomically acking and completing a command', async () => {
+  const store = seedStore()
+  const runtime = new SlowSuccessfulRuntime(0)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    undefined,
+    { randomUUID: () => 'test-id' },
+  )
+  const order: string[] = []
+  const originalRecordExecution = service.recordManagedExecutionEvent.bind(service)
+  service.recordManagedExecutionEvent = (async (input) => {
+    order.push(input.eventType)
+    return originalRecordExecution(input)
+  }) as typeof service.recordManagedExecutionEvent
+  const originalCheckpointAndAck = store.checkpointAndAckSessionCommand.bind(store)
+  store.checkpointAndAckSessionCommand = ((lease, commandId, now) => {
+    order.push('checkpointAndAck')
+    return originalCheckpointAndAck(lease, commandId, now)
+  }) as typeof store.checkpointAndAckSessionCommand
+  const worker = new CloudWorker(
+    store,
+    service,
+    'worker-1',
+    3_000,
+    {
+      saveAfterCommand: async (lease) => {
+        order.push(`save:${lease.checkpointVersion}`)
+      },
+    },
+  )
+
+  assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
+  assert.deepEqual(order, [
+    'worker.execution_started',
+    'save:1',
+    'checkpointAndAck',
+    'worker.execution_completed',
+  ])
+  assert.deepEqual(runtime.messageIds, ['cmd-1'])
+
+  const nextLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-2', new Date(Date.now() + 60_000))
+  assert.ok(nextLease)
+  assert.equal(store.claimNextSessionCommand(nextLease, new Date(Date.now() + 60_000)), null)
+})
+
+test('cloud worker leaves a command retryable when checkpoint save fails before ack', async () => {
+  const store = seedStore()
+  const runtime = new SlowSuccessfulRuntime(0)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    undefined,
+    { randomUUID: () => 'test-id' },
+  )
+  const order: string[] = []
+  const originalRecordExecution = service.recordManagedExecutionEvent.bind(service)
+  service.recordManagedExecutionEvent = (async (input) => {
+    order.push(input.eventType)
+    return originalRecordExecution(input)
+  }) as typeof service.recordManagedExecutionEvent
+  const observability = new RecordingObservability()
+  const originalCheckpointAndAck = store.checkpointAndAckSessionCommand.bind(store)
+  let checkpointAndAckCalls = 0
+  store.checkpointAndAckSessionCommand = ((lease, commandId, now) => {
+    checkpointAndAckCalls += 1
+    return originalCheckpointAndAck(lease, commandId, now)
+  }) as typeof store.checkpointAndAckSessionCommand
+  const worker = new CloudWorker(
+    store,
+    service,
+    'worker-1',
+    3_000,
+    {
+      saveAfterCommand: async () => {
+        throw new Error('checkpoint save failed')
+      },
+    },
+    null,
+    observability,
+  )
+
+  await assert.rejects(
+    () => worker.processSessionCommands('tenant-1', 'session-1'),
+    /checkpoint save failed/,
+  )
+  assert.equal(checkpointAndAckCalls, 0)
+  assert.equal(
+    observability.metrics.some((metric) => metric.name === 'open_cowork_cloud_worker_checkpoint_pending_command_failures_total'),
+    true,
+  )
+  assert.deepEqual(order, ['worker.execution_started', 'worker.execution_failed'])
+
+  const recoveryNow = new Date(Date.now() + 60_000)
+  const reaped = store.reapExpiredSessionLeases({ now: recoveryNow })
+  assert.deepEqual(reaped.map((entry) => entry.retriedCommandIds), [['cmd-1']])
+  const nextLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-2', recoveryNow)
+  assert.ok(nextLease)
+  const reclaimed = store.claimNextSessionCommand(nextLease, recoveryNow)
+  assert.equal(reclaimed?.commandId, 'cmd-1')
+  assert.equal(reclaimed?.attemptCount, 2)
+})
+
 test('cloud worker keeps a valid cached lease when cached renewal metrics fail', async () => {
   const store = seedStore()
   const runtime = new SlowSuccessfulRuntime(0)
@@ -275,25 +380,26 @@ test('cloud worker refreshes stale checkpoint leases advanced by runtime events'
   const observability = new RecordingObservability()
   const worker = new CloudWorker(store, service, 'worker-1', 3_000, {}, null, observability)
   const originalCheckpointSession = store.checkpointSession.bind(store)
+  const originalCheckpointAndAck = store.checkpointAndAckSessionCommand.bind(store)
   const originalRenewSessionLease = store.renewSessionLease.bind(store)
-  let checkpointAttempts = 0
+  let checkpointAndAckAttempts = 0
   let renewAttempts = 0
 
-  store.checkpointSession = (lease) => {
-    checkpointAttempts += 1
-    if (checkpointAttempts === 1) {
+  store.checkpointAndAckSessionCommand = ((lease, commandId, now) => {
+    checkpointAndAckAttempts += 1
+    if (checkpointAndAckAttempts === 1) {
       originalCheckpointSession(lease)
       throw new Error('Checkpoint version is stale.')
     }
-    return originalCheckpointSession(lease)
-  }
+    return originalCheckpointAndAck(lease, commandId, now)
+  }) as typeof store.checkpointAndAckSessionCommand
   store.renewSessionLease = (lease, now, ttlMs) => {
     renewAttempts += 1
     return originalRenewSessionLease(lease, now, ttlMs)
   }
 
   assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
-  assert.equal(checkpointAttempts, 2)
+  assert.equal(checkpointAndAckAttempts, 2)
   assert.equal(renewAttempts, 1)
   assert.deepEqual(runtime.messageIds, ['cmd-1'])
   assert.equal(
