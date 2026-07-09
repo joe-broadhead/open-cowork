@@ -149,6 +149,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '026_org_custom_roles',
         '027_managed_policies',
         '028_org_sso_scim',
+        '030_artifact_upload_reservations',
         '010_managed_work_reaper_indexes',
         '020_session_lookup_indexes',
         '021_performance_indexes',
@@ -1423,7 +1424,7 @@ test('real Postgres cloud store recovers workflow starts stranded after session 
     }
     assert.equal(claimed?.run.id, retryRunId)
     assert.equal(claimed?.run.status, 'running')
-    assert.equal(claimed?.run.sessionId, ids.sessionId)
+    assert.equal(claimed?.run.sessionId, first.sessionId)
     assert.equal(claimed?.run.attemptCount, 2)
     assert.ok(claimed?.run.claimToken)
 
