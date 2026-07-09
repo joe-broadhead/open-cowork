@@ -45,7 +45,7 @@ export type GatewayMetrics = {
   providerMetrics: Record<string, GatewayProviderMetrics>
 }
 
-export type GatewayProviderMetricState = 'configured' | 'starting' | 'healthy' | 'unhealthy' | 'stopped'
+export type GatewayProviderMetricState = 'configured' | 'starting' | 'healthy' | 'unhealthy' | 'failed' | 'stopped'
 
 export type GatewayProviderMetrics = {
   id: string
@@ -305,7 +305,7 @@ function latencyHistogramSeries(name: string, histogram: GatewayLatencyHistogram
 }
 
 function providerStateSeries(provider: GatewayProviderMetrics) {
-  const states: GatewayProviderMetricState[] = ['configured', 'starting', 'healthy', 'unhealthy', 'stopped']
+  const states: GatewayProviderMetricState[] = ['configured', 'starting', 'healthy', 'unhealthy', 'failed', 'stopped']
   return states.map((state) => (
     `open_cowork_gateway_provider_state${providerLabels(provider, { state })} ${provider.state === state ? 1 : 0}`
   ))
