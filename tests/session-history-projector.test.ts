@@ -14,6 +14,11 @@ function textMessage(id: string, role: 'user' | 'assistant', text: string, creat
   }
 }
 
+function median(samples: number[]) {
+  const sorted = [...samples].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)] || 0
+}
+
 test('history projector keeps child task running when the child is idle but has not emitted a terminal stop', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-1',
@@ -2035,4 +2040,141 @@ test('history projector does not mine agent identity from user prompt/raw conten
   assert.equal(taskRun.taskRun?.agent, null)
   // The human-readable title may still draw on the description text.
   assert.equal(taskRun.taskRun?.title, 'Investigate the outage')
+})
+
+test('history projector scales task-tool binding across many bounded and nested delegations', async () => {
+  const sessionId = 'root-scale-task-tool-binding'
+  const rootDelegationCount = 420
+  const nestedDelegationCount = 120
+  const rootMessages: any[] = []
+  const children: any[] = []
+  const statuses: Record<string, { type: string }> = {
+    [sessionId]: { type: 'idle' },
+  }
+  const childSnapshots = new Map<string, { messages: any[]; todos: any[] }>()
+  const doneSnapshot = (childId: string, created: number) => ({
+    messages: [{
+      info: { id: `${childId}-msg`, role: 'assistant', time: { created } },
+      parts: [
+        { id: `${childId}-text`, type: 'text', text: `${childId} done` },
+        { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+      ],
+    }],
+    todos: [],
+  })
+
+  for (let index = 0; index < rootDelegationCount; index += 1) {
+    const baseTime = 1_000 + index * 10
+    const taskChildId = `root-task-child-${index}`
+    const boundaryChildId = `root-boundary-child-${index}`
+
+    rootMessages.push({
+      info: { id: `root-task-msg-${index}`, role: 'assistant', time: { created: baseTime } },
+      parts: [{
+        id: `root-task-part-${index}`,
+        type: 'tool',
+        tool: 'task',
+        callID: `root-task-call-${index}`,
+        state: {
+          status: 'completed',
+          input: { agent: 'analyst', description: `Bounded root task ${index}` },
+          output: 'started',
+          metadata: {},
+        },
+      }],
+    })
+    rootMessages.push({
+      info: { id: `root-boundary-msg-${index}`, role: 'assistant', time: { created: baseTime + 5 } },
+      parts: [{
+        id: `root-boundary-subtask-${index}`,
+        type: 'subtask',
+        agent: 'research',
+        description: `Boundary subtask ${index}`,
+      }],
+    })
+
+    children.push({
+      id: taskChildId,
+      title: `Bounded root task ${index} (@analyst subagent)`,
+      parentSessionId: sessionId,
+      time: { created: baseTime + 1, updated: baseTime + 2 },
+    })
+    children.push({
+      id: boundaryChildId,
+      title: `Boundary subtask ${index} (@research subagent)`,
+      parentSessionId: sessionId,
+      time: { created: baseTime + 6, updated: baseTime + 7 },
+    })
+    statuses[taskChildId] = { type: 'idle' }
+    statuses[boundaryChildId] = { type: 'idle' }
+    childSnapshots.set(taskChildId, doneSnapshot(taskChildId, baseTime + 2))
+    childSnapshots.set(boundaryChildId, doneSnapshot(boundaryChildId, baseTime + 7))
+  }
+
+  const nestedParentId = 'root-task-child-0'
+  const nestedParts: any[] = []
+  for (let index = 0; index < nestedDelegationCount; index += 1) {
+    const childId = `nested-task-child-${index}`
+    nestedParts.push({
+      id: `nested-task-part-${index}`,
+      type: 'tool',
+      tool: 'task',
+      callID: `nested-task-call-${index}`,
+      state: {
+        status: 'completed',
+        input: { agent: 'writer', description: `Nested parallel task ${index}` },
+        output: 'started',
+        metadata: {},
+      },
+    })
+    children.push({
+      id: childId,
+      title: `Nested parallel task ${index} (@writer subagent)`,
+      parentSessionId: nestedParentId,
+      time: { created: 100_000 + index, updated: 100_500 + index },
+    })
+    statuses[childId] = { type: 'idle' }
+    childSnapshots.set(childId, doneSnapshot(childId, 100_600 + index))
+  }
+  nestedParts.push({ id: 'nested-parent-finish', type: 'step-finish', reason: 'stop' })
+  childSnapshots.set(nestedParentId, {
+    messages: [{
+      info: { id: 'nested-parent-msg', role: 'assistant', time: { created: 99_999 } },
+      parts: nestedParts,
+    }],
+    todos: [],
+  })
+
+  const project = () => projectSessionHistory({
+    sessionId,
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages,
+    rootTodos: [],
+    children,
+    statuses,
+    loadChildSnapshot: async (childId) => childSnapshots.get(childId) || { messages: [], todos: [] },
+  })
+
+  const warmResult = await project()
+  const samples: number[] = []
+  for (let index = 0; index < 5; index += 1) {
+    const start = performance.now()
+    await project()
+    samples.push(performance.now() - start)
+  }
+
+  const taskRuns = warmResult.filter((item) => item.type === 'task_run')
+  const nestedTaskRuns = taskRuns.filter((item) => item.taskRun?.parentSessionId === nestedParentId)
+  assert.equal(taskRuns.some((item) => item.id.startsWith('pending:')), false)
+  assert.equal(nestedTaskRuns.length, nestedDelegationCount)
+  assert.equal(warmResult.find((item) => item.id === 'child:root-task-child-419')?.taskRun?.title, 'Bounded root task 419')
+  assert.equal(warmResult.find((item) => item.id === 'child:root-boundary-child-419')?.taskRun?.title, 'Boundary subtask 419')
+  assert.equal(nestedTaskRuns[119]?.taskRun?.sourceSessionId, 'nested-task-child-119')
+
+  const medianMs = median(samples)
+  assert.ok(
+    medianMs <= 250,
+    `task-tool history projection median ${medianMs.toFixed(3)} ms exceeded the 250 ms guard for `
+    + `${rootDelegationCount} bounded root task tools and ${nestedDelegationCount} nested task tools`,
+  )
 })
