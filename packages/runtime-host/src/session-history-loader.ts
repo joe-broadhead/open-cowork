@@ -65,6 +65,7 @@ export type SessionHistoryViewIndexHandler = (input: {
 }) => void | Promise<void>
 
 const CHILD_SNAPSHOT_PREFETCH_CONCURRENCY = 8
+const CHILD_GRAPH_DISCOVERY_CONCURRENCY = 8
 
 type ChildSnapshot = { messages: unknown[]; todos: unknown[] }
 
@@ -137,6 +138,40 @@ export function createBoundedChildSnapshotLoader(options: {
     load(id: string) {
       return ensure(id)
     },
+  }
+}
+
+function createAsyncLimiter(concurrency: number) {
+  const limit = Math.max(1, Math.floor(concurrency))
+  const queue: Array<() => void> = []
+  let active = 0
+
+  const acquire = async () => {
+    if (active < limit) {
+      active += 1
+      return
+    }
+    await new Promise<void>((resolve) => {
+      queue.push(() => {
+        active += 1
+        resolve()
+      })
+    })
+  }
+
+  const release = () => {
+    active -= 1
+    const next = queue.shift()
+    if (next) next()
+  }
+
+  return async function runLimited<T>(task: () => Promise<T>): Promise<T> {
+    await acquire()
+    try {
+      return await task()
+    } finally {
+      release()
+    }
   }
 }
 
@@ -418,10 +453,11 @@ export function createSessionHistoryService(
     client: OpencodeClient,
     parentSessionId: string,
     seen = new Set<string>(),
+    runChildrenRequest = createAsyncLimiter(CHILD_GRAPH_DISCOVERY_CONCURRENCY),
   ): Promise<{ children: ChildSessionRecord[]; complete: boolean }> {
     seen.add(parentSessionId)
 
-    const childrenResult = await client.session.children({ sessionID: parentSessionId }).catch((err) => {
+    const childrenResult = await runChildrenRequest(() => client.session.children({ sessionID: parentSessionId })).catch((err) => {
       logHistoryError('session:messages children', parentSessionId, err)
       return null
     })
@@ -437,7 +473,7 @@ export function createSessionHistoryService(
       })
 
     const nestedChildren = await Promise.all(
-      directChildren.map(async (child) => loadChildSessionsRecursive(client, child.id, seen)),
+      directChildren.map(async (child) => loadChildSessionsRecursive(client, child.id, seen, runChildrenRequest)),
     )
 
     return {
@@ -498,7 +534,12 @@ export function createSessionHistoryService(
       const rootMessages = normalizeSessionMessages(rootMessagesResult.data)
       const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
       const childGraph = includeChildGraph
-        ? await loadChildSessionsRecursive(client, sessionId)
+        ? await loadChildSessionsRecursive(
+            client,
+            sessionId,
+            new Set<string>(),
+            createAsyncLimiter(CHILD_GRAPH_DISCOVERY_CONCURRENCY),
+          )
         : { children: [], complete: true }
       const children = childGraph.children
       const statuses = normalizeSessionStatuses(readResponseData(statusResult))
