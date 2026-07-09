@@ -72,8 +72,13 @@ describe("TelegramProvider attachments", () => {
     expect(telegramFileDownloadUrl(
       "123:token",
       "documents/report final.txt",
-      "https://telegram.example.test/base/",
-    )).toBe("https://telegram.example.test/base/file/bot123:token/documents/report%20final.txt");
+    )).toBe("https://api.telegram.org/file/bot123:token/documents/report%20final.txt");
+
+    expect(() => telegramFileDownloadUrl(
+      "123:token",
+      "documents/report final.txt",
+      "https://evil.example.test",
+    )).toThrow("non-Telegram host");
   });
 
   it("downloads Telegram attachments through injectable fetch", async () => {
@@ -84,7 +89,6 @@ describe("TelegramProvider attachments", () => {
       mode: "polling",
       respondInGroups: "commands_only",
       observeUnmentionedGroupMessages: false,
-      fileDownloadBaseUrl: "https://telegram.example.test",
       fetch: async (input) => {
         urls.push(String(input));
         return new Response(new TextEncoder().encode("payload"), { status: 200 });
@@ -110,8 +114,37 @@ describe("TelegramProvider attachments", () => {
     });
 
     expect(fileIds).toEqual(["doc-file-id"]);
-    expect(urls).toEqual(["https://telegram.example.test/file/bot123:token/documents/error.log"]);
+    expect(urls).toEqual(["https://api.telegram.org/file/bot123:token/documents/error.log"]);
     expect(new TextDecoder().decode(data)).toBe("payload");
+  });
+
+  it("refuses to send the bot token to a non-Telegram file host", async () => {
+    let fetched = false;
+    const provider = new TelegramProvider({
+      botToken: "123:token",
+      mode: "polling",
+      respondInGroups: "commands_only",
+      observeUnmentionedGroupMessages: false,
+      fileDownloadBaseUrl: "https://evil.example.test",
+      fetch: async () => {
+        fetched = true;
+        return new Response(new Uint8Array(), { status: 200 });
+      }
+    });
+    const internals = provider as unknown as {
+      bot: {
+        api: {
+          getFile: (fileId: string) => Promise<{ file_path?: string }>;
+        };
+      };
+    };
+    internals.bot.api.getFile = async () => ({ file_path: "documents/error.log" });
+
+    await expect(provider.downloadAttachment({
+      providerFileId: "doc-file-id",
+      filename: "error.log"
+    })).rejects.toThrow("non-Telegram host");
+    expect(fetched).toBe(false);
   });
 
   it("rejects inline callback data before Telegram can reject overlong payloads", () => {

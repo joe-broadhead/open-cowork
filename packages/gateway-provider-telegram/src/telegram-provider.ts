@@ -17,6 +17,7 @@ import type { Update } from "grammy/types";
 import { withTelegramRetry, type TelegramRateLimitEvent } from "./telegram-retry.js";
 
 const MAX_TELEGRAM_WEBHOOK_DEDUPE_KEYS = 10_000;
+const TELEGRAM_FILE_DOWNLOAD_HOST = "api.telegram.org";
 
 export interface TelegramProviderConfig {
   providerId?: ChannelProviderId;
@@ -545,11 +546,14 @@ function containsControlCharacter(value: string): boolean {
 export function telegramFileDownloadUrl(
   botToken: string,
   filePath: string,
-  baseUrl = "https://api.telegram.org",
+  baseUrl = `https://${TELEGRAM_FILE_DOWNLOAD_HOST}`,
 ): string {
-  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const parsedBase = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  if (parsedBase.protocol !== "https:" || parsedBase.hostname !== TELEGRAM_FILE_DOWNLOAD_HOST) {
+    throw new Error(`Refusing to send the Telegram bot token to a non-Telegram host: ${parsedBase.hostname}`);
+  }
   const safeFilePath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
-  return new URL(`file/bot${botToken}/${safeFilePath}`, base).toString();
+  return new URL(`file/bot${botToken}/${safeFilePath}`, parsedBase).toString();
 }
 
 class TelegramFileDownloadError extends Error {
