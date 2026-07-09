@@ -81,8 +81,10 @@ change is on a smoke-tested flow.
 
 Packaged-app smoke tests live in
 `apps/desktop/tests/*.packaged.test.ts`. They run after
-`pnpm --dir apps/desktop dist:ci:mac` in CI and validate the actual
-packaged bundle, not just the unpackaged Electron dev build.
+macOS, Windows, and Linux packaging in CI and validate the actual
+packaged bundle, not just the unpackaged Electron dev build. The Windows
+package job also runs `pnpm test:windows-prepackage` before NSIS packaging to
+catch path handling, preload, updater, and runtime-spawn regressions earlier.
 
 ## Commit style
 
@@ -123,8 +125,8 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm test:renderer && pnpm perf:chec
 ```
 
 That covers the main repository quality gates. Release tags also run
-platform packaging, packaged-app smoke validation on macOS, and
-artifact publication.
+platform packaging, packaged-app smoke validation on macOS, Windows, and
+Linux, and artifact publication.
 
 ## Questions
 

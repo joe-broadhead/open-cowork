@@ -327,7 +327,7 @@ The repo includes GitHub Actions for:
 
 - CI validation
 - documentation deployment to GitHub Pages
-- tagged release builds for macOS and Linux artifacts
+- tagged release builds for macOS, Windows, and Linux artifacts
 - monthly maintenance and dependency-drift checks
 - release preflight verification for allowed actors, required green checks, signed tags, and protected `release-publish` environments before publishing artifacts or images
 

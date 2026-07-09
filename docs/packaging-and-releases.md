@@ -38,9 +38,12 @@ Current release targets:
 - ships `latest.yml` + `*.blockmap` update-feed metadata for signed builds
 
 Windows is a first-class, free release target. The `windows-package` CI job
-packages and smoke-tests the NSIS installer on every PR, and the release
-workflow's `build-windows` job produces the signed installer for tags. There
-is no paid or deferred Windows tier.
+packages and smoke-tests the NSIS installer on every PR. Packaged smoke is the
+intentional Windows PR gate for the real installed app path, and CI also runs
+Windows pre-package targeted tests for path handling, preload bridge, updater,
+and runtime spawn before NSIS packaging. The release workflow's `build-windows`
+job produces the signed installer for tags. There is no paid or deferred
+Windows tier.
 
 ### Linux
 
@@ -57,6 +60,7 @@ From the repository root:
 ```bash
 pnpm --dir apps/desktop dist:ci:mac
 pnpm --dir apps/desktop dist:ci:linux
+pnpm test:windows-prepackage         # run before Windows packaging
 pnpm --dir apps/desktop dist:ci:win   # run on Windows (or a Windows runner)
 ```
 
@@ -77,6 +81,8 @@ The repository includes:
   - packaged desktop smoke tests on macOS
   - packaged desktop smoke tests on Linux under `xvfb`
   - Linux packaging validation
+  - Windows pre-package targeted tests for path handling, preload bridge, updater, and runtime spawn
+  - Windows packaged desktop smoke tests and NSIS packaging validation
   - typecheck
   - perf gate
   - production dependency audit at `moderate` severity
@@ -230,7 +236,8 @@ Recommended release flow:
 2. Create and push a version tag like `v0.2.0`
 3. Let `release.yml` build platform artifacts
 4. Verify the resulting GitHub Release includes checksums and provenance
-5. Smoke-test at least one macOS build and one Linux build before announcing it
+5. Smoke-test at least one macOS build, one Windows build, and one Linux build
+   before announcing it
 
 The default tag workflow validates the public `local-self-host-beta` promotion
 claim with `pnpm deploy:promotion:validate -- --tier local-self-host-beta`.
@@ -537,6 +544,15 @@ The packaged macOS smoke lane can be run locally after packaging with:
 ```bash
 pnpm --dir apps/desktop dist:ci:mac
 OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged
+```
+
+The Windows PR lane runs a targeted pre-package suite before building the NSIS
+installer, then launches the packaged executable:
+
+```bash
+pnpm test:windows-prepackage
+pnpm --dir apps/desktop dist:ci:win
+OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-windows-packaged-executable.mjs)" pnpm test:e2e:packaged
 ```
 
 `pnpm test:e2e:packaged` is the release gate and fails before smoke test

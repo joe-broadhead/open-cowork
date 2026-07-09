@@ -82,6 +82,12 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'node scripts/coverage-summary.mjs --check',
   ])
 
+  assert.deepEqual(splitScriptSteps(requireScript('test:windows-prepackage')), [
+    'pnpm test:prepare',
+    'node scripts/check-preload-channels.mjs',
+    'node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/regenerate-windows-update-metadata.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts',
+  ])
+
   assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/app test:coverage:renderer')
 })
 
@@ -310,7 +316,9 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
+    'pnpm test:windows-prepackage',
     'node scripts/find-linux-packaged-executable.mjs',
+    'node scripts/find-windows-packaged-executable.mjs',
     'pnpm proof:cloud:opencode-portability --json',
     'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
