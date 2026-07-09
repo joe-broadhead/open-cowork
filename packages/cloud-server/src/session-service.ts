@@ -1676,24 +1676,14 @@ export class CloudSessionService {
 
   async listUsageEvents(principal: CloudPrincipal, limit?: number) {
     await this.ensurePrincipal(principal)
-    this.assertUsageAnalyticsAccess(principal)
+    this.principalService.assertAnyPermission(principal, ['operations:view', 'billing:manage'], 'Usage analytics requires the "operations:view" or "billing:manage" permission.')
     return this.store.listUsageEvents(this.principalOrgId(principal), limit)
   }
 
   async getUsageSummary(principal: CloudPrincipal, limit = 100): Promise<CloudUsageSummary> {
     await this.ensurePrincipal(principal)
-    this.assertUsageAnalyticsAccess(principal)
+    this.principalService.assertAnyPermission(principal, ['operations:view', 'billing:manage'], 'Usage analytics requires the "operations:view" or "billing:manage" permission.')
     return this.usageGovernance.getUsageSummary(this.principalOrgId(principal), limit)
-  }
-
-  private assertUsageAnalyticsAccess(principal: CloudPrincipal) {
-    if (
-      this.principalService.principalHasPermission(principal, 'operations:view')
-      || this.principalService.principalHasPermission(principal, 'billing:manage')
-    ) {
-      return
-    }
-    throw new CloudServiceError(403, 'Usage analytics requires the "operations:view" or "billing:manage" permission.')
   }
 
   async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
