@@ -30,10 +30,15 @@ const WINDOWS_ROOTED_PATH_RE = /^(?:[a-zA-Z]:[\\/]|[\\/])/
 const E2E_ENV_ARG_PREFIX = '--open-cowork-e2e-env='
 export const E2E_ARG_ENV_ENABLE_KEY = 'OPEN_COWORK_E2E_ARG_ENV'
 export const E2E_ALLOW_SETTINGS_MUTATION_KEY = 'OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION'
+// The enable key is deliberately NOT in this allowlist: the arg-env mechanism
+// must never be able to authorize itself from argv (that would let anyone who
+// controls the launch command line — e.g. `open -a … --args …` — turn on E2E
+// hooks like remote debugging on an installed build). Authorization must come
+// from a real environment variable, which the smoke harness sets via
+// `launchctl setenv` / spawn env, and which argv cannot forge.
 const E2E_ARG_ENV_KEYS = new Set([
   'OPEN_COWORK_CHART_TIMEOUT_MS',
   'OPEN_COWORK_CONFIG_PATH',
-  E2E_ARG_ENV_ENABLE_KEY,
   E2E_ALLOW_SETTINGS_MUTATION_KEY,
   'HOME',
   'TMPDIR',
@@ -60,26 +65,16 @@ export function buildE2EArgEnvironment(env: Record<string, string>) {
     .map(([key, value]) => `${E2E_ENV_ARG_PREFIX}${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
 }
 
-function e2eArgEnvironmentIsEnabled(argv: readonly string[], env: NodeJS.ProcessEnv) {
-  if (env[E2E_ARG_ENV_ENABLE_KEY] === '1') return true
-  for (const arg of argv) {
-    if (!arg.startsWith(E2E_ENV_ARG_PREFIX)) continue
-    const encoded = arg.slice(E2E_ENV_ARG_PREFIX.length)
-    const separatorIndex = encoded.indexOf('=')
-    if (separatorIndex <= 0) continue
-    try {
-      const key = decodeURIComponent(encoded.slice(0, separatorIndex))
-      const value = decodeURIComponent(encoded.slice(separatorIndex + 1))
-      if (key === E2E_ARG_ENV_ENABLE_KEY && value === '1') return true
-    } catch {
-      continue
-    }
-  }
-  return false
+// Authorization for the arg-env mechanism comes ONLY from the real process
+// environment — never from argv. A launcher that can set the real env var
+// (the smoke harness, dev shells) is already trusted; an attacker who can only
+// influence the command line of an installed build cannot bootstrap it.
+function e2eArgEnvironmentIsEnabled(env: NodeJS.ProcessEnv) {
+  return env[E2E_ARG_ENV_ENABLE_KEY] === '1'
 }
 
 export function applyE2EArgEnvironment(argv: readonly string[] = process.argv, env: NodeJS.ProcessEnv = process.env) {
-  if (!e2eArgEnvironmentIsEnabled(argv, env)) return
+  if (!e2eArgEnvironmentIsEnabled(env)) return
   const appliedKeys = new Set<string>()
   for (const arg of argv) {
     if (!arg.startsWith(E2E_ENV_ARG_PREFIX)) continue
