@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function testTempDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), prefix))
 }

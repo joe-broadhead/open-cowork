@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { getChartArtifactsRoot } from '../apps/desktop/src/main/chart-artifacts.ts'
 import { resolvePrivateSessionArtifactPath } from '../apps/desktop/src/main/ipc-artifact-access.ts'
 

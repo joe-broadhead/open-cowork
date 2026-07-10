@@ -4,7 +4,7 @@ import { isRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
 import { measureAsyncPerf } from '@open-cowork/runtime-host/perf-metrics'
 import { shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { createSessionStatusReconciler } from './session-status-coordinator.ts'
 
 type RuntimeSessionStatusReconcilerOptions = {

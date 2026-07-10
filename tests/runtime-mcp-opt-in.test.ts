@@ -4,9 +4,9 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import type { AppSettings } from '../packages/shared/src/index.ts'
-import type { BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
+import type { BundleMcp } from '@open-cowork/runtime-host/config'
 
 const BASE_SETTINGS: AppSettings = {
   selectedProviderId: null,

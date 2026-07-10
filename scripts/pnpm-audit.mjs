@@ -47,6 +47,13 @@ export function summarizeAuditReport(report, policy, options = {}) {
   return { ignored, failures }
 }
 
+export function auditResultRequiresFailure(resultStatus, summary) {
+  const status = typeof resultStatus === 'number' ? resultStatus : 0
+  if (status === 0) return false
+  if (summary.failures.length > 0) return true
+  return summary.ignored.length === 0
+}
+
 function normalizeSeverity(value) {
   const normalized = String(value || '').toLowerCase()
   if (!severityRank.has(normalized)) return 'low'
@@ -131,6 +138,11 @@ function main() {
   const summary = summarizeAuditReport(report, loadAuditPolicy(packageJsonPath), { auditLevel })
   if (summary.ignored.length > 0) {
     process.stderr.write(`[pnpm-audit] ignored ${summary.ignored.length} advisory/advisories from package.json#pnpm.auditConfig\n`)
+  }
+  if (auditResultRequiresFailure(result.status, summary)) {
+    if (result.stderr) process.stderr.write(result.stderr)
+    process.stderr.write('[pnpm-audit] pnpm audit failed without a fully ignored threshold advisory report.\n')
+    process.exit(result.status || 1)
   }
   if (summary.failures.length > 0) {
     for (const failure of summary.failures) {

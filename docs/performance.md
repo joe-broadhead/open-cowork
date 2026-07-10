@@ -150,6 +150,11 @@ semantics matter.
 | `catalog.relationship.downstreamCatalog` | sub-1 ms avg | Custom agent / tool / skill relationship summarization |
 | `agents.preview.downstreamCatalog` | sub-0.1 ms avg | Agent-builder preview compilation |
 | `threads.search.downstreamHistory` | platform baseline | SQLite-backed thread search and facets over 5,000 seeded threads |
+| `launchpad.feed.syntheticScale` | platform baseline | Launchpad feed assembly over synthetic projects, tasks, waiting interactions, and artifacts |
+| `artifacts.localIndex.writeScale` | platform baseline | Local artifact index write path over hundreds of artifacts and task provenance records |
+| `workflows.recentRuns.batchScale` | platform baseline | Batched workflow recent-run listing across many workflows with deep run history |
+| `cloud.launchpadSummaries.queryScale` | platform baseline | Cloud launchpad summary list path over a large pending-work index |
+| `cloud.artifactIndex.queryScale` | platform baseline | Cloud artifact index filtering by project/task and updated-time ordering |
 
 `pnpm perf:check` first selects the matching
 `benchmarks/perf-baseline.<platform>-<arch>-node<major>.json`, then falls

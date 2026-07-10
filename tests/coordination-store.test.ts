@@ -11,7 +11,7 @@ import {
   coordinationCapabilityStatus,
   coordinationTaskColumnForStatus,
 } from '../packages/shared/src/coordination.ts'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function withTempAppData(name: string, run: (dir: string) => void) {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const dir = mkdtempSync(join(tmpdir(), `open-cowork-coordination-${name}-`))

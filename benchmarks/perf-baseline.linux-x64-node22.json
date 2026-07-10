@@ -103,6 +103,51 @@
       "avgMs": 55,
       "p50Ms": 55,
       "p95Ms": 65
+    },
+    {
+      "name": "launchpad.feed.syntheticScale",
+      "iterations": 24,
+      "minMs": 2.4,
+      "maxMs": 4.5,
+      "avgMs": 3,
+      "p50Ms": 3,
+      "p95Ms": 4
+    },
+    {
+      "name": "artifacts.localIndex.writeScale",
+      "iterations": 18,
+      "minMs": 7,
+      "maxMs": 16,
+      "avgMs": 9,
+      "p50Ms": 9,
+      "p95Ms": 13
+    },
+    {
+      "name": "workflows.recentRuns.batchScale",
+      "iterations": 24,
+      "minMs": 0.5,
+      "maxMs": 1.5,
+      "avgMs": 0.8,
+      "p50Ms": 0.8,
+      "p95Ms": 1.2
+    },
+    {
+      "name": "cloud.launchpadSummaries.queryScale",
+      "iterations": 24,
+      "minMs": 0.4,
+      "maxMs": 1.4,
+      "avgMs": 0.7,
+      "p50Ms": 0.7,
+      "p95Ms": 1.1
+    },
+    {
+      "name": "cloud.artifactIndex.queryScale",
+      "iterations": 24,
+      "minMs": 0.5,
+      "maxMs": 1.8,
+      "avgMs": 0.9,
+      "p50Ms": 0.9,
+      "p95Ms": 1.4
     }
   ]
 }

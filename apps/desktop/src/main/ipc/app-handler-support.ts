@@ -2,7 +2,7 @@ import { basename, extname } from 'node:path'
 import {
   getPublicAppConfig,
   resolveProviderDefaultModel,
-} from '../config-loader.ts'
+} from '@open-cowork/runtime-host/config'
 import type {
   ProviderAuthAuthorization,
   ProviderDescriptor,

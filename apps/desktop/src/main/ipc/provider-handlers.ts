@@ -13,8 +13,8 @@ import {
   normalizeProviderAuthMethod,
   resolveKnownProviderId,
 } from './app-handler-support.ts'
-import { getProviderDescriptor, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
-import { log } from '../logger.ts'
+import { getProviderDescriptor, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '@open-cowork/runtime-host/config'
+import { log } from '@open-cowork/shared/node'
 type ElectronShell = typeof import('electron').shell
 const MAX_PROVIDER_MODEL_ID_LENGTH = 512
 

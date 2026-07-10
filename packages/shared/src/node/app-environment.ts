@@ -4,7 +4,7 @@
 // modules historically imported `electron` only for `app.isPackaged` /
 // `app.getAppPath()` / `app.getPath()`; injecting that surface here keeps them
 // Electron-free (and package-resolvable). The desktop wires the real Electron app
-// via the `config-loader.ts` shim at startup; the cloud server leaves it unset and
+// via `desktop-electron-hosts.ts` at startup; the cloud server leaves it unset and
 // the modules take their env/cwd/`process.resourcesPath`-guarded fallbacks —
 // exactly the result the build-cloud Electron shim + nullable guards produced,
 // now structural rather than shim-dependent.

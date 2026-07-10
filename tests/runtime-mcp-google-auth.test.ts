@@ -6,7 +6,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import type { CustomMcpConfig } from '../packages/shared/src/index.ts'
 import type { AppSettings } from '../packages/shared/src/index.ts'
-import { clearConfigCaches, type BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches, type BundleMcp } from '@open-cowork/runtime-host/config'
 
 const BASE_SETTINGS: AppSettings = {
   selectedProviderId: null,

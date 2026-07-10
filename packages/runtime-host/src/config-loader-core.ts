@@ -55,7 +55,7 @@ export { resolveConfigEnvPlaceholders } from './config-layer-utils.js'
 
 // Electron's `app` provides only path resolution here (isPackaged / getAppPath /
 // getPath). It is injected via the shared `AppPathHost` (set by the desktop
-// `config-loader.ts` shim at startup) instead of importing electron, so this
+// `desktop-electron-hosts.ts` wiring at startup) instead of importing electron, so this
 // config core stays Electron-free and package-resolvable; the cloud server leaves
 // the host unset and the env/homedir/cwd fallbacks below apply.
 let configCache: OpenCoworkConfig | null = null

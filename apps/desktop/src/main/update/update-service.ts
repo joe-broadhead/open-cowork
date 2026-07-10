@@ -16,9 +16,9 @@ import type {
   UpdateDownloadedEvent,
   UpdateInfo,
 } from 'electron-updater'
-import { getBranding } from '../config-loader.ts'
+import { getBranding } from '@open-cowork/runtime-host/config'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { getCurrentVersion, parseGithubRepo } from './update-check.ts'
 import {
   type ResolvedUpdateReleaseSource,

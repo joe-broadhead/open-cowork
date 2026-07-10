@@ -6,7 +6,7 @@ import { normalizeSessionInfo, normalizeTodoItems } from '@open-cowork/runtime-h
 import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString, extractRuntimeErrorMessage, normalizePermissionEvent, readRuntimeSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { trackPermission } from './permission-tracker.ts'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { dropSessionFromDispatcherQueues, publishNotification } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {

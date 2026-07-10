@@ -23,7 +23,7 @@ import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coord
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function createTestContext() {
   const handlers = new Map<string, unknown>()
   const listeners = new Map<string, unknown>()

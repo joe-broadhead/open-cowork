@@ -82,6 +82,9 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     ON cloud_artifact_index (tenant_id, user_id, session_id, updated_at DESC, artifact_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_project_idx
     ON cloud_artifact_index (tenant_id, user_id, project_id, task_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_task_idx
+    ON cloud_artifact_index (tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id)
+    WHERE task_id IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_kind_status_idx
     ON cloud_artifact_index (tenant_id, user_id, kind, status, updated_at DESC)`,
   `CREATE TABLE IF NOT EXISTS cloud_launchpad_session_summaries (
@@ -212,6 +215,8 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_user_idx
     ON cloud_workflows (tenant_id, user_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_workflows_webhook_lookup_idx
+    ON cloud_workflows (workflow_id, updated_at DESC, tenant_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_due_idx
     ON cloud_workflows (status, next_run_at)`,
   `CREATE TABLE IF NOT EXISTS cloud_workflow_runs (
@@ -232,8 +237,8 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     PRIMARY KEY (tenant_id, run_id),
     FOREIGN KEY (tenant_id, workflow_id) REFERENCES cloud_workflows(tenant_id, workflow_id) ON DELETE CASCADE
   )`,
-  `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_workflow_idx
-    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_workflow_recent_idx
+    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC, run_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_session_idx
     ON cloud_workflow_runs (tenant_id, session_id)`,
   `CREATE TABLE IF NOT EXISTS cloud_thread_tags (
@@ -1354,6 +1359,33 @@ const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
     WHERE status = 'reserved'`,
 ] as const
 
+const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID = '031_launchpad_empty_summary_purge'
+const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS = [
+  `DELETE FROM cloud_launchpad_session_summaries
+    WHERE pending_approvals = '[]'::jsonb
+      AND pending_questions = '[]'::jsonb`,
+] as const
+
+const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID = '032_artifact_task_index'
+const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_artifact_index_task_idx
+    ON cloud_artifact_index (tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id)
+    WHERE task_id IS NOT NULL`,
+] as const
+
+const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID = '033_workflow_run_recent_index'
+const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflow_runs_workflow_recent_idx
+    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC, run_id)`,
+  `DROP INDEX CONCURRENTLY IF EXISTS cloud_workflow_runs_workflow_idx`,
+] as const
+
+const CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID = '034_workflow_webhook_lookup_index'
+const CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflows_webhook_lookup_idx
+    ON cloud_workflows (workflow_id, updated_at DESC, tenant_id)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -1492,5 +1524,27 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_artifact_index_task_idx'],
+    transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_workflow_runs_workflow_recent_idx'],
+    transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS,
+    concurrentIndexes: ['cloud_workflows_webhook_lookup_idx'],
+    transactional: false,
   },
 ] as const

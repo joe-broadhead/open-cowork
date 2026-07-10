@@ -5,7 +5,7 @@ import type {
   UpdateReleaseSourceDescriptor,
 } from '@open-cowork/shared'
 import type { OpenCoworkConfig, UpdateReleaseSourceConfig } from '@open-cowork/shared'
-import { getAppConfig, getBranding } from '../config-loader.ts'
+import { getAppConfig, getBranding } from '@open-cowork/runtime-host/config'
 import { compareVersions, normalizeVersion } from './update-version.ts'
 import {
   githubApiReleaseUrl,

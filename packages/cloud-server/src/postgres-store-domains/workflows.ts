@@ -108,7 +108,7 @@ export class PostgresWorkflowsRepository {
     const row = await this.maybeOne(
       `SELECT * FROM cloud_workflows
        WHERE workflow_id = $1
-       ORDER BY updated_at DESC
+       ORDER BY updated_at DESC, tenant_id
        LIMIT 1`,
       [workflowId],
     )
@@ -212,24 +212,21 @@ export class PostgresWorkflowsRepository {
     const result = await this.options.pool.query(
       `WITH requested AS (
          SELECT DISTINCT unnest($3::text[]) AS workflow_id
-       ), ranked AS (
-         SELECT runs.*,
-                row_number() OVER (
-                  PARTITION BY runs.workflow_id
-                  ORDER BY runs.created_at DESC, runs.run_id
-                ) AS workflow_rank
-         FROM cloud_workflow_runs runs
-         JOIN cloud_workflows workflows
-           ON workflows.tenant_id = runs.tenant_id
-          AND workflows.workflow_id = runs.workflow_id
-         JOIN requested
-           ON requested.workflow_id = runs.workflow_id
-         WHERE runs.tenant_id = $1
-           AND workflows.user_id = $2
        )
-       SELECT *
-       FROM ranked
-       WHERE workflow_rank <= $4
+       SELECT runs.*
+       FROM requested
+       CROSS JOIN LATERAL (
+         SELECT candidate.*
+         FROM cloud_workflow_runs candidate
+         JOIN cloud_workflows workflows
+           ON workflows.tenant_id = candidate.tenant_id
+          AND workflows.workflow_id = candidate.workflow_id
+         WHERE candidate.tenant_id = $1
+           AND candidate.workflow_id = requested.workflow_id
+           AND workflows.user_id = $2
+         ORDER BY candidate.created_at DESC, candidate.run_id
+         LIMIT $4
+       ) runs
        ORDER BY created_at DESC, run_id
        LIMIT $5`,
       [input.tenantId, input.userId, workflowIds, limitPerWorkflow, limit],

@@ -93,6 +93,94 @@ test('bounded child snapshot prefetch handles early rejections while preserving 
   )
 })
 
+test('createSessionHistoryService caps child graph discovery concurrency', async () => {
+  const rootSessionId = 'session-wide'
+  const childCount = 16
+  const childrenByParent = new Map<string, Array<Record<string, unknown>>>()
+  const directChildren = Array.from({ length: childCount }, (_, index) => ({
+    id: `child-${index}`,
+    title: `Child ${index}`,
+    parentID: rootSessionId,
+    time: { created: index + 1, updated: index + 1 },
+  }))
+  childrenByParent.set(rootSessionId, directChildren)
+  for (const child of directChildren) {
+    const childId = String(child.id)
+    childrenByParent.set(childId, [{
+      id: `${childId}-grandchild`,
+      title: `${childId} grandchild`,
+      parentID: childId,
+      time: { created: 100, updated: 100 },
+    }])
+    childrenByParent.set(`${childId}-grandchild`, [])
+  }
+
+  let activeChildrenRequests = 0
+  let maxActiveChildrenRequests = 0
+  const requestedParents: string[] = []
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({ data: [] }),
+          todo: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+          get: async () => ({ data: null }),
+          children: async ({ sessionID }: { sessionID: string }) => {
+            requestedParents.push(sessionID)
+            activeChildrenRequests += 1
+            maxActiveChildrenRequests = Math.max(maxActiveChildrenRequests, activeChildrenRequests)
+            await new Promise((resolve) => setTimeout(resolve, 5))
+            activeChildrenRequests -= 1
+            return { data: childrenByParent.get(sessionID) || [] }
+          },
+        },
+      },
+      questionClient: { id: 'question-client' },
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async (input) => {
+      assert.deepEqual(input.children, [])
+      return []
+    },
+    getCachedModelId: () => 'cached-model',
+    updateSessionRecord: () => null,
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {},
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => createEmptySessionView(),
+    },
+  })
+
+  const result = await service.loadSessionHistory(rootSessionId, { includeChildTranscripts: false })
+
+  assert.equal(maxActiveChildrenRequests, 8)
+  assert.equal(requestedParents.length, 1 + childCount + childCount)
+  assert.equal(result.childGraphComplete, true)
+  assert.equal(result.childLineage.length, childCount * 2)
+  assert.equal(new Set(result.childLineage.map((child) => child.id)).size, childCount * 2)
+})
+
 test('createSessionHistoryService loads questions and updates provider/model from projected history', async () => {
   const updates: Array<Record<string, unknown>> = []
   const projectedItems: ProjectedHistoryItem[] = [

@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '@open-cowork/shared'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { CloudArtifactService } from '@open-cowork/cloud-server/artifact-service'
 import type { BillingAdapter } from '@open-cowork/cloud-server/billing-adapter'
 import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '@open-cowork/cloud-server/app'
@@ -2499,6 +2499,89 @@ test('cloud HTTP server enforces prompt quotas before processing commands and ex
     assert.equal(summary.eventSampleLimit, 50)
     const totals = asArray(summary.totals).map(asRecord)
     assert.equal(totals.some((total) => total.eventType === 'prompt.enqueued' && total.quantity === 1), true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP usage analytics require operations or billing permission', async () => {
+  let currentPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'member-user',
+    accountId: 'member-user',
+    email: 'member@example.test',
+    role: 'member',
+    authSource: 'user',
+  }
+  const fixture = createFixture({
+    auth: () => ({ ...currentPrincipal }),
+  })
+  await fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1', orgId: 'tenant-1' })
+  await fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1', orgId: 'tenant-1' })
+  await fixture.store.createAccount({ accountId: 'ops-user', email: 'ops@example.test' })
+  await fixture.store.createCustomRole({
+    orgId: 'tenant-1',
+    roleKey: 'usage-ops',
+    name: 'Usage Operations',
+    baseRole: 'member',
+    permissions: ['org:read', 'operations:view'],
+  })
+  await fixture.store.upsertMembership({
+    orgId: 'tenant-1',
+    accountId: 'ops-user',
+    role: 'member',
+    customRoleKey: 'usage-ops',
+    status: 'active',
+  })
+  await fixture.store.createAccount({ accountId: 'billing-user', email: 'billing@example.test' })
+  await fixture.store.createCustomRole({
+    orgId: 'tenant-1',
+    roleKey: 'usage-billing',
+    name: 'Usage Billing',
+    baseRole: 'member',
+    permissions: ['org:read', 'billing:manage'],
+  })
+  await fixture.store.upsertMembership({
+    orgId: 'tenant-1',
+    accountId: 'billing-user',
+    role: 'member',
+    customRoleKey: 'usage-billing',
+    status: 'active',
+  })
+  await fixture.store.recordUsageEvent({
+    orgId: 'tenant-1',
+    accountId: 'ops-user',
+    eventType: 'prompt.enqueued',
+    unit: 'count',
+    quantity: 1,
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const deniedEvents = await fetch(`${baseUrl}/api/usage/events`)
+    assert.equal(deniedEvents.status, 403)
+    assert.match(String((await readJson(deniedEvents)).error), /operations:view|billing:manage/)
+    const deniedSummary = await fetch(`${baseUrl}/api/usage/summary`)
+    assert.equal(deniedSummary.status, 403)
+
+    currentPrincipal = {
+      ...currentPrincipal,
+      userId: 'ops-user',
+      accountId: 'ops-user',
+      email: 'ops@example.test',
+    }
+    const allowedEvents = await readJson(await fetch(`${baseUrl}/api/usage/events`))
+    assert.equal(asArray(allowedEvents.events).length, 1)
+
+    currentPrincipal = {
+      ...currentPrincipal,
+      userId: 'billing-user',
+      accountId: 'billing-user',
+      email: 'billing@example.test',
+    }
+    const allowedSummary = await readJson(await fetch(`${baseUrl}/api/usage/summary?limit=50`))
+    assert.equal(allowedSummary.totalsScope, 'recent_events')
   } finally {
     await fixture.server.close()
   }

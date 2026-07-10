@@ -2,7 +2,7 @@ import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretS
 import { getAppPathHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir } from '@open-cowork/runtime-host/config'
 type SecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString: (plaintext: string) => Buffer

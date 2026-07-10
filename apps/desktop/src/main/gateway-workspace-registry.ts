@@ -2,7 +2,7 @@ import { quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir } from '@open-cowork/runtime-host/config'
 export type GatewayWorkspaceConnectionRecord = {
   id: string
   baseUrl: string

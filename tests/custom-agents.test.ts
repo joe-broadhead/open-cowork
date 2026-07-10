@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { validateCustomAgentConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 
 const builtinTools = [

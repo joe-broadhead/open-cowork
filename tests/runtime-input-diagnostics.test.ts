@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { getRuntimeInputDiagnostics } from '../apps/desktop/src/main/runtime-input-diagnostics.ts'
 test('getRuntimeInputDiagnostics reports effective provider inputs and override sources', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-inputs-'))

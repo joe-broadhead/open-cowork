@@ -182,8 +182,9 @@ top-level barrel and domain barrels under `src/domains/`.
 Cloud source files should stay below 2,000 lines. A handful of former facades
 carry explicit line budgets that are ratcheted to just above their current size
 so a decomposed file cannot silently re-grow. Most now sit under the 2,000-line
-limit; only `postgres-control-plane-store.ts` still exceeds it today. These
-budgets are implementation backlogs, not target architecture:
+limit; only `postgres-control-plane-store.ts` and the compatibility
+`session-service.ts` facade still exceed it today. These budgets are
+implementation backlogs, not target architecture:
 
 - `postgres-control-plane-store.ts` (budget 2,820 lines): the only file still
   above the 2,000-line limit. Compatibility implementation for the full
@@ -198,7 +199,7 @@ budgets are implementation backlogs, not target architecture:
   and ratcheted. Compatibility Cloud HTTP/SSE entry point that wires shared
   route modules, HTML/CSP serving, pre-auth health, and streaming lifecycles
   while route handlers continue moving into `http-routes/`.
-- `session-service.ts` (budget 1,935 lines, ratcheted down from 2,720): a thin
+- `session-service.ts` (budget 2,030 lines, ratcheted down from 2,720): a thin
   orchestration **facade** whose real logic already lives in ~30 cohesive
   sub-services it composes — `services/byok-service.ts`, `member-service.ts`,
   `role-service.ts`, `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,

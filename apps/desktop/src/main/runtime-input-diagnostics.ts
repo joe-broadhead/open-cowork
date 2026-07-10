@@ -14,7 +14,7 @@ import type {
   RuntimeCompatibilityReport,
   RuntimeInputDiagnostics,
 } from '@open-cowork/shared'
-import { getAppConfig, getConfiguredMcpsFromConfig, getConfiguredSkillsFromConfig, getPublicAppConfig, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader.ts'
+import { getAppConfig, getConfiguredMcpsFromConfig, getConfiguredSkillsFromConfig, getPublicAppConfig, getProviderDescriptor, resolveCustomProviderConfig } from '@open-cowork/runtime-host/config'
 import { getOpencodeCompatibilityReport } from './opencode-compatibility.ts'
 function isSensitiveOptionKey(key: string) {
   return /(token|secret|password|authorization|headers?|cookie|api[-_]?key|private[-_]?key)/i.test(key)

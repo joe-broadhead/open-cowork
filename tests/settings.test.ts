@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { SMALL_MODEL_USE_MAIN } from '../packages/shared/src/app-config.ts'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')

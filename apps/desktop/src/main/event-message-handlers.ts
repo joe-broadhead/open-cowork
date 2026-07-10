@@ -20,7 +20,7 @@ import {
   consumePendingPromptEcho,
 } from './event-task-state.ts'
 import { emitTaskRun } from './event-task-run-dispatch.ts'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 const MAX_PENDING_TEXT_EVENTS_PER_SESSION = 500
 const MAX_TOTAL_PENDING_TEXT_EVENTS = 10_000
 const MAX_MESSAGE_ROLES_PER_SESSION = 2_000

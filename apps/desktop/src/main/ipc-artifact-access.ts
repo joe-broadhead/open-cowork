@@ -4,7 +4,7 @@ import { isSandboxWorkspaceDir } from '@open-cowork/runtime-host/runtime-paths'
 import { isAbsolute, relative, resolve } from 'path'
 import type { SessionArtifactRequest } from '@open-cowork/shared'
 import { getChartArtifactsRoot } from './chart-artifacts.ts'
-import { getBrandName } from './config-loader.ts'
+import { getBrandName } from '@open-cowork/runtime-host/config'
 import { resolveContainedArtifactPath } from './artifact-path-policy.ts'
 function isInsideOrSame(root: string, source: string) {
   const relativeToRoot = relative(root, source)

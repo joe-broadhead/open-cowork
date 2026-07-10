@@ -1,5 +1,5 @@
 import { sanitizeLogMessage } from '@open-cowork/shared'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import type { UpdateCheckResult } from '@open-cowork/shared'
 import { resolveUpdateReleaseSource, UpdateReleaseSourceError } from './update-release-source.ts'
 export { compareVersions, parseGithubRepo } from './update-version.ts'

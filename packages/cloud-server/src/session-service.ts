@@ -1676,11 +1676,13 @@ export class CloudSessionService {
 
   async listUsageEvents(principal: CloudPrincipal, limit?: number) {
     await this.ensurePrincipal(principal)
+    this.principalService.assertAnyPermission(principal, ['operations:view', 'billing:manage'], 'Usage analytics requires the "operations:view" or "billing:manage" permission.')
     return this.store.listUsageEvents(this.principalOrgId(principal), limit)
   }
 
   async getUsageSummary(principal: CloudPrincipal, limit = 100): Promise<CloudUsageSummary> {
     await this.ensurePrincipal(principal)
+    this.principalService.assertAnyPermission(principal, ['operations:view', 'billing:manage'], 'Usage analytics requires the "operations:view" or "billing:manage" permission.')
     return this.usageGovernance.getUsageSummary(this.principalOrgId(principal), limit)
   }
 

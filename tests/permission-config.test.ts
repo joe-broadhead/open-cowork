@@ -2,7 +2,7 @@ import { getMachineSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } fro
 import { buildManagedExternalDirectoryRules, buildManagedSkillRules, buildPermissionConfig } from '@open-cowork/runtime-host/permission-config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getProjectOverlayDirName } from '../apps/desktop/src/main/config-loader.ts'
+import { getProjectOverlayDirName } from '@open-cowork/runtime-host/config'
 
 test('buildManagedSkillRules dedupes and sorts skill names deterministically', () => {
   assert.deepEqual(buildManagedSkillRules(['charts', '', 'autoresearch', 'charts']), {

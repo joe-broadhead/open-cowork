@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 
 import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
 import { ControlPlaneQuotaExceededError } from '@open-cowork/cloud-server/control-plane-store'
+import { CLOUD_CONTROL_PLANE_MIGRATIONS } from '@open-cowork/cloud-server/postgres-schema'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
@@ -12,6 +13,11 @@ const POSTGRES_SKIP = POSTGRES_URL
   ? false
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres cloud concurrency tests.'
 const require = createRequire(new URL('../packages/cloud-server/src/postgres-control-plane-store.ts', import.meta.url))
+
+const EXPECTED_MIGRATION_APPLY_ORDER = [
+  ...CLOUD_CONTROL_PLANE_MIGRATIONS.filter((migration) => migration.transactional !== false),
+  ...CLOUD_CONTROL_PLANE_MIGRATIONS.filter((migration) => migration.transactional === false),
+].map((migration) => migration.id)
 
 type PgPool = {
   query(text: string, values?: unknown[]): Promise<unknown>
@@ -123,40 +129,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
     )))
     try {
       const migrations = await stores[0]?.listSchemaMigrations()
-      // The list pins the deterministic APPLY order (= the postgres-schema.ts
-      // registration order, which is not numeric — e.g. 010 and 024 are appended
-      // late). Update it when migrations are added/reordered there.
-      assert.deepEqual(migrations?.map((migration) => migration.id), [
-        '001_cloud_control_plane',
-        '002_org_identity_tokens_audit',
-        '003_headless_channels',
-        '004_byok_secrets',
-        '005_usage_quotas_rate_limits',
-        '006_billing_subscriptions',
-        '007_scale_foundation',
-        '008_managed_workers',
-        '009_managed_work_claims',
-        '011_channel_provider_events',
-        '012_channel_delivery_owner',
-        '013_api_token_channel_binding_grants',
-        '014_cloud_coordination_watches',
-        '015_cloud_workflow_steps',
-        '016_cloud_knowledge',
-        '017_cloud_concurrency_counters',
-        '018_concurrency_counter_sessions',
-        '019_concurrency_counter_commands',
-        '024_concurrency_counter_clamp_on_read',
-        '026_org_custom_roles',
-        '027_managed_policies',
-        '028_org_sso_scim',
-        '030_artifact_upload_reservations',
-        '010_managed_work_reaper_indexes',
-        '020_session_lookup_indexes',
-        '021_performance_indexes',
-        '022_event_retention_indexes',
-        '025_workspace_event_retention_and_interaction_index',
-        '029_projection_lag_index',
-      ])
+      assert.deepEqual(migrations?.map((migration) => migration.id), EXPECTED_MIGRATION_APPLY_ORDER)
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
     }

@@ -27,10 +27,10 @@ import {
   sniffImageMime,
 } from './app-handler-support.ts'
 import { getPublicAppConfigWithRuntimeModels, registerProviderHandlers } from './provider-handlers.ts'
-import { getConfigError } from '../config-loader.ts'
+import { getConfigError } from '@open-cowork/runtime-host/config'
 import { buildDiagnosticsBundle } from '../diagnostics-export.ts'
 import { awaitRuntimeInitialization } from '../runtime-initialization.ts'
-import { log } from '../logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { getRecentProjectByIndex, listRecentProjects } from '../project-registry.ts'
 import { trackParentSession } from '../event-task-state.ts'

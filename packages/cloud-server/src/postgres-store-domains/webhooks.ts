@@ -1,4 +1,5 @@
 import type { WorkflowWebhookReplayClaim } from '@open-cowork/shared/node'
+import { createHash } from 'node:crypto'
 import { numberValue, type QueryResult, type QueryRow } from '../postgres-domains/shared.ts'
 import { webhookAuthFailureFromRow } from '../postgres-domains/webhooks.ts'
 // Webhook-security SQL domain extracted from postgres-control-plane-store.ts. Implements
@@ -16,6 +17,10 @@ type PgClient = PgExecutor & { release: () => void }
 type PostgresWebhooksRepositoryOptions = {
   pool: PgExecutor
   withTransaction<T>(fn: (client: PgClient) => Promise<T>): Promise<T>
+}
+
+function webhookReplayKeyHash(key: string) {
+  return createHash('sha256').update(key).digest('hex')
 }
 
 export class PostgresWebhooksRepository {
@@ -102,6 +107,7 @@ export class PostgresWebhooksRepository {
     windowMs: number
     cacheLimit: number
   }): Promise<WorkflowWebhookReplayClaim | null> {
+    const replayKey = webhookReplayKeyHash(input.key)
     const claimed = await this.options.withTransaction(async (client) => {
       await client.query(
         `DELETE FROM cloud_webhook_replay_claims WHERE $1 - seen_at_ms > $2`,
@@ -109,10 +115,15 @@ export class PostgresWebhooksRepository {
       )
       const result = await client.query(
         `INSERT INTO cloud_webhook_replay_claims (replay_key, seen_at_ms, status)
-         VALUES ($1, $2, 'pending')
+         SELECT $1, $3, 'pending'
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM cloud_webhook_replay_claims
+           WHERE replay_key = $1 OR replay_key = $2
+         )
          ON CONFLICT (replay_key) DO NOTHING
          RETURNING replay_key`,
-        [input.key, input.nowMs],
+        [replayKey, input.key, input.nowMs],
       )
       await client.query(
         `DELETE FROM cloud_webhook_replay_claims
@@ -136,7 +147,7 @@ export class PostgresWebhooksRepository {
           `UPDATE cloud_webhook_replay_claims
            SET status = 'accepted'
            WHERE replay_key = $1`,
-          [input.key],
+          [replayKey],
         )
       },
       release: async () => {
@@ -145,7 +156,7 @@ export class PostgresWebhooksRepository {
         await this.options.pool.query(
           `DELETE FROM cloud_webhook_replay_claims
            WHERE replay_key = $1 AND status = 'pending'`,
-          [input.key],
+          [replayKey],
         )
       },
     }

@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { closeLogger } from '../apps/desktop/src/main/logger.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
+import { closeLogger } from '@open-cowork/shared/node'
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })

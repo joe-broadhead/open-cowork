@@ -7,7 +7,7 @@ import type { BuiltInAgentDetail } from '@open-cowork/shared'
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredToolsFromConfig,
-} from './config-loader.ts'
+} from '@open-cowork/runtime-host/config'
 function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
   return getConfiguredAgentsFromConfig().map((agent) => ({
     name: agent.name,

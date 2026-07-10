@@ -5,7 +5,7 @@ import {
   isExpectedPackagedRendererFile,
   rendererUrlMatchesDevServer,
 } from './main-window-lifecycle.ts'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 
 const guardedWebContents = new WeakSet<WebContents>()
 

@@ -219,9 +219,21 @@ export class CloudPrincipalService {
     return hasPermission(this.principalPermissions(principal), permission)
   }
 
+  principalHasAnyPermission(principal: CloudPrincipal, permissions: readonly ControlPlanePermission[]): boolean {
+    if (principal.authSource === 'local') return true
+    const effectivePermissions = this.principalPermissions(principal)
+    return permissions.some((permission) => hasPermission(effectivePermissions, permission))
+  }
+
   assertPermission(principal: CloudPrincipal, permission: ControlPlanePermission) {
     if (!this.principalHasPermission(principal, permission)) {
       throw new CloudServiceError(403, `This action requires the "${permission}" permission.`)
+    }
+  }
+
+  assertAnyPermission(principal: CloudPrincipal, permissions: readonly ControlPlanePermission[], message?: string) {
+    if (!this.principalHasAnyPermission(principal, permissions)) {
+      throw new CloudServiceError(403, message || `This action requires one of: ${permissions.map((permission) => `"${permission}"`).join(', ')}.`)
     }
   }
 

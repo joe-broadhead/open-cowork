@@ -1,6 +1,6 @@
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { clearCoordinationStoreCache, createCoordinationProject, createCoordinationTask, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
-import { artifactLifecycleStorageKey, clearArtifactLifecycleStoreCache, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
+import { artifactLifecycleStorageKey, clearArtifactLifecycleStoreCache, getArtifactLifecycleTransactionCountForTests, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { SessionArtifact, SessionView } from '@open-cowork/shared'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function sessionViewWithArtifacts(artifacts: SessionArtifact[]): SessionView {
   return {
     messages: [],
@@ -313,6 +313,94 @@ test('local artifact provenance prefers exact task-run matches over session-leve
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('local artifact indexing batches lifecycle, provenance, and index writes', async () => {
+  const db = new DatabaseSync(':memory:')
+  const sessionId = 'artifact-batch-session'
+  const artifactCount = 40
+  try {
+    setArtifactLifecycleDatabaseForTests(db)
+    const artifacts: SessionArtifact[] = Array.from({ length: artifactCount }, (_, index) => ({
+      id: `artifact-${index}`,
+      toolId: `tool-${index}`,
+      toolName: 'write',
+      filePath: `/tmp/batch-${index}.md`,
+      filename: `batch-${index}.md`,
+      order: index,
+      taskRunId: `run-${index}`,
+    }))
+    const insertLifecycle = db.prepare(`
+      insert into artifact_lifecycle (
+        workspace_id, session_id, artifact_id, kind, status, author_agent_id,
+        project_id, task_id, status_updated_by, status_updated_at, created_at, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    for (const artifact of artifacts) {
+      insertLifecycle.run(
+        'local',
+        sessionId,
+        artifactLifecycleStorageKey(artifact),
+        'document',
+        'in-review',
+        null,
+        null,
+        null,
+        'reviewer',
+        '2026-05-27T10:10:00.000Z',
+        '2026-05-27T10:00:00.000Z',
+        '2026-05-27T10:10:00.000Z',
+      )
+    }
+
+    let runIdReads = 0
+    let sessionIdReads = 0
+    const tasks = Array.from({ length: artifactCount }, (_, index) => {
+      const task: Record<string, unknown> = {
+        id: `task-${index}`,
+        projectId: `project-${index}`,
+        assigneeAgent: `agent-${index}`,
+      }
+      Object.defineProperty(task, 'assignedRunId', {
+        enumerable: true,
+        get() {
+          runIdReads += 1
+          return `run-${index}`
+        },
+      })
+      Object.defineProperty(task, 'assignedSessionId', {
+        enumerable: true,
+        get() {
+          sessionIdReads += 1
+          return sessionId
+        },
+      })
+      return task
+    })
+
+    const beforeTransactions = getArtifactLifecycleTransactionCountForTests()
+    const entries = indexLocalSessionArtifactsFromView({
+      sessionId,
+      sessionTitle: 'Batch artifact session',
+      view: sessionViewWithArtifacts(artifacts),
+      tasks: tasks as NonNullable<Parameters<typeof indexLocalSessionArtifactsFromView>[0]['tasks']>,
+    })
+    const afterTransactions = getArtifactLifecycleTransactionCountForTests()
+
+    assert.equal(afterTransactions - beforeTransactions, 1)
+    assert.equal(runIdReads, artifactCount)
+    assert.equal(sessionIdReads, artifactCount)
+    assert.equal(entries.length, artifactCount)
+    const sampledEntry = entries.find((entry) => entry.id === 'artifact-17')
+    assert.equal(sampledEntry?.status, 'in-review')
+    assert.equal(sampledEntry?.taskId, 'task-17')
+    assert.equal(sampledEntry?.projectId, 'project-17')
+    const indexed = await listLocalArtifactIndex({ sessionId, limit: artifactCount })
+    assert.equal(indexed.artifacts.length, artifactCount)
+  } finally {
+    setArtifactLifecycleDatabaseForTests(null)
+    db.close()
   }
 })
 

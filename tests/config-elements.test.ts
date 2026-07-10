@@ -18,7 +18,7 @@ import {
   getConfiguredToolAskPatterns,
   getPublicAppConfig,
   getProviderDescriptors,
-} from '../apps/desktop/src/main/config-loader.ts'
+} from '@open-cowork/runtime-host/config'
 test('open core ships with built-in tools, skills, mcps, and agents configured by default', () => {
   const tools = getConfiguredToolsFromConfig()
   const skills = getConfiguredSkillsFromConfig()

@@ -483,15 +483,48 @@ jobs:
           OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
           OPEN_COWORK_EXPECT_SIGNED_UPDATE_INSTALL: ${{ steps.signing.outputs.mode == 'signed' }}
 
-      - name: Verify Windows Authenticode signature
+      - name: Verify Windows Authenticode signatures
         if: steps.signing.outputs.mode == 'signed'
         shell: pwsh
+        env:
+          OPEN_COWORK_WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
+          OPEN_COWORK_WINDOWS_SIGNING_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_THUMBPRINT }}
         run: |
-          $installer = Get-ChildItem apps/desktop/release/*-setup.exe | Select-Object -First 1
-          if (-not $installer) { throw "No Windows installer found in apps/desktop/release" }
-          $sig = Get-AuthenticodeSignature $installer.FullName
-          if ($sig.Status -ne 'Valid') { throw "Authenticode signature is not valid: $($sig.Status)" }
-          Write-Host "Authenticode signature valid for $($installer.Name)"
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $targetsJson = (node scripts/windows-signing-targets.mjs --version "$version") -join "`n"
+          $targets = @($targetsJson | ConvertFrom-Json)
+          if ($targets.Count -eq 0) { throw "No Windows signing targets resolved." }
+
+          $expectedPublisher = $env:OPEN_COWORK_WINDOWS_SIGNING_PUBLISHER
+          $expectedThumbprint = $env:OPEN_COWORK_WINDOWS_SIGNING_THUMBPRINT
+          if ($expectedThumbprint) {
+            $expectedThumbprint = ($expectedThumbprint -replace "\s", "").ToUpperInvariant()
+          }
+          foreach ($target in $targets) {
+            if (-not (Test-Path -LiteralPath $target.path -PathType Leaf)) {
+              throw "Windows signing target is missing: $($target.path)"
+            }
+            $sig = Get-AuthenticodeSignature -LiteralPath $target.path
+            if ($sig.Status -ne 'Valid') {
+              throw "Authenticode signature is not valid for $($target.name): $($sig.Status)"
+            }
+            if (-not $sig.SignerCertificate) {
+              throw "Authenticode signature is missing a signer certificate for $($target.name)"
+            }
+            if ($expectedPublisher -and $sig.SignerCertificate.Subject -notlike "*$expectedPublisher*") {
+              throw "Authenticode signer subject for $($target.name) does not include expected publisher '$expectedPublisher': $($sig.SignerCertificate.Subject)"
+            }
+            if ($expectedThumbprint) {
+              $actualThumbprint = ($sig.SignerCertificate.Thumbprint -replace "\s", "").ToUpperInvariant()
+              if ($actualThumbprint -ne $expectedThumbprint) {
+                throw "Authenticode signer thumbprint for $($target.name) is $actualThumbprint, expected $expectedThumbprint"
+              }
+            }
+            if (-not $sig.TimeStamperCertificate) {
+              throw "Authenticode signature is missing a timestamp for $($target.name)"
+            }
+            Write-Host "Authenticode signature valid for $($target.kind): $($target.name)"
+          }
 
       - name: Upload signed Windows artifacts
         if: steps.signing.outputs.mode == 'signed'

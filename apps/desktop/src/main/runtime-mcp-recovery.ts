@@ -1,8 +1,8 @@
 import { loadSettings } from '@open-cowork/runtime-host/settings'
 import { listReadyGoogleAuthLocalMcpNames } from '@open-cowork/runtime-host/runtime-mcp'
 import { listCustomMcps } from '@open-cowork/runtime-host/native-customizations'
-import { getConfiguredMcpsFromConfig } from './config-loader.ts'
-import { log } from './logger.ts'
+import { getConfiguredMcpsFromConfig } from '@open-cowork/runtime-host/config'
+import { log } from '@open-cowork/shared/node'
 
 type RuntimeMcpClient = {
   mcp: {

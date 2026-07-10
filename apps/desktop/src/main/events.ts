@@ -5,7 +5,7 @@ import { normalizeMcpStatusEntries, normalizeRuntimeEventEnvelope } from '@open-
 import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { dispatchRuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import {
   sweepStaleTaskState,

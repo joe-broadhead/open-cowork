@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 import {
   ControlPlaneQuotaExceededError,
@@ -33,7 +33,8 @@ runControlPlaneDomainContracts('postgres', async () => {
 // (no in-memory peer), so it gets its own pglite-backed contract. `nowMs` is a real
 // epoch-ms (> int32) to guard the bigint blocked-until regression.
 test('pglite webhook security store enforces fail-closed rate limit / auth backoff / replay claims', async () => {
-  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool: createPglitePool() })
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
   try {
     const prefix = `webhook-${randomUUID()}`
     const nowMs = 1_781_000_000_000
@@ -53,6 +54,49 @@ test('pglite webhook security store enforces fail-closed rate limit / auth backo
     const reclaim = await store.claimSignature({ key: `${prefix}-sig`, nowMs, windowMs: 60_000, cacheLimit: 100 })
     assert.ok(reclaim)
     await reclaim?.accept()
+
+    const rawSignatureReplayKey = `${prefix}:2026-01-01T00:00:00.000Z:sha256=${'a'.repeat(64)}`
+    const signatureClaim = await store.claimSignature({
+      key: rawSignatureReplayKey,
+      nowMs,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    })
+    assert.ok(signatureClaim)
+    await signatureClaim.accept()
+    const persisted = await pool.query<{ replay_key: string }>(
+      `SELECT replay_key FROM cloud_webhook_replay_claims ORDER BY replay_key`,
+    )
+    const replayKeys = persisted.rows.map((row) => row.replay_key)
+    assert.equal(replayKeys.includes(rawSignatureReplayKey), false)
+    assert.equal(replayKeys.some((key) => key.includes('sha256=')), false)
+    assert.ok(replayKeys.includes(createHash('sha256').update(rawSignatureReplayKey).digest('hex')))
+    assert.equal(replayKeys.every((key) => /^[a-f0-9]{64}$/.test(key)), true)
+
+    const legacyRawReplayKey = `${prefix}:legacy:sha256=${'b'.repeat(64)}`
+    await pool.query(
+      `INSERT INTO cloud_webhook_replay_claims (replay_key, seen_at_ms, status)
+       VALUES ($1, $2, 'accepted')`,
+      [legacyRawReplayKey, nowMs],
+    )
+    assert.equal(await store.claimSignature({
+      key: legacyRawReplayKey,
+      nowMs: nowMs + 1,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    }), null)
+    const expiredLegacyClaim = await store.claimSignature({
+      key: legacyRawReplayKey,
+      nowMs: nowMs + 60_001,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    })
+    assert.ok(expiredLegacyClaim)
+    const legacyRows = await pool.query<{ replay_key: string }>(
+      `SELECT replay_key FROM cloud_webhook_replay_claims WHERE replay_key = $1`,
+      [legacyRawReplayKey],
+    )
+    assert.equal(legacyRows.rows.length, 0)
   } finally {
     await store.close?.()
   }
@@ -97,6 +141,71 @@ test('pglite concurrency gauge keeps a true running sum, clamps reads, and recon
     assert.equal(Number((clampedRead.rows[0] as { v: number }).v), 0)
     assert.ok(await store.reconcileConcurrencyCounters() >= 1, 'reconcile should touch the drifted counter row')
     assert.equal(await rawValue(), 1)
+  } finally {
+    await store.close?.()
+  }
+})
+
+test('pglite launchpad summaries delete empty rows on write', async () => {
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
+  try {
+    const prefix = `launchpad-${randomUUID()}`
+    const tenantId = `${prefix}-tenant`
+    const userId = `${prefix}-user`
+    await store.createTenant({ tenantId, name: 'Launchpad tenant' })
+    await store.ensureUser({ tenantId, userId, email: `${userId}@example.test`, role: 'owner' })
+    for (let index = 0; index < 25; index += 1) {
+      const sessionId = `${prefix}-empty-${index}`
+      await store.createSession({
+        tenantId,
+        userId,
+        sessionId,
+        opencodeSessionId: `${sessionId}-runtime`,
+        profileName: 'default',
+        title: `Empty ${index}`,
+      })
+      await store.upsertCloudLaunchpadSessionSummary({
+        tenantId,
+        userId,
+        sessionId,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      })
+    }
+    const pendingSessionId = `${prefix}-pending`
+    await store.createSession({
+      tenantId,
+      userId,
+      sessionId: pendingSessionId,
+      opencodeSessionId: `${pendingSessionId}-runtime`,
+      profileName: 'default',
+      title: 'Pending launchpad work',
+    })
+    await store.upsertCloudLaunchpadSessionSummary({
+      tenantId,
+      userId,
+      sessionId: pendingSessionId,
+      pendingApprovals: [],
+      pendingQuestions: [{
+        id: `${prefix}-question`,
+        sessionId: pendingSessionId,
+        sourceSessionId: pendingSessionId,
+        questions: [{ header: 'Confirm', question: 'Proceed?', options: [] }],
+      }],
+      updatedAt: '2026-01-02T00:01:00.000Z',
+    })
+
+    const stored = await pool.query<{ session_id: string }>(
+      `SELECT session_id FROM cloud_launchpad_session_summaries WHERE tenant_id = $1 ORDER BY session_id`,
+      [tenantId],
+    )
+    assert.deepEqual(stored.rows.map((row) => row.session_id), [pendingSessionId])
+    const listed = await store.listCloudLaunchpadSessionSummaries({ tenantId, userId, limit: 5 })
+    assert.deepEqual(listed.items.map((summary) => summary.sessionId), [pendingSessionId])
+    assert.equal(listed.totalEstimate, 1)
+    assert.equal(listed.truncated, false)
   } finally {
     await store.close?.()
   }
@@ -295,6 +404,18 @@ function runControlPlaneDomainContracts(
       assert.equal(artifactPage.items[0]?.key, `${tenantId}/${sessionId}/private-new-key`)
       assert.equal(artifactPage.totalEstimate, 2)
       assert.equal(artifactPage.truncated, true)
+      const taskOnlyArtifactPage = await store.listCloudArtifactIndex({
+        tenantId,
+        userId,
+        taskIds: [`${prefix}-task`],
+        limit: 10,
+      })
+      assert.deepEqual(taskOnlyArtifactPage.items.map((artifact) => artifact.artifactId), [
+        `${prefix}-artifact-new`,
+        `${prefix}-artifact-old`,
+      ])
+      assert.equal(taskOnlyArtifactPage.totalEstimate, 2)
+      assert.equal(taskOnlyArtifactPage.truncated, false)
       const exactArtifact = await store.getCloudArtifactIndexRecord({
         tenantId,
         userId,
@@ -1244,6 +1365,127 @@ function runControlPlaneDomainContracts(
         metadata: { source: 'contract' },
       })
       assert.equal((await store.getBillingSubscription(org.orgId))?.providerSubscriptionId, subscription.providerSubscriptionId)
+    } finally {
+      await store.close?.()
+    }
+  })
+
+  test(`${name} control plane batch-lists recent workflow runs from deep histories`, { skip }, async () => {
+    const store = await createStore()
+    const prefix = `${name}-workflow-history-${randomUUID()}`
+    const tenantId = `${prefix}-tenant`
+    const userId = `${prefix}-user`
+    const workflowIds = Array.from({ length: 6 }, (_, index) => `${prefix}-workflow-${index}`)
+    const runCount = 36
+
+    try {
+      await store.createTenant({ tenantId, name: 'Workflow history tenant' })
+      await store.ensureUser({ tenantId, userId, email: `${userId}@example.test`, role: 'owner' })
+      for (const [workflowIndex, workflowId] of workflowIds.entries()) {
+        await store.createWorkflow({
+          tenantId,
+          userId,
+          workflowId,
+          draft: {
+            title: `Workflow ${workflowIndex}`,
+            instructions: 'Exercise recent-run listing.',
+            agentName: 'runner',
+            skillNames: [],
+            toolIds: [],
+            projectDirectory: null,
+            draftSessionId: null,
+            triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+          },
+          createdAt: new Date(Date.UTC(2031, 0, 1, 0, 0, workflowIndex)),
+        })
+        for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
+          const runId = `${workflowId}-run-${String(runIndex).padStart(2, '0')}`
+          await store.createWorkflowRun({
+            tenantId,
+            userId,
+            workflowId,
+            runId,
+            triggerType: 'manual',
+            createdAt: new Date(Date.UTC(2031, 0, 2, 0, runIndex, workflowIndex)),
+          })
+          await store.completeWorkflowRun({
+            tenantId,
+            workflowId,
+            runId,
+            summary: `done ${runIndex}`,
+            nextStatus: 'active',
+            nextRunAt: null,
+            finishedAt: new Date(Date.UTC(2031, 0, 2, 0, runIndex, workflowIndex + 1)),
+          })
+        }
+      }
+
+      const runs = await store.listWorkflowRunsForWorkflows({
+        tenantId,
+        userId,
+        workflowIds,
+        limitPerWorkflow: 3,
+        limit: workflowIds.length * 3,
+      })
+      const expectedIds = [35, 34, 33].flatMap((runIndex) => workflowIds
+        .slice()
+        .reverse()
+        .map((workflowId) => `${workflowId}-run-${String(runIndex).padStart(2, '0')}`))
+      assert.deepEqual(runs.map((run) => run.id), expectedIds)
+      for (const workflowId of workflowIds) {
+        assert.equal(runs.filter((run) => run.workflowId === workflowId).length, 3)
+      }
+    } finally {
+      await store.close?.()
+    }
+  })
+
+  test(`${name} control plane resolves bare workflow ids by latest update for webhook lookup`, { skip }, async () => {
+    const store = await createStore()
+    const prefix = `${name}-workflow-lookup-${randomUUID()}`
+    const workflowId = `${prefix}-shared-workflow`
+    const tenants = [
+      { tenantId: `${prefix}-tenant-a`, userId: `${prefix}-user-a`, createdAt: new Date(Date.UTC(2032, 0, 1)) },
+      { tenantId: `${prefix}-tenant-b`, userId: `${prefix}-user-b`, createdAt: new Date(Date.UTC(2032, 0, 2)) },
+    ]
+
+    try {
+      for (const tenant of tenants) {
+        await store.createTenant({ tenantId: tenant.tenantId, name: tenant.tenantId })
+        await store.ensureUser({
+          tenantId: tenant.tenantId,
+          userId: tenant.userId,
+          email: `${tenant.userId}@example.test`,
+          role: 'owner',
+        })
+        await store.createWorkflow({
+          tenantId: tenant.tenantId,
+          userId: tenant.userId,
+          workflowId,
+          draft: {
+            title: tenant.tenantId,
+            instructions: 'Exercise bare workflow lookup.',
+            agentName: 'runner',
+            skillNames: [],
+            toolIds: [],
+            projectDirectory: null,
+            draftSessionId: null,
+            triggers: [{ id: 'webhook', type: 'webhook', enabled: true, webhookSecret: tenant.tenantId }],
+          },
+          createdAt: tenant.createdAt,
+        })
+      }
+
+      assert.equal((await store.findWorkflow(workflowId))?.tenantId, tenants[1]?.tenantId)
+      await store.updateWorkflowStatus({
+        tenantId: tenants[0]!.tenantId,
+        userId: tenants[0]!.userId,
+        workflowId,
+        status: 'paused',
+        nextRunAt: null,
+        updatedAt: new Date(Date.UTC(2032, 0, 3)),
+      })
+      assert.equal((await store.findWorkflow(workflowId))?.tenantId, tenants[0]?.tenantId)
     } finally {
       await store.close?.()
     }

@@ -4,7 +4,7 @@ import {
   coordinationCapabilityStatus,
   workspaceApiSupportContextForAuthority,
 } from '@open-cowork/shared'
-import { log } from './logger.ts'
+import { log } from '@open-cowork/shared/node'
 import { createKeyedSerializer } from './keyed-serializer.ts'
 import type {
   AddCloudWorkspaceInput,

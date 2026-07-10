@@ -3,8 +3,8 @@ import electron from 'electron'
 import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle } from 'electron'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { getAppDataDir } from './config-loader.ts'
-import { log } from './logger.ts'
+import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import { log } from '@open-cowork/shared/node'
 
 const electronScreen = (electron as { screen?: typeof import('electron').screen }).screen
 

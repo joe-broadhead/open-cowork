@@ -27,7 +27,7 @@ import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { createApplicationMenuTemplate } from './app-menu.ts'
 import { subscribeToEvents } from './events.ts'
-import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts'
+import { assertConfigValid, getAppConfig, getBranding } from '@open-cowork/runtime-host/config'
 import { createPromiseChain, createSingleFlight } from './promise-chain.ts'
 import { configureWorkflowService, startWorkflowService, stopWorkflowService } from './workflow/workflow-service.ts'
 import {
@@ -70,7 +70,7 @@ import {
 } from './main-window-security.ts'
 import { createMainWindowController } from './main-window-controller.ts'
 
-import { log, getLogFilePath, closeLogger } from './logger.ts'
+import { log, getLogFilePath, closeLogger } from '@open-cowork/shared/node'
 registerAppProtocolSchemes()
 appendE2ERemoteDebuggingSwitches(app)
 

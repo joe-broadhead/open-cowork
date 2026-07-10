@@ -4,7 +4,7 @@
 // destination (data directory + brand file prefix) is INJECTED via
 // `setLogStorage` rather than imported, so this module carries no config-loader /
 // Electron dependency. The desktop wires the resolver in
-// `apps/desktop/src/main/logger.ts`; the resolver is invoked lazily (on the first
+// `apps/desktop/src/main/desktop-electron-hosts.ts`; the resolver is invoked lazily (on the first
 // file write), so timing is identical to the pre-extraction logger.
 import { createWriteStream, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'

@@ -4,7 +4,7 @@ import electron from 'electron'
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DesktopPairingCredentialMetadata } from '@open-cowork/shared'
-import { getAppDataDir } from '../config-loader.ts'
+import { getAppDataDir } from '@open-cowork/runtime-host/config'
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
 const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
   getSelectedStorageBackend?: () => string

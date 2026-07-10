@@ -2,7 +2,7 @@ import { getEffectiveSettings, getIntegrationCredentialValue, type CoworkSetting
 import { resolveConfiguredMcpRuntimeEntry, type ResolvedRuntimeMcpEntry } from '@open-cowork/runtime-host/runtime-mcp'
 import { evaluateHttpMcpUrlResolved, type McpDnsResolver } from '@open-cowork/runtime-host/mcp-url-policy'
 import { credentialFieldIsVisible, type CapabilityToolEntry, type McpPreflightResult, sanitizeLogMessage } from '@open-cowork/shared'
-import { getConfiguredMcpsFromConfig, type BundleMcp } from './config-loader.ts'
+import { getConfiguredMcpsFromConfig, type BundleMcp } from '@open-cowork/runtime-host/config'
 type FetchLike = typeof fetch
 
 type McpPreflightDeps = {
