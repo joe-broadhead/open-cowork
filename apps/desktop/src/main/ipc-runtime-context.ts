@@ -1,7 +1,7 @@
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
-import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from '@open-cowork/runtime-host/runtime'
+import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
 import type {
   RuntimeContextOptions,
@@ -67,7 +67,7 @@ export function createIpcRuntimeContext(dependencies: RuntimeContextDependencies
     }
     const directory = record.opencodeDirectory || getRuntimeHomeDir()
     await ensureRuntimeContextDirectory(directory)
-    const client = getV2ClientForDirectory(directory)
+    const client = getClientForDirectory(directory)
     if (!client) throw new Error('Runtime not started')
     return { client, record, directory }
   }

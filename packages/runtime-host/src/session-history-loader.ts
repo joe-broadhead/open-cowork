@@ -2,7 +2,7 @@ import { normalizeSessionInfo, normalizeSessionMessages, normalizeSessionStatuse
 import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString } from '@open-cowork/shared'
 import type { OpencodeClient, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork/shared'
-import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.js'
+import { getClientForDirectory, getRuntimeHomeDir } from './runtime.js'
 import { getBrandName } from './config-loader-core.js'
 import { getEffectiveSettings, loadSettings } from './settings.js'
 import { isInternalCoworkMessage } from './internal-message-utils.js'
@@ -412,7 +412,7 @@ async function getSessionClient(sessionId: string) {
   const directory = record.opencodeDirectory || getRuntimeHomeDir()
   await ensureRuntimeContextDirectory(directory)
   const client = getClientForDirectory(directory)
-  const questionClient = getV2ClientForDirectory(directory)
+  const questionClient = getClientForDirectory(directory)
   if (!client || !questionClient) throw new Error('Runtime not started')
   return { client, questionClient, record }
 }
