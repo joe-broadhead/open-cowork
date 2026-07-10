@@ -64,25 +64,25 @@ own branding, providers, skills, and workflows.
 
     [:octicons-arrow-right-24: Desktop App Guide](desktop-app.md)
 
--   :material-text-search:{ .lg } **Searchable thread history**
+-   :material-text-search:{ .lg } **Searchable project history**
 
     ---
 
-    A dedicated Threads workspace for indexed history search, metadata
+    A dedicated Projects workspace for indexed history search, metadata
     facets, user tags, saved filters, and suggestion-only categorization.
     The compact sidebar list stays focused on quick switching.
 
-    [:octicons-arrow-right-24: Threads](threads.md)
+    [:octicons-arrow-right-24: Projects](threads.md)
 
--   :material-clock-outline:{ .lg } **Review-first workflows**
+-   :material-clock-outline:{ .lg } **Review-first playbooks**
 
     ---
 
-    Repeatable tasks created from a Workflow Designer setup thread, then run
+    Repeatable tasks created from a Workflow Designer setup chat, then run
     manually, on a schedule, or from a webhook through the same OpenCode agents
     you already trust.
 
-    [:octicons-arrow-right-24: Workflows](workflows.md)
+    [:octicons-arrow-right-24: Playbooks](workflows.md)
 
 -   :material-toolbox:{ .lg } **Built-in & custom MCPs**
 
@@ -145,7 +145,7 @@ own branding, providers, skills, and workflows.
 | Role | Goal | Start here |
 |---|---|---|
 | **End user** | Install the app, run my first session | [Getting Started](getting-started.md) → [Desktop App Guide](desktop-app.md) |
-| **Power user** | Schedule recurring work, build skills | [Workflows](workflows.md) → [Workflow Recipes](workflow-recipes.md) |
+| **Power user** | Schedule recurring work, build skills | [Playbooks](workflows.md) → [Workflow Recipes](workflow-recipes.md) |
 | **Downstream distributor** | Ship a branded internal build | [Configuration](configuration.md) → [Downstream Customization](downstream.md) |
 | **Contributor** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
 | **Operator / release manager** | Cut a release, run the gates | [OSS Packaging and Gateway Migration](oss-packaging-migration.md) → [Packaging and Releases](packaging-and-releases.md) |
@@ -241,8 +241,9 @@ own branding, providers, skills, and workflows.
 
     ---
 
-    Focused six-phase plan, explicit non-goals, and a high bar for
-    reintroducing deferred advanced workflow features. No surprises.
+    A multi-authority roadmap with non-negotiable product promises, explicit
+    non-goals, and a high bar for reintroducing deferred advanced workflow
+    features. No surprises.
 
     [:octicons-arrow-right-24: Roadmap](roadmap.md)
 

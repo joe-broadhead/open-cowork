@@ -34,7 +34,10 @@ Use these invariants across every provider:
   command handling, and worker checkpoints. Local/self-host beta tiers remain
   available for demos and internal evaluation.
 - Wire Kubernetes probes to cloud `/livez` for liveness and `/readyz` for
-  dependency readiness; `/healthz` is backward-compatible liveness only.
+  dependency readiness. `/healthz` is a liveness alias of `/livez` (both report
+  process liveness), so either endpoint works as a basic reachability check —
+  the CI Compose smoke probes `/healthz` — but gate dependency readiness on
+  `/readyz`.
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
   replicas beyond one, and store checkpoints in a shared object store.
 - Keep billing optional for self-hosted OSS deployments. Use no billing

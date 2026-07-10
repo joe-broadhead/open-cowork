@@ -36,8 +36,8 @@ planned before broad distribution.
 
 ### Changed
 
-- Simplified the product surface around Chat, Agents, Tools & Skills, Threads,
-  and Workflows so Open Cowork stays a product layer on top of OpenCode rather
+- Simplified the product surface around Chat, Team, Tools & Skills, Projects,
+  and Playbooks so Open Cowork stays a product layer on top of OpenCode rather
   than a second runtime or team-operations platform.
 - CI now runs unpackaged Electron e2e tests on Linux, reports all failed smoke
   files in one pass, pins artifact retention to 14 days, and raises the
@@ -76,10 +76,11 @@ planned before broad distribution.
 
 ### Removed
 
-- Removed dormant product-surface references to Pulse, crews, channels,
-  governance, autonomous dreaming/improvement loops, and operations queues from
-  current release notes. The active `v0.x` product is Chat, Agents, Tools &
-  Skills, Threads, and Workflows.
+- Removed dormant product-surface references to Pulse, governance, and
+  autonomous dreaming/improvement loops from current release notes. Channels and
+  Team ship as default-enabled Studio surfaces and were not removed. The active
+  `v0.x` product spans Chat, Projects, Knowledge, Approvals, Team, Playbooks,
+  Channels, Tools & Skills, and Artifacts.
 
 ## [0.0.0] - 2026-04-28
 
@@ -115,7 +116,7 @@ planned before broad distribution.
 ### Security
 
 - Bumped `dompurify` to `^3.4.0` to pick up the `ADD_TAGS` short-circuit fix (GHSA-39q2-94rc-95cp). Our config never passed the function form of `ADD_TAGS`, so the app was not exploitable, but the upgrade closes the advisory at the package level.
-- Added a pnpm override forcing transitive `hono` to `>=4.12.14` (GHSA-458j-xx4x-4375). The JSX-SSR injection path is not exercised by our renderer — `@modelcontextprotocol/sdk` uses `@hono/node-server` only — but the override removes the advisory from `pnpm audit`.
+- Added a pnpm override forcing transitive `hono` to `>=4.12.25` (GHSA-458j-xx4x-4375). The JSX-SSR injection path is not exercised by our renderer — `@modelcontextprotocol/sdk` uses `@hono/node-server` only — but the override removes the advisory from `pnpm audit`.
 
 ### Fixed
 

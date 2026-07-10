@@ -103,10 +103,10 @@ nav:
       - Desktop App Guide: desktop-app.md
       - Glossary: glossary.md
   - Use:
-      - Threads: threads.md
-      - Workflows: workflows.md
+      - Projects: threads.md
+      - Playbooks: workflows.md
       - Workflow Recipes: workflow-recipes.md
-      - Agents: agent-authoring.md
+      - Team: agent-authoring.md
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
       - OpenWiki Knowledge Base: openwiki.md
@@ -160,7 +160,6 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
-      - Supervised Agent Operations: agent-operations.md
       - Contributing: contributing.md
       - First Contribution: first-contribution.md
 
