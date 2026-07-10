@@ -18,6 +18,11 @@ import {
 // limit, so the periodic sweep caps both.
 const MAX_RETAINED_TASK_RUNS = 2_000
 const MAX_PENDING_PROMPTS = 2_000
+// Lineage/parent tracking gains one entry per session id ever seen. On a
+// long-lived desktop instance that is otherwise unbounded, so cap it the same
+// way as task runs and prompts. A root maps to itself, so evicting the oldest
+// entries only loses ancestry for very old sessions no longer resolving lineage.
+const MAX_TRACKED_SESSIONS = 5_000
 
 export type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -449,6 +454,15 @@ export class SessionTaskStateStore {
       const oldest = this.pendingSubmittedPromptBySession.keys().next().value
       if (!oldest) break
       this.pendingSubmittedPromptBySession.delete(oldest)
+    }
+
+    // Bound lineage/parent tracking so touching many sessions over a long
+    // session cannot grow these unbounded. Evict oldest first.
+    while (this.sessionLineage.size > MAX_TRACKED_SESSIONS) {
+      const oldest = this.sessionLineage.keys().next().value
+      if (!oldest) break
+      this.sessionLineage.delete(oldest)
+      this.parentSessions.delete(oldest)
     }
 
     if (!messageRoles) return
