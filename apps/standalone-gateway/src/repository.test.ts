@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import * as standaloneGateway from "../dist/index.js";
-import { exportStandaloneGatewayBackup } from "../dist/backup.js";
 import {
   createStandaloneGatewayPostgresRepository,
   PostgresStandaloneGatewayRepository,
@@ -116,29 +115,10 @@ test("standalone repository persists sessions, events, jobs, leases, and redacte
   assert.equal(snapshot.audits[0]?.metadata.token, "[redacted]");
 });
 
-test("standalone package barrel exposes backup, retention, and repository adapters", async () => {
-  let requestedLimit = 0;
-  const backup = await exportStandaloneGatewayBackup({
-    dashboardSnapshot: async (limit: number) => {
-      requestedLimit = limit;
-      return {
-        generatedAt: "2026-06-05T00:00:00.000Z",
-        sessions: [{ sessionId: "session-1" }],
-        identities: [{ identityId: "identity-1" }],
-        jobs: [{ jobId: "job-1" }],
-        audits: [{ auditId: "audit-1" }],
-      };
-    },
-  } as never);
-
-  assert.equal(requestedLimit, 500);
-  assert.equal(backup.format, "open-cowork-standalone-gateway-backup-v1");
-  assert.deepEqual(backup.sessions, [{ sessionId: "session-1" }]);
-  assert.deepEqual(backup.identities, [{ identityId: "identity-1" }]);
+test("standalone package barrel exposes retention and repository adapters", () => {
   assert.deepEqual(describeStandaloneRetention({
     retention: { sessionDays: 30, artifactDays: 7, auditDays: 90, jobDays: 14 },
   } as never), ["sessions:30d", "artifacts:7d", "audit:90d", "jobs:14d"]);
-  assert.equal(standaloneGateway.exportStandaloneGatewayBackup, exportStandaloneGatewayBackup);
   assert.equal(standaloneGateway.describeStandaloneRetention, describeStandaloneRetention);
   assert.equal(typeof standaloneGateway.createStandaloneGatewayPostgresRepository, "function");
 });

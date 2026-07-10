@@ -1,4 +1,3 @@
-export * from "./backup.js";
 export * from "./config.js";
 export * from "./dashboard.js";
 export * from "./doctor.js";
