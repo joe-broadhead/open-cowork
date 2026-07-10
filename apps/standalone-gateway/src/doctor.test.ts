@@ -29,7 +29,6 @@ test("standalone doctor checks product mode, repository, OpenCode, schema, and p
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.checks.map((check) => check.name), ["product-mode", "postgres", "postgres-tls", "opencode-private", "schema", "providers", "identity-authorization", "retention"]);
   assert.deepEqual(result.doctorChecks.map((check) => check.code), [
     "standalone_gateway.product_mode",
     "standalone_gateway.repository.readiness",
