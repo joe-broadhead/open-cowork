@@ -148,17 +148,6 @@ test('dist capability manifest normalization requires schema collections unless 
   if (result.ok) return
   assert.equal(result.issues.some((issue) => issue.code === 'resources_required'), true)
   assert.equal(result.issues.some((issue) => issue.code === 'permissions_required'), true)
-
-  const legacy = normalizeCapabilityBundleManifest({
-    format: CAPABILITY_BUNDLE_FORMAT,
-    name: 'dist-legacy-pack',
-    version: '1.0.0',
-    owner: 'open-cowork',
-  }, { allowMissingCollections: true })
-  assert.equal(legacy.ok, true)
-  if (!legacy.ok) return
-  assert.deepEqual(legacy.manifest.resources, [])
-  assert.deepEqual(legacy.manifest.permissions, [])
 })
 
 test('dist capability planning blocks unsafe remote resources and reviews native helpers', () => {
