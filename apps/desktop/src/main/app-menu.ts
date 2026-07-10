@@ -81,9 +81,9 @@ export function createApplicationMenuTemplate(options: {
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => getMainWindow()?.webContents.send('action', 'toggle-sidebar') },
         { label: 'Command Palette…', accelerator: COMMAND_PALETTE_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'command-palette') },
-        { label: 'Workflows', click: () => getMainWindow()?.webContents.send('navigate', 'workflows') },
-        { label: 'Agents', accelerator: AGENTS_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'agents') },
-        { label: 'Tools & Skills', accelerator: CAPABILITIES_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'capabilities') },
+        { label: 'Workflows', click: () => getMainWindow()?.webContents.send('navigate', 'playbooks') },
+        { label: 'Agents', accelerator: AGENTS_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'team') },
+        { label: 'Tools & Skills', accelerator: CAPABILITIES_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'tools') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],

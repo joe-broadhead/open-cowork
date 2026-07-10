@@ -16,11 +16,11 @@ describe('parseAppHash', () => {
     }
   })
 
-  it('normalizes legacy view aliases', () => {
-    expect(parseAppHash('#/threads').view).toBe('projects')
-    expect(parseAppHash('#/workflows').view).toBe('playbooks')
-    expect(parseAppHash('#/agents').view).toBe('team')
-    expect(parseAppHash('#/capabilities').view).toBe('tools')
+  it('rejects the removed legacy view aliases', () => {
+    expect(parseAppHash('#/threads').view).toBeNull()
+    expect(parseAppHash('#/workflows').view).toBeNull()
+    expect(parseAppHash('#/agents').view).toBeNull()
+    expect(parseAppHash('#/capabilities').view).toBeNull()
   })
 
   it('parses chat deep links and URI-decodes the session id', () => {

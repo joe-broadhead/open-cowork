@@ -13,9 +13,7 @@ export type AppView =
   | 'admin'
   | 'ui-primitives'
 
-export type LegacyAppView = 'threads' | 'workflows' | 'agents' | 'capabilities'
-
-export type AppNavigationTarget = AppView | LegacyAppView | 'settings'
+export type AppNavigationTarget = AppView | 'settings'
 
 const APP_VIEWS: readonly AppView[] = [
   'home',
@@ -35,16 +33,8 @@ const APP_VIEWS: readonly AppView[] = [
 
 const APP_VIEW_SET = new Set<string>(APP_VIEWS)
 
-const LEGACY_VIEW_ALIASES: Record<LegacyAppView, AppView> = {
-  threads: 'projects',
-  workflows: 'playbooks',
-  agents: 'team',
-  capabilities: 'tools',
-}
-
 export function normalizeAppView(view: AppNavigationTarget | string): AppView | 'settings' | null {
   if (view === 'settings') return view
-  if (view in LEGACY_VIEW_ALIASES) return LEGACY_VIEW_ALIASES[view as LegacyAppView]
   if (APP_VIEW_SET.has(view)) return view as AppView
   return null
 }

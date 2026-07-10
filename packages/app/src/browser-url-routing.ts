@@ -6,8 +6,7 @@ import { normalizeAppView, type AppView } from './app-types.ts'
 // browser refresh always landed back on Home and no view was shareable. These
 // helpers map view state to a stable `#/…` scheme:
 //
-//   #/home, #/projects, #/knowledge, …   plain views (legacy aliases accepted
-//                                        on parse via normalizeAppView)
+//   #/home, #/projects, #/knowledge, …   plain views (validated via normalizeAppView)
 //   #/chat/<sessionId>                   chat bound to a session
 //
 // Kept pure (no window access) so parsing/formatting is node-testable; App.tsx
