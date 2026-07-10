@@ -108,16 +108,6 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   mkdirSync(skillsDst, { recursive: true })
   mkdirSync(customSkillsDst, { recursive: true })
 
-  // Older installs populated `runtime-home/.opencode/skills/` because
-  // OpenCode used to discover skills cwd-relative. Keep clearing that
-  // stale project-local tree so `du` reads match the user's mental model
-  // ("fresh install only contains what the app uses") and so a future SDK
-  // change that re-enables cwd-relative discovery can't resurface old skills.
-  const legacyCwdSkills = join(runtimeHome, '.opencode', 'skills')
-  if (existsSync(legacyCwdSkills)) {
-    rmSync(legacyCwdSkills, { recursive: true, force: true })
-  }
-
   for (const skillName of Array.from(configuredSkillNames)) {
     const destination = join(skillsDst, skillName)
     const source = bundledSkillIndex.get(skillName)?.skillDir || null
