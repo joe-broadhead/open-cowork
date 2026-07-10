@@ -264,6 +264,7 @@ export type ChannelActorInput = {
   provider?: CloudChannelProviderId | null
   externalWorkspaceId?: string | null
   externalUserId?: string | null
+  externalChatId?: string | null
 }
 
 export type SessionRecord = {

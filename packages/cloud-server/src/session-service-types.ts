@@ -167,6 +167,9 @@ export type ChannelActorInput = {
   provider?: ChannelProviderId | null
   externalWorkspaceId?: string | null
   externalUserId?: string | null
+  // Chat the responder is acting from, used to scope interaction approval to the chat the
+  // interaction was sent to (audit #922) rather than the whole provider/workspace.
+  externalChatId?: string | null
 }
 
 export type ChannelInteractionResolutionInput = ChannelActorInput & {

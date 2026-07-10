@@ -31,6 +31,9 @@ export type ChannelActorInput = {
   provider?: ChannelProviderId | null
   externalWorkspaceId?: string | null
   externalUserId?: string | null
+  // Chat the responder is acting from, used to scope interaction approval to the chat the
+  // interaction was sent to (audit #922) rather than the whole provider/workspace.
+  externalChatId?: string | null
 }
 
 export type ChannelInteractionResolutionInput = ChannelActorInput & {
@@ -161,9 +164,18 @@ export async function requireChannelActorForSession(
 ): Promise<ChannelIdentityRecord> {
   const actor = await requireChannelActor(options, principal, input, purpose, { provider })
   const orgId = options.principalOrgId(principal)
+  // Same-chat scoping (audit #922): the responder must be acting from the chat the session (and thus
+  // the interaction) is bound to. Providers without workspace scoping (Telegram/email) match
+  // null===null on the workspace alone, so without the chat check a bystander in another chat who
+  // holds the token could approve. When the caller supplies the responder chat we require it to
+  // match a binding; a caller that cannot supply it falls back to the workspace match.
+  const responderChatId = typeof input.externalChatId === 'string' && input.externalChatId
+    ? input.externalChatId
+    : null
   const bindings = await options.store.listChannelSessionBindingsForSession(orgId, sessionId)
   for (const binding of bindings) {
     if (binding.provider !== provider) continue
+    if (responderChatId && binding.externalChatId !== responderChatId) continue
     const channelBinding = await options.store.getChannelBinding(orgId, binding.channelBindingId)
     if (!channelBinding) continue
     if (channelBinding.externalWorkspaceId === actor.externalWorkspaceId) return actor
