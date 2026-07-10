@@ -70,10 +70,10 @@ test('SSO config: protocol + domain normalization and merge semantics', () => {
   assert.throws(() => mergeOrgSsoConfig(null, { orgId: 'org-1', oidcIssuer: 'http://insecure.test' }, NOW), /https/)
 })
 
-test('SSO config: public projection hides sealed material behind booleans', () => {
+test('SSO config: public projection hides sealed material behind booleans', async () => {
   const record = baseConfig({
     oidcClientSecretCiphertext: 'enc:v1:x',
-    scimTokenHash: hashScimToken('t'),
+    scimTokenHash: await hashScimToken('t'),
     samlIdpCertificateCiphertext: null,
   })
   const pub = toPublicOrgSsoConfig(record)
@@ -84,10 +84,10 @@ test('SSO config: public projection hides sealed material behind booleans', () =
   assert.equal('scimTokenHash' in pub, false)
 })
 
-test('SCIM token hashing verifies the right secret and rejects others', () => {
-  const hash = hashScimToken('scim_abc')
-  assert.equal(verifyScimTokenHash('scim_abc', hash), true)
-  assert.equal(verifyScimTokenHash('scim_wrong', hash), false)
+test('SCIM token hashing verifies the right secret and rejects others', async () => {
+  const hash = await hashScimToken('scim_abc')
+  assert.equal(await verifyScimTokenHash('scim_abc', hash), true)
+  assert.equal(await verifyScimTokenHash('scim_wrong', hash), false)
 })
 
 test('SCIM retry backoff grows exponentially and caps', () => {

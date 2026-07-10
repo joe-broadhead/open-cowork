@@ -174,7 +174,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     role: 'admin',
     status: 'active',
   })
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway smoke token',
@@ -448,7 +448,7 @@ test('gateway cloud smoke script validates self-host gateway against deployed cl
     role: 'admin',
     status: 'active',
   })
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway smoke admin token',

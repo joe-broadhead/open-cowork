@@ -1667,7 +1667,7 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
   let listening = false
   try {
     await fixture.service.ensurePrincipal(ownerPrincipal)
-    const issued = fixture.store.issueApiToken({
+    const issued = await fixture.store.issueApiToken({
       orgId: 'tenant-1',
       accountId: 'owner-1',
       name: 'Gateway-only watch token',
@@ -2158,7 +2158,7 @@ test('cloud HTTP channel approval responses fail closed unless the profile opts 
 
     assert.equal(await fixture.worker.processAllSessionCommands(), 0)
     assert.deepEqual(fixture.runtime.permissions, [])
-    const pending = fixture.store.findChannelInteraction({
+    const pending = await fixture.store.findChannelInteraction({
       orgId: 'tenant-1',
       token: String(issuedInteraction.plaintextToken),
       provider: 'telegram',
@@ -4116,7 +4116,7 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
     role: 'admin',
     status: 'active',
   })
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Desktop token',
@@ -4166,7 +4166,7 @@ test('cloud HTTP server rejects user-bound admin API token privileges after role
     role: 'admin',
     status: 'active',
   })
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Admin token',
@@ -4268,7 +4268,7 @@ test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', 
     role: 'admin',
     status: 'active',
   })
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway token',
@@ -5084,25 +5084,25 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     role: 'admin',
     status: 'active',
   })
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway token',
     scopes: ['gateway', 'admin'],
   })
-  const operatorIssued = store.issueApiToken({
+  const operatorIssued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Operator diagnostics token',
     scopes: ['operator'],
   })
-  const gatewayOnlyIssued = store.issueApiToken({
+  const gatewayOnlyIssued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway-only token',
     scopes: ['gateway'],
   })
-  const otherGatewayOnlyIssued = store.issueApiToken({
+  const otherGatewayOnlyIssued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Other gateway-only token',
@@ -5122,7 +5122,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     role: 'admin',
     status: 'active',
   })
-  const issuedTenant2 = store.issueApiToken({
+  const issuedTenant2 = await store.issueApiToken({
     orgId: org2.orgId,
     accountId: account2.accountId,
     name: 'Other org gateway token',

@@ -1059,7 +1059,7 @@ function runControlPlaneDomainContracts(
         oidcIssuer: 'https://idp.example.test',
         oidcClientSecretCiphertext: 'enc:v1:opaque',
         scimEnabled: true,
-        scimTokenHash: hashScimToken('scim-secret-token'),
+        scimTokenHash: await hashScimToken('scim-secret-token'),
       })
       assert.deepEqual(sso.verifiedDomains, ['example.test'])
       assert.equal(sso.enforced, true)

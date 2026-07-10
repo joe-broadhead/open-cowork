@@ -78,10 +78,10 @@ export class InMemorySsoDomain {
     return true
   }
 
-  findOrgSsoConfigByScimToken(plaintext: string): OrgSsoConfigRecord | null {
+  async findOrgSsoConfigByScimToken(plaintext: string): Promise<OrgSsoConfigRecord | null> {
     if (!plaintext) return null
     for (const record of this.configs.values()) {
-      if (record.scimEnabled && record.scimTokenHash && verifyScimTokenHash(plaintext, record.scimTokenHash)) {
+      if (record.scimEnabled && record.scimTokenHash && await verifyScimTokenHash(plaintext, record.scimTokenHash)) {
         return clone(record)
       }
     }

@@ -1002,7 +1002,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         input.sessionId,
         normalizeProvider(input.provider),
         normalizeNullableText(input.externalInteractionId, CHANNEL_TEXT_MAX_LENGTH, 'External interaction id'),
-        hashChannelInteractionToken(plaintextToken),
+        await hashChannelInteractionToken(plaintextToken),
         input.kind,
         normalizeText(input.targetId, CHANNEL_TEXT_MAX_LENGTH, 'Interaction target id'),
         input.createdByIdentityId || null,
@@ -1027,7 +1027,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          AND left($2, length('occi_' || interaction_id || '_')) = ('occi_' || interaction_id || '_')${client ? '\n       FOR UPDATE' : ''}`,
       [orgId, token, now],
     )
-    return candidates.rows.find((row) => verifyChannelInteractionTokenHash(token, String(row.token_hash))) ?? null
+    for (const row of candidates.rows) {
+      if (await verifyChannelInteractionTokenHash(token, String(row.token_hash))) return row
+    }
+    return null
   }
 
   async findChannelInteraction(input: FindChannelInteractionInput) {

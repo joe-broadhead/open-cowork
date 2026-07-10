@@ -58,7 +58,7 @@ export class PostgresApiTokensRepository {
           input.orgId,
           input.accountId || null,
           normalizeText(input.name, API_TOKEN_NAME_MAX_LENGTH, 'API token name'),
-          hashCloudApiToken(generated.plaintext),
+          await hashCloudApiToken(generated.plaintext),
           JSON.stringify([...new Set(input.scopes)]),
           generated.plaintext.slice(-4),
           input.expiresAt ? input.expiresAt.toISOString() : null,
@@ -107,7 +107,13 @@ export class PostgresApiTokensRepository {
          ORDER BY created_at DESC`,
         [plaintext, nowText],
       )
-    const matched = candidates.rows.find((row) => verifyCloudApiTokenHash(plaintext, String(row.token_hash)))
+    let matched: (typeof candidates.rows)[number] | undefined
+    for (const row of candidates.rows) {
+      if (await verifyCloudApiTokenHash(plaintext, String(row.token_hash))) {
+        matched = row
+        break
+      }
+    }
     if (!matched) return null
     const result = await this.options.pool.query(
       `UPDATE cloud_api_tokens

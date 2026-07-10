@@ -284,7 +284,7 @@ export class PostgresManagedWorkersRepository {
           worker.orgId,
           worker.workerId,
           worker.poolId,
-          hashManagedWorkerCredential(generated.plaintext),
+          await hashManagedWorkerCredential(generated.plaintext),
           JSON.stringify(normalizeCredentialScopes(input.scopes)),
           generated.plaintext.slice(-4),
           expiresAt.toISOString(),
@@ -336,7 +336,13 @@ export class PostgresManagedWorkersRepository {
            WHERE left($1, length('ocw_' || credential_id || '_')) = ('ocw_' || credential_id || '_')`,
           [plaintext],
         )
-      const matched = candidates.rows.find((row) => verifyManagedWorkerCredentialHash(plaintext, String(row.token_hash)))
+      let matched: (typeof candidates.rows)[number] | undefined
+      for (const row of candidates.rows) {
+        if (await verifyManagedWorkerCredentialHash(plaintext, String(row.token_hash))) {
+          matched = row
+          break
+        }
+      }
       if (!matched) return null
       const credential = managedWorkerCredentialFromRow(matched)
       if (credential.revokedAt) {

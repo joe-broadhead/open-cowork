@@ -213,7 +213,7 @@ export class InMemoryManagedWorkersDomain {
       .map((worker) => clone(worker))
   }
 
-  issueCredential(input: IssueManagedWorkerCredentialInput): { credential: ManagedWorkerCredentialRecord, plaintext: string } {
+  async issueCredential(input: IssueManagedWorkerCredentialInput): Promise<{ credential: ManagedWorkerCredentialRecord, plaintext: string }> {
     const worker = this.workers.get(input.workerId)
     if (!worker || worker.orgId !== input.orgId) throw new Error(`Unknown managed worker ${input.workerId}.`)
     if (worker.status === 'revoked' || worker.status === 'retired') throw new Error('Cannot issue credentials for a terminal managed worker.')
@@ -229,7 +229,7 @@ export class InMemoryManagedWorkersDomain {
       orgId: worker.orgId,
       workerId: worker.workerId,
       poolId: worker.poolId,
-      tokenHash: hashManagedWorkerCredential(generated.plaintext),
+      tokenHash: await hashManagedWorkerCredential(generated.plaintext),
       scopes: normalizeCredentialScopes(input.scopes),
       last4: generated.plaintext.slice(-4),
       expiresAt: expiresAt.toISOString(),
@@ -261,12 +261,12 @@ export class InMemoryManagedWorkersDomain {
       .map((credential) => clone(credential))
   }
 
-  findCredentialByPlaintext(plaintext: string, now = new Date()): ResolvedManagedWorkerCredentialRecord | null {
+  async findCredentialByPlaintext(plaintext: string, now = new Date()): Promise<ResolvedManagedWorkerCredentialRecord | null> {
     for (const credential of this.credentials.values()) {
       // Pre-filter by the credential id embedded in the presented plaintext, then verify
       // the per-credential salted hash. A forged id cannot pass the hash check.
       if (!plaintextMatchesManagedWorkerCredentialId(plaintext, credential.credentialId)) continue
-      if (!verifyManagedWorkerCredentialHash(plaintext, credential.tokenHash)) continue
+      if (!(await verifyManagedWorkerCredentialHash(plaintext, credential.tokenHash))) continue
       if (credential.revokedAt) {
         this.recordHeartbeatRejected(credential, 'credential_revoked', now)
         return null

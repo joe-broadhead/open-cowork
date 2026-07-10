@@ -47,7 +47,7 @@ export class InMemoryApiTokensDomain {
     this.host = host
   }
 
-  issueApiToken(input: IssueApiTokenInput): IssuedApiTokenRecord {
+  async issueApiToken(input: IssueApiTokenInput): Promise<IssuedApiTokenRecord> {
     if (!this.host.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
     if (input.accountId && !this.host.accountExists(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
     const generated = generateCloudApiToken(input)
@@ -57,7 +57,7 @@ export class InMemoryApiTokensDomain {
       orgId: input.orgId,
       accountId: input.accountId || null,
       name: normalizeText(input.name, 96, 'API token name'),
-      tokenHash: hashCloudApiToken(generated.plaintext),
+      tokenHash: await hashCloudApiToken(generated.plaintext),
       scopes: [...new Set(input.scopes)],
       last4: generated.plaintext.slice(-4),
       expiresAt: input.expiresAt ? input.expiresAt.toISOString() : null,
@@ -88,10 +88,10 @@ export class InMemoryApiTokensDomain {
       .map((token) => clone(token))
   }
 
-  findApiTokenByPlaintext(plaintext: string, now = new Date()): ApiTokenRecord | null {
+  async findApiTokenByPlaintext(plaintext: string, now = new Date()): Promise<ApiTokenRecord | null> {
     for (const token of this.apiTokens.values()) {
       if (!plaintextMatchesCloudApiTokenId(plaintext, token.tokenId)) continue
-      if (!verifyCloudApiTokenHash(plaintext, token.tokenHash)) continue
+      if (!(await verifyCloudApiTokenHash(plaintext, token.tokenHash))) continue
       if (token.revokedAt) return null
       if (token.expiresAt && new Date(token.expiresAt).getTime() <= now.getTime()) return null
       token.lastUsedAt = now.toISOString()

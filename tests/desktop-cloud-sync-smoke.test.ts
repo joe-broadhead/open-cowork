@@ -168,7 +168,7 @@ function runDesktopSmokeScript(baseUrl: string, adminToken: string, env: Record<
   })
 }
 
-function createDesktopSmokeFixture(input: {
+async function createDesktopSmokeFixture(input: {
   runtime?: DesktopSmokeRuntime
   desktopAuth?: Parameters<typeof createCloudHttpServer>[0]['desktopAuth']
 } = {}) {
@@ -192,12 +192,12 @@ function createDesktopSmokeFixture(input: {
     role: 'admin',
     status: 'active',
   })
-  const adminToken = store.issueApiToken({
+  const adminToken = (await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Desktop smoke admin token',
     scopes: ['admin'],
-  }).plaintext
+  })).plaintext
   const runtime = input.runtime || new DesktopSmokeRuntime()
   const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   const service = new CloudSessionService(store, runtime, policy)
@@ -220,7 +220,7 @@ function createDesktopSmokeFixture(input: {
 }
 
 test('desktop cloud sync smoke validates deployed-cloud desktop continuation path', async () => {
-  const { store, runtime, server, adminToken, org } = createDesktopSmokeFixture()
+  const { store, runtime, server, adminToken, org } = await createDesktopSmokeFixture()
   const baseUrl = await server.listen()
 
   try {
@@ -268,7 +268,7 @@ test('desktop cloud sync smoke validates deployed-cloud desktop continuation pat
 
 test('desktop cloud sync smoke revokes ephemeral token when prompt validation fails', async () => {
   const runtime = new DesktopSmokeRuntime({ failPrompt: true })
-  const { store, server, adminToken, org } = createDesktopSmokeFixture({ runtime })
+  const { store, server, adminToken, org } = await createDesktopSmokeFixture({ runtime })
   const baseUrl = await server.listen()
 
   try {
@@ -286,7 +286,7 @@ test('desktop cloud sync smoke revokes ephemeral token when prompt validation fa
 })
 
 test('desktop cloud sync smoke skips OIDC metadata when deployed auth does not expose desktop config', async () => {
-  const { server, adminToken } = createDesktopSmokeFixture({ desktopAuth: null })
+  const { server, adminToken } = await createDesktopSmokeFixture({ desktopAuth: null })
   const baseUrl = await server.listen()
 
   try {

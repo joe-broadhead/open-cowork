@@ -186,7 +186,7 @@ export class PostgresSsoRepository {
     )
     for (const row of result.rows) {
       const record = configFromRow(row)
-      if (record.scimTokenHash && verifyScimTokenHash(plaintext, record.scimTokenHash)) return record
+      if (record.scimTokenHash && await verifyScimTokenHash(plaintext, record.scimTokenHash)) return record
     }
     return null
   }
