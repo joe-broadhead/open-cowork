@@ -19,12 +19,6 @@ function recordThreadIndexSchemaVersion(db: DatabaseSync) {
   `).run(THREAD_INDEX_SCHEMA_VERSION_KEY, String(THREAD_INDEX_SCHEMA_VERSION))
 }
 
-function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
-  const rows = db.prepare(`pragma table_info(${tableName})`).all() as Array<{ name?: string }>
-  if (rows.some((row) => row.name === columnName)) return
-  db.exec(`alter table ${tableName} add column ${columnName} ${definition}`)
-}
-
 export function migrateThreadIndexDb(db: DatabaseSync) {
   db.exec(`
     create table if not exists thread_index_meta (
@@ -128,7 +122,5 @@ export function migrateThreadIndexDb(db: DatabaseSync) {
     create index if not exists idx_thread_tag_links_tag on thread_tag_links(tag_id);
     create index if not exists idx_thread_suggestions_session on thread_category_suggestions(session_id, status);
   `)
-  ensureColumn(db, 'thread_index', 'workflow_id', 'text')
-  ensureColumn(db, 'thread_index', 'change_source', 'text')
   recordThreadIndexSchemaVersion(db)
 }
