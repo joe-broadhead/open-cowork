@@ -1,5 +1,4 @@
 import { normalizeTodoItems, normalizeSessionMessages, normalizeSessionStatuses, type NormalizedMessagePart } from './opencode-adapter.js'
-import { isInternalCoworkMessage } from './internal-message-utils.js'
 import type { TodoItem } from '@open-cowork/shared'
 import { deriveToolStatus } from '@open-cowork/shared'
 import {
@@ -597,7 +596,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (!part) continue
       if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
         const partId = part.id || `${msgId}:part:${textIndex++}`
-        if (fullText && !isInternalCoworkMessage(fullText)) {
+        if (fullText) {
           pushItem({
             type: 'message',
             id: `${msgId}:${partId}:text`,
@@ -836,7 +835,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
           const messageId = info.id || generateId()
           const partId = part.id || `${messageId}:part:${textIndex++}`
-          if (fullText && !isInternalCoworkMessage(fullText)) {
+          if (fullText) {
             pushItem({
               type: 'task_text',
               id: `${taskId}:${messageId}:${partId}:text`,

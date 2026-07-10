@@ -118,10 +118,6 @@
       "types": "./dist/html-escape.d.ts",
       "import": "./dist/html-escape.js"
     },
-    "./internal-message-utils": {
-      "types": "./dist/internal-message-utils.d.ts",
-      "import": "./dist/internal-message-utils.js"
-    },
     "./knowledge/knowledge-service": {
       "types": "./dist/knowledge/knowledge-service.d.ts",
       "import": "./dist/knowledge/knowledge-service.js"

@@ -5,7 +5,6 @@ import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork
 import { getClientForDirectory, getRuntimeHomeDir } from './runtime.js'
 import { getBrandName } from './config-loader-core.js'
 import { getEffectiveSettings, loadSettings } from './settings.js'
-import { isInternalCoworkMessage } from './internal-message-utils.js'
 import { projectSessionHistory } from './session-history-projector.js'
 import { log } from '@open-cowork/shared/node'
 import { measureAsyncPerf } from './perf-metrics.js'
@@ -208,7 +207,7 @@ function fallbackSessionTitleFromHistory(messages: NormalizedSessionMessage[]) {
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim()
-    if (text && !isInternalCoworkMessage(text)) return truncateFallbackSessionTitle(text)
+    if (text) return truncateFallbackSessionTitle(text)
   }
   return null
 }

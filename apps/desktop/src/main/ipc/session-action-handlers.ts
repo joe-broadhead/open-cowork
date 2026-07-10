@@ -4,7 +4,6 @@ import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '@open-cowork/runtime-host/session-diff-fallback'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
-import { isInternalCoworkMessage } from '@open-cowork/runtime-host/internal-message-utils'
 import { normalizeSessionInfo, normalizeSessionMessages, normalizeShareUrl } from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
@@ -33,7 +32,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
         for (const part of message.parts) {
           if (part.type === 'text' && part.text) text += part.text
         }
-        if (!text || isInternalCoworkMessage(text)) continue
+        if (!text) continue
         markdown += message.role === 'user'
           ? `## User\n\n${text}\n\n`
           : `## Assistant\n\n${text}\n\n`
