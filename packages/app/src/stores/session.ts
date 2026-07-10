@@ -22,6 +22,7 @@ import {
   activeSessionWorkspaceKey,
   LOCAL_WORKSPACE_ID,
   normalizeWorkspaceId,
+  parseSessionWorkspaceKey,
   sessionWorkspaceKey,
 } from './session-workspace-keys.ts'
 import { permissionSignature, type RunawaySample } from '../components/chat/permission-approval-model.ts'
@@ -180,15 +181,32 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const nextWorkspaceId = normalizeWorkspaceId(workspaceId)
     if (nextWorkspaceId === normalizeWorkspaceId(state.activeWorkspaceId)) return {}
     const timing = sessionViewTiming()
+    // Drop status entries for the workspace we are leaving. Its session events are filtered out
+    // while it is inactive (useOpenCodeEvents keys on the active workspace), so those entries would
+    // otherwise never clear — accumulating across every switch and pinning the referenced session
+    // states against pruning. Only active-workspace keys are ever read (ThreadList).
+    const keepActiveWorkspace = (keys: Set<string>) => {
+      const next = new Set<string>()
+      for (const key of keys) {
+        if (parseSessionWorkspaceKey(key).workspaceId === nextWorkspaceId) next.add(key)
+      }
+      return next.size === keys.size ? keys : next
+    }
+    const busySessions = keepActiveWorkspace(state.busySessions)
+    const awaitingPermissionSessions = keepActiveWorkspace(state.awaitingPermissionSessions)
+    const awaitingQuestionSessions = keepActiveWorkspace(state.awaitingQuestionSessions)
     return {
       activeWorkspaceId: nextWorkspaceId,
       sessions: state.sessionsByWorkspace[nextWorkspaceId] || [],
       currentSessionId: null,
+      busySessions,
+      awaitingPermissionSessions,
+      awaitingQuestionSessions,
       currentView: deriveVisibleSessionPatch(
         createEmptySessionViewState({}, timing),
         null,
-        state.busySessions,
-        state.awaitingPermissionSessions,
+        busySessions,
+        awaitingPermissionSessions,
         timing,
       ),
     }

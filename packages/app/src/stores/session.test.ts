@@ -103,6 +103,25 @@ describe('useSessionStore', () => {
     expect(useSessionStore.getState().totalCost).toBe(2)
   })
 
+  it('prunes inactive-workspace status entries on workspace switch (no leak)', () => {
+    const store = useSessionStore.getState()
+
+    store.setCurrentSession('ses_1')
+    useSessionStore.getState().setSessionView('ses_1', view({
+      isGenerating: true,
+      isAwaitingPermission: true,
+    }))
+    expect(useSessionStore.getState().busySessions.has('ses_1')).toBe(true)
+    expect(useSessionStore.getState().awaitingPermissionSessions.has('ses_1')).toBe(true)
+
+    // Switching away from local drops local status entries — their events are filtered out while
+    // local is inactive, so they would otherwise never clear and would accumulate forever.
+    useSessionStore.getState().setActiveWorkspace('cloud:acme')
+    expect(useSessionStore.getState().busySessions.has('ses_1')).toBe(false)
+    expect(useSessionStore.getState().awaitingPermissionSessions.has('ses_1')).toBe(false)
+    expect(useSessionStore.getState().busySessions.size).toBe(0)
+  })
+
   it('keeps same-id session state separate across workspaces', () => {
     const store = useSessionStore.getState()
 
