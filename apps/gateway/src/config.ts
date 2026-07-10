@@ -860,7 +860,7 @@ export function redactGatewayDiagnosticText(value: string) {
     .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
     .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
     .replace(/\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g, '[redacted-token]')
-    .replace(/\boc(?:c|gw)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
+    .replace(/\boc(?:c|gw|w)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]'))
 }

@@ -372,7 +372,7 @@ test('runtime custom agents carry deniedToolPatterns through to the SDK payload'
   assert.equal(runtimeAgents.length, 1)
   // Entries should be de-duped, trimmed, and expanded to both known
   // OpenCode MCP permission spellings so the SDK gets a clean list.
-  assert.deepEqual(runtimeAgents[0]?.deniedPatterns, ['mcp__github__delete_repo', 'github_delete_repo'])
+  assert.deepEqual(runtimeAgents[0]?.deniedPatterns, ['mcp__github__delete_repo'])
   // The parent MCP's allow stays intact — only the specific method is denied.
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__repos_*'), true)
 })
@@ -433,9 +433,7 @@ test('custom agent permission overrides emit collapsed OpenCode permission keys'
     assert.equal(permission['/tmp/shared/*'], undefined)
     assert.equal(permission['mcp__*'], 'ask')
     assert.equal(permission.mcp__github__pull_request_read, 'ask')
-    assert.equal(permission.github_pull_request_read, 'ask')
     assert.equal(permission['mcp__github__delete-repo'], 'deny')
-    assert.equal(permission['github_delete-repo'], 'deny')
     const permissionKeys = Object.keys(permission)
     assert.ok(permissionKeys.indexOf('mcp__github__create_pull_request') < permissionKeys.indexOf('mcp__*'))
     assert.ok(permissionKeys.indexOf('mcp__*') < permissionKeys.indexOf('mcp__github__delete-repo'))
@@ -560,16 +558,13 @@ test('custom agent MCP deny override is applied after selected MCP tool patterns
 
   assert.equal(permission['mcp__*'], 'deny')
   assert.equal(permission['mcp__github__repos_*'], 'deny')
-  assert.equal(permission['github_repos_*'], 'deny')
   assert.equal(permission.mcp__github__pull_request_read, 'deny')
-  assert.equal(permission.github_pull_request_read, 'deny')
   assert.equal(permission.mcp__github__create_pull_request, 'deny')
-  assert.equal(permission.github_create_pull_request, 'deny')
   const permissionKeys = Object.keys(permission)
   assert.ok(permissionKeys.indexOf('mcp__github__pull_request_read') < permissionKeys.indexOf('mcp__*'))
 })
 
-test('custom agent MCP deny override also covers alias-only MCP tool patterns', () => {
+test('custom agent MCP deny override ignores non-canonical alias-only tool patterns', () => {
   const catalog = buildCustomAgentCatalog({
     builtinTools: builtinTools as any,
     builtinSkills: builtinSkills as any,
@@ -582,10 +577,10 @@ test('custom agent MCP deny override also covers alias-only MCP tool patterns', 
     tools: [
       ...catalog.tools,
       {
-        id: 'legacy-github',
-        name: 'Legacy GitHub',
+        id: 'alias-github',
+        name: 'Alias GitHub',
         icon: 'plug',
-        description: 'Legacy alias-form MCP tool.',
+        description: 'Alias-form tool pattern.',
         supportsWrite: true,
         source: 'builtin' as const,
         patterns: ['github_*'],
@@ -596,11 +591,11 @@ test('custom agent MCP deny override also covers alias-only MCP tool patterns', 
   }
 
   const permission = buildCustomAgentPermissionFromCatalog({
-    name: 'legacy-mcp-locked',
-    description: 'Keeps alias-only MCPs off.',
+    name: 'alias-mcp-locked',
+    description: 'Keeps MCPs off without rewriting alias-only patterns.',
     instructions: 'Do not use MCPs.',
     skillNames: [],
-    toolIds: ['legacy-github'],
+    toolIds: ['alias-github'],
     enabled: true,
     color: 'accent' as const,
     permissionOverrides: [
@@ -609,7 +604,7 @@ test('custom agent MCP deny override also covers alias-only MCP tool patterns', 
   }, aliasOnlyCatalog)
 
   assert.equal(permission['mcp__*'], 'deny')
-  assert.equal(permission['github_*'], 'deny')
+  assert.equal(permission['github_*'], 'allow')
 })
 
 test('custom agent MCP default overrides do not rewrite native repo permissions', () => {
@@ -698,7 +693,6 @@ test('custom agent MCP permission rules cannot grant native tool permissions', (
     assert.notEqual(permission.bash, 'allow')
     assert.equal(permission['mcp__*'], 'deny')
     assert.equal(permission.mcp__github__pull_request_read, 'allow')
-    assert.equal(permission.github_pull_request_read, 'allow')
   })
 })
 
@@ -732,7 +726,7 @@ test('custom agent validation rejects invalid MCP permission rule patterns', () 
 
   assert.equal(issues.some((issue) => issue.code === 'permission_rule_pattern_invalid_mcp_0_0'), true)
   assert.equal(
-    issues.some((issue) => issue.message === 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.'),
+    issues.some((issue) => issue.message === 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.'),
     true,
   )
 })
@@ -810,7 +804,7 @@ test('custom MCP tools default to ask-only access', () => {
 
   const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')
   assert.deepEqual(warehouse?.allowPatterns, [])
-  assert.deepEqual(warehouse?.askPatterns, ['mcp__warehouse__*', 'warehouse_*'])
+  assert.deepEqual(warehouse?.askPatterns, ['mcp__warehouse__*'])
 })
 
 test('trusted custom MCP tools become allow access', () => {
@@ -830,7 +824,7 @@ test('trusted custom MCP tools become allow access', () => {
   })
 
   const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')
-  assert.deepEqual(warehouse?.allowPatterns, ['mcp__warehouse__*', 'warehouse_*'])
+  assert.deepEqual(warehouse?.allowPatterns, ['mcp__warehouse__*'])
   assert.deepEqual(warehouse?.askPatterns, [])
 })
 
@@ -863,6 +857,6 @@ test('runtime custom agents inherit trusted custom MCP allow patterns', () => {
   })
 
   assert.equal(runtimeAgents.length, 1)
-  assert.deepEqual(runtimeAgents[0]?.allowPatterns, ['mcp__nova__*', 'nova_*'])
+  assert.deepEqual(runtimeAgents[0]?.allowPatterns, ['mcp__nova__*'])
   assert.deepEqual(runtimeAgents[0]?.askPatterns, [])
 })

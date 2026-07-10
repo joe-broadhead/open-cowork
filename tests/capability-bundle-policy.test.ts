@@ -23,7 +23,7 @@ function manifest(overrides: Partial<CapabilityBundleManifest> = {}): Capability
     ],
     permissions: [],
     uninstall: {
-      removes: ['review-skill'],
+      removes: [{ kind: 'skill', id: 'review-skill' }],
       preserves: [],
     },
     ...overrides,
@@ -50,8 +50,8 @@ test('capability bundle manifests normalize valid resources and permissions', ()
       { kind: 'filesystem', id: 'workspace-write', reason: 'Writes reviewed files.' },
     ],
     uninstall: {
-      removes: ['review-skill'],
-      preserves: ['user-notes'],
+      removes: [{ kind: 'skill', id: 'review-skill' }],
+      preserves: [{ kind: 'command', id: 'user-notes' }],
     },
   })
 
@@ -59,7 +59,7 @@ test('capability bundle manifests normalize valid resources and permissions', ()
   if (!result.ok) return
   assert.equal(result.manifest.resources.length, 2)
   assert.equal(result.manifest.permissions[0]?.required, true)
-  assert.deepEqual(result.manifest.uninstall?.preserves, ['user-notes'])
+  assert.deepEqual(result.manifest.uninstall?.preserves, [{ kind: 'command', id: 'user-notes' }])
 })
 
 test('capability bundle validation requires explicit plugin compatibility', () => {
@@ -135,7 +135,7 @@ test('capability bundle plan preserves existing user resources and orders action
     ],
   }), {
     productMode: 'desktop-local',
-    existingResourceIds: ['daily-review'],
+    existingResourceIds: [{ kind: 'workflow', id: 'daily-review' }],
   })
 
   assert.equal(plan.blocked, false)
@@ -175,18 +175,27 @@ test('capability bundle uninstall plan removes only bundle-owned resources', () 
       { kind: 'skill', id: 'review-skill', ownedByBundle: true },
     ],
     uninstall: {
-      removes: ['reviewer-agent', 'review-skill', 'daily-review'],
-      preserves: ['operator-notes'],
+      removes: [
+        { kind: 'agent', id: 'reviewer-agent' },
+        { kind: 'skill', id: 'review-skill' },
+        { kind: 'workflow', id: 'daily-review' },
+      ],
+      preserves: [{ kind: 'command', id: 'operator-notes' }],
     },
   }), {
-    installedResourceIds: ['reviewer-agent', 'review-skill', 'daily-review', 'operator-notes'],
-    userOwnedResourceIds: ['daily-review'],
+    installedResourceIds: [
+      { kind: 'agent', id: 'reviewer-agent' },
+      { kind: 'skill', id: 'review-skill' },
+      { kind: 'workflow', id: 'daily-review' },
+      { kind: 'command', id: 'operator-notes' },
+    ],
+    userOwnedResourceIds: [{ kind: 'workflow', id: 'daily-review' }],
   })
 
   assert.equal(plan.blocked, false)
   assert.deepEqual(plan.actions.map((action) => `${action.action}:${action.kind}:${action.id}`), [
     'preserve_user_resource:workflow:daily-review',
-    'preserve_user_resource:bundle:operator-notes',
+    'preserve_user_resource:command:operator-notes',
     'remove_bundle_resource:skill:review-skill',
     'remove_bundle_resource:agent:reviewer-agent',
   ])
@@ -217,9 +226,13 @@ test('capability bundle update plan removes only obsolete bundle-owned resources
 
   const plan = planCapabilityBundleUpdate(previous, next, {
     productMode: 'desktop-local',
-    installedResourceIds: ['review-skill', 'old-agent', 'operator-workflow'],
-    userOwnedResourceIds: ['operator-workflow'],
-    existingResourceIds: ['operator-workflow'],
+    installedResourceIds: [
+      { kind: 'skill', id: 'review-skill' },
+      { kind: 'agent', id: 'old-agent' },
+      { kind: 'workflow', id: 'operator-workflow' },
+    ],
+    userOwnedResourceIds: [{ kind: 'workflow', id: 'operator-workflow' }],
+    existingResourceIds: [{ kind: 'workflow', id: 'operator-workflow' }],
   })
 
   assert.equal(plan.blocked, false)
@@ -362,8 +375,11 @@ test('capability bundle lifecycle uninstall removes bundle-owned resources and p
       { kind: 'workflow', id: 'operator-workflow' },
     ],
     uninstall: {
-      removes: ['review-skill', 'operator-workflow'],
-      preserves: ['operator-command'],
+      removes: [
+        { kind: 'skill', id: 'review-skill' },
+        { kind: 'workflow', id: 'operator-workflow' },
+      ],
+      preserves: [{ kind: 'command', id: 'operator-command' }],
     },
   }), {
     productMode: 'desktop-local',

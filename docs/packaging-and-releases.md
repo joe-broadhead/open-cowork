@@ -4,9 +4,9 @@
 
 Open Cowork packages desktop artifacts with Electron Builder.
 
-Product naming, compatibility aliases, Gateway migration policy, and support
-channels are defined in
-[OSS Packaging and Gateway Migration](oss-packaging-migration.md). Treat that
+Product naming, Gateway product-mode boundaries, compatibility policy, and
+support channels are defined in
+[Packaging and Gateway Product Modes](packaging-and-product-modes.md). Treat that
 page as the source of truth when changing public artifact names, OCI image
 names, Helm chart names, or Gateway mode language.
 

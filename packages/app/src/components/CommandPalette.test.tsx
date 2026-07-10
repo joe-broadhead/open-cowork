@@ -223,7 +223,7 @@ describe('CommandPalette', () => {
     expect(onSetAgentMode).toHaveBeenCalledWith('build')
   })
 
-  it('keeps deprecated operational destinations out of the command palette', async () => {
+  it('keeps retired operational destinations out of the command palette', async () => {
     const onClose = vi.fn()
     const onNavigate = vi.fn()
     const user = userEvent.setup()

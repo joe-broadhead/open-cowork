@@ -84,7 +84,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/cloud-client build && node --no-warnings --experimental-strip-types --test src/*.test.ts && node test/public-import-smoke.mjs"
+    "test": "corepack pnpm --filter @open-cowork/shared build && corepack pnpm --filter @open-cowork/cloud-client build && node --no-warnings --experimental-strip-types --test src/*.test.ts && node test/public-import-smoke.mjs"
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*"

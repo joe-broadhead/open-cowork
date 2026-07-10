@@ -374,23 +374,11 @@ async function handleRequest(
 }
 
 function classifyGatewayWebhookError(error: unknown) {
-  // Classify on the provider's stable error code first (audit G4); the message-keyword heuristic
-  // below is a fallback for any throw site not yet migrated to a typed ChannelWebhookError.
   const code = channelWebhookErrorCode(error)
   if (code === 'not_found') return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
   if (code === 'auth') return new GatewayHttpError(401, 'Gateway webhook authorization failed.')
   if (code === 'payload') return new GatewayHttpError(400, 'Gateway webhook payload is invalid.')
   if (code === 'upstream') return new GatewayHttpError(502, 'Gateway webhook provider failed.')
-  const message = error instanceof Error ? error.message : String(error)
-  if (/unknown gateway provider|does not expose a webhook endpoint/i.test(message)) {
-    return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
-  }
-  if (/signature|secret|authorization|authorized|token|timestamp|replay/i.test(message)) {
-    return new GatewayHttpError(401, 'Gateway webhook authorization failed.')
-  }
-  if (/payload|invalid|malformed|required|too large|control characters/i.test(message)) {
-    return new GatewayHttpError(400, 'Gateway webhook payload is invalid.')
-  }
   return new GatewayHttpError(502, 'Gateway webhook provider failed.')
 }
 

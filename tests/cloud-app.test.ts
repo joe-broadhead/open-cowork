@@ -368,7 +368,7 @@ test('cloud public branding resolves from config and env JSON', () => {
   assert.equal(branding.managedOrgConnectionLabels?.gatewayToken, 'Gateway token')
 })
 
-test('cloud public branding derives desktop theme keys from legacy theme overlays', () => {
+test('cloud public branding derives desktop theme keys without legacy palette shims', () => {
   const branding = resolveCloudPublicBranding(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: JSON.stringify({
       theme: {
@@ -391,10 +391,10 @@ test('cloud public branding derives desktop theme keys from legacy theme overlay
   assert.equal(branding.theme?.textSecondary, '#66736b')
   assert.equal(branding.theme?.accentHover, '#13845d')
   assert.equal(branding.theme?.accentForeground, '#ffffff')
-  assert.equal(branding.theme?.green, '#1f6b46')
-  assert.equal(branding.theme?.amber, '#8a5a14')
-  assert.equal(branding.theme?.red, '#9d3630')
-  assert.equal(branding.theme?.focus, 'rgba(45, 107, 86, 0.28)')
+  assert.equal(branding.theme?.green, '#3f9a8f')
+  assert.equal(branding.theme?.amber, '#e0913a')
+  assert.equal(branding.theme?.red, '#d6587e')
+  assert.equal(branding.theme?.focus, 'rgba(47, 107, 240, 0.52)')
   assert.equal(branding.theme?.bgImage, 'none')
 })
 
@@ -986,6 +986,20 @@ test('cloud postgres control plane fails closed without a connection URL', async
     config,
     env: {},
   }), /no connection URL/)
+})
+
+test('non-local cloud web roles require durable webhook security storage', async () => {
+  await assert.rejects(() => startCloudApp({
+    config: DEFAULT_CONFIG,
+    runtime: new FakeRuntime(),
+    store: new InMemoryControlPlaneStore(),
+    env: {
+      OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'private_beta',
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  }), /durable workflow webhook security store/)
 })
 
 test('cloud app lets deployers inject a durable control-plane store factory', async () => {

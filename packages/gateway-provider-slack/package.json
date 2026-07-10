@@ -20,9 +20,9 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @open-cowork/gateway-channel build && tsc",
-    "typecheck": "pnpm --filter @open-cowork/gateway-channel build && tsc --noEmit",
-    "test": "pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-slack build && node --no-warnings --experimental-strip-types --test src/*.test.ts"
+    "build": "corepack pnpm --filter @open-cowork/gateway-channel build && tsc",
+    "typecheck": "corepack pnpm --filter @open-cowork/gateway-channel build && tsc --noEmit",
+    "test": "corepack pnpm --filter @open-cowork/gateway-channel build && corepack pnpm --filter @open-cowork/gateway-provider-slack build && node --no-warnings --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
     "@open-cowork/gateway-channel": "workspace:*"

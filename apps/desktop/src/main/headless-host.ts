@@ -237,7 +237,7 @@ export async function readHeadlessHostState(stateDir?: string | null): Promise<H
     // A corrupt state file is distinct from "no host running" (P1-X3) — do not let it read as absent.
     throw new Error(`Headless host state file is corrupt at ${statePathForDir(dir)}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
   }
-  // A parseable but schema-incompatible/legacy state is treated as no usable host (unchanged).
+  // A parseable but schema-incompatible state is treated as no usable host.
   if (parsed.schemaVersion !== HEADLESS_HOST_STATE_VERSION || parsed.redacted !== true) return null
   if (!parsed.status || parsed.status.redacted !== true) return null
   return parsed as HeadlessHostState

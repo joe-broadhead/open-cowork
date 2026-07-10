@@ -191,13 +191,13 @@ describe('AgentBuilderPage', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('does not add default permission overrides when saving a legacy custom agent', async () => {
+  it('does not add default permission overrides when saving a permission-neutral custom agent', async () => {
     const user = userEvent.setup()
-    const legacyAgent: CustomAgentSummary = {
+    const permissionNeutralAgent: CustomAgentSummary = {
       scope: 'machine',
       directory: null,
-      name: 'legacy-agent',
-      description: 'Legacy custom agent.',
+      name: 'permission-neutral-agent',
+      description: 'Permission-neutral custom agent.',
       instructions: 'Keep existing runtime permissions.',
       skillNames: [],
       toolIds: [],
@@ -218,7 +218,7 @@ describe('AgentBuilderPage', () => {
       issues: [],
     }
     const { update } = renderBuilder({
-      target: { kind: 'custom', agent: legacyAgent },
+      target: { kind: 'custom', agent: permissionNeutralAgent },
     })
 
     await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
@@ -509,7 +509,7 @@ describe('AgentBuilderPage', () => {
     )
 
     expect(
-      screen.getAllByText('MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.').length,
+      screen.getAllByText('MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.').length,
     ).toBeGreaterThanOrEqual(1)
     for (const button of screen.getAllByRole('button', { name: 'Hire coworker' })) {
       expect(button).toBeDisabled()

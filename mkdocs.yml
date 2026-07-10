@@ -133,7 +133,7 @@ nav:
       - Telemetry and Privacy: privacy.md
   - Operate:
       - Open Cowork Cloud: open-cowork-cloud.md
-      - OSS Packaging and Gateway Migration: oss-packaging-migration.md
+      - Packaging and Gateway Product Modes: packaging-and-product-modes.md
       - Managed Workers: managed-workers.md
       - Cloud Gateway Registration: cloud-gateway-registration.md
       - Deployment Topologies: deployment-topologies.md

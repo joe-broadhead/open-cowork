@@ -36,7 +36,7 @@ planned before broad distribution.
 
 ### Changed
 
-- Upgraded the bundled OpenCode SDK and embedded runtime to `1.17.14`.
+- Upgraded the bundled OpenCode SDK and embedded runtime to `1.17.18`.
 - Simplified the product surface around Chat, Team, Tools & Skills, Projects,
   and Playbooks so Open Cowork stays a product layer on top of OpenCode rather
   than a second runtime or team-operations platform.

@@ -9,6 +9,7 @@ import type { StandaloneOpenCodeAdapter } from "./opencode.js";
 import type { StandaloneProviderRegistry } from "./provider-registry.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
 import type { StandaloneGatewayConfig } from "./types.js";
+import { redactSecretText } from "./redaction.js";
 
 const maxWebhookBodyBytes = 1024 * 1024;
 const webhookRateLimitWindowMs = 60_000;
@@ -345,17 +346,13 @@ function isStandaloneHttpError(error: unknown): error is StandaloneHttpError {
 }
 
 function isWebhookAuthFailure(error: unknown): boolean {
-  // Prefer the provider's stable error code (audit G4); only fall back to the message-keyword
-  // heuristic when the throw site has not been migrated to a typed ChannelWebhookError.
   const code = channelWebhookErrorCode(error);
-  if (code) return code === "auth";
-  const message = error instanceof Error ? error.message : String(error);
-  return /signature|secret|authorization|authorized|token|timestamp|replay/i.test(message);
+  return code === "auth";
 }
 
 function logInternalError(error: unknown): void {
   const detail = error instanceof Error ? (error.stack || error.message) : String(error);
-  process.stderr.write(`Standalone Gateway request failed: ${detail}\n`);
+  process.stderr.write(`Standalone Gateway request failed: ${redactSecretText(detail)}\n`);
 }
 
 function writeJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

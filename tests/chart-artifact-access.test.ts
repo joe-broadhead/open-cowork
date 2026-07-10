@@ -71,6 +71,7 @@ function request(overrides: Partial<ChartSaveArtifactRequest> = {}): ChartSaveAr
     toolCallId: 'tool-1',
     toolName: 'charts_bar_chart',
     dataUrl: 'data:image/png;base64,AAAA',
+    taskRunId: null,
     ...overrides,
   }
 }
@@ -109,13 +110,13 @@ test('chart artifact saves reject non-chart tool calls even when the renderer ec
   )
 })
 
-test('chart artifact saves accept task tools when legacy renderer requests omit taskRunId', () => {
+test('chart artifact saves reject task tools when renderer requests omit taskRunId', () => {
   assert.equal(
     isKnownChartArtifactToolCall(
       view({ taskRuns: [taskRun({ toolCalls: [tool({ id: 'task-tool' })] })] }),
       request({ toolCallId: 'task-tool' }),
     ),
-    true,
+    false,
   )
 })
 

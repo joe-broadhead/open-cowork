@@ -44,7 +44,7 @@ test('runtime home tooling bridge mirrors curated tool config but not agent comp
   }
 })
 
-test('runtime home tooling bridge removes stale Copilot config links from older builds', () => {
+test('runtime home tooling bridge removes forbidden Copilot config links', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-home-copilot-cleanup-'))
   const realHome = join(root, 'real-home')
   const runtimeHome = join(root, 'runtime-home')

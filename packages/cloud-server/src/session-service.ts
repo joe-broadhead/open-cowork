@@ -1917,9 +1917,9 @@ export class CloudSessionService {
     profileName?: string | null
     providerId?: string | null
   }) {
-    // Legacy billing-config gate (unchanged): active only when billing is
-    // explicitly configured. This is a WRITE-only helper — every caller is a
-    // create/write path, so reads/exports/deletes/admin never reach here.
+    // Billing is active only when explicitly configured. This is a WRITE-only
+    // helper — every caller is a create/write path, so reads/exports/deletes/admin
+    // never reach here.
     if (this.billingConfig && isBillingConfigured(this.billingConfig)) {
       const subscription = await this.store.getBillingSubscription(input.orgId)
       const verdict = evaluateBillingEntitlement({

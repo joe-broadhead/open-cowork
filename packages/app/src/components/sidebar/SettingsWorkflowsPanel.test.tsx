@@ -60,7 +60,7 @@ describe('WorkflowSettingsPanel', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('keeps legacy automation defaults and queue controls out of workflow settings', () => {
+  it('keeps removed automation defaults and queue controls out of workflow settings', () => {
     const update = vi.fn()
     render(<WorkflowSettingsPanel settings={settings()} update={update} />)
 
