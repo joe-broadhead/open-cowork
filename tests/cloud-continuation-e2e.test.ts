@@ -341,24 +341,24 @@ async function createContinuationFixture() {
     role: 'admin',
     status: 'active',
   })
-  const desktopToken = store.issueApiToken({
+  const desktopToken = (await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Desktop continuation token',
     scopes: ['desktop', 'admin'],
-  }).plaintext
-  const webToken = store.issueApiToken({
+  })).plaintext
+  const webToken = (await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Web continuation token',
     scopes: ['desktop', 'admin'],
-  }).plaintext
-  const gatewayToken = store.issueApiToken({
+  })).plaintext
+  const gatewayToken = (await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway continuation token',
     scopes: ['gateway', 'admin'],
-  }).plaintext
+  })).plaintext
   const runtime = new ContinuationRuntime()
   const policy = {
     ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),

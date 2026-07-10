@@ -8,17 +8,10 @@ import { redactSecretText } from "./redaction.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
 import type { StandaloneGatewayConfig } from "./types.js";
 
-export interface StandaloneDoctorCheck {
-  name: string;
-  ok: boolean;
-  detail: string;
-}
-
 export interface StandaloneGatewayDoctorReport {
   ok: boolean;
   productMode: "standalone";
   generatedAt: string;
-  checks: StandaloneDoctorCheck[];
   doctorChecks: RuntimeDoctorCheck[];
   readinessTimeline: RuntimeReadinessTimelineEntry[];
   runtimeStatus: {
@@ -79,10 +72,6 @@ function doctorCheck(input: {
   };
 }
 
-function legacyCheck(name: string, ok: boolean, detail: string): StandaloneDoctorCheck {
-  return { name, ok, detail: redact(detail) };
-}
-
 export async function runStandaloneGatewayDoctor(input: {
   config: StandaloneGatewayConfig;
   repository: StandaloneGatewayRepository | Pick<StandaloneGatewayRepository, "readiness">;
@@ -98,16 +87,6 @@ export async function runStandaloneGatewayDoctor(input: {
   const productModeOk = input.config.productMode === "standalone";
   const providersOk = input.config.providers.length > 0;
   const identitiesOk = identityAuthorization.summary.promptCapable > 0;
-  const checks: StandaloneDoctorCheck[] = [
-    legacyCheck("product-mode", productModeOk, `mode=${input.config.productMode}`),
-    legacyCheck("postgres", repository.ok, repository.detail),
-    legacyCheck("postgres-tls", databaseTls.ok, databaseTls.detail),
-    legacyCheck("opencode-private", opencode.ok, opencode.detail),
-    legacyCheck("schema", schemaOk, "standalone gateway schema covers sessions/events/jobs/leases/channel/artifact/team/audit tables"),
-    legacyCheck("providers", providersOk, `${input.config.providers.length} provider(s) configured`),
-    legacyCheck("identity-authorization", identitiesOk, identityAuthorization.detail),
-    legacyCheck("retention", retention.ok, retention.detail),
-  ];
   const doctorChecks = [
     doctorCheck({
       code: "standalone_gateway.product_mode",
@@ -174,7 +153,6 @@ export async function runStandaloneGatewayDoctor(input: {
     ok,
     productMode: "standalone",
     generatedAt: nowIso(),
-    checks,
     doctorChecks,
     readinessTimeline: [
       timeline("environment", "passed", "standalone_gateway.environment", "Standalone Gateway environment loaded."),

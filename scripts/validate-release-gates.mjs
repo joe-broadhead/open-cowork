@@ -131,6 +131,66 @@ function assertIncludes(path, text) {
   if (!contents.includes(text)) throw new Error(`${path} must include ${text}`)
 }
 
+// A GitHub Actions `run:` step is the only place a required build/test command is
+// actually executed. Matching required commands with a naked substring search over
+// the whole workflow file (as `assertIncludes` does) is unsafe when one command is a
+// prefix of another: `contents.includes('pnpm lint')` is satisfied by the unrelated
+// `pnpm lint:dead-code` step, so deleting the real Lint step still passed the gate.
+// `collectWorkflowRunScript` extracts just the shell text of every `run:` step
+// (inline and block scalar) so a command can only be satisfied by a real command
+// line, never by a step name, a `#` comment, or the `defaults.run` mapping.
+export function collectWorkflowRunScript(path) {
+  const lines = read(path).split('\n')
+  const scriptLines = []
+  let index = 0
+  while (index < lines.length) {
+    const match = /^(\s*)run:(?:[ \t]+(.*))?$/.exec(lines[index])
+    if (!match) {
+      index += 1
+      continue
+    }
+    const runIndent = match[1].length
+    const inlineValue = match[2]
+    // `defaults:\n  run:\n    shell: bash` is a mapping key, not a shell script.
+    if (inlineValue === undefined || inlineValue === '') {
+      index += 1
+      continue
+    }
+    // Inline scalar command, e.g. `run: pnpm lint`.
+    if (!/^[|>][+-]?\d*[ \t]*$/.test(inlineValue)) {
+      scriptLines.push(inlineValue)
+      index += 1
+      continue
+    }
+    // Block scalar (`run: |` / `run: >`): capture blank and more-indented body lines
+    // until the block dedents back to (or past) the `run:` key.
+    index += 1
+    while (index < lines.length) {
+      const bodyLine = lines[index]
+      if (bodyLine.trim() !== '') {
+        const bodyIndent = bodyLine.length - bodyLine.trimStart().length
+        if (bodyIndent <= runIndent) break
+      }
+      scriptLines.push(bodyLine)
+      index += 1
+    }
+  }
+  return scriptLines.join('\n')
+}
+
+// Characters that can continue a shell command token. If a required command is
+// immediately preceded or followed by one of these it is only a fragment of a longer
+// token (e.g. `pnpm lint` inside `pnpm lint:dead-code`, or `pnpm build` inside
+// `pnpm build:shared`) and must not satisfy the requirement.
+const COMMAND_TOKEN_CHARS = 'A-Za-z0-9_./:@+=-'
+
+export function assertRunCommand(path, command) {
+  const script = collectWorkflowRunScript(path)
+  const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`(?<![${COMMAND_TOKEN_CHARS}])${escaped}(?![${COMMAND_TOKEN_CHARS}])`)
+  if (!pattern.test(script)) throw new Error(`${path} must include ${command}`)
+}
+
 function assertNotIncludes(path, text, label = `${path} must not include ${text}`) {
   const contents = read(path)
   if (contents.includes(text)) throw new Error(label)
@@ -342,7 +402,7 @@ function assertCiContract() {
     'node scripts/find-linux-packaged-executable.mjs',
     'node scripts/find-windows-packaged-executable.mjs',
   ]) {
-    assertIncludes(ciWorkflowPath, command)
+    assertRunCommand(ciWorkflowPath, command)
   }
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}')
@@ -371,7 +431,7 @@ function assertReleaseWorkflowContract() {
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
   ]) {
-    assertIncludes(releaseWorkflowPath, command)
+    assertRunCommand(releaseWorkflowPath, command)
   }
 
   assertMatches(
@@ -520,32 +580,36 @@ function assertGoNoGoTemplateContract() {
   }
 }
 
-for (const path of [
-  branchProtectionPath,
-  releaseChecklistPath,
-  packagingDocsPath,
-  ciWorkflowPath,
-  releaseWorkflowPath,
-  codeqlWorkflowPath,
-  goNoGoTemplatePath,
-  privateGoNoGoSummaryPath,
-  launchEvidenceTemplatePath,
-  launchEvidenceMatrixPath,
-  packagePath,
-]) {
-  assertFile(path)
-}
+// Only run the full gate validation when invoked as a CLI. Importing this module
+// (e.g. from tests exercising the matchers) must not trigger the whole contract check.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  for (const path of [
+    branchProtectionPath,
+    releaseChecklistPath,
+    packagingDocsPath,
+    ciWorkflowPath,
+    releaseWorkflowPath,
+    codeqlWorkflowPath,
+    goNoGoTemplatePath,
+    privateGoNoGoSummaryPath,
+    launchEvidenceTemplatePath,
+    launchEvidenceMatrixPath,
+    packagePath,
+  ]) {
+    assertFile(path)
+  }
 
-assertPackageScripts()
-assertBranchProtectionContract()
-assertCiContract()
-assertReleaseWorkflowContract()
-assertReleaseChecklistContract()
-assertPackagingDocsContract()
-assertGoNoGoTemplateContract()
-for (const path of collectPrivateValueScanFiles()) {
-  if (relative('.', path).startsWith('..')) throw new Error(`private-value scan path escaped repository root: ${path}`)
-  assertPublicSafe(path)
-}
+  assertPackageScripts()
+  assertBranchProtectionContract()
+  assertCiContract()
+  assertReleaseWorkflowContract()
+  assertReleaseChecklistContract()
+  assertPackagingDocsContract()
+  assertGoNoGoTemplateContract()
+  for (const path of collectPrivateValueScanFiles()) {
+    if (relative('.', path).startsWith('..')) throw new Error(`private-value scan path escaped repository root: ${path}`)
+    assertPublicSafe(path)
+  }
 
-process.stdout.write('[release-gates-validate] release gate contract validated\n')
+  process.stdout.write('[release-gates-validate] release gate contract validated\n')
+}

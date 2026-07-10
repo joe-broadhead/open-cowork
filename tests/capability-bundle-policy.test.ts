@@ -90,17 +90,6 @@ test('capability bundle validation aligns required collections with the public s
   if (result.ok) return
   assert.equal(result.issues.some((issue) => issue.code === 'resources_required'), true)
   assert.equal(result.issues.some((issue) => issue.code === 'permissions_required'), true)
-
-  const legacy = normalizeCapabilityBundleManifest({
-    format: CAPABILITY_BUNDLE_FORMAT,
-    name: 'legacy-pack',
-    version: '1.0.0',
-    owner: 'open-cowork',
-  }, { allowMissingCollections: true })
-  assert.equal(legacy.ok, true)
-  if (!legacy.ok) return
-  assert.deepEqual(legacy.manifest.resources, [])
-  assert.deepEqual(legacy.manifest.permissions, [])
 })
 
 test('capability bundle plan fails closed for unsupported product modes and remote plugin tiers', () => {

@@ -1247,7 +1247,7 @@ describe("WebhookProvider", () => {
             sizeBytes: 5
           }
         ]
-      }, new Date(), "webhook", { maxAttachmentBytes: 4 }),
+      }, new Date(), "webhook", "webhook", { maxAttachmentBytes: 4 }),
     ).toThrow("Webhook attachment exceeds max size of 4 bytes");
   });
 });

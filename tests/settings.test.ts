@@ -130,8 +130,6 @@ test('native permission ask defaults initialize fresh profiles with toggles enab
     assert.equal(settings.externalDirectoryPermission, 'allow')
     assert.equal(settings.mcpPermission, 'allow')
     assert.equal(settings.requireApprovalBeforeSending, true)
-    assert.equal(settings.enableBash, true)
-    assert.equal(settings.enableFileWrite, true)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -168,8 +166,6 @@ test('default public config initializes native permission toggles enabled', asyn
     assert.equal(settings.notificationDailyDigest, false)
     assert.equal(settings.privacyKeepConversationHistory, true)
     assert.equal(settings.privacyShareAnonymizedUsage, false)
-    assert.equal(settings.enableBash, true)
-    assert.equal(settings.enableFileWrite, true)
     assert.equal(settings.runtimeConfigSource, 'app')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
@@ -197,7 +193,7 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     const { loadSettings, saveSettings } = await importFreshSettingsModule('normalize-updates')
     const before = loadSettings()
     saveSettings({
-      enableBash: false,
+      bashPermission: 'deny',
       workflowQuietHoursStart: '99:99',
       providerCredentials: {
         openrouter: {
@@ -219,7 +215,6 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
 
     const after = loadSettings() as any
     assert.equal(after.bashPermission, 'deny')
-    assert.equal(after.enableBash, false)
     assert.equal(after.workflowQuietHoursStart, before.workflowQuietHoursStart)
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
@@ -264,9 +259,7 @@ test('saveSettings persists explicit native permission modes and clamps to downs
 
     const after = loadSettings()
     assert.equal(after.bashPermission, 'ask')
-    assert.equal(after.enableBash, true)
     assert.equal(after.fileWritePermission, 'deny')
-    assert.equal(after.enableFileWrite, false)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -292,7 +285,7 @@ test('saveSettings records an explicit persisted schema version', async () => {
   try {
     const { loadSettings, saveSettings, SETTINGS_SCHEMA_VERSION } = await importFreshSettingsModule('schema-version')
     assert.equal(loadSettings()._schemaVersion, SETTINGS_SCHEMA_VERSION)
-    saveSettings({ enableBash: false })
+    saveSettings({ bashPermission: 'deny' })
     const persisted = JSON.parse(readFileSync(join(userDataDir, 'settings.json'), 'utf-8'))
     assert.equal(persisted._schemaVersion, SETTINGS_SCHEMA_VERSION)
   } finally {
@@ -502,8 +495,6 @@ test('stored settings without optional permission fields inherit downstream ask 
     const settings = loadSettings()
     assert.equal(settings.bashPermission, 'ask')
     assert.equal(settings.fileWritePermission, 'ask')
-    assert.equal(settings.enableBash, true)
-    assert.equal(settings.enableFileWrite, true)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

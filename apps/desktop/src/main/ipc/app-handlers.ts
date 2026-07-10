@@ -92,8 +92,6 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'mcpPermission',
   'requireApprovalBeforeSending',
   'privacyKeepConversationHistory',
-  'enableBash',
-  'enableFileWrite',
   'runtimeConfigSource',
   'runtimeToolingBridgeEnabled',
   'windowZoomFactor',
@@ -198,8 +196,6 @@ export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSetting
     || updates.integrationEnabled !== undefined
     || updates.bashPermission !== undefined
     || updates.fileWritePermission !== undefined
-    || updates.enableBash !== undefined
-    || updates.enableFileWrite !== undefined
     || updates.webPermission !== undefined
     || updates.webSearchEnabled !== undefined
     || updates.taskPermission !== undefined

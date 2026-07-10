@@ -280,8 +280,6 @@ const completeSettings: EffectiveAppSettings = {
   notificationSounds: true,
   privacyKeepConversationHistory: true,
   privacyShareAnonymizedUsage: false,
-  enableBash: false,
-  enableFileWrite: false,
   runtimeToolingBridgeEnabled: true,
   windowZoomFactor: 1,
   workflowLaunchAtLogin: false,
@@ -774,10 +772,10 @@ describe('App', () => {
     render(<App />)
     await screen.findByTestId('home-page')
 
-    act(() => listeners.menuNavigate?.('workflows'))
+    act(() => listeners.menuNavigate?.('playbooks'))
     expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
 
-    act(() => listeners.menuNavigate?.('agents'))
+    act(() => listeners.menuNavigate?.('team'))
     expect(await screen.findByTestId('agents-page')).toBeInTheDocument()
 
     act(() => listeners.menuNavigate?.('health'))

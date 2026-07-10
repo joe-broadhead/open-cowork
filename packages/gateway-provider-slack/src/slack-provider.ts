@@ -414,7 +414,6 @@ function mapSlackEvent(event: Record<string, unknown>, envelope: Record<string, 
   const teamId = stringField(envelope, "team_id") || stringField(event, "team");
   return {
     id: stringField(event, "client_msg_id") || `slack-${teamId || "team"}-${channel}-${ts}`,
-    providerInstanceId: providerId,
     providerEventId: stringField(envelope, "event_id") || stringField(event, "client_msg_id") || `${channel}:${ts}`,
     providerMessageId: ts,
     provider: providerId,
@@ -459,7 +458,6 @@ function mapSlackInteraction(payload: Record<string, unknown>, now: Date, provid
   const id = stringField(payload, "trigger_id") || stringField(action, "action_ts") || randomUUID();
   return {
     id,
-    providerInstanceId: providerId,
     providerEventId: id,
     providerMessageId: stringField(message, "ts") ?? null,
     provider: providerId,

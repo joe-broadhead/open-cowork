@@ -314,9 +314,10 @@ export function buildEffectiveProviderRuntimeConfig(
 function applyUserPermissionPolicy(
   defaultPolicy: PermissionAction,
   selectedPolicy: PermissionAction | undefined,
-  legacyEnabled: boolean,
 ): PermissionAction {
-  return legacyEnabled ? selectedPolicy || defaultPolicy : 'deny'
+  // The enum ('allow' | 'ask' | 'deny') is the single source of truth: a 'deny'
+  // selection propagates through as-is, so no separate enabled gate is needed.
+  return selectedPolicy || defaultPolicy
 }
 
 function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAction {
@@ -369,19 +370,19 @@ function buildRuntimeConfigWithCustomMcpsResult(
   // returns the last-known persisted policy when the cloud is unreachable.
   const managedPolicy = getActiveManagedPolicy()
   const bashPolicy = clampManagedPolicyDimension(
-    applyUserPermissionPolicy(appPermissions.bash, settings.bashPermission, settings.enableBash), 'bash', managedPolicy)
+    applyUserPermissionPolicy(appPermissions.bash, settings.bashPermission), 'bash', managedPolicy)
   const fileWritePolicy = clampManagedPolicyDimension(
-    applyUserPermissionPolicy(appPermissions.fileWrite, settings.fileWritePermission, settings.enableFileWrite), 'fileWrite', managedPolicy)
+    applyUserPermissionPolicy(appPermissions.fileWrite, settings.fileWritePermission), 'fileWrite', managedPolicy)
   const webPolicy = clampManagedPolicyDimension(
-    applyUserPermissionPolicy(appPermissions.web, settings.webPermission, true), 'web', managedPolicy)
+    applyUserPermissionPolicy(appPermissions.web, settings.webPermission), 'web', managedPolicy)
   const effectiveWebSearchPolicy = clampManagedPolicyDimension(
     webSearchPolicy(webPolicy, settings.webSearchEnabled && appPermissions.webSearch), 'webSearch', managedPolicy)
   const taskPolicy = clampManagedPolicyDimension(
-    applyUserPermissionPolicy(appPermissions.task, settings.taskPermission, true), 'task', managedPolicy)
+    applyUserPermissionPolicy(appPermissions.task, settings.taskPermission), 'task', managedPolicy)
   const externalDirectoryPolicy = clampManagedPolicyDimension(
-    applyUserPermissionPolicy('allow', settings.externalDirectoryPermission, true), 'externalDirectory', managedPolicy)
+    applyUserPermissionPolicy('allow', settings.externalDirectoryPermission), 'externalDirectory', managedPolicy)
   const mcpPolicy = clampManagedPolicyDimension(
-    applyUserPermissionPolicy('allow', settings.mcpPermission, true), 'mcp', managedPolicy)
+    applyUserPermissionPolicy('allow', settings.mcpPermission), 'mcp', managedPolicy)
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
   const configModel = settings.effectiveModel
     || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
@@ -686,7 +687,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
 
 export async function buildRuntimeConfigForRuntime(projectDirectory?: string | null): Promise<Config> {
   const settings = getEffectiveSettings()
-  const mcpPolicy = applyUserPermissionPolicy('allow', settings.mcpPermission, true)
+  const mcpPolicy = applyUserPermissionPolicy('allow', settings.mcpPermission)
   if (mcpPolicy === 'deny') {
     const result = buildRuntimeConfigWithCustomMcpsResult(
       projectDirectory,

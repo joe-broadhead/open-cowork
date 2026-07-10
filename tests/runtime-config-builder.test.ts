@@ -92,8 +92,6 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     selectedModelId: 'fast',
     bashPermission: 'allow',
     fileWritePermission: 'deny',
-    enableBash: true,
-    enableFileWrite: false,
   })
 
   saveCustomMcp({
@@ -201,7 +199,7 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
   process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
   clearConfigCaches()
-  saveSettings({ selectedProviderId: 'openrouter', selectedModelId: 'auto', bashPermission: 'allow', enableBash: true })
+  saveSettings({ selectedProviderId: 'openrouter', selectedModelId: 'auto', bashPermission: 'allow' })
   saveCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse', type: 'http', url: 'https://warehouse.example.test/mcp' })
   saveCustomSkill({
     scope: 'project',
@@ -360,8 +358,6 @@ test('buildProviderRuntimeConfig preserves configured custom provider options', 
       integrationEnabled: {},
       bashPermission: 'deny',
       fileWritePermission: 'deny',
-      enableBash: false,
-      enableFileWrite: false,
     },
     'custom-provider',
   ) as Record<string, any>

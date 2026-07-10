@@ -138,25 +138,6 @@ test('workflow store preserves plaintext webhook secrets that look like encrypte
   assert.equal(parsed[0]?.webhookSecret, rawSecret)
 }))
 
-test('workflow store decrypts legacy prefixed webhook secrets in plaintext mode when possible', () => withWorkflowStore('legacy-secret-prefix', () => {
-  setWorkflowSecretStorageForTests({
-    mode: 'plaintext',
-    decryptString: (value) => value.toString('utf8').replace(/^sealed:/, ''),
-  })
-
-  const rawSecret = 'legacy-webhook-secret'
-  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
-    {
-      id: 'webhook',
-      type: 'webhook',
-      enabled: true,
-      webhookSecret: `enc:v1:${Buffer.from(`sealed:${rawSecret}`, 'utf8').toString('base64')}`,
-    },
-  ]))
-
-  assert.equal(parsed[0]?.webhookSecret, rawSecret)
-}))
-
 test('workflow store preserves encrypted webhook secret records when decryption fails', () => withWorkflowStore('secret-record-preserve', () => {
   setWorkflowSecretStorageForTests({
     mode: 'encrypted',

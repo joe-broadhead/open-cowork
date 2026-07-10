@@ -22,6 +22,7 @@ import {
   activeSessionWorkspaceKey,
   LOCAL_WORKSPACE_ID,
   normalizeWorkspaceId,
+  parseSessionWorkspaceKey,
   sessionWorkspaceKey,
 } from './session-workspace-keys.ts'
 import { permissionSignature, type RunawaySample } from '../components/chat/permission-approval-model.ts'
@@ -180,14 +181,28 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const nextWorkspaceId = normalizeWorkspaceId(workspaceId)
     if (nextWorkspaceId === normalizeWorkspaceId(state.activeWorkspaceId)) return {}
     const timing = sessionViewTiming()
+    // Drop busy entries for the workspace we are leaving. A busy (generating) session re-emits
+    // events, so its entry re-populates on switch-back; clearing it meanwhile lets the detail cache
+    // it pins (pruneSessionDetailCache keys on busySessions) be reclaimed rather than accumulating
+    // across every switch. Only active-workspace keys are ever read (ThreadList).
+    //
+    // The awaiting-permission/question sets are deliberately NOT pruned: those are quiescent states
+    // that emit no further events while waiting, so a pruned badge would never recover on switch-back
+    // and the user would lose the only sidebar signal that a session needs input. They hold just
+    // keys (no pinned state), so retaining them costs negligible memory.
+    const busySessions = new Set<string>()
+    for (const key of state.busySessions) {
+      if (parseSessionWorkspaceKey(key).workspaceId === nextWorkspaceId) busySessions.add(key)
+    }
     return {
       activeWorkspaceId: nextWorkspaceId,
       sessions: state.sessionsByWorkspace[nextWorkspaceId] || [],
       currentSessionId: null,
+      busySessions,
       currentView: deriveVisibleSessionPatch(
         createEmptySessionViewState({}, timing),
         null,
-        state.busySessions,
+        busySessions,
         state.awaitingPermissionSessions,
         timing,
       ),

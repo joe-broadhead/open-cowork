@@ -153,7 +153,6 @@ export interface ChannelInteraction {
 
 export interface IncomingChannelMessage {
   id: string;
-  providerInstanceId?: ChannelProviderId;
   providerEventId?: string;
   providerMessageId?: string | null;
   provider: ChannelProviderId;

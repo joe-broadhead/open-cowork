@@ -14,7 +14,6 @@ function message(id: string, text: string): IncomingChannelMessage {
     id,
     provider: "cli-standalone",
     providerKind: "cli",
-    providerInstanceId: "cli-standalone",
     providerEventId: `event-${id}`,
     providerMessageId: id,
     target: { provider: "cli-standalone", providerKind: "cli", chatId: "chat-1", threadId: "thread-1" },

@@ -1,5 +1,3 @@
-export const STANDALONE_GATEWAY_SCHEMA_VERSION = 2;
-
 export const standaloneGatewayMigrations = [{
   id: "0001_standalone_gateway_core",
   sql: `

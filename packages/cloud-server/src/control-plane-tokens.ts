@@ -1,5 +1,11 @@
-import { randomBytes, scryptSync } from 'node:crypto'
+import { randomBytes, scrypt as scryptCb } from 'node:crypto'
+import { promisify } from 'node:util'
 import { constantTimeEquals as constantTimeStringEqual } from '@open-cowork/shared/node'
+
+// scrypt is CPU-bound; running it via the async binding hands the work to libuv's
+// threadpool instead of blocking the Node event loop, so a burst of token hashes/
+// verifies under load cannot starve SSE or other request handling.
+const scrypt = promisify(scryptCb) as (password: string, salt: string, keylen: number) => Promise<Buffer>
 
 const scryptHashPrefixV2 = 'scrypt-v2'
 
@@ -7,17 +13,19 @@ const scryptHashPrefixV2 = 'scrypt-v2'
 // tokens, channel-interaction tokens, managed-worker credentials). Each call mints a
 // fresh 128-bit salt and stores it inline as `scrypt-v2:<salt>:<hash>`, so a DB-only
 // compromise cannot precompute one scrypt table against every stored credential.
-export function hashSecretWithRandomSalt(plaintext: string) {
+export async function hashSecretWithRandomSalt(plaintext: string) {
   const salt = randomBytes(16).toString('base64url')
-  return `${scryptHashPrefixV2}:${salt}:${scryptSync(plaintext, salt, 32).toString('base64url')}`
+  const derived = await scrypt(plaintext, salt, 32)
+  return `${scryptHashPrefixV2}:${salt}:${derived.toString('base64url')}`
 }
 
 // Verify a v2 per-secret-salted scrypt hash. Any stored hash that is not in the
 // `scrypt-v2:<salt>:<hash>` shape fails closed — there is no constant-salt legacy fallback.
-export function verifySecretHash(plaintext: string, storedHash: string) {
+export async function verifySecretHash(plaintext: string, storedHash: string) {
   const parts = storedHash.split(':')
   if (parts[0] === scryptHashPrefixV2 && parts[1] && parts[2]) {
-    return constantTimeStringEqual(scryptSync(plaintext, parts[1], 32).toString('base64url'), parts[2])
+    const derived = await scrypt(plaintext, parts[1], 32)
+    return constantTimeStringEqual(derived.toString('base64url'), parts[2])
   }
   return false
 }

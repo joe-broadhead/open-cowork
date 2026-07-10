@@ -118,10 +118,6 @@
       "types": "./dist/html-escape.d.ts",
       "import": "./dist/html-escape.js"
     },
-    "./internal-message-utils": {
-      "types": "./dist/internal-message-utils.d.ts",
-      "import": "./dist/internal-message-utils.js"
-    },
     "./knowledge/knowledge-service": {
       "types": "./dist/knowledge/knowledge-service.d.ts",
       "import": "./dist/knowledge/knowledge-service.js"
@@ -422,10 +418,10 @@
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*",
-    "@opencode-ai/sdk": "1.15.5",
+    "@opencode-ai/sdk": "1.17.14",
     "ajv": "^8.20.0",
     "google-auth-library": "^10.9.0",
-    "opencode-ai": "1.15.5"
+    "opencode-ai": "1.17.14"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

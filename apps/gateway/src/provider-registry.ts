@@ -280,7 +280,6 @@ function fakeMessage(provider: Pick<ChannelProvider, 'id' | 'kind'>, payload: un
   }
   return {
     id: typeof record.id === 'string' && record.id ? record.id : `fake-${Date.now()}`,
-    providerInstanceId: provider.id,
     providerEventId: typeof record.id === 'string' && record.id ? record.id : `fake-${Date.now()}`,
     providerMessageId: typeof record.id === 'string' && record.id ? record.id : null,
     provider: provider.id,

@@ -14,7 +14,6 @@ import type {
   CapabilityBundleLifecycleResource,
   CapabilityBundleLifecycleState,
   CapabilityBundleManifest,
-  CapabilityBundleManifestNormalizeOptions,
   CapabilityBundlePermission,
   CapabilityBundlePermissionKind,
   CapabilityBundleProductMode,
@@ -239,7 +238,6 @@ function normalizeResourceSelectors(value: unknown, issues: CapabilityBundleIssu
 
 export function normalizeCapabilityBundleManifest(
   input: unknown,
-  options: CapabilityBundleManifestNormalizeOptions = {},
 ): { ok: true; manifest: CapabilityBundleManifest } | { ok: false; issues: CapabilityBundleIssue[] } {
   const issues: CapabilityBundleIssue[] = []
   const record = asRecord(input)
@@ -260,7 +258,7 @@ export function normalizeCapabilityBundleManifest(
   if (Array.isArray(record.resources)) {
     resources = record.resources.map((entry, index) => normalizeResource(entry, issues, index)).filter((entry): entry is CapabilityBundleResource => Boolean(entry))
   } else if (record.resources === undefined) {
-    if (!options.allowMissingCollections) pushIssue(issues, 'resources_required', 'Capability bundle resources must be declared as an array.')
+    pushIssue(issues, 'resources_required', 'Capability bundle resources must be declared as an array.')
   } else {
     pushIssue(issues, 'invalid_resources', 'Capability bundle resources must be an array.')
   }
@@ -269,7 +267,7 @@ export function normalizeCapabilityBundleManifest(
   if (Array.isArray(record.permissions)) {
     permissions = record.permissions.map((entry, index) => normalizePermission(entry, issues, index)).filter((entry): entry is CapabilityBundlePermission => Boolean(entry))
   } else if (record.permissions === undefined) {
-    if (!options.allowMissingCollections) pushIssue(issues, 'permissions_required', 'Capability bundle permissions must be declared as an array.')
+    pushIssue(issues, 'permissions_required', 'Capability bundle permissions must be declared as an array.')
   } else {
     pushIssue(issues, 'invalid_permissions', 'Capability bundle permissions must be an array.')
   }

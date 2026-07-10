@@ -26,8 +26,6 @@ function withIsolatedPermissionSettings<T>(name: string, run: () => T): T {
       taskPermission: 'allow',
       externalDirectoryPermission: 'allow',
       mcpPermission: 'allow',
-      enableBash: true,
-      enableFileWrite: true,
     })
     return run()
   } finally {

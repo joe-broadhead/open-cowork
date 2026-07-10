@@ -59,8 +59,6 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'notificationSounds',
   'privacyKeepConversationHistory',
   'privacyShareAnonymizedUsage',
-  'enableBash',
-  'enableFileWrite',
   'runtimeConfigSource',
   'runtimeToolingBridgeEnabled',
   'windowZoomFactor',
@@ -403,8 +401,6 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
       update[key] = record[key] as CoworkSettings['bashPermission']
     }
   }
-  update.enableBash = optionalBoolean(record, 'enableBash', 'Bash enabled')
-  update.enableFileWrite = optionalBoolean(record, 'enableFileWrite', 'File write enabled')
   update.webSearchEnabled = optionalBoolean(record, 'webSearchEnabled', 'Web search enabled')
   update.requireApprovalBeforeSending = optionalBoolean(record, 'requireApprovalBeforeSending', 'Require approval before sending')
   update.notificationVoiceReplies = optionalBoolean(record, 'notificationVoiceReplies', 'Voice reply notifications')

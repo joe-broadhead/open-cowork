@@ -19,15 +19,16 @@ export async function routeGatewayInteraction(input: RouteGatewayInteractionInpu
   if (!interaction) return false
 
   const cloudProvider = input.message.provider as CloudChannelProviderId
-  // SECURITY (#922): the gateway forwards the RESPONDER's identity (externalUserId) alongside the
-  // interaction token and fails closed on unknown tokens, but it does not itself decide who may
-  // approve. The cloud's resolveChannelInteraction MUST enforce that this externalUserId matches
-  // the interaction's authorized approver — token possession alone must never be sufficient, or a
-  // bystander in a shared channel could approve by replaying a visible token.
+  // SECURITY (#922): the gateway forwards the RESPONDER's identity (externalUserId) and the chat the
+  // response came from (externalChatId) alongside the interaction token, and fails closed on unknown
+  // tokens. It does not itself decide who may approve; the cloud's resolveChannelInteraction enforces
+  // that the responder is acting from the chat the interaction was sent to (same-chat scoping) so a
+  // bystander in another chat cannot approve by replaying a visible token.
   await input.cloud.resolveChannelInteraction({
     provider: cloudProvider,
     externalWorkspaceId: input.providerConfig.externalWorkspaceId ?? null,
     externalUserId: input.message.sender.providerUserId,
+    externalChatId: input.message.target.chatId,
     token: interaction.token,
     externalInteractionId: interaction.externalInteractionId,
     ...interaction.resolution,

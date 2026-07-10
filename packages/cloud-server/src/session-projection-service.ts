@@ -89,6 +89,16 @@ function workspaceEntityForProjectedEvent(input: AppendProjectedEventInput, even
   }
 }
 
+// Rough byte size of a value via its JSON length (UTF-16 code units ~ bytes for mostly-ASCII
+// transcripts). Used only to bound the view cache; accuracy is not load-bearing.
+function approxJsonBytes(value: unknown): number {
+  try {
+    return JSON.stringify(value)?.length ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export class CloudSessionProjectionService {
   private readonly store: CloudProjectionStore
   private readonly sessionEvents: CloudSessionEventBus
@@ -98,8 +108,13 @@ export class CloudSessionProjectionService {
   // view from JSON on every event — that was O(view-size) per event and O(N^2) over a long session
   // (#913). Sequence validation keeps it correct across worker/instance handoff (a mismatch falls
   // back to a fresh normalize); LRU-bounded so one process can't retain a view per session forever.
-  private readonly viewCache = new Map<string, { sequence: number, view: CloudSessionProjectionView }>()
+  private readonly viewCache = new Map<string, { sequence: number, view: CloudSessionProjectionView, bytes: number }>()
   private readonly maxCachedViews = 512
+  // Also cap total cached bytes: a few very large transcripts (multi-MB views) could otherwise pin
+  // gigabytes of worker heap even well under the 512-entry count cap. Size is estimated cheaply — a
+  // full measure only on the rare cold-normalize path, an O(payload) delta on the hot warm path.
+  private readonly maxCachedBytes = 256 * 1024 * 1024
+  private totalCachedBytes = 0
 
   constructor(
     store: CloudProjectionStore,
@@ -111,15 +126,23 @@ export class CloudSessionProjectionService {
     this.workspaceEvents = workspaceEvents
   }
 
-  private cacheView(key: string, sequence: number, view: CloudSessionProjectionView) {
-    // Move-to-most-recent (delete+set) then evict the oldest once over the cap, so an actively
-    // streamed session stays warm and idle sessions are dropped first.
+  private cacheView(key: string, sequence: number, view: CloudSessionProjectionView, bytes: number) {
+    // Move-to-most-recent (delete+set) then evict the oldest once over the entry OR byte cap, so an
+    // actively streamed session stays warm and idle sessions are dropped first.
+    const prev = this.viewCache.get(key)
+    if (prev) this.totalCachedBytes -= prev.bytes
     this.viewCache.delete(key)
-    this.viewCache.set(key, { sequence, view })
-    while (this.viewCache.size > this.maxCachedViews) {
+    this.viewCache.set(key, { sequence, view, bytes })
+    this.totalCachedBytes += bytes
+    while (
+      this.viewCache.size > this.maxCachedViews
+      || (this.totalCachedBytes > this.maxCachedBytes && this.viewCache.size > 1)
+    ) {
       const oldest = this.viewCache.keys().next().value
       if (oldest === undefined) break
+      const evicted = this.viewCache.get(oldest)
       this.viewCache.delete(oldest)
+      if (evicted) this.totalCachedBytes -= evicted.bytes
     }
   }
 
@@ -129,6 +152,7 @@ export class CloudSessionProjectionService {
     }
     const cacheKey = `${input.tenantId}\0${input.sessionId}`
     let projectedView: CloudSessionProjectionView | null = null
+    let projectedBytes = 0
     const result = await this.store.appendProjectedSessionEvent({
       tenantId: input.tenantId,
       sessionId: input.sessionId,
@@ -151,10 +175,17 @@ export class CloudSessionProjectionService {
         // Reuse the cached, already-normalized view when it matches the stored sequence (the common
         // case: one worker folds a session's events in order). Otherwise re-normalize the stored view
         // — cold cache, or another instance advanced the projection.
-        const currentView = cached && currentProjection && cached.sequence === currentProjection.sequence
+        const warm = Boolean(cached && currentProjection && cached.sequence === currentProjection.sequence)
+        const currentView = warm && cached
           ? cached.view
           : normalizeCloudSessionProjectionView(currentProjection?.view, session)
         projectedView = reduceCloudSessionProjectionEvent(session, currentView, event)
+        // Warm path: carry the cached size forward plus the new event payload (O(payload)). Cold
+        // path (cache miss / instance handoff): measure the whole view once. A conservative
+        // over-estimate is fine — it only evicts slightly earlier.
+        projectedBytes = warm && cached
+          ? cached.bytes + approxJsonBytes(input.payload)
+          : approxJsonBytes(projectedView)
         return {
           view: projectedView,
           updatedAt: new Date(event.createdAt),
@@ -162,10 +193,12 @@ export class CloudSessionProjectionService {
       },
     })
     const summaryView = projectedView || normalizeCloudSessionProjectionView(result.projection.view, result.session)
+    const summaryBytes = projectedView ? projectedBytes : approxJsonBytes(summaryView)
     this.cacheView(
       cacheKey,
       result.projection.sequence,
       summaryView,
+      summaryBytes,
     )
     await this.store.upsertCloudLaunchpadSessionSummary({
       tenantId: input.tenantId,

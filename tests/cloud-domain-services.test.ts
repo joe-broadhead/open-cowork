@@ -458,6 +458,75 @@ test('cloud channel domain service owns channel agent listing behind explicit de
   ])
 })
 
+function channelDomainServiceForResolve(storeOverrides: Partial<ChannelControlPlaneStore>) {
+  return new CloudChannelDomainService({
+    store: channelStore(storeOverrides),
+    policy: { profileName: 'default', profile: {}, features: {} } as never,
+    ids: { randomUUID: () => 'cmd-1' },
+    abuse: {} as never,
+    usageGovernance: {} as CloudUsageGovernanceService,
+    async ensurePrincipal(input) { input.orgId = 'org-1'; input.accountId = 'account-1' },
+    principalOrgId: (input) => input.orgId || input.tenantId,
+    assertBillingAllowed: async () => { throw new Error('not used') },
+    normalizeAndValidateProjectSource: () => { throw new Error('not used') },
+    createCloudSessionRecord: async () => { throw new Error('not used') },
+    bindSessionProjectSource: async () => { throw new Error('not used') },
+    getTenantSessionView: async () => { throw new Error('not used') },
+    assertRemoteInteractionAllowed: async () => ({ allowed: true }) as never,
+    auditActor: (input) => ({ actorType: 'user', actorId: input.userId, accountId: input.accountId || null }),
+    stableCloudId: (prefix) => `${prefix}_stable`,
+  })
+}
+
+// A pending permission interaction bound to session ses-1, and an approve-capable Telegram identity
+// (no workspace scoping, so the workspace match alone is null===null).
+const scopingInteraction = { interactionId: 'int-1', orgId: 'org-1', agentId: 'agent-1', sessionId: 'ses-1', provider: 'telegram', externalInteractionId: null, tokenHash: 'hash', kind: 'permission', targetId: 'perm-1', status: 'pending', createdByIdentityId: null, expiresAt: new Date(Date.now() + 60_000).toISOString(), usedAt: null, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() } as never
+const scopingIdentity = { identityId: 'id-bob', orgId: 'org-1', provider: 'telegram', externalWorkspaceId: null, externalUserId: 'bob', role: 'member', status: 'active', accountId: 'account-1', displayName: null, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() } as never
+const scopingBinding = { bindingId: 'b1', orgId: 'org-1', agentId: 'agent-1', channelBindingId: 'cb1', provider: 'telegram', externalWorkspaceId: null, externalThreadId: 'thr-A', externalChatId: 'chat-A', sessionId: 'ses-1', lastEventSequence: 0, lastWorkspaceSequence: 0, lastChatMessageId: null, status: 'active', createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() } as never
+const scopingChannelBinding = { channelBindingId: 'cb1', externalWorkspaceId: null } as never
+
+test('channel approval is rejected for a responder acting from a different chat (#922)', async () => {
+  const service = channelDomainServiceForResolve({
+    async findChannelInteraction() { return scopingInteraction },
+    async findChannelIdentity() { return scopingIdentity },
+    async listChannelSessionBindingsForSession() { return [scopingBinding] },
+    async getChannelBinding() { return scopingChannelBinding },
+  })
+  // Bob approves from chat-B, but the interaction's session is bound to chat-A.
+  await assert.rejects(
+    service.resolveChannelInteraction({ ...principal }, {
+      provider: 'telegram',
+      externalUserId: 'bob',
+      externalChatId: 'chat-B',
+      token: 'occi_int-1_secret',
+      response: { allowed: true },
+    }),
+    (error: unknown) => error instanceof CloudServiceError && error.status === 403 && /not authorized for this channel session/.test(error.message),
+  )
+})
+
+test('channel approval clears the actor check for a responder in the same chat (#922)', async () => {
+  const service = channelDomainServiceForResolve({
+    async findChannelInteraction() { return scopingInteraction },
+    async findChannelIdentity() { return scopingIdentity },
+    async listChannelSessionBindingsForSession() { return [scopingBinding] },
+    async getChannelBinding() { return scopingChannelBinding },
+    // Reached only after the actor/chat check passes; returning null makes resolve fail at the next
+    // step with a distinct error, proving same-chat responders are not blocked by the scoping.
+    async getSession() { return null },
+  })
+  await assert.rejects(
+    service.resolveChannelInteraction({ ...principal }, {
+      provider: 'telegram',
+      externalUserId: 'bob',
+      externalChatId: 'chat-A',
+      token: 'occi_int-1_secret',
+      response: { allowed: true },
+    }),
+    (error: unknown) => error instanceof CloudServiceError && error.status === 403 && /requires a session owned by the gateway principal/.test(error.message),
+  )
+})
+
 test('cloud BYOK service rejects non-admin principals before billing or mutation', async () => {
   const calls: string[] = []
   const service = new CloudByokService({

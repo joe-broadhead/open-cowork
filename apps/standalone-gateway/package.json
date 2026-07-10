@@ -23,7 +23,7 @@
     "@open-cowork/gateway-provider-telegram": "workspace:*",
     "@open-cowork/gateway-provider-webhook": "workspace:*",
     "@open-cowork/gateway-testing": "workspace:*",
-    "@opencode-ai/sdk": "1.15.5",
+    "@opencode-ai/sdk": "1.17.14",
     "pg": "^8.22.0"
   },
   "devDependencies": {

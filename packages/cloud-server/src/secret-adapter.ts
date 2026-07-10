@@ -26,8 +26,8 @@ type SecretEnvelope = {
   iv: string
   tag: string
   ciphertext: string
-  // Key id of the envelope key (audit P2-1). New envelopes always carry it so reveal can pick the
-  // right key during rotation; envelopes written before kid support carry none and are trial-decrypted.
+  // Key id of the envelope key (audit P2-1). protect always stamps it so reveal can pick the right
+  // key during rotation; an envelope without a kid is malformed and reveal fails closed.
   kid?: string
 }
 
@@ -420,15 +420,14 @@ export async function resolveCloudSecretRef(
 }
 
 // `previousKeyMaterials` are retired keys kept in the ring for rotation (audit P2-1): protect always
-// writes with the current key (and stamps its kid), while reveal selects the matching key by kid for
-// keyed envelopes and trial-decrypts legacy (no-kid) envelopes against the whole ring.
+// writes with the current key (and stamps its kid), while reveal selects the matching key by kid.
 export function createEnvelopeSecretAdapter(
   keyMaterial: string | Buffer,
   previousKeyMaterials: Array<string | Buffer> = [],
 ): SecretAdapter {
   const currentKey = deriveKey(keyMaterial)
   const currentKid = keyIdFor(keyMaterial)
-  // kid → derived key. Insertion order is current-first so legacy trial-decrypt tries the likely key first.
+  // kid → derived key, current-first, for exact-kid lookup at reveal time.
   const keyring = new Map<string, Buffer>([[currentKid, currentKey]])
   for (const previous of previousKeyMaterials) {
     keyring.set(keyIdFor(previous), deriveKey(previous))
@@ -468,23 +467,14 @@ export function createEnvelopeSecretAdapter(
       const raw = base64urlDecode(stored.slice(CLOUD_SECRET_ENVELOPE_PREFIX.length)).toString('utf8')
       const envelope = JSON.parse(raw) as SecretEnvelope
       if (envelope.alg !== 'A256GCM') throw new Error(`Unsupported cloud secret algorithm ${envelope.alg}.`)
-      if (envelope.kid !== undefined) {
-        const key = keyring.get(envelope.kid)
-        if (!key) throw new Error(`No cloud secret key available for kid ${envelope.kid}; supply the matching previous key to rotate.`)
-        return decryptWith(key, envelope, context)
+      // Every envelope carries a kid (protect always stamps currentKid); a missing kid is a
+      // malformed envelope and fails closed rather than being trial-decrypted against the ring.
+      if (envelope.kid === undefined) {
+        throw new Error('Cloud secret envelope is missing a key id (kid).')
       }
-      // Legacy envelope (written before kid support): it was sealed with whichever key was current at
-      // write time, possibly now a previous key. GCM's auth tag fails cleanly on the wrong key, so try
-      // each ring key (current first) and return the first that decrypts.
-      let lastError: unknown = null
-      for (const key of keyring.values()) {
-        try {
-          return decryptWith(key, envelope, context)
-        } catch (error) {
-          lastError = error
-        }
-      }
-      throw lastError instanceof Error ? lastError : new Error('Could not decrypt cloud secret envelope with any available key.')
+      const key = keyring.get(envelope.kid)
+      if (!key) throw new Error(`No cloud secret key available for kid ${envelope.kid}; supply the matching previous key to rotate.`)
+      return decryptWith(key, envelope, context)
     },
   }
 }

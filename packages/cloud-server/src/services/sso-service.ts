@@ -149,7 +149,7 @@ export class CloudSsoService {
     const record = await this.store.upsertOrgSsoConfig({
       orgId,
       scimEnabled: true,
-      scimTokenHash: hashScimToken(scimToken),
+      scimTokenHash: await hashScimToken(scimToken),
       actor: this.auditActor(principal),
     })
     return { config: toPublicOrgSsoConfig(record), scimToken }

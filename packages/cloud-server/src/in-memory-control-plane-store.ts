@@ -523,7 +523,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.ssoDomain.deleteOrgSsoConfig(orgId)
   }
 
-  findOrgSsoConfigByScimToken(plaintext: string): OrgSsoConfigRecord | null {
+  findOrgSsoConfigByScimToken(plaintext: string): Promise<OrgSsoConfigRecord | null> {
     return this.ssoDomain.findOrgSsoConfigByScimToken(plaintext)
   }
 
@@ -598,7 +598,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.identityDomain.resolveOrgIdOrNull(tenantId)
   }
 
-  issueApiToken(input: IssueApiTokenInput): IssuedApiTokenRecord {
+  issueApiToken(input: IssueApiTokenInput): Promise<IssuedApiTokenRecord> {
     return this.apiTokensDomain.issueApiToken(input)
   }
 
@@ -606,7 +606,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.apiTokensDomain.listApiTokens(orgId)
   }
 
-  findApiTokenByPlaintext(plaintext: string, now = new Date()): ApiTokenRecord | null {
+  findApiTokenByPlaintext(plaintext: string, now = new Date()): Promise<ApiTokenRecord | null> {
     return this.apiTokensDomain.findApiTokenByPlaintext(plaintext, now)
   }
 
@@ -654,7 +654,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.managedWorkersDomain.listWorkers(orgId, input)
   }
 
-  issueManagedWorkerCredential(input: IssueManagedWorkerCredentialInput): IssuedManagedWorkerCredentialRecord {
+  issueManagedWorkerCredential(input: IssueManagedWorkerCredentialInput): Promise<IssuedManagedWorkerCredentialRecord> {
     return this.managedWorkersDomain.issueCredential(input)
   }
 
@@ -662,7 +662,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.managedWorkersDomain.listCredentials(orgId, workerId)
   }
 
-  findManagedWorkerCredentialByPlaintext(plaintext: string, now = new Date()): ResolvedManagedWorkerCredentialRecord | null {
+  findManagedWorkerCredentialByPlaintext(plaintext: string, now = new Date()): Promise<ResolvedManagedWorkerCredentialRecord | null> {
     return this.managedWorkersDomain.findCredentialByPlaintext(plaintext, now)
   }
 
@@ -991,7 +991,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return { ok: true, binding: clone(existing) }
   }
 
-  createChannelInteraction(input: CreateChannelInteractionInput): IssuedChannelInteractionRecord {
+  async createChannelInteraction(input: CreateChannelInteractionInput): Promise<IssuedChannelInteractionRecord> {
     if (!this.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
     const agent = this.getHeadlessAgent(input.orgId, input.agentId)
     if (!agent) throw new Error(`Unknown headless agent ${input.agentId}.`)
@@ -1002,7 +1002,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       if (!identity || identity.orgId !== input.orgId) throw new Error(`Unknown channel identity ${input.createdByIdentityId}.`)
     }
     const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
-    const tokenHash = hashChannelInteractionToken(plaintextToken)
+    const tokenHash = await hashChannelInteractionToken(plaintextToken)
     const existing = this.channelInteractions.get(input.interactionId)
     if (existing) throw new Error(`Channel interaction ${input.interactionId} already exists.`)
     const now = nowIso(input.createdAt)
@@ -1030,21 +1030,21 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return { interaction: clone(record), plaintextToken }
   }
 
-  private findChannelInteractionByToken(token: string, orgId: string): ChannelInteractionRecord | null {
+  private async findChannelInteractionByToken(token: string, orgId: string): Promise<ChannelInteractionRecord | null> {
     // Pre-filter by the interaction id embedded in the presented token
     // (`occi_<interactionId>_<secret>`), then verify the per-interaction salted hash.
     for (const interaction of this.channelInteractions.values()) {
       if (interaction.orgId !== orgId) continue
       if (!plaintextMatchesChannelInteractionId(token, interaction.interactionId)) continue
-      if (verifyChannelInteractionTokenHash(token, interaction.tokenHash)) return interaction
+      if (await verifyChannelInteractionTokenHash(token, interaction.tokenHash)) return interaction
     }
     return null
   }
 
-  private findChannelInteractionMutable(input: FindChannelInteractionInput): ChannelInteractionRecord | null {
+  private async findChannelInteractionMutable(input: FindChannelInteractionInput): Promise<ChannelInteractionRecord | null> {
     let interaction: ChannelInteractionRecord | null = null
     if (input.token) {
-      interaction = this.findChannelInteractionByToken(input.token, input.orgId)
+      interaction = await this.findChannelInteractionByToken(input.token, input.orgId)
     } else if (input.externalInteractionId && input.provider) {
       const interactionId = this.channelInteractionsByExternal.get(key(input.orgId, input.provider, input.externalInteractionId))
       interaction = interactionId ? this.channelInteractions.get(interactionId) ?? null : null
@@ -1060,14 +1060,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return interaction
   }
 
-  findChannelInteraction(input: FindChannelInteractionInput): ChannelInteractionRecord | null {
-    const interaction = this.findChannelInteractionMutable(input)
+  async findChannelInteraction(input: FindChannelInteractionInput): Promise<ChannelInteractionRecord | null> {
+    const interaction = await this.findChannelInteractionMutable(input)
     return interaction ? clone(interaction) : null
   }
 
-  resolveChannelInteraction(input: ResolveChannelInteractionInput): ChannelInteractionRecord | null {
+  async resolveChannelInteraction(input: ResolveChannelInteractionInput): Promise<ChannelInteractionRecord | null> {
     const now = input.usedAt || new Date()
-    const interaction = this.findChannelInteractionMutable({ ...input, now })
+    const interaction = await this.findChannelInteractionMutable({ ...input, now })
     if (!interaction) return null
     interaction.status = 'used'
     interaction.usedAt = now.toISOString()
@@ -1085,12 +1085,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(interaction)
   }
 
-  resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput): {
+  async resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput): Promise<{
     interaction: ChannelInteractionRecord
     command: SessionCommandRecord
-  } | null {
+  } | null> {
     const now = input.usedAt || new Date()
-    const interaction = this.findChannelInteractionMutable({ ...input, now })
+    const interaction = await this.findChannelInteractionMutable({ ...input, now })
     if (!interaction) return null
     if (input.command.sessionId !== interaction.sessionId) throw new Error('Channel interaction command session does not match interaction session.')
     const command = this.enqueueSessionCommand(input.command)

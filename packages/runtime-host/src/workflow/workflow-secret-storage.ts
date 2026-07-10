@@ -2,7 +2,6 @@ import type { WorkflowTrigger } from '@open-cowork/shared'
 import type { SecretStorageMode } from '../secure-storage-policy.js'
 import { isWorkflowTriggerType } from './workflow-normalization.js'
 
-const LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX = 'enc:v1:'
 const ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION = 2
 
 export type WorkflowSecretStorageAdapter = {
@@ -71,11 +70,7 @@ function decodeWebhookSecretFromStorage(secret: unknown, storage: WorkflowSecret
   }
 
   if (typeof secret !== 'string' || !secret.trim()) return null
-  if (!secret.startsWith(LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX)) return secret
-
-  const legacyPayload = secret.slice(LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX.length)
-  const decrypted = tryDecryptWebhookSecretPayload(storage, legacyPayload)
-  return decrypted ?? secret
+  return secret
 }
 
 export function serializeWorkflowTriggersForStorageWithAdapter(

@@ -1,6 +1,6 @@
 import type { RuntimeContextOptions } from '@open-cowork/shared'
 import { getEffectiveSettings } from './settings.js'
-import { getV2ClientForDirectory, getRuntimeHomeDir } from './runtime.js'
+import { getClientForDirectory, getRuntimeHomeDir } from './runtime.js'
 import { ensureRuntimeContextDirectory } from './runtime-context.js'
 import { resolveProjectDirectory } from './runtime-paths.js'
 import { log } from '@open-cowork/shared/node'
@@ -93,7 +93,7 @@ export async function listRuntimeToolsForResolvedContext(context: ResolvedRuntim
   const promise = (async () => {
     await ensureRuntimeContextDirectory(directory)
 
-    const client = getV2ClientForDirectory(directory)
+    const client = getClientForDirectory(directory)
     if (!client) return []
 
     try {

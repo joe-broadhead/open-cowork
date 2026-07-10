@@ -558,10 +558,6 @@ export function getClientForDirectory(directory?: string | null): V2OpencodeClie
   })
 }
 
-export function getV2ClientForDirectory(directory?: string | null): V2OpencodeClient | null {
-  return getClientForDirectory(directory)
-}
-
 export function getServerUrl() {
   return runtimeState.getServerUrl()
 }

@@ -58,7 +58,7 @@ export class PostgresApiTokensRepository {
           input.orgId,
           input.accountId || null,
           normalizeText(input.name, API_TOKEN_NAME_MAX_LENGTH, 'API token name'),
-          hashCloudApiToken(generated.plaintext),
+          await hashCloudApiToken(generated.plaintext),
           JSON.stringify([...new Set(input.scopes)]),
           generated.plaintext.slice(-4),
           input.expiresAt ? input.expiresAt.toISOString() : null,
@@ -83,31 +83,29 @@ export class PostgresApiTokensRepository {
 
   async findApiTokenByPlaintext(plaintext: string, now = new Date()) {
     const nowText = nowIso(now)
-    // Fast path: standard tokens are `occ_<tokenId>_<secret>` with a fixed-shape
-    // `tok_`+16-base64url id, so resolve by primary key (index seek) instead of
-    // scanning every live token across all orgs on the auth hot path. The hash is
-    // still verified below, so a forged/guessed id cannot authenticate. A token whose
-    // id doesn't match the standard shape (legacy/custom) falls back to the prior scan.
+    // Every issued token is `occ_<tokenId>_<secret>` with a fixed-shape `tok_`+16-base64url id,
+    // so resolve by primary key (index seek) instead of scanning every live token across all orgs
+    // on the auth hot path. The hash is still verified below, so a forged/guessed id cannot
+    // authenticate. A presented string that does not match the shape can never correspond to a
+    // stored token, so it fails closed with no query — this also removes the prior unindexable
+    // full-table scan that malformed Authorization headers could trigger.
     const standardTokenId = /^occ_(tok_[A-Za-z0-9_-]{16})_/.exec(plaintext)?.[1]
-    const candidates = standardTokenId
-      ? await this.options.pool.query(
-        `SELECT *
-         FROM cloud_api_tokens
-         WHERE token_id = $1
-           AND revoked_at IS NULL
-           AND (expires_at IS NULL OR expires_at > $2)`,
-        [standardTokenId, nowText],
-      )
-      : await this.options.pool.query(
-        `SELECT *
-         FROM cloud_api_tokens
-         WHERE left($1, length('occ_' || token_id || '_')) = ('occ_' || token_id || '_')
-           AND revoked_at IS NULL
-           AND (expires_at IS NULL OR expires_at > $2)
-         ORDER BY created_at DESC`,
-        [plaintext, nowText],
-      )
-    const matched = candidates.rows.find((row) => verifyCloudApiTokenHash(plaintext, String(row.token_hash)))
+    if (!standardTokenId) return null
+    const candidates = await this.options.pool.query(
+      `SELECT *
+       FROM cloud_api_tokens
+       WHERE token_id = $1
+         AND revoked_at IS NULL
+         AND (expires_at IS NULL OR expires_at > $2)`,
+      [standardTokenId, nowText],
+    )
+    let matched: (typeof candidates.rows)[number] | undefined
+    for (const row of candidates.rows) {
+      if (await verifyCloudApiTokenHash(plaintext, String(row.token_hash))) {
+        matched = row
+        break
+      }
+    }
     if (!matched) return null
     const result = await this.options.pool.query(
       `UPDATE cloud_api_tokens

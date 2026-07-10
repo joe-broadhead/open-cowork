@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { getAppPathHost } from '@open-cowork/shared/node'
-import { isAbsolute, join, resolve } from 'node:path'
+import { delimiter as pathDelimiter, isAbsolute, join, resolve } from 'node:path'
 import { credentialFieldIsVisible } from '@open-cowork/shared'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import { getConfiguredMcpsFromConfig, type BundleMcp } from './config-loader-core.js'
@@ -143,10 +143,21 @@ function externalCommandResolves(command: string[] | undefined): boolean {
     return existsSync(isAbsolute(executable) ? executable : resolve(executable))
   }
   // Bare name: resolvable iff present in some PATH entry. `node` is always
-  // present in dev, and packaged builds use packageName entries instead.
-  const pathValue = process.env.PATH || ''
-  for (const dir of pathValue.split(':')) {
-    if (dir && existsSync(join(dir, executable))) return true
+  // present in dev, and packaged builds use packageName entries instead. Use the
+  // platform PATH delimiter (';' on Windows, ':' elsewhere) and, on Windows,
+  // try each PATHEXT extension so extensionless lookups match real executables.
+  const pathValue = process.env.PATH || process.env.Path || ''
+  const candidates = process.platform === 'win32'
+    ? [executable, ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')
+        .map((ext) => ext.trim())
+        .filter(Boolean)
+        .map((ext) => `${executable}${ext}`)]
+    : [executable]
+  for (const dir of pathValue.split(pathDelimiter)) {
+    if (!dir) continue
+    for (const candidate of candidates) {
+      if (existsSync(join(dir, candidate))) return true
+    }
   }
   return false
 }

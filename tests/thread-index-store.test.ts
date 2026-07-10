@@ -1,6 +1,8 @@
 import { ThreadIndexStore, THREAD_INDEX_SCHEMA_VERSION } from '@open-cowork/runtime-host/thread-index/thread-index-store'
+import { migrateThreadIndexDb } from '../packages/runtime-host/src/thread-index/thread-index-schema.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -15,6 +17,42 @@ function withStore(name: string, run: (store: ThreadIndexStore, root: string) =>
     rmSync(root, { recursive: true, force: true })
   }
 }
+
+test('thread index migration backfills workflow_id/change_source into a pre-existing older table', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-thread-index-upgrade-'))
+  const dbPath = join(root, 'thread-index.sqlite')
+  try {
+    // Simulate a database created under an earlier schema whose thread_index table predates the
+    // workflow_id/change_source columns. `create table if not exists` cannot add them later, so the
+    // migration must backfill them via ALTER — otherwise the first upsert throws "no such column".
+    const legacy = new DatabaseSync(dbPath)
+    // The full thread_index schema minus the workflow_id/change_source columns that were added later.
+    legacy.exec(`create table thread_index (
+      session_id text primary key, title text not null, kind text not null, directory text,
+      project_label text, provider_id text, model_id text, status text not null,
+      created_at text not null, updated_at text not null, parent_session_id text, run_id text,
+      reverted_message_id text, message_count integer not null default 0,
+      tool_call_count integer not null default 0, task_run_count integer not null default 0,
+      cost real not null default 0, input_tokens integer not null default 0,
+      output_tokens integer not null default 0, reasoning_tokens integer not null default 0,
+      cache_read_tokens integer not null default 0, cache_write_tokens integer not null default 0,
+      change_files integer not null default 0, change_additions integer not null default 0,
+      change_deletions integer not null default 0, indexed_at text not null,
+      metadata_version integer not null
+    );`)
+    legacy.close()
+
+    const db = new DatabaseSync(dbPath)
+    migrateThreadIndexDb(db)
+    const columns = (db.prepare('pragma table_info(thread_index)').all() as Array<{ name?: string }>).map((row) => row.name)
+    db.close()
+
+    assert.ok(columns.includes('change_source'), 'change_source must be backfilled into a pre-existing table')
+    assert.ok(columns.includes('workflow_id'), 'workflow_id must be backfilled into a pre-existing table')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
 test('thread index store searches, facets, and cursor-pages 5k seeded threads', () => withStore('search', (store, root) => {
   for (let index = 0; index < 5_000; index += 1) {

@@ -4,13 +4,7 @@ import type { TaskRun } from '../../stores/session'
 // until the model streams something in. Filter empties and sort by order so
 // the UI renders a clean stream.
 export function transcriptSegments(taskRun: TaskRun) {
-  const transcript = taskRun.transcript.length > 0
-    ? taskRun.transcript
-    : taskRun.content
-      ? [{ id: `${taskRun.id}:legacy`, content: taskRun.content, order: taskRun.order }]
-      : []
-
-  return transcript
+  return taskRun.transcript
     .slice()
     .sort((a, b) => a.order - b.order)
     .filter((segment) => segment.content.trim().length > 0)

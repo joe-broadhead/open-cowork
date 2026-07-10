@@ -224,18 +224,18 @@ test('envelope adapter rotates keys via kid + a previous-key ring (P2-1)', () =>
   assert.throws(() => createEnvelopeSecretAdapter(k2).reveal(cipher1, 'ctx'), /No cloud secret key available for kid/)
 })
 
-test('envelope adapter trial-decrypts legacy (no-kid) envelopes across the ring (P2-1)', () => {
+test('envelope adapter fails closed on a no-kid envelope (no legacy trial-decrypt) (P2-1)', () => {
   const k1 = 'legacy-key-one-with-enough-entropy'
   const k2 = 'legacy-key-two-with-enough-entropy'
 
-  // Forge a pre-kid envelope: encrypt with k1, then strip the kid the adapter now stamps.
+  // Forge a pre-kid envelope: encrypt with k1, then strip the kid the adapter always stamps.
   const sealed = createEnvelopeSecretAdapter(k1).protect('legacy-secret')
   const envelope = JSON.parse(Buffer.from(sealed.slice(CLOUD_SECRET_ENVELOPE_PREFIX.length), 'base64url').toString('utf8'))
   delete envelope.kid
   const legacyCipher = CLOUD_SECRET_ENVELOPE_PREFIX + Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url')
 
-  // After rotation to k2 with k1 retained, the no-kid envelope still decrypts (trial across the ring).
-  assert.equal(createEnvelopeSecretAdapter(k2, [k1]).reveal(legacyCipher), 'legacy-secret')
+  // A no-kid envelope is rejected; there is no back-compat trial-decrypt.
+  assert.throws(() => createEnvelopeSecretAdapter(k2, [k1]).reveal(legacyCipher), /missing a key id/)
 })
 
 test('createCloudSecretAdapterFromEnv loads previous keys for rotation (P2-1)', async () => {

@@ -313,6 +313,7 @@ export async function handleChannelsApiRoute(input: {
         provider: tools.readChannelProvider(body.provider),
         externalWorkspaceId: tools.readString(body.externalWorkspaceId),
         externalUserId: tools.readString(body.externalUserId),
+        externalChatId: tools.readString(body.externalChatId),
         token: tools.readString(body.token),
         externalInteractionId: tools.readString(body.externalInteractionId),
         response: body.response ?? null,

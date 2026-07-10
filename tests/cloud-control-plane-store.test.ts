@@ -913,7 +913,7 @@ test('cloud control plane caps managed command queues and workflow starts', () =
   ))
 })
 
-test('cloud control plane resolves org accounts memberships, tokens, and audit events', () => {
+test('cloud control plane resolves org accounts memberships, tokens, and audit events', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
   const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Acme' })
@@ -942,7 +942,7 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
     accountId: 'account-1',
   })?.membership.status, 'active')
 
-  const issued = store.issueApiToken({
+  const issued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Desktop token',
@@ -954,7 +954,7 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
   assert.notEqual(issued.token.tokenHash, issued.plaintext)
   assert.deepEqual(issued.token.scopes, ['desktop', 'gateway'])
   assert.equal(store.listApiTokens(org.orgId)[0]?.tokenId, issued.token.tokenId)
-  assert.equal(store.findApiTokenByPlaintext(issued.plaintext)?.tokenId, issued.token.tokenId)
+  assert.equal((await store.findApiTokenByPlaintext(issued.plaintext))?.tokenId, issued.token.tokenId)
 
   const revoked = store.revokeApiToken({
     tokenId: issued.token.tokenId,
@@ -962,7 +962,7 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
     actor: { actorType: 'user', actorId: account.accountId },
   })
   assert.equal(revoked?.revokedAt !== null, true)
-  assert.equal(store.findApiTokenByPlaintext(issued.plaintext), null)
+  assert.equal(await store.findApiTokenByPlaintext(issued.plaintext), null)
 
   const audit = store.recordAuditEvent({
     orgId: org.orgId,
@@ -980,7 +980,7 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
   assert.equal(store.listAuditEvents(org.orgId).some((event) => event.eventType === 'api_token.created'), true)
 })
 
-test('cloud control plane manages worker lifecycle credentials and heartbeats', () => {
+test('cloud control plane manages worker lifecycle credentials and heartbeats', async () => {
   const store = seededStore()
   const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'org-1', name: 'Acme' })
 
@@ -1020,8 +1020,8 @@ test('cloud control plane manages worker lifecycle credentials and heartbeats', 
   assert.equal(store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'paused' })?.status, 'paused')
   assert.equal(store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'active' })?.status, 'active')
 
-  assert.throws(
-    () => store.issueManagedWorkerCredential({
+  await assert.rejects(
+    store.issueManagedWorkerCredential({
       orgId: org.orgId,
       workerId: worker.workerId,
       createdAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -1030,14 +1030,14 @@ test('cloud control plane manages worker lifecycle credentials and heartbeats', 
     /expiration must be in the future/,
   )
 
-  const issued = store.issueManagedWorkerCredential({
+  const issued = await store.issueManagedWorkerCredential({
     orgId: org.orgId,
     workerId: worker.workerId,
     secret: 'managed-worker-secret',
   })
   assert.match(issued.plaintext, /^ocw_/)
   assert.equal(store.listManagedWorkerCredentials(org.orgId, worker.workerId)[0]?.tokenHash.includes(issued.plaintext), false)
-  assert.equal(store.findManagedWorkerCredentialByPlaintext(issued.plaintext)?.worker.workerId, worker.workerId)
+  assert.equal((await store.findManagedWorkerCredentialByPlaintext(issued.plaintext))?.worker.workerId, worker.workerId)
 
   const heartbeat = store.recordManagedWorkerHeartbeat({
     orgId: org.orgId,
@@ -1059,7 +1059,7 @@ test('cloud control plane manages worker lifecycle credentials and heartbeats', 
     credentialId: issued.credential.credentialId,
   })
   assert.equal(revokedCredential?.revokedAt !== null, true)
-  assert.equal(store.findManagedWorkerCredentialByPlaintext(issued.plaintext), null)
+  assert.equal(await store.findManagedWorkerCredentialByPlaintext(issued.plaintext), null)
   const heartbeatRejectionAudit = store.listAuditEvents(org.orgId, 20)
   assert.equal(heartbeatRejectionAudit.some((event) => (
     event.eventType === 'managed_worker_heartbeat.rejected'
@@ -1079,7 +1079,7 @@ test('cloud control plane manages worker lifecycle credentials and heartbeats', 
   assert.equal(store.listAuditEvents(org.orgId).some((event) => event.eventType === 'managed_worker.revoked'), true)
 })
 
-test('cloud control plane stores headless channel bindings, interactions, cursors, and deliveries', () => {
+test('cloud control plane stores headless channel bindings, interactions, cursors, and deliveries', async () => {
   const store = seededStore()
   const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Acme' })
 
@@ -1169,7 +1169,7 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     lastWorkspaceSequence: 1,
   }), { ok: false, reason: 'not_found' })
 
-  const issued = store.createChannelInteraction({
+  const issued = await store.createChannelInteraction({
     interactionId: 'interaction-1',
     orgId: org.orgId,
     agentId: agent.agentId,
@@ -1184,7 +1184,7 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
   })
   assert.match(issued.plaintextToken, /^occi_interaction-1_/)
   assert.notEqual(issued.interaction.tokenHash, issued.plaintextToken)
-  assert.throws(() => store.createChannelInteraction({
+  await assert.rejects(store.createChannelInteraction({
     interactionId: 'interaction-1',
     orgId: org.orgId,
     agentId: agent.agentId,
@@ -1194,13 +1194,13 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     targetId: 'permission-1',
     expiresAt: new Date('2026-01-01T01:00:00.000Z'),
   }), /already exists/)
-  assert.equal(store.resolveChannelInteraction({
+  assert.equal((await store.resolveChannelInteraction({
     orgId: org.orgId,
     token: issued.plaintextToken,
     identityId: identity.identityId,
     usedAt: new Date('2026-01-01T00:01:00.000Z'),
-  })?.status, 'used')
-  assert.equal(store.resolveChannelInteraction({
+  }))?.status, 'used')
+  assert.equal(await store.resolveChannelInteraction({
     orgId: org.orgId,
     token: issued.plaintextToken,
     identityId: identity.identityId,
@@ -1398,7 +1398,7 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     now: new Date('2026-01-01T00:00:04.000Z'),
   }).claimed, false)
 
-  const secondInteraction = store.createChannelInteraction({
+  const secondInteraction = await store.createChannelInteraction({
     interactionId: 'interaction-2',
     orgId: org.orgId,
     agentId: agent.agentId,
@@ -1408,7 +1408,7 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     targetId: 'question-1',
     expiresAt: new Date('2027-01-01T01:00:00.000Z'),
   })
-  assert.throws(() => store.resolveChannelInteractionWithCommand({
+  await assert.rejects(store.resolveChannelInteractionWithCommand({
     orgId: org.orgId,
     token: secondInteraction.plaintextToken,
     identityId: identity.identityId,
@@ -1421,11 +1421,11 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
       payload: { requestId: 'question-1', answers: [] },
     },
   }), /does not match/)
-  assert.equal(store.findChannelInteraction({
+  assert.equal((await store.findChannelInteraction({
     orgId: org.orgId,
     token: secondInteraction.plaintextToken,
-  })?.status, 'pending')
-  const resolvedWithCommand = store.resolveChannelInteractionWithCommand({
+  }))?.status, 'pending')
+  const resolvedWithCommand = await store.resolveChannelInteractionWithCommand({
     orgId: org.orgId,
     token: secondInteraction.plaintextToken,
     identityId: identity.identityId,

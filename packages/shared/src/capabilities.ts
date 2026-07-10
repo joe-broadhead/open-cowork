@@ -206,15 +206,6 @@ export interface CapabilityBundleIssue {
   resourceId?: string
 }
 
-export interface CapabilityBundleManifestNormalizeOptions {
-  /**
-   * Compatibility mode for legacy manifests written before the public schema
-   * required explicit resources/permissions arrays. Runtime callers should
-   * leave this false so normalization matches the schema contract.
-   */
-  allowMissingCollections?: boolean
-}
-
 export interface CapabilityBundleInstallPlanAction {
   action: 'install' | 'review_permission' | 'preserve_user_resource' | 'remove_bundle_resource' | 'block'
   kind: CapabilityBundleResourceKind | CapabilityBundlePermissionKind | 'bundle'

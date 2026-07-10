@@ -21,7 +21,6 @@ import {
   type CloudDeploymentTier,
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
-export { parseCloudDeploymentTier, resolveCloudAbuseConfig, resolveCloudAuthConfig, resolveCloudBillingConfig, resolveCloudEntitlementsConfig, type CloudDeploymentTier } from './cloud-config.ts'
 import type { ControlPlaneStore } from './control-plane-store.ts'
 import { InMemoryControlPlaneStore } from './in-memory-control-plane-store.ts'
 import {

@@ -199,9 +199,6 @@ export function validateIncomingChannelMessage(
 ): void {
   const violations: string[] = [];
   if (!message.id) violations.push("message id is required");
-  if ((message.providerInstanceId ?? message.provider) !== provider.id) {
-    violations.push(`message providerInstanceId ${message.providerInstanceId ?? "(missing)"} does not match ${provider.id}`);
-  }
   if (message.provider !== provider.id) {
     violations.push(`message provider ${message.provider} does not match ${provider.id}`);
   }

@@ -42,7 +42,6 @@ export const DEFAULT_WINDOW_ZOOM_FACTOR = 1
 export const MIN_WINDOW_ZOOM_FACTOR = 0.8
 export const MAX_WINDOW_ZOOM_FACTOR = 1.5
 
-type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
 const MAX_SETTINGS_KEY_BYTES = 256
 const MAX_SETTINGS_VALUE_BYTES = 64 * 1024
@@ -59,10 +58,6 @@ class UnsupportedSettingsSchemaVersionError extends Error {
     super(`Settings schema version ${version} is newer than supported version ${SETTINGS_SCHEMA_VERSION}.`)
     this.name = 'UnsupportedSettingsSchemaVersionError'
   }
-}
-
-export function nativePermissionEnabledByDefault(policy: NativePermissionDefault) {
-  return policy !== 'deny'
 }
 
 function isRuntimePermissionPolicy(value: unknown): value is RuntimePermissionPolicy {
@@ -141,8 +136,6 @@ function createDefaults(): AppSettings {
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    enableBash: nativePermissionEnabledByDefault(bashPermission),
-    enableFileWrite: nativePermissionEnabledByDefault(fileWritePermission),
     runtimeConfigSource: 'app',
     runtimeToolingBridgeEnabled: true,
     windowZoomFactor: DEFAULT_WINDOW_ZOOM_FACTOR,
@@ -251,22 +244,10 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   const bashPermission = normalizeRuntimePermissionPolicy(settings.bashPermission, appPermissions.bash)
   if (bashPermission) {
     update.bashPermission = bashPermission
-    update.enableBash = bashPermission !== 'deny'
-  } else if (typeof settings.enableBash === 'boolean') {
-    update.enableBash = settings.enableBash
-    update.bashPermission = settings.enableBash
-      ? defaultRuntimePermissionPolicy(appPermissions.bash)
-      : 'deny'
   }
   const fileWritePermission = normalizeRuntimePermissionPolicy(settings.fileWritePermission, appPermissions.fileWrite)
   if (fileWritePermission) {
     update.fileWritePermission = fileWritePermission
-    update.enableFileWrite = fileWritePermission !== 'deny'
-  } else if (typeof settings.enableFileWrite === 'boolean') {
-    update.enableFileWrite = settings.enableFileWrite
-    update.fileWritePermission = settings.enableFileWrite
-      ? defaultRuntimePermissionPolicy(appPermissions.fileWrite)
-      : 'deny'
   }
   const webPermission = normalizeRuntimePermissionPolicy(settings.webPermission, appPermissions.web)
   if (webPermission) update.webPermission = webPermission
@@ -341,8 +322,6 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
     notificationSounds: raw?.notificationSounds !== false,
     privacyKeepConversationHistory: raw?.privacyKeepConversationHistory !== false,
     privacyShareAnonymizedUsage: raw?.privacyShareAnonymizedUsage === true,
-    enableBash: bashPermission !== 'deny',
-    enableFileWrite: fileWritePermission !== 'deny',
     runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
     runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
     windowZoomFactor: normalizeWindowZoomFactor(raw?.windowZoomFactor) ?? defaults.windowZoomFactor,
@@ -615,14 +594,8 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
     ? selectedModelId
     : resolveProviderModelSelection(providerId, provider?.models, settings.selectedSmallModelId)
   const effectiveSmallModel = validSelectedSmallModel || validConfiguredSmallModel || selectedModelId
-  const bashPermission = clampRuntimePermissionPolicy(
-    settings.enableBash === false ? 'deny' : settings.bashPermission,
-    appPermissions.bash,
-  )
-  const fileWritePermission = clampRuntimePermissionPolicy(
-    settings.enableFileWrite === false ? 'deny' : settings.fileWritePermission,
-    appPermissions.fileWrite,
-  )
+  const bashPermission = clampRuntimePermissionPolicy(settings.bashPermission, appPermissions.bash)
+  const fileWritePermission = clampRuntimePermissionPolicy(settings.fileWritePermission, appPermissions.fileWrite)
   const webPermission = clampRuntimePermissionPolicy(settings.webPermission, appPermissions.web)
   const taskPermission = clampRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
   const externalDirectoryPermission = clampRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
@@ -637,8 +610,6 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
     taskPermission,
     externalDirectoryPermission,
     mcpPermission,
-    enableBash: bashPermission !== 'deny',
-    enableFileWrite: fileWritePermission !== 'deny',
     effectiveProviderId: providerId,
     effectiveModel: selectedModelId,
     effectiveSmallModel,

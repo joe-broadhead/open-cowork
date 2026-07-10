@@ -28,8 +28,6 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    enableBash: false,
-    enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
     windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
@@ -253,8 +251,6 @@ describe('SettingsPanel', () => {
       taskPermission: 'ask',
       externalDirectoryPermission: 'ask',
       mcpPermission: 'deny',
-      enableBash: true,
-      enableFileWrite: true,
       runtimeToolingBridgeEnabled: false,
     })
   })

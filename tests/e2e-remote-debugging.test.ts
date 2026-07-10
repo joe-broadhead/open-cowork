@@ -107,26 +107,23 @@ test('e2e arg environment applies only smoke allowlisted keys', () => {
   })
 })
 
-test('e2e arg environment can be explicitly enabled by an allowlisted launch argument', () => {
+test('e2e arg environment cannot be enabled from argv alone (no self-authorization)', () => {
   const args = buildE2EArgEnvironment({
-    [E2E_ARG_ENV_ENABLE_KEY]: '1',
     OPEN_COWORK_E2E: '1',
     OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
     HOME: '/tmp/open-cowork-home',
   })
+  // The enable key is not in the applyable allowlist, so an argv that tries to
+  // set it is ignored; with no real-env authorization, nothing is applied.
   const env: NodeJS.ProcessEnv = {}
 
   applyE2EArgEnvironment([
     'Open Cowork',
     ...args,
+    `--open-cowork-e2e-env=${E2E_ARG_ENV_ENABLE_KEY}=1`,
   ], env)
 
-  assert.deepEqual(env, {
-    [E2E_ARG_ENV_ENABLE_KEY]: '1',
-    OPEN_COWORK_E2E: '1',
-    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
-    HOME: '/tmp/open-cowork-home',
-  })
+  assert.deepEqual(env, {})
 })
 
 test('e2e settings mutation requires explicit opt-in for packaged probes', () => {

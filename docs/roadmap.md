@@ -120,10 +120,10 @@ intake -> setup thread -> agent/tool selection -> saved workflow -> run thread -
 The stable vocabulary is:
 
 - **Chat** for direct work with OpenCode.
-- **Agents** for reusable OpenCode-native workers.
+- **Team** for reusable OpenCode-native coworkers.
 - **Tools & Skills** for scoped authority and repeatable know-how.
-- **Workflows** for reviewed recurring work around OpenCode-native execution.
-- **Threads** for history and recall.
+- **Playbooks** for reviewed recurring work around OpenCode-native execution.
+- **Projects** for history and recall.
 - **Artifacts** for generated files, charts, reports, and saved outputs.
 
 Primary navigation should support one of those concepts or the workspace
@@ -150,7 +150,7 @@ and deployment artifacts:
 ## Non-Goals
 
 These concepts remain outside the core product unless they collapse cleanly into
-Chat, Agents, Tools & Skills, Workflows, Threads, or Workspaces:
+Chat, Team, Tools & Skills, Playbooks, Projects, or Workspaces:
 
 - a parallel agent runtime outside OpenCode
 - peer-to-peer runtime replication between desktop and cloud
