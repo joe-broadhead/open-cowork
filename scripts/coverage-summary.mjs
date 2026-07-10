@@ -125,6 +125,26 @@ export const STANDALONE_GATEWAY_COVERAGE_INPUT = {
   },
   thresholds: { lines: 82, functions: 80, branches: 78 },
 }
+// KNOWN LIMITATION (test-infra follow-up required): these thresholds run over
+// mcps/*/dist, NOT mcps/*/src, and are near-meaningless as a regression signal for
+// handler code. Each MCP is a stdio server: `mcps/*/tests/contract.test.ts` spawns
+// the built `dist/index.js` as a subprocess (StdioClientTransport) rather than
+// importing handlers in-process, and coverage is collected via NODE_V8_COVERAGE over
+// that subprocess (see scripts/run-workspace-node-tests.mjs +
+// scripts/subprocess-v8-coverage.mjs). `mcps/build.mjs` bundles with esbuild
+// `bundle: true` and NO sourcemap, so every dist/index.js is a single ~31k-line file
+// with @modelcontextprotocol/sdk + zod inlined (e.g. knowledge: 81 src lines ->
+// 31,099 dist lines). The V8 merge maps offsets straight onto those dist lines with
+// no source map, so the SDK/vendor code dominates the denominator and a handler's
+// actual src (~70-1500 lines) barely moves the ratio: untested new handler code
+// cannot trip a lines:35/functions:25 floor. The sourceInventory below only proves
+// each bundle is loaded at least once, not that any handler branch is exercised.
+// Measuring src coverage is NOT feasible without a larger test-infra change -- either
+// (a) emit esbuild sourcemaps AND teach mergeSubprocessV8Coverage to remap dist
+// offsets back to src files, or (b) refactor the contract suites to import handler
+// modules from src in-process (strip-types) instead of spawning the bundle. Until one
+// of those lands, do NOT trust these numbers; keep the dist thresholds only as a
+// "did the server boot" smoke floor.
 export const MCP_HANDLER_COVERAGE_INPUT = {
   name: 'MCP Handlers',
   path: 'coverage/workspace/lcov.info',
@@ -149,6 +169,8 @@ export const MCP_HANDLER_COVERAGE_INPUT = {
       { path: 'mcps/workflows/dist', extensions: ['.js', '.mjs'] },
     ],
   },
+  // Dist-bundle thresholds: a boot/smoke floor only. See the KNOWN LIMITATION note
+  // above -- these do not enforce handler src coverage.
   thresholds: { lines: 35, functions: 25, branches: 67 },
 }
 export const GATEWAY_PROVIDER_COVERAGE_INPUT = {
