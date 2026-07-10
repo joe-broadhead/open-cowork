@@ -36,6 +36,7 @@ planned before broad distribution.
 
 ### Changed
 
+- Upgraded the bundled OpenCode SDK and embedded runtime to `1.17.14`.
 - Simplified the product surface around Chat, Team, Tools & Skills, Projects,
   and Playbooks so Open Cowork stays a product layer on top of OpenCode rather
   than a second runtime or team-operations platform.
@@ -66,6 +67,15 @@ planned before broad distribution.
 - Private update release source credentials stay in the main process; renderer
   IPC receives only safe source labels/status, and signed URL query strings are
   redacted from logs and diagnostics.
+- Channel interaction approvals are scoped to the chat the request was sent to,
+  so an approve-capable member in a different chat can no longer approve using a
+  leaked token (previously token possession plus role was sufficient).
+- Desktop E2E test hooks can no longer be enabled from command-line arguments
+  alone; remote debugging and config/data-dir overrides now require a real
+  environment marker that argv cannot forge.
+- Cloud token hashing (API tokens, channel-interaction, SCIM, worker
+  credentials) runs off the event loop, and cloud secret envelopes without a key
+  id fail closed instead of being trial-decrypted against the key ring.
 
 ### Fixed
 
@@ -73,6 +83,11 @@ planned before broad distribution.
   command instead of exposing a secret-bearing URL.
 - Fixed stale docs that still described removed Pulse, crew, governance,
   improvement, and operations-queue surfaces as active product features.
+- Bundled MCP command resolution on Windows now uses the platform PATH
+  delimiter and PATHEXT instead of assuming a POSIX `:` separator.
+- Bounded the session-status reconciler polling, session lineage tracking, and
+  the cloud projection view cache so long-running sessions cannot grow them
+  without limit.
 
 ### Removed
 
@@ -81,6 +96,10 @@ planned before broad distribution.
   Team ship as default-enabled Studio surfaces and were not removed. The active
   `v0.x` product spans Chat, Projects, Knowledge, Approvals, Team, Playbooks,
   Channels, Tools & Skills, and Artifacts.
+- Removed back-compat shims and dead code: the `enableBash`/`enableFileWrite`
+  boolean settings (superseded by the permission enums), renamed-view route
+  aliases, the `providerInstanceId` channel-message field, and several unused
+  modules and legacy decode/migration paths.
 
 ## [0.0.0] - 2026-04-28
 
