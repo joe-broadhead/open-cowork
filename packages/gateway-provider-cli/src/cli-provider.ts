@@ -181,7 +181,6 @@ export function mapCliPayload(payload: unknown, now = new Date(), providerId: Ch
   const id = cleanString(record.id) ?? randomUUID();
   return {
     id,
-    providerInstanceId: providerId,
     providerEventId: id,
     providerMessageId: id,
     provider: providerId,

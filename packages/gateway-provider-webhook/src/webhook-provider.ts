@@ -587,13 +587,9 @@ export function mapWebhookPayload(
   payload: unknown,
   now = new Date(),
   providerId: ChannelProviderId = "webhook",
-  providerKindOrOptions: ChannelProviderKind | MapWebhookPayloadOptions = channelProviderKindFromId(providerId) ?? "webhook",
+  providerKind: ChannelProviderKind = channelProviderKindFromId(providerId) ?? "webhook",
   options: MapWebhookPayloadOptions = {},
 ): IncomingChannelMessage {
-  const providerKind = typeof providerKindOrOptions === "string"
-    ? providerKindOrOptions
-    : channelProviderKindFromId(providerId) ?? "webhook";
-  const resolvedOptions = typeof providerKindOrOptions === "string" ? options : providerKindOrOptions;
   const record = requireRecord(payload, "Webhook payload");
   const target = normalizeTarget(record.target);
   const sender = normalizeSender(record.sender);
@@ -604,7 +600,6 @@ export function mapWebhookPayload(
   const eventId = optionalString(record.id) ?? randomUUID();
   return {
     id: eventId,
-    providerInstanceId: providerId,
     providerEventId: eventId,
     providerMessageId: eventId,
     provider: providerId,
@@ -624,7 +619,7 @@ export function mapWebhookPayload(
     isCommand: command !== null,
     command: command?.command,
     commandArgs: command?.args,
-    attachments: normalizeAttachments(record.attachments, resolvedOptions),
+    attachments: normalizeAttachments(record.attachments, options),
     interaction,
     receivedAt: parseReceivedAt(record.receivedAt, now),
     raw: payload

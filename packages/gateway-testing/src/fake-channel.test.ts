@@ -31,7 +31,6 @@ describe("FakeChannelProvider", () => {
         name: "text",
         emit: () => provider.emit({
           id: "msg-1",
-          providerInstanceId: "cli-main",
           providerEventId: "event-1",
           providerMessageId: "msg-1",
           provider: "cli-main",

@@ -355,7 +355,6 @@ export function mapTelegramMessage(
 
   return {
     id: String(message.message_id),
-    providerInstanceId: providerId,
     providerEventId,
     providerMessageId: String(message.message_id),
     provider: providerId,
@@ -404,7 +403,6 @@ export function mapTelegramCallback(ctx: Context, providerId: ChannelProviderId 
 
   return {
     id: query.id,
-    providerInstanceId: providerId,
     providerEventId,
     providerMessageId: String(message.message_id),
     provider: providerId,

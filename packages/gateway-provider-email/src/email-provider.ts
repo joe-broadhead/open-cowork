@@ -297,7 +297,6 @@ function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number
     || messageId;
   return {
     id: messageId,
-    providerInstanceId: providerId,
     providerEventId: messageId,
     providerMessageId: messageId,
     provider: providerId,

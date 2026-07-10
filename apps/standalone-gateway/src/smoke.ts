@@ -25,7 +25,6 @@ export async function runStandaloneGatewaySmoke(): Promise<{ ok: true; sessionCo
     id: "message-1",
     provider: "cli-standalone",
     providerKind: "cli",
-    providerInstanceId: "cli-standalone",
     providerEventId: "event-1",
     providerMessageId: "message-1",
     target: { provider: "cli-standalone", providerKind: "cli", chatId: "smoke", threadId: "smoke" },
