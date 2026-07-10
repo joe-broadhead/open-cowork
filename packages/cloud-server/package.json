@@ -89,7 +89,7 @@
     "@open-cowork/cloud-client": "workspace:*",
     "@open-cowork/runtime-host": "workspace:*",
     "@open-cowork/shared": "workspace:*",
-    "@opencode-ai/sdk": "1.15.5",
+    "@opencode-ai/sdk": "1.17.14",
     "google-auth-library": "^10.9.0",
     "pg": "^8.22.0"
   },
