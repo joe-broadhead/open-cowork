@@ -390,8 +390,6 @@ test('custom agent permission overrides emit collapsed OpenCode permission keys'
     saveSettings({
       bashPermission: 'allow',
       fileWritePermission: 'allow',
-      enableBash: true,
-      enableFileWrite: true,
     })
     const catalog = buildCustomAgentCatalog({
       builtinTools: builtinTools as any,
@@ -506,8 +504,6 @@ test('custom agent permission overrides honor user-disabled shell and write sett
       bashPermission: 'deny',
       fileWritePermission: 'deny',
       externalDirectoryPermission: 'deny',
-      enableBash: false,
-      enableFileWrite: false,
     })
     const catalog = buildCustomAgentCatalog({
       builtinTools: builtinTools as any,

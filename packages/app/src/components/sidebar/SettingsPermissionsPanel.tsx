@@ -110,7 +110,6 @@ export function PermissionsPanel({
   const permissionRows = [
     {
       key: 'bashPermission' as const,
-      legacyKey: 'enableBash' as const,
       maximum: permissions.bash,
       code: 'bash',
       id: 'settings-permissions-shell',
@@ -119,7 +118,6 @@ export function PermissionsPanel({
     },
     {
       key: 'fileWritePermission' as const,
-      legacyKey: 'enableFileWrite' as const,
       maximum: permissions.fileWrite,
       code: 'edit/write/apply_patch',
       id: 'settings-permissions-files',
@@ -183,7 +181,6 @@ export function PermissionsPanel({
                 value={selected}
                 onChange={(value) => update({
                   [row.key]: value as RuntimePermissionPolicy,
-                  ...(row.legacyKey ? { [row.legacyKey]: value !== 'deny' } : {}),
                 } as Partial<EffectiveAppSettings>)}
                 className="settings-permission-control shrink-0"
                 options={PERMISSION_OPTIONS.map((option) => {

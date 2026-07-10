@@ -280,8 +280,6 @@ const completeSettings: EffectiveAppSettings = {
   notificationSounds: true,
   privacyKeepConversationHistory: true,
   privacyShareAnonymizedUsage: false,
-  enableBash: false,
-  enableFileWrite: false,
   runtimeToolingBridgeEnabled: true,
   windowZoomFactor: 1,
   workflowLaunchAtLogin: false,

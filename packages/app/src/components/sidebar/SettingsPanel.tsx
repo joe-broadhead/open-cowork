@@ -82,8 +82,6 @@ function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean
         notificationDailyDigest: settings.notificationDailyDigest,
         notificationSounds: settings.notificationSounds,
         privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
-        enableBash: settings.enableBash,
-        enableFileWrite: settings.enableFileWrite,
         runtimeConfigSource: settings.runtimeConfigSource,
         runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
         windowZoomFactor: settings.windowZoomFactor,

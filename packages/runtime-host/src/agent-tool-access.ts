@@ -320,8 +320,8 @@ export function nativeToolLabels(ids: string[]) {
 
 export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'explore' | 'chief-of-staff' | 'autoresearch') {
   const settings = getEffectiveSettings()
-  const canUseBash = settings.enableBash
-  const canWriteFiles = settings.enableFileWrite
+  const canUseBash = settings.bashPermission !== 'deny'
+  const canWriteFiles = settings.fileWritePermission !== 'deny'
   const readOnlyCore = ['read', 'grep', 'glob', 'list']
   const webTools = ['websearch', 'webfetch']
   const writeTools = canWriteFiles ? ['edit', 'write', 'apply_patch'] : []

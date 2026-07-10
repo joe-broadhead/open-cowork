@@ -125,8 +125,6 @@ function installModelRuntime() {
         integrationEnabled: {},
         bashPermission: 'deny',
         fileWritePermission: 'deny',
-        enableBash: false,
-        enableFileWrite: false,
         runtimeToolingBridgeEnabled: true,
         workflowLaunchAtLogin: false,
         workflowRunInBackground: false,

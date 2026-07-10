@@ -32,8 +32,6 @@ function baseSettings(): AppSettings {
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    enableBash: false,
-    enableFileWrite: false,
     runtimeConfigSource: 'app',
     runtimeToolingBridgeEnabled: true,
     windowZoomFactor: 1,
