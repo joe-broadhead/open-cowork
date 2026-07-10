@@ -122,7 +122,7 @@ if (errors.length) {
 // Rather than block on migrating them all at once, ratchet the count DOWN: the check fails if a
 // NEW raw color is introduced (count above the baseline), and the baseline must be lowered as
 // they are migrated. This stops the app's raw-color debt from growing (#917).
-const APP_RAW_COLOR_BASELINE = 80
+const APP_RAW_COLOR_BASELINE = 74
 const appScanRoot = join(root, 'packages/app/src')
 const appErrors = []
 scan(appScanRoot, appErrors)
