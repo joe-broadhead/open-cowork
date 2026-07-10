@@ -181,32 +181,29 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const nextWorkspaceId = normalizeWorkspaceId(workspaceId)
     if (nextWorkspaceId === normalizeWorkspaceId(state.activeWorkspaceId)) return {}
     const timing = sessionViewTiming()
-    // Drop status entries for the workspace we are leaving. Its session events are filtered out
-    // while it is inactive (useOpenCodeEvents keys on the active workspace), so those entries would
-    // otherwise never clear — accumulating across every switch and pinning the referenced session
-    // states against pruning. Only active-workspace keys are ever read (ThreadList).
-    const keepActiveWorkspace = (keys: Set<string>) => {
-      const next = new Set<string>()
-      for (const key of keys) {
-        if (parseSessionWorkspaceKey(key).workspaceId === nextWorkspaceId) next.add(key)
-      }
-      return next.size === keys.size ? keys : next
+    // Drop busy entries for the workspace we are leaving. A busy (generating) session re-emits
+    // events, so its entry re-populates on switch-back; clearing it meanwhile lets the detail cache
+    // it pins (pruneSessionDetailCache keys on busySessions) be reclaimed rather than accumulating
+    // across every switch. Only active-workspace keys are ever read (ThreadList).
+    //
+    // The awaiting-permission/question sets are deliberately NOT pruned: those are quiescent states
+    // that emit no further events while waiting, so a pruned badge would never recover on switch-back
+    // and the user would lose the only sidebar signal that a session needs input. They hold just
+    // keys (no pinned state), so retaining them costs negligible memory.
+    const busySessions = new Set<string>()
+    for (const key of state.busySessions) {
+      if (parseSessionWorkspaceKey(key).workspaceId === nextWorkspaceId) busySessions.add(key)
     }
-    const busySessions = keepActiveWorkspace(state.busySessions)
-    const awaitingPermissionSessions = keepActiveWorkspace(state.awaitingPermissionSessions)
-    const awaitingQuestionSessions = keepActiveWorkspace(state.awaitingQuestionSessions)
     return {
       activeWorkspaceId: nextWorkspaceId,
       sessions: state.sessionsByWorkspace[nextWorkspaceId] || [],
       currentSessionId: null,
       busySessions,
-      awaitingPermissionSessions,
-      awaitingQuestionSessions,
       currentView: deriveVisibleSessionPatch(
         createEmptySessionViewState({}, timing),
         null,
         busySessions,
-        awaitingPermissionSessions,
+        state.awaitingPermissionSessions,
         timing,
       ),
     }

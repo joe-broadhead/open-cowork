@@ -103,7 +103,7 @@ describe('useSessionStore', () => {
     expect(useSessionStore.getState().totalCost).toBe(2)
   })
 
-  it('prunes inactive-workspace status entries on workspace switch (no leak)', () => {
+  it('prunes busy entries on workspace switch but keeps awaiting badges (no leak, no lost signal)', () => {
     const store = useSessionStore.getState()
 
     store.setCurrentSession('ses_1')
@@ -114,12 +114,13 @@ describe('useSessionStore', () => {
     expect(useSessionStore.getState().busySessions.has('ses_1')).toBe(true)
     expect(useSessionStore.getState().awaitingPermissionSessions.has('ses_1')).toBe(true)
 
-    // Switching away from local drops local status entries — their events are filtered out while
-    // local is inactive, so they would otherwise never clear and would accumulate forever.
+    // Switching away from local drops the busy entry (a generating session re-emits, and clearing
+    // it unpins the detail cache), but the awaiting-permission badge is retained: that session is
+    // quiescent and emits no further event, so pruning it would lose the sidebar signal forever.
     useSessionStore.getState().setActiveWorkspace('cloud:acme')
     expect(useSessionStore.getState().busySessions.has('ses_1')).toBe(false)
-    expect(useSessionStore.getState().awaitingPermissionSessions.has('ses_1')).toBe(false)
     expect(useSessionStore.getState().busySessions.size).toBe(0)
+    expect(useSessionStore.getState().awaitingPermissionSessions.has('ses_1')).toBe(true)
   })
 
   it('keeps same-id session state separate across workspaces', () => {
