@@ -469,9 +469,8 @@ class PostgresKnowledgeStore implements KnowledgeStore {
 /**
  * Construct a Postgres-backed {@link KnowledgeStore}. The caller injects a
  * pg-compatible `pool` (node-postgres in production, pglite in tests). The
- * `cloud_knowledge_*` tables must already exist — run the
- * `016_cloud_knowledge` migration (registered in CLOUD_CONTROL_PLANE_MIGRATIONS)
- * before first use. Set `ownsPool: true` to have `close()` end the pool.
+ * `cloud_knowledge_*` tables must already exist in the current cloud control-plane
+ * schema. Set `ownsPool: true` to have `close()` end the pool.
  */
 export function createPostgresKnowledgeStore(
   pool: PostgresKnowledgePool,

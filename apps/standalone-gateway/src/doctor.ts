@@ -117,10 +117,10 @@ export async function runStandaloneGatewayDoctor(input: {
       evidence: { runtimeAuthority: "private-opencode" },
     }),
     doctorCheck({
-      code: "standalone_gateway.schema.production_tables",
+      code: "standalone_gateway.schema.baseline_definition",
       status: schemaOk ? "pass" : "fail",
-      message: "Standalone Gateway schema includes production session, event, job, lease, channel, artifact, team, and audit tables.",
-      remediation: "Run the Standalone Gateway migration before serving traffic.",
+      message: "The compiled Standalone Gateway clean baseline defines production session, event, job, lease, channel, artifact, team, and audit tables; live database verification is reported separately by repository readiness.",
+      remediation: "Repair the baseline definition in the application build, then recreate an empty Standalone Gateway schema before serving traffic.",
     }),
     doctorCheck({
       code: "standalone_gateway.providers.configured",

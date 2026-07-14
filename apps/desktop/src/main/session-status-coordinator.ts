@@ -1,6 +1,6 @@
 // Polling reconciler with bounded linear backoff. It is a safety net behind the
-// SDK's session.status / session.idle events: if the SSE stream briefly
-// lags, this loop confirms idle via an explicit client.session.status() call.
+// native session events: if the SSE stream briefly lags, this loop confirms
+// idle via the authoritative `/api/session/active` process-owned drain list.
 // Do not remove without measuring event-stream reliability first; idle-state
 // confirmation is load-bearing for the question-reply and post-run UI flows.
 type SessionStatusType = string | null

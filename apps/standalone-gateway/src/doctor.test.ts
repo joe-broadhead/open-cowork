@@ -34,7 +34,7 @@ test("standalone doctor checks product mode, repository, OpenCode, schema, and p
     "standalone_gateway.repository.readiness",
     "standalone_gateway.repository.tls",
     "standalone_gateway.opencode.health",
-    "standalone_gateway.schema.production_tables",
+    "standalone_gateway.schema.baseline_definition",
     "standalone_gateway.providers.configured",
     "standalone_gateway.identity_authorization",
     "standalone_gateway.retention.policy",

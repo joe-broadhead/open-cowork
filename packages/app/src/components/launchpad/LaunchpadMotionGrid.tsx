@@ -7,12 +7,11 @@ import type {
 import type { AppNavigationTarget } from '../../app-types'
 import { formatDate, t } from '../../helpers/i18n'
 import { Badge, Button, Icon, type IconName, type StudioTone } from '../ui'
+import { MAX_MOTION_ITEMS } from './constants'
 
 // The "In motion" launchpad: three columns (In progress / Waiting on you /
 // Fresh artifacts) summarising live work. Extracted from HomePage so the home
 // surface stays focused on the composer + page shell.
-export const MAX_MOTION_ITEMS = 3
-
 type MotionColumnConfig<TItem> = {
   key: string
   title: string

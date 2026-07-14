@@ -366,7 +366,6 @@ test('private beta deployment examples validate against the public schema', () =
 test('gateway deployer config validates shared branding providers and safety semantics', () => {
   const config = cloneConfig()
   config.allowedEnvPlaceholders = [
-    'ACME_GATEWAY_SERVICE_TOKEN',
     'ACME_GATEWAY_ADMIN_TOKEN',
     'ACME_WEBHOOK_SECRET',
   ]
@@ -375,10 +374,6 @@ test('gateway deployer config validates shared branding providers and safety sem
       productName: 'Acme Cowork',
       shortName: 'AC',
       supportUrl: 'https://support.acme.example/cowork',
-    },
-    cloud: {
-      baseUrl: 'https://cowork.acme.example',
-      serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
     },
     productMode: 'cloud_channel',
     server: {
@@ -416,9 +411,8 @@ test('gateway deployer config validates shared branding providers and safety sem
 
 test('gateway deployer config fails closed when a bridge provider omits its relay', () => {
   const config = cloneConfig()
-  config.allowedEnvPlaceholders = ['ACME_GATEWAY_SERVICE_TOKEN', 'ACME_GATEWAY_ADMIN_TOKEN', 'ACME_BRIDGE_SECRET']
+  config.allowedEnvPlaceholders = ['ACME_GATEWAY_ADMIN_TOKEN', 'ACME_BRIDGE_SECRET']
   const gateway = {
-    cloud: { baseUrl: 'https://cowork.acme.example', serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}' },
     productMode: 'cloud_channel',
     server: {
       host: '0.0.0.0',
@@ -455,10 +449,6 @@ test('gateway deployer config fails closed when a bridge provider omits its rela
 test('gateway deployer config allows gateway-only secrets to be injected outside desktop validation', () => {
   const config = cloneConfig()
   config.gateway = {
-    cloud: {
-      baseUrl: 'https://cowork.acme.example',
-      serviceToken: '',
-    },
     server: {
       host: '127.0.0.1',
       adminToken: '',
@@ -485,11 +475,6 @@ test('gateway deployer config allows gateway-only secrets to be injected outside
 test('gateway deployer config rejects unsafe public URLs and fail-open provider settings', () => {
   const config = cloneConfig()
   config.gateway = {
-    cloud: {
-      baseUrl: 'http://cowork.acme.example',
-      serviceToken: 'service-token',
-      allowInsecureHttp: false,
-    },
     providers: [{
       kind: 'webhook',
       channelBindingId: 'acme-webhook',
@@ -498,14 +483,7 @@ test('gateway deployer config rejects unsafe public URLs and fail-open provider 
       },
     }],
   }
-  assert.throws(() => validateResolvedConfig(config, 'gateway deployer config'), /gateway\.cloud\.baseUrl/)
-
-  config.gateway.cloud.allowInsecureHttp = true
   assert.doesNotThrow(() => validateResolvedConfig(config, 'gateway deployer config'))
-  assert.throws(() => validateConfigSemantics(config, 'gateway deployer config'), /credentials\.sharedSecret/)
-
-  config.gateway.cloud.baseUrl = 'https://cowork.acme.example'
-  config.gateway.cloud.allowInsecureHttp = false
   assert.throws(() => validateConfigSemantics(config, 'gateway deployer config'), /credentials\.sharedSecret/)
 
   config.gateway.providers = [{

@@ -59,7 +59,7 @@ export function parseCsvArray(value: string | null, fallback: string[] | undefin
 }
 
 export function parseSignupMode(value: string | null | undefined) {
-  if (value === 'disabled') return 'disabled'
-  if (value === 'closed' || value === 'invite' || value === 'domain' || value === 'open') return value
-  return null
+  if (value === null || value === undefined || value === '') return null
+  if (value === 'disabled' || value === 'invite' || value === 'domain' || value === 'open') return value
+  throw new Error(`Invalid cloud signup mode "${value}". Expected disabled, invite, domain, or open.`)
 }

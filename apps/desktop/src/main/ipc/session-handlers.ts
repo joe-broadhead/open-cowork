@@ -8,8 +8,9 @@ import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
-import { normalizeProviderListResponse, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
-import { normalizeSessionInfo } from '@open-cowork/runtime-host'
+import { listNativeProviders, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
+import { getNativeProviderAuthMethods } from './provider-handlers.ts'
+import { createNativeSession, getNativeSession, interruptNativeSession, normalizeSessionInfo, promptNativeSession } from '@open-cowork/runtime-host'
 import type { IpcHandlerContext } from './context.ts'
 import { isCloudProjectedSessionEventType, normalizeCloudProjectSource, type CloudProjectSourceInput, type SessionChangeSummary, type SessionImportSelection, shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
@@ -314,22 +315,6 @@ function buildPromptParts(promptText: string, attachments: PromptAttachment[]): 
   ]
 }
 
-function buildPromptRequest(input: {
-  sessionId: string
-  parts: PromptPart[]
-  model: ReturnType<typeof resolvePromptModel>
-  variant: string | null
-  agent: string
-}) {
-  return {
-    sessionID: input.sessionId,
-    parts: input.parts,
-    ...(input.model ? { model: input.model } : {}),
-    ...(input.variant ? { variant: input.variant } : {}),
-    agent: input.agent,
-  }
-}
-
 function buildRendererSessionFallback(input: {
   id: string
   title: string
@@ -383,8 +368,8 @@ type ProviderAuthMethodLike = {
 async function getSelectedRuntimeProvider(client: NonNullable<ReturnType<typeof getClient>>, providerId?: string | null) {
   if (!providerId) return null
   try {
-    const providerList = await client.provider.list()
-    return normalizeProviderListResponse(providerList.data).find((provider) => (
+    const providers = await listNativeProviders(client)
+    return providers.find((provider) => (
       provider.id === providerId || provider.name === providerId
     )) || null
   } catch (err) {
@@ -408,8 +393,7 @@ async function getRuntimeProviderAuthMethods(
   providerId: string,
 ): Promise<ProviderAuthMethodLike[]> {
   try {
-    const result = await client.provider.auth()
-    const methods = result.data?.[providerId]
+    const methods = (await getNativeProviderAuthMethods(client))[providerId]
     return Array.isArray(methods) ? methods : []
   } catch (err) {
     log('provider', `Could not resolve auth methods for ${providerId}: ${sdkErrorMessage(err)}`)
@@ -485,8 +469,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const settings = getEffectiveSettings()
 
     log('session', 'Creating new session')
-    const result = await client.session.create({}, { throwOnError: true })
-    const session = normalizeSessionInfo(result.data)
+    const session = normalizeSessionInfo(await createNativeSession(client, {
+      location: { directory: opencodeDirectory },
+    }))
     if (!session) {
       throw new Error('Runtime returned an invalid session payload')
     }
@@ -576,14 +561,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       })
       if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
 
-      await client.session.promptAsync(buildPromptRequest({
-        sessionId,
+      await promptNativeSession(client, {
+        sessionID: sessionId,
         parts,
-        model: promptModel,
-        variant: promptVariant,
+        model: promptModel
+          ? { ...promptModel, variant: promptVariant || undefined }
+          : null,
         agent: requestedAgent,
-      }), {
-        throwOnError: true,
       })
 
       startSessionStatusReconciliation(sessionId, {
@@ -716,8 +700,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     try {
       const client = getClientForDirectory(record.opencodeDirectory)
       if (!client) return toRendererSession(record)
-      const result = await client.session.get({ sessionID: id })
-      const session = normalizeSessionInfo(result.data)
+      const session = normalizeSessionInfo(await getNativeSession(client, id))
       if (!session) return null
       const updated = updateSessionRecord(id, {
         title: session.title || undefined,
@@ -800,7 +783,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       })
     }
     try {
-      await client.session.abort({ sessionID: sessionId })
+      await interruptNativeSession(client, sessionId)
     } catch (err) {
       context.logHandlerError(`session:abort ${shortSessionId(sessionId)}`, err)
     }
@@ -821,7 +804,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const { client } = await context.getSessionClient(rootSessionId)
     log('session', `Aborting task ${shortSessionId(childSessionId)} under ${shortSessionId(rootSessionId)}`)
     try {
-      await client.session.abort({ sessionID: childSessionId })
+      await interruptNativeSession(client, childSessionId)
     } catch (err) {
       context.logHandlerError(
         `session:abort-task ${shortSessionId(childSessionId)} (root ${shortSessionId(rootSessionId)})`,

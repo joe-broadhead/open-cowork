@@ -293,7 +293,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', '--run-connection-test')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'cloudSqlProxy:')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'gcr.io/cloud-sql-connectors/cloud-sql-proxy')
-  assertIncludes('helm/open-cowork-cloud/values.yaml', 'tag: "2.22.0"')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'tag: "2.23.0"')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'maxSigtermDelay: ""')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production rejects cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production rejects cloud.allowInsecurePublicAuth=true')
@@ -2322,7 +2322,7 @@ function validateDocs() {
   }
 
   const exampleReadme = read('examples/downstream/example-org/README.md')
-  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'contractVersion: 1', 'docs/downstream-contract.md', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers', 'immutable downstream release tag or digest', 'cloud.billing.provider=none']) {
+  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'contractVersion: 1', 'docs/downstream-contract.md', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers', 'immutable downstream release tag or digest', 'cloud.billing.provider=none', 'OPEN_COWORK_CLOUD_BASE_URL', 'OPEN_COWORK_GATEWAY_SERVICE_TOKEN', 'OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS']) {
     if (!exampleReadme.includes(phrase)) {
       throw new Error(`examples/downstream/example-org/README.md must include ${phrase}`)
     }
@@ -2334,7 +2334,6 @@ function validateDocs() {
     '"gateway"',
     '"productMode": "cloud_channel"',
     '"providers"',
-    'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
     'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
     'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
   ]) {

@@ -1,5 +1,7 @@
 {
-  "source": "open-wiki docs/reference/mcp-tools.md",
+  "source": "https://github.com/joe-broadhead/open-wiki/blob/85a8aaf1973c194f17d283ed5fe8af71bcfc58f1/docs/reference/mcp-tools.md",
+  "sourceRevision": "85a8aaf1973c194f17d283ed5fe8af71bcfc58f1",
+  "sourcePath": "docs/reference/mcp-tools.md",
   "read": [
     "wiki.search",
     "wiki.recall",
@@ -49,7 +51,8 @@
     "wiki.propose_source",
     "wiki.comment_on_proposal",
     "wiki.dream_run",
-    "wiki.inbox_submit"
+    "wiki.inbox_submit",
+    "wiki.inbox_process"
   ],
   "write": [
     "wiki.read_policy",
@@ -57,9 +60,11 @@
     "wiki.connect_workspace",
     "wiki.propose_policy",
     "wiki.propose_section_policy",
+    "wiki.write_page",
+    "wiki.create_page",
+    "wiki.rename_page",
     "wiki.ingest_source",
     "wiki.fetch_source",
-    "wiki.inbox_process",
     "wiki.inbox_ignore",
     "wiki.inbox_retry",
     "wiki.review_proposal",

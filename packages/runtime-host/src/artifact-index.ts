@@ -21,6 +21,7 @@ import {
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader-core.js'
 import { listCoordinationTasks } from './coordination/coordination-service.js'
+import { initializeLocalSqliteSchema } from './local-sqlite-schema.js'
 import { sessionEngine } from './session-engine.js'
 import { listSessionRecords, type SessionRecord } from './session-registry.js'
 import { setSessionHistoryViewIndexHandler, syncSessionView } from './session-history-loader.js'
@@ -30,6 +31,70 @@ const ARTIFACT_LIFECYCLE_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
 const DEFAULT_INDEX_LIMIT = 100
 const MAX_INDEX_LIMIT = 500
+
+const ARTIFACT_LIFECYCLE_BASELINE_SQL = `
+  create table artifact_lifecycle_meta (
+    key text primary key,
+    value text not null
+  );
+  create table artifact_lifecycle (
+    workspace_id text not null,
+    session_id text not null,
+    artifact_id text not null,
+    kind text not null,
+    status text not null,
+    author_agent_id text,
+    project_id text,
+    task_id text,
+    status_updated_by text,
+    status_updated_at text,
+    created_at text not null,
+    updated_at text not null,
+    primary key(workspace_id, session_id, artifact_id)
+  );
+  create index idx_artifact_lifecycle_workspace_updated
+    on artifact_lifecycle(workspace_id, updated_at);
+  create index idx_artifact_lifecycle_project
+    on artifact_lifecycle(workspace_id, project_id, task_id, updated_at);
+  create index idx_artifact_lifecycle_kind_status
+    on artifact_lifecycle(workspace_id, kind, status, updated_at);
+  create table artifact_index (
+    workspace_id text not null,
+    session_id text not null,
+    artifact_id text not null,
+    id text not null,
+    tool_id text not null,
+    tool_name text not null,
+    file_path text not null,
+    filename text not null,
+    order_value integer not null,
+    source text,
+    cloud_artifact_id text,
+    task_run_id text,
+    mime text,
+    size_bytes integer,
+    chart_json text,
+    session_title text,
+    kind text not null,
+    status text not null,
+    author_agent_id text,
+    project_id text,
+    task_id text,
+    status_updated_by text,
+    status_updated_at text,
+    created_at text not null,
+    updated_at text not null,
+    primary key(workspace_id, session_id, artifact_id)
+  );
+  create index idx_artifact_index_workspace_updated
+    on artifact_index(workspace_id, updated_at);
+  create index idx_artifact_index_project
+    on artifact_index(workspace_id, project_id, task_id, updated_at);
+  create index idx_artifact_index_kind_status
+    on artifact_index(workspace_id, kind, status, updated_at);
+  create index idx_artifact_index_session_updated
+    on artifact_index(workspace_id, session_id, updated_at);
+`
 
 let lifecycleDb: DatabaseSync | null = null
 let lifecycleDbForTests: DatabaseSync | null = null
@@ -92,74 +157,28 @@ function ensureArtifactLifecycleFileModes(dbPath = artifactLifecycleDbPath()) {
 }
 
 function initDb(db: DatabaseSync) {
-  db.exec(`
-    create table if not exists artifact_lifecycle_meta (
-      key text primary key,
-      value text not null
-    );
-    create table if not exists artifact_lifecycle (
-      workspace_id text not null,
-      session_id text not null,
-      artifact_id text not null,
-      kind text not null,
-      status text not null,
-      author_agent_id text,
-      project_id text,
-      task_id text,
-      status_updated_by text,
-      status_updated_at text,
-      created_at text not null,
-      updated_at text not null,
-      primary key(workspace_id, session_id, artifact_id)
-    );
-    create index if not exists idx_artifact_lifecycle_workspace_updated
-      on artifact_lifecycle(workspace_id, updated_at);
-    create index if not exists idx_artifact_lifecycle_project
-      on artifact_lifecycle(workspace_id, project_id, task_id, updated_at);
-    create index if not exists idx_artifact_lifecycle_kind_status
-      on artifact_lifecycle(workspace_id, kind, status, updated_at);
-    create table if not exists artifact_index (
-      workspace_id text not null,
-      session_id text not null,
-      artifact_id text not null,
-      id text not null,
-      tool_id text not null,
-      tool_name text not null,
-      file_path text not null,
-      filename text not null,
-      order_value integer not null,
-      source text,
-      cloud_artifact_id text,
-      task_run_id text,
-      mime text,
-      size_bytes integer,
-      chart_json text,
-      session_title text,
-      kind text not null,
-      status text not null,
-      author_agent_id text,
-      project_id text,
-      task_id text,
-      status_updated_by text,
-      status_updated_at text,
-      created_at text not null,
-      updated_at text not null,
-      primary key(workspace_id, session_id, artifact_id)
-    );
-    create index if not exists idx_artifact_index_workspace_updated
-      on artifact_index(workspace_id, updated_at);
-    create index if not exists idx_artifact_index_project
-      on artifact_index(workspace_id, project_id, task_id, updated_at);
-    create index if not exists idx_artifact_index_kind_status
-      on artifact_index(workspace_id, kind, status, updated_at);
-    create index if not exists idx_artifact_index_session_updated
-      on artifact_index(workspace_id, session_id, updated_at);
-  `)
-  db.prepare(`
-    insert into artifact_lifecycle_meta (key, value)
-    values (?, ?)
-    on conflict(key) do update set value = excluded.value
-  `).run(ARTIFACT_LIFECYCLE_SCHEMA_VERSION_KEY, String(ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION))
+  initializeLocalSqliteSchema(db, {
+    storeName: 'local artifact lifecycle and index store',
+    currentVersion: ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION,
+    metaTable: 'artifact_lifecycle_meta',
+    versionKey: ARTIFACT_LIFECYCLE_SCHEMA_VERSION_KEY,
+    baselineSql: ARTIFACT_LIFECYCLE_BASELINE_SQL,
+    tables: [
+      { name: 'artifact_lifecycle_meta', columns: ['key', 'value'] },
+      { name: 'artifact_lifecycle', columns: ['workspace_id', 'session_id', 'artifact_id', 'kind', 'status', 'author_agent_id', 'project_id', 'task_id', 'status_updated_by', 'status_updated_at', 'created_at', 'updated_at'] },
+      { name: 'artifact_index', columns: ['workspace_id', 'session_id', 'artifact_id', 'id', 'tool_id', 'tool_name', 'file_path', 'filename', 'order_value', 'source', 'cloud_artifact_id', 'task_run_id', 'mime', 'size_bytes', 'chart_json', 'session_title', 'kind', 'status', 'author_agent_id', 'project_id', 'task_id', 'status_updated_by', 'status_updated_at', 'created_at', 'updated_at'] },
+    ],
+    indexes: [
+      'idx_artifact_lifecycle_workspace_updated',
+      'idx_artifact_lifecycle_project',
+      'idx_artifact_lifecycle_kind_status',
+      'idx_artifact_index_workspace_updated',
+      'idx_artifact_index_project',
+      'idx_artifact_index_kind_status',
+      'idx_artifact_index_session_updated',
+    ],
+    recovery: 'Back up or export artifact review/provenance metadata, then reset only artifact-lifecycle.sqlite; session records and underlying artifact files are separate and must be preserved.',
+  })
 }
 
 export function getArtifactLifecycleDb() {
@@ -168,8 +187,8 @@ export function getArtifactLifecycleDb() {
   const dbPath = artifactLifecycleDbPath()
   const db = new DatabaseSync(dbPath)
   try {
-    db.exec('pragma journal_mode = WAL;')
     initDb(db)
+    db.exec('pragma journal_mode = WAL;')
     ensureArtifactLifecycleFileModes(dbPath)
     lifecycleDb = db
     return db
@@ -182,9 +201,12 @@ export function getArtifactLifecycleDb() {
 export function setArtifactLifecycleDatabaseForTests(db: DatabaseSync | null) {
   lifecycleDb?.close()
   lifecycleDb = null
-  lifecycleDbForTests = db
+  lifecycleDbForTests = null
   transactionCounter = 0
-  if (db) initDb(db)
+  if (db) {
+    initDb(db)
+    lifecycleDbForTests = db
+  }
 }
 
 export function clearArtifactLifecycleStoreCache() {

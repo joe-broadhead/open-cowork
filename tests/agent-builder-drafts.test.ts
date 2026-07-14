@@ -124,13 +124,13 @@ describe('draftFromCustomAgent', () => {
     assert.equal(draft.model, 'provider/model')
   })
 
-  it('preserves missing legacy permission editor state for custom agents', () => {
+  it('preserves omitted permission editor state for OpenCode-native custom agents', () => {
     const draft = draftFromCustomAgent(makeCustomAgent({ permissionOverrides: undefined }))
 
     assert.equal(draft.permissionOverrides, undefined)
   })
 
-  it('treats normalized empty permission editor arrays as legacy missing state', () => {
+  it('treats normalized empty permission editor arrays as omitted state', () => {
     const draft = draftFromCustomAgent(makeCustomAgent({ permissionOverrides: [] }))
 
     assert.equal(draft.permissionOverrides, undefined)

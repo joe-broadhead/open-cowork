@@ -4,6 +4,7 @@ import { normalizeMessagePart, normalizeRuntimeEventEnvelope, normalizeSessionIn
 import { asRecord, deriveToolStatus, normalizePermissionEvent, readRecordNestedRecord, readRecordString, readString } from '@open-cowork/shared'
 import {
   createOpencodeClient,
+  type OpencodeClient,
   type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
@@ -18,15 +19,6 @@ import {
   type CloudRuntimeEventListener,
   type CloudRuntimeSubscribeOptions,
 } from './runtime-adapter.ts'
-
-type EventCapableClient = {
-  event?: {
-    subscribe(
-      input?: Record<string, never>,
-      options?: { signal?: AbortSignal },
-    ): Promise<{ stream: AsyncIterable<unknown> }>
-  }
-}
 
 export type NodeOpencodeCloudRuntimeAdapter = CloudRuntimeAdapter & {
   url: string
@@ -171,6 +163,75 @@ function eventFromMessagePartDelta(properties: Record<string, unknown>): CloudRu
   }]
 }
 
+function eventFromNativeText(properties: Record<string, unknown>, mode: 'append' | 'replace'): CloudRuntimeEvent[] {
+  const content = readRecordString(properties, [mode === 'append' ? 'delta' : 'text'])
+  if (!content) return []
+  const sessionId = readSessionId(properties)
+  const messageId = readRecordString(properties, ['assistantMessageID'])
+  return [{
+    type: 'assistant.message',
+    payload: {
+      ...(sessionId ? { sessionId } : {}),
+      ...(messageId ? { messageId } : {}),
+      content,
+      mode,
+    },
+  }]
+}
+
+function eventsFromNativeTool(eventType: string, properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  const sessionId = readSessionId(properties)
+  const toolName = readRecordString(properties, ['tool'])
+  const content = Array.isArray(properties.content) ? properties.content : []
+  const textOutput = content
+    .map((entry) => asRecord(entry))
+    .filter((entry) => readString(entry.type) === 'text')
+    .map((entry) => readString(entry.text) || '')
+    .join('')
+  const status = eventType === 'session.next.tool.success'
+    ? 'complete'
+    : eventType === 'session.next.tool.failed'
+      ? 'error'
+      : 'running'
+  return [{
+    type: 'tool.call',
+    payload: {
+      ...(sessionId ? { sessionId } : {}),
+      id: readRecordString(properties, ['callID']),
+      ...(toolName ? { name: toolName } : {}),
+      input: asRecord(properties.input),
+      status,
+      ...(properties.result !== undefined
+        ? { output: properties.result }
+        : textOutput
+          ? { output: textOutput }
+          : {}),
+      ...(properties.error !== undefined ? { error: properties.error } : {}),
+    },
+  }]
+}
+
+function eventsFromNativeStepEnded(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  const sessionId = readSessionId(properties)
+  const finish = readRecordString(properties, ['finish'])
+  const events: CloudRuntimeEvent[] = [{
+    type: 'cost.updated',
+    payload: {
+      ...(sessionId ? { sessionId } : {}),
+      id: [sessionId || 'session', readRecordString(properties, ['assistantMessageID']) || 'message', 'step-finish'].join(':'),
+      cost: typeof properties.cost === 'number' ? properties.cost : 0,
+      tokens: asRecord(properties.tokens),
+    },
+  }]
+  if (finish !== 'tool-calls' && finish !== 'tool_calls') {
+    events.push({
+      type: 'session.idle',
+      payload: { ...(sessionId ? { sessionId } : {}) },
+    })
+  }
+  return events
+}
+
 function eventsFromPermissionRequested(properties: Record<string, unknown>): CloudRuntimeEvent[] {
   const normalized = normalizePermissionEvent(properties)
   if (!normalized.id) return []
@@ -180,6 +241,7 @@ function eventsFromPermissionRequested(properties: Record<string, unknown>): Clo
       permissionId: normalized.id,
       id: normalized.id,
       ...(normalized.sessionId ? { sessionId: normalized.sessionId } : {}),
+      ...(normalized.sessionId ? { sourceSessionId: normalized.sessionId } : {}),
       tool: normalized.title,
       input: normalized.input,
       description: normalized.title || `Permission requested for ${normalized.permissionType}`,
@@ -229,6 +291,7 @@ function eventsFromQuestionAsked(properties: Record<string, unknown>): CloudRunt
       requestId,
       id: requestId,
       ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+      ...(readSessionId(properties) ? { sourceSessionId: readSessionId(properties) } : {}),
       questions: Array.isArray(properties.questions) ? properties.questions.map(normalizeQuestionPrompt) : [],
       ...(Object.keys(tool).length > 0
         ? {
@@ -329,6 +392,43 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
       }]
     case 'session.status':
       return eventFromSessionStatus(properties)
+    case 'session.next.step.started':
+      return [{
+        type: 'session.status',
+        payload: {
+          ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+          statusType: 'busy',
+        },
+      }]
+    case 'session.next.step.ended':
+      return eventsFromNativeStepEnded(properties)
+    case 'session.next.step.failed':
+      return [{
+        type: 'runtime.error',
+        payload: {
+          ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+          message: readErrorMessage(properties),
+        },
+      }, {
+        type: 'session.idle',
+        payload: {
+          ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+        },
+      }]
+    case 'session.next.text.delta':
+      return eventFromNativeText(properties, 'append')
+    case 'session.next.text.ended':
+      return eventFromNativeText(properties, 'replace')
+    case 'session.next.reasoning.delta':
+    case 'session.next.reasoning.ended':
+      // Reasoning remains private in the cloud event contract. Recognize the
+      // native family explicitly so diagnostics distinguish it from drift.
+      return []
+    case 'session.next.tool.called':
+    case 'session.next.tool.progress':
+    case 'session.next.tool.success':
+    case 'session.next.tool.failed':
+      return eventsFromNativeTool(eventType, properties)
     case 'session.error':
       return [{
         type: 'runtime.error',
@@ -339,13 +439,18 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
       }]
     case 'permission.asked':
     case 'permission.updated':
+    case 'permission.v2.asked':
       return eventsFromPermissionRequested(properties)
     case 'permission.replied':
+    case 'permission.v2.replied':
       return eventsFromPermissionResolved(properties)
     case 'question.asked':
+    case 'question.v2.asked':
       return eventsFromQuestionAsked(properties)
     case 'question.replied':
     case 'question.rejected':
+    case 'question.v2.replied':
+    case 'question.v2.rejected':
       return eventsFromQuestionResolved(properties)
     case 'todo.updated':
       return eventsFromTodosUpdated(properties)
@@ -392,11 +497,10 @@ export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[]
 }
 
 export function subscribeToOpencodeCloudRuntimeEvents(
-  client: EventCapableClient,
+  client: OpencodeClient,
   listener: CloudRuntimeEventListener,
   options: CloudRuntimeSubscribeOptions = {},
 ) {
-  if (!client.event?.subscribe) return () => undefined
   if (options.signal?.aborted) return () => undefined
   const controller = new AbortController()
   const abort = () => controller.abort()
@@ -404,7 +508,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
 
   void (async () => {
     try {
-      const result = await client.event!.subscribe({}, { signal: controller.signal })
+      const result = await client.v2.event.subscribe({ signal: controller.signal })
       for await (const raw of result.stream) {
         if (controller.signal.aborted) break
         const translation = translateOpencodeRuntimeEventWithDiagnostics(raw)
@@ -509,7 +613,9 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
     cleanupEphemeralConfig?.()
   }
   const client = createOpencodeClient(buildNodeOpencodeCloudRuntimeClientConfig(server.url, auth))
-  const adapter = createSdkCloudRuntimeAdapter(client)
+  const adapter = createSdkCloudRuntimeAdapter(client, {
+    directory: options.cwd || options.paths.getRuntimeHomeDir(),
+  })
   return {
     ...adapter,
     url: server.url,

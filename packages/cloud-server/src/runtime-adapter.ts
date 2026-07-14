@@ -1,4 +1,14 @@
-import { normalizeSessionInfo } from '@open-cowork/runtime-host'
+import {
+  createNativeSession,
+  findNativePermissionSession,
+  findNativeQuestionSession,
+  interruptNativeSession,
+  listNativePendingPermissions,
+  listNativePendingQuestions,
+  normalizeSessionInfo,
+  promptNativeSession,
+} from '@open-cowork/runtime-host'
+import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { CloudProjectedSessionEventType } from '@open-cowork/shared'
 export type CloudRuntimeSession = {
   id: string
@@ -61,26 +71,6 @@ export type CloudRuntimeAdapter = {
   close?: () => Promise<void> | void
 }
 
-type SdkLikeClient = {
-  session: {
-    create(input?: Record<string, never>, options?: { throwOnError?: boolean }): Promise<{ data: unknown }>
-    promptAsync(input: {
-      sessionID: string
-      parts: CloudRuntimePromptPart[]
-      agent: string
-      messageID?: string
-    }, options?: { throwOnError?: boolean, signal?: AbortSignal }): Promise<unknown>
-    abort(input: { sessionID: string }, options?: { throwOnError?: boolean, signal?: AbortSignal }): Promise<unknown>
-  }
-  question?: {
-    reply?: unknown
-    reject?: unknown
-  }
-  permission?: {
-    reply?: unknown
-  }
-}
-
 function toIsoTimestamp(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) return new Date(value).toISOString()
   if (typeof value === 'string' && value.trim()) return value
@@ -91,11 +81,23 @@ function opencodeMessageId(value: string | null | undefined) {
   return typeof value === 'string' && value.startsWith('msg') ? value : null
 }
 
-export function createSdkCloudRuntimeAdapter(client: SdkLikeClient): CloudRuntimeAdapter {
+function normalizeV2QuestionAnswers(value: unknown[]): string[][] {
+  return value.map((answer) => (
+    Array.isArray(answer)
+      ? answer.filter((entry): entry is string => typeof entry === 'string')
+      : typeof answer === 'string'
+        ? [answer]
+        : []
+  ))
+}
+
+export function createSdkCloudRuntimeAdapter(
+  client: OpencodeClient,
+  location: { directory: string },
+): CloudRuntimeAdapter {
   return {
     async createSession() {
-      const result = await client.session.create({}, { throwOnError: true })
-      const session = normalizeSessionInfo(result.data)
+      const session = normalizeSessionInfo(await createNativeSession(client, { location }))
       if (!session) throw new Error('OpenCode returned an invalid session payload.')
       return {
         id: session.id,
@@ -106,44 +108,48 @@ export function createSdkCloudRuntimeAdapter(client: SdkLikeClient): CloudRuntim
     },
     async promptSession(input) {
       const messageId = opencodeMessageId(input.messageId)
-      await client.session.promptAsync({
+      await promptNativeSession(client, {
         sessionID: input.sessionId,
         parts: input.parts,
         agent: input.agent,
-        ...(messageId ? { messageID: messageId } : {}),
-      }, { throwOnError: true, signal: input.signal })
+        messageID: messageId,
+        signal: input.signal,
+      })
     },
     async abortSession(input) {
-      await client.session.abort({ sessionID: input.sessionId }, { throwOnError: true, signal: input.signal })
+      await interruptNativeSession(client, input.sessionId, input.signal)
     },
     async replyToQuestion(input) {
-      if (typeof client.question?.reply !== 'function') throw new Error('OpenCode question replies are not available.')
-      const reply = client.question.reply as (
-        request: { requestID: string, answers: unknown[] },
-        options?: { throwOnError?: boolean, signal?: AbortSignal },
-      ) => Promise<unknown>
-      await reply.call(client.question, {
+      const sourceSessionId = findNativeQuestionSession(
+        await listNativePendingQuestions(client),
+        input.requestId,
+      ) || input.context?.sessionId
+      if (!sourceSessionId) throw new Error(`OpenCode question ${input.requestId} is no longer pending.`)
+      await client.v2.session.question.reply({
+        sessionID: sourceSessionId,
         requestID: input.requestId,
-        answers: input.answers,
+        questionV2Reply: { answers: normalizeV2QuestionAnswers(input.answers) },
       }, { throwOnError: true, signal: input.signal })
     },
     async rejectQuestion(input) {
-      if (typeof client.question?.reject !== 'function') throw new Error('OpenCode question rejection is not available.')
-      const reject = client.question.reject as (
-        request: { requestID: string },
-        options?: { throwOnError?: boolean, signal?: AbortSignal },
-      ) => Promise<unknown>
-      await reject.call(client.question, {
+      const sourceSessionId = findNativeQuestionSession(
+        await listNativePendingQuestions(client),
+        input.requestId,
+      ) || input.context?.sessionId
+      if (!sourceSessionId) throw new Error(`OpenCode question ${input.requestId} is no longer pending.`)
+      await client.v2.session.question.reject({
+        sessionID: sourceSessionId,
         requestID: input.requestId,
       }, { throwOnError: true, signal: input.signal })
     },
     async respondToPermission(input) {
-      if (typeof client.permission?.reply !== 'function') throw new Error('OpenCode permission responses are not available.')
-      const reply = client.permission.reply as (
-        request: { requestID: string, reply: 'once' | 'reject' },
-        options?: { throwOnError?: boolean, signal?: AbortSignal },
-      ) => Promise<unknown>
-      await reply.call(client.permission, {
+      const sourceSessionId = findNativePermissionSession(
+        await listNativePendingPermissions(client),
+        input.permissionId,
+      ) || input.context?.sessionId
+      if (!sourceSessionId) throw new Error(`OpenCode permission ${input.permissionId} is no longer pending.`)
+      await client.v2.session.permission.reply({
+        sessionID: sourceSessionId,
         requestID: input.permissionId,
         reply: input.allowed ? 'once' : 'reject',
       }, { throwOnError: true, signal: input.signal })

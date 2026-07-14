@@ -1294,16 +1294,21 @@ test('session:prompt clears pending prompt echo when dispatch fails', async () =
   let promptCalled = false
   context.getSessionClient = async () => ({
     client: {
-      provider: {
-        list: async () => ({
-          data: [],
-        }),
-        auth: async () => ({ data: {} }),
-      },
-      session: {
-        promptAsync: async () => {
-          promptCalled = true
-          throw new Error('dispatch failed')
+      v2: {
+        provider: {
+          list: async () => ({ data: { data: [] } }),
+        },
+        model: {
+          list: async () => ({ data: { data: [] } }),
+        },
+        session: {
+          get: async () => ({ data: { data: { id: 'session-prompt-failure', agent: 'build', model: null } } }),
+          switchAgent: async () => {},
+          switchModel: async () => {},
+          prompt: async () => {
+            promptCalled = true
+            throw new Error('dispatch failed')
+          },
         },
       },
     } as any,
@@ -1330,36 +1335,42 @@ test('session:prompt forwards an OpenCode model variant when the runtime catalog
   const { context, handlers } = createBaseContext()
   const sessionId = 'session-prompt-variant'
   const promptPayloads: Array<Record<string, unknown>> = []
+  const switchModelPayloads: Array<Record<string, unknown>> = []
 
   sessionEngine.removeSession(sessionId)
   try {
     context.getSessionClient = async () => ({
       client: {
-        provider: {
-          list: async () => ({
-            data: {
-              all: [{
+        v2: {
+          provider: {
+            list: async () => ({
+              data: { data: [{
                 id: providerId,
                 name: 'Acme Provider',
-                models: {
-                  [modelId]: {
-                    name: 'Live Model',
-                    variants: {
-                      xhigh: {},
-                      low: {},
-                    },
-                  },
-                },
-              }],
-              default: { [providerId]: modelId },
-              connected: [providerId],
+              }] },
+            }),
+          },
+          model: {
+            list: async () => ({
+              data: { data: [{
+                id: modelId,
+                providerID: providerId,
+                name: 'Live Model',
+                cost: [],
+                variants: [{ id: 'xhigh' }, { id: 'low' }],
+              }] },
+            }),
+          },
+          session: {
+            get: async () => ({ data: { data: { id: sessionId, agent: 'build', model: null } } }),
+            switchAgent: async () => {},
+            switchModel: async (payload: Record<string, unknown>) => {
+              switchModelPayloads.push(payload)
             },
-          }),
-          auth: async () => ({ data: {} }),
-        },
-        session: {
-          promptAsync: async (payload: Record<string, unknown>) => {
-            promptPayloads.push(payload)
+            prompt: async (payload: Record<string, unknown>) => {
+              promptPayloads.push(payload)
+              return { data: { data: { id: 'input-1', sessionID: sessionId } } }
+            },
           },
         },
       } as any,
@@ -1373,10 +1384,19 @@ test('session:prompt forwards an OpenCode model variant when the runtime catalog
     await handler({}, sessionId, 'analyze with more reasoning', undefined, 'build', { variant: 'xhigh' })
 
     assert.equal(promptPayloads.length, 1)
-    assert.equal(promptPayloads[0]?.variant, 'xhigh')
-    assert.deepEqual(promptPayloads[0]?.model, {
-      providerID: providerId,
-      modelID: modelId,
+    assert.deepEqual(switchModelPayloads, [{
+      sessionID: sessionId,
+      model: {
+        providerID: providerId,
+        id: modelId,
+        variant: 'xhigh',
+      },
+    }])
+    assert.deepEqual(promptPayloads[0], {
+      sessionID: sessionId,
+      prompt: { text: 'analyze with more reasoning' },
+      delivery: 'queue',
+      resume: true,
     })
   } finally {
     consumePendingPromptEcho(sessionId, 'analyze with more reasoning')
@@ -1391,36 +1411,42 @@ test('session:prompt ignores disabled model variants before runtime dispatch', a
   const { context, handlers } = createBaseContext()
   const sessionId = 'session-prompt-invalid-variant'
   const promptPayloads: Array<Record<string, unknown>> = []
+  const switchModelPayloads: Array<Record<string, unknown>> = []
 
   sessionEngine.removeSession(sessionId)
   try {
     context.getSessionClient = async () => ({
       client: {
-        provider: {
-          list: async () => ({
-            data: {
-              all: [{
+        v2: {
+          provider: {
+            list: async () => ({
+              data: { data: [{
                 id: providerId,
                 name: 'Acme Provider',
-                models: {
-                  [modelId]: {
-                    name: 'Live Model',
-                    variants: {
-                      low: {},
-                      xhigh: { disabled: true },
-                    },
-                  },
-                },
-              }],
-              default: { [providerId]: modelId },
-              connected: [providerId],
+              }] },
+            }),
+          },
+          model: {
+            list: async () => ({
+              data: { data: [{
+                id: modelId,
+                providerID: providerId,
+                name: 'Live Model',
+                cost: [],
+                variants: [{ id: 'low' }, { id: 'xhigh', disabled: true }],
+              }] },
+            }),
+          },
+          session: {
+            get: async () => ({ data: { data: { id: sessionId, agent: 'build', model: null } } }),
+            switchAgent: async () => {},
+            switchModel: async (payload: Record<string, unknown>) => {
+              switchModelPayloads.push(payload)
             },
-          }),
-          auth: async () => ({ data: {} }),
-        },
-        session: {
-          promptAsync: async (payload: Record<string, unknown>) => {
-            promptPayloads.push(payload)
+            prompt: async (payload: Record<string, unknown>) => {
+              promptPayloads.push(payload)
+              return { data: { data: { id: 'input-2', sessionID: sessionId } } }
+            },
           },
         },
       } as any,
@@ -1434,7 +1460,13 @@ test('session:prompt ignores disabled model variants before runtime dispatch', a
     await handler({}, sessionId, 'try a stale reasoning variant', undefined, 'build', { variant: 'xhigh' })
 
     assert.equal(promptPayloads.length, 1)
-    assert.equal('variant' in promptPayloads[0]!, false)
+    assert.deepEqual(switchModelPayloads, [{
+      sessionID: sessionId,
+      model: {
+        providerID: providerId,
+        id: modelId,
+      },
+    }])
   } finally {
     consumePendingPromptEcho(sessionId, 'try a stale reasoning variant')
     stopSessionStatusReconciliation(sessionId)
@@ -1658,6 +1690,65 @@ test('explorer:file-read returns null for ungranted renderer-supplied directorie
   assert.match(errors[0] || '', /native directory picker/)
 })
 
+test('explorer list and find use native V2 filesystem routes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-explorer-v2-'))
+  const docs = join(root, 'docs')
+  mkdirSync(docs)
+  writeFileSync(join(root, 'README.md'), 'hello')
+  const calls: Array<{ method: string; input: unknown }> = []
+  const client = {
+    v2: {
+      fs: {
+        async list(input: unknown) {
+          calls.push({ method: 'v2.fs.list', input })
+          return { data: { data: [
+            { path: 'docs/', type: 'directory' },
+            { path: 'README.md', type: 'file' },
+          ] } }
+        },
+        async find(input: unknown) {
+          calls.push({ method: 'v2.fs.find', input })
+          return { data: { data: [{ path: 'README.md', type: 'file' }] } }
+        },
+      },
+    },
+  }
+
+  runtimeState.setClient(client as Parameters<typeof runtimeState.setClient>[0])
+  try {
+    const { context, handlers } = createBaseContext()
+    registerExplorerHandlers(context)
+
+    assert.deepEqual(await handlers.get('explorer:file-list')?.({}, root, root), [
+      { name: 'docs', path: 'docs/', absolute: docs, type: 'directory', ignored: false },
+      { name: 'README.md', path: 'README.md', absolute: join(root, 'README.md'), type: 'file', ignored: false },
+    ])
+    assert.deepEqual(await handlers.get('explorer:find-files')?.({}, {
+      query: 'read',
+      dirs: false,
+      limit: 25,
+    }, root), ['README.md'])
+    assert.deepEqual(calls, [
+      {
+        method: 'v2.fs.list',
+        input: { location: { directory: root }, path: '.' },
+      },
+      {
+        method: 'v2.fs.find',
+        input: {
+          query: 'read',
+          type: 'file',
+          limit: '25',
+          location: { directory: root },
+        },
+      },
+    ])
+  } finally {
+    runtimeState.resetAfterStop()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('explorer find-text pattern validation caps costly regex input', () => {
   assert.equal(normalizeFindTextPattern('  TODO  '), 'TODO')
   assert.equal(normalizeFindTextPattern('   '), null)
@@ -1784,9 +1875,13 @@ test('permission:respond can answer a reopened approval using the hydrated sessi
     requestedSessionId = sessionId
     return {
       client: {
-        permission: {
-          reply: async (payload: Record<string, unknown>) => {
-            replies.push(payload)
+        v2: {
+          session: {
+            permission: {
+              reply: async (payload: Record<string, unknown>) => {
+                replies.push(payload)
+              },
+            },
           },
         },
       } as any,
@@ -1802,9 +1897,28 @@ test('permission:respond can answer a reopened approval using the hydrated sessi
 
   assert.equal(requestedSessionId, 'session-reopened')
   assert.deepEqual(replies, [{
+    sessionID: 'session-reopened',
     requestID: 'perm-1',
     reply: 'once',
   }])
+})
+
+test('permission:respond rejects malformed ids, sessions, and non-boolean decisions before runtime access', async () => {
+  const { context, handlers } = createBaseContext()
+  let runtimeAccesses = 0
+  context.getSessionV2Client = async () => {
+    runtimeAccesses += 1
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('permission:respond')
+  assert.ok(handler, 'expected permission:respond handler to be registered')
+
+  await assert.rejects(() => handler({}, 'perm-1', 'false', 'session-1'), /must be a boolean/)
+  await assert.rejects(() => handler({}, '   ', true, 'session-1'), /request id is required/)
+  await assert.rejects(() => handler({}, 'perm-1', true, '   '), /Session id is required/)
+  assert.equal(runtimeAccesses, 0)
 })
 
 test('permission:respond routes cloud approvals through the cloud workspace adapter', async () => {
@@ -1914,9 +2028,13 @@ test('question:reply clears the answered request locally so queued questions adv
     } as any)
     context.getSessionV2Client = async () => ({
       client: {
-        question: {
-          reply: async (payload: Record<string, unknown>) => {
-            replies.push(payload)
+        v2: {
+          session: {
+            question: {
+              reply: async (payload: Record<string, unknown>) => {
+                replies.push(payload)
+              },
+            },
           },
         },
       } as any,
@@ -1931,8 +2049,9 @@ test('question:reply clears the answered request locally so queued questions adv
 
     const view = sessionEngine.getSessionView(sessionId)
     assert.deepEqual(replies, [{
+      sessionID: sessionId,
       requestID: 'question-1',
-      answers: [['A']],
+      questionV2Reply: { answers: [['A']] },
     }])
     assert.equal(view.pendingQuestions.length, 1)
     assert.equal(view.pendingQuestions[0]?.id, 'question-2')
@@ -2127,9 +2246,13 @@ test('question:reject clears the rejected request locally', async () => {
     } as any)
     context.getSessionV2Client = async () => ({
       client: {
-        question: {
-          reject: async (payload: Record<string, unknown>) => {
-            rejects.push(payload)
+        v2: {
+          session: {
+            question: {
+              reject: async (payload: Record<string, unknown>) => {
+                rejects.push(payload)
+              },
+            },
           },
         },
       } as any,
@@ -2143,7 +2266,10 @@ test('question:reject clears the rejected request locally', async () => {
     await handler({}, sessionId, 'question-reject')
 
     const view = sessionEngine.getSessionView(sessionId)
-    assert.deepEqual(rejects, [{ requestID: 'question-reject' }])
+    assert.deepEqual(rejects, [{
+      sessionID: sessionId,
+      requestID: 'question-reject',
+    }])
     assert.equal(view.pendingQuestions.length, 0)
     assert.equal(view.isAwaitingQuestion, false)
 
@@ -2520,26 +2646,38 @@ test('provider connection test IPC syncs saved API auth and validates live model
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
 
-  const authSetCalls: unknown[] = []
+  const credentialConnectCalls: unknown[] = []
   const fakeClient = {
-    auth: {
-      set: async (input: unknown, options: unknown) => {
-        authSetCalls.push({ input, options })
+    v2: {
+      provider: {
+        get: async () => ({
+          data: { data: { id: 'acme', name: 'Acme', integrationID: 'acme' } },
+        }),
+        list: async () => ({
+          data: { data: [{ id: 'acme', name: 'Acme', integrationID: 'acme' }] },
+        }),
       },
-    },
-    provider: {
-      list: async () => ({
-        data: {
-          all: [{
-            id: 'acme',
-            name: 'Acme',
-            models: {
-              'acme/model': {},
-            },
-          }],
-          connected: [],
+      model: {
+        list: async () => ({
+          data: { data: [{
+            id: 'acme/model',
+            providerID: 'acme',
+            name: 'Acme model',
+            cost: [],
+            variants: [],
+          }] },
+        }),
+      },
+      integration: {
+        get: async () => ({
+          data: { data: { id: 'acme', methods: [{ type: 'key' }] } },
+        }),
+        connect: {
+          key: async (input: unknown, options: unknown) => {
+            credentialConnectCalls.push({ input, options })
+          },
         },
-      }),
+      },
     },
   }
 
@@ -2568,14 +2706,11 @@ test('provider connection test IPC syncs saved API auth and validates live model
       providerId: 'acme',
       modelId: 'acme/model',
     })
-    assert.deepEqual(authSetCalls, [{
+    assert.deepEqual(credentialConnectCalls, [{
       input: {
-        providerID: 'acme',
-        auth: {
-          type: 'api',
-          key: 'provider-secret',
-          metadata: { source: 'open-cowork' },
-        },
+        integrationID: 'acme',
+        key: 'provider-secret',
+        label: 'Open Cowork',
       },
       options: { throwOnError: true },
     }])

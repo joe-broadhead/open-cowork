@@ -454,7 +454,7 @@ Rollback order:
 
 1. Scale worker and scheduler down to zero if command execution is unhealthy.
 2. Roll web, worker, and scheduler deployments back to the previous image tag.
-3. Verify `/healthz`, `GET /api/config`, and session list/projection reads.
+3. Verify `/readyz`, `GET /api/config`, and session list/projection reads.
 4. Start one worker replica and run a smoke prompt.
 5. Start scheduler and remaining workers.
 

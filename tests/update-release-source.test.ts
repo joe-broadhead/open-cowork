@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DEFAULT_CONFIG, type OpenCoworkConfig, sanitizeLogMessage } from '@open-cowork/shared'
 import { resolveUpdateReleaseSource, UpdateReleaseSourceError } from '../apps/desktop/src/main/update/update-release-source.ts'
+import { channelFileName } from '../apps/desktop/src/main/update/update-release-source-generic.ts'
 import { checkForUpdates } from '../apps/desktop/src/main/update/update-check.ts'
 function baseConfig(): OpenCoworkConfig {
   return {
@@ -53,6 +54,7 @@ test('generic update release source discovers latest version from updater metada
   const result = await checkForUpdates({
     config,
     currentVersion: '1.2.3',
+    platform: 'darwin',
     fetchImpl: async (input) => {
       assert.equal(String(input), 'https://updates.example.test/cowork/beta-mac.yml')
       return new Response('version: 1.2.4\nfiles: []\n', { status: 200 })
@@ -66,6 +68,12 @@ test('generic update release source discovers latest version from updater metada
     hasUpdate: true,
     releaseUrl: 'https://updates.example.test/cowork',
   })
+})
+
+test('generic update metadata filenames follow electron-updater platform conventions', () => {
+  assert.equal(channelFileName('latest', 'darwin'), 'latest-mac.yml')
+  assert.equal(channelFileName('latest', 'linux'), 'latest-linux.yml')
+  assert.equal(channelFileName('latest', 'win32'), 'latest.yml')
 })
 
 test('generic update release source allows localhost only outside packaged builds', async () => {
@@ -168,6 +176,7 @@ test('authenticated generic update release source does not expose feed URL witho
   const source = await resolveUpdateReleaseSource({
     config,
     currentVersion: '1.2.3',
+    platform: 'darwin',
     fetchImpl: async (input, init) => {
       assert.equal(String(input), 'https://private-updates.example.test/cowork/latest-mac.yml')
       assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer private-token')
@@ -226,6 +235,7 @@ test('GCS OAuth release source attaches bearer auth only inside main-process fet
   const source = await resolveUpdateReleaseSource({
     config,
     currentVersion: '1.2.3',
+    platform: 'darwin',
     getAuthState: () => ({ authenticated: true, email: 'user@example.test' }),
     refreshGoogleAccessToken: async () => 'ya29.private-token',
     fetchImpl: async (input, init) => {
@@ -277,6 +287,7 @@ test('GCS signed-url broker does not expose brokered artifact URLs in check resu
   const source = await resolveUpdateReleaseSource({
     config,
     currentVersion: '1.2.3',
+    platform: 'win32',
     getAuthState: () => ({ authenticated: true, email: 'user@example.test' }),
     refreshGoogleAccessToken: async () => 'ya29.private-token',
     fetchImpl: async (input, init) => {
@@ -284,13 +295,14 @@ test('GCS signed-url broker does not expose brokered artifact URLs in check resu
       if (url === 'https://updates.example.test/cowork/broker') {
         assert.equal(init?.method, 'POST')
         assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer ya29.private-token')
+        assert.deepEqual(JSON.parse(String(init?.body)), { channel: 'latest', platform: 'win32' })
         return Response.json({
           providerUrl: 'https://brokered.example.test/releases/',
-          releaseUrl: 'https://brokered.example.test/releases/Open-Cowork.dmg?X-Goog-Signature=private',
+          releaseUrl: 'https://brokered.example.test/releases/Open-Cowork.exe?X-Goog-Signature=private',
           requestHeaders: { 'X-Release-Token': 'private-feed-token' },
         })
       }
-      assert.equal(url, 'https://brokered.example.test/releases/latest-mac.yml')
+      assert.equal(url, 'https://brokered.example.test/releases/latest.yml')
       assert.equal((init?.headers as Record<string, string>)['X-Release-Token'], 'private-feed-token')
       return new Response('version: 1.2.4\nfiles: []\n', { status: 200 })
     },

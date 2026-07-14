@@ -15,7 +15,7 @@ export type CloudOrgMode = 'multi-org' | 'single-org'
 
 export type CloudIdentityPolicy = {
   allowSelfServiceSignup: boolean
-  signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
+  signupMode?: 'disabled' | 'invite' | 'domain' | 'open'
   allowedEmailDomains?: readonly string[]
   apiTokenDefaultTtlMs?: number | null
   apiTokenMaxTtlMs?: number | null
@@ -43,8 +43,7 @@ export function publicApiToken(token: ApiTokenRecord, channelBindingIds: readonl
   }
 }
 
-export function resolvedSignupMode(policy: CloudIdentityPolicy): 'disabled' | 'closed' | 'invite' | 'domain' | 'open' {
-  if (policy.signupMode === 'closed') return 'disabled'
+export function resolvedSignupMode(policy: CloudIdentityPolicy): 'disabled' | 'invite' | 'domain' | 'open' {
   if (policy.signupMode) return policy.signupMode
   if (!policy.allowSelfServiceSignup) return 'invite'
   return policy.allowedEmailDomains?.length ? 'domain' : 'open'

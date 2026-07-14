@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
   SETUP_INTENTS,
   type ProviderDescriptor,
@@ -10,12 +10,15 @@ import {
 import { t } from '../helpers/i18n'
 import { getDocsBaseUrl } from '../helpers/brand'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
-import { ProviderAuthControls } from './provider/ProviderAuthControls'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
 import { Badge, Button } from './ui'
 import { BrandMark } from './BrandMark'
 import { ConfirmDialog } from './ConfirmDialog'
+
+const ProviderAuthControls = lazy(() => import('./provider/ProviderAuthControls').then((module) => ({
+  default: module.ProviderAuthControls,
+})))
 
 interface Props {
   brandName: string
@@ -509,20 +512,28 @@ export function SetupScreen({
                 {t('setup.authenticationDescription', 'Use a browser sign-in if available, or enter the required API key.')}
               </p>
             </div>
-            <ProviderAuthControls
-              providerId={providerId}
-              providerName={selectedProvider.name}
-              connected={selectedProvider.connected}
-              disabled={!providerId || saving}
-              copyMode="setup"
-              onBeforeAuthorize={prepareProviderAuthorization}
-              onAuthUpdated={async () => {
-                const authModelId = selectedProvider.defaultModel
-                  || await resolveRuntimeProviderDefaultModel(providerId)
-                  || modelId
-                setModelId(authModelId)
-              }}
-            />
+            <Suspense
+              fallback={(
+                <div className="rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text-muted" role="status" aria-live="polite">
+                  {t('providerAuth.loading', 'Loading sign-in options...')}
+                </div>
+              )}
+            >
+              <ProviderAuthControls
+                providerId={providerId}
+                providerName={selectedProvider.name}
+                connected={selectedProvider.connected}
+                disabled={!providerId || saving}
+                copyMode="setup"
+                onBeforeAuthorize={prepareProviderAuthorization}
+                onAuthUpdated={async () => {
+                  const authModelId = selectedProvider.defaultModel
+                    || await resolveRuntimeProviderDefaultModel(providerId)
+                    || modelId
+                  setModelId(authModelId)
+                }}
+              />
+            </Suspense>
             {selectedProvider.credentials.length > 0 ? (
               <div className="flex flex-col gap-3">
                 {selectedProvider.credentials.map((credential) => {

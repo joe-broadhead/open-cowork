@@ -26,7 +26,9 @@ describe('ViewErrorBoundary', () => {
       </ViewErrorBoundary>,
     )
 
-    expect(screen.getByText('This page failed to render.')).toBeInTheDocument()
+    const recoveryAlert = screen.getByRole('alert')
+    expect(recoveryAlert).toHaveTextContent('This page failed to render.')
+    expect(recoveryAlert).toHaveFocus()
     expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
       message: 'render exploded',
       view: 'capabilities',

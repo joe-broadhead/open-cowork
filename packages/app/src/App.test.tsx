@@ -10,6 +10,7 @@ import {
   type PublicAppConfig,
   type RuntimeStatus,
   type SessionInfo,
+  type WorkflowRun,
   type WorkspaceApiSupport,
   type WorkspaceInfo,
 } from '@open-cowork/shared'
@@ -120,10 +121,10 @@ vi.mock('./components/LoadingScreen', () => ({
 }))
 
 vi.mock('./components/LoginScreen', () => ({
-  LoginScreen: ({ brandName, onLoggedIn }: { brandName: string; onLoggedIn: (email: string) => void }) => (
+  LoginScreen: ({ brandName, onLoggedIn }: { brandName: string; onLoggedIn: (email: string) => void | Promise<void> }) => (
     <div data-testid="login-screen">
       <span>{brandName} login</span>
-      <button type="button" onClick={() => onLoggedIn('joe@example.com')}>Finish login</button>
+      <button type="button" onClick={() => void Promise.resolve(onLoggedIn('joe@example.com')).catch(() => undefined)}>Finish login</button>
     </div>
   ),
 }))
@@ -176,7 +177,7 @@ vi.mock('./components/workflows/WorkflowsPage', () => ({
     initialTarget,
   }: {
     onOpenThread: (sessionId: string) => void
-    initialTarget?: { workflowId: string; runId?: string | null } | null
+    initialTarget?: { workflowId: string; runId?: string | null; run?: WorkflowRun | null } | null
   }) => (
     <div data-testid="workflows-page" data-target={JSON.stringify(initialTarget ?? null)}>
       <button type="button" onClick={() => onOpenThread('workflow-session')}>Open workflow thread</button>
@@ -522,6 +523,32 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('offers a skip link and moves focus only when the app view changes', async () => {
+    const user = userEvent.setup()
+    installAppApi()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    const skipLink = screen.getByRole('link', { name: 'Skip to main content' })
+    const main = screen.getByRole('main')
+
+    await user.tab()
+    expect(skipLink).toHaveFocus()
+    await user.click(skipLink)
+    expect(main).toHaveFocus()
+    expect(window.location.hash).toBe('')
+
+    const ordinaryControl = screen.getByRole('button', { name: 'Sidebar playbooks' })
+    ordinaryControl.focus()
+    fireEvent(window, new ErrorEvent('error', { message: 'background notice', error: new Error('background notice') }))
+    expect(ordinaryControl).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Sidebar team' }))
+    expect(await screen.findByTestId('agents-page')).toBeInTheDocument()
+    await waitFor(() => expect(main).toHaveFocus())
+  })
+
   it('auto-collapses the sidebar below the narrow-window breakpoint', async () => {
     const matchMedia = installMatchMedia(true)
     installAppApi()
@@ -560,7 +587,7 @@ describe('App', () => {
     expect(screen.getByTestId('sidebar')).toHaveAttribute('data-view', 'home')
     expect(screen.getByText('Public preview 0.0.0')).toBeInTheDocument()
     expect(api.session.list).toHaveBeenCalled()
-    expect(api.runtime.status).toHaveBeenCalled()
+    await waitFor(() => expect(api.runtime.status).toHaveBeenCalled())
     expect(mockSetBrandName).toHaveBeenCalledWith('Open Cowork')
     expect(mockConfigureI18n).toHaveBeenCalledWith(config.i18n)
     expect(mockRegisterExtraThemes).toHaveBeenCalledWith([])
@@ -630,11 +657,35 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByTestId('login-screen')).toHaveTextContent('Open Cowork login')
+    expect(api.settings.get).not.toHaveBeenCalled()
+    expect(api.session.list).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Finish login' }))
 
     expect(await screen.findByTestId('home-page')).toBeInTheDocument()
     expect(api.settings.get).toHaveBeenCalled()
+    expect(api.session.list).toHaveBeenCalled()
     expect(api.runtime.status).toHaveBeenCalled()
+  })
+
+  it('does not enter the workspace when protected settings fail after login', async () => {
+    const user = userEvent.setup()
+    const authConfig: PublicAppConfig = {
+      ...config,
+      auth: { mode: 'google-oauth', enabled: true },
+    }
+    const { api } = installAppApi({
+      appConfig: authConfig,
+      authState: { authenticated: false, email: null },
+    })
+    vi.mocked(api.settings.get).mockRejectedValueOnce(new Error('settings unavailable'))
+
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Finish login' }))
+
+    await waitFor(() => expect(api.settings.get).toHaveBeenCalledTimes(1))
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument()
+    expect(api.runtime.status).not.toHaveBeenCalled()
   })
 
   it('mounts global error toasts outside the chat view', async () => {
@@ -1148,6 +1199,20 @@ describe('App', () => {
 
   it('opens exact workflow-run resource links to the workflow surface', async () => {
     const { api } = installAppApi()
+    const exactRun: WorkflowRun = {
+      id: 'run-1',
+      workflowId: 'workflow-1',
+      sessionId: 'run-session',
+      triggerType: 'manual',
+      triggerPayload: null,
+      status: 'completed',
+      title: 'Run 1',
+      summary: null,
+      error: null,
+      createdAt: '2026-05-06T00:00:00.000Z',
+      startedAt: null,
+      finishedAt: null,
+    }
     vi.mocked(api.workflows.get).mockResolvedValueOnce({
       id: 'workflow-1',
       title: 'Workflow',
@@ -1169,20 +1234,7 @@ describe('App', () => {
       latestRunSummary: null,
       webhookUrl: null,
       steps: [{ id: 'step-1', title: 'Run workflow', detail: 'Execute the saved instructions.' }],
-      runs: [{
-        id: 'run-1',
-        workflowId: 'workflow-1',
-        sessionId: 'run-session',
-        triggerType: 'manual',
-        triggerPayload: null,
-        status: 'completed',
-        title: 'Run 1',
-        summary: null,
-        error: null,
-        createdAt: '2026-05-06T00:00:00.000Z',
-        startedAt: null,
-        finishedAt: null,
-      }],
+      runs: [exactRun],
     })
 
     render(<App />)
@@ -1200,6 +1252,7 @@ describe('App', () => {
     expect(await screen.findByTestId('workflows-page')).toHaveAttribute('data-target', JSON.stringify({
       workflowId: 'workflow-1',
       runId: 'run-1',
+      run: exactRun,
     }))
   })
 

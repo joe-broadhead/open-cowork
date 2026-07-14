@@ -102,7 +102,7 @@ verify membership and role; write-only endpoint; continue the same thread from D
 ### 1. Account And Org
 
 - [ ] Confirm the partner has accepted private beta terms and the support path.
-- [ ] Create or approve the org in `closed` or `invite` signup mode.
+- [ ] Create or approve the org in `disabled` or `invite` signup mode.
 - [ ] Assign one owner and at least one admin/member as appropriate.
 - [ ] Confirm IdP email domain, role mapping, and membership are correct.
 - [ ] Record org id, owner email, plan key, support contact, and launch date in

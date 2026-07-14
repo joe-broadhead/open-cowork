@@ -356,6 +356,7 @@ function normalizePendingApproval(value: unknown): PendingApproval | null {
   return {
     id,
     sessionId,
+    sourceSessionId: readNullableString(record.sourceSessionId),
     taskRunId: readNullableString(record.taskRunId),
     tool: readString(record.tool, 'permission'),
     input: cloneProjectionValue(asRecord(record.input)),
@@ -582,6 +583,7 @@ function pendingApprovalFromPayload(
   return {
     id,
     sessionId: session.sessionId,
+    sourceSessionId: readNullableString(payload.sourceSessionId),
     taskRunId: readNullableString(payload.taskRunId),
     tool: readString(payload.tool, 'permission'),
     input: cloneProjectionValue(asRecord(payload.input)),
@@ -775,8 +777,18 @@ export function reduceCloudSessionProjectionEvent(
       })
     }
     case 'tool.call': {
-      const toolCall = toolCallFromPayload(session, payload, event)
+      const projectedToolCall = toolCallFromPayload(session, payload, event)
       const taskRunId = readNullableString(payload.taskRunId)
+      const existingToolCall = taskRunId
+        ? current.taskRuns.find((entry) => entry.id === taskRunId)?.toolCalls.find((entry) => entry.id === projectedToolCall.id)
+        : current.toolCalls.find((entry) => entry.id === projectedToolCall.id)
+      const toolCall = existingToolCall
+        ? {
+            ...projectedToolCall,
+            name: readString(payload.name, readString(payload.tool)) || existingToolCall.name,
+            input: Object.keys(projectedToolCall.input).length > 0 ? projectedToolCall.input : existingToolCall.input,
+          }
+        : projectedToolCall
       const next = {
         ...current,
         status: 'running' as const,

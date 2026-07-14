@@ -34,7 +34,7 @@ const DEFAULTS = {
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
   // 30s: bounds a runaway/blocked query so it can't pin a pooled connection. The only
-  // legitimately-long operations are exempted — DDL/backfill migrations (SET LOCAL /
+  // legitimately-long operations are exempted — baseline/concurrent DDL phases (SET LOCAL /
   // per-connection override in postgres-migrations) and the previously-unbounded event-log
   // reads (now keyset-paged). Operators can override via OPEN_COWORK_CLOUD_PG_STATEMENT_TIMEOUT_MS.
   statementTimeoutMs: 30_000,

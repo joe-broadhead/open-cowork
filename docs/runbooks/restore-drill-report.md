@@ -29,7 +29,7 @@ The drill is considered passing only when all rows are satisfied.
 | Postgres restore | `pg_restore` output and table-count summary | sessions, events, projections, workflows, channel bindings, BYOK metadata, billing/usage, and audit rows are present |
 | Object-store restore | provider copy/sync output and prefix-count summary | artifact metadata points at restored blobs; checkpoint manifests are present |
 | Secret/KMS references | secret manager version list | cloud secret adapter, OIDC, cookie, gateway, and channel secret refs exist; no plaintext exported |
-| Web-only boot | `GET /healthz`, `GET /api/workspace`, `GET /api/diagnostics`, `GET /api/metrics` | all operator reads succeed while workers are still scaled to zero |
+| Web-only boot | `GET /readyz`, `GET /api/workspace`, `GET /api/diagnostics`, `GET /api/metrics` | all operator reads succeed while workers are still scaled to zero |
 | Session projection parity | restored session list and one session projection | latest projection sequence is at least the restored event sequence for the sampled session |
 | Artifact metadata | restored artifact list and one download/read check | metadata and blob are both available |
 | Worker recovery | one worker enabled and one bounded smoke prompt | worker claims a lease, executes command, writes projection, and saves checkpoint |

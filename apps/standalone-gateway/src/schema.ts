@@ -1,5 +1,19 @@
+export const STANDALONE_GATEWAY_BASELINE_MIGRATION_ID = "0001_standalone_gateway_baseline";
+
+export const STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES = [
+  "standalone_gateway_sessions",
+  "standalone_gateway_events",
+  "standalone_gateway_jobs",
+  "standalone_gateway_daemon_leases",
+  "standalone_gateway_channel_identities",
+  "standalone_gateway_channel_bindings",
+  "standalone_gateway_artifacts",
+  "standalone_gateway_team_tasks",
+  "standalone_gateway_audit_events",
+] as const;
+
 export const standaloneGatewayMigrations = [{
-  id: "0001_standalone_gateway_core",
+  id: STANDALONE_GATEWAY_BASELINE_MIGRATION_ID,
   sql: `
 CREATE TABLE IF NOT EXISTS standalone_gateway_schema_migrations (
   id text PRIMARY KEY,
@@ -122,10 +136,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_channel_identities_provider
 
 CREATE INDEX IF NOT EXISTS standalone_gateway_channel_identities_prompt_auth_idx
   ON standalone_gateway_channel_identities (provider, status, role);
-  `,
-  }, {
-    id: "0002_standalone_gateway_retention_indexes",
-    sql: `
+
 CREATE INDEX IF NOT EXISTS standalone_gateway_sessions_retention_idx
   ON standalone_gateway_sessions (updated_at)
   WHERE status IN ('idle', 'failed', 'completed');
@@ -144,18 +155,8 @@ CREATE INDEX IF NOT EXISTS standalone_gateway_artifacts_retention_idx
 CREATE INDEX IF NOT EXISTS standalone_gateway_artifacts_session_retention_idx
   ON standalone_gateway_artifacts (session_id, created_at);
   `,
-  }];
+}];
 
 export function standaloneGatewaySchemaContainsProductionTables(sql = standaloneGatewayMigrations.map((migration) => migration.sql).join("\n")): boolean {
-  return [
-    "standalone_gateway_sessions",
-    "standalone_gateway_events",
-    "standalone_gateway_jobs",
-    "standalone_gateway_daemon_leases",
-    "standalone_gateway_channel_identities",
-    "standalone_gateway_channel_bindings",
-    "standalone_gateway_artifacts",
-    "standalone_gateway_team_tasks",
-    "standalone_gateway_audit_events",
-  ].every((table) => sql.includes(table));
+  return STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES.every((table) => sql.includes(table));
 }

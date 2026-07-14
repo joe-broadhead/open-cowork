@@ -231,7 +231,8 @@
         "mcp__openwiki__wiki.propose_source",
         "mcp__openwiki__wiki.comment_on_proposal",
         "mcp__openwiki__wiki.dream_run",
-        "mcp__openwiki__wiki.inbox_submit"
+        "mcp__openwiki__wiki.inbox_submit",
+        "mcp__openwiki__wiki.inbox_process"
       ]
     },
     {
@@ -342,7 +343,7 @@
         "mcp__opencode-gateway__gateway_human_gate_decide",
         "mcp__opencode-gateway__gateway_question_reply",
         "mcp__opencode-gateway__gateway_question_reject",
-        "mcp__opencode-gateway__gateway_permission_reply",
+        "mcp__opencode-gateway__gateway_permission_reject",
         "mcp__opencode-gateway__gateway_scheduler_pause",
         "mcp__opencode-gateway__gateway_scheduler_resume",
         "mcp__opencode-gateway__gateway_scheduler_run_once",
@@ -526,7 +527,7 @@
     {
       "name": "openwiki",
       "type": "local",
-      "description": "OpenWiki knowledge base: fusion search, cited reads, claim tracing, graph queries, and human-reviewed edit proposals.",
+      "description": "OpenWiki knowledge base: fusion search, cited reads, claim tracing, graph queries, and approval-gated proposal and inbox-processing workflows.",
       "authMode": "none",
       "command": ["openwiki", "mcp", "--stdio", "--tools", "proposal"]
     },
@@ -541,9 +542,23 @@
     {
       "name": "opencode-gateway",
       "type": "local",
-      "description": "Durable work coordination for OpenCode: persistent Initiatives/Issues, scheduler runs, agent teams, human gates, and Mission Control - operate tier (admin tools never exposed).",
-      "authMode": "none",
-      "command": ["opencode-gateway", "mcp", "--tools", "operate"]
+      "description": "Durable work coordination for OpenCode: persistent Initiatives/Issues, scheduler runs, agent teams, human gates, and Mission Control - operate tier (admin tools never exposed). Requires an explicitly provisioned operator-scoped loopback token file.",
+      "authMode": "api_token",
+      "command": ["opencode-gateway", "mcp", "--tools", "operate"],
+      "envSettings": [
+        { "env": "OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE", "key": "operatorTokenFile" }
+      ],
+      "credentials": [
+        {
+          "key": "operatorTokenFile",
+          "label": "Gateway operator token file",
+          "description": "Absolute path to an owner-only file containing the operator-scoped token configured on the Gateway daemon. Open Cowork passes the path, never the token value, to the trusted Gateway MCP process.",
+          "placeholder": "/absolute/path/to/opencode-gateway-operator-token",
+          "secret": false,
+          "required": true
+        }
+      ],
+      "credentialHelp": "Keep capabilityScopedLoopback enabled. Provision a strong operator token in an owner-only file (0600), configure the Gateway daemon with OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE, and enter that same absolute path here. Current Gateway install only auto-provisions an admin token file; never substitute it for this operate-tier integration."
     }
   ],
   "agents": [
@@ -642,7 +657,7 @@
       "description": "Runs durable work through opencode-gateway delegations, then watches progress, runs, and gates.",
       "color": "warning",
       "mode": "subagent",
-      "instructions": "You coordinate durable work through the opencode-gateway MCP. Check the briefing and attention queues before acting. For current-chat handoffs into Gateway-owned durable work, prefer gateway_delegation_submit with an idempotency key, objective, context summary, references, constraints, non-goals, acceptance criteria, definition of done, evidence requirements, budget or schedule constraints when relevant, notification target, and parent-session context. Use direct roadmap/task tools only when the user explicitly asks you to manually edit Gateway primitives. Watch runs and human gates; when OpenCode raises permissions or questions, surface them to the user rather than deciding yourself. Never touch scheduler configuration or OpenCode asset management - those are admin-tier operations that this deployment does not expose.",
+      "instructions": "You coordinate durable work through the opencode-gateway MCP. Check the briefing and attention queues before acting. For current-chat handoffs into Gateway-owned durable work, prefer gateway_delegation_submit with an idempotency key, objective, context summary, references, constraints, non-goals, acceptance criteria, definition of done, evidence requirements, budget or schedule constraints when relevant, notification target, and parent-session context. Use direct roadmap/task tools only when the user explicitly asks you to manually edit Gateway primitives. Watch runs and human gates. Surface OpenCode permission approvals for the human to decide outside this MCP; the operate tier can reject permissions but cannot grant shell/edit authority. Question replies and safe rejections still require approval. Never touch scheduler configuration or OpenCode asset management - those are admin-tier operations that this deployment does not expose.",
       "toolIds": ["opencode-gateway"],
       "skillNames": ["opencode-gateway"]
     }

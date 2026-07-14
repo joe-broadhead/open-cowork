@@ -86,11 +86,11 @@ export function normalizePermissionEvent(properties: Record<string, unknown> | n
     || readFirstString(properties, ['id', 'requestID', 'requestId'])
   const sessionId = readFirstString(permission, ['sessionID', 'sessionId'])
     || readFirstString(properties, ['sessionID', 'sessionId'])
-  const permissionType = readFirstString(permission, ['type', 'permission'])
-    || readFirstString(properties, ['type', 'permission'])
+  const permissionType = readFirstString(permission, ['action', 'type', 'permission'])
+    || readFirstString(properties, ['action', 'type', 'permission'])
     || 'permission'
-  const title = readFirstString(permission, ['title', 'tool', 'name'])
-    || readFirstString(properties, ['title', 'tool', 'name'])
+  const title = readFirstString(permission, ['title', 'tool', 'name', 'action'])
+    || readFirstString(properties, ['title', 'tool', 'name', 'action'])
     || permissionType
   const metadata = asRecord(readRecordValue(permission, 'metadata'))
   const outerMetadata = asRecord(readRecordValue(properties, 'metadata'))
@@ -100,6 +100,18 @@ export function normalizePermissionEvent(properties: Record<string, unknown> | n
   if (Object.keys(nestedInput).length > 0) input = nestedInput
   if (Object.keys(outerMetadata).length > 0) input = outerMetadata
   if (Object.keys(metadata).length > 0) input = metadata
+
+  const resources = readRecordValue(permission, 'resources') || readRecordValue(properties, 'resources')
+  const save = readRecordValue(permission, 'save') || readRecordValue(properties, 'save')
+  const source = asRecord(readRecordValue(permission, 'source') || readRecordValue(properties, 'source'))
+  if (Array.isArray(resources) || Array.isArray(save) || Object.keys(source).length > 0) {
+    input = {
+      ...input,
+      ...(Array.isArray(resources) ? { resources } : {}),
+      ...(Array.isArray(save) ? { save } : {}),
+      ...(Object.keys(source).length > 0 ? { source } : {}),
+    }
+  }
 
   return {
     id,

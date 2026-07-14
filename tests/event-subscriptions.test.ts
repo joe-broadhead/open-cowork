@@ -52,3 +52,28 @@ test('event subscription manager leaves runtime-level failures to the caller ins
   assert.equal(manager.has(null), false)
   assert.equal(manager.count(), 0)
 })
+
+test('event subscription manager maintains one global native stream for repeated ensures', async () => {
+  let attempts = 0
+  let release: (() => void) | undefined
+  const pending = new Promise<void>((resolve) => { release = resolve })
+  const manager = createRuntimeEventSubscriptionManager({
+    getMainWindow: () => null,
+    subscribe: async () => {
+      attempts += 1
+      await pending
+    },
+    onError: () => 'restart-runtime',
+  })
+  const client = {} as any
+
+  manager.ensure('/runtime/home', client)
+  manager.ensure('/runtime/home', client)
+  manager.ensure('/runtime/home', client)
+  await waitForCondition(() => attempts === 1)
+
+  assert.equal(attempts, 1)
+  assert.equal(manager.count(), 1)
+  release?.()
+  manager.reset()
+})

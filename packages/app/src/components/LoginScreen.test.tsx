@@ -53,7 +53,7 @@ describe('LoginScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(await screen.findByText('Login was cancelled or failed. Please try again.')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Login was cancelled or failed. Please try again.')
     expect(onLoggedIn).not.toHaveBeenCalled()
   })
 
@@ -67,7 +67,29 @@ describe('LoginScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(await screen.findByText('Browser profile is unavailable.')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Browser profile is unavailable.')
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  })
+
+  it('keeps the login screen recoverable when protected post-login setup fails', async () => {
+    const user = userEvent.setup()
+    installAuthLogin(async () => ({
+      authenticated: true,
+      email: 'user@example.com',
+    }))
+
+    render(
+      <LoginScreen
+        brandName="Open Cowork"
+        onLoggedIn={async () => {
+          throw new Error('Could not load protected settings.')
+        }}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load protected settings.')
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 

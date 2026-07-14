@@ -4,6 +4,7 @@
 // it is one of the test-sanctioned SDK "runtime authority" packages
 // (tests/opencode-sdk-boundary.test.ts) and ships in the cloud Docker image.
 export * from './opencode-adapter.js'
+export * from './opencode-v2.js'
 export * from './runtime-managed-server-protocol.js'
 export * from './runtime-managed-server-output.js'
 export * from './runtime-managed-server-core.js'

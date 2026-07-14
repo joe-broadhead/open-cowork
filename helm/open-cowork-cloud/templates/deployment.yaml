@@ -230,9 +230,12 @@ spec:
           env:
             - name: OPEN_COWORK_CLOUD_ROLE
               value: {{ $roleName | quote }}
-            {{- if eq $roleName "web" }}
+            # Kubernetes HTTP probes address the pod IP, so both the web server
+            # and the worker/scheduler heartbeat listener must bind all pod
+            # interfaces rather than loopback.
             - name: OPEN_COWORK_CLOUD_HOST
               value: "0.0.0.0"
+            {{- if eq $roleName "web" }}
             - name: OPEN_COWORK_CLOUD_PORT
               value: {{ $role.port | quote }}
             - name: OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS

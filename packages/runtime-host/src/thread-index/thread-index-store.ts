@@ -24,7 +24,7 @@ import {
   THREAD_SUGGESTION_LABEL_MAX_LENGTH,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader-core.js'
-import { migrateThreadIndexDb, THREAD_INDEX_SCHEMA_VERSION } from './thread-index-schema.js'
+import { initializeThreadIndexDb, THREAD_INDEX_SCHEMA_VERSION } from './thread-index-schema.js'
 
 import {
   THREAD_DEFAULT_TAG_COLOR,
@@ -123,8 +123,8 @@ export class ThreadIndexStore {
     mkdirSync(join(dbPath, '..'), { recursive: true })
     this.db = new DatabaseSync(dbPath)
     try {
+      initializeThreadIndexDb(this.db)
       this.db.exec('pragma journal_mode = WAL;')
-      migrateThreadIndexDb(this.db)
       ensureThreadIndexDbFileModes(this.dbPath)
     } catch (error) {
       this.db.close()

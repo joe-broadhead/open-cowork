@@ -38,7 +38,7 @@ cloud:
     enabled: true
   auth:
     mode: oidc
-    signupMode: invite_only
+    signupMode: invite
     oidcIssuerUrl: https://issuer.example.com
     oidcClientId: OPEN_COWORK_OIDC_CLIENT_ID
   objectStore:

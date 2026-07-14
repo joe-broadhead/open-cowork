@@ -25,8 +25,11 @@ export async function verifyRuntimeSkillCatalog(client: OpencodeClient, director
   if (expectedNames.length === 0) return { expected: [], available: [], missing: [] }
 
   try {
-    const response = await client.app.skills(directory ? { directory } : undefined, { throwOnError: true })
-    const result = compareRuntimeSkills(expectedNames, response.data || [])
+    const response = await client.v2.skill.list(
+      directory ? { location: { directory } } : undefined,
+      { throwOnError: true },
+    )
+    const result = compareRuntimeSkills(expectedNames, response.data.data)
     if (result.missing.length > 0) {
       log('runtime', `OpenCode skill catalog missing configured skills: ${result.missing.join(', ')}`)
     }

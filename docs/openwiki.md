@@ -22,14 +22,18 @@ product side of that contract.
       reads, facts/takes reads, proposal reads, history, diffs, git/event/run
       status, dream status, inbox reads, governance detection, and every graph
       query.
-    - *Proposal tier asks*: `wiki.propose_edit`,
+    - *Proposal-profile mutations ask*: `wiki.propose_edit`,
       `wiki.propose_synthesis`, `wiki.propose_fact`, `wiki.propose_take`,
       `wiki.resolve_take`, `wiki.forget_fact`, `wiki.propose_source`,
       `wiki.comment_on_proposal`, `wiki.dream_run`, and
-      `wiki.inbox_submit` require your approval in the transcript.
-    - *Write tier absent*: the bundled MCP runs in proposal mode, so apply/
-      publish/commit tools are never exposed to coworkers. Publishing stays a
-      human (or explicitly trusted maintainer) decision inside OpenWiki.
+      `wiki.inbox_submit` and `wiki.inbox_process` require your approval in the
+      transcript. OpenWiki's proposal profile also exposes the read-only tools;
+      Open Cowork classifies each call by its read-only hint instead of treating
+      the whole profile as writable.
+    - *Direct-write profiles absent*: the bundled MCP runs in `proposal` mode,
+      so `write`/`write-full` page writes, apply, publish, and commit tools are
+      never exposed to coworkers. Publishing stays a human (or explicitly
+      trusted maintainer) decision inside OpenWiki.
 - **Three skills**: `openwiki-research` (cited answers over model memory),
   `openwiki-edit-review` (scoped, cited proposals; never publish directly),
   and `openwiki-ingest` (artifacts → records with provenance; external text
@@ -39,15 +43,26 @@ product side of that contract.
 
 ## Getting started
 
-1. Install the OpenWiki CLI and create (or clone) a wiki:
+1. Install the OpenWiki CLI using its
+   [current installation guide](https://github.com/joe-broadhead/open-wiki/blob/master/docs/getting-started/installation.md),
+   then create (or clone) a wiki:
+
+   The official package name is `@openwiki/cli`. Until that scoped package is
+   published, use the guide's release-candidate tarball or source-checkout path;
+   the unscoped `openwiki` package on npm is a different project and is not a
+   compatible substitute.
 
    ```sh
    openwiki setup team ~/team-wiki --title "Team Wiki"
    ```
 
-2. Restart Open Cowork (or reload tools). The OpenWiki tool turns available
+2. Open `~/team-wiki` as the active Open Cowork project. The bundled stdio
+   command intentionally lets OpenWiki resolve the wiki from the project
+   working directory; a downstream distribution can instead add an explicit
+   `--root /absolute/wiki/path` before `mcp` in its command.
+3. Restart Open Cowork (or reload tools). The OpenWiki tool turns available
    once the `openwiki` binary resolves on PATH.
-3. Hire a **Wiki Researcher** from the Team starter templates and ask it a
+4. Hire a **Wiki Researcher** from the Team starter templates and ask it a
    question. It answers with page and source IDs, not vibes.
 
 ## Wiki recipes
@@ -65,7 +80,7 @@ Playbook-shaped work that pairs well with the wiki coworkers:
   page updates whose claims link back to it.
 - **Triage wiki inbox/governance** — Wiki Editor can read inbox items,
   recent events/runs, dream status, and governance detector output; inbox
-  submissions and dream runs still ask before execution.
+  submissions, inbox processing, and dream runs still ask before execution.
 - **Create a research brief** — Wiki Researcher synthesizes with
   `wiki.think`, listing supporting records and open gaps.
 
@@ -75,7 +90,28 @@ Designer; see [Workflow Recipes](workflow-recipes.md) for the general shape.
 ## Remote / team deployments
 
 For a hosted team wiki, downstream configs replace the local command with a
-remote MCP entry pointing at the deployment's HTTP endpoint:
+remote MCP entry pointing at the deployment's Streamable HTTP endpoint. Prefer
+OpenWiki's OAuth 2.1 authorization-code + PKCE flow for a desktop client; it is
+explicitly opt-in in Open Cowork and OpenCode owns the native MCP OAuth flow:
+
+```json
+{
+  "name": "openwiki",
+  "type": "remote",
+  "description": "Company OpenWiki knowledge base.",
+  "authMode": "oauth",
+  "url": "https://wiki.example.com/mcp?tools=proposal"
+}
+```
+
+After adding this entry, enable OpenWiki from Tools & Skills and complete the
+authorization prompt. OAuth must be enabled and configured at the OpenWiki
+deployment; it is not a substitute for the deployment's human SSO boundary.
+
+For automation that cannot complete OAuth, declare the scoped service-account
+token field and its header mapping so Open Cowork can fail closed before
+registering the MCP. Setting only `authMode: "api_token"` does not invent or
+forward a token:
 
 ```json
 {
@@ -83,14 +119,33 @@ remote MCP entry pointing at the deployment's HTTP endpoint:
   "type": "remote",
   "description": "Company OpenWiki knowledge base.",
   "authMode": "api_token",
-  "url": "https://wiki.example.com/mcp?tools=proposal"
+  "url": "https://wiki.example.com/mcp?tools=proposal",
+  "headerSettings": [
+    { "header": "Authorization", "key": "proposalToken", "prefix": "Bearer " }
+  ],
+  "credentials": [
+    {
+      "key": "proposalToken",
+      "label": "OpenWiki proposal token",
+      "description": "Short-lived service-account token bounded to proposal tools and the required wiki paths.",
+      "placeholder": "owk_agent_...",
+      "secret": true,
+      "required": true
+    }
+  ],
+  "credentialHelp": "Create and rotate a short-lived OpenWiki proposal-agent token; do not reuse a maintainer token."
 }
 ```
 
-Keep the same trust posture: reads allowed, proposals ask, write workflow
-reserved for maintainer deployments. OpenWiki hosted deployments require an
-explicit auth boundary (identity headers or scoped service-account tokens) —
-see the OpenWiki deployment docs before exposing a writable server.
+Keep the same trust posture: reads allowed, proposal mutations ask, and direct
+write workflows reserved for maintainer deployments. OpenWiki hosted
+deployments require an explicit auth boundary. Never configure trusted
+`x-openwiki-*` identity headers in a desktop client; only a reverse proxy that
+strips inbound copies and holds the shared proxy secret may assert them. See
+OpenWiki's
+[authentication boundary](https://github.com/joe-broadhead/open-wiki/blob/master/docs/deployment/auth-boundaries.md)
+before exposing a server. Set `allowPrivateNetwork: true` only for an
+intentionally internal hostname after reviewing Open Cowork's SSRF boundary.
 
 ## Boundary notes
 

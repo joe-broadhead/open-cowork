@@ -398,7 +398,7 @@ async function signInForUpdates() {
 
 function openReleaseNotes(url: string) {
   try {
-    window.open(url, '_blank')
+    window.open(url, '_blank', 'noopener,noreferrer')
   } catch {
     // Electron routes normal _blank windows through shell.openExternal.
   }

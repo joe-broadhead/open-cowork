@@ -6,13 +6,16 @@ import type {
   Message as SdkMessage,
   Part as SdkPart,
   Session as SdkSession,
-  SessionMessagesResponse as SdkSessionMessagesResponse,
+  SessionMessagesResponse2 as SdkClassicSessionMessagesResponse,
   SessionStatus as SdkSessionStatus,
+  SessionMessage as SdkV2SessionMessage,
+  SessionMessagesResponse as SdkV2SessionMessagesPage,
+  SessionV2Info as SdkV2SessionInfo,
 } from '@opencode-ai/sdk/v2'
 import type {
   TodoItem,
 } from '@open-cowork/shared'
-type SdkSessionMessage = SdkSessionMessagesResponse extends Array<infer T> ? T : never
+type SdkSessionMessage = SdkClassicSessionMessagesResponse extends Array<infer T> ? T : never
 type SdkRuntimeEventEnvelope = SdkEvent | SdkGlobalEvent | { payload: SdkEvent | SdkGlobalEvent }
 
 export type NormalizedTokens = {
@@ -149,9 +152,9 @@ function normalizeTokens(value: unknown): NormalizedTokens {
 function normalizeAttachment(value: unknown): NormalizedAttachment | null {
   const record = asRecord(value)
   const mime = readRecordString(record, ['mime'])
-  const url = readRecordString(record, ['url'])
+  const url = readRecordString(record, ['url', 'uri'])
   if (!mime || !url) return null
-  const filename = readRecordString(record, ['filename']) || undefined
+  const filename = readRecordString(record, ['filename', 'name']) || undefined
   return filename ? { mime, url, filename } : { mime, url }
 }
 
@@ -173,7 +176,7 @@ function normalizeToolState(value: unknown): NormalizedToolState {
   }
 }
 
-export function normalizeSessionInfo(value: SdkSession | SdkMessage): NormalizedSessionInfo | null
+export function normalizeSessionInfo(value: SdkSession | SdkMessage | SdkV2SessionInfo | SdkV2SessionMessage): NormalizedSessionInfo | null
 export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | null
 export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | null {
   const record = asRecord(value)
@@ -207,17 +210,216 @@ export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | nu
     },
     model: {
       providerId: readRecordString(model, ['providerID', 'providerId']) || readRecordString(record, ['providerID', 'providerId']),
-      modelId: readRecordString(model, ['modelID', 'modelId']) || readRecordString(record, ['modelID', 'modelId']),
+      modelId: readRecordString(model, ['modelID', 'modelId', 'id']) || readRecordString(record, ['modelID', 'modelId']),
     },
     summary,
     revertedMessageId,
   }
 }
 
-export function normalizeSessionMessage(value: SdkSessionMessage | SdkMessage): NormalizedSessionMessage | null
+function normalizeV2ToolContent(value: unknown) {
+  const record = asRecord(value)
+  if (readRecordString(record, ['type']) === 'text') return readRecordString(record, ['text']) || ''
+  if (readRecordString(record, ['type']) === 'file') {
+    return {
+      type: 'file',
+      uri: readRecordString(record, ['uri']) || '',
+      mime: readRecordString(record, ['mime']) || 'application/octet-stream',
+      name: readRecordString(record, ['name']) || undefined,
+    }
+  }
+  return value
+}
+
+function parsePendingToolInput(value: unknown): JsonRecord {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return asRecord(parsed)
+  } catch {
+    return {}
+  }
+}
+
+function normalizeV2ToolPart(value: unknown): NormalizedMessagePart | null {
+  const record = asRecord(value)
+  if (readRecordString(record, ['type']) !== 'tool') return null
+  const state = asRecord(record.state)
+  const status = readRecordString(state, ['status'])
+  const content = asArray(state.content).map(normalizeV2ToolContent)
+  const input = status === 'pending'
+    ? parsePendingToolInput(state.input)
+    : asRecord(state.input)
+  const attachments = asArray(state.attachments)
+    .map(normalizeAttachment)
+    .filter((entry): entry is NormalizedAttachment => Boolean(entry))
+  return {
+    type: 'tool',
+    id: readRecordString(record, ['id']),
+    text: null,
+    tool: readRecordString(record, ['name']),
+    callId: readRecordString(record, ['id']),
+    title: readRecordString(record, ['name']),
+    name: readRecordString(record, ['name']),
+    agent: null,
+    description: null,
+    prompt: null,
+    raw: typeof state.input === 'string' ? state.input : null,
+    auto: false,
+    overflow: false,
+    reason: null,
+    metadata: asRecord(asRecord(record.provider).metadata),
+    attachments,
+    state: {
+      input,
+      args: input,
+      output: state.result !== undefined
+        ? state.result
+        : content.length === 1
+          ? content[0]
+          : content.length > 1
+            ? content
+            : state.structured,
+      result: state.result,
+      error: state.error,
+      attachments,
+      metadata: asRecord(asRecord(record.provider).resultMetadata),
+      title: readRecordString(record, ['name']),
+      raw: typeof state.input === 'string' ? state.input : null,
+      status,
+    },
+    tokens: normalizeTokens(undefined),
+    cost: null,
+  }
+}
+
+function normalizeV2SessionMessage(value: unknown): NormalizedSessionMessage | null {
+  const record = asRecord(value)
+  const type = readRecordString(record, ['type'])
+  const id = readRecordString(record, ['id'])
+  if (!id || !type) return null
+  const time = asRecord(record.time)
+  const model = asRecord(record.model)
+  const role = type === 'user' ? 'user' : 'assistant'
+  const info = normalizeSessionInfo({
+    id,
+    role,
+    time,
+    model,
+  })
+  if (!info) return null
+
+  const parts: NormalizedMessagePart[] = []
+  const addPart = (part: NormalizedMessagePart | null) => {
+    if (part) parts.push(part)
+  }
+  const simplePart = (partType: string, partId: string | null, text: string | null): NormalizedMessagePart => ({
+    type: partType,
+    id: partId,
+    text,
+    tool: null,
+    callId: null,
+    title: null,
+    name: null,
+    agent: null,
+    description: null,
+    prompt: null,
+    raw: null,
+    auto: false,
+    overflow: false,
+    reason: null,
+    metadata: {},
+    attachments: [],
+    state: normalizeToolState(undefined),
+    tokens: normalizeTokens(undefined),
+    cost: null,
+  })
+
+  if (type === 'user') {
+    const text = readRecordString(record, ['text'])
+    if (text) addPart(simplePart('text', `${id}:text`, text))
+    for (const file of asArray(record.files)) {
+      const attachment = normalizeAttachment(file)
+      if (!attachment) continue
+      const part = simplePart('file', null, null)
+      part.attachments = [attachment]
+      parts.push(part)
+    }
+  } else if (type === 'assistant') {
+    for (const content of asArray(record.content)) {
+      const contentRecord = asRecord(content)
+      const contentType = readRecordString(contentRecord, ['type'])
+      if (contentType === 'text' || contentType === 'reasoning') {
+        addPart(simplePart(
+          contentType,
+          readRecordString(contentRecord, ['id']),
+          readRecordString(contentRecord, ['text']),
+        ))
+      } else if (contentType === 'tool') {
+        addPart(normalizeV2ToolPart(contentRecord))
+      }
+    }
+    if (record.cost !== undefined || record.tokens !== undefined) {
+      const finish = simplePart('step-finish', `${id}:step-finish`, null)
+      finish.cost = readRecordNumber(record, ['cost'])
+      finish.tokens = normalizeTokens(record.tokens)
+      finish.reason = readRecordString(record, ['finish'])
+      parts.push(finish)
+    }
+  } else if (type === 'compaction') {
+    const part = simplePart('compaction', id, readRecordString(record, ['summary']))
+    part.auto = readRecordString(record, ['reason']) === 'auto'
+    parts.push(part)
+  } else if (type === 'agent-switched') {
+    const part = simplePart('agent', id, null)
+    part.name = readRecordString(record, ['agent'])
+    part.agent = part.name
+    parts.push(part)
+  } else if (type === 'shell') {
+    const part = normalizeV2ToolPart({
+      type: 'tool',
+      id: readRecordString(record, ['callID']) || id,
+      name: 'shell',
+      state: {
+        status: asRecord(time).completed ? 'completed' : 'running',
+        input: { command: readRecordString(record, ['command']) || '' },
+        content: [{ type: 'text', text: readRecordString(record, ['output']) || '' }],
+      },
+    })
+    addPart(part)
+  } else if (type === 'synthetic' || type === 'system') {
+    const text = readRecordString(record, ['text'])
+    if (text) addPart(simplePart('text', `${id}:text`, text))
+  }
+
+  return {
+    id,
+    role,
+    time: info.time,
+    info,
+    parts,
+  }
+}
+
+export function normalizeSessionMessage(value: SdkSessionMessage | SdkMessage | SdkV2SessionMessage): NormalizedSessionMessage | null
 export function normalizeSessionMessage(value: unknown): NormalizedSessionMessage | null
 export function normalizeSessionMessage(value: unknown): NormalizedSessionMessage | null {
   const record = asRecord(value)
+  const nativeType = readRecordString(record, ['type'])
+  // Model switches are session configuration changes, not conversation turns.
+  // Returning an empty assistant message creates a phantom bubble during replay.
+  if (nativeType === 'model-switched') return null
+  if (
+    nativeType === 'user'
+    || nativeType === 'assistant'
+    || nativeType === 'synthetic'
+    || nativeType === 'system'
+    || nativeType === 'shell'
+    || nativeType === 'agent-switched'
+    || nativeType === 'compaction'
+  ) {
+    return normalizeV2SessionMessage(record)
+  }
   const mergedInfo = { ...record, ...asRecord(record.info) }
   const info = normalizeSessionInfo(mergedInfo)
   if (!info) return null
@@ -233,10 +435,12 @@ export function normalizeSessionMessage(value: unknown): NormalizedSessionMessag
   }
 }
 
-export function normalizeSessionMessages(value: SdkSessionMessagesResponse): NormalizedSessionMessage[]
+export function normalizeSessionMessages(value: SdkClassicSessionMessagesResponse | SdkV2SessionMessagesPage | SdkV2SessionMessage[]): NormalizedSessionMessage[]
 export function normalizeSessionMessages(value: unknown): NormalizedSessionMessage[]
 export function normalizeSessionMessages(value: unknown): NormalizedSessionMessage[] {
-  return asArray(value)
+  const record = asRecord(value)
+  const messages = Array.isArray(value) ? value : asArray(record.data)
+  return messages
     .map(normalizeSessionMessage)
     .filter((message): message is NormalizedSessionMessage => Boolean(message))
 }

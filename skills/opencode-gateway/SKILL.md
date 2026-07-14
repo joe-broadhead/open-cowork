@@ -32,7 +32,12 @@ should be able to inspect later in Mission Control.
    explain run outcomes from their receipts rather than guessing.
 4. Route human decisions honestly: `mcp__opencode-gateway__gateway_permission_list`
    and `mcp__opencode-gateway__gateway_question_list` show pending OpenCode
-   requests — surface them to the user; replies require approval.
+   requests. Question replies/rejections require approval. The operate tier can
+   reject a permission with
+   `mcp__opencode-gateway__gateway_permission_reject`, but it cannot approve
+   one: `gateway_permission_reply` is admin-tier because `once`/`always` grants
+   OpenCode shell or edit authority. Surface approval requests for the human to
+   decide outside this MCP.
 5. Use team, blueprint, promotion, scheduler, task lifecycle, environment,
    channel-send, and roadmap/project control tools only when the user has asked
    for that mutation. These operate-tier tools ask before execution.
@@ -44,12 +49,17 @@ should be able to inspect later in Mission Control.
 - This deployment runs the **operate** tier: scheduler configuration,
   profile upsert/delete, agent-team apply/bind/delete, project binding
   mutation, task deletion, OpenCode asset mutation, OpenCode session abort or
-  message reads, backup verification/restore/export, and restart are admin-tier
-  tools that are not exposed here.
+  message reads, permission approval, backup verification/restore/export, and
+  restart are admin-tier tools that are not exposed here.
 - Read-tier inspection is auto-allowed. Operate-tier mutations (task/roadmap
   lifecycle, delegation, teams, blueprints, promotions, channel sends, gate
   decisions, scheduler pause/resume/dispatch, active-run control, and
   environment actions) ask for the user's approval by design — propose, do not
   accumulate unreviewed state.
+- With Gateway's default `requireNonMcpDestructiveApproval`, MCP cannot approve
+  gates for destructive actions, external side effects, budget exceptions, or
+  credential use. Send those approvals to the operator's HTTP/CLI surface;
+  only procedural gates (`task_start`, `stage_transition`, `manual`) are
+  MCP-approvable.
 - The daemon must be running (`opencode-gateway start`); if tools fail with
   connection errors, say so and suggest `opencode-gateway doctor`.

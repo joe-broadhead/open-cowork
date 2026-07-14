@@ -10,8 +10,8 @@ export function registerSessionCommandHandlers(context: IpcHandlerContext) {
     const client = getClient()
     if (!client) return []
     try {
-      const result = await client.command.list()
-      return normalizeRuntimeCommands(result.data)
+      const result = await client.v2.command.list(undefined, { throwOnError: true })
+      return normalizeRuntimeCommands(result.data.data)
     } catch (err) {
       context.logHandlerError('command:list', err)
       return []

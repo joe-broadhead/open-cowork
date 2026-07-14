@@ -13,8 +13,10 @@ type IntervalId = ReturnType<typeof setInterval>
 
 function createFakeClient(stream: AsyncIterable<unknown>): OpencodeClient {
   return {
-    event: {
-      subscribe: async () => ({ stream }),
+    v2: {
+      event: {
+        subscribe: async () => ({ stream }),
+      },
     },
   } as unknown as OpencodeClient
 }

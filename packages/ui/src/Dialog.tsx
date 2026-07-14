@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 import { useFocusTrap } from './useFocusTrap.js'
 import { IconButton } from './Button.js'
 import { cn } from './utils.js'
@@ -11,6 +11,7 @@ export type DialogProps = {
   variant?: 'modal' | 'drawer'
   side?: 'right' | 'left'
   footer?: ReactNode
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function Dialog({
@@ -21,10 +22,11 @@ export function Dialog({
   variant = 'modal',
   side = 'right',
   footer,
+  returnFocusRef,
 }: DialogProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, { onEscape: onClose })
+  useFocusTrap(dialogRef, { onEscape: onClose, returnFocusRef })
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {

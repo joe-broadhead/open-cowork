@@ -180,4 +180,30 @@ describe('HealthCenterPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Restart runtime' }))
     await waitFor(() => expect(restart).toHaveBeenCalledTimes(1))
   })
+
+  it('reports partial health-source outages instead of presenting empty data as healthy', async () => {
+    installRendererTestCoworkApi({
+      runtime: {
+        status: vi.fn(async () => { throw new Error('runtime unavailable') }),
+      },
+      app: {
+        runtimeInputs: vi.fn(async () => { throw new Error('diagnostics unavailable') }),
+      },
+      workspace: {
+        list: vi.fn(async () => { throw new Error('workspace registry unavailable') }),
+      },
+      desktopPairing: {
+        list: vi.fn(async () => { throw new Error('pairing registry unavailable') }),
+      },
+    })
+
+    render(<HealthCenterPage />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Some health checks could not be loaded')
+    expect(alert).toHaveTextContent('runtime status')
+    expect(alert).toHaveTextContent('runtime inputs')
+    expect(alert).toHaveTextContent('workspaces')
+    expect(alert).toHaveTextContent('pairings')
+  })
 })

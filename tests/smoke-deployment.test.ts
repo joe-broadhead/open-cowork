@@ -133,8 +133,8 @@ test('strict deployment smoke checks authenticated cloud and gateway operator en
   await withServer((request, response) => {
     requested.add(`cloud:${request.url}`)
     switch (request.url) {
-      case '/healthz':
       case '/livez':
+      case '/readyz':
         sendJson(response, { ok: true })
         return
       case '/':
@@ -188,8 +188,8 @@ test('strict deployment smoke checks authenticated cloud and gateway operator en
       assert.equal(body.ok, true)
       assert.equal(body.strict, true)
       assert.deepEqual(body.results.map((entry) => entry.check), [
-        'cloud health',
         'cloud liveness',
+        'cloud readiness',
         'cloud web workbench',
         'cloud web api config bootstrap',
         'cloud web api workspace bootstrap',

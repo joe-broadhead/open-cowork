@@ -98,8 +98,7 @@ the demo override.
   verification.
 - Gateway and Standalone Gateway webhook HTTP surfaces apply source-scoped
   request throttles with `Retry-After` before provider dispatch.
-- Generic webhook outbound delivery is signed with timestamped HMAC headers by
-  default; legacy shared-secret headers are local compatibility only.
+- Generic webhook outbound delivery is signed with timestamped HMAC headers.
 - Gateway service-token authority is separate from inbound actor authority.
   Cloud resolves the channel actor and enforces approval authority.
 - Production providers must map incoming messages, commands, and interactions

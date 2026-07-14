@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HomeComposer } from './home/HomeComposer'
 import type {
   BrandingHomeConfig,
@@ -22,10 +22,15 @@ import {
   Icon,
   IconButton,
   type IconName,
-  ReviewPanel,
-  TaskLane,
 } from './ui'
-import { LaunchpadMotionGrid, MAX_MOTION_ITEMS } from './launchpad/LaunchpadMotionGrid'
+import { MAX_MOTION_ITEMS } from './launchpad/constants'
+
+const LaunchpadMotionGrid = lazy(() => import('./launchpad/LaunchpadMotionGrid').then((module) => ({
+  default: module.LaunchpadMotionGrid,
+})))
+const HomeReviewSnapshot = lazy(() => import('./home/HomeReviewSnapshot').then((module) => ({
+  default: module.HomeReviewSnapshot,
+})))
 
 // Home is the welcoming landing surface for the simplified core product:
 // start a normal chat, @mention a coworker, or pick up recent work.
@@ -266,61 +271,6 @@ function HomeCoachmark({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
-function HomeReviewSnapshot({
-  pendingApprovals,
-  pendingQuestions,
-  taskCount,
-}: {
-  pendingApprovals: number
-  pendingQuestions: number
-  taskCount: number
-}) {
-  const totalInput = pendingApprovals + pendingQuestions
-  if (totalInput === 0 && taskCount === 0) return null
-  return (
-    <div className="w-full mt-8">
-      <ReviewPanel
-        title={t('home.review.title', 'Review Snapshot')}
-        summary={t('home.review.summary', 'Live review state from the active OpenCode session projection.')}
-        status={{ label: totalInput > 0 ? t('home.review.needsInput', 'Needs input') : t('home.review.clear', 'Clear'), tone: totalInput > 0 ? 'warning' : 'success' }}
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          <TaskLane
-            title={t('home.review.decisions', 'Decisions')}
-            tone="approval"
-            items={[
-              ...(pendingApprovals > 0 ? [{
-                id: 'approvals',
-                title: t('home.review.approvals', 'Permission approvals'),
-                meta: t('home.review.pendingCount', '{{count}} pending', { count: pendingApprovals }),
-                status: { label: t('home.review.open', 'Open'), tone: 'warning' as const },
-              }] : []),
-              ...(pendingQuestions > 0 ? [{
-                id: 'questions',
-                title: t('home.review.questions', 'Questions'),
-                meta: t('home.review.pendingCount', '{{count}} pending', { count: pendingQuestions }),
-                status: { label: t('home.review.open', 'Open'), tone: 'warning' as const },
-              }] : []),
-            ]}
-            emptyLabel={t('home.review.noDecisions', 'No decisions waiting')}
-          />
-          <TaskLane
-            title={t('home.review.coworkers', 'Coworker Activity')}
-            tone="delegated"
-            items={taskCount > 0 ? [{
-              id: 'task-runs',
-              title: t('home.review.specialistLanes', 'Specialist lanes'),
-              meta: t('home.review.taskCount', '{{count}} task runs', { count: taskCount }),
-              status: { label: t('home.review.projected', 'Projected'), tone: 'accent' },
-            }] : []}
-            emptyLabel={t('home.review.noCoworkers', 'No delegated runs active')}
-          />
-        </div>
-      </ReviewPanel>
-    </div>
-  )
-}
-
 function StatusStrip({ readyLabel }: { readyLabel: string }) {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const summary = summarizeMcpConnections(mcpConnections)
@@ -349,6 +299,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   const [coachmarkDismissed, setCoachmarkDismissed] = useState(readHomeCoachmarkDismissed)
   const [launchpadFeed, setLaunchpadFeed] = useState<LaunchpadFeedPayload>(EMPTY_LAUNCHPAD_FEED)
   const [launchpadLoading, setLaunchpadLoading] = useState(true)
+  const [launchpadInitialized, setLaunchpadInitialized] = useState(false)
   const [launchpadError, setLaunchpadError] = useState<string | null>(null)
   // Bumped by the "Refresh" affordance so a failed feed fetch isn't a dead end;
   // wired into the feed effect deps below to re-run the same fetch on demand.
@@ -453,7 +404,10 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
         setLaunchpadFeed(EMPTY_LAUNCHPAD_FEED)
         setLaunchpadError(error instanceof Error ? error.message : String(error))
       }).finally(() => {
-        if (!cancelled && requestId === launchpadRequestIdRef.current) setLaunchpadLoading(false)
+        if (!cancelled && requestId === launchpadRequestIdRef.current) {
+          setLaunchpadLoading(false)
+          setLaunchpadInitialized(true)
+        }
       })
     }, 150)
 
@@ -591,15 +545,23 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
 
         <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
 
-        <LaunchpadMotionGrid
-          feed={launchpadFeed}
-          loading={launchpadLoading}
-          error={launchpadError}
-          onNavigate={onNavigate}
-          onOpenThread={handleOpenThread}
-          onOpenArtifact={handleOpenArtifact}
-          onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
-        />
+        {launchpadInitialized ? (
+          <Suspense fallback={<div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status">{t('home.motion.loading', 'Loading')}</div>}>
+            <LaunchpadMotionGrid
+              feed={launchpadFeed}
+              loading={launchpadLoading}
+              error={launchpadError}
+              onNavigate={onNavigate}
+              onOpenThread={handleOpenThread}
+              onOpenArtifact={handleOpenArtifact}
+              onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
+            />
+          </Suspense>
+        ) : (
+          <div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status" aria-live="polite">
+            {t('home.motion.loading', 'Loading')}
+          </div>
+        )}
 
         <TeamStrip
           agents={suggestedAgents}
@@ -608,11 +570,15 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
           onNavigate={onNavigate}
         />
 
-        <HomeReviewSnapshot
-          pendingApprovals={currentView.pendingApprovals.length}
-          pendingQuestions={currentView.pendingQuestions.length}
-          taskCount={currentView.taskRuns.length}
-        />
+        {(currentView.pendingApprovals.length > 0 || currentView.pendingQuestions.length > 0 || currentView.taskRuns.length > 0) && (
+          <Suspense fallback={<div className="w-full mt-8 text-center text-xs text-text-muted" role="status">{t('home.review.loading', 'Loading review snapshot...')}</div>}>
+            <HomeReviewSnapshot
+              pendingApprovals={currentView.pendingApprovals.length}
+              pendingQuestions={currentView.pendingQuestions.length}
+              taskCount={currentView.taskRuns.length}
+            />
+          </Suspense>
+        )}
 
         <StatusStrip readyLabel={readyLabel} />
       </div>

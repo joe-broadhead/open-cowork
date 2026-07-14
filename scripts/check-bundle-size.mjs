@@ -33,10 +33,23 @@ const ENTRY_KEY = 'browser.html'
 const out = (line = '') => process.stdout.write(`${line}\n`)
 const kb = (n) => `${(n / 1024).toFixed(1)} KB`
 
-// Eager startup budget, gzipped bytes. 220 KB — current eager graph is ~216 KB
-// (2026-07, after admin control-plane + typed-approvals work), leaving modest
-// headroom for hash churn and minor additions without masking real regressions.
+// Eager startup budget, gzipped bytes. 220 KB — fresh production build measured
+// 208,910 B / 204.0 KB on 2026-07-14 after the startup feature split, leaving
+// 16,370 B / 16.0 KB headroom without raising the existing budget.
 const BUDGET_BYTES = 220 * 1024
+
+// These secondary surfaces must remain behind dynamic-import boundaries. Their
+// module names are stable manifest metadata even when Vite changes content hashes.
+// StudioPrimitives is a generated shared chunk, so its absence is a leanness win;
+// when emitted, it still must never re-enter the startup graph.
+const LAZY_STARTUP_FEATURES = [
+  { name: 'DiffViewer', label: 'DiffViewer', required: true },
+  { name: 'ProviderAuthControls', label: 'ProviderAuthControls', required: true },
+  { name: 'HomeReviewSnapshot', label: 'Home review snapshot', required: true },
+  { name: 'LaunchpadMotionGrid', label: 'Launchpad motion grid', required: true },
+  { name: 'StatusBar', label: 'Status bar telemetry', required: true },
+  { name: 'StudioPrimitives', label: 'Studio primitives shared chunk', required: false },
+]
 
 // Per-route lazy-chunk budgets, gzipped bytes, keyed by the STABLE vite manifest
 // source key (not the hashed emitted filename). These gate the OWN code of each
@@ -162,6 +175,44 @@ function checkEagerBudget(manifest, failures) {
   } else {
     out(`  OK: ${kb(total)} within budget (${kb(BUDGET_BYTES - total)} headroom).`)
   }
+
+  return files
+}
+
+function checkLazyStartupFeatures(manifest, eagerFiles, failures) {
+  out('\n[check-bundle-size] lazy startup feature boundaries (gzipped):')
+  const chunks = Object.values(manifest)
+  for (const { name, label, required } of LAZY_STARTUP_FEATURES) {
+    const matches = chunks.filter((chunk) => chunk?.name === name && chunk.file)
+    if (matches.length === 0) {
+      if (required) {
+        failures.push(
+          `lazy startup feature '${label}' is missing from the manifest — it may have re-entered `
+          + 'an eager chunk or been renamed. Preserve the dynamic-import boundary and update '
+          + 'LAZY_STARTUP_FEATURES only for an intentional source rename.',
+        )
+        out(`  ${'MISSING'.padStart(8)}  ${label}`)
+      } else {
+        out(`  ${'(absent)'.padStart(8)}  ${label} — no standalone chunk emitted`)
+      }
+      continue
+    }
+    if (matches.length > 1) {
+      failures.push(`lazy startup feature '${label}' resolves to ${matches.length} manifest chunks; expected exactly one.`)
+      out(`  ${'DUPLICATE'.padStart(8)}  ${label}`)
+      continue
+    }
+    const [{ file }] = matches
+    const eager = eagerFiles.has(file)
+    const gz = gzipSizeOf(file)
+    out(`  ${String(gz).padStart(8)} B  ${label}${eager ? '  <-- EAGER' : ''}`)
+    if (eager) {
+      failures.push(
+        `feature '${label}' (${file}) is back in the eager startup graph. Restore its dynamic import `
+        + 'instead of spending the shared 220 KB startup budget.',
+      )
+    }
+  }
 }
 
 function checkPerRouteBudgets(manifest, failures) {
@@ -217,7 +268,8 @@ function main() {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const failures = []
 
-  checkEagerBudget(manifest, failures)
+  const eagerFiles = checkEagerBudget(manifest, failures)
+  checkLazyStartupFeatures(manifest, eagerFiles, failures)
   checkPerRouteBudgets(manifest, failures)
   checkVendorCeilings(failures)
 
@@ -226,7 +278,7 @@ function main() {
     for (const failure of failures) console.error(`  - ${failure}`)
     process.exit(1)
   }
-  out('\n[check-bundle-size] OK: eager, per-route, and vendor budgets all within limits.')
+  out('\n[check-bundle-size] OK: eager, lazy-boundary, per-route, and vendor checks all pass.')
 }
 
 main()

@@ -53,7 +53,7 @@ the role selected by `OPEN_COWORK_CLOUD_ROLE` from that bundle. Use
 `docker-compose.cloud.yml` for local all-in-one checks and
 `docker-compose.cloud.split.yml` for web/worker/scheduler topology checks.
 `pnpm cloud:smoke:compose` starts the split-role compose topology, waits
-for `/healthz`, runs the deployment smoke against the Cloud Web Workbench at
+for `/readyz`, runs the deployment smoke against the Cloud Web Workbench at
 `GET /`, and prints service logs if the smoke fails.
 
 `pnpm deploy:validate` checks local Compose files, Helm chart guardrails, and

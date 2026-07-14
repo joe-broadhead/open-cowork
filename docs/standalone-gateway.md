@@ -93,6 +93,15 @@ URLs, and does not echo provided secrets to stdout when `--output` is used. Use
   gate does not apply. **Data is lost on restart and is not shared across
   replicas**, so it is not suitable for production team/enterprise use.
 
+Standalone Gateway uses one clean pre-release Postgres baseline. It initializes
+only an empty product schema when the baseline ledger entry is absent. If any
+Standalone Gateway domain table already exists without that entry, startup
+fails before creating or stamping the ledger; recreate the schema or restore a
+backup whose ledger matches its data. A present ledger entry is not enough on
+its own: migration startup and repository readiness also verify every required
+production table. The doctor reports the live repository failure and does not
+silently repair, adopt, or delete a drifted database.
+
 ### File config
 
 Every `OPEN_COWORK_STANDALONE_GATEWAY_*` value can be supplied from a JSON (or

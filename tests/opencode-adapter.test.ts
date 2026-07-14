@@ -1,4 +1,4 @@
-import { normalizeMcpStatusEntries, normalizeRuntimeCommands, normalizeRuntimeEventEnvelope, normalizeSessionInfo, normalizeSessionMessages, normalizeSessionStatuses, normalizeShareUrl } from '@open-cowork/runtime-host'
+import { connectNativeProviderApiKey, createNativeSession, normalizeMcpStatusEntries, normalizeRuntimeCommands, normalizeRuntimeEventEnvelope, normalizeSessionInfo, normalizeSessionMessages, normalizeSessionStatuses, normalizeShareUrl } from '@open-cowork/runtime-host'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type {
@@ -129,6 +129,29 @@ test('normalizeRuntimeEventEnvelope accepts SDK sync events that identify the ru
   assert.equal(event?.type, 'message.part.updated')
   assert.equal(event?.properties.sessionID, 'sess_sync')
   assert.equal((event?.properties.part as { id?: string } | undefined)?.id, 'part_sync')
+})
+
+test('native model switch history records do not create empty assistant messages', () => {
+  assert.deepEqual(normalizeSessionMessages([{
+    id: 'model-switch-1',
+    type: 'model-switched',
+    time: { created: 1 },
+    model: { providerID: 'openai', id: 'gpt-5' },
+  }]), [])
+})
+
+test('native assistant replay preserves V2 ModelRef provider and model ids', () => {
+  const messages = normalizeSessionMessages([{
+    id: 'assistant-1',
+    type: 'assistant',
+    time: { created: 1, completed: 2 },
+    agent: 'build',
+    model: { providerID: 'openai', id: 'gpt-5' },
+    content: [{ id: 'text-1', type: 'text', text: 'done' }],
+  }])
+
+  assert.equal(messages[0]?.info.model.providerId, 'openai')
+  assert.equal(messages[0]?.info.model.modelId, 'gpt-5')
 })
 
 test('normalizeMcpStatusEntries maps named status objects', () => {
@@ -263,4 +286,118 @@ test('opencode adapter accepts current SDK session, message, part, status, and e
   assert.equal(normalizeRuntimeEventEnvelope(event)?.type, 'message.part.updated')
   assert.deepEqual(normalizeSessionStatuses(sessionStatuses), { ses_sdk: { type: 'busy' } })
   assert.equal(normalizeMcpStatusEntries(mcpStatuses)[1]?.rawStatus, 'auth_required')
+})
+
+test('native provider API-key sync resolves the provider integration before connecting', async () => {
+  const calls: unknown[] = []
+  const client = {
+    v2: {
+      provider: {
+        async get(input: unknown) {
+          calls.push(['provider.get', input])
+          return { data: { data: { id: 'openrouter', integrationID: 'openrouter' } } }
+        },
+      },
+      integration: {
+        async get(input: unknown) {
+          calls.push(['integration.get', input])
+          return { data: { data: { id: 'openrouter', methods: [{ type: 'key' }] } } }
+        },
+        connect: {
+          async key(input: unknown) {
+            calls.push(['integration.connect.key', input])
+          },
+        },
+      },
+    },
+  }
+
+  await connectNativeProviderApiKey(client as never, 'openrouter', 'secret')
+
+  assert.deepEqual(calls, [
+    ['provider.get', { providerID: 'openrouter' }],
+    ['integration.get', { integrationID: 'openrouter' }],
+    ['integration.connect.key', {
+      integrationID: 'openrouter',
+      key: 'secret',
+      label: 'Open Cowork',
+    }],
+  ])
+})
+
+test('native session creation sends an explicit V2 location body', async () => {
+  const calls: unknown[] = []
+  const client = {
+    v2: {
+      session: {
+        async create(input: unknown, options: unknown) {
+          calls.push([input, options])
+          return {
+            data: {
+              data: {
+                id: 'ses_native',
+                projectID: 'project-native',
+                cost: 0,
+                tokens: {
+                  input: 0,
+                  output: 0,
+                  reasoning: 0,
+                  cache: { read: 0, write: 0 },
+                },
+                time: { created: 1, updated: 1 },
+                title: 'New session',
+                location: { directory: '/workspace' },
+              },
+            },
+          }
+        },
+      },
+    },
+  }
+
+  const session = await createNativeSession(client as never, {
+    location: { directory: ' /workspace ' },
+  })
+
+  assert.equal(session.id, 'ses_native')
+  assert.deepEqual(calls, [[
+    { location: { directory: '/workspace' } },
+    { throwOnError: true },
+  ]])
+})
+
+test('native session creation rejects an empty V2 location before transport', async () => {
+  let called = false
+  const client = {
+    v2: {
+      session: {
+        async create() {
+          called = true
+        },
+      },
+    },
+  }
+
+  await assert.rejects(
+    createNativeSession(client as never, { location: { directory: '   ' } }),
+    /requires an explicit location directory/,
+  )
+  assert.equal(called, false)
+})
+
+test('native provider API-key sync fails closed when V2 exposes no key integration', async () => {
+  const client = {
+    v2: {
+      provider: {
+        async get() {
+          return { data: { data: { id: 'local-provider' } } }
+        },
+      },
+    },
+  }
+
+  await assert.rejects(
+    connectNativeProviderApiKey(client as never, 'local-provider', 'secret'),
+    /does not expose a credential integration/,
+  )
 })

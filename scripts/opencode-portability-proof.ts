@@ -22,13 +22,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { RuntimePortabilityProofStore } from './support/runtime-portability-proof-store.ts'
 import {
-  buildPortableRuntimeManifest,
   checkSandboxRuntimeEngine,
+  type SandboxEngine,
+} from '@open-cowork/cloud-server/runtime-portability'
+import {
+  buildPortableRuntimeManifest,
   isRuntimeSnapshotSecretBearingPath,
   runtimePathsForPortability,
-  type SandboxEngine,
   type PortableRuntimeEntry,
-} from '@open-cowork/cloud-server/runtime-portability'
+} from '@open-cowork/cloud-server/runtime-snapshot-portability'
 type RuntimePathSet = ReturnType<typeof runtimePathsForPortability>
 
 type ProofCliOptions = {
@@ -43,7 +45,7 @@ type ProofCliOptions = {
 type SdkSnapshot = {
   session: unknown
   messages: unknown[]
-  todos: unknown
+  history: unknown[]
   children: unknown[]
   permissions: unknown[]
   questions: unknown[]
@@ -111,11 +113,11 @@ function printHelp() {
 
 Runs the OpenCode portability proof with isolated runtime homes:
   1. start OpenCode runtime A through the Node RuntimeLauncher
-  2. create and prompt a session without model credentials using noReply
+  2. create and durably admit a prompt without model credentials using resume:false
   3. snapshot OpenCode/Cowork/workspace/artifact state
   4. restore that snapshot to a separate runtime/workspace path
   5. start OpenCode runtime B through the Node RuntimeLauncher
-  6. verify SDK session, messages, todos, children, permissions, and questions match
+  6. verify native SDK session, messages, children, permissions, and questions match
   7. report sandbox engine preflight availability without leaking local paths
 `)
 }
@@ -168,6 +170,7 @@ function buildProofRuntimeEnvironment(input: {
   env.LOCALAPPDATA = input.runtimePaths.dataHome
   env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
   env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
+  env.OPENCODE_DISABLE_EXTERNAL_SKILLS = '1'
   env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = 'true'
   env.OPENCODE_SERVER_USERNAME = input.auth.username
   env.OPENCODE_SERVER_PASSWORD = input.auth.password
@@ -182,19 +185,21 @@ async function loadOpencodeClientFactory() {
       directory?: string
       headers?: Record<string, string>
     }): {
-      session: {
-        create(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { id: string } }>
-        get(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown }>
-        messages(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown[] }>
-        promptAsync(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown }>
-        todo(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown }>
-        children(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown[] }>
-      }
-      permission: {
-        list(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown[] }>
-      }
-      question: {
-        list(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: unknown[] }>
+      v2: {
+        session: {
+          create(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: { id: string } } }>
+          get(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown } }>
+          list(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown[]; cursor: Record<string, unknown> } }>
+          messages(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown[]; cursor: Record<string, unknown> } }>
+          history(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown[]; hasMore: boolean } }>
+          prompt(parameters: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown } }>
+        }
+        permission: {
+          request: { list(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown[] } }> }
+        }
+        question: {
+          request: { list(parameters?: Record<string, unknown>, options?: { throwOnError?: boolean }): Promise<{ data: { data: unknown[] } }> }
+        }
       }
     }
   }
@@ -410,6 +415,18 @@ function redactProofPath(path: string, root: string) {
 }
 
 function extractMessageText(message: unknown) {
+  if (typeof (message as { text?: unknown })?.text === 'string') {
+    return (message as { text: string }).text
+  }
+  const content = Array.isArray((message as { content?: unknown[] })?.content)
+    ? (message as { content: unknown[] }).content
+    : []
+  if (content.length > 0) {
+    return content
+      .map((part) => typeof (part as { text?: unknown })?.text === 'string' ? (part as { text: string }).text : '')
+      .filter(Boolean)
+      .join('\n')
+  }
   const parts = Array.isArray((message as { parts?: unknown[] }).parts)
     ? (message as { parts: unknown[] }).parts
     : []
@@ -425,14 +442,26 @@ export function digestSdkSnapshot(snapshot: SdkSnapshot) {
     sessionId: session?.id || null,
     title: session?.title || null,
     messages: snapshot.messages.map((message) => {
-      const info = (message as { info?: { id?: string; role?: string } }).info || {}
+      const record = message as { id?: string; type?: string; info?: { id?: string; role?: string } }
+      const info = record.info || {}
       return {
-        id: info.id || null,
-        role: info.role || null,
+        id: record.id || info.id || null,
+        role: record.type === 'user' || record.type === 'assistant' ? record.type : info.role || null,
         text: extractMessageText(message),
       }
     }),
-    todos: snapshot.todos,
+    promptAdmissions: snapshot.history.flatMap((event) => {
+      const record = event as {
+        type?: unknown
+        data?: { messageID?: unknown; prompt?: unknown; delivery?: unknown }
+      }
+      if (record.type !== 'session.next.prompt.admitted') return []
+      return [{
+        messageId: typeof record.data?.messageID === 'string' ? record.data.messageID : null,
+        text: extractMessageText(record.data?.prompt),
+        delivery: typeof record.data?.delivery === 'string' ? record.data.delivery : null,
+      }]
+    }),
     childCount: snapshot.children.length,
     permissionCount: snapshot.permissions.length,
     questionCount: snapshot.questions.length,
@@ -448,26 +477,28 @@ async function readSdkSnapshot(input: {
   sessionId: string
   workspaceDir: string
 }): Promise<SdkSnapshot> {
-  const parameters = { sessionID: input.sessionId, directory: input.workspaceDir }
-  const [session, messages, todos, children, permissions, questions] = await Promise.all([
-    input.client.session.get(parameters, { throwOnError: true }),
-    input.client.session.messages(parameters, { throwOnError: true }),
-    input.client.session.todo(parameters, { throwOnError: true }),
-    input.client.session.children(parameters, { throwOnError: true }),
-    input.client.permission.list({ directory: input.workspaceDir }, { throwOnError: true }),
-    input.client.question.list({ directory: input.workspaceDir }, { throwOnError: true }),
+  const parameters = { sessionID: input.sessionId }
+  const [session, messages, history, sessions, permissions, questions] = await Promise.all([
+    input.client.v2.session.get(parameters, { throwOnError: true }),
+    input.client.v2.session.messages({ ...parameters, limit: 200, order: 'asc' }, { throwOnError: true }),
+    input.client.v2.session.history({ ...parameters, limit: 100, after: 0 }, { throwOnError: true }),
+    input.client.v2.session.list({ directory: input.workspaceDir, limit: 200, order: 'asc' }, { throwOnError: true }),
+    input.client.v2.permission.request.list({ location: { directory: input.workspaceDir } }, { throwOnError: true }),
+    input.client.v2.question.request.list({ location: { directory: input.workspaceDir } }, { throwOnError: true }),
   ])
   return {
-    session: session.data,
-    messages: messages.data || [],
-    todos: todos.data,
-    children: children.data || [],
-    permissions: permissions.data || [],
-    questions: questions.data || [],
+    session: session.data.data,
+    messages: messages.data.data || [],
+    history: history.data.data || [],
+    children: (sessions.data.data || []).filter((candidate) => (
+      (candidate as { parentID?: unknown }).parentID === input.sessionId
+    )),
+    permissions: permissions.data.data || [],
+    questions: questions.data.data || [],
   }
 }
 
-async function waitForPromptMessage(input: {
+async function waitForPromptAdmission(input: {
   client: Awaited<ReturnType<typeof startRuntime>>['client']
   expectedText: string
   sessionId: string
@@ -481,12 +512,16 @@ async function waitForPromptMessage(input: {
       sessionId: input.sessionId,
       workspaceDir: input.workspaceDir,
     })
-    if (snapshot.messages.some((message) => extractMessageText(message).includes(input.expectedText))) {
+    if (snapshot.history.some((event) => {
+      const record = event as { type?: unknown; data?: { prompt?: unknown } }
+      return record.type === 'session.next.prompt.admitted'
+        && extractMessageText(record.data?.prompt).includes(input.expectedText)
+    })) {
       return snapshot
     }
     await delay(250)
   }
-  throw new Error(`Timed out waiting for prompt message in session ${input.sessionId}.`)
+  throw new Error(`Timed out waiting for durable prompt admission in session ${input.sessionId}.`)
 }
 
 function runControlPlaneProof(sessionId: string) {
@@ -568,23 +603,22 @@ export async function runOpencodePortabilityProof(options: ProofCliOptions) {
   let sessionId: string
   let before: SdkSnapshot
   try {
-    const created = await runtimeA.client.session.create({
-      directory: workspaceDirA,
-      title: 'OpenCode portability proof',
+    const created = await runtimeA.client.v2.session.create({
+      location: { directory: workspaceDirA },
     }, { throwOnError: true })
-    sessionId = created.data.id
+    sessionId = created.data.data.id
     writeCoworkSessionMetadata({
       metadataPath: metadataPathA,
       sessionId,
       workspaceDir: workspaceDirA,
     })
-    await runtimeA.client.session.promptAsync({
+    await runtimeA.client.v2.session.prompt({
       sessionID: sessionId,
-      directory: workspaceDirA,
-      noReply: true,
-      parts: [{ type: 'text', text: promptText }],
+      prompt: { text: promptText },
+      delivery: 'queue',
+      resume: false,
     }, { throwOnError: true })
-    before = await waitForPromptMessage({
+    before = await waitForPromptAdmission({
       client: runtimeA.client,
       expectedText: promptText,
       sessionId,
@@ -645,7 +679,7 @@ export async function runOpencodePortabilityProof(options: ProofCliOptions) {
     nodeRuntimeLauncher: true,
     runtimeConfigSource: 'app-managed',
     machineNativeRuntimeConfigDisabled: true,
-    promptMode: 'noReply',
+    promptMode: 'resume:false',
     copied: redactedCopied,
     omittedOptionalKinds: ['opencode-cache'],
     secretBearingPaths: copied

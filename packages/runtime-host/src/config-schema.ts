@@ -2,7 +2,8 @@ import Ajv2020 from 'ajv/dist/2020.js'
 import { getAppPathHost } from '@open-cowork/shared/node'
 import type { ErrorObject } from 'ajv'
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 
 type JsonSchemaNode = {
@@ -36,8 +37,14 @@ function cloneSchemaWithoutRequired(node: JsonSchemaNode): JsonSchemaNode {
 }
 
 function resolveSchemaPath() {
+  const moduleDirectory = dirname(fileURLToPath(import.meta.url))
   const candidates = [
     (process as { resourcesPath?: string }).resourcesPath ? join((process as { resourcesPath?: string }).resourcesPath!, 'open-cowork.config.schema.json') : null,
+    // Standalone runtime-host builds live at packages/runtime-host/{src,dist};
+    // the desktop bundle lives one level deeper at apps/desktop/dist/main.
+    // Resolve both from the module instead of depending on the launch cwd.
+    resolve(moduleDirectory, '../../../open-cowork.config.schema.json'),
+    resolve(moduleDirectory, '../../../../open-cowork.config.schema.json'),
     typeof __dirname === 'string' ? resolve(__dirname, '../../../../open-cowork.config.schema.json') : null,
     getAppPathHost()?.getAppPath ? resolve(getAppPathHost()!.getAppPath!(), '..', '..', 'open-cowork.config.schema.json') : null,
     resolve(process.cwd(), 'open-cowork.config.schema.json'),

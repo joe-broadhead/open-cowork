@@ -1,5 +1,5 @@
 import { nowIso, stableJson } from '../postgres-store-id-helpers.ts'
-import { redactOperationalText } from '../postgres-store-normalizers.ts'
+import { redactOperationalText } from '../operational-text-redaction.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from '../control-plane-store.ts'
 import {
   commandFromRow,
@@ -166,7 +166,7 @@ export class PostgresSessionsRepository {
     // Defensively bound this per-user read so it can never become an unbounded
     // scan that grows with a user's lifetime session count; the result is ordered
     // most-recent-first, and UI callers that need to page beyond this use
-    // listSessionsPage (keyset cursor). Mirrors the listAllSessions cap.
+    // listSessionsPage uses a bounded keyset cursor for predictable query cost.
     const result = await this.options.pool.query(
       `SELECT s.*, p.view -> 'projectSource' AS projection_project_source
        FROM cloud_sessions s
@@ -230,15 +230,6 @@ export class PostgresSessionsRepository {
       nextCursor: rows.length > limit && items.length > 0 ? encodeSessionPageCursor(items[items.length - 1]!, input) : null,
       totalEstimate: rows.length > limit ? limit + 1 : rows.length,
     }
-  }
-
-  async listAllSessions() {
-    // Defensively bound this cross-tenant read so it can never become an unbounded
-    // full-table scan; it has no production caller (diagnostics/compat only).
-    const result = await this.options.pool.query(
-      `SELECT * FROM cloud_sessions ORDER BY updated_at DESC, tenant_id, session_id LIMIT 1000`,
-    )
-    return result.rows.map(sessionFromRow)
   }
 
   async listRunnableSessions(input: {

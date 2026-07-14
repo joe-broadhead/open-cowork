@@ -458,6 +458,17 @@ describe('useSessionStore', () => {
     expect(state.sidebarCollapsed).toBe(true)
     expect(state.chartArtifactsBySession.ses_1).toEqual([{ ...artifact, id: 'artifact-2' }])
   })
+
+  it('bounds global errors while retaining the newest messages', () => {
+    for (let index = 0; index < 55; index += 1) {
+      useSessionStore.getState().addGlobalError(`Error ${index}`)
+    }
+
+    const errors = useSessionStore.getState().globalErrors
+    expect(errors).toHaveLength(50)
+    expect(errors[0]?.message).toBe('Error 5')
+    expect(errors.at(-1)?.message).toBe('Error 54')
+  })
 })
 
 describe('useSessionStore workspace-list invariant (#919)', () => {

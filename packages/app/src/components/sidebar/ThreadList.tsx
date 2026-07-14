@@ -1,9 +1,8 @@
-import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
+import { lazy, Suspense, useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { switchToSession } from '../../helpers/switchToSession'
-import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
@@ -12,6 +11,10 @@ import { cloudGitRepositoryLabel } from '@open-cowork/shared'
 import type { CloudProjectSourceSummary, SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
 import { Badge, Button, Card, Dialog, EmptyState, Input, Select } from '../ui'
+
+const DiffViewer = lazy(() => import('../chat/DiffViewer').then((module) => ({
+  default: module.DiffViewer,
+})))
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -653,7 +656,19 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           actionLabel={t('error.closePanel', 'Close panel')}
           onBackHome={() => setDiffSessionId(null)}
         >
-          <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
+          <Suspense
+            fallback={(
+              <div
+                className="fixed top-[8%] left-1/2 z-50 w-[960px] max-w-[95vw] -translate-x-1/2 rounded-xl theme-popover px-4 py-8 text-center text-xs text-text-muted shadow-2xl"
+                role="status"
+                aria-live="polite"
+              >
+                {t('diff.loading', 'Loading changes...')}
+              </div>
+            )}
+          >
+            <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
+          </Suspense>
         </ViewErrorBoundary>
       )}
       {copyDialog && (

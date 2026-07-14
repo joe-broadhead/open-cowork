@@ -302,7 +302,7 @@ same session list, projection, and SSE contracts.
 
 ### Cloud Web Workbench readiness gates
 
-The browser workbench has its own release gates because `/healthz` only proves
+The browser workbench has its own release gates because `/livez` only proves
 the server is alive. Cloud Web is the browser build of the desktop renderer, so
 its UI is covered by the renderer suite, while the cloud control-plane behavior
 is covered by the cloud HTTP and continuation suites. Run these before provider
@@ -772,7 +772,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal-only token for operational endpoints such as scheduler tick probes. Keep it in a platform secret store. |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF` | Optional env secret ref for the internal operational token. |
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
-| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `closed` remains a backward-compatible alias for `disabled`; `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. |
+| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. Invalid values fail startup validation. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
 | `OPEN_COWORK_CLOUD_ORG_MODE` | Deployment topology: `multi-org` (default) preserves multi-tenant behaviour; `single-org` funnels every principal into one auto-bootstrapped org and skips tenant switching, for single-tenant self-host installs. |
 | `OPEN_COWORK_CLOUD_SINGLE_ORG_ID` | Org/tenant id used as the single org when `OPEN_COWORK_CLOUD_ORG_MODE=single-org` (default `default`). Ignored in `multi-org` mode. |
@@ -1157,7 +1157,6 @@ browser is not the only protection.
 - `GET /readyz` reports dependency readiness for the control plane, object
   store, secret adapter, billing adapter, auth config, and role-specific worker
   dependencies. Kubernetes readiness probes should use this route.
-- `GET /healthz` remains available as a backward-compatible liveness route.
 - `GET /api/runtime/status` reports the active role/profile, whether this
   process can execute runtime commands, and whether commands are handled inline
   or by durable worker polling.

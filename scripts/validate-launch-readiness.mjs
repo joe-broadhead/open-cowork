@@ -303,7 +303,8 @@ for (const forbidden of [
 }
 
 for (const route of [
-  '/healthz',
+  '/livez',
+  '/readyz',
   '/api/config',
   '/api/workspace',
   '/api/sessions',

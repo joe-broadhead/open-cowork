@@ -5,7 +5,12 @@ import {
   createSessionScopedMessageState,
   handleMessagePartDeltaEvent,
   handleMessageUpdatedEvent,
+  handleNativeStepEndedEvent,
+  handleNativeTextDeltaEvent,
+  handleNativeTextEndedEvent,
+  handleNativeToolEvent,
 } from '../apps/desktop/src/main/event-message-handlers.ts'
+import { trackParentSession } from '../apps/desktop/src/main/event-task-state.ts'
 
 function createDispatchCollector() {
   const events: unknown[] = []
@@ -324,4 +329,106 @@ test('message role cache remains globally bounded across many sessions', () => {
   assert.equal(messageState.messageRolesBySession.has('sess_24'), false)
   assert.equal(messageState.messageRolesBySession.has('sess_25'), true)
   assert.equal(messageState.messageRolesBySession.has('sess_10024'), true)
+})
+
+test('native v2 text and reasoning event families project append and replace patches', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+  trackParentSession('native-text-session')
+
+  handleNativeTextDeltaEvent(win, collector.dispatch, {
+    sessionID: 'native-text-session',
+    assistantMessageID: 'assistant-1',
+    textID: 'text-1',
+    delta: 'Hello',
+  }, messageState, 'text')
+  handleNativeTextEndedEvent(win, collector.dispatch, {
+    sessionID: 'native-text-session',
+    assistantMessageID: 'assistant-1',
+    textID: 'text-1',
+    text: 'Hello world',
+  }, messageState, 'openai/gpt-5', 'text')
+  handleNativeTextDeltaEvent(win, collector.dispatch, {
+    sessionID: 'native-text-session',
+    assistantMessageID: 'assistant-1',
+    reasoningID: 'reasoning-1',
+    delta: 'Inspecting',
+  }, messageState, 'reasoning')
+  handleNativeTextEndedEvent(win, collector.dispatch, {
+    sessionID: 'native-text-session',
+    assistantMessageID: 'assistant-1',
+    reasoningID: 'reasoning-1',
+    text: 'Inspecting complete',
+  }, messageState, 'openai/gpt-5', 'reasoning')
+
+  assert.deepEqual(collector.events.map((event) => {
+    const data = (event as { data: Record<string, unknown> }).data
+    return {
+      type: data.type,
+      mode: data.mode,
+      content: data.content,
+      messageId: data.messageId,
+      partId: data.partId,
+    }
+  }), [
+    { type: 'text', mode: 'append', content: 'Hello', messageId: 'assistant-1', partId: 'text-1' },
+    { type: 'text', mode: 'replace', content: 'Hello world', messageId: 'assistant-1', partId: 'text-1' },
+    { type: 'reasoning', mode: 'append', content: 'Inspecting', messageId: 'assistant-1', partId: 'reasoning-1' },
+    { type: 'reasoning', mode: 'replace', content: 'Inspecting complete', messageId: 'assistant-1', partId: 'reasoning-1' },
+  ])
+})
+
+test('native v2 tool terminal events retain called metadata and step events project cost', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+  trackParentSession('native-tool-session')
+
+  handleNativeToolEvent(win, collector.dispatch, 'session.next.tool.called', {
+    sessionID: 'native-tool-session',
+    assistantMessageID: 'assistant-2',
+    callID: 'call-1',
+    tool: 'read',
+    input: { path: 'README.md' },
+    provider: { executed: true, metadata: { openai: { itemId: 'item-1' } } },
+  }, messageState, 'openai/gpt-5')
+  handleNativeToolEvent(win, collector.dispatch, 'session.next.tool.success', {
+    sessionID: 'native-tool-session',
+    assistantMessageID: 'assistant-2',
+    callID: 'call-1',
+    structured: { bytes: 42 },
+    content: [{ type: 'text', text: 'file body' }],
+    provider: { executed: true, metadata: { openai: { responseId: 'response-1' } } },
+  }, messageState, 'openai/gpt-5')
+  handleNativeStepEndedEvent(win, collector.dispatch, {
+    sessionID: 'native-tool-session',
+    assistantMessageID: 'assistant-2',
+    finish: 'stop',
+    cost: 0.125,
+    tokens: { input: 5, output: 7, reasoning: 1, cache: { read: 2, write: 3 } },
+  }, messageState, 'openai/gpt-5')
+
+  const toolEvents = collector.events.filter((event) => (event as { type?: string }).type === 'tool_call') as Array<{
+    data: { name?: string; input?: unknown; status?: string; output?: unknown }
+  }>
+  assert.equal(toolEvents.length, 2)
+  assert.deepEqual(toolEvents[1]?.data, {
+    type: 'tool_call',
+    id: 'call-1',
+    name: 'read',
+    input: { path: 'README.md' },
+    status: 'complete',
+    output: [{ type: 'text', text: 'file body' }],
+    agent: null,
+    attachments: undefined,
+    taskRunId: null,
+    sourceSessionId: 'native-tool-session',
+  })
+  const cost = collector.events.find((event) => (event as { type?: string }).type === 'cost') as {
+    data?: { cost?: number; tokens?: unknown }
+  } | undefined
+  assert.equal(cost?.data?.cost, 0.125)
+  assert.deepEqual(cost?.data?.tokens, { input: 5, output: 7, reasoning: 1, cache: { read: 2, write: 3 } })
+  assert.equal(messageState.nativeToolPartsByKey.size, 0)
 })

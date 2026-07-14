@@ -1,7 +1,7 @@
 import { clearKnowledgeStoreCache } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { IncomingMessage } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -204,6 +204,32 @@ test('cloud BYOK defaults include only provider descriptors with secret credenti
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text()) as Record<string, unknown>
+}
+
+async function reserveLoopbackPort(): Promise<number> {
+  const server = createServer()
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  return address.port
+}
+
+async function waitForResponse(url: string): Promise<Response> {
+  const deadline = Date.now() + 1_000
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      return await fetch(url)
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Timed out waiting for ${url}`)
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -546,14 +572,10 @@ test('cloud auth config requires explicit self-service opt-in for managed OIDC s
     OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS: 'example.test',
     OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP: 'true',
   }).signupMode, 'domain')
-  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+  assert.throws(() => resolveCloudAuthConfig(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
-  }).allowSelfServiceSignup, false)
-  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
-    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
-    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
-  }).signupMode, 'closed')
+  }), /Invalid cloud signup mode/)
   assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'disabled',
@@ -1881,8 +1903,8 @@ test('cloud app wires OIDC auth mode instead of header demo auth', async () => {
   })
 
   try {
-    const health = await readJson(await fetch(`${app.url}/healthz`))
-    assert.equal(health.ok, true)
+    const liveness = await readJson(await fetch(`${app.url}/livez`))
+    assert.equal(liveness.ok, true)
 
     const response = await fetch(`${app.url}/api/config`, {
       headers: {
@@ -1924,6 +1946,33 @@ test('cloud app exposes separate liveness and dependency readiness endpoints', a
     assert.equal(checks.some((entry) => asRecord(entry).name === 'control_plane'), true)
     assert.equal(checks.some((entry) => asRecord(entry).name === 'object_store'), true)
     assert.equal(checks.some((entry) => asRecord(entry).name === 'secret_adapter'), true)
+  } finally {
+    await app.close()
+  }
+})
+
+test('cloud worker liveness server exposes only the canonical liveness route', async () => {
+  const livenessPort = await reserveLoopbackPort()
+  const app = await startCloudApp({
+    store: new InMemoryControlPlaneStore(),
+    runtime: new FakeRuntime(),
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+      OPEN_COWORK_CLOUD_LIVENESS_PORT: String(livenessPort),
+    },
+    hostname: '127.0.0.1',
+    workerPollMs: 60_000,
+  })
+
+  try {
+    assert.equal(app.server, null)
+    const baseUrl = `http://127.0.0.1:${livenessPort}`
+    const live = await waitForResponse(`${baseUrl}/livez`)
+    assert.equal(live.status, 200)
+    assert.equal((await readJson(live)).ok, true)
+    assert.equal((await fetch(`${baseUrl}/healthz`)).status, 404)
   } finally {
     await app.close()
   }

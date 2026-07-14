@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import type { ModelInfoSnapshot, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
 import { getAppPathHost } from '@open-cowork/shared/node'
 import {
   buildConfiguredModelFallbacks,
@@ -23,7 +23,6 @@ import {
 } from './config-layer-utils.js'
 import type {
   ConfiguredTool,
-  ModelFallbackInfo,
   OpenCoworkConfig,
 } from '@open-cowork/shared'
 import { applyE2EArgEnvironment } from './e2e-remote-debugging.js'
@@ -46,7 +45,7 @@ export type {
   ConfiguredSkill,
   ConfiguredTool,
   CustomProviderRuntimeConfig,
-  ModelFallbackInfo,
+  ModelInfoSnapshot,
   OpenCoworkConfig,
 } from '@open-cowork/shared'
 
@@ -390,6 +389,6 @@ export function resolveCustomProviderConfig(providerId: string) {
   return getAppConfig().providers.custom?.[providerId] || null
 }
 
-export function getConfiguredModelFallbacks(): ModelFallbackInfo {
+export function getConfiguredModelFallbacks(): ModelInfoSnapshot {
   return buildConfiguredModelFallbacks(getAppConfig())
 }

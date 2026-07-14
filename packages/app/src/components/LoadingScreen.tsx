@@ -48,15 +48,31 @@ export function LoadingScreen({
   }, [elapsed, errorMessage, stage])
 
   return (
-    <div className="flex items-center justify-center h-screen w-screen" style={{ background: 'var(--color-base)' }}>
+    <div
+      className="flex items-center justify-center h-screen w-screen"
+      style={{ background: 'var(--color-base)' }}
+      aria-busy={errorMessage ? undefined : true}
+    >
       <div className="flex flex-col items-center gap-5 text-center px-6">
         <BrandMark size="lg" glow />
         <div className="flex flex-col gap-1.5">
           <div className="text-lg font-semibold text-text">{brandName}</div>
-          <div className="text-sm text-text-secondary">{message}</div>
+          <div
+            className="text-sm text-text-secondary"
+            role={errorMessage ? undefined : 'status'}
+            aria-live={errorMessage ? undefined : 'polite'}
+            aria-atomic={errorMessage ? undefined : true}
+          >
+            {message}
+          </div>
         </div>
         {errorMessage ? (
-          <div className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-start">
+          <div
+            className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-start"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
             <div className="text-xs font-medium text-red mb-1">{t('loading.error.title', '{{brandName}} could not start the runtime', { brandName })}</div>
             <div className="text-xs leading-relaxed text-text-secondary">{errorMessage}</div>
             <div className="text-2xs text-text-muted mt-2">{t('loading.error.hint', 'Fix the invalid runtime or config input, then relaunch the app.')}</div>
@@ -69,7 +85,7 @@ export function LoadingScreen({
             ) : null}
           </div>
         ) : (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" aria-hidden="true">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse [animation-delay:160ms]" />
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse [animation-delay:320ms]" />

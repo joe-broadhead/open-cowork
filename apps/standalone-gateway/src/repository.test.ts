@@ -9,7 +9,11 @@ import {
 } from "../dist/postgres-repository.js";
 import { InMemoryStandaloneGatewayRepository } from "../dist/repository.js";
 import { describeStandaloneRetention, runStandaloneGatewayRetention } from "../dist/retention.js";
-import { standaloneGatewayMigrations } from "../dist/schema.js";
+import {
+  STANDALONE_GATEWAY_BASELINE_MIGRATION_ID,
+  STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES,
+  standaloneGatewayMigrations,
+} from "../dist/schema.js";
 
 function fakeProviderKey(...parts: string[]) {
   return parts.join("-");
@@ -303,6 +307,15 @@ test("postgres repository adapter maps readiness and daemon lease rows without a
     async query(sql: string, params?: unknown[]) {
       queries.push(sql);
       if (sql === "SELECT 1") return { rows: [] };
+      if (sql.includes("FROM pg_catalog.pg_tables")) {
+        return {
+          rows: ["standalone_gateway_schema_migrations", ...STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES]
+            .map((table_name) => ({ table_name })),
+        };
+      }
+      if (sql.includes("SELECT id FROM standalone_gateway_schema_migrations")) {
+        return { rows: [{ id: STANDALONE_GATEWAY_BASELINE_MIGRATION_ID }] };
+      }
       if (sql.includes("INSERT INTO standalone_gateway_daemon_leases")) {
         return {
           rows: [{
@@ -432,7 +445,10 @@ test("postgres repository adapter maps readiness and daemon lease rows without a
   };
   const repository = new PostgresStandaloneGatewayRepository(pool as never);
 
-  assert.deepEqual(await repository.readiness(), { ok: true, detail: "postgres ready" });
+  assert.deepEqual(await repository.readiness(), {
+    ok: true,
+    detail: "postgres ready; migration ledger and production tables verified",
+  });
   const lease = await repository.acquireDaemonLease({ leaseId: "daemon", ownerId: "node-1", ttlMs: 30_000, now });
   assert.deepEqual(lease, {
     leaseId: "daemon",
@@ -572,19 +588,21 @@ test("postgres repository touches existing sessions before appending new message
   assert.equal(queries.at(-1), "COMMIT");
 });
 
-test("postgres repository migrations skip applied core schema before applying retention indexes", async () => {
+test("postgres repository migrations skip the applied clean baseline", async () => {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
+  const tables = new Set(["standalone_gateway_schema_migrations", ...STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES]);
   const pool = {
     async query(sql: string, params?: unknown[]) {
       queries.push({ sql, params });
-      if (sql.includes("CREATE TABLE IF NOT EXISTS standalone_gateway_schema_migrations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 };
+      if (sql.includes("FROM pg_catalog.pg_tables")) {
+        const requested = (params?.[0] as string[]) || [];
+        return { rows: requested.filter((name) => tables.has(name)).map((name) => ({ table_name: name })), rowCount: tables.size };
+      }
       if (sql.includes("SELECT id FROM standalone_gateway_schema_migrations")) {
-        return { rows: params?.[0] === "0001_standalone_gateway_core" ? [{ id: params[0] }] : [], rowCount: params?.[0] === "0001_standalone_gateway_core" ? 1 : 0 };
+        return { rows: [{ id: STANDALONE_GATEWAY_BASELINE_MIGRATION_ID }], rowCount: 1 };
       }
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
-      if (sql.includes("INSERT INTO standalone_gateway_schema_migrations")) return { rows: [], rowCount: 1 };
-      if (sql.includes("0001_standalone_gateway_core")) throw new Error("migration id should not be embedded in SQL");
-      if (sql.includes("standalone_gateway_sessions_retention_idx")) return { rows: [], rowCount: 0 };
       throw new Error(`Unexpected migration query: ${sql}`);
     },
   };
@@ -595,29 +613,80 @@ test("postgres repository migrations skip applied core schema before applying re
   const migrationSql = queries.map((query) => query.sql).join("\n");
   assert.equal(migrationSql.includes("CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_sessions_provider_thread_unique"), false);
   assert.equal(migrationSql.includes("standalone_gateway_sessions_provider_workspace_thread_unique"), false);
-  assert.equal(migrationSql.includes("standalone_gateway_jobs_active_session_idx"), true);
+  assert.equal(migrationSql.includes("standalone_gateway_jobs_active_session_idx"), false);
 });
 
-test("standalone retention migration indexes prune and active-job lookups", () => {
-  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0002_standalone_gateway_retention_indexes");
-  assert.ok(migration);
-  assert.match(migration.sql, /standalone_gateway_sessions_retention_idx/);
-  assert.match(migration.sql, /WHERE status IN \('idle', 'failed', 'completed'\)/);
-  assert.match(migration.sql, /standalone_gateway_jobs_retention_idx/);
-  assert.match(migration.sql, /standalone_gateway_jobs_active_session_idx/);
-  assert.match(migration.sql, /standalone_gateway_artifacts_retention_idx/);
-  assert.match(migration.sql, /standalone_gateway_artifacts_session_retention_idx/);
+test("postgres repository refuses a clean baseline over untracked product tables before mutation", async () => {
+  const queries: string[] = [];
+  const pool = {
+    async query(sql: string, params?: unknown[]) {
+      queries.push(sql);
+      if (sql === "BEGIN" || sql === "ROLLBACK" || sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 0 };
+      if (sql.includes("FROM pg_catalog.pg_tables")) {
+        const requested = (params?.[0] as string[]) || [];
+        return {
+          rows: requested.includes("standalone_gateway_sessions") ? [{ table_name: "standalone_gateway_sessions" }] : [],
+          rowCount: 1,
+        };
+      }
+      throw new Error(`Unexpected migration query: ${sql}`);
+    },
+  };
+  const repository = new PostgresStandaloneGatewayRepository(pool as never);
+
+  await assert.rejects(
+    () => repository.migrate(),
+    /Refusing to apply the clean Standalone Gateway baseline[\s\S]*Recreate an empty Standalone Gateway schema/,
+  );
+
+  assert.equal(queries.some((sql) => sql.includes("CREATE TABLE IF NOT EXISTS standalone_gateway_schema_migrations")), false);
+  assert.equal(queries.some((sql) => sql.includes("INSERT INTO standalone_gateway_schema_migrations")), false);
 });
 
-test("standalone core schema starts with workspace-aware identity authorization", () => {
-  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0001_standalone_gateway_core");
-  assert.ok(migration);
-  assert.match(migration.sql, /provider_workspace_id text NOT NULL DEFAULT ''/);
-  assert.match(migration.sql, /standalone_gateway_sessions_provider_workspace_thread_unique/);
-  assert.match(migration.sql, /standalone_gateway_channel_identities_provider_workspace_user_unique/);
-  assert.match(migration.sql, /CHECK \(role IN \('owner', 'admin', 'member', 'approver', 'viewer'\)\)/);
-  assert.match(migration.sql, /CHECK \(status IN \('active', 'disabled'\)\)/);
-  assert.doesNotMatch(migration.sql, /pg_constraint/);
-  assert.doesNotMatch(migration.sql, /DROP CONSTRAINT/);
-  assert.doesNotMatch(migration.sql, /UNIQUE \(provider, external_user_id\)/);
+test("postgres repository readiness rejects a ledger-only schema", async () => {
+  const pool = {
+    async query(sql: string, params?: unknown[]) {
+      if (sql === "SELECT 1") return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      if (sql.includes("FROM pg_catalog.pg_tables")) {
+        const requested = (params?.[0] as string[]) || [];
+        return {
+          rows: requested.includes("standalone_gateway_schema_migrations")
+            ? [{ table_name: "standalone_gateway_schema_migrations" }]
+            : [],
+          rowCount: 1,
+        };
+      }
+      if (sql.includes("SELECT id FROM standalone_gateway_schema_migrations")) {
+        return { rows: [{ id: STANDALONE_GATEWAY_BASELINE_MIGRATION_ID }], rowCount: 1 };
+      }
+      throw new Error(`Unexpected readiness query: ${sql}`);
+    },
+  };
+  const repository = new PostgresStandaloneGatewayRepository(pool as never);
+
+  const readiness = await repository.readiness();
+
+  assert.equal(readiness.ok, false);
+  assert.match(readiness.detail, /required production tables are missing/);
+});
+
+test("standalone clean baseline includes current authorization and retention schema", () => {
+  assert.equal(standaloneGatewayMigrations.length, 1);
+  const baseline = standaloneGatewayMigrations[0];
+  assert.ok(baseline);
+  assert.equal(baseline.id, "0001_standalone_gateway_baseline");
+  assert.match(baseline.sql, /provider_workspace_id text NOT NULL DEFAULT ''/);
+  assert.match(baseline.sql, /standalone_gateway_sessions_provider_workspace_thread_unique/);
+  assert.match(baseline.sql, /standalone_gateway_channel_identities_provider_workspace_user_unique/);
+  assert.match(baseline.sql, /CHECK \(role IN \('owner', 'admin', 'member', 'approver', 'viewer'\)\)/);
+  assert.match(baseline.sql, /CHECK \(status IN \('active', 'disabled'\)\)/);
+  assert.match(baseline.sql, /standalone_gateway_sessions_retention_idx/);
+  assert.match(baseline.sql, /WHERE status IN \('idle', 'failed', 'completed'\)/);
+  assert.match(baseline.sql, /standalone_gateway_jobs_retention_idx/);
+  assert.match(baseline.sql, /standalone_gateway_jobs_active_session_idx/);
+  assert.match(baseline.sql, /standalone_gateway_artifacts_retention_idx/);
+  assert.match(baseline.sql, /standalone_gateway_artifacts_session_retention_idx/);
+  assert.doesNotMatch(baseline.sql, /pg_constraint/);
+  assert.doesNotMatch(baseline.sql, /DROP CONSTRAINT/);
+  assert.doesNotMatch(baseline.sql, /UNIQUE \(provider, external_user_id\)/);
 });

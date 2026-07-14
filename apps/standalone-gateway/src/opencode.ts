@@ -16,168 +16,215 @@ export interface StandaloneOpenCodeAdapter {
 }
 
 export function normalizeOpenCodeEvent(event: unknown): StandaloneRuntimeEvent[] {
-  if (!event || typeof event !== "object") return [];
-  const record = event as Record<string, unknown>;
-  const type = String(record.type || record.event || "");
-  if (type.includes("permission") && (type.includes("request") || type.includes("ask"))) {
-    return [{ type: "permission.requested", entityId: stringField(record, "id"), payload: publicPayload(record) }];
+  const source = parseEvent(event);
+  const envelope = objectRecord(source);
+  const nested = objectRecord(envelope.data);
+  const properties = Object.keys(objectRecord(envelope.properties)).length > 0
+    ? objectRecord(envelope.properties)
+    : nested;
+  const type = stringField(envelope, "type") || stringField(nested, "type") || "";
+
+  if (type === "permission.v2.asked" || type === "permission.asked") {
+    return [{
+      type: "permission.requested",
+      entityId: stringField(properties, "id") || stringField(envelope, "id"),
+      payload: publicPayload(properties),
+    }];
   }
-  if (type.includes("question") && (type.includes("ask") || type.includes("request"))) {
-    return [{ type: "question.asked", entityId: stringField(record, "id"), payload: publicPayload(record) }];
+  if (type === "question.v2.asked" || type === "question.asked") {
+    return [{
+      type: "question.asked",
+      entityId: stringField(properties, "id") || stringField(envelope, "id"),
+      payload: publicPayload(properties),
+    }];
   }
-  if (type.includes("tool") && (type.includes("start") || type.includes("call"))) {
-    return [{ type: "tool.started", entityId: stringField(record, "id"), payload: publicPayload(record) }];
+  if (type === "session.next.tool.called") {
+    return [{
+      type: "tool.started",
+      entityId: stringField(properties, "callID") || stringField(envelope, "id"),
+      payload: publicPayload(properties),
+    }];
   }
-  if (type.includes("tool") && (type.includes("complete") || type.includes("finish"))) {
-    return [{ type: "tool.completed", entityId: stringField(record, "id"), payload: publicPayload(record) }];
+  if (type === "session.next.tool.success") {
+    return [{
+      type: "tool.completed",
+      entityId: stringField(properties, "callID") || stringField(envelope, "id"),
+      payload: publicPayload(properties),
+    }];
   }
-  if (type.includes("tool") && type.includes("fail")) {
-    return [{ type: "tool.failed", entityId: stringField(record, "id"), payload: publicPayload(record) }];
+  if (type === "session.next.tool.failed") {
+    return [{
+      type: "tool.failed",
+      entityId: stringField(properties, "callID") || stringField(envelope, "id"),
+      payload: publicPayload(properties),
+    }];
   }
-  if (type.includes("reasoning") || type.includes("thought")) return [];
-  const text = stringField(record, "text") || stringField(record, "content") || stringField(record, "message");
-  if (text) return [{ type: "assistant.message", payload: { text } }];
+  if (type === "session.next.text.ended") {
+    const text = stringField(properties, "text");
+    return text ? [{ type: "assistant.message", payload: { text } }] : [];
+  }
+  if (type === "session.next.step.failed" || type === "session.error") {
+    return [{ type: "session.error", payload: publicPayload(properties) }];
+  }
+
+  // Reasoning and streaming deltas are intentionally private. The durable text-ended
+  // event contains the complete assistant text and avoids duplicate channel replies.
   return [];
 }
 
 export function createSdkOpenCodeAdapter(options: {
   baseUrl: string;
-  fetch?: typeof globalThis.fetch;
   loadSdk?: () => Promise<SdkV2Module>;
 }): StandaloneOpenCodeAdapter {
   const baseUrl = assertPrivateOpenCodeEndpoint(options.baseUrl).toString().replace(/\/$/, "");
-  const fetchImpl = options.fetch || globalThis.fetch;
   const loadSdk = options.loadSdk || (async () => await import("@opencode-ai/sdk/v2") as unknown as SdkV2Module);
+
+  const createClient = async (): Promise<SdkV2Client> => {
+    const sdk = await loadSdk();
+    if (typeof sdk.createOpencodeClient !== "function") {
+      throw new Error("OpenCode SDK v2 is unavailable.");
+    }
+    const client = sdk.createOpencodeClient({ baseUrl });
+    if (!client?.v2?.session || !client.v2.event || !client.v2.health) {
+      throw new Error("OpenCode SDK v2 client is missing required native APIs.");
+    }
+    return client;
+  };
+
   return {
     async createSession(input) {
-      const sdk = await loadSdk();
-      const clientFactory = sdk.createOpencodeClient;
-      if (typeof clientFactory === "function") {
-        const client = clientFactory({ baseUrl });
-        const created = await client.session?.create?.({ title: input.title });
-        const data = unwrapData(created);
-        return { opencodeSessionId: stringField(data, "id") || stringField(data, "sessionID") || randomUUID() };
+      void input.title; // Native sessions derive their title from the first prompt.
+      try {
+        const client = await createClient();
+        const created = await client.v2.session.create({}, { throwOnError: true });
+        const session = unwrapNestedData(created);
+        const id = stringField(session, "id");
+        if (!id) throw new Error("OpenCode returned a session without an id.");
+        return { opencodeSessionId: id };
+      } catch (error) {
+        throw new Error(`OpenCode SDK session creation failed: ${redactOpenCodeError(error)}`, { cause: error });
       }
-      return { opencodeSessionId: randomUUID() };
     },
+
     async prompt(input) {
-      const sdk = await loadSdk();
-      const clientFactory = sdk.createOpencodeClient;
-      if (typeof clientFactory === "function") {
-        const client = clientFactory({ baseUrl });
-        if (typeof client?.session?.prompt === "function") {
-          let prompted: unknown;
-          try {
-            prompted = await client.session.prompt({
-              sessionID: input.opencodeSessionId,
-              parts: [{ type: "text", text: input.text }],
-            });
-          } catch (error) {
-            throw new Error(`OpenCode SDK prompt failed: ${redactOpenCodeError(error)}`, { cause: error });
+      const client = await createClient();
+      const controller = new AbortController();
+      let subscription: SdkEventSubscription;
+      try {
+        // Connect before admitting the prompt so fast events cannot be missed.
+        subscription = await client.v2.event.subscribe({ signal: controller.signal });
+        await client.v2.session.prompt({
+          sessionID: input.opencodeSessionId,
+          prompt: { text: input.text },
+          delivery: "queue",
+          resume: true,
+        }, { throwOnError: true });
+
+        for await (const raw of subscription.stream) {
+          const event = parseEvent(raw);
+          if (!belongsToSession(event, input.opencodeSessionId)) continue;
+          for (const projected of normalizeOpenCodeEvent(event)) {
+            await input.onEvent(projected);
           }
-          const error = sdkPromptError(prompted);
-          if (error) throw error;
-          for (const event of normalizeOpenCodePromptResult(prompted)) {
-            await input.onEvent(event);
-          }
-          return;
+          if (isTerminalOpenCodeEvent(event)) return;
         }
+        throw new Error("OpenCode event stream ended before the session completed.");
+      } catch (error) {
+        throw new Error(`OpenCode SDK prompt failed: ${redactOpenCodeError(error)}`, { cause: error });
+      } finally {
+        controller.abort();
       }
-      await promptViaHttp(baseUrl, fetchImpl, input);
     },
+
+    async abort(opencodeSessionId) {
+      try {
+        const client = await createClient();
+        await client.v2.session.interrupt({ sessionID: opencodeSessionId }, { throwOnError: true });
+      } catch (error) {
+        throw new Error(`OpenCode SDK interrupt failed: ${redactOpenCodeError(error)}`, { cause: error });
+      }
+    },
+
     async health() {
-      return healthViaHttp(baseUrl, fetchImpl);
+      try {
+        const client = await createClient();
+        const result = await client.v2.health.get({ throwOnError: true });
+        const health = unwrapNestedData(result);
+        return health.healthy === true
+          ? { ok: true, detail: "OpenCode native API ready" }
+          : { ok: false, detail: "OpenCode native API reported unhealthy" };
+      } catch (error) {
+        return { ok: false, detail: redactOpenCodeError(error) };
+      }
     },
   };
 }
 
-type SdkV2Module = {
-  createOpencodeClient?: (config: { baseUrl: string }) => {
-    session?: {
-      create?: (input: { title: string }) => Promise<unknown>;
-      prompt?: (input: Record<string, unknown>) => Promise<unknown>;
+type SdkRequestOptions = { throwOnError?: boolean };
+
+type SdkEventSubscription = {
+  stream: AsyncIterable<unknown>;
+};
+
+type SdkV2Client = {
+  v2: {
+    health: {
+      get: (options?: SdkRequestOptions) => Promise<unknown>;
+    };
+    event: {
+      subscribe: (options?: { signal?: AbortSignal }) => Promise<SdkEventSubscription>;
+    };
+    session: {
+      create: (input?: Record<string, never>, options?: SdkRequestOptions) => Promise<unknown>;
+      prompt: (input: {
+        sessionID: string;
+        prompt: { text: string };
+        delivery: "queue";
+        resume: true;
+      }, options?: SdkRequestOptions) => Promise<unknown>;
+      interrupt: (input: { sessionID: string }, options?: SdkRequestOptions) => Promise<unknown>;
     };
   };
 };
 
-async function promptViaHttp(
-  baseUrl: string,
-  fetchImpl: typeof globalThis.fetch,
-  input: Parameters<StandaloneOpenCodeAdapter["prompt"]>[0],
-): Promise<void> {
-  const response = await fetchImpl(`${baseUrl}/session/${encodeURIComponent(input.opencodeSessionId)}/prompt`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text: input.text }),
-  }).catch((error: unknown) => {
-    throw new Error(`OpenCode prompt request failed: ${redactOpenCodeError(error)}`);
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`OpenCode prompt request returned HTTP ${response.status}${detail ? `: ${redactOpenCodeText(detail)}` : ""}`);
-  }
-  if (response.status === 204) return;
-  const payload = await response.json().catch(() => ({}));
-  for (const event of normalizeOpenCodeEvent(payload)) await input.onEvent(event);
+type SdkV2Module = {
+  createOpencodeClient?: (config: { baseUrl: string }) => SdkV2Client;
+};
+
+function belongsToSession(event: unknown, sessionId: string): boolean {
+  const envelope = objectRecord(parseEvent(event));
+  const data = objectRecord(envelope.data);
+  const properties = objectRecord(envelope.properties);
+  return stringField(data, "sessionID") === sessionId
+    || stringField(properties, "sessionID") === sessionId;
 }
 
-async function healthViaHttp(baseUrl: string, fetchImpl: typeof globalThis.fetch): Promise<{ ok: boolean; detail: string }> {
-  const response = await fetchImpl(`${baseUrl}/health`).catch((error: unknown) => error);
-  if (response instanceof Response) return { ok: response.ok, detail: `OpenCode HTTP ${response.status}` };
-  return { ok: false, detail: response instanceof Error ? redactOpenCodeText(response.message) : redactOpenCodeText(String(response)) };
+function isTerminalOpenCodeEvent(event: unknown): boolean {
+  const envelope = objectRecord(parseEvent(event));
+  const data = Object.keys(objectRecord(envelope.data)).length > 0
+    ? objectRecord(envelope.data)
+    : objectRecord(envelope.properties);
+  const type = stringField(envelope, "type") || stringField(data, "type") || "";
+  if (type === "session.next.step.failed" || type === "session.error") return true;
+  if (type !== "session.next.step.ended") return false;
+  return stringField(data, "finish") !== "tool-calls";
+}
+
+function parseEvent(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return {};
+  }
 }
 
 function redactOpenCodeError(error: unknown): string {
-  return redactOpenCodeText(error instanceof Error ? error.message : String(error));
-}
-
-function redactOpenCodeText(value: string): string {
-  return redactSecretText(value, 500);
-}
-
-function normalizeOpenCodePromptResult(result: unknown): StandaloneRuntimeEvent[] {
-  const events = [...normalizeOpenCodeEvent(result)];
-  const record = objectRecord(result);
-  const data = unwrapData(result);
-  if (data !== record) events.push(...normalizeOpenCodeEvent(data));
-  for (const value of arrayField(data, "parts")) events.push(...normalizeOpenCodePart(value));
-  for (const value of arrayField(data, "events")) events.push(...normalizeOpenCodeEvent(value));
-  for (const value of arrayField(data, "messages")) events.push(...normalizeOpenCodeEvent(value));
-  return events;
-}
-
-function normalizeOpenCodePart(value: unknown): StandaloneRuntimeEvent[] {
-  const record = objectRecord(value);
-  const type = String(record.type || "");
-  if (type && type !== "text") return [];
-  return normalizeOpenCodeEvent(record);
-}
-
-function sdkPromptError(result: unknown): Error | null {
-  const record = objectRecord(result);
-  const error = record.error;
-  if (error) {
-    return new Error(`OpenCode SDK prompt failed: ${redactOpenCodeText(errorMessage(error))}`);
-  }
-  const response = objectRecord(record.response);
-  const status = typeof response.status === "number" ? response.status : null;
-  if (status !== null && status >= 400) {
-    return new Error(`OpenCode SDK prompt returned HTTP ${status}.`);
-  }
-  return null;
-}
-
-function arrayField(record: Record<string, unknown>, key: string): unknown[] {
-  const value = record[key];
-  return Array.isArray(value) ? value : [];
-}
-
-function objectRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const message = error instanceof Error ? error.message : errorMessage(error);
+  return redactSecretText(message, 500);
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   const record = objectRecord(error);
   return stringField(record, "message")
@@ -206,12 +253,18 @@ function publicPayload(record: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(record).filter(([key]) => !/token|secret|password|key/i.test(key)));
 }
 
-function unwrapData(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object") return {};
-  const record = value as Record<string, unknown>;
-  const data = record.data;
-  if (data && typeof data === "object" && !Array.isArray(data)) return data as Record<string, unknown>;
-  return record;
+function unwrapNestedData(value: unknown): Record<string, unknown> {
+  let current = objectRecord(value);
+  for (let index = 0; index < 3; index += 1) {
+    const next = objectRecord(current.data);
+    if (Object.keys(next).length === 0) break;
+    current = next;
+  }
+  return current;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | null {

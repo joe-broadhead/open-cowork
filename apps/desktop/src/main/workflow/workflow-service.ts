@@ -7,7 +7,15 @@ import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionReco
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
-import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from '@open-cowork/runtime-host'
+import { isRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
+import {
+  createNativeSession,
+  listNativeSessionMessages,
+  normalizeSessionInfo,
+  normalizeSessionMessages,
+  promptNativeSession,
+  type NormalizedSessionMessage,
+} from '@open-cowork/runtime-host'
 import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth, WebhookHttpError } from '@open-cowork/shared/node'
 import type { BrowserWindow } from 'electron'
 import type {
@@ -24,10 +32,68 @@ import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
+let showDesktopNotification: ((notification: WorkflowDesktopNotification) => void) | null = null
+let notificationNow = () => new Date()
 let schedulerTimer: NodeJS.Timeout | null = null
 let schedulerTickPromise: Promise<void> | null = null
 const runWorkflowFinalizerForRun = createKeyedPromiseChain()
 const WORKFLOW_DESIGNER_AGENT_NAME = 'workflow-designer'
+
+export interface WorkflowDesktopNotification {
+  title: string
+  body: string
+}
+
+function minutesFromTime(value: string | null | undefined) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value || '')
+  if (!match) return null
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (hour > 23 || minute > 59) return null
+  return hour * 60 + minute
+}
+
+export function isWorkflowNotificationQuietTime(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  now: Date,
+) {
+  const startMinutes = minutesFromTime(start)
+  const endMinutes = minutesFromTime(end)
+  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) return false
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  return startMinutes < endMinutes
+    ? currentMinutes >= startMinutes && currentMinutes < endMinutes
+    : currentMinutes >= startMinutes || currentMinutes < endMinutes
+}
+
+function notifyWorkflowRun(runId: string, outcome: 'completed' | 'failed' | 'needs-attention') {
+  try {
+    if (!showDesktopNotification) return
+    const settings = getEffectiveSettings()
+    if (!settings.workflowDesktopNotifications) return
+    if (isWorkflowNotificationQuietTime(
+      settings.workflowQuietHoursStart,
+      settings.workflowQuietHoursEnd,
+      notificationNow(),
+    )) return
+    const run = getWorkflowRun(runId)
+    if (!run || (run.triggerType !== 'schedule' && run.triggerType !== 'webhook')) return
+    const workflow = getWorkflow(run.workflowId, workflowWebhookBaseUrl())
+    const workflowTitle = workflow?.title || 'Playbook'
+    const detail = outcome === 'completed'
+      ? 'finished successfully.'
+      : outcome === 'failed'
+        ? 'failed. Open the app for details.'
+        : 'needs your attention.'
+    showDesktopNotification({
+      title: workflowTitle,
+      body: `${run.triggerType === 'schedule' ? 'Scheduled' : 'Webhook'} playbook ${detail}`,
+    })
+  } catch (error) {
+    log('error', `Failed to show workflow notification: ${sdkErrorMessage(error)}`)
+  }
+}
 
 function publishWorkflowUpdated() {
   const win = getMainWindow?.()
@@ -97,8 +163,7 @@ async function getWorkflowSessionMessages(sessionId: string) {
   await ensureRuntimeContextDirectory(record.opencodeDirectory)
   const client = getClientForDirectory(record.opencodeDirectory)
   if (!client) return []
-  const result = await client.session.messages({ sessionID: sessionId }, { throwOnError: true })
-  return normalizeSessionMessages(result.data)
+  return normalizeSessionMessages(await listNativeSessionMessages(client, sessionId))
 }
 
 async function createWorkflowThread(input: {
@@ -115,8 +180,9 @@ async function createWorkflowThread(input: {
   await ensureRuntimeContextDirectory(opencodeDirectory)
   const client = getClientForDirectory(opencodeDirectory)
   if (!client) throw new Error('Runtime not started.')
-  const created = await client.session.create({}, { throwOnError: true })
-  const session = normalizeSessionInfo(created.data)
+  const session = normalizeSessionInfo(await createNativeSession(client, {
+    location: { directory: opencodeDirectory },
+  }))
   if (!session?.id) throw new Error('Runtime returned an invalid session payload.')
   const settings = getEffectiveSettings()
   const record = upsertSessionRecord(toSessionRecord({
@@ -135,11 +201,11 @@ async function createWorkflowThread(input: {
   trackParentSession(session.id)
   input.onSessionCreated?.(session.id)
   const prompt = typeof input.prompt === 'function' ? input.prompt(session.id) : input.prompt
-  await client.session.promptAsync({
+  await promptNativeSession(client, {
     sessionID: session.id,
     parts: [{ type: 'text', text: prompt }],
     agent: input.agent,
-  }, { throwOnError: true })
+  })
   if (input.kind === 'workflow_run') {
     startSessionStatusReconciliation(session.id, {
       getMainWindow: () => getMainWindow?.() ?? null,
@@ -151,8 +217,14 @@ async function createWorkflowThread(input: {
   return toRendererSession(record!)
 }
 
-export function configureWorkflowService(options: { getMainWindow: () => BrowserWindow | null }) {
+export function configureWorkflowService(options: {
+  getMainWindow: () => BrowserWindow | null
+  showDesktopNotification?: (notification: WorkflowDesktopNotification) => void
+  notificationNow?: () => Date
+}) {
   getMainWindow = options.getMainWindow
+  showDesktopNotification = options.showDesktopNotification || null
+  notificationNow = options.notificationNow || (() => new Date())
   configureWorkflowToolActions({ publishWorkflowUpdated })
   configureWorkflowWebhookServer(async ({ workflowId, auth, payload }) => {
     const workflow = getWorkflow(workflowId, workflowWebhookBaseUrl())
@@ -228,6 +300,7 @@ export async function startWorkflowDraft(directory?: string | null) {
 }
 
 async function runWorkflow(workflowId: string, triggerType: WorkflowTriggerType, payload: Record<string, unknown> | null = null) {
+  if (!isRuntimeReady()) throw new Error('OpenCode runtime is not ready for workflow execution.')
   const run = createWorkflowRun(workflowId, triggerType, payload)
   return startClaimedWorkflowRun(run)
 }
@@ -254,6 +327,7 @@ async function startClaimedWorkflowRun(run: WorkflowRun | null) {
   } catch (error) {
     const message = sdkErrorMessage(error, 'Workflow run failed to start.')
     markWorkflowRunFailed(run.id, message)
+    notifyWorkflowRun(run.id, 'failed')
     publishWorkflowUpdated()
     throw error
   }
@@ -288,6 +362,7 @@ export function regenerateWebhookSecret(workflowId: string) {
 }
 
 async function runWorkflowSchedulerTickNow(now = new Date()) {
+  if (!isRuntimeReady()) return
   while (true) {
     const run = claimDueWorkflowRun(now)
     if (!run) break
@@ -316,6 +391,7 @@ export async function handleWorkflowSessionIdle(sessionId: string) {
     if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return
     const messages = await getWorkflowSessionMessages(sessionId)
     markWorkflowRunCompleted(runId, summarizeWorkflowMessages(messages))
+    notifyWorkflowRun(runId, 'completed')
     publishWorkflowUpdated()
   })
 }
@@ -328,6 +404,13 @@ export async function handleWorkflowSessionError(sessionId: string, message: str
     const run = getWorkflowRun(runId)
     if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return
     markWorkflowRunFailed(runId, message)
+    notifyWorkflowRun(runId, 'failed')
     publishWorkflowUpdated()
   })
+}
+
+export function handleWorkflowSessionNeedsAttention(sessionId: string) {
+  const record = getSessionRecord(sessionId)
+  if (!record || record.kind !== 'workflow_run' || !record.runId) return
+  notifyWorkflowRun(record.runId, 'needs-attention')
 }

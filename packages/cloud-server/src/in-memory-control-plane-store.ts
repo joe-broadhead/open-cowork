@@ -1228,10 +1228,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.sessionsDomain.listSessionsPage(input)
   }
 
-  listAllSessions(): SessionRecord[] {
-    return this.sessionsDomain.listAllSessions()
-  }
-
   listRunnableSessions(input: ListRunnableSessionsInput = {}): RunnableSessionListRecord {
     return this.sessionsDomain.listRunnableSessions(input)
   }
@@ -1586,6 +1582,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   listSchemaMigrations(): SchemaMigrationRecord[] {
     return this.schemaMigrationsDomain.listSchemaMigrations()
+  }
+
+  assertSchemaIntegrity(): void {
+    // The in-memory store has no physical schema to drift independently from
+    // its typed domains. Migration-ledger completeness is checked by readiness.
   }
 
   private requireSession(tenantId: string, sessionId: string) {

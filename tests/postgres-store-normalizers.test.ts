@@ -6,10 +6,10 @@ import {
   normalizePositiveInteger,
   normalizeTagColor,
   normalizeText,
-  redactOperationalText,
   retryAfterMs,
   windowStart,
 } from '@open-cowork/cloud-server/postgres-store-normalizers'
+import { redactOperationalText } from '@open-cowork/cloud-server/operational-text-redaction'
 
 // Focused coverage for the pure normalizers extracted from
 // postgres-control-plane-store.ts — including the security-relevant operational

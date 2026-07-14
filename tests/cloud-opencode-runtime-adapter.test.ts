@@ -28,22 +28,24 @@ test('cloud SDK runtime adapter only forwards native OpenCode message ids', asyn
   const promptInputs: unknown[] = []
   const parts = [{ type: 'text' as const, text: 'hello' }]
   const adapter = createSdkCloudRuntimeAdapter({
-    session: {
-      async create() {
-        return {
-          data: {
-            id: 'ses_1',
-            title: 'Session',
-            time: { created: Date.now(), updated: Date.now() },
-          },
-        }
+    v2: {
+      session: {
+        async get() {
+          return { data: { data: { id: 'ses_1', agent: 'build', time: { created: 1, updated: 1 } } } }
+        },
+        async switchAgent() {},
+        async switchModel() {},
+        async prompt(input) {
+          promptInputs.push(input)
+          return { data: { data: { id: 'input-1', sessionID: 'ses_1' } } }
+        },
+        async create() {
+          return { data: { data: { id: 'ses_1', title: 'Session', time: { created: 1, updated: 1 } } } }
+        },
+        async interrupt() {},
       },
-      async promptAsync(input) {
-        promptInputs.push(input)
-      },
-      async abort() {},
     },
-  })
+  } as any, { directory: '/workspace' })
 
   await adapter.promptSession({
     sessionId: 'ses_1',
@@ -61,14 +63,16 @@ test('cloud SDK runtime adapter only forwards native OpenCode message ids', asyn
   assert.deepEqual(promptInputs, [
     {
       sessionID: 'ses_1',
-      parts,
-      agent: 'build',
+      prompt: { text: 'hello' },
+      delivery: 'queue',
+      resume: true,
     },
     {
       sessionID: 'ses_1',
-      parts,
-      agent: 'build',
-      messageID: 'msg_valid',
+      id: 'msg_valid',
+      prompt: { text: 'hello' },
+      delivery: 'queue',
+      resume: true,
     },
   ])
 })
@@ -207,6 +211,7 @@ test('cloud OpenCode event translator preserves projection-critical runtime even
       permissionId: 'permission-1',
       id: 'permission-1',
       sessionId: 'session-1',
+      sourceSessionId: 'session-1',
       tool: 'bash',
       input: { command: 'git status' },
       description: 'bash',
@@ -233,6 +238,7 @@ test('cloud OpenCode event translator preserves projection-critical runtime even
       requestId: 'question-1',
       id: 'question-1',
       sessionId: 'session-1',
+      sourceSessionId: 'session-1',
       questions: [{
         header: 'Pick',
         question: 'Proceed?',
@@ -336,10 +342,11 @@ test('cloud OpenCode runtime subscription translates stream events and reports f
   const errors: unknown[] = []
   const dropped: unknown[] = []
   const client = {
-    event: {
-      async subscribe() {
-        return {
-          stream: (async function* stream() {
+    v2: {
+      event: {
+        async subscribe() {
+          return {
+            stream: (async function* stream() {
             yield {
               payload: {
                 type: 'message.part.updated',
@@ -362,14 +369,15 @@ test('cloud OpenCode runtime subscription translates stream events and reports f
                 },
               },
             }
-          })(),
+            })(),
+          }
         }
       },
     },
   }
 
   subscribeToOpencodeCloudRuntimeEvents(
-    client,
+    client as any,
     (event) => delivered.push(event),
     {
       onError: (error) => errors.push(error),
@@ -402,13 +410,15 @@ test('cloud OpenCode runtime subscription does not subscribe after caller cancel
   let subscribed = false
   const unsubscribe = subscribeToOpencodeCloudRuntimeEvents(
     {
-      event: {
-        async subscribe() {
-          subscribed = true
-          return { stream: [] }
+      v2: {
+        event: {
+          async subscribe() {
+            subscribed = true
+            return { stream: [] }
+          },
         },
       },
-    },
+    } as any,
     () => undefined,
     { signal: controller.signal },
   )

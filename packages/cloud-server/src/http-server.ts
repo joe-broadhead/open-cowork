@@ -1694,10 +1694,14 @@ export class CloudHttpServer {
       // relaxed-but-script-strict CSP (writeBrowserRendererHtml) because the SPA injects
       // its surface stylesheet via a runtime-created <style> element.
       if ((url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/app' || url.pathname === '/app/') && req.method === 'GET') {
-        // Minimal bootstrap: the shim derives the same-origin endpoint base from
-        // window.location and reads the CSRF token from /auth/me at runtime, so only
-        // the session event types are worth embedding (trivially available here).
-        const html = browserRendererHtml({ sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES] })
+        // Minimal public bootstrap: the shim derives the same-origin endpoint
+        // base from window.location and reads the CSRF token from /auth/me.
+        const html = browserRendererHtml({
+          // Public bootstrap contract: expose only whether the SPA must present
+          // sign-in, never cookie secrets, provider configuration, or tenant data.
+          authRequired: Boolean(this.options.sessionCookies && this.options.browserAuth),
+          sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
+        })
         if (html === null) {
           writeError(res, 404, 'Unified renderer browser build was not found.', requestOptions.corsOrigin)
           return
@@ -1741,7 +1745,7 @@ export class CloudHttpServer {
         return
       }
 
-      if (url.pathname === '/livez' || url.pathname === '/healthz') {
+      if (url.pathname === '/livez') {
         writeJson(res, 200, {
           ok: true,
           role: this.options.policy.role,

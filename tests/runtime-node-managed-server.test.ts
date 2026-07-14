@@ -35,7 +35,8 @@ test('node managed opencode server starts and stops without Electron utilityProc
   const executable = writeExecutable(root, 'fake-opencode', `
 printf '%s' "$$" > ${JSON.stringify(pidFile)}
 printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}
-printf '%s\\n%s\\n' "$OPENCODE_SERVER_USERNAME" "$OPENCODE_CONFIG_CONTENT" > ${JSON.stringify(envFile)}
+printf '%s\\n' "$OPENCODE_SERVER_USERNAME" > ${JSON.stringify(envFile)}
+cat "$OPENCODE_CONFIG_DIR/opencode.json" >> ${JSON.stringify(envFile)}
 printf '%s\\n' 'opencode server listening on http://127.0.0.1:43220'
 while true; do sleep 1; done
 `)

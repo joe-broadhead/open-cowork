@@ -9,7 +9,7 @@ import { getClient, getClientForDirectory, getModelInfoAsync } from '@open-cowor
 import { invalidateRuntimeCatalogSnapshotCache } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
 import { getRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
 import { getPerfSnapshot } from '@open-cowork/runtime-host/perf-metrics'
-import { normalizeSessionInfo } from '@open-cowork/runtime-host'
+import { createNativeSession, normalizeSessionInfo } from '@open-cowork/runtime-host'
 import { writeFileAtomic, readFileCheckedSync, readTextFileCheckedSync } from '@open-cowork/shared/node'
 import electron from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
@@ -209,8 +209,9 @@ export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSetting
 async function createProjectBoundSession(directory: string) {
   const client = getClientForDirectory(directory)
   if (!client) throw new Error('Runtime not started')
-  const result = await client.session.create({}, { throwOnError: true })
-  const session = normalizeSessionInfo(result.data)
+  const session = normalizeSessionInfo(await createNativeSession(client, {
+    location: { directory },
+  }))
   if (!session) throw new Error('Runtime returned an invalid session payload')
   const settings = getEffectiveSettings()
   trackParentSession(session.id)

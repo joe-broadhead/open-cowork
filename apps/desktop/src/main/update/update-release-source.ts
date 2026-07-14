@@ -69,6 +69,7 @@ export interface ResolveUpdateReleaseSourceOptions {
   fetchImpl?: typeof fetch
   getAuthState?: () => AuthState
   isPackaged?: boolean
+  platform?: NodeJS.Platform
   refreshGoogleAccessToken?: () => Promise<string | null>
 }
 
@@ -334,7 +335,7 @@ async function resolveGenericSource(input: {
     discoverLatest: async () => {
       const yamlText = await fetchTextOrThrow({
         fetchImpl: input.options.fetchImpl || fetch,
-        url: releaseFeedFileUrl(url, channel),
+        url: releaseFeedFileUrl(url, channel, input.options.platform),
         headers: requestHeaders,
         descriptor,
         manualReleaseUrl,
@@ -396,7 +397,7 @@ async function resolveGcsSource(input: {
       },
       body: JSON.stringify({
         channel,
-        platform: 'darwin',
+        platform: input.options.platform ?? process.platform,
       }),
     })
     if (response.status === 401 || response.status === 403) {
@@ -435,7 +436,7 @@ async function resolveGcsSource(input: {
       discoverLatest: async () => {
         const yamlText = await fetchTextOrThrow({
           fetchImpl: input.options.fetchImpl || fetch,
-          url: releaseFeedFileUrl(brokerPayload.providerUrl, channel),
+          url: releaseFeedFileUrl(brokerPayload.providerUrl, channel, input.options.platform),
           headers: requestHeaders,
           descriptor,
           manualReleaseUrl,
@@ -483,7 +484,7 @@ async function resolveGcsSource(input: {
     discoverLatest: async () => {
       const yamlText = await fetchTextOrThrow({
         fetchImpl: input.options.fetchImpl || fetch,
-        url: releaseFeedFileUrl(baseUrl, channel),
+        url: releaseFeedFileUrl(baseUrl, channel, input.options.platform),
         headers: requestHeaders,
         descriptor,
         manualReleaseUrl,

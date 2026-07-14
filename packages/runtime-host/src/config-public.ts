@@ -1,5 +1,6 @@
 import type {
   BrandingConfig,
+  ModelInfoSnapshot,
   ProviderDescriptor,
   ProviderModelDescriptor,
   PublicAppConfig,
@@ -8,7 +9,6 @@ import type {
 import { brandingAssetUrl } from './branding-assets.js'
 import type {
   ConfiguredProviderDescriptor,
-  ModelFallbackInfo,
   OpenCoworkConfig,
 } from '@open-cowork/shared'
 import { modelInfoKeys } from './model-info-utils.js'
@@ -198,9 +198,9 @@ export function buildPublicAppConfig(
   }
 }
 
-export function buildConfiguredModelFallbacks(config: OpenCoworkConfig): ModelFallbackInfo {
-  const pricing: ModelFallbackInfo['pricing'] = {}
-  const contextLimits: ModelFallbackInfo['contextLimits'] = {}
+export function buildConfiguredModelFallbacks(config: OpenCoworkConfig): ModelInfoSnapshot {
+  const pricing: ModelInfoSnapshot['pricing'] = {}
+  const contextLimits: ModelInfoSnapshot['contextLimits'] = {}
 
   const addModelInfo = (providerId: string | undefined, modelId: string, rawModel: unknown) => {
     const model = rawModel as Record<string, any>

@@ -278,6 +278,30 @@ test('update install capability ignores malformed packaged resource markers', as
   }
 })
 
+test('update install capability rejects obsolete schema-v1 resource markers', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-update-service-'))
+  try {
+    const markerPath = join(root, 'open-cowork-update-capability.json')
+    writeFileSync(markerPath, '{"schemaVersion":1,"signedInstallEligible":true,"feedConfigured":true}\n')
+
+    assert.deepEqual(await getUpdateInstallCapability({
+      isPackaged: true,
+      platform: 'darwin',
+      currentVersion: '1.2.3',
+      manualReleaseUrl: null,
+      resourcePath: markerPath,
+    }), {
+      supported: false,
+      reason: 'unsigned',
+      currentVersion: '1.2.3',
+      manualReleaseUrl: null,
+      releaseSource: githubReleaseSource,
+    })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('installable update check reports available state without downloading', async () => {
   resetUpdateInstallServiceForTests()
   const updater = new MockUpdater(availableResult())

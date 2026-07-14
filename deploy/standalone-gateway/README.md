@@ -10,10 +10,6 @@ This is the `gateway-only` topology profile from
 Cloud Channel Gateway, Desktop pairing, edge registration, and full-hybrid
 deployments.
 
-For product naming, release channels, and migration from the historical
-`opencode-agent-gateway` prototype, see
-`docs/oss-packaging-migration.md`.
-
 Standalone Gateway owns private OpenCode execution and Gateway Postgres. It
 does not require Open Cowork Cloud.
 

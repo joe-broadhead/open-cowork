@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
 import { useEscape } from '../../hooks/useEscape'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
@@ -97,10 +98,16 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
   const [abortInFlight, setAbortInFlight] = useState(false)
   const [artifactRevealInFlight, setArtifactRevealInFlight] = useState(false)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
   // Focus history stack. Entry 0 is the root; pushing a nested task navigates
   // deeper, popping (via back) returns to the parent.
   const [focusStack, setFocusStack] = useState<string[]>([rootTask.id])
   const { drawerWidth, isResizing, onStartResize } = useTaskDrillInLayout()
+
+  // The drawer is modal even though it is visually a slide-over. Trap focus
+  // inside it and let the shared Escape stack arbitrate nested overlays.
+  useFocusTrap(dialogRef)
 
   // Reset the stack whenever the drill-in opens to a different root task.
   useEffect(() => {
@@ -115,6 +122,13 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
     () => allTaskRuns.find((task) => task.id === focusedId) || rootTask,
     [allTaskRuns, focusedId, rootTask],
   )
+
+  // This is a long, structurally rich dialog, so start at its heading rather
+  // than dropping keyboard users into the resize handle. Re-focus the heading
+  // when navigating between nested tasks so the new context is announced.
+  useEffect(() => {
+    titleRef.current?.focus()
+  }, [focused.id])
 
   const nestedChildren = useMemo(() => {
     if (!focused.sourceSessionId) return []
@@ -218,7 +232,8 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
         onClick={onClose}
         aria-hidden="true"
       />
-      <aside
+      <div
+        ref={dialogRef}
         className="no-drag fixed top-0 end-0 bottom-0 z-50 flex flex-col motion-reduce:transition-none"
         style={{
           width: drawerWidth,
@@ -229,6 +244,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           animation: 'task-drill-in-drawer-in 180ms ease-out both',
         }}
         role="dialog"
+        aria-modal="true"
         aria-label={`${formatAgentName(focused.agent)} drill-in`}
       >
         <button
@@ -277,7 +293,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="font-display text-role-title text-text truncate">
+              <h2 ref={titleRef} tabIndex={-1} className="font-display text-role-title text-text truncate outline-none">
                 {formatAgentName(focused.agent)}
               </h2>
               <Badge tone={statusBadgeTone(focused.status)} className="uppercase tracking-[0.08em] font-semibold">
@@ -494,7 +510,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
             </section>
           )}
         </div>
-      </aside>
+      </div>
     </>
   )
 })

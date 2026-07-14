@@ -647,14 +647,21 @@ It also ships three command-launched bundled MCPs (`type: local` with a
 `command` launcher rather than a packaged `packageName`):
 - `openwiki` — OpenWiki knowledge base: fusion search, cited reads, claim
   tracing, facts/takes, inbox and governance reads, graph queries, and
-  proposal-safe edit/fact/take/source workflows (see [OpenWiki](openwiki.md))
+  approval-gated inbox processing plus proposal-safe edit/fact/take/source
+  workflows (see [OpenWiki](openwiki.md))
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
   queries
 - `opencode-gateway` — durable work coordination: persistent
   Initiatives/Issues, scheduler runs, teams, blueprints, project bindings,
   environments, channel sends, and diagnostics. The bundled launcher uses the
   Gateway operate tier: read-tier tools are auto-allowed, operate-tier tools
-  ask, and admin-tier tools are absent.
+  ask, and admin-tier tools are absent. OpenCode permission approval is
+  deliberately admin-tier; the operate surface exposes only safe rejection.
+  Gateway's hardened loopback rejects mutations without a capability token, so
+  this integration stays disabled until the user supplies the absolute path to
+  an owner-only operator-token file also configured in the Gateway daemon via
+  `OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE`. Do not use Gateway's
+  auto-provisioned admin token for this operate-tier client.
 
 User-added MCPs are stored separately from the shipped config.
 

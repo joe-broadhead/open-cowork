@@ -4,7 +4,14 @@ import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '@open-cowork/runtime-host/session-diff-fallback'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
-import { normalizeSessionInfo, normalizeSessionMessages, normalizeShareUrl } from '@open-cowork/runtime-host'
+import {
+  getNativeSession,
+  listNativeSessionMessages,
+  listNativeSessions,
+  normalizeSessionInfo,
+  normalizeSessionMessages,
+  normalizeShareUrl,
+} from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { normalizeSessionId, normalizeSessionTitle } from './session-handler-validation.ts'
@@ -19,10 +26,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      const session = await client.session.get({ sessionID: sessionId })
-      const normalizedSession = normalizeSessionInfo(session.data)
-      const messagesResult = await client.session.messages({ sessionID: sessionId }, { throwOnError: true })
-      const messages = normalizeSessionMessages(messagesResult.data)
+      const normalizedSession = normalizeSessionInfo(await getNativeSession(client, sessionId))
+      const messages = normalizeSessionMessages(await listNativeSessionMessages(client, sessionId))
       if (!messages) return null
 
       let markdown = `# ${normalizedSession?.title || 'Thread'}\n\n`
@@ -100,10 +105,12 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      await client.session.revert({
+      if (!messageId) throw new Error('A message id is required to stage a session revert.')
+      await client.v2.session.revert.stage({
         sessionID: sessionId,
-        ...(messageId ? { messageID: messageId } : {}),
-      })
+        messageID: messageId,
+        files: true,
+      }, { throwOnError: true })
       log('session', `Reverted ${shortSessionId(sessionId)}${messageId ? ' to message' : ''}`)
       return true
     } catch (err) {
@@ -116,7 +123,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      await client.session.unrevert({ sessionID: sessionId })
+      await client.v2.session.revert.clear({ sessionID: sessionId }, { throwOnError: true })
       log('session', `Unreverted ${shortSessionId(sessionId)}`)
       return true
     } catch (err) {
@@ -129,8 +136,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      const result = await client.session.children({ sessionID: sessionId })
-      return result.data || []
+      return (await listNativeSessions(client)).filter((session) => session.parentID === sessionId)
     } catch (err) {
       context.logHandlerError(`session:children ${shortSessionId(sessionId)}`, err)
       return []

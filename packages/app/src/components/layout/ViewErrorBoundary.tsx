@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Component, createRef, type ErrorInfo, type ReactNode } from 'react'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import { Button } from '../ui'
@@ -18,6 +18,7 @@ interface ViewErrorBoundaryState {
 
 export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErrorBoundaryState> {
   state: ViewErrorBoundaryState = { hasError: false }
+  private readonly recoveryRef = createRef<HTMLDivElement>()
 
   static getDerivedStateFromError() {
     return { hasError: true }
@@ -39,6 +40,11 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
     } catch {
       /* diagnostics reporting must never throw */
     }
+
+    // The failed subtree may have contained keyboard focus. Move focus to the
+    // recovery alert so assistive technology announces both the failure and
+    // the available action instead of leaving focus on a detached element.
+    this.recoveryRef.current?.focus({ preventScroll: true })
   }
 
   componentDidUpdate(prevProps: ViewErrorBoundaryProps) {
@@ -52,7 +58,14 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
 
     return (
       <div className="flex-1 flex items-center justify-center px-8">
-        <div className="max-w-[420px] w-full rounded-2xl border border-border-subtle bg-surface p-6 text-center">
+        <div
+          ref={this.recoveryRef}
+          className="max-w-[420px] w-full rounded-2xl border border-border-subtle bg-surface p-6 text-center"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          tabIndex={-1}
+        >
           <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-text-muted mb-2">{t('error.viewError', 'View Error')}</div>
           <h2 className="text-xl font-semibold text-text mb-2">{this.props.title || t('error.viewErrorTitle', 'This page failed to render.')}</h2>
           <p className="text-sm text-text-secondary leading-relaxed mb-5">

@@ -8,12 +8,11 @@ import type {
   TextMatch,
 } from '@open-cowork/shared'
 import { existsSync, realpathSync } from 'fs'
-import { isAbsolute, relative, resolve } from 'path'
+import { basename, isAbsolute, relative, resolve } from 'path'
 import type { IpcHandlerContext } from './context.ts'
 import {
   normalizeExplorerSymbols,
   normalizeFileContent,
-  normalizeFileNodes,
   normalizeFileStatuses,
   normalizeTextMatches,
 } from '../explorer-normalizers.ts'
@@ -51,6 +50,13 @@ export function isExplorerPathInsideDirectory(path: string, directory?: string |
   } catch {
     return false
   }
+}
+
+function nativeExplorerRelativePath(path: string, directory: string) {
+  const root = realpathSync.native(resolve(directory))
+  const target = realpathSync.native(resolve(root, path))
+  const relativePath = relative(root, target)
+  return relativePath || '.'
 }
 
 export function normalizeFindTextPattern(pattern: unknown) {
@@ -102,11 +108,17 @@ async function runExplorerPathOperation<T>(
 export function registerExplorerHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('explorer:file-list', async (_event, path: string, directory?: string | null): Promise<FileNode[]> => {
     return runExplorerPathOperation(context, path, directory, [], `explorer:file-list ${path}`, async (client, resolvedDirectory) => {
-      const result = await client.file.list({
-        path,
-        directory: resolvedDirectory,
-      })
-      return normalizeFileNodes(result.data)
+      const result = await client.v2.fs.list({
+        location: { directory: resolvedDirectory },
+        path: nativeExplorerRelativePath(path, resolvedDirectory),
+      }, { throwOnError: true })
+      return result.data.data.map((entry) => ({
+        name: basename(entry.path),
+        path: entry.path,
+        absolute: resolve(resolvedDirectory, entry.path),
+        type: entry.type,
+        ignored: false,
+      }))
     })
   })
 
@@ -131,14 +143,17 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
     const query = (options?.query || '').trim()
     if (!query) return []
     return runExplorerOperation(context, directory, [], `explorer:find-files ${query}`, async (client, resolvedDirectory) => {
-      const result = await client.find.files({
+      const result = await client.v2.fs.find({
         query,
-        ...(options.dirs !== undefined ? { dirs: options.dirs ? 'true' : 'false' } : {}),
-        ...(options.type ? { type: options.type } : {}),
-        ...(typeof options.limit === 'number' ? { limit: options.limit } : {}),
-        directory: resolvedDirectory,
-      })
-      return Array.isArray(result.data) ? result.data.filter((entry): entry is string => typeof entry === 'string') : []
+        ...(options.type
+          ? { type: options.type }
+          : options.dirs === false
+            ? { type: 'file' as const }
+            : {}),
+        ...(typeof options.limit === 'number' ? { limit: String(options.limit) } : {}),
+        location: { directory: resolvedDirectory },
+      }, { throwOnError: true })
+      return result.data.data.map((entry) => entry.path)
     })
   })
 

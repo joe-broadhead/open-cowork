@@ -1,8 +1,8 @@
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import {
   type ManagedOpencodeServerParentMessage,
   type ManagedOpencodeServerSupervisorMessage,
@@ -72,13 +72,36 @@ export function createManagedOpencodeServerAuth(): ManagedOpencodeServerAuth {
   }
 }
 
-// Linux caps a single env string at MAX_ARG_STRLEN (~128 KiB); exceeding it
-// makes the OpenCode spawn fail with E2BIG (macOS has no per-string cap, so
-// the failure only shows on Linux). The composed runtime config grows with
-// every bundled tool's permission patterns, so large configs spill to a
-// private file passed via OPENCODE_CONFIG (a path the OpenCode CLI reads
-// natively) instead of inlining via OPENCODE_CONFIG_CONTENT.
-const MAX_INLINE_OPENCODE_CONFIG_BYTES = 100_000
+function snapshotManagedNativeAgents(env: NodeJS.ProcessEnv, configDir: string) {
+  const configHome = env.XDG_CONFIG_HOME?.trim()
+  if (!configHome) return
+
+  const sourceDir = join(configHome, 'opencode', 'agents')
+  let entries
+  try {
+    entries = readdirSync(sourceDir, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  // Disabled agents are deliberately stored as `<name>.disabled.md` by the
+  // Open Cowork native customization store. OpenCode treats every discovered
+  // Markdown file as an agent, so only snapshot the enabled native files.
+  const enabledAgents = entries.filter((entry) =>
+    entry.isFile()
+    && entry.name.endsWith('.md')
+    && !entry.name.endsWith('.disabled.md'),
+  )
+  if (enabledAgents.length === 0) return
+
+  const targetDir = join(configDir, 'agents')
+  mkdirSync(targetDir, { recursive: true, mode: 0o700 })
+  for (const entry of enabledAgents) {
+    const target = join(targetDir, entry.name)
+    copyFileSync(join(sourceDir, entry.name), target)
+    chmodSync(target, 0o600)
+  }
+}
 
 export function buildManagedOpencodeServerEnvironment(
   env: NodeJS.ProcessEnv,
@@ -92,29 +115,39 @@ export function buildManagedOpencodeServerEnvironment(
   delete next.OPENCODE_CONFIG_CONTENT
   if (config !== undefined) {
     const serialized = JSON.stringify(config ?? {})
-    if (Buffer.byteLength(serialized, 'utf8') > MAX_INLINE_OPENCODE_CONFIG_BYTES) {
-      const writeConfigFile = options.writeConfigFile || ((content: string) => {
-        // The config can carry provider credentials: private dir (0700) and
-        // owner-only file (0600), same protection class as OpenCode's own
-        // config files.
-        const dir = mkdtempSync(join(tmpdir(), 'open-cowork-opencode-config-'))
-        const file = join(dir, 'opencode-config.json')
-        try {
-          writeFileSync(file, content, { mode: 0o600 })
-        } catch (error) {
-          // If the write fails the server object (and its close() cleanup hook) is never
-          // returned, so remove the freshly created dir here rather than leaking it.
-          rmSync(dir, { recursive: true, force: true })
-          throw error
-        }
-        // Only register the dir for lifecycle cleanup once it actually holds the file.
-        options.onTempConfigDirCreated?.(dir)
-        return file
-      })
-      next.OPENCODE_CONFIG = writeConfigFile(serialized)
-    } else {
-      next.OPENCODE_CONFIG_CONTENT = serialized
+    const writeConfigFile = options.writeConfigFile || ((content: string) => {
+      // OpenCode V2 discovers composed agents, skills, and providers through
+      // its native config directory. Keep that config credential-class: a
+      // private directory and an owner-only canonical opencode.json file.
+      const dir = mkdtempSync(join(tmpdir(), 'open-cowork-opencode-config-'))
+      const file = join(dir, 'opencode.json')
+      try {
+        writeFileSync(file, content, { mode: 0o600 })
+        // OPENCODE_CONFIG_DIR replaces the normal XDG OpenCode directory for
+        // both config documents and native agent discovery. Snapshot the
+        // enabled app-owned Markdown agents beside the composed config so V2
+        // sees the exact catalog selected for this runtime generation.
+        snapshotManagedNativeAgents(env, dir)
+      } catch (error) {
+        // If the write fails the server object (and its close() cleanup hook) is never
+        // returned, so remove the freshly created dir here rather than leaking it.
+        rmSync(dir, { recursive: true, force: true })
+        throw error
+      }
+      // Only register the dir for lifecycle cleanup once it actually holds the file.
+      options.onTempConfigDirCreated?.(dir)
+      return file
+    })
+    const configFile = writeConfigFile(serialized)
+    if (basename(configFile) !== 'opencode.json' && basename(configFile) !== 'opencode.jsonc') {
+      throw new Error('Managed OpenCode config writer must return an opencode.json or opencode.jsonc path.')
     }
+    // OPENCODE_CONFIG_CONTENT is consumed only by OpenCode's classic config
+    // layer in 1.17.20. OPENCODE_CONFIG_DIR is shared by the classic and V2
+    // layers, so one native file keeps both execution surfaces in lockstep and
+    // avoids Linux's per-environment-string E2BIG limit at every config size.
+    delete next.OPENCODE_CONFIG
+    next.OPENCODE_CONFIG_DIR = dirname(configFile)
   }
   return next
 }
@@ -172,7 +205,6 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
   env: NodeJS.ProcessEnv
   forkSupervisor: ManagedOpencodeSupervisorFork
   supervisorPath: string
-  startOnSpawnFallbackMs?: number | null
   onUnexpectedExit?: (event: ManagedOpencodeServerUnexpectedExit) => void
   opencodeBinPath?: string | null
   logLevel?: ManagedOpencodeServerLogLevel
@@ -181,7 +213,6 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
   const resolved = {
     hostname: '127.0.0.1',
     port: 4096,
-    startOnSpawnFallbackMs: 100,
     timeout: 5000,
     ...options,
   }
@@ -192,10 +223,8 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
 
   const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args, process.platform, resolved.opencodeBinPath)
   const proc = resolved.forkSupervisor(resolved.supervisorPath)
-  // Tracks the private temp directory an oversized (credential-bearing)
-  // config spills into so teardown can remove it (audit #868). OpenCode
-  // reads OPENCODE_CONFIG once at spawn, so it is safe to delete the file
-  // whenever the server stops.
+  // Tracks the private native config directory so teardown removes its
+  // credential-bearing file after OpenCode stops.
   let tempConfigDir: string | null = null
   const bootMessage: ManagedOpencodeServerParentMessage = {
     type: 'boot',
@@ -270,7 +299,6 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
 
   const url = await new Promise<string>((resolveUrl, reject) => {
     function cleanupStartupListeners() {
-      proc.off('spawn', onSpawn)
       proc.off('error', onError)
     }
 
@@ -282,7 +310,7 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
       reject(error)
     }
 
-    function onSpawn() {
+    function sendBoot() {
       if (started || startupSettled || closeRequested) return
       started = true
       proc.postMessage(bootMessage)
@@ -290,7 +318,7 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
 
     function onMessage(message: ManagedOpencodeServerSupervisorMessage) {
       if (message.type === 'supervisor-ready') {
-        onSpawn()
+        sendBoot()
         return
       }
       if (message.type === 'ready') {
@@ -335,12 +363,10 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
     }, resolved.timeout)
 
     proc.on('message', onMessage)
-    proc.on('spawn', onSpawn)
     proc.on('exit', onExit)
     proc.on('error', onError)
     detachSupervisorListeners = () => {
       proc.off('message', onMessage)
-      proc.off('spawn', onSpawn)
       proc.off('exit', onExit)
       proc.off('error', onError)
     }
@@ -351,15 +377,8 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
         : new Error(reason === undefined ? 'Managed OpenCode server startup aborted.' : String(reason)))
     })
 
-    // Process implementations differ on when they emit `spawn`, and a message
-    // posted immediately after fork can race the supervisor's listener. Prefer
-    // the explicit supervisor-ready handshake, with a short fallback for older
-    // process implementations that only expose `spawn`.
-    if (resolved.startOnSpawnFallbackMs !== null) {
-      setTimeout(() => {
-        if (!started && !startupSettled && !closeRequested) onSpawn()
-      }, resolved.startOnSpawnFallbackMs).unref()
-    }
+    // Boot is sent only after the current supervisor explicitly confirms that
+    // its message listener is installed. This removes the spawn-time race.
   })
 
   return {

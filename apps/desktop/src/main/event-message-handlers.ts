@@ -43,6 +43,7 @@ type NormalizedMessagePart = NonNullable<ReturnType<typeof normalizeMessagePart>
 export type SessionScopedMessageState = {
   messageRolesBySession: Map<string, Map<string, 'user' | 'assistant'>>
   pendingTextEventsBySession: Map<string, Map<string, PendingTextEvent[]>>
+  nativeToolPartsByKey: Map<string, Record<string, unknown>>
   totalPendingTextEvents: number
   totalMessageRoles: number
 }
@@ -51,6 +52,7 @@ export function createSessionScopedMessageState(): SessionScopedMessageState {
   return {
     messageRolesBySession: new Map(),
     pendingTextEventsBySession: new Map(),
+    nativeToolPartsByKey: new Map(),
     totalPendingTextEvents: 0,
     totalMessageRoles: 0,
   }
@@ -889,4 +891,173 @@ export function handleMessagePartUpdatedEvent(
     || handleUpdatedSubtaskPart(ctx)
     || handleUpdatedCompactionPart(ctx)
     || handleUpdatedToolPart(ctx)
+}
+
+function nativeMessageEventFields(properties: Record<string, unknown> | null | undefined) {
+  return {
+    sessionID: readString(readRecordValue(properties, 'sessionID')) || null,
+    messageID: readString(readRecordValue(properties, 'assistantMessageID')) || null,
+  }
+}
+
+export function handleNativeTextDeltaEvent(
+  win: BrowserWindow,
+  dispatchRuntimeEvent: DispatchRuntimeEvent,
+  properties: Record<string, unknown> | null | undefined,
+  messageState: SessionScopedMessageState,
+  kind: 'text' | 'reasoning',
+) {
+  const { sessionID, messageID } = nativeMessageEventFields(properties)
+  const partID = readString(readRecordValue(properties, kind === 'text' ? 'textID' : 'reasoningID'))
+  const delta = readString(readRecordValue(properties, 'delta'))
+  if (!sessionID || !messageID || !delta) return
+  setMessageRole(messageState, sessionID, messageID, 'assistant')
+  handleMessagePartDeltaEvent(win, dispatchRuntimeEvent, {
+    sessionID,
+    messageID,
+    partID,
+    type: kind,
+    delta,
+  }, messageState)
+}
+
+export function handleNativeTextEndedEvent(
+  win: BrowserWindow,
+  dispatchRuntimeEvent: DispatchRuntimeEvent,
+  properties: Record<string, unknown> | null | undefined,
+  messageState: SessionScopedMessageState,
+  cachedModelId: string,
+  kind: 'text' | 'reasoning',
+) {
+  const { sessionID, messageID } = nativeMessageEventFields(properties)
+  const partID = readString(readRecordValue(properties, kind === 'text' ? 'textID' : 'reasoningID'))
+  const content = readString(readRecordValue(properties, 'text'))
+  if (!sessionID || !messageID || !content) return
+  setMessageRole(messageState, sessionID, messageID, 'assistant')
+  handleMessagePartUpdatedEvent(win, dispatchRuntimeEvent, {
+    sessionID,
+    messageID,
+    part: {
+      type: kind,
+      id: partID,
+      sessionID,
+      messageID,
+      text: content,
+    },
+  }, messageState, cachedModelId)
+}
+
+function nativeToolKey(sessionID: string, callID: string) {
+  return `${sessionID}\0${callID}`
+}
+
+function nativeToolAttachments(content: unknown) {
+  return Array.isArray(content)
+    ? content.flatMap((entry) => {
+        const record = asRecord(entry)
+        if (readString(readRecordValue(record, 'type')) !== 'file') return []
+        const url = readString(readRecordValue(record, 'uri'))
+        const mime = readString(readRecordValue(record, 'mime'))
+        if (!url || !mime) return []
+        const filename = readString(readRecordValue(record, 'name')) || undefined
+        return [{ mime, url, ...(filename ? { filename } : {}) }]
+      })
+    : []
+}
+
+export function handleNativeToolEvent(
+  win: BrowserWindow,
+  dispatchRuntimeEvent: DispatchRuntimeEvent,
+  type: string,
+  properties: Record<string, unknown> | null | undefined,
+  messageState: SessionScopedMessageState,
+  cachedModelId: string,
+) {
+  const { sessionID, messageID } = nativeMessageEventFields(properties)
+  const callID = readString(readRecordValue(properties, 'callID'))
+  if (!sessionID || !messageID || !callID) return
+  const key = nativeToolKey(sessionID, callID)
+  const previous = messageState.nativeToolPartsByKey.get(key) || {}
+  const previousState = asRecord(readRecordValue(previous, 'state'))
+  const provider = asRecord(readRecordValue(properties, 'provider'))
+  const providerMetadata = asRecord(readRecordValue(provider, 'metadata'))
+  const structured = readRecordValue(properties, 'structured')
+  const content = readRecordValue(properties, 'content')
+  const result = readRecordValue(properties, 'result')
+  const output = result !== undefined
+    ? result
+    : content !== undefined
+      ? content
+      : structured
+  const next: Record<string, unknown> = {
+    ...previous,
+    type: 'tool',
+    id: callID,
+    callID,
+    sessionID,
+    messageID,
+    tool: readString(readRecordValue(properties, 'tool'))
+      || readString(readRecordValue(previous, 'tool'))
+      || 'tool',
+    state: {
+      ...previousState,
+      ...(readRecordValue(properties, 'input') && typeof readRecordValue(properties, 'input') === 'object'
+        ? { input: readRecordValue(properties, 'input') }
+        : {}),
+      ...(output !== undefined ? { output } : {}),
+      ...(result !== undefined ? { result } : {}),
+      ...(readRecordValue(properties, 'error') !== undefined ? { error: readRecordValue(properties, 'error') } : {}),
+      metadata: {
+        ...asRecord(readRecordValue(previousState, 'metadata')),
+        ...asRecord(structured),
+        ...providerMetadata,
+      },
+      attachments: nativeToolAttachments(content),
+      status: type === 'session.next.tool.success'
+        ? 'completed'
+        : type === 'session.next.tool.failed'
+          ? 'error'
+          : 'running',
+    },
+  }
+  messageState.nativeToolPartsByKey.delete(key)
+  if (type !== 'session.next.tool.success' && type !== 'session.next.tool.failed') {
+    messageState.nativeToolPartsByKey.set(key, next)
+    while (messageState.nativeToolPartsByKey.size > MAX_TOTAL_MESSAGE_ROLES) {
+      const oldest = messageState.nativeToolPartsByKey.keys().next().value
+      if (typeof oldest !== 'string') break
+      messageState.nativeToolPartsByKey.delete(oldest)
+    }
+  }
+  setMessageRole(messageState, sessionID, messageID, 'assistant')
+  handleMessagePartUpdatedEvent(win, dispatchRuntimeEvent, {
+    sessionID,
+    messageID,
+    part: next,
+  }, messageState, cachedModelId)
+}
+
+export function handleNativeStepEndedEvent(
+  win: BrowserWindow,
+  dispatchRuntimeEvent: DispatchRuntimeEvent,
+  properties: Record<string, unknown> | null | undefined,
+  messageState: SessionScopedMessageState,
+  cachedModelId: string,
+) {
+  const { sessionID, messageID } = nativeMessageEventFields(properties)
+  if (!sessionID || !messageID) return
+  setMessageRole(messageState, sessionID, messageID, 'assistant')
+  handleMessagePartUpdatedEvent(win, dispatchRuntimeEvent, {
+    sessionID,
+    messageID,
+    part: {
+      type: 'step-finish',
+      id: `${messageID}:step-finish`,
+      sessionID,
+      messageID,
+      cost: readRecordValue(properties, 'cost'),
+      tokens: readRecordValue(properties, 'tokens'),
+      reason: readRecordValue(properties, 'finish'),
+    },
+  }, messageState, cachedModelId)
 }

@@ -53,10 +53,14 @@ const PERMISSION_POLICY_RANK: Record<RuntimePermissionPolicy, number> = {
   allow: 2,
 }
 
-class UnsupportedSettingsSchemaVersionError extends Error {
-  constructor(version: number) {
-    super(`Settings schema version ${version} is newer than supported version ${SETTINGS_SCHEMA_VERSION}.`)
-    this.name = 'UnsupportedSettingsSchemaVersionError'
+class SettingsStoreLoadError extends Error {
+  constructor(problem: string) {
+    super(
+      `Open Cowork cannot load the existing settings store: ${problem} `
+      + `This pre-release build requires exact settings schema version ${SETTINGS_SCHEMA_VERSION} and does not migrate settings in place. `
+      + 'Back up or export the settings file, then reset only settings.json/settings.enc and reconfigure the app. The existing file was left untouched.',
+    )
+    this.name = 'SettingsStoreLoadError'
   }
 }
 
@@ -148,21 +152,25 @@ function createDefaults(): AppSettings {
 }
 
 function readSettingsSchemaVersion(raw: unknown) {
-  if (!raw || typeof raw !== 'object') return 0
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const value = (raw as { _schemaVersion?: unknown })._schemaVersion
-  if (typeof value !== 'number') return 0
-  return Number.isInteger(value) && value >= 0 ? value : 0
+  if (typeof value !== 'number') return null
+  return Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
-function assertSupportedSettingsSchemaVersion(raw: unknown) {
+function assertCurrentSettingsSchemaVersion(raw: unknown) {
   const version = readSettingsSchemaVersion(raw)
-  if (version > SETTINGS_SCHEMA_VERSION) {
-    throw new UnsupportedSettingsSchemaVersionError(version)
+  if (version !== SETTINGS_SCHEMA_VERSION) {
+    throw new SettingsStoreLoadError(
+      version === null
+        ? 'the schema version is missing or invalid.'
+        : `the file declares version ${version}.`,
+    )
   }
 }
 
-function isUnsupportedSettingsSchemaVersionError(error: unknown) {
-  return error instanceof UnsupportedSettingsSchemaVersionError
+function isSettingsStoreLoadError(error: unknown) {
+  return error instanceof SettingsStoreLoadError
 }
 
 function normalizeBoolMap(value: unknown): Record<string, boolean> {
@@ -281,7 +289,7 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
 }
 
 function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
-  assertSupportedSettingsSchemaVersion(rawInput)
+  assertCurrentSettingsSchemaVersion(rawInput)
   const raw = asSettingsRecord(rawInput)
   const defaults = createDefaults()
   const appPermissions = getAppConfig().permissions
@@ -458,8 +466,21 @@ export function loadSettings(): AppSettings {
   if (settingsCache) return settingsCache
 
   const encryptedPath = getSettingsPath()
+  const plaintextPath = getPlaintextSettingsPath()
+  const encryptedExists = existsSync(encryptedPath)
+  const plaintextExists = existsSync(plaintextPath)
   const storageMode = getSecretStorageMode()
-  if (existsSync(encryptedPath) && storageMode === 'encrypted') {
+  if (encryptedExists && plaintextExists) {
+    throw new SettingsStoreLoadError('both encrypted and plaintext settings files exist, so the authoritative store is ambiguous.')
+  }
+  if (encryptedExists && storageMode !== 'encrypted') {
+    throw new SettingsStoreLoadError('an encrypted settings file exists but OS-backed encrypted storage is not the active storage mode.')
+  }
+  if (plaintextExists && storageMode !== 'plaintext') {
+    throw new SettingsStoreLoadError('a plaintext development settings file exists but plaintext storage is not the active storage mode.')
+  }
+
+  if (encryptedExists && storageMode === 'encrypted') {
     try {
       const safeStorage = requireSafeStorage()
       const raw = readFileSync(encryptedPath)
@@ -468,22 +489,21 @@ export function loadSettings(): AppSettings {
       settingsCache = result
       return result
     } catch (err: unknown) {
-      if (isUnsupportedSettingsSchemaVersionError(err)) throw err
-      log('error', `Settings load failed: ${err instanceof Error ? err.message : String(err)}`)
+      if (isSettingsStoreLoadError(err)) throw err
+      throw new SettingsStoreLoadError('the encrypted file could not be decrypted or parsed.')
     }
   }
 
   if (storageMode === 'plaintext') {
-    const plaintextPath = getPlaintextSettingsPath()
-    if (existsSync(plaintextPath)) {
+    if (plaintextExists) {
       try {
         const raw = readFileSync(plaintextPath, 'utf-8')
         const result = normalizeSettingsFromDisk(JSON.parse(raw))
         settingsCache = result
         return result
       } catch (err: unknown) {
-        if (isUnsupportedSettingsSchemaVersionError(err)) throw err
-        log('error', `Settings plaintext load failed: ${err instanceof Error ? err.message : String(err)}`)
+        if (isSettingsStoreLoadError(err)) throw err
+        throw new SettingsStoreLoadError('the plaintext file could not be parsed.')
       }
     }
   }

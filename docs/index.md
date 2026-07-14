@@ -191,7 +191,7 @@ own branding, providers, skills, and workflows.
 
     ```bash
     node -v
-    # Expected: v22.13.0 or newer
+    # Supported: v22.13.0 or newer; CI uses the exact .nvmrc version
     corepack enable
     corepack prepare pnpm@10.32.1 --activate
     pnpm -v

@@ -62,7 +62,7 @@ async function waitForProcessExit(pid: number) {
   assert.fail(`managed server process ${pid} did not exit`)
 }
 
-test('managed opencode server resolves from stdout and closes the child process', async () => {
+test('managed opencode server resolves after supervisor and child readiness, then closes the child process', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-server-'))
   const pidFile = join(root, 'pid')
   const envFile = join(root, 'env')
@@ -113,6 +113,45 @@ while true; do sleep 1; done
   })()
 
   await waitForProcessExit(pid)
+})
+
+test('managed opencode server fails closed when the supervisor never reports readiness', async () => {
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
+  const posted: Array<{ type: string }> = []
+  const supervisor = {
+    postMessage(message: { type: string }) {
+      posted.push(message)
+    },
+    kill() {
+      return true
+    },
+    on(event: string, listener: (...args: unknown[]) => void) {
+      const handlers = listeners.get(event) || new Set()
+      handlers.add(listener)
+      listeners.set(event, handlers)
+      return supervisor
+    },
+    off(event: string, listener: (...args: unknown[]) => void) {
+      listeners.get(event)?.delete(listener)
+      return supervisor
+    },
+  }
+
+  const startup = createManagedOpencodeServer({
+    env: { PATH: process.env.PATH || '' },
+    forkUtilityProcess: () => supervisor as never,
+    hostname: '127.0.0.1',
+    port: 0,
+    timeout: 25,
+  })
+
+  // A process-level spawn event is not a readiness contract. The parent must
+  // wait for `supervisor-ready`, which proves the IPC message listener exists.
+  for (const listener of listeners.get('spawn') || []) listener()
+
+  await assert.rejects(startup, /Timeout waiting for server to start after 25ms/)
+  assert.equal(posted.some((message) => message.type === 'boot'), false)
+  assert.equal(posted.some((message) => message.type === 'shutdown'), true)
 })
 
 test('managed opencode server timeout fails closed and stops the child process', async () => {
@@ -228,16 +267,16 @@ exit 7
   }
 })
 
-test('managed opencode server removes the spilled temp config dir on close', async () => {
+test('managed opencode server removes the native temp config dir on close', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-config-spill-'))
   const configPathFile = join(root, 'config-path')
   const executable = writeExecutable(root, 'config-opencode', `
-printf '%s' "$OPENCODE_CONFIG" > ${JSON.stringify(configPathFile)}
+printf '%s' "$OPENCODE_CONFIG_DIR/opencode.json" > ${JSON.stringify(configPathFile)}
 printf '%s\\n' 'opencode server listening on http://127.0.0.1:43212'
 while true; do sleep 1; done
 `)
 
-  // Oversized config spills to a credential-class temp file via OPENCODE_CONFIG.
+  // Composed config is a credential-class native file shared by classic and V2 config layers.
   const server = await createManagedOpencodeServer({
     env: { PATH: process.env.PATH || '' },
     forkUtilityProcess: forkTestSupervisor,

@@ -72,6 +72,7 @@ const historicalNamingAllowlist = new Set([
   'tests/i18n-runtime.test.ts',
   'tests/native-customizations.test.ts',
   'tests/runtime-config-builder.test.ts',
+  'tests/runtime-environment.test.ts',
   'tests/runtime-permissions.test.ts',
   'tests/runtime-skill-catalog.test.ts',
 ])

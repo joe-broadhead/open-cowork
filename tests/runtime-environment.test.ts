@@ -4,6 +4,8 @@ import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtim
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 const runtimePaths = {
   home: '/tmp/open-cowork/runtime-home',
   configHome: '/tmp/open-cowork/runtime-home/.config',
@@ -77,6 +79,7 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.OPENCODE_ENABLE_EXA, '1')
   assert.equal(env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT, '1')
   assert.equal(env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS, '1')
+  assert.equal(env.OPENCODE_DISABLE_EXTERNAL_SKILLS, '1')
   assert.equal(env.OPENCODE_DISABLE_EMBEDDED_WEB_UI, 'true')
   assert.equal(env.OPENCODE_SERVER_USERNAME, 'opencode')
   assert.equal(env.OPENCODE_SERVER_PASSWORD, 'runtime-password')
@@ -183,6 +186,7 @@ test('managed runtime server env is explicit and does not mutate main process en
   process.env.PATH = '/usr/bin:/bin'
 
   try {
+    let configContent = ''
     const serverEnv = buildManagedOpencodeServerEnvironment(
       {
         PATH: '/managed/bin',
@@ -192,12 +196,21 @@ test('managed runtime server env is explicit and does not mutate main process en
       {
         logLevel: 'debug',
       },
+      {
+        writeConfigFile: (serialized) => {
+          configContent = serialized
+          return '/tmp/open-cowork-config/opencode.json'
+        },
+      },
     )
 
     assert.equal(serverEnv.PATH, '/managed/bin')
     assert.equal(serverEnv.HOME, runtimePaths.home)
     assert.equal(serverEnv[OPEN_COWORK_MANAGED_RUNTIME_ENV], OPEN_COWORK_MANAGED_RUNTIME_VALUE)
-    assert.match(serverEnv.OPENCODE_CONFIG_CONTENT || '', /"logLevel":"debug"/)
+    assert.equal(serverEnv.OPENCODE_CONFIG_CONTENT, undefined)
+    assert.equal(serverEnv.OPENCODE_CONFIG, undefined)
+    assert.equal(serverEnv.OPENCODE_CONFIG_DIR, '/tmp/open-cowork-config')
+    assert.match(configContent, /"logLevel":"debug"/)
     assert.equal(serverEnv.OPEN_COWORK_USER_DATA_DIR, undefined)
     assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, '/tmp/open-cowork/user-data')
     assert.equal(process.env.PATH, '/usr/bin:/bin')
@@ -326,32 +339,41 @@ test('managed runtime drains stdio after startup parsing is detached', () => {
   assert.equal(stderr.readableFlowing, true)
 })
 
-test('managed opencode server env spills oversized config to a file (Linux E2BIG guard)', async () => {
-  // Small config stays inline.
-  const small = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, { agent: {} })
-  assert.match(small.OPENCODE_CONFIG_CONTENT || '', /"agent"/)
+test('managed opencode server env writes every composed config to the native V2 config directory', async () => {
+  let smallWritten: string | null = null
+  const small = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, { agent: {} }, {
+    writeConfigFile: (serialized) => {
+      smallWritten = serialized
+      return '/tmp/open-cowork-small-config/opencode.json'
+    },
+  })
+  assert.equal(small.OPENCODE_CONFIG_CONTENT, undefined)
   assert.equal(small.OPENCODE_CONFIG, undefined)
+  assert.equal(small.OPENCODE_CONFIG_DIR, '/tmp/open-cowork-small-config')
+  assert.match(smallWritten || '', /"agent"/)
 
-  // Oversized config (over the ~100 KB inline cap that protects Linux's
-  // MAX_ARG_STRLEN) moves to OPENCODE_CONFIG as a file path.
+  // Oversized config uses the same file contract, avoiding Linux's
+  // MAX_ARG_STRLEN without creating a second runtime configuration path.
   const bigConfig = { instructions: ['x'.repeat(150_000)] }
   let written: string | null = null
   const big = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig, {
     writeConfigFile: (serialized) => {
       written = serialized
-      return '/tmp/opencode-config-test.json'
+      return '/tmp/open-cowork-big-config/opencode.json'
     },
   })
   assert.equal(big.OPENCODE_CONFIG_CONTENT, undefined)
-  assert.equal(big.OPENCODE_CONFIG, '/tmp/opencode-config-test.json')
+  assert.equal(big.OPENCODE_CONFIG, undefined)
+  assert.equal(big.OPENCODE_CONFIG_DIR, '/tmp/open-cowork-big-config')
   assert.match(written || '', /"instructions"/)
 
   // Real file path variant: written 0600 into a private temp dir.
   const real = buildManagedOpencodeServerEnvironment({ PATH: '/bin' }, bigConfig)
   const fs = await import('node:fs')
-  assert.ok(real.OPENCODE_CONFIG, 'expected a config file path')
+  assert.ok(real.OPENCODE_CONFIG_DIR, 'expected a native config directory')
+  const realConfigFile = join(real.OPENCODE_CONFIG_DIR, 'opencode.json')
   // Single descriptor for stat + read (no check-then-use race).
-  const fd = fs.openSync(real.OPENCODE_CONFIG!, 'r')
+  const fd = fs.openSync(realConfigFile, 'r')
   try {
     const stat = fs.fstatSync(fd)
     if (process.platform !== 'win32') {
@@ -361,6 +383,38 @@ test('managed opencode server env spills oversized config to a file (Linux E2BIG
     assert.equal(parsed.instructions[0].length, 150_000)
   } finally {
     fs.closeSync(fd)
-    fs.rmSync(real.OPENCODE_CONFIG!, { force: true })
+    fs.rmSync(real.OPENCODE_CONFIG_DIR, { recursive: true, force: true })
+  }
+})
+
+test('managed opencode server snapshots enabled native agents into the V2 config directory', async () => {
+  const fs = await import('node:fs')
+  const sourceConfigHome = fs.mkdtempSync(join(tmpdir(), 'open-cowork-native-agent-source-'))
+  const sourceAgentsDir = join(sourceConfigHome, 'opencode', 'agents')
+  fs.mkdirSync(sourceAgentsDir, { recursive: true })
+  fs.writeFileSync(join(sourceAgentsDir, 'reviewer.md'), '---\ndescription: Reviewer\n---\nReview carefully.\n')
+  fs.writeFileSync(join(sourceAgentsDir, 'paused.disabled.md'), '---\ndescription: Paused\n---\nDo not load.\n')
+  fs.writeFileSync(join(sourceAgentsDir, 'reviewer.opencowork.json'), '{"color":"accent"}\n')
+
+  const serverEnv = buildManagedOpencodeServerEnvironment(
+    { PATH: '/bin', XDG_CONFIG_HOME: sourceConfigHome },
+    { agent: {} },
+  )
+
+  assert.ok(serverEnv.OPENCODE_CONFIG_DIR, 'expected a native config directory')
+  try {
+    const runtimeAgentsDir = join(serverEnv.OPENCODE_CONFIG_DIR, 'agents')
+    assert.equal(
+      fs.readFileSync(join(runtimeAgentsDir, 'reviewer.md'), 'utf8'),
+      '---\ndescription: Reviewer\n---\nReview carefully.\n',
+    )
+    assert.equal(fs.existsSync(join(runtimeAgentsDir, 'paused.disabled.md')), false)
+    assert.equal(fs.existsSync(join(runtimeAgentsDir, 'reviewer.opencowork.json')), false)
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(join(runtimeAgentsDir, 'reviewer.md')).mode & 0o777, 0o600)
+    }
+  } finally {
+    fs.rmSync(serverEnv.OPENCODE_CONFIG_DIR, { recursive: true, force: true })
+    fs.rmSync(sourceConfigHome, { recursive: true, force: true })
   }
 })

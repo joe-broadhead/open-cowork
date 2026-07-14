@@ -4,16 +4,6 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { isRuntimeSnapshotSecretBearingPath } from './runtime-snapshot-portability.ts'
 
-// The snapshot-portability surface lives in a dedicated module so the production
-// checkpoint path can import it without pulling in the sandbox-runtime machinery
-// below. Re-exported here so existing script/test import sites are unaffected.
-export {
-  buildPortableRuntimeManifest,
-  isRuntimeSnapshotSecretBearingPath,
-  runtimePathsForPortability,
-} from './runtime-snapshot-portability.ts'
-export type { PortableRuntimeEntry, PortableRuntimeEntryKind } from './runtime-snapshot-portability.ts'
-
 export const SANDBOX_COMPONENT_MANIFEST_FORMAT = 'open-cowork-sandbox-component-manifest-v1'
 
 export type SandboxEngine = 'docker' | 'apple-container'

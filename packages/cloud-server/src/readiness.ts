@@ -70,13 +70,19 @@ async function check(name: string, fn: () => Promise<void> | void): Promise<Clou
 
 async function checkControlPlaneStore(store: ControlPlaneStore, requireSchemaMigrations: boolean) {
   const migrations = await store.listSchemaMigrations()
-  if (!requireSchemaMigrations) return
-  const applied = new Set(migrations.map((migration) => migration.id))
-  const missing = CLOUD_CONTROL_PLANE_MIGRATIONS
-    .map((migration) => migration.id)
-    .filter((id) => !applied.has(id))
-  if (missing.length > 0) {
-    throw new Error(`Missing cloud control-plane migrations: ${missing.join(', ')}.`)
+  if (requireSchemaMigrations) {
+    const applied = new Set(migrations.map((migration) => migration.id))
+    const missing = CLOUD_CONTROL_PLANE_MIGRATIONS
+      .map((migration) => migration.id)
+      .filter((id) => !applied.has(id))
+    if (missing.length > 0) {
+      throw new Error(`Missing cloud control-plane migrations: ${missing.join(', ')}.`)
+    }
+  }
+  if (store.assertSchemaIntegrity) {
+    await store.assertSchemaIntegrity()
+  } else if (requireSchemaMigrations) {
+    throw new Error('Cloud control-plane store does not expose physical schema integrity validation.')
   }
 }
 

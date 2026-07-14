@@ -6,9 +6,8 @@ type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
 }
 
-// P2-7: recompute every maintained concurrency gauge from its source table (resetting idle scopes to
-// 0), self-healing drift the old write-clamp could accumulate. Runs the exact statements migration
-// 024 applies once on deploy; each RETURNs its touched scope_ids so we can total rows reconciled.
+// Recompute every maintained concurrency gauge from its source table (resetting idle scopes to
+// 0). Each statement returns its touched scope_ids so operators can observe the reconciliation.
 export async function reconcilePostgresConcurrencyCounters(executor: PgExecutor): Promise<number> {
   let touched = 0
   for (const statement of CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS) {

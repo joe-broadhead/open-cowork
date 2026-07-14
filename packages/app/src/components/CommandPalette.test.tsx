@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { axe } from 'vitest-axe'
 import type { BuiltInAgentDetail, CustomAgentSummary } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { CommandPalette } from './CommandPalette'
@@ -310,5 +312,54 @@ describe('CommandPalette', () => {
     await user.type(search, 'health')
     expect(await screen.findByRole('option', { name: /Health Center/ })).toBeInTheDocument()
     expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('traps focus, closes only through the modal Escape handler, and restores the opening control', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>Open commands</button>
+          <button type="button">Background action</button>
+          {open ? (
+            <CommandPalette
+              onClose={() => {
+                onClose()
+                setOpen(false)
+              }}
+              onNavigate={vi.fn()}
+              onCreateThread={vi.fn(async () => null)}
+              onEnsureSession={vi.fn(async () => true)}
+              onInsertComposer={vi.fn()}
+              onSetAgentMode={vi.fn()}
+              onStartAgentChat={vi.fn()}
+              onOpenSettings={vi.fn()}
+              onToggleSearch={vi.fn()}
+            />
+          ) : null}
+        </>
+      )
+    }
+
+    render(<Harness />)
+    const trigger = screen.getByRole('button', { name: 'Open commands' })
+    await user.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: 'Command palette' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    await waitFor(() => expect(screen.getByRole('searchbox')).toHaveFocus())
+    expect((await axe(dialog)).violations).toEqual([])
+
+    await user.tab({ shift: true })
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    expect(screen.getByRole('button', { name: 'Background action' })).not.toHaveFocus()
+
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 })

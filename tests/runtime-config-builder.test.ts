@@ -197,14 +197,15 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
   })
   try {
     // Baseline (no policy): bash allowed, custom MCP/skill are registered through
-    // Cowork-owned config and skill catalog. Native ambient skill discovery stays off.
+    // Cowork-owned config and skill catalog. Native ambient skill discovery is
+    // disabled by the managed runtime environment, not an unsupported config key.
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
     copySkillsAndAgents(projectRoot)
     const baseline = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(baseline.permission.bash, 'allow')
     assert.equal(baseline.mcp.warehouse?.url, 'https://warehouse.example.test/mcp')
-    assert.equal(baseline.skills.customSkills, false)
+    assert.equal(baseline.skills.customSkills, undefined)
     assert.equal(baseline.permission.skill['managed-skill'], 'allow')
     assert.equal(baseline.permission.skill['custom-review'], 'allow')
     assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)
@@ -224,7 +225,7 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
     assert.equal(governed.permission.bash, 'deny')
     // The custom MCP is dropped entirely by the extension-class gate.
     assert.equal(governed.mcp.warehouse, undefined)
-    assert.equal(governed.skills.customSkills, false)
+    assert.equal(governed.skills.customSkills, undefined)
     assert.equal(governed.permission.skill['managed-skill'], 'allow')
     assert.equal(governed.permission.skill['custom-review'], undefined)
     assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)

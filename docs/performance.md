@@ -178,8 +178,11 @@ Startup-to-interactive is gated from both ends:
   the browser fetches on first load. `scripts/check-bundle-size.mjs`
   walks the `browser.html` entry's static-import closure plus its single
   bootstrap dynamic import and sums the gzipped bytes. Budget: **220 KB**
-  (current ~216 KB). Lazy route views and chart/diagram vendors are
-  excluded — they load on demand and must not count against startup.
+  (fresh 2026-07-14 production build: **208,910 B / 204.0 KB**, leaving
+  **16,370 B / 16.0 KB** headroom). Diff inspection, provider sign-in
+  controls, conditional Home review/motion surfaces, and status telemetry
+  stay behind guarded dynamic-import boundaries; lazy route views and
+  chart/diagram vendors also load on demand and do not count against startup.
 - **Main-process side (init to first interactive session):**
   `tests/startup-budget.test.ts` measures a fresh `SessionEngine`
   hydrating a realistic session from projected history and producing the
@@ -210,7 +213,8 @@ also carry generous ceilings that catch gross bloat — a duplicated copy
 or a version that doubles the engine — without tripping on routine
 dependabot patch bumps.
 
-All three checks run under `tests/bundle-size-budget.test.ts`
+All three budgets, plus the startup lazy-boundary guard, run under
+`tests/bundle-size-budget.test.ts`
 (`pnpm check:bundle-size` locally), which is part of `pnpm test` in CI.
 Set budgets just above the measured size and ratchet them **down** as
 things shrink; only raise a budget with a note explaining the growth.

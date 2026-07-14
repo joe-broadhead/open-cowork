@@ -295,11 +295,6 @@ export interface GatewayDeploymentConfig {
   instanceId?: string
   branding?: Partial<PublicBrandingConfig>
   productMode?: GatewayProductMode
-  cloud?: {
-    baseUrl?: string
-    serviceToken?: string
-    allowInsecureHttp?: boolean
-  }
   server?: {
     host?: string
     port?: number
@@ -321,7 +316,6 @@ export interface GatewayDeploymentConfig {
     enabled?: boolean
   }
   timeouts?: {
-    cloudRequestMs?: number
     webhookDeliveryMs?: number
     smtpMs?: number
     shutdownDrainMs?: number

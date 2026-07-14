@@ -13,6 +13,7 @@ type RuntimeHealthErrorReporter = (notice: string, error: unknown, viewName: str
 export function useRuntimeHealth(
   loadSessions: () => Promise<void>,
   reportError?: RuntimeHealthErrorReporter,
+  enabled = true,
 ): RuntimeHealth {
   const [runtimeReady, setRuntimeReady] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
@@ -79,7 +80,7 @@ export function useRuntimeHealth(
   // instead of silently hanging the next prompt. Polling is skipped while the
   // app is hidden because there is no visible state to update.
   useEffect(() => {
-    if (!runtimeWasReady) return
+    if (!enabled || !runtimeWasReady) return
     const check = async () => {
       if (document.visibilityState !== 'visible') return
       try {
@@ -97,9 +98,10 @@ export function useRuntimeHealth(
       window.clearInterval(interval)
       window.removeEventListener('focus', onFocus)
     }
-  }, [refreshRuntimeStatus, runtimeWasReady])
+  }, [enabled, refreshRuntimeStatus, runtimeWasReady])
 
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     const unsub = window.coworkApi.on.runtimeReady(() => {
       if (cancelled) return
@@ -111,7 +113,10 @@ export function useRuntimeHealth(
     })
 
     void refreshRuntimeStatus('Could not initialize runtime status. Try restarting the app.', {
-      loadOnReady: true,
+      // App bootstrap already loads the session registry without waiting for
+      // runtime startup. Runtime-ready events below still refresh it when the
+      // execution layer transitions later.
+      loadOnReady: false,
       isCancelled: () => cancelled,
     })
 
@@ -119,7 +124,7 @@ export function useRuntimeHealth(
       cancelled = true
       unsub()
     }
-  }, [loadSessions, refreshRuntimeStatus])
+  }, [enabled, loadSessions, refreshRuntimeStatus])
 
   return {
     runtimeReady,

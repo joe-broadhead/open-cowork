@@ -95,12 +95,15 @@ import {
  * The minimal shape of the server-embedded bootstrap blob this adapter reads.
  * The cloud server renders it into `<script id="cowork-bootstrap">` (see
  * packages/cloud-server/src/browser-renderer-app.ts). We only need the optional
- * endpoint registry, the per-session SSE event types, and an optional CSRF
- * token; everything else is ignored here.
+ * endpoint registry, the per-session SSE event types, a public auth-required
+ * hint, and an optional CSRF token; everything else is ignored here. The auth
+ * hint is deliberately only a boolean: private deployment configuration must
+ * never be embedded in the public SPA document.
  */
 export type BrowserCoworkApiBootstrap = {
   api?: Array<{ id: string; path: string }>
   sessionEventTypes?: string[]
+  authRequired?: boolean
   csrfToken?: string | null
 }
 
@@ -315,14 +318,10 @@ export function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
         csrfToken = null
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent(BROWSER_UNAVAILABLE_AUTH_EVENT, { detail: { path } }))
-          // Cloud auth is server-driven: a 401 means the session is missing or
-          // expired, so send the browser to the OIDC login, which redirects back
-          // authenticated. (The ephemeral auth=none cloud returns 200 on /auth/me,
-          // so this never fires there.) Skip when already on the auth path to
-          // avoid a redirect loop.
-          if (!window.location.pathname.startsWith('/auth/')) {
-            window.location.assign('/auth/login')
-          }
+          // The renderer owns the signed-out UI state. Do not redirect from the
+          // transport: doing so made initial 401s race the app bootstrap and
+          // prevented the LoginScreen from ever rendering. The explicit login
+          // action still navigates to /auth/login through auth.login().
         }
       }
       throw error
@@ -674,6 +673,8 @@ function cloudViewToSessionInfo(view: unknown): SessionInfo {
 
 export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): CoworkAPI {
   const resolvedBootstrap = bootstrap || readBootstrapFromWindow() || {}
+  const authRequired = resolvedBootstrap.authRequired === true
+  let authenticated: boolean | null = null
   const transport = createTransport(resolvedBootstrap)
   const { request, endpoint, withQuery } = transport
   const hub = new CloudEventHub(transport)
@@ -803,8 +804,11 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
         try {
           const me = await request<{ principal?: { email?: string | null } }>(endpoint('authMe'))
           const email = me?.principal?.email || null
-          return { authenticated: Boolean(me?.principal), email }
-        } catch {
+          authenticated = Boolean(me?.principal)
+          return { authenticated, email }
+        } catch (error) {
+          if ((error as { status?: unknown } | null)?.status !== 401) throw error
+          authenticated = false
           return { authenticated: false, email: null }
         }
       },
@@ -1043,23 +1047,17 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
 
         // Cloud/browser optimization: when the server advertises presigned upload support, push
         // the bytes straight to object storage (begin -> direct PUT -> finalize) so they never
-        // base64-buffer through the web pod. The buffered path remains the fallback whenever the
-        // server says "unsupported" (non-S3 / no static creds), the begin call errors (e.g. an
-        // older server), or the direct PUT fails. (Electron implements `upload` over IPC and
-        // never reaches this code; the public method signature + return shape are unchanged.)
-        let begun: PresignedUploadBegin | null
-        try {
-          begun = unwrap<PresignedUploadBegin | null>(
-            await request(withQuery(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { transfer: 'presigned' }), {
-              method: 'POST',
-              body: { filename: req.filename, contentType: req.contentType ?? null },
-            }),
-            'upload',
-            null,
-          )
-        } catch {
-          return bufferedUpload()
-        }
+        // base64-buffer through the web pod. A begin failure is a real API failure and must remain
+        // visible; buffered fallback is reserved for an explicit unsupported response or a failed
+        // object-store PUT. (Electron implements `upload` over IPC and never reaches this code.)
+        const begun = unwrap<PresignedUploadBegin | null>(
+          await request(withQuery(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { transfer: 'presigned' }), {
+            method: 'POST',
+            body: { filename: req.filename, contentType: req.contentType ?? null },
+          }),
+          'upload',
+          null,
+        )
         if (!begun || begun.transfer !== 'presigned' || !begun.uploadUrl || !begun.artifactId) {
           return bufferedUpload()
         }
@@ -1224,14 +1222,30 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       // PublicAppConfig; default every required field (the renderer hard-reads
       // config.auth.enabled) and let the cloud response override what it provides.
       config: async (): Promise<PublicAppConfig> => {
-        const raw = await request<Record<string, unknown>>(endpoint('config')).catch(() => ({} as Record<string, unknown>))
+        // Once /auth/me has established that this browser is signed out, do not
+        // probe the protected config endpoint as a second failed auth attempt.
+        // That avoids needless auth-backoff/rate-limit pressure during boot.
+        const raw = authRequired && authenticated === false
+          ? {} as Record<string, unknown>
+          : await request<Record<string, unknown>>(endpoint('config')).catch((error: unknown) => {
+              // Direct callers may ask for config before auth.status(). Preserve
+              // the same fail-closed login state for that ordering, but surface
+              // every non-auth failure as a real boot error.
+              if (authRequired && (error as { status?: unknown } | null)?.status === 401) {
+                authenticated = false
+                return {} as Record<string, unknown>
+              }
+              throw error
+            })
         const merged: Record<string, unknown> = {
           branding: { name: 'Open Cowork' },
           providers: { available: [], defaultProvider: null, defaultModel: null },
           permissions: { bash: 'ask', fileWrite: 'ask', task: 'ask', web: 'ask', webSearch: false },
           agentStarterTemplates: [],
           ...raw,
-          auth: (raw.auth as PublicAppConfig['auth'] | undefined) ?? { mode: 'none', enabled: false },
+          auth: authRequired
+            ? { mode: 'google-oauth', enabled: true }
+            : (raw.auth as PublicAppConfig['auth'] | undefined) ?? { mode: 'none', enabled: false },
         }
         return merged as unknown as PublicAppConfig
       },

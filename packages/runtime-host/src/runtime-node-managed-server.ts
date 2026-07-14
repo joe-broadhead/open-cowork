@@ -66,7 +66,6 @@ export async function createNodeManagedOpencodeServer(options: OpencodeServerOpt
   return createManagedOpencodeServerWithSupervisor({
     ...options,
     forkSupervisor: forkNodeManagedOpencodeSupervisor,
-    startOnSpawnFallbackMs: null,
     supervisorPath: options.supervisorPath || resolveNodeManagedOpencodeSupervisorPath(),
   })
 }

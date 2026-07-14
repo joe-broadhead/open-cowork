@@ -7,6 +7,8 @@ import type {
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { t } from '../helpers/i18n'
+import { useEscape } from '../hooks/useEscape'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import type { PrimaryAgentMode } from '../stores/session'
 import { Badge, EmptyState, Input, Kbd } from './ui'
 import { ModalBackdrop } from './layout/ModalBackdrop'
@@ -50,11 +52,19 @@ export function CommandPalette({
   const [builtinAgents, setBuiltinAgents] = useState<BuiltInAgentDetail[]>([])
   const [customAgents, setCustomAgents] = useState<CustomAgentSummary[]>([])
   const [selected, setSelected] = useState(0)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listboxId = 'command-palette-results'
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const setSessionPrimaryAgent = useSessionStore((s) => s.setSessionPrimaryAgent)
+
+  // Keep keyboard and assistive-technology interaction inside the palette,
+  // then restore focus to the control that opened it when it unmounts.
+  // Escape uses the shared stack so a palette opened over another overlay
+  // closes only itself.
+  useFocusTrap(dialogRef)
+  useEscape(onClose)
 
   const currentProjectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
@@ -159,12 +169,6 @@ export function CommandPalette({
   const activeOptionId = selectedItem ? `${listboxId}-option-${selectedItem.id}` : undefined
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      onClose()
-      return
-    }
-
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setSelected((current) => Math.min(current + 1, filteredItems.length - 1))
@@ -187,6 +191,7 @@ export function CommandPalette({
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-50 bg-black/45" />
       <div
+        ref={dialogRef}
         className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl"
         role="dialog"
         aria-modal="true"

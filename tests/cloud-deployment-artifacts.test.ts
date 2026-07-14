@@ -134,7 +134,8 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /X-CSRF-Token/)
   assert.match(docs, /\/auth\/login/)
   assert.match(docs, /Cloud Run all-in-one demo only/)
-  assert.match(docs, /GET \/healthz/)
+  assert.match(docs, /GET \/livez/)
+  assert.match(docs, /GET \/readyz/)
   assert.match(docs, /GET \/api\/runtime\/status/)
   assert.match(docs, /GET \/api\/workers\/heartbeats/)
   assert.match(docs, /GET \/api\/metrics/)
@@ -232,7 +233,7 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(values, /startupProbe:/)
   assert.match(values, /cloudSqlProxy:/)
   assert.match(values, /^ {4}repository: gcr\.io\/cloud-sql-connectors\/cloud-sql-proxy$/m)
-  assert.match(values, /tag: "2\.22\.0"/)
+  assert.match(values, /tag: "2\.23\.0"/)
   assert.match(values, /instanceConnectionName: ""/)
   assert.match(values, /address: 127\.0\.0\.1/)
   assert.match(values, /runConnectionTest: false/)
@@ -283,6 +284,7 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(deployment, /strategy:/)
   assert.match(deployment, /OPEN_COWORK_CLOUD_WORKER_ID/)
   assert.match(deployment, /OPEN_COWORK_CLOUD_SCHEDULER_ID/)
+  assert.match(deployment, /OPEN_COWORK_CLOUD_ROLE[\s\S]*OPEN_COWORK_CLOUD_HOST[\s\S]*\{\{- if eq \$roleName "web" \}\}[\s\S]*OPEN_COWORK_CLOUD_PORT/)
   assert.match(deployment, /serviceAccountName:/)
   assert.match(deployment, /cloudSqlProxy\.image\.tag=latest is not allowed/)
   assert.match(deployment, /cloudSqlProxy\.enabled=true requires cloudSqlProxy\.instanceConnectionName/)
@@ -382,6 +384,9 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   const continuationSmokeScript = readRepoFile('scripts/cloud-continuation-smoke.mjs')
   const launchReadinessScript = readRepoFile('scripts/launch-readiness.mjs')
   const launchTargets = readRepoFile('deploy/load/launch-readiness-targets.json')
+  const terraform = readRepoFile('deploy/gcp/terraform/main.tf')
+  const terraformVariables = readRepoFile('deploy/gcp/terraform/variables.tf')
+  const terraformLock = readRepoFile('deploy/gcp/terraform/.terraform.lock.hcl')
 
   assert.match(readme, /GCP Reference Deployment/)
   assert.match(readme, /Cloud SQL for PostgreSQL/)
@@ -428,6 +433,47 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   assert.match(readme, /OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS/)
   assert.match(readme, /Rollback order/)
   assert.match(readme, /GCP configuration is adapter wiring only/)
+
+  assert.match(terraform, /web = \{[\s\S]*?startup_probe_path = "\/readyz"/)
+  assert.match(terraform, /worker = \{[\s\S]*?startup_probe_path = "\/livez"/)
+  assert.match(terraform, /scheduler = \{[\s\S]*?startup_probe_path = "\/livez"/)
+  assert.match(terraform, /OPEN_COWORK_CLOUD_LIVENESS_PORT/)
+  assert.match(terraform, /startup_probe\s*\{[\s\S]*?path = each\.value\.startup_probe_path/)
+  assert.match(terraform, /database_user = trimsuffix\(google_service_account\.cloud\.email, "\.gserviceaccount\.com"\)/)
+  assert.match(terraform, /role\s*= "roles\/cloudsql\.client"/)
+  assert.match(terraform, /role\s*= "roles\/cloudsql\.instanceUser"/)
+  assert.match(terraform, /name\s*= "cloudsql\.iam_authentication"[\s\S]*?value\s*= "on"/)
+  assert.match(terraform, /edition\s*= "ENTERPRISE"/)
+  assert.match(terraform, /availability_type\s*= "REGIONAL"/)
+  assert.match(terraform, /deletion_protection_enabled\s*= true/)
+  assert.match(terraform, /start_time\s*= "02:00"/)
+  assert.match(terraform, /transaction_log_retention_days\s*= 7/)
+  assert.match(terraform, /retained_backups\s*= 14/)
+  assert.match(terraform, /maintenance_window\s*\{[\s\S]*?day\s*= 7[\s\S]*?hour\s*= 4[\s\S]*?update_track\s*= "stable"/)
+  assert.match(terraform, /insights_config\s*\{[\s\S]*?query_insights_enabled\s*= true[\s\S]*?record_client_address\s*= false/)
+  assert.match(terraform, /resource "google_sql_user" "cloud" \{[\s\S]*?name\s*= local\.database_user/)
+  assert.match(terraform, /database_roles\s*= \["cloudsqlsuperuser"\]/)
+  assert.match(terraform, /deletion_policy\s*= "ABANDON"/)
+  assert.match(terraform, /version = ">= 7\.18, < 8\.0"/)
+  assert.match(terraform, /cloud_sql_proxy_image = "gcr\.io\/cloud-sql-connectors\/cloud-sql-proxy:2\.23\.0@sha256:54e23cad9aeeedbf88ab75f993146631b878035f702b31c51885a932e0c7286c"/)
+  assert.match(terraform, /runtime_secret_ids = toset\(concat\(var\.secret_ids, values\(var\.secret_env\)\)\)/)
+  assert.match(terraform, /resource "google_secret_manager_secret_iam_member" "cloud_secrets" \{[\s\S]*?for_each\s*= local\.runtime_secret_ids/)
+  assert.match(terraform, /resource "google_storage_bucket" "artifacts" \{[\s\S]*?public_access_prevention\s*= "enforced"/)
+  assert.match(terraform, /OPEN_COWORK_CLOUD_CONTROL_PLANE_URL\s*= "postgresql:\/\/\$\{urlencode\(local\.database_user\)\}@127\.0\.0\.1:5432/)
+  assert.match(terraform, /vpc_access\s*\{[\s\S]*?network\s*= var\.vpc_self_link[\s\S]*?subnetwork\s*= var\.vpc_subnetwork_self_link/)
+  assert.match(terraform, /name\s*= "open-cowork-cloud"[\s\S]*?depends_on = \["cloud-sql-proxy"\]/)
+  assert.match(terraform, /name\s*= "cloud-sql-proxy"[\s\S]*?"--private-ip"[\s\S]*?"--auto-iam-authn"[\s\S]*?"--run-connection-test"/)
+  assert.match(terraform, /cpu_idle\s*= each\.value\.role == "web"/)
+  assert.match(terraform, /name\s*= "cloud-sql-proxy"[\s\S]*?period_seconds\s*= 5[\s\S]*?failure_threshold\s*= 48/)
+  assert.match(terraform, /liveness_probe\s*\{[\s\S]*?path = "\/livez"/)
+  assert.doesNotMatch(terraform, /path = "\/healthz"/)
+  assert.match(terraformVariables, /variable "postgres_version" \{[\s\S]*?default\s*= "POSTGRES_17"/)
+  assert.equal(
+    terraformVariables.includes('can(regex("^[^[:space:]@/]+/[^[:space:]@]+@sha256:[0-9a-f]{64}$", var.cloud_image))'),
+    true,
+  )
+  assert.match(terraformLock, /provider "registry\.terraform\.io\/hashicorp\/google"/)
+  assert.match(terraformLock, /constraints = ">= 7\.18\.0, < 8\.0\.0"/)
 
   assert.match(values, /REGION-docker\.pkg\.dev\/PROJECT\/open-cowork\/open-cowork-cloud/)
   assert.match(values, /digest: sha256:REPLACE_WITH_CLOUD_DIGEST/)
@@ -736,6 +782,9 @@ test('downstream example covers desktop, cloud, and gateway branding parity', ()
   assert.match(readme, /cloud\.publicBranding/)
   assert.match(readme, /cloudDesktop/)
   assert.match(readme, /gateway\.providers/)
+  assert.match(readme, /OPEN_COWORK_CLOUD_BASE_URL/)
+  assert.match(readme, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
+  assert.match(readme, /OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS/)
   assert.match(desktopConfig, /"name": "Example Cowork"/)
   assert.match(desktopConfig, /"shortName": "EX"/)
   assert.match(desktopConfig, /"supportUrl": "https:\/\/support\.example\.com\/cowork"/)
@@ -743,7 +792,7 @@ test('downstream example covers desktop, cloud, and gateway branding parity', ()
   assert.match(desktopConfig, /"preconfiguredConnections"/)
   assert.match(desktopConfig, /"allowUserAddedConnections": false/)
   assert.match(desktopConfig, /"gateway"/)
-  assert.match(desktopConfig, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
+  assert.doesNotMatch(desktopConfig, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
   assert.match(desktopConfig, /OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
   assert.match(desktopConfig, /OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN/)
   assert.match(desktopConfig, /"providers"/)
@@ -816,9 +865,11 @@ test('cloud image builds workspace packages required by package entrypoints', ()
       `${workspaceExternal} must not also appear in root devDependencies`,
     )
   }
-  // The container healthcheck must probe readiness (/readyz), not bare liveness, so a
-  // degraded backing service marks the container unhealthy instead of accepting traffic.
+  // Web containers probe dependency readiness; execution-only roles probe the
+  // dedicated heartbeat listener and must never be treated as healthy by omission.
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/readyz/)
+  assert.match(dockerfile, /HEALTHCHECK[\s\S]*OPEN_COWORK_CLOUD_LIVENESS_PORT[\s\S]*\/livez/)
+  assert.doesNotMatch(dockerfile, /role!==?'web'[\s\S]*process\.exit\(0\)/)
   assert.doesNotMatch(dockerfile, /HEALTHCHECK[\s\S]*\/healthz/)
   // --experimental-sqlite is required for the all-in-one node:sqlite store on the
   // pinned Node 22.x (stable/flag-free only on 23.4+).
@@ -1107,8 +1158,8 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(validate, /unsafe-metrics-gateway/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_CLOUD_URL/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_GATEWAY_URL/)
-  assert.match(smoke, /\/healthz/)
   assert.match(smoke, /\/livez/)
+  assert.match(smoke, /\/readyz/)
   assert.match(smoke, /cloud web workbench/)
   assert.match(smoke, /id="cowork-bootstrap"/)
   assert.match(smoke, /\/app\/assets\//)
@@ -1138,7 +1189,8 @@ test('managed operations runbook covers readiness, rollback, diagnostics, and ga
   const runbook = readRepoFile('docs/runbooks/cloud-managed-operations.md')
 
   for (const phrase of [
-    'GET /healthz',
+    'GET /livez',
+    'GET /readyz',
     'GET /api/workers/heartbeats',
     'GET /ready',
     'Rollback',
@@ -1194,8 +1246,8 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
 
   const smoke = readRepoFile('scripts/ci-cloud-compose-smoke.sh')
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" up --build -d/)
-  assert.match(smoke, /http:\/\/127\.0\.0\.1:8787\/healthz/)
   assert.match(smoke, /http:\/\/127\.0\.0\.1:8787\/livez/)
+  assert.match(smoke, /http:\/\/127\.0\.0\.1:8787\/readyz/)
   assert.match(smoke, /OPEN_COWORK_GATEWAY_SMOKE_URL/)
   assert.match(smoke, /pnpm deploy:smoke/)
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" logs --no-color --tail=200/)

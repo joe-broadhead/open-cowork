@@ -1229,7 +1229,7 @@ function startCloudLivenessServer(
   isLive: () => boolean,
 ): { close(): Promise<void> } {
   const server = createServer((req, res) => {
-    if (req.url === '/livez' || req.url === '/healthz') {
+    if (req.url === '/livez') {
       const live = isLive()
       res.writeHead(live ? 200 : 503, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok: live }))
@@ -1374,7 +1374,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
   // When the control plane resolves to Postgres (same condition as
   // createControlPlaneStoreForCloud), back cloud knowledge with the same Postgres
-  // (016_cloud_knowledge tables) so it is durable + shared across replicas rather
+  // (cloud_knowledge_* tables) so it is durable + shared across replicas rather
   // than a node-local SQLite file. Owns its own pool so it is closed on shutdown.
   // Only auto-built on the default control-plane path; an injected store/factory
   // (e.g. tests) makes the backend unknown, so we leave knowledge to the HTTP

@@ -6,6 +6,59 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import type { SessionView } from '@open-cowork/shared'
+
+type SessionMock = {
+  messages?: (input: { sessionID: string }) => Promise<{ data: unknown[] }>
+  todo?: (input: { sessionID: string }) => Promise<{ data: unknown[] }>
+  status?: () => Promise<{ data: Record<string, unknown> }>
+  get?: (input: { sessionID: string }) => Promise<{ data: unknown }>
+  children?: (input: { sessionID: string }) => Promise<{ data: unknown[] }>
+  list?: () => Promise<{ data: unknown[] }>
+  diff?: (...args: any[]) => Promise<unknown>
+  update?: (...args: any[]) => Promise<unknown>
+}
+
+function createNativeHistoryClient(session: SessionMock, rootSessionId: string) {
+  const listAllSessions = async () => {
+    if (session.list) return (await session.list()).data
+    if (!session.children) return []
+    const seen = new Set<string>()
+    const result: unknown[] = []
+    const queue = [rootSessionId]
+    while (queue.length > 0) {
+      const parent = queue.shift()
+      if (!parent || seen.has(parent)) continue
+      seen.add(parent)
+      const children = (await session.children({ sessionID: parent })).data
+      for (const value of children) {
+        result.push(value)
+        const id = (value as { id?: unknown })?.id
+        if (typeof id === 'string') queue.push(id)
+      }
+    }
+    return result
+  }
+
+  return {
+    session,
+    v2: {
+      session: {
+        messages: async (input: { sessionID: string }) => ({
+          data: {
+            data: session.messages ? (await session.messages(input)).data : [],
+            cursor: {},
+          },
+        }),
+        active: async () => ({ data: { data: session.status ? (await session.status()).data : {} } }),
+        get: async (input: { sessionID: string }) => ({
+          data: { data: session.get ? (await session.get(input)).data : null },
+        }),
+        list: async () => ({ data: { data: await listAllSessions(), cursor: {} } }),
+      },
+    },
+  } as any
+}
+
 function createEmptySessionView(): SessionView {
   return {
     messages: [],
@@ -93,7 +146,7 @@ test('bounded child snapshot prefetch handles early rejections while preserving 
   )
 })
 
-test('createSessionHistoryService caps child graph discovery concurrency', async () => {
+test('createSessionHistoryService discovers the full child graph from one native session list', async () => {
   const rootSessionId = 'session-wide'
   const childCount = 16
   const childrenByParent = new Map<string, Array<Record<string, unknown>>>()
@@ -115,27 +168,19 @@ test('createSessionHistoryService caps child graph discovery concurrency', async
     childrenByParent.set(`${childId}-grandchild`, [])
   }
 
-  let activeChildrenRequests = 0
-  let maxActiveChildrenRequests = 0
-  const requestedParents: string[] = []
+  let listCalls = 0
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({ data: [] }),
           todo: async () => ({ data: [] }),
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-          children: async ({ sessionID }: { sessionID: string }) => {
-            requestedParents.push(sessionID)
-            activeChildrenRequests += 1
-            maxActiveChildrenRequests = Math.max(maxActiveChildrenRequests, activeChildrenRequests)
-            await new Promise((resolve) => setTimeout(resolve, 5))
-            activeChildrenRequests -= 1
-            return { data: childrenByParent.get(sessionID) || [] }
+          list: async () => {
+            listCalls += 1
+            return { data: Array.from(childrenByParent.values()).flat() }
           },
-        },
-      },
+      }, rootSessionId),
       questionClient: { id: 'question-client' },
       record: null,
     }),
@@ -174,8 +219,7 @@ test('createSessionHistoryService caps child graph discovery concurrency', async
 
   const result = await service.loadSessionHistory(rootSessionId, { includeChildTranscripts: false })
 
-  assert.equal(maxActiveChildrenRequests, 8)
-  assert.equal(requestedParents.length, 1 + childCount + childCount)
+  assert.equal(listCalls, 1)
   assert.equal(result.childGraphComplete, true)
   assert.equal(result.childLineage.length, childCount * 2)
   assert.equal(new Set(result.childLineage.map((child) => child.id)).size, childCount * 2)
@@ -195,8 +239,7 @@ test('createSessionHistoryService loads questions and updates provider/model fro
 
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({ data: [] }),
           todo: async () => ({ data: [] }),
           diff: async () => ({ data: [] }),
@@ -211,8 +254,7 @@ test('createSessionHistoryService loads questions and updates provider/model fro
           },
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-        },
-      },
+      }, 'session-1'),
       questionClient: { id: 'question-client' },
       record: null,
     }),
@@ -307,6 +349,7 @@ test('createSessionHistoryService loads questions and updates provider/model fro
   assert.deepEqual(result.approvals[0], {
     id: 'perm-1',
     sessionId: 'session-1',
+    sourceSessionId: 'session-1',
     taskRunId: null,
     tool: 'bash',
     input: { command: 'pwd' },
@@ -315,6 +358,7 @@ test('createSessionHistoryService loads questions and updates provider/model fro
   assert.deepEqual(result.approvals[1], {
     id: 'perm-2',
     sessionId: 'session-1',
+    sourceSessionId: 'grandchild-1',
     taskRunId: 'child:grandchild-1',
     tool: 'write',
     input: { path: 'notes.md' },
@@ -331,8 +375,7 @@ test('createSessionHistoryService replaces SDK default titles from first user me
   const sdkTitleUpdates: Array<Record<string, unknown>> = []
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({
             data: [{
               info: { id: 'user-message-1', role: 'user', time: { created: 1 } },
@@ -356,8 +399,7 @@ test('createSessionHistoryService replaces SDK default titles from first user me
             sdkTitleUpdates.push(input)
             return { data: {} }
           },
-        },
-      },
+      }, 'session-title-fallback'),
       questionClient: {},
       record: null,
     }),
@@ -408,8 +450,7 @@ test('createSessionHistoryService preserves product-owned workflow titles before
   const sdkTitleUpdates: Array<Record<string, unknown>> = []
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({
             data: [{
               info: { id: 'workflow-prompt', role: 'user', time: { created: 1 } },
@@ -433,8 +474,7 @@ test('createSessionHistoryService preserves product-owned workflow titles before
             sdkTitleUpdates.push(input)
             return { data: {} }
           },
-        },
-      },
+      }, 'workflow-draft-session'),
       questionClient: {},
       record: {
         title: 'New workflow draft',
@@ -496,16 +536,14 @@ test('createSessionHistoryService honors activate:false during warm syncs', asyn
     getSessionClient: async () => {
       calls.getSessionClient += 1
       return {
-        client: {
-          session: {
+        client: createNativeHistoryClient({
             messages: async () => ({ data: [] }),
             todo: async () => ({ data: [] }),
             children: async () => ({ data: [] }),
             diff: async () => ({ data: [] }),
             status: async () => ({ data: {} }),
             get: async () => ({ data: null }),
-          },
-        },
+        }, 'session-2'),
         questionClient: {},
         record: null,
       }
@@ -580,16 +618,14 @@ test('createSessionHistoryService forwards forced refresh syncs without caller-m
   const calls: Array<Record<string, unknown>> = []
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({ data: [] }),
           todo: async () => ({ data: [] }),
           children: async () => ({ data: [] }),
           diff: async () => ({ data: [] }),
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-        },
-      },
+      }, 'session-3'),
       questionClient: {},
       record: null,
     }),
@@ -651,8 +687,7 @@ test('createSessionHistoryService hydrates root history after loading child ids 
 
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async ({ sessionID }: { sessionID: string }) => {
             if (sessionID !== 'session-progressive') calls.childSnapshot += 1
             return { data: [] }
@@ -672,8 +707,7 @@ test('createSessionHistoryService hydrates root history after loading child ids 
           },
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-        },
-      },
+      }, 'session-progressive'),
       questionClient: {},
       record: null,
     }),
@@ -818,8 +852,7 @@ test('createSessionHistoryService preserves existing child pending state when ch
 
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({ data: [] }),
           todo: async () => ({ data: [] }),
           children: async () => {
@@ -829,8 +862,7 @@ test('createSessionHistoryService preserves existing child pending state when ch
           diff: async () => ({ data: [] }),
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-        },
-      },
+      }, 'session-incomplete-graph'),
       questionClient: {},
       record: null,
     }),
@@ -934,8 +966,7 @@ test('createSessionHistoryService keeps partial hydration retryable until a full
 
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
-      client: {
-        session: {
+      client: createNativeHistoryClient({
           messages: async () => ({ data: [] }),
           todo: async () => ({ data: [] }),
           children: async ({ sessionID }: { sessionID: string }) => {
@@ -949,8 +980,7 @@ test('createSessionHistoryService keeps partial hydration retryable until a full
           diff: async () => ({ data: [] }),
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-        },
-      },
+      }, 'session-partial'),
       questionClient: {},
       record: null,
     }),
@@ -1040,16 +1070,14 @@ test('createSessionHistoryService synthesizes changeSummary for write-only sessi
 
     const service = createSessionHistoryService({
       getSessionClient: async () => ({
-        client: {
-          session: {
+        client: createNativeHistoryClient({
             messages: async () => ({ data: [] }),
             todo: async () => ({ data: [] }),
             children: async () => ({ data: [] }),
             diff: async () => ({ data: [] }),
             status: async () => ({ data: {} }),
             get: async () => ({ data: null }),
-          },
-        },
+        }, 'session-4'),
         questionClient: {},
         record: {
           opencodeDirectory: root,

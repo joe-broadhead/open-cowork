@@ -6,6 +6,7 @@ import { shortSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { log } from '@open-cowork/shared/node'
 import { createSessionStatusReconciler } from './session-status-coordinator.ts'
+import { listNativeActiveSessionIds } from '@open-cowork/runtime-host'
 
 type RuntimeSessionStatusReconcilerOptions = {
   getMainWindow: () => BrowserWindow | null
@@ -23,16 +24,13 @@ async function lookupRuntimeSessionStatus(sessionId: string): Promise<string | n
   if (!client) return null
 
   const result = await measureAsyncPerf('session.status.lookup', async () => {
-    return client.session.status()
+    return listNativeActiveSessionIds(client)
   }, {
     slowThresholdMs: 200,
     slowData: { sessionId: shortSessionId(sessionId) },
   })
 
-  const statuses = ((result.data as Record<string, { type?: string }> | undefined) || {})
-  return typeof statuses[sessionId]?.type === 'string'
-    ? statuses[sessionId].type
-    : null
+  return result.has(sessionId) ? 'busy' : 'idle'
 }
 
 const runtimeSessionStatusReconciler = createSessionStatusReconciler(lookupRuntimeSessionStatus)

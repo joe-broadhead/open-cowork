@@ -119,6 +119,14 @@ provider control plane.
 - Enable automated backups and point-in-time recovery.
 - Size connection limits for web replicas, workers, scheduler replicas, and
   dashboard/gateway API traffic.
+- Treat the current pre-release schema as a clean baseline, not an upgrade or
+  adoption mechanism. A missing baseline ledger entry is initialized only in
+  an empty product schema. If Cloud product tables already exist without that
+  entry, startup fails before mutation; recreate the schema or restore a backup
+  whose ledger matches its data.
+- `/readyz` validates the current migration IDs plus the required physical
+  production tables and concurrent indexes. A populated ledger alone does not
+  certify database readiness.
 - Run the real Postgres concurrency tests before changing schema, lease,
   command, delivery, or quota behavior.
 
@@ -212,8 +220,6 @@ provider control plane.
   deny-all, and each opened dependency should use a typed
   `networkPolicy.egress.allow[]` entry with explicit peers and ports.
 - Use `/livez` for process liveness and `/readyz` for dependency readiness.
-  `/healthz` remains backward-compatible, but Kubernetes readiness probes should
-  not use it for public production.
 
 ### Worker/Scheduler Scaling
 
@@ -586,7 +592,7 @@ OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
 pnpm deploy:smoke
 ```
 
-The smoke script validates cloud `/healthz`/`/livez`, the Cloud Web Workbench at `GET /`,
+The smoke script validates cloud `/livez` and `/readyz`, the Cloud Web Workbench at `GET /`,
 workbench CSP/bootstrap markers, cloud API bootstrap endpoint reachability,
 gateway `/health`, and gateway `/ready`. Operator mode also checks cloud
 runtime/heartbeat/metrics endpoints and gateway metrics, and now fails closed

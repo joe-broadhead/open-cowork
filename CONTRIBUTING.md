@@ -24,7 +24,8 @@ Bad changes usually:
 ## Development setup
 
 Requirements:
-- Node `>=22.13`
+- Node `>=22.13` (supported floor). For development and CI parity, use the
+  exact version pinned in [`.nvmrc`](.nvmrc).
 - pnpm `10.32.1` via Corepack
 - Python `>=3.11` for docs work
 

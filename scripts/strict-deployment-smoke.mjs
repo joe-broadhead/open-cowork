@@ -110,7 +110,7 @@ function assertAllRevoked(body) {
 }
 
 function validateInputs() {
-  rejectWeakeningEnv('OPEN_COWORK_SMOKE_SKIP_CLOUD', 'strict smoke must include Cloud health, workbench, runtime, heartbeat, and metrics checks')
+  rejectWeakeningEnv('OPEN_COWORK_SMOKE_SKIP_CLOUD', 'strict smoke must include Cloud liveness, readiness, workbench, runtime, heartbeat, and metrics checks')
   rejectWeakeningEnv('OPEN_COWORK_SMOKE_SKIP_GATEWAY', 'strict smoke must include Gateway health, readiness, and operator metrics checks')
   rejectWeakeningEnv('OPEN_COWORK_DESKTOP_SMOKE_SKIP_PROMPT', 'strict smoke must include Desktop/Web mutation and cache checks')
   rejectWeakeningEnv('OPEN_COWORK_GATEWAY_SMOKE_ALLOW_INSECURE_HTTP', 'strict smoke must use HTTPS unless each deep smoke is run explicitly outside the strict wrapper')

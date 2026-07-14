@@ -221,10 +221,6 @@ export class InMemorySessionsDomain {
     }
   }
 
-  listAllSessions(): SessionRecord[] {
-    return Array.from(this.sessions.values()).map((session) => clone(session.record))
-  }
-
   listRunnableSessions(input: ListRunnableSessionsInput = {}): RunnableSessionListRecord {
     const nowMs = (input.now || new Date()).getTime()
     const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))

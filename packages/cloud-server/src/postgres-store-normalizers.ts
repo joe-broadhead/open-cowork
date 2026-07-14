@@ -1,15 +1,11 @@
 import { jsonRecord } from './postgres-domains/shared.ts'
 import { stableJson } from './postgres-store-id-helpers.ts'
-// redactOperationalText now lives in its own single-source module; re-exported here so the
-// store's existing import surface (postgres-store-normalizers) is unchanged.
-export { redactOperationalText } from './operational-text-redaction.ts'
 
 // Pure input normalizers/validators for the Postgres control-plane store,
 // extracted from postgres-control-plane-store.ts: trimming/length-bounding text,
-// the operational-text secret redactor, tag-colour/id-list/thread-query/metadata
-// record normalization, integer bounds, the rate-limit window math, and the BYOK
-// provider-id validator. No store state — depends only on the shared JSON-record
-// coercion and the stable-JSON serializer.
+// tag-colour/id-list/thread-query/metadata record normalization, integer bounds,
+// the rate-limit window math, and the BYOK provider-id validator. No store state —
+// depends only on the shared JSON-record coercion and the stable-JSON serializer.
 
 const THREAD_DEFAULT_TAG_COLOR = '#64748b'
 const SMART_FILTER_QUERY_MAX_BYTES = 16_384

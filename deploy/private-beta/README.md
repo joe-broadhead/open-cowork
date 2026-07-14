@@ -6,7 +6,7 @@ and OSS self-host deployment.
 Files:
 
 - `hosted-byok.config.example.json`: managed BYOK SaaS-style config with OIDC,
-  closed/invite signup posture, Desktop cloud connection, managed Gateway, stub
+  disabled/invite signup posture, Desktop cloud connection, managed Gateway, stub
   private beta billing, quotas, and placeholder secret refs.
 - `self-host-oss.config.example.json`: OSS self-host config with optional stub
   billing, self-host Gateway, and placeholder secret refs.
@@ -49,7 +49,7 @@ The hosted path is for an operator-managed private beta:
 2. Set Cloud role selection in Compose, Helm, or role-specific environment
    variables. Keep the shared config examples focused on product policy and
    launch posture.
-3. Set `cloud.auth.signupMode` to `closed` or `invite`.
+3. Set `cloud.auth.signupMode` to `disabled` or `invite`.
 4. Keep `cloud.billing.provider` as `stub` or manual operational state until
    self-serve billing is intentionally enabled.
 5. Configure BYOK and quotas per org.

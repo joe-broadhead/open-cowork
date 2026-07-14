@@ -216,6 +216,7 @@ export interface TaskRun {
 export interface PendingApproval {
   id: string
   sessionId: string
+  sourceSessionId?: string | null
   workspaceId?: string | null
   taskRunId?: string | null
   tool: string

@@ -1,4 +1,5 @@
-export const CLOUD_CONTROL_PLANE_MIGRATION_ID = '001_cloud_control_plane'
+export const CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID = '001_cloud_control_plane_baseline'
+export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID = '002_cloud_control_plane_concurrent_indexes'
 export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
 
 export type CloudControlPlaneMigration = {
@@ -82,9 +83,6 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     ON cloud_artifact_index (tenant_id, user_id, session_id, updated_at DESC, artifact_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_project_idx
     ON cloud_artifact_index (tenant_id, user_id, project_id, task_id, updated_at DESC)`,
-  `CREATE INDEX IF NOT EXISTS cloud_artifact_index_task_idx
-    ON cloud_artifact_index (tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id)
-    WHERE task_id IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_index_kind_status_idx
     ON cloud_artifact_index (tenant_id, user_id, kind, status, updated_at DESC)`,
   `CREATE TABLE IF NOT EXISTS cloud_launchpad_session_summaries (
@@ -125,14 +123,6 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
   )`,
-  `ALTER TABLE cloud_workspace_events
-    ADD COLUMN IF NOT EXISTS entity_type text NOT NULL DEFAULT 'session'`,
-  `ALTER TABLE cloud_workspace_events
-    ADD COLUMN IF NOT EXISTS entity_id text NOT NULL DEFAULT ''`,
-  `ALTER TABLE cloud_workspace_events
-    ADD COLUMN IF NOT EXISTS operation text NOT NULL DEFAULT 'update'`,
-  `ALTER TABLE cloud_workspace_events
-    ADD COLUMN IF NOT EXISTS projection_version integer NOT NULL DEFAULT 0`,
   `CREATE INDEX IF NOT EXISTS cloud_workspace_events_sequence_idx
     ON cloud_workspace_events (tenant_id, user_id, sequence)`,
   `CREATE TABLE IF NOT EXISTS cloud_session_projections (
@@ -169,6 +159,10 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     claimed_lease_token text,
     acked_at timestamptz,
     error text,
+    attempt_count integer NOT NULL DEFAULT 0,
+    available_at timestamptz,
+    last_error_code text,
+    last_error_summary text,
     FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_session_commands_pending_idx
@@ -215,8 +209,6 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_user_idx
     ON cloud_workflows (tenant_id, user_id, updated_at DESC)`,
-  `CREATE INDEX IF NOT EXISTS cloud_workflows_webhook_lookup_idx
-    ON cloud_workflows (workflow_id, updated_at DESC, tenant_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_due_idx
     ON cloud_workflows (status, next_run_at)`,
   `CREATE TABLE IF NOT EXISTS cloud_workflow_runs (
@@ -234,11 +226,17 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     created_at timestamptz NOT NULL,
     started_at timestamptz,
     finished_at timestamptz,
+    claimed_by text,
+    claim_token text,
+    claim_expires_at timestamptz,
+    attempt_count integer NOT NULL DEFAULT 0,
+    idempotency_key text,
+    checkpoint_version integer NOT NULL DEFAULT 0,
+    last_error_code text,
+    last_error_summary text,
     PRIMARY KEY (tenant_id, run_id),
     FOREIGN KEY (tenant_id, workflow_id) REFERENCES cloud_workflows(tenant_id, workflow_id) ON DELETE CASCADE
   )`,
-  `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_workflow_recent_idx
-    ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC, run_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_session_idx
     ON cloud_workflow_runs (tenant_id, session_id)`,
   `CREATE TABLE IF NOT EXISTS cloud_thread_tags (
@@ -295,8 +293,6 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
 ] as const
 
-export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_MIGRATION_ID = '002_org_identity_tokens_audit'
-
 export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_orgs (
     org_id text PRIMARY KEY,
@@ -307,10 +303,6 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL
   )`,
-  `INSERT INTO cloud_orgs (org_id, tenant_id, name, plan_key, status, created_at, updated_at)
-    SELECT tenant_id, tenant_id, name, NULL, 'active', created_at, created_at
-    FROM cloud_tenants
-    ON CONFLICT (tenant_id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS cloud_accounts (
     account_id text PRIMARY KEY,
     idp_subject text UNIQUE,
@@ -321,10 +313,6 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS cloud_accounts_email_idx
     ON cloud_accounts (lower(email))`,
-  `INSERT INTO cloud_accounts (account_id, idp_subject, email, display_name, created_at, updated_at)
-    SELECT DISTINCT user_id, user_id, email, NULL, created_at, created_at
-    FROM cloud_users
-    ON CONFLICT (account_id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS cloud_memberships (
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
     account_id text NOT NULL REFERENCES cloud_accounts(account_id) ON DELETE CASCADE,
@@ -332,13 +320,9 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
     status text NOT NULL,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
+    custom_role_key text,
     PRIMARY KEY (org_id, account_id)
   )`,
-  `INSERT INTO cloud_memberships (org_id, account_id, role, status, created_at, updated_at)
-    SELECT orgs.org_id, u.user_id, u.role, 'active', u.created_at, u.created_at
-    FROM cloud_users u
-    JOIN cloud_orgs orgs ON orgs.tenant_id = u.tenant_id
-    ON CONFLICT (org_id, account_id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS cloud_api_tokens (
     token_id text PRIMARY KEY,
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
@@ -370,8 +354,6 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS cloud_audit_events_org_created_idx
     ON cloud_audit_events (org_id, created_at DESC)`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_MIGRATION_ID = '003_headless_channels'
 
 export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS headless_agents (
@@ -435,20 +417,6 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL
   )`,
-  `ALTER TABLE cloud_channel_session_bindings
-    ADD COLUMN IF NOT EXISTS external_workspace_id text`,
-  `DO $$
-   BEGIN
-     IF EXISTS (
-       SELECT 1
-       FROM pg_indexes
-       WHERE schemaname = current_schema()
-         AND indexname = 'cloud_channel_session_bindings_thread_idx'
-         AND indexdef NOT LIKE '%COALESCE(external_workspace_id%'
-     ) THEN
-       DROP INDEX cloud_channel_session_bindings_thread_idx;
-     END IF;
-   END $$`,
   `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_session_bindings_thread_idx
     ON cloud_channel_session_bindings (org_id, provider, COALESCE(external_workspace_id, ''), external_chat_id, external_thread_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_channel_session_bindings_session_idx
@@ -522,8 +490,6 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     ON cloud_channel_provider_events (org_id, status, retryable, claim_expires_at, updated_at)`,
 ] as const
 
-export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_MIGRATION_ID = '004_byok_secrets'
-
 export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_byok_secrets (
     secret_id text PRIMARY KEY,
@@ -551,8 +517,6 @@ export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS = [
     ON cloud_byok_secrets (org_id, provider_id)
     WHERE status = 'active'`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_USAGE_QUOTAS_MIGRATION_ID = '005_usage_quotas_rate_limits'
 
 export const CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_usage_events (
@@ -596,8 +560,6 @@ export const CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS = [
   )`,
 ] as const
 
-export const CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_MIGRATION_ID = '006_billing_subscriptions'
-
 export const CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_subscriptions (
     org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
@@ -622,8 +584,6 @@ export const CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS = [
     WHERE provider_subscription_id IS NOT NULL`,
 ] as const
 
-export const CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_MIGRATION_ID = '007_scale_foundation'
-
 export const CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS cloud_sessions_user_cursor_idx
     ON cloud_sessions (tenant_id, user_id, updated_at DESC, session_id)`,
@@ -637,8 +597,6 @@ export const CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS cloud_worker_leases_expiry_idx
     ON cloud_worker_leases (tenant_id, session_id, lease_expires_at_ms)`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_MANAGED_WORKERS_MIGRATION_ID = '008_managed_workers'
 
 export const CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_worker_pools (
@@ -713,40 +671,12 @@ export const CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS = [
     ON cloud_managed_worker_heartbeats (org_id, received_at DESC)`,
 ] as const
 
-export const CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_MIGRATION_ID = '009_managed_work_claims'
-
 export const CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS = [
-  `ALTER TABLE cloud_session_commands
-    ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0`,
-  `ALTER TABLE cloud_session_commands
-    ADD COLUMN IF NOT EXISTS available_at timestamptz`,
-  `ALTER TABLE cloud_session_commands
-    ADD COLUMN IF NOT EXISTS last_error_code text`,
-  `ALTER TABLE cloud_session_commands
-    ADD COLUMN IF NOT EXISTS last_error_summary text`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS claimed_by text`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS claim_token text`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS claim_expires_at timestamptz`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS idempotency_key text`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS checkpoint_version integer NOT NULL DEFAULT 0`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS last_error_code text`,
-  `ALTER TABLE cloud_workflow_runs
-    ADD COLUMN IF NOT EXISTS last_error_summary text`,
   `CREATE INDEX IF NOT EXISTS cloud_session_commands_available_idx
     ON cloud_session_commands (status, available_at, tenant_id, session_id, created_sequence)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_claim_idx
     ON cloud_workflow_runs (tenant_id, status, claim_expires_at)`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_MIGRATION_ID = '010_managed_work_reaper_indexes'
 
 export const CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_worker_leases_reaper_idx
@@ -758,45 +688,11 @@ export const CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS = [
       AND status IN ('queued', 'running')`,
 ] as const
 
-export const CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_MIGRATION_ID = '011_channel_provider_events'
-
-export const CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_STATEMENTS = [
-  `CREATE TABLE IF NOT EXISTS cloud_channel_provider_events (
-    event_id text PRIMARY KEY,
-    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
-    provider text NOT NULL,
-    provider_instance_id text NOT NULL,
-    external_workspace_id text,
-    provider_event_id text NOT NULL,
-    event_type text NOT NULL,
-    status text NOT NULL,
-    claimed_by text,
-    claim_expires_at timestamptz,
-    attempt_count integer NOT NULL DEFAULT 0,
-    retryable boolean NOT NULL DEFAULT true,
-    last_error text,
-    metadata jsonb NOT NULL,
-    processed_at timestamptz,
-    created_at timestamptz NOT NULL,
-    updated_at timestamptz NOT NULL
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_provider_events_dedupe_idx
-    ON cloud_channel_provider_events (org_id, provider, provider_instance_id, COALESCE(external_workspace_id, ''), event_type, provider_event_id)`,
-  `CREATE INDEX IF NOT EXISTS cloud_channel_provider_events_claim_idx
-    ON cloud_channel_provider_events (org_id, status, retryable, claim_expires_at, updated_at)`,
-] as const
-
-export const CLOUD_CONTROL_PLANE_DELIVERY_OWNER_MIGRATION_ID = '012_channel_delivery_owner'
-
 export const CLOUD_CONTROL_PLANE_DELIVERY_OWNER_STATEMENTS = [
-  `ALTER TABLE cloud_channel_deliveries
-    ADD COLUMN IF NOT EXISTS last_claimed_by text`,
   `CREATE INDEX IF NOT EXISTS cloud_channel_deliveries_owner_idx
     ON cloud_channel_deliveries (org_id, last_claimed_by, status, updated_at DESC)
     WHERE last_claimed_by IS NOT NULL`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID = '013_api_token_channel_binding_grants'
 
 export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_api_token_channel_binding_grants (
@@ -811,8 +707,6 @@ export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_binding_idx
     ON cloud_api_token_channel_binding_grants (org_id, channel_binding_id, token_id)`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_MIGRATION_ID = '014_cloud_coordination_watches'
 
 export const CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_coordination_watches (
@@ -838,15 +732,6 @@ export const CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS cloud_coordination_watches_events_idx
     ON cloud_coordination_watches USING GIN (events jsonb_path_ops)`,
 ] as const
-
-export const CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_MIGRATION_ID = '015_cloud_workflow_steps'
-
-export const CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_STATEMENTS = [
-  `ALTER TABLE cloud_workflows
-    ADD COLUMN IF NOT EXISTS steps jsonb NOT NULL DEFAULT '[]'::jsonb`,
-] as const
-
-export const CLOUD_CONTROL_PLANE_KNOWLEDGE_MIGRATION_ID = '016_cloud_knowledge'
 
 // Cloud-backed knowledge wiki. Mirrors the desktop SQLite schema
 // (knowledge_spaces / knowledge_pages / knowledge_page_versions /
@@ -936,12 +821,11 @@ export const CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS = [
 ] as const
 
 // Maintained concurrency gauges. The per-org count of *active* rows for each
-// concurrency quota (workflow runs, sessions, queued commands, worker leases) is
+// concurrency quota (workflow runs, sessions, and queued commands) is
 // kept in cloud_concurrency_counters by AFTER-row triggers, so the quota hot path
 // reads an O(1) primary-key row instead of running a COUNT(*) on every
 // enqueue/claim/create. The trigger fires for EVERY row change regardless of code
-// path, so the gauge can't drift; a migration-time backfill seeds it from the
-// current COUNT. (Built one gauge per migration — this one covers workflow runs.)
+// path, so the gauge stays current from the first write on a clean database.
 //
 // KNOWN CEILING (#912): the counter is one row per (scope_id=org, counter_key), so all
 // concurrent transactions that change an org's active count serialize on that row's lock
@@ -952,7 +836,6 @@ export const CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS = [
 // org approaches it, shard the row into (scope_id, counter_key, bucket) with the bucket
 // chosen by hash(session_id/run_id) % N and SUM the buckets on read — the read stays O(N
 // buckets). See docs/performance.md ("What's NOT optimized (yet)") for the threshold guidance.
-export const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID = '017_cloud_concurrency_counters'
 const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_concurrency_counters (
     scope_id text NOT NULL,
@@ -974,28 +857,19 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS = [
       tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
       scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
       INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
-        VALUES (scope, 'concurrent_workflow_runs', GREATEST(0, new_active - old_active), now())
+        VALUES (scope, 'concurrent_workflow_runs', new_active - old_active, now())
         ON CONFLICT (scope_id, counter_key) DO UPDATE
-          SET value = GREATEST(0, cloud_concurrency_counters.value + (new_active - old_active)), updated_at = now();
+          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
       RETURN NULL;
     END;
     $func$ LANGUAGE plpgsql`,
-  `DROP TRIGGER IF EXISTS cloud_workflow_runs_concurrency_counter ON cloud_workflow_runs`,
-  `CREATE TRIGGER cloud_workflow_runs_concurrency_counter
+  `CREATE OR REPLACE TRIGGER cloud_workflow_runs_concurrency_counter
     AFTER INSERT OR UPDATE OR DELETE ON cloud_workflow_runs
     FOR EACH ROW EXECUTE FUNCTION cloud_workflow_run_concurrency_counter()`,
-  `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value)
-    SELECT COALESCE(orgs.org_id, runs.tenant_id), 'concurrent_workflow_runs', count(*)
-    FROM cloud_workflow_runs runs
-    LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = runs.tenant_id
-    WHERE runs.status IN ('queued', 'running')
-    GROUP BY COALESCE(orgs.org_id, runs.tenant_id)
-    ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
 // Concurrent-sessions gauge (active = status <> 'closed'), same drift-free
 // trigger pattern as workflow runs.
-export const CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_MIGRATION_ID = '018_concurrency_counter_sessions'
 const CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS = [
   `CREATE OR REPLACE FUNCTION cloud_session_concurrency_counter() RETURNS trigger AS $func$
     DECLARE
@@ -1010,29 +884,20 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS = [
       tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
       scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
       INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
-        VALUES (scope, 'concurrent_sessions', GREATEST(0, new_active - old_active), now())
+        VALUES (scope, 'concurrent_sessions', new_active - old_active, now())
         ON CONFLICT (scope_id, counter_key) DO UPDATE
-          SET value = GREATEST(0, cloud_concurrency_counters.value + (new_active - old_active)), updated_at = now();
+          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
       RETURN NULL;
     END;
     $func$ LANGUAGE plpgsql`,
-  `DROP TRIGGER IF EXISTS cloud_sessions_concurrency_counter ON cloud_sessions`,
-  `CREATE TRIGGER cloud_sessions_concurrency_counter
+  `CREATE OR REPLACE TRIGGER cloud_sessions_concurrency_counter
     AFTER INSERT OR UPDATE OR DELETE ON cloud_sessions
     FOR EACH ROW EXECUTE FUNCTION cloud_session_concurrency_counter()`,
-  `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value)
-    SELECT COALESCE(orgs.org_id, sessions.tenant_id), 'concurrent_sessions', count(*)
-    FROM cloud_sessions sessions
-    LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = sessions.tenant_id
-    WHERE sessions.status <> 'closed'
-    GROUP BY COALESCE(orgs.org_id, sessions.tenant_id)
-    ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
 // Queued-commands gauge (active = status IN ('pending','running')), same
 // drift-free trigger pattern. The queue-AGE limit still needs min(created_at),
 // so the quota keeps a bounded age scan only when that limit is configured.
-export const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_MIGRATION_ID = '019_concurrency_counter_commands'
 const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
   `CREATE OR REPLACE FUNCTION cloud_command_concurrency_counter() RETURNS trigger AS $func$
     DECLARE
@@ -1047,33 +912,20 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS = [
       tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
       scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
       INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
-        VALUES (scope, 'queued_commands', GREATEST(0, new_active - old_active), now())
+        VALUES (scope, 'queued_commands', new_active - old_active, now())
         ON CONFLICT (scope_id, counter_key) DO UPDATE
-          SET value = GREATEST(0, cloud_concurrency_counters.value + (new_active - old_active)), updated_at = now();
+          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
       RETURN NULL;
     END;
     $func$ LANGUAGE plpgsql`,
-  `DROP TRIGGER IF EXISTS cloud_session_commands_concurrency_counter ON cloud_session_commands`,
-  `CREATE TRIGGER cloud_session_commands_concurrency_counter
+  `CREATE OR REPLACE TRIGGER cloud_session_commands_concurrency_counter
     AFTER INSERT OR UPDATE OR DELETE ON cloud_session_commands
     FOR EACH ROW EXECUTE FUNCTION cloud_command_concurrency_counter()`,
-  `INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value)
-    SELECT COALESCE(orgs.org_id, commands.tenant_id), 'queued_commands', count(*)
-    FROM cloud_session_commands commands
-    LEFT JOIN cloud_orgs orgs ON orgs.tenant_id = commands.tenant_id
-    WHERE commands.status IN ('pending', 'running')
-    GROUP BY COALESCE(orgs.org_id, commands.tenant_id)
-    ON CONFLICT (scope_id, counter_key) DO UPDATE SET value = EXCLUDED.value`,
 ] as const
 
-// Concurrency-gauge correctness (P2-7). The original triggers clamped the in-place write with
-// GREATEST(0, value + delta), which permanently LOST any decrement that momentarily took the value
-// below zero — so a later increment built on the wrongly-elevated floor and the gauge drifted high
-// forever, falsely rejecting legitimate work. The fix keeps the counter as a true running delta-sum
-// (allowed to sit transiently negative) and clamps GREATEST(0, value) on READ instead; combined
-// with the always-firing AFTER-row trigger this is drift-free for all post-migration activity. The
-// `reconcile` statements recompute every counter from its source table (resetting idle scopes to 0)
-// to wipe drift accumulated under the old clamp on deploy, and are reused by the periodic reconcile.
+// The counter stores a true running delta-sum (which may be transiently negative)
+// and callers clamp it on read. The optional reconcile operation below is an
+// operational integrity check, not a schema-upgrade backfill.
 //
 // COST (#924): each statement is a full, status-filtered GROUP BY scan of its source table — no
 // index serves it. That is cheap at deploy time (one-off) but EXPENSIVE if the optional periodic
@@ -1103,73 +955,11 @@ function concurrencyReconcileStatements(counterKey: string, sourceTable: string,
   ] as const
 }
 
-// Reused by migration 024's one-time correction AND the scheduler's periodic reconcile job.
+// Reused by the scheduler's optional periodic reconcile job.
 export const CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS = [
   ...concurrencyReconcileStatements('concurrent_workflow_runs', 'cloud_workflow_runs', `s.status IN ('queued', 'running')`),
   ...concurrencyReconcileStatements('concurrent_sessions', 'cloud_sessions', `s.status <> 'closed'`),
   ...concurrencyReconcileStatements('queued_commands', 'cloud_session_commands', `s.status IN ('pending', 'running')`),
-] as const
-
-export const CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_MIGRATION_ID = '024_concurrency_counter_clamp_on_read'
-const CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_STATEMENTS = [
-  `CREATE OR REPLACE FUNCTION cloud_workflow_run_concurrency_counter() RETURNS trigger AS $func$
-    DECLARE
-      old_active int := 0;
-      new_active int := 0;
-      tid text;
-      scope text;
-    BEGIN
-      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status IN ('queued', 'running') THEN old_active := 1; END IF;
-      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status IN ('queued', 'running') THEN new_active := 1; END IF;
-      IF old_active = new_active THEN RETURN NULL; END IF;
-      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
-      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
-      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
-        VALUES (scope, 'concurrent_workflow_runs', new_active - old_active, now())
-        ON CONFLICT (scope_id, counter_key) DO UPDATE
-          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
-      RETURN NULL;
-    END;
-    $func$ LANGUAGE plpgsql`,
-  `CREATE OR REPLACE FUNCTION cloud_session_concurrency_counter() RETURNS trigger AS $func$
-    DECLARE
-      old_active int := 0;
-      new_active int := 0;
-      tid text;
-      scope text;
-    BEGIN
-      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status <> 'closed' THEN old_active := 1; END IF;
-      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status <> 'closed' THEN new_active := 1; END IF;
-      IF old_active = new_active THEN RETURN NULL; END IF;
-      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
-      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
-      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
-        VALUES (scope, 'concurrent_sessions', new_active - old_active, now())
-        ON CONFLICT (scope_id, counter_key) DO UPDATE
-          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
-      RETURN NULL;
-    END;
-    $func$ LANGUAGE plpgsql`,
-  `CREATE OR REPLACE FUNCTION cloud_command_concurrency_counter() RETURNS trigger AS $func$
-    DECLARE
-      old_active int := 0;
-      new_active int := 0;
-      tid text;
-      scope text;
-    BEGIN
-      IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') AND OLD.status IN ('pending', 'running') THEN old_active := 1; END IF;
-      IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') AND NEW.status IN ('pending', 'running') THEN new_active := 1; END IF;
-      IF old_active = new_active THEN RETURN NULL; END IF;
-      tid := COALESCE(NEW.tenant_id, OLD.tenant_id);
-      scope := COALESCE((SELECT org_id FROM cloud_orgs WHERE tenant_id = tid LIMIT 1), tid);
-      INSERT INTO cloud_concurrency_counters (scope_id, counter_key, value, updated_at)
-        VALUES (scope, 'queued_commands', new_active - old_active, now())
-        ON CONFLICT (scope_id, counter_key) DO UPDATE
-          SET value = cloud_concurrency_counters.value + (new_active - old_active), updated_at = now();
-      RETURN NULL;
-    END;
-    $func$ LANGUAGE plpgsql`,
-  ...CLOUD_CONTROL_PLANE_CONCURRENCY_RECONCILE_STATEMENTS,
 ] as const
 
 // findSession resolves a session globally by either id (session_id OR
@@ -1178,7 +968,6 @@ const CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_STATEMENTS = [
 // cloud_sessions. Index both lookup columns so the OR-query can BitmapOr two
 // index seeks instead. Built CONCURRENTLY (non-transactional) so adding them to
 // a populated table never holds a write lock.
-export const CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID = '020_session_lookup_indexes'
 const CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_sessions_session_id_idx
     ON cloud_sessions (session_id)`,
@@ -1191,7 +980,6 @@ const CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS = [
 // existing partial reaper index), the channel retention sweeps (status/expires_at), the
 // per-webhook replay-cache trim (seen_at_ms), and account→orgs principal resolution
 // (account_id, not the PK lead). Built CONCURRENTLY so they never lock a populated table.
-export const CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID = '021_performance_indexes'
 const CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflow_runs_due_idx
     ON cloud_workflow_runs (created_at, run_id)
@@ -1210,7 +998,6 @@ const CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS = [
 // Age-leading indexes for the opt-in event-retention sweep (P1-C3). The existing event indexes all
 // lead with tenant/org, so a global "created_at < cutoff" bounded delete would seq-scan; these let
 // the retention prune find the oldest rows cheaply without disturbing the read-path indexes.
-export const CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_MIGRATION_ID = '022_event_retention_indexes'
 const CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_session_events_created_idx
     ON cloud_session_events (created_at)`,
@@ -1223,7 +1010,6 @@ const CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS = [
 // P1-B: created_at index so the cloud_workspace_events retention prune (the twin of the P1-C3
 // session-event prune, previously missed) doesn't seq-scan. P2: a partial (org_id, expires_at)
 // index so the channel-interaction token lookup's pending scan is bounded to one org's pending set.
-export const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_MIGRATION_ID = '025_workspace_event_retention_and_interaction_index'
 const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workspace_events_created_idx
     ON cloud_workspace_events (created_at)`,
@@ -1234,7 +1020,6 @@ const CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS = [
 // Org custom roles (named permission maps) + the membership pointer that assigns
 // one to a member. Built-in roles keep working: custom_role_key is nullable and
 // only overrides the effective permission set when set. RBAC foundation (#894).
-export const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID = '026_org_custom_roles'
 const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_custom_roles (
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
@@ -1247,14 +1032,12 @@ const CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS = [
     updated_at timestamptz NOT NULL,
     PRIMARY KEY (org_id, role_key)
   )`,
-  `ALTER TABLE cloud_memberships ADD COLUMN IF NOT EXISTS custom_role_key text`,
 ] as const
 
 // Org-managed workspace & desktop policy (#898): one policy record per org that clamps
 // permission maxima, allow/deny-lists providers/models, gates extension classes, pins
 // the update channel, and sets the key-management requirement. Nullable allow-lists are
 // SQL NULL (unrestricted); deny-lists default to an empty jsonb array.
-export const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_MIGRATION_ID = '027_managed_policies'
 const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_managed_policies (
     org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
@@ -1277,7 +1060,6 @@ const CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS = [
 // SCIM sync-event queue with retry/backoff. IdP secrets (SAML cert, OIDC client secret)
 // and the SCIM bearer token are stored ONLY as `enc:vN:` envelope ciphertext / salted
 // hash — never plaintext (the *_ciphertext / *_hash columns).
-export const CLOUD_CONTROL_PLANE_SSO_SCIM_MIGRATION_ID = '028_org_sso_scim'
 const CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_org_sso_configs (
     org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
@@ -1323,14 +1105,12 @@ const CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS = [
 // Serves the scheduler's projection-lag gauge, which previously full-scanned cloud_sessions +
 // LEFT JOINed projections on every emission. A partial index on updated_at over only the sessions
 // that carry events lets the bounded (recent-window) lag query touch just the active tail (#911).
-export const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_MIGRATION_ID = '029_projection_lag_index'
 const CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_sessions_projection_lag_idx
     ON cloud_sessions (updated_at)
     WHERE next_event_sequence > 0`,
 ] as const
 
-const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID = '030_artifact_upload_reservations'
 const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_artifact_upload_reservations (
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
@@ -1359,192 +1139,102 @@ const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
     WHERE status = 'reserved'`,
 ] as const
 
-const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID = '031_launchpad_empty_summary_purge'
-const CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS = [
-  `DELETE FROM cloud_launchpad_session_summaries
-    WHERE pending_approvals = '[]'::jsonb
-      AND pending_questions = '[]'::jsonb`,
-] as const
-
-const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID = '032_artifact_task_index'
 const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_artifact_index_task_idx
     ON cloud_artifact_index (tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id)
     WHERE task_id IS NOT NULL`,
 ] as const
 
-const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID = '033_workflow_run_recent_index'
 const CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflow_runs_workflow_recent_idx
     ON cloud_workflow_runs (tenant_id, workflow_id, created_at DESC, run_id)`,
-  `DROP INDEX CONCURRENTLY IF EXISTS cloud_workflow_runs_workflow_idx`,
 ] as const
 
-const CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID = '034_workflow_webhook_lookup_index'
 const CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS = [
   `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflows_webhook_lookup_idx
     ON cloud_workflows (workflow_id, updated_at DESC, tenant_id)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_BASELINE_STATEMENTS = [
+  ...CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_DELIVERY_OWNER_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS,
+] as const
+
+// The runtime validates the physical schema independently from the migration
+// ledger. Keep this list derived from the clean baseline so a newly added
+// production table cannot be omitted from the integrity check by accident.
+export const CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES = Object.freeze(
+  Array.from(new Set(
+    CLOUD_CONTROL_PLANE_BASELINE_STATEMENTS.flatMap((statement) => (
+      Array.from(statement.matchAll(/\bCREATE TABLE IF NOT EXISTS\s+([a-z][a-z0-9_]*)\b/g), (match) => match[1]!)
+    )),
+  )).filter((name) => name !== 'cloud_schema_migrations'),
+)
+
+export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_STATEMENTS = [
+  ...CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS,
+] as const
+
+export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES = [
+  'cloud_worker_leases_reaper_idx',
+  'cloud_workflow_runs_reaper_idx',
+  'cloud_sessions_session_id_idx',
+  'cloud_sessions_opencode_session_idx',
+  'cloud_workflow_runs_due_idx',
+  'cloud_channel_deliveries_retention_idx',
+  'cloud_channel_interactions_expiry_idx',
+  'cloud_webhook_replay_claims_seen_idx',
+  'cloud_memberships_account_idx',
+  'cloud_session_events_created_idx',
+  'cloud_audit_events_created_idx',
+  'cloud_usage_events_created_idx',
+  'cloud_workspace_events_created_idx',
+  'cloud_channel_interactions_pending_idx',
+  'cloud_sessions_projection_lag_idx',
+  'cloud_artifact_index_task_idx',
+  'cloud_workflow_runs_workflow_recent_idx',
+  'cloud_workflows_webhook_lookup_idx',
+] as const
+
+// This pre-release project starts from one clean schema baseline. Concurrent
+// indexes stay in a second phase because PostgreSQL forbids CREATE INDEX
+// CONCURRENTLY inside a transaction; this is an execution boundary, not
+// historical upgrade compatibility.
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
-    id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS,
+    id: CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_BASELINE_STATEMENTS,
   },
   {
-    id: CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_BYOK_SECRETS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_USAGE_QUOTAS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_MANAGED_WORKERS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS,
-    concurrentIndexes: ['cloud_worker_leases_reaper_idx', 'cloud_workflow_runs_reaper_idx'],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_DELIVERY_OWNER_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_DELIVERY_OWNER_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_KNOWLEDGE_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_COUNTERS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_SESSIONS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_COMMANDS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_STATEMENTS,
-    concurrentIndexes: ['cloud_sessions_session_id_idx', 'cloud_sessions_opencode_session_idx'],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_STATEMENTS,
-    concurrentIndexes: [
-      'cloud_workflow_runs_due_idx',
-      'cloud_channel_deliveries_retention_idx',
-      'cloud_channel_interactions_expiry_idx',
-      'cloud_webhook_replay_claims_seen_idx',
-      'cloud_memberships_account_idx',
-    ],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_EVENT_RETENTION_INDEXES_STATEMENTS,
-    concurrentIndexes: [
-      'cloud_session_events_created_idx',
-      'cloud_audit_events_created_idx',
-      'cloud_usage_events_created_idx',
-    ],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_CONCURRENCY_CLAMP_ON_READ_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_WORKSPACE_EVENT_RETENTION_STATEMENTS,
-    concurrentIndexes: ['cloud_workspace_events_created_idx', 'cloud_channel_interactions_pending_idx'],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_ORG_CUSTOM_ROLES_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_MANAGED_POLICIES_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_MANAGED_POLICIES_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_SSO_SCIM_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_SSO_SCIM_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_PROJECTION_LAG_INDEX_STATEMENTS,
-    concurrentIndexes: ['cloud_sessions_projection_lag_idx'],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_LAUNCHPAD_EMPTY_SUMMARY_PURGE_STATEMENTS,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS,
-    concurrentIndexes: ['cloud_artifact_index_task_idx'],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_STATEMENTS,
-    concurrentIndexes: ['cloud_workflow_runs_workflow_recent_idx'],
-    transactional: false,
-  },
-  {
-    id: CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID,
-    statements: CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_STATEMENTS,
-    concurrentIndexes: ['cloud_workflows_webhook_lookup_idx'],
+    id: CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_STATEMENTS,
+    concurrentIndexes: CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
     transactional: false,
   },
 ] as const

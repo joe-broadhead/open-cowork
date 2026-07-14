@@ -204,6 +204,51 @@ test('evaluateBuiltInMcp — local MCP missing required credentials is skipped a
   })
 })
 
+test('evaluateBuiltInMcp — Gateway operate tier fails closed until an operator token file is configured', () => {
+  withConfigDir(baseConfig({}), () => {
+    const mcp: BundleMcp = {
+      name: 'opencode-gateway',
+      type: 'local',
+      description: 'Gateway operate tier',
+      authMode: 'api_token',
+      command: ['node', '/tmp/opencode-gateway.js', 'mcp', '--tools', 'operate'],
+      credentials: [
+        {
+          key: 'operatorTokenFile',
+          label: 'Gateway operator token file',
+          description: 'Owner-only operator token file.',
+          required: true,
+        },
+      ],
+      envSettings: [
+        { env: 'OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE', key: 'operatorTokenFile' },
+      ],
+    }
+
+    assert.deepEqual(evaluateBuiltInMcp(mcp, BASE_SETTINGS), {
+      status: 'skipped',
+      reason: 'not-configured',
+    })
+
+    const result = evaluateBuiltInMcp(mcp, {
+      ...BASE_SETTINGS,
+      integrationCredentials: {
+        'opencode-gateway': {
+          operatorTokenFile: '/secure/opencode-gateway/operator-token',
+        },
+      },
+    })
+    assert.equal(result.status, 'ready')
+    if (result.status !== 'ready') return
+    assert.equal(result.entry.type, 'local')
+    if (result.entry.type !== 'local') return
+    assert.deepEqual(result.entry.environment, {
+      OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE: '/secure/opencode-gateway/operator-token',
+    })
+    assert.equal('OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE' in (result.entry.environment || {}), false)
+  })
+})
+
 test('evaluateBuiltInMcp — required conditional credentials only apply when their when clause matches', () => {
   withConfigDir(baseConfig({}), () => {
     const mcp: BundleMcp = {

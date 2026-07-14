@@ -151,7 +151,7 @@ const args = parseArgs(process.argv.slice(2))
 const startedMs = Date.now()
 const startedAt = new Date().toISOString()
 const preflight = [
-  await probe('cloud-health-before', args.cloudUrl, args.cloudToken, '/healthz', args.redacted, args.dryRun),
+  await probe('cloud-liveness-before', args.cloudUrl, args.cloudToken, '/livez', args.redacted, args.dryRun),
   await probe('gateway-ready-before', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted, args.dryRun),
 ]
 const hooks = [
@@ -160,7 +160,7 @@ const hooks = [
   runHook('gateway-failover-hook', args.gatewayHook, args.executeHooks, args.dryRun),
 ]
 const postflight = [
-  await probe('cloud-health-after', args.cloudUrl, args.cloudToken, '/healthz', args.redacted, args.dryRun),
+  await probe('cloud-liveness-after', args.cloudUrl, args.cloudToken, '/livez', args.redacted, args.dryRun),
   await probe('cloud-metrics-after', args.cloudUrl, args.cloudToken, '/api/metrics', args.redacted, args.dryRun),
   await probe('gateway-ready-after', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted, args.dryRun),
   await probe('gateway-metrics-after', args.gatewayUrl, args.gatewayAdminToken, '/metrics', args.redacted, args.dryRun),

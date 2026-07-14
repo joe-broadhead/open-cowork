@@ -56,17 +56,6 @@ type RuntimeConfigBuildDiagnostic = {
   message: string
 }
 
-type OpenCodeSkillsConfigWithCustomDiscovery = NonNullable<Config['skills']> & {
-  customSkills?: boolean
-}
-
-function setNativeCustomSkillDiscovery(config: Config, enabled: boolean) {
-  config.skills = {
-    ...(config.skills || {}),
-    customSkills: enabled,
-  } as OpenCodeSkillsConfigWithCustomDiscovery
-}
-
 function emitRuntimeConfigBuildDiagnostics(diagnostics: readonly RuntimeConfigBuildDiagnostic[]) {
   for (const diagnostic of diagnostics) {
     log(diagnostic.scope, diagnostic.message)
@@ -459,7 +448,6 @@ function buildRuntimeConfigWithCustomMcpsResult(
   // registration, delegation-agent descriptors, and permission patterns alike.
   const scopedCustomMcps = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customMcps') ? customMcps : []
   const allowCustomSkills = isManagedPolicyExtensionClassEnabled(managedPolicy, 'customSkills')
-  setNativeCustomSkillDiscovery(config, false)
   if (!allowCustomSkills) {
     diagnostics.push({ scope: 'runtime', message: 'Skipping custom skill discovery because managed policy disables customSkills.' })
   }

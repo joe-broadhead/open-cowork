@@ -1,21 +1,28 @@
 import { ensureWorkflowToolBridge, getWorkflowToolBridgeEnvironment, stopWorkflowToolBridge } from '@open-cowork/runtime-host/workflow/workflow-tool-bridge'
 import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
-import { clearWorkflowStoreCache, createWorkflow, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { attachWorkflowRunSession, clearWorkflowStoreCache, createWorkflow, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { setRuntimeReady } from '@open-cowork/runtime-host/runtime-status'
 import { runtimeState } from '@open-cowork/runtime-host/runtime-state'
 import { configureWorkflowWebhookServer, ensureWorkflowWebhookServer, getWorkflowWebhookBaseUrl, isWorkflowWebhookLoopbackBindAddress, InMemoryWorkflowWebhookSecurityStore, resetWorkflowWebhookSecurityStateForTests, signWorkflowWebhookPayload, stopWorkflowWebhookServer, claimWorkflowWebhookSignatureOnce, verifyWorkflowWebhookAuth } from '@open-cowork/shared/node'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import type { BrowserWindow } from 'electron'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import {
   configureWorkflowService,
+  handleWorkflowSessionError,
+  handleWorkflowSessionNeedsAttention,
+  isWorkflowNotificationQuietTime,
   runWorkflowSchedulerTick,
   startWorkflowService,
   stopWorkflowService,
 } from '../apps/desktop/src/main/workflow/workflow-service.ts'
+import { handleRuntimeSideEffectEvent } from '../apps/desktop/src/main/event-runtime-handlers.ts'
+import { registerSession, resetEventTaskState, trackParentSession } from '../apps/desktop/src/main/event-task-state.ts'
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-runtime-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 }
@@ -27,6 +34,7 @@ async function withWorkflowRuntimeStore(name: string, run: (userDataDir: string)
     process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
     clearConfigCaches()
     clearWorkflowStoreCache()
+    clearSessionRegistryCache()
     await run(userDataDir)
   } finally {
     stopWorkflowService()
@@ -34,6 +42,8 @@ async function withWorkflowRuntimeStore(name: string, run: (userDataDir: string)
     stopWorkflowToolBridge()
     runtimeState.resetRuntimeSessionState()
     setRuntimeReady(false)
+    resetEventTaskState()
+    clearSessionRegistryCache()
     clearWorkflowStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -106,10 +116,54 @@ test('workflow service startup recovers interrupted runs before scheduling new w
   })
 })
 
+test('a delegated child-session error does not prematurely fail its workflow run', async () => {
+  await withWorkflowRuntimeStore('child-session-error', async (userDataDir) => {
+    const workflow = createWorkflow(manualWorkflowDraft)
+    const run = createWorkflowRun(workflow.id, 'manual', { source: 'test' })
+    assert.ok(run)
+    attachWorkflowRunSession(workflow.id, run.id, 'root-session')
+    upsertSessionRecord(toSessionRecord({
+      id: 'root-session',
+      title: 'Workflow run',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      kind: 'workflow_run',
+      workflowId: workflow.id,
+      runId: run.id,
+    }))
+
+    trackParentSession('root-session')
+    registerSession('child-session', 'root-session')
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        isDestroyed: () => false,
+        send: () => undefined,
+      },
+    } as unknown as BrowserWindow
+
+    handleRuntimeSideEffectEvent({
+      win,
+      type: 'session.error',
+      properties: {
+        sessionID: 'child-session',
+        error: { message: 'Delegated analysis failed' },
+      },
+      dispatchRuntimeEvent: () => undefined,
+      getMainWindow: () => win,
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(getWorkflow(workflow.id)?.latestRunStatus, 'running')
+  })
+})
+
 test('workflow scheduler coalesces overlapping ticks', async () => {
   await withWorkflowRuntimeStore('scheduler-overlap', async () => {
     configureWorkflowService({ getMainWindow: () => null })
     const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
+    setRuntimeReady(true)
 
     await Promise.all([
       runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z')),
@@ -122,6 +176,88 @@ test('workflow scheduler coalesces overlapping ticks', async () => {
   })
 })
 
+test('workflow scheduler leaves due work unclaimed until the runtime is ready', async () => {
+  await withWorkflowRuntimeStore('scheduler-runtime-gate', async () => {
+    configureWorkflowService({ getMainWindow: () => null })
+    const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
+
+    await runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z'))
+    assert.equal(getWorkflow(workflow.id)?.runs.length, 0)
+    assert.equal(getWorkflow(workflow.id)?.status, 'active')
+
+    setRuntimeReady(true)
+    await runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z'))
+    assert.equal(getWorkflow(workflow.id)?.runs.length, 1)
+  })
+})
+
+test('workflow notifications honor quiet hours and cover background run attention and failure', async () => {
+  assert.equal(isWorkflowNotificationQuietTime('22:00', '07:00', new Date(2026, 0, 1, 23, 0)), true)
+  assert.equal(isWorkflowNotificationQuietTime('22:00', '07:00', new Date(2026, 0, 1, 12, 0)), false)
+  assert.equal(isWorkflowNotificationQuietTime('09:00', '17:00', new Date(2026, 0, 1, 12, 0)), true)
+
+  await withWorkflowRuntimeStore('desktop-notifications', async (userDataDir) => {
+    const notifications: Array<{ title: string; body: string }> = []
+    configureWorkflowService({
+      getMainWindow: () => null,
+      showDesktopNotification: (notification) => notifications.push(notification),
+      notificationNow: () => new Date(2026, 0, 1, 12, 0),
+    })
+    const workflow = createWorkflow(dueScheduledWorkflowDraft)
+    const run = createWorkflowRun(workflow.id, 'schedule', { source: 'test' })
+    assert.ok(run)
+    attachWorkflowRunSession(workflow.id, run.id, 'scheduled-session')
+    upsertSessionRecord(toSessionRecord({
+      id: 'scheduled-session',
+      title: 'Scheduled workflow run',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      kind: 'workflow_run',
+      workflowId: workflow.id,
+      runId: run.id,
+    }))
+
+    handleWorkflowSessionNeedsAttention('scheduled-session')
+    await handleWorkflowSessionError('scheduled-session', 'Provider failed')
+
+    assert.deepEqual(notifications, [
+      {
+        title: workflow.title,
+        body: 'Scheduled playbook needs your attention.',
+      },
+      {
+        title: workflow.title,
+        body: 'Scheduled playbook failed. Open the app for details.',
+      },
+    ])
+
+    configureWorkflowService({
+      getMainWindow: () => null,
+      showDesktopNotification: () => {
+        throw new Error('Notifications unavailable')
+      },
+      notificationNow: () => new Date(2026, 0, 1, 12, 0),
+    })
+    const secondRun = createWorkflowRun(workflow.id, 'schedule', { source: 'test' })
+    assert.ok(secondRun)
+    attachWorkflowRunSession(workflow.id, secondRun.id, 'second-scheduled-session')
+    upsertSessionRecord(toSessionRecord({
+      id: 'second-scheduled-session',
+      title: 'Second scheduled workflow run',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      kind: 'workflow_run',
+      workflowId: workflow.id,
+      runId: secondRun.id,
+    }))
+
+    await assert.doesNotReject(handleWorkflowSessionError('second-scheduled-session', 'Provider failed again'))
+    assert.equal(getWorkflow(workflow.id)?.latestRunStatus, 'failed')
+  })
+})
+
 test('workflow run completion reconciles through session status when idle event is missed', async () => {
   await withWorkflowRuntimeStore('status-reconcile', async () => {
     const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
@@ -129,30 +265,48 @@ test('workflow run completion reconciles through session status when idle event 
     const prompts: unknown[] = []
     let statusCalls = 0
     runtimeState.setClient({
-      session: {
-        create: async () => ({
-          data: {
-            id: sessionId,
-            title: 'Workflow session',
-            time: { created: 1_700_000_000, updated: 1_700_000_001 },
+      v2: {
+        session: {
+          create: async () => ({
+            data: {
+              data: {
+                id: sessionId,
+                title: 'Workflow session',
+                agent: 'build',
+                time: { created: 1_700_000_000, updated: 1_700_000_001 },
+              },
+            },
+          }),
+          get: async () => ({
+            data: {
+              data: {
+                id: sessionId,
+                title: 'Workflow session',
+                agent: 'build',
+                time: { created: 1_700_000_000, updated: 1_700_000_001 },
+              },
+            },
+          }),
+          prompt: async (input: unknown) => {
+            prompts.push(input)
+            return { data: { data: {} } }
           },
-        }),
-        promptAsync: async (input: unknown) => {
-          prompts.push(input)
-          return { data: {} }
+          messages: async () => ({
+            data: {
+              data: [{
+                id: 'msg_done',
+                role: 'assistant',
+                time: { created: 1_700_000_002 },
+                parts: [{ type: 'text', text: 'Workflow finished through status reconciliation.' }],
+              }],
+              cursor: {},
+            },
+          }),
+          active: async () => {
+            statusCalls += 1
+            return { data: { data: {} } }
+          },
         },
-        status: async () => {
-          statusCalls += 1
-          return { data: { [sessionId]: { type: 'idle' } } }
-        },
-        messages: async () => ({
-          data: [{
-            id: 'msg_done',
-            role: 'assistant',
-            time: { created: 1_700_000_002 },
-            parts: [{ type: 'text', text: 'Workflow finished through status reconciliation.' }],
-          }],
-        }),
       },
     } as never)
     setRuntimeReady(true)

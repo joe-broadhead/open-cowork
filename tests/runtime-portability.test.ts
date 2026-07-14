@@ -3,19 +3,21 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 
 import {
-  buildPortableRuntimeManifest,
   checkSandboxRuntimeEngine,
   createSandboxRuntimeLaunchPlan,
-  isRuntimeSnapshotSecretBearingPath,
   planSandboxPolicy,
   readSandboxRuntimeStatus,
   SANDBOX_COMPONENT_MANIFEST_FORMAT,
-  runtimePathsForPortability,
   runSandboxRuntimeOneShot,
   runSandboxRuntimeSmoke,
   startSandboxRuntime,
   stopSandboxRuntime,
 } from '@open-cowork/cloud-server/runtime-portability'
+import {
+  buildPortableRuntimeManifest,
+  isRuntimeSnapshotSecretBearingPath,
+  runtimePathsForPortability,
+} from '@open-cowork/cloud-server/runtime-snapshot-portability'
 
 type RuntimePortabilityInput = Parameters<typeof createSandboxRuntimeLaunchPlan>[0]
 

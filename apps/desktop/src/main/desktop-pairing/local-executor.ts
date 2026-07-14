@@ -4,7 +4,7 @@ import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 import { getSessionRecord, listSessionRecords, toRendererSession, toSessionRecord, touchSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { getClientForDirectory } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
-import { normalizeSessionInfo } from '@open-cowork/runtime-host'
+import { createNativeSession, interruptNativeSession, normalizeSessionInfo, promptNativeSession } from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
@@ -71,8 +71,9 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
       const client = getClientForDirectory(opencodeDirectory)
       if (!client) throw new Error('Runtime not started')
       const settings = getEffectiveSettings()
-      const result = await client.session.create({}, { throwOnError: true })
-      const session = normalizeSessionInfo(result.data)
+      const session = normalizeSessionInfo(await createNativeSession(client, {
+        location: { directory: opencodeDirectory },
+      }))
       if (!session) throw new Error('Runtime returned an invalid session payload')
       trackParentSession(session.id)
       const record = upsertSessionRecord(
@@ -115,13 +116,12 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
       if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
       trackParentSession(input.sessionId)
       touchSessionRecord(input.sessionId)
-      await client.session.promptAsync({
+      await promptNativeSession(client, {
         sessionID: input.sessionId,
         parts: promptParts(text, attachments),
-        ...(model ? { model } : {}),
-        ...(options.variant ? { variant: options.variant } : {}),
+        model: model ? { ...model, variant: options.variant || undefined } : null,
         agent,
-      }, { throwOnError: true })
+      })
       startSessionStatusReconciliation(input.sessionId, {
         getMainWindow: context.getMainWindow,
         onIdle: (_win, sessionId) => context.reconcileIdleSession(sessionId),
@@ -135,12 +135,13 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
     async abort(sessionId) {
       const { client } = await context.getSessionClient(sessionId)
       stopSessionStatusReconciliation(sessionId)
-      await client.session.abort({ sessionID: sessionId })
+      await interruptNativeSession(client, sessionId)
     },
 
     async respondPermission(input) {
       const { client } = await context.getSessionV2Client(input.sessionId)
-      await client.permission.reply({
+      await client.v2.session.permission.reply({
+        sessionID: input.sessionId,
         requestID: input.permissionId,
         reply: input.allowed ? 'once' : 'reject',
       }, { throwOnError: true })
@@ -148,15 +149,17 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
 
     async replyQuestion(input) {
       const { client } = await context.getSessionV2Client(input.sessionId)
-      await client.question.reply({
+      await client.v2.session.question.reply({
+        sessionID: input.sessionId,
         requestID: input.requestId,
-        answers: input.answers,
+        questionV2Reply: { answers: input.answers as string[][] },
       }, { throwOnError: true })
     },
 
     async rejectQuestion(input) {
       const { client } = await context.getSessionV2Client(input.sessionId)
-      await client.question.reject({
+      await client.v2.session.question.reject({
+        sessionID: input.sessionId,
         requestID: input.requestId,
       }, { throwOnError: true })
     },

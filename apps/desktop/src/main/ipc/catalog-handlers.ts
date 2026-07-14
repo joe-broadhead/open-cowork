@@ -1,4 +1,4 @@
-import { getClient } from '@open-cowork/runtime-host/runtime'
+import { getClient, getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '@open-cowork/runtime-host/native-customizations'
 import { readEffectiveSkillBundleFile } from '@open-cowork/runtime-host/effective-skills'
@@ -254,6 +254,18 @@ function mcpNamespaceFromPermissionPattern(pattern: string) {
 
 export function runtimeAgentToolIds(agent: unknown): string[] {
   const toolIds = new Set<string>()
+  const nativePermissions = Array.isArray((agent as { permissions?: unknown }).permissions)
+    ? (agent as { permissions: unknown[] }).permissions
+    : []
+  for (const value of nativePermissions) {
+    const rule = recordFrom(value)
+    const action = typeof rule.action === 'string' ? rule.action : ''
+    if (!action || rule.effect === 'deny') continue
+    if (NATIVE_RUNTIME_TOOL_IDS.has(action)) toolIds.add(action)
+    for (const toolId of configuredToolIdsForPermissionPattern(action)) toolIds.add(toolId)
+    const namespace = mcpNamespaceFromPermissionPattern(action)
+    if (namespace) toolIds.add(namespace)
+  }
   const permission = recordFrom((agent as { permission?: unknown }).permission)
   for (const [key, value] of Object.entries(permission)) {
     if (!permissionValueHasAllowedRule(value)) continue
@@ -287,6 +299,15 @@ function permissionBashAllowsWrite(value: unknown): boolean {
 }
 
 export function runtimeAgentCanWrite(agent: unknown): boolean {
+  const nativePermissions = Array.isArray((agent as { permissions?: unknown }).permissions)
+    ? (agent as { permissions: unknown[] }).permissions
+    : []
+  if (nativePermissions.some((value) => {
+    const rule = recordFrom(value)
+    return typeof rule.action === 'string'
+      && WRITE_TOOL_IDS.has(rule.action)
+      && rule.effect !== 'deny'
+  })) return true
   const permission = recordFrom((agent as { permission?: unknown }).permission)
   return permissionValueHasAllowedRule(permission.edit)
     || permissionValueHasAllowedRule(permission.write)
@@ -418,20 +439,23 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   // slot that didn't flow through Cowork's config pipeline.
   context.ipcMain.handle('agents:runtime', async (): Promise<RuntimeAgentDescriptor[]> => {
     return timeAgentCatalogHandler('agents:runtime', async () => {
-      const client = getClient()
+      const directory = getRuntimeHomeDir()
+      const client = getClientForDirectory(directory)
       if (!client) return []
       try {
-        const response = await client.app.agents()
-        const agents = response.data || []
+        const response = await client.v2.agent.list({
+          location: { directory },
+        }, { throwOnError: true })
+        const agents = response.data.data
         return agents
-          .filter((agent) => agent.name)
+          .filter((agent) => agent.id)
           .map((agent): RuntimeAgentDescriptor => {
             const toolIds = runtimeAgentToolIds(agent)
             return {
-              name: agent.name,
+              name: agent.id,
               mode: agent.mode,
               description: agent.description || null,
-              model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
+              model: agent.model ? `${agent.model.providerID}/${agent.model.id}` : null,
               color: agent.color || null,
               // SDK's Agent type has no `disable` flag — runtime agents are by
               // definition the registered/enabled set.

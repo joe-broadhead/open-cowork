@@ -41,6 +41,7 @@ import {
   isCoordinationWatchVerbosity,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader-core.js'
+import { initializeLocalSqliteSchema } from '../local-sqlite-schema.js'
 
 const COORDINATION_DB_SCHEMA_VERSION = 2
 const COORDINATION_SCHEMA_VERSION_KEY = 'schema_version'
@@ -51,6 +52,75 @@ const MAX_AGENT_ID_BYTES = 256
 const MAX_ARTIFACT_REFS = 100
 const MAX_WATCH_EVENTS = 16
 const MAX_CHANNEL_TARGET_BYTES = 16 * 1024
+
+const COORDINATION_BASELINE_SQL = `
+  create table coordination_meta (
+    key text primary key,
+    value text not null
+  );
+  create table coordination_projects (
+    id text primary key,
+    workspace_id text not null,
+    owner_authority text not null,
+    execution_authority text not null,
+    state_owner text not null,
+    title text not null,
+    objective text not null,
+    description text,
+    status text not null,
+    team_json text not null,
+    source_session_id text,
+    created_at text not null,
+    updated_at text not null
+  );
+  create table coordination_tasks (
+    id text primary key,
+    workspace_id text not null,
+    owner_authority text not null,
+    execution_authority text not null,
+    state_owner text not null,
+    project_id text not null,
+    parent_task_id text,
+    title text not null,
+    spec text not null,
+    description text,
+    status text not null,
+    column_name text not null,
+    priority text not null,
+    external_ref text,
+    assignee_agent text,
+    assigned_run_id text,
+    assigned_session_id text,
+    artifact_refs_json text not null,
+    created_at text not null,
+    updated_at text not null,
+    foreign key(project_id) references coordination_projects(id) on delete cascade,
+    foreign key(parent_task_id) references coordination_tasks(id) on delete set null
+  );
+  create table coordination_watches (
+    id text primary key,
+    workspace_id text not null,
+    owner_authority text not null,
+    execution_authority text not null,
+    state_owner text not null,
+    target_kind text not null,
+    target_id text not null,
+    events_json text not null,
+    delivery_surface text not null,
+    channel_json text not null,
+    recipient_json text,
+    status text not null,
+    verbosity text not null,
+    cursor_json text,
+    created_at text not null,
+    updated_at text not null
+  );
+  create index idx_coordination_projects_workspace on coordination_projects(workspace_id, updated_at);
+  create index idx_coordination_tasks_project on coordination_tasks(project_id, column_name, updated_at);
+  create index idx_coordination_tasks_session on coordination_tasks(assigned_session_id);
+  create index idx_coordination_watches_workspace on coordination_watches(workspace_id, status, updated_at);
+  create index idx_coordination_watches_target on coordination_watches(workspace_id, target_kind, target_id, status);
+`
 
 let coordinationDb: DatabaseSync | null = null
 let coordinationDbForTests: DatabaseSync | null = null
@@ -77,79 +147,27 @@ function ensureCoordinationDbFileModes(dbPath = coordinationDbPath()) {
 }
 
 function initDb(db: DatabaseSync) {
-  db.exec(`
-    create table if not exists coordination_meta (
-      key text primary key,
-      value text not null
-    );
-    create table if not exists coordination_projects (
-      id text primary key,
-      workspace_id text not null,
-      owner_authority text not null,
-      execution_authority text not null,
-      state_owner text not null,
-      title text not null,
-      objective text not null,
-      description text,
-      status text not null,
-      team_json text not null,
-      source_session_id text,
-      created_at text not null,
-      updated_at text not null
-    );
-    create table if not exists coordination_tasks (
-      id text primary key,
-      workspace_id text not null,
-      owner_authority text not null,
-      execution_authority text not null,
-      state_owner text not null,
-      project_id text not null,
-      parent_task_id text,
-      title text not null,
-      spec text not null,
-      description text,
-      status text not null,
-      column_name text not null,
-      priority text not null,
-      external_ref text,
-      assignee_agent text,
-      assigned_run_id text,
-      assigned_session_id text,
-      artifact_refs_json text not null,
-      created_at text not null,
-      updated_at text not null,
-      foreign key(project_id) references coordination_projects(id) on delete cascade,
-      foreign key(parent_task_id) references coordination_tasks(id) on delete set null
-    );
-    create table if not exists coordination_watches (
-      id text primary key,
-      workspace_id text not null,
-      owner_authority text not null,
-      execution_authority text not null,
-      state_owner text not null,
-      target_kind text not null,
-      target_id text not null,
-      events_json text not null,
-      delivery_surface text not null,
-      channel_json text not null,
-      recipient_json text,
-      status text not null,
-      verbosity text not null,
-      cursor_json text,
-      created_at text not null,
-      updated_at text not null
-    );
-    create index if not exists idx_coordination_projects_workspace on coordination_projects(workspace_id, updated_at);
-    create index if not exists idx_coordination_tasks_project on coordination_tasks(project_id, column_name, updated_at);
-    create index if not exists idx_coordination_tasks_session on coordination_tasks(assigned_session_id);
-    create index if not exists idx_coordination_watches_workspace on coordination_watches(workspace_id, status, updated_at);
-    create index if not exists idx_coordination_watches_target on coordination_watches(workspace_id, target_kind, target_id, status);
-  `)
-  db.prepare(`
-    insert into coordination_meta (key, value)
-    values (?, ?)
-    on conflict(key) do update set value = excluded.value
-  `).run(COORDINATION_SCHEMA_VERSION_KEY, String(COORDINATION_DB_SCHEMA_VERSION))
+  initializeLocalSqliteSchema(db, {
+    storeName: 'local coordination store',
+    currentVersion: COORDINATION_DB_SCHEMA_VERSION,
+    metaTable: 'coordination_meta',
+    versionKey: COORDINATION_SCHEMA_VERSION_KEY,
+    baselineSql: COORDINATION_BASELINE_SQL,
+    tables: [
+      { name: 'coordination_meta', columns: ['key', 'value'] },
+      { name: 'coordination_projects', columns: ['id', 'workspace_id', 'owner_authority', 'execution_authority', 'state_owner', 'title', 'objective', 'description', 'status', 'team_json', 'source_session_id', 'created_at', 'updated_at'] },
+      { name: 'coordination_tasks', columns: ['id', 'workspace_id', 'owner_authority', 'execution_authority', 'state_owner', 'project_id', 'parent_task_id', 'title', 'spec', 'description', 'status', 'column_name', 'priority', 'external_ref', 'assignee_agent', 'assigned_run_id', 'assigned_session_id', 'artifact_refs_json', 'created_at', 'updated_at'] },
+      { name: 'coordination_watches', columns: ['id', 'workspace_id', 'owner_authority', 'execution_authority', 'state_owner', 'target_kind', 'target_id', 'events_json', 'delivery_surface', 'channel_json', 'recipient_json', 'status', 'verbosity', 'cursor_json', 'created_at', 'updated_at'] },
+    ],
+    indexes: [
+      'idx_coordination_projects_workspace',
+      'idx_coordination_tasks_project',
+      'idx_coordination_tasks_session',
+      'idx_coordination_watches_workspace',
+      'idx_coordination_watches_target',
+    ],
+    recovery: 'Back up or export projects, tasks, and watches, then reset only coordination.sqlite before recreating or importing that coordination state.',
+  })
 }
 
 export function getCoordinationDb() {
@@ -158,9 +176,9 @@ export function getCoordinationDb() {
   const dbPath = coordinationDbPath()
   const db = new DatabaseSync(dbPath)
   try {
+    initDb(db)
     db.exec('pragma journal_mode = WAL;')
     db.exec('pragma foreign_keys = ON;')
-    initDb(db)
     ensureCoordinationDbFileModes(dbPath)
     coordinationDb = db
     return db
@@ -173,11 +191,12 @@ export function getCoordinationDb() {
 export function setCoordinationDatabaseForTests(db: DatabaseSync | null) {
   coordinationDb?.close()
   coordinationDb = null
-  coordinationDbForTests = db
+  coordinationDbForTests = null
   transactionCounter = 0
   if (db) {
-    db.exec('pragma foreign_keys = ON;')
     initDb(db)
+    db.exec('pragma foreign_keys = ON;')
+    coordinationDbForTests = db
   }
 }
 

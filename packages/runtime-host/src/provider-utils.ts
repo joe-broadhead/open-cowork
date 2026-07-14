@@ -1,3 +1,5 @@
+import type { ModelV2Info, OpencodeClient, ProviderV2Info } from '@opencode-ai/sdk/v2'
+
 export type ProviderLike = {
   id?: string
   name?: string
@@ -6,38 +8,45 @@ export type ProviderLike = {
   connected?: boolean
 }
 
-// SDK v2 `provider.list` returns { all: Array<Provider>, default, connected } —
-// see types.gen.d.ts:3600. We narrow the `all` array to ProviderLike so the
-// caller does not have to care about unexpected fields, while preserving the
-// OpenCode-owned default model and auth/connected state.
-export function normalizeProviderListResponse(raw: unknown): ProviderLike[] {
-  if (!raw || typeof raw !== 'object') return []
-  const value = raw as Record<string, unknown>
-  if (!Array.isArray(value.all)) return []
-  const defaults = value.default && typeof value.default === 'object'
-    ? value.default as Record<string, unknown>
-    : {}
-  const connected = new Set(
-    Array.isArray(value.connected)
-      ? value.connected.filter((entry): entry is string => typeof entry === 'string')
-      : [],
-  )
-
-  return value.all.filter(isProviderLike).map((provider) => {
-    const id = provider.id || provider.name
-    const defaultModel = id && typeof defaults[id] === 'string' ? defaults[id] : undefined
-    return {
-      ...provider,
-      ...(defaultModel ? { defaultModel } : {}),
-      ...(id ? { connected: connected.has(id) } : {}),
-    }
-  })
+function projectNativeModel(model: ModelV2Info) {
+  const baseCost = model.cost[0]
+  return {
+    ...model,
+    cost: baseCost
+      ? {
+          input: baseCost.input,
+          output: baseCost.output,
+          cache: baseCost.cache,
+        }
+      : {},
+    variants: Object.fromEntries(model.variants.map((variant) => [variant.id, variant])),
+  }
 }
 
-function isProviderLike(value: unknown): value is ProviderLike {
-  if (!value || typeof value !== 'object') return false
-  const record = value as Record<string, unknown>
-  const hasName = typeof record.id === 'string' || typeof record.name === 'string'
-  const hasModels = record.models === undefined || typeof record.models === 'object'
-  return hasName && hasModels
+export function combineNativeProviderCatalog(
+  providers: ProviderV2Info[],
+  models: ModelV2Info[],
+): ProviderLike[] {
+  const modelsByProvider = new Map<string, Record<string, unknown>>()
+  for (const model of models) {
+    const providerModels = modelsByProvider.get(model.providerID) || {}
+    providerModels[model.id] = projectNativeModel(model)
+    modelsByProvider.set(model.providerID, providerModels)
+  }
+  return providers.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    models: modelsByProvider.get(provider.id) || {},
+    // `/api/provider` returns only Catalog.provider.available(), so presence
+    // in this response is the native V2 connected/available signal.
+    connected: true,
+  }))
+}
+
+export async function listNativeProviders(client: OpencodeClient): Promise<ProviderLike[]> {
+  const [providerResponse, modelResponse] = await Promise.all([
+    client.v2.provider.list(undefined, { throwOnError: true }),
+    client.v2.model.list(undefined, { throwOnError: true }),
+  ])
+  return combineNativeProviderCatalog(providerResponse.data.data, modelResponse.data.data)
 }

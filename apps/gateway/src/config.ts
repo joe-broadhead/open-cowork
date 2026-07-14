@@ -231,11 +231,11 @@ function readRawConfig(env: GatewayEnv): GatewayRawConfig {
   const central = readCentralGatewayConfig(env)
   const configPath = readString(env.OPEN_COWORK_GATEWAY_CONFIG)
   const fromGatewayFile = configPath
-    ? omitFileBackedCloudConnection(parseGatewayConfigFile(readFileSync(configPath, 'utf8'), configPath))
+    ? assertGatewayFileContract(parseGatewayConfigFile(readFileSync(configPath, 'utf8'), configPath), configPath)
     : {}
   const json = readString(env.OPEN_COWORK_GATEWAY_CONFIG_JSON)
   const fromJson = json
-    ? parseGatewayConfigJson(json, 'OPEN_COWORK_GATEWAY_CONFIG_JSON')
+    ? assertGatewayFileContract(parseGatewayConfigJson(json, 'OPEN_COWORK_GATEWAY_CONFIG_JSON'), 'OPEN_COWORK_GATEWAY_CONFIG_JSON')
     : {}
 
   return mergeGatewayRawConfigs(mergeGatewayRawConfigs(central, fromGatewayFile), fromJson)
@@ -275,23 +275,23 @@ function parseOpenCoworkConfig(value: string, source: string, env: GatewayEnv): 
   const allowed = new Set(Array.isArray(parsed.allowedEnvPlaceholders)
     ? parsed.allowedEnvPlaceholders.filter((entry): entry is string => typeof entry === 'string')
     : [])
-  const gateway = omitFileBackedCloudConnection(parsed.gateway)
+  const gateway = assertGatewayFileContract(parsed.gateway, source)
   return resolveGatewayEnvPlaceholders({
     gateway,
   }, allowed, env, source) as { gateway?: GatewayRawConfig }
 }
 
-function omitFileBackedCloudConnection(value: unknown): GatewayRawConfig {
+function assertGatewayFileContract(value: unknown, source: string): GatewayRawConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const config = { ...(value as GatewayRawConfig) }
-  if (config.cloud) {
-    const cloud = { ...config.cloud }
-    delete cloud.baseUrl
-    delete cloud.serviceToken
-    delete cloud.allowInsecureHttp
-    config.cloud = Object.keys(cloud).length > 0 ? cloud : undefined
+  const config = value as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(config, 'cloud')) {
+    throw new Error(`Invalid gateway config JSON from ${source}: gateway cloud connection settings must use deployment environment variables.`)
   }
-  return config
+  if (config.timeouts && typeof config.timeouts === 'object' && !Array.isArray(config.timeouts)
+    && Object.prototype.hasOwnProperty.call(config.timeouts, 'cloudRequestMs')) {
+    throw new Error(`Invalid gateway config JSON from ${source}: cloudRequestMs must use OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS.`)
+  }
+  return config as GatewayRawConfig
 }
 
 function parseGatewayConfigJson(value: string, source: string): GatewayRawConfig {

@@ -13,7 +13,8 @@ storage, provider secret management, and a separate gateway deployment.
 
 Before routing traffic to a new deployment:
 
-1. Confirm the cloud web role returns `200` from `GET /healthz`.
+1. Confirm the cloud web role returns `200` from `GET /readyz`; use
+   `GET /livez` separately to diagnose process liveness.
 2. Confirm authenticated operators can read `GET /api/runtime/status`.
 3. Confirm `GET /api/workers/heartbeats` shows at least one fresh worker and
    one fresh scheduler heartbeat when those roles are enabled.
@@ -27,8 +28,11 @@ Before routing traffic to a new deployment:
 
 ## Rollback
 
-Rollback is image-based. Schema migrations must remain additive and
-idempotent, so rollback does not require destructive database migration.
+Rollback is image-based only while both images use the same clean pre-release
+schema baseline. The application does not ship historical upgrade or downgrade
+paths. Before deploying a build with a changed baseline, take and verify a
+restorable database backup; rollback across that boundary requires restoring
+the matching backup or recreating an empty pre-release schema.
 
 1. Pause new rollout traffic at the load balancer or ingress.
 2. Scale new workers to zero first so they stop claiming new sessions.
@@ -38,13 +42,15 @@ idempotent, so rollback does not require destructive database migration.
    known-good tag.
 5. Roll back gateway images independently if channel delivery or webhook
    handling regressed.
-6. Verify `GET /healthz`, `GET /api/workers/heartbeats`, gateway `/ready`, and
+6. Verify `GET /readyz`, `GET /api/workers/heartbeats`, gateway `/ready`, and
    one cloud session prompt.
 7. Resume traffic and monitor error rate, command latency, projection lag, and
    gateway delivery retries.
 
-If a release introduced a bad additive column or index, keep the column in
-place and ship a forward fix. Do not drop columns during incident rollback.
+Do not hand-edit the ledger, stamp an existing schema, or drop individual
+tables/columns during incident rollback. The readiness check validates ledger
+IDs, required tables, and current concurrent indexes. Restore the matching
+backup or recreate an empty schema, then ship a corrected clean baseline.
 
 For worker-only regressions, prefer rolling workers back first while keeping
 web reads available. Keep the scheduler active only if due workflow claims are
@@ -206,7 +212,8 @@ durable cursors.
 
 ## Web Unavailable Or Erroring
 
-Use this when `GET /healthz` fails, Cloud Web returns elevated 5xx responses,
+Use this when `GET /livez` fails, `GET /readyz` reports unavailable dependencies,
+Cloud Web returns elevated 5xx responses,
 or users cannot load the Cloud Web Workbench.
 
 1. Check ingress/load-balancer health and TLS certificate status.

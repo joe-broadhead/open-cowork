@@ -16,8 +16,13 @@ variable "name_prefix" {
 }
 
 variable "cloud_image" {
-  description = "Fully-qualified open-cowork-cloud image (e.g. REGION-docker.pkg.dev/PROJECT/REPO/open-cowork-cloud:TAG)."
+  description = "Fully qualified immutable open-cowork-cloud image reference ending in @sha256:<64 lowercase hex characters>."
   type        = string
+
+  validation {
+    condition     = can(regex("^[^[:space:]@/]+/[^[:space:]@]+@sha256:[0-9a-f]{64}$", var.cloud_image))
+    error_message = "cloud_image must be a fully qualified immutable image reference ending in @sha256:<64 lowercase hex characters>."
+  }
 }
 
 variable "vpc_self_link" {
@@ -25,8 +30,13 @@ variable "vpc_self_link" {
   type        = string
 }
 
+variable "vpc_subnetwork_self_link" {
+  description = "Regional subnet self link used for Cloud Run Direct VPC egress to private Cloud SQL."
+  type        = string
+}
+
 variable "database_tier" {
-  description = "Cloud SQL machine tier."
+  description = "Cloud SQL Enterprise-edition machine tier."
   type        = string
   default     = "db-custom-2-7680"
 }
@@ -34,12 +44,7 @@ variable "database_tier" {
 variable "postgres_version" {
   description = "Cloud SQL Postgres version."
   type        = string
-  default     = "POSTGRES_16"
-}
-
-variable "database_user" {
-  description = "IAM service-account database user (usually the runtime SA email without the .gserviceaccount.com suffix)."
-  type        = string
+  default     = "POSTGRES_17"
 }
 
 variable "web_min_instances" {
