@@ -1,7 +1,7 @@
 import { DEFAULT_DARK_PUBLIC_BRANDING_THEME } from './design-tokens.js'
 import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from './tool-trace.js'
 import type { AgentStarterTemplate, BrandingConfig, DesktopFeatureFlags, GatewayDeploymentConfig, PublicBrandingConfig } from './app-config.js'
-import type { CredentialField, ModelInfoSnapshot, ProviderModelDescriptor } from './providers.js'
+import type { CredentialField, ProviderModelDescriptor } from './providers.js'
 import type { CapabilityBundleManifest } from './capabilities.js'
 import type { CloudProjectSourceInput } from './project-source.js'
 import type { UpdateReleaseSourceAuthKind, UpdateReleaseSourceKind } from './updates.js'
@@ -259,7 +259,7 @@ export type CloudProfileConfig = {
 
 export type CloudAuthConfig = {
   mode: 'none' | 'header' | 'oidc'
-  signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
+  signupMode?: 'disabled' | 'invite' | 'domain' | 'open'
   headerSecret?: string
   headerSecretRef?: string
   headerAllowUnsigned?: boolean
@@ -531,12 +531,6 @@ export type OpenCoworkConfig = {
   features?: DesktopFeatureFlags
 }
 
-// Re-export the shared type under the config-loader's historical name so
-// existing call sites continue to compile. The shape is identical — this
-// is the same data structure that `model:info` IPC returns and that the
-// renderer consumes.
-export type ModelFallbackInfo = ModelInfoSnapshot
-
 const DEFAULT_CLOUD_FEATURES: CloudFeatureConfig = {
   chat: true,
   agents: true,
@@ -667,9 +661,6 @@ const DEFAULT_CLOUD_DESKTOP: CloudDesktopConfig = {
 
 const DEFAULT_GATEWAY_CONFIG: GatewayDeploymentConfig = {
   branding: DEFAULT_CLOUD_PUBLIC_BRANDING,
-  cloud: {
-    allowInsecureHttp: false,
-  },
   server: {
     host: '127.0.0.1',
     port: 8790,

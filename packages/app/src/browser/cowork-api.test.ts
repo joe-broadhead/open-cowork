@@ -100,9 +100,75 @@ describe('browser shim CSRF transport', () => {
   })
 })
 
+describe('browser shim authentication bootstrap', () => {
+  it('fails closed to an auth-required public config when protected config returns 401', async () => {
+    const calls = installFetch((url) => {
+      if (url.endsWith('/api/config')) return jsonResponse({ error: 'Cloud authentication is required.' }, 401)
+      return jsonResponse({})
+    })
+
+    const api = createBrowserCoworkApi({ authRequired: true })
+    const config = await api.app.config()
+
+    expect(config.auth).toEqual({ mode: 'google-oauth', enabled: true })
+    expect(config.branding.name).toBe('Open Cowork')
+    expect(calls.map((call) => call.url)).toEqual(['/api/config'])
+  })
+
+  it('does not probe protected config after auth status establishes a signed-out browser', async () => {
+    const calls = installFetch((url) => {
+      if (url.endsWith('/auth/me')) return jsonResponse({ error: 'Cloud authentication is required.' }, 401)
+      if (url.endsWith('/api/config')) throw new Error('protected config must not be requested while signed out')
+      return jsonResponse({})
+    })
+
+    const api = createBrowserCoworkApi({ authRequired: true })
+
+    await expect(api.auth.status()).resolves.toEqual({ authenticated: false, email: null })
+    await expect(api.app.config()).resolves.toMatchObject({
+      auth: { mode: 'google-oauth', enabled: true },
+      branding: { name: 'Open Cowork' },
+    })
+    expect(calls.map((call) => call.url)).toEqual(['/auth/me'])
+  })
+
+  it('does not hide non-auth config failures behind a fabricated default config', async () => {
+    installFetch((url) => {
+      if (url.endsWith('/api/config')) return jsonResponse({ error: 'unavailable' }, 503)
+      return jsonResponse({})
+    })
+
+    const api = createBrowserCoworkApi({ authRequired: true })
+
+    await expect(api.app.config()).rejects.toMatchObject({ message: 'unavailable', status: 503 })
+  })
+})
+
+describe('browser shim runtime health', () => {
+  it('identifies the browser surface and propagates runtime endpoint failures', async () => {
+    installFetch((url) => (
+      url.endsWith('/api/runtime/status')
+        ? jsonResponse({ error: 'runtime unavailable' }, 503)
+        : jsonResponse({})
+    ))
+
+    const api = createBrowserCoworkApi({})
+
+    await expect(api.app.metadata()).resolves.toEqual({
+      version: '0.0.0',
+      preview: false,
+      surface: 'browser',
+    })
+    await expect(api.runtime.status()).rejects.toMatchObject({
+      message: 'runtime unavailable',
+      status: 503,
+    })
+  })
+})
+
 // F4 presigned artifact UPLOAD: the shim must take the direct-to-store fast path when the cloud
-// advertises it (begin -> direct PUT -> finalize), and fall back to the buffered upload whenever
-// the server can't presign or the direct PUT fails. The public upload(...) contract is unchanged.
+// advertises it (begin -> direct PUT -> finalize), and fall back to the buffered upload only when
+// the server explicitly reports unsupported or the direct PUT fails. Begin API failures propagate.
 
 type RecordedCall = { url: string; method: string; headers: Record<string, string>; body: unknown }
 
@@ -179,6 +245,21 @@ describe('browser shim presigned artifact upload', () => {
     expect(calls.some((c) => c.method === 'PUT')).toBe(false)
     const buffered = calls.find((c) => c.url.endsWith('/artifacts') && c.method === 'POST')
     expect((buffered?.body as { dataBase64?: string })?.dataBase64).toBe(uploadRequest.dataBase64)
+  })
+
+  it('propagates presigned begin failures without retrying a buffered upload', async () => {
+    const calls = installRecordingFetch((url, method) => {
+      if (url.endsWith('/auth/me')) return jsonResponse({ csrfToken: null })
+      if (url.includes('/artifacts?transfer=presigned')) return jsonResponse({ error: 'upload service unavailable' }, 503)
+      if (url.endsWith('/artifacts') && method === 'POST') throw new Error('buffered upload must not hide begin failures')
+      return jsonResponse({})
+    })
+
+    await expect(createBrowserCoworkApi({}).artifact.upload(uploadRequest)).rejects.toMatchObject({
+      message: 'upload service unavailable',
+      status: 503,
+    })
+    expect(calls.some((call) => call.url.endsWith('/artifacts') && call.method === 'POST')).toBe(false)
   })
 
   it('falls back to the buffered upload when the direct PUT fails', async () => {

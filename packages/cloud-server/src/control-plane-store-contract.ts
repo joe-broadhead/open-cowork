@@ -398,7 +398,6 @@ export type ControlPlaneStore = {
   findSession(sessionId: string): MaybePromise<SessionRecord | null>
   listSessions(tenantId: string, userId: string): MaybePromise<SessionRecord[]>
   listSessionsPage(input: ListSessionsPageInput): MaybePromise<ListSessionsPageRecord>
-  listAllSessions(): MaybePromise<SessionRecord[]>
   listRunnableSessions(input: ListRunnableSessionsInput): MaybePromise<RunnableSessionListRecord>
   bindSessionRuntime(input: {
     tenantId: string
@@ -525,5 +524,7 @@ export type ControlPlaneStore = {
   }): MaybePromise<ThreadMetadataRecord[]>
   recordSchemaMigration(id: string, appliedAt?: Date): MaybePromise<SchemaMigrationRecord>
   listSchemaMigrations(): MaybePromise<SchemaMigrationRecord[]>
+  /** Assert physical storage completeness; required by production readiness when available. */
+  assertSchemaIntegrity?(): MaybePromise<void>
   close?(): MaybePromise<void>
 }

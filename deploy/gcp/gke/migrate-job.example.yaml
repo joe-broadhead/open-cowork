@@ -1,0 +1,125 @@
+# Copy this manifest into a private deployment repo and replace every
+# placeholder before applying it. The application image and Cloud SQL Auth
+# Proxy are immutable; no password, service-account key, or other secret is
+# stored in this file. The proxy authenticates through GKE Workload Identity.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: open-cowork-cloud-migrator
+  namespace: open-cowork
+  annotations:
+    iam.gke.io/gcp-service-account: open-cowork-cloud-migrator@PROJECT.iam.gserviceaccount.com
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: open-cowork-cloud-migrate
+  namespace: open-cowork
+  labels:
+    app.kubernetes.io/name: open-cowork-cloud
+    app.kubernetes.io/component: database-migrator
+spec:
+  # Migrations are idempotent, but retries should be an operator decision so a
+  # failed DDL/grant step cannot loop without review.
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: open-cowork-cloud-migrator
+        app.kubernetes.io/component: database-migrator
+    spec:
+      serviceAccountName: open-cowork-cloud-migrator
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # A native sidecar starts before the migration container, passes its
+      # startup gate only after Cloud SQL is reachable, and exits when the Job
+      # completes. This avoids a proxy sidecar keeping a successful Job alive.
+      initContainers:
+        - name: cloud-sql-proxy
+          restartPolicy: Always
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.23.0@sha256:54e23cad9aeeedbf88ab75f993146631b878035f702b31c51885a932e0c7286c
+          imagePullPolicy: IfNotPresent
+          args:
+            - --address=127.0.0.1
+            - --port=5432
+            - --private-ip
+            - --auto-iam-authn
+            - --structured-logs
+            - --run-connection-test
+            - --health-check
+            - --http-address=127.0.0.1
+            - --http-port=9090
+            - PROJECT:REGION:INSTANCE
+          startupProbe:
+            exec:
+              command:
+                - /cloud-sql-proxy
+                - wait
+                - --http-address=127.0.0.1
+                - --http-port=9090
+                - --max=2s
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 60
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      containers:
+        - name: migrate
+          image: REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud@sha256:REPLACE_WITH_CLOUD_DIGEST
+          imagePullPolicy: IfNotPresent
+          command:
+            - node
+            - --experimental-sqlite
+            - apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs
+          env:
+            # Cloud SQL IAM service-account usernames omit the
+            # .gserviceaccount.com suffix. Percent-encode the @ in the URL.
+            - name: OPEN_COWORK_CLOUD_CONTROL_PLANE_URL
+              value: postgresql://open-cowork-cloud-migrator%40PROJECT.iam@127.0.0.1:5432/open_cowork_cloud?sslmode=disable
+            - name: OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE
+              value: open_cowork_runtime
+            - name: OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL
+              value: open-cowork-cloud@PROJECT.iam
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

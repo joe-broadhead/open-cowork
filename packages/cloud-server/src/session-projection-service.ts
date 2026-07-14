@@ -2,14 +2,19 @@ import {
   createCloudProjectionCheckpoint,
   waitForCloudProjectionFence,
   isCloudProjectedSessionEventType,
+  normalizeCloudToolAttachments,
   normalizeCloudSessionProjectionView,
   reduceCloudSessionProjectionEvent,
+  RUNTIME_EVENT_MAX_COLLECTION_ENTRIES,
+  RUNTIME_EVENT_TRUNCATED,
+  sanitizeRuntimeEventRecord,
   type CloudProjectionFenceToken,
   type CloudProjectionFenceWaitResult,
   type CloudProjectedSessionEventType,
   type CloudSessionProjectionView,
 } from '@open-cowork/shared'
 import type { SessionEventRecord } from './control-plane-store.ts'
+import type { ControlPlaneSessionStatus, CompleteWorkflowRunInput, FailWorkflowRunInput } from './control-plane-store.ts'
 import type { ProjectionControlPlaneStore } from './control-plane-store-domains.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
 
@@ -25,6 +30,10 @@ export type AppendProjectedEventInput = {
   payload?: Record<string, unknown>
   leaseToken?: string | null
   createdAt?: Date
+  sessionStatus?: ControlPlaneSessionStatus
+  workflowTerminal?:
+    | { kind: 'completed'; input: CompleteWorkflowRunInput }
+    | { kind: 'failed'; input: FailWorkflowRunInput }
 }
 
 export type CloudProjectionStore = ProjectionControlPlaneStore
@@ -69,6 +78,43 @@ function workspaceOperationFromEventType(type: string) {
   if (/\b(created|submitted|uploaded|started)\b/.test(type)) return 'create'
   if (/\b(deleted|removed|archived)\b/.test(type)) return 'delete'
   return 'update'
+}
+
+function sanitizeProjectedEventPayload(
+  type: CloudProjectedSessionEventType,
+  value: Record<string, unknown>,
+) {
+  if (type !== 'tool.call') {
+    // Product content is intentionally durable: silently rewriting prompts,
+    // assistant answers, question text, artifact metadata, or signed
+    // attachment URLs would corrupt the user-visible transcript. Keep the
+    // structural DoS boundary for every event, while applying secret/path
+    // redaction to the opaque runtime surfaces that can accidentally capture
+    // execution credentials or host paths.
+    return sanitizeRuntimeEventRecord(value, {
+      redactSensitive: type === 'permission.requested' || type === 'runtime.error',
+    })
+  }
+
+  // Inline tool attachments have their own strict data-URL validation and
+  // aggregate byte budget. Exclude them from the generic 64 KiB string limit,
+  // then restore only the normalized allowlisted form.
+  const withoutAttachments: Record<string, unknown> = {}
+  let examined = 0
+  for (const key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue
+    examined += 1
+    if (examined > RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) {
+      withoutAttachments.truncated = RUNTIME_EVENT_TRUNCATED
+      break
+    }
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
+    if (key !== 'attachments') withoutAttachments[key] = value[key]
+  }
+  const payload = sanitizeRuntimeEventRecord(withoutAttachments)
+  const attachments = normalizeCloudToolAttachments(value.attachments)
+  if (attachments.length > 0) payload.attachments = attachments
+  return payload
 }
 
 function workspaceEntityForProjectedEvent(input: AppendProjectedEventInput, event: SessionEventRecord) {
@@ -150,6 +196,12 @@ export class CloudSessionProjectionService {
     if (!isCloudProjectedSessionEventType(input.type)) {
       throw new Error(`Unsupported cloud projection event type: ${input.type}`)
     }
+    // This is the single durable/remote boundary for every cloud session
+    // event, including service-produced permission payloads and command
+    // failures. Adapters sanitize early for safety and responsiveness, but the
+    // projection boundary must fail closed even when a future producer forgets.
+    const payload = sanitizeProjectedEventPayload(input.type, input.payload || {})
+    const sanitizedInput: AppendProjectedEventInput = { ...input, payload }
     const cacheKey = `${input.tenantId}\0${input.sessionId}`
     let projectedView: CloudSessionProjectionView | null = null
     let projectedBytes = 0
@@ -158,11 +210,13 @@ export class CloudSessionProjectionService {
       sessionId: input.sessionId,
       eventId: input.eventId,
       type: input.type,
-      payload: input.payload || {},
+      payload,
       leaseToken: input.leaseToken,
       createdAt: input.createdAt,
+      sessionStatus: input.sessionStatus,
+      workflowTerminal: input.workflowTerminal,
       workspace: ({ event }) => {
-        const workspaceEntity = workspaceEntityForProjectedEvent(input, event)
+        const workspaceEntity = workspaceEntityForProjectedEvent(sanitizedInput, event)
         return {
           eventId: event.eventId.startsWith(`${input.sessionId}:`)
             ? event.eventId
@@ -184,7 +238,7 @@ export class CloudSessionProjectionService {
         // path (cache miss / instance handoff): measure the whole view once. A conservative
         // over-estimate is fine — it only evicts slightly earlier.
         projectedBytes = warm && cached
-          ? cached.bytes + approxJsonBytes(input.payload)
+          ? cached.bytes + approxJsonBytes(payload)
           : approxJsonBytes(projectedView)
         return {
           view: projectedView,

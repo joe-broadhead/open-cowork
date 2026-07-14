@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { AgentColor } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
 import { downsampleImageToDataUri } from '../../helpers/image-downsampler'
+import { useEscape } from '../../hooks/useEscape'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 
@@ -47,17 +49,11 @@ export function AvatarEditor({
 }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const closeRef = useRef(onClose)
-  useEffect(() => { closeRef.current = onClose }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const open = Boolean(anchorRect)
 
-  // Dismiss on Escape — matches the rest of the app's popovers.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+  useFocusTrap(dialogRef, { active: open })
+  useEscape(onClose, { enabled: open })
 
   if (!anchorRect) return null
 
@@ -93,7 +89,9 @@ export function AvatarEditor({
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
+        ref={dialogRef}
         role="dialog"
+        aria-modal="true"
         aria-label={t('agentCard.editAvatar', 'Edit coworker avatar')}
         className="fixed z-50 rounded-2xl border shadow-2xl overflow-hidden"
         style={{
@@ -137,7 +135,7 @@ export function AvatarEditor({
             </button>
           )}
           {error && (
-            <div className="text-2xs" style={{ color: 'var(--color-red)' }}>{error}</div>
+            <div role="alert" className="text-2xs" style={{ color: 'var(--color-red)' }}>{error}</div>
           )}
         </div>
 

@@ -1,11 +1,8 @@
 import { useState } from 'react'
 import { getBuiltInLocales, getLocale, setLocale, t } from '../../helpers/i18n'
 import { BUILT_IN_TRANSLATION_COVERAGE } from '../../helpers/i18n-catalogs/coverage-status'
-import { Select } from '../ui'
-import {
-  fieldLabelCls,
-  panelCardCls,
-} from './settings-panel-styles'
+import { Card, Select } from '../ui'
+import { fieldLabelCls } from './settings-panel-styles'
 
 // Honest partial-translation signal: every built-in non-English catalog shares
 // one key set, so a single generated figure (coverage-status.ts, kept in sync
@@ -27,7 +24,7 @@ export function LanguagePicker() {
   }
 
   return (
-    <div className={panelCardCls}>
+    <Card className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <span className={fieldLabelCls}>{t('settings.language.label', 'Language')}</span>
         <Select
@@ -54,6 +51,6 @@ export function LanguagePicker() {
           )}
         </span>
       </div>
-    </div>
+    </Card>
   )
 }

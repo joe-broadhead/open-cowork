@@ -29,6 +29,7 @@ helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.tag=IMAGE_TAG \
   --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.profile=full \
+  --set cloud.runMigrations=false \
   --set cloud.publicUrl=https://cowork.example.com \
   --set cloud.auth.mode=oidc \
   --set cloud.auth.oidcIssuerUrl=https://login.microsoftonline.com/TENANT_ID/v2.0 \
@@ -71,7 +72,7 @@ AKS secret-store CSI. The names below are runtime keys, not committed values:
 
 | Secret key | Runtime input |
 | --- | --- |
-| `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Azure Database for PostgreSQL connection string |
+| `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Least-privilege runtime Azure PostgreSQL connection string; never the owner/migrator URL |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` or `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | BYOK envelope key or `azure-kv://...` reference |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | Cookie signing secret |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal service token |
@@ -82,15 +83,20 @@ AKS secret-store CSI. The names below are runtime keys, not committed values:
 
 ## Rollout And Smoke
 
-1. Render Helm, AKS, or Container Apps definitions and verify `web`, `worker`,
+1. Create a dedicated runtime database principal and run
+   `cloud:migrate:start` once from the exact pinned image with a separately
+   stored owner/migrator URL. Remove that privileged credential after the
+   migration and verify all long-running roles set
+   `OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false`.
+2. Render Helm, AKS, or Container Apps definitions and verify `web`, `worker`,
    `scheduler`, and Gateway are separate scalable services for production.
-2. Confirm Azure PostgreSQL PITR, Blob versioning/lifecycle, Azure Monitor JSON
+3. Confirm Azure PostgreSQL PITR, Blob versioning/lifecycle, Azure Monitor JSON
    logs, and OTLP export or collector wiring are enabled.
-3. Route HTTPS through Container Apps ingress, Application Gateway, Front Door,
+4. Route HTTPS through Container Apps ingress, Application Gateway, Front Door,
    or AKS ingress and set `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` plus
    `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only for trusted Azure forwarding
    hops.
-4. Run the shared gates:
+5. Run the shared gates:
 
    ```bash
    pnpm deploy:validate

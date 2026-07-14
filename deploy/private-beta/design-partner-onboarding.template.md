@@ -27,7 +27,7 @@ channel secrets, or support rosters.
 ## Required Ten-Step Flow
 
 1. **Create or invite org owner**
-   - Evidence: owner account exists in invite/closed signup mode.
+   - Evidence: owner account exists in invite/disabled signup mode.
    - Audit event:
 
 2. **Verify org membership and role**

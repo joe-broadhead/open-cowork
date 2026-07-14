@@ -217,7 +217,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     },
     app: {
       builtinAgents: vi.fn(async () => []),
-      metadata: vi.fn(async () => ({ version: '0.0.0', preview: true })),
+      metadata: vi.fn(async () => ({ version: '0.0.0', preview: true, surface: 'desktop' as const })),
       config: vi.fn(async () => ({
         branding: {
           appId: 'com.opencowork.desktop',

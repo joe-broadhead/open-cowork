@@ -6,6 +6,7 @@ import type { ControlPlaneStore } from './control-plane-store.ts'
 import type { ObjectStoreAdapter } from './object-store.ts'
 import { CLOUD_CONTROL_PLANE_MIGRATIONS } from './postgres-schema.ts'
 import type { SecretAdapter } from './secret-adapter.ts'
+import { isNonPublicCloudHost } from './cloud-host-policy.ts'
 
 export type CloudReadinessCheckStatus = 'ok' | 'error'
 
@@ -70,13 +71,19 @@ async function check(name: string, fn: () => Promise<void> | void): Promise<Clou
 
 async function checkControlPlaneStore(store: ControlPlaneStore, requireSchemaMigrations: boolean) {
   const migrations = await store.listSchemaMigrations()
-  if (!requireSchemaMigrations) return
-  const applied = new Set(migrations.map((migration) => migration.id))
-  const missing = CLOUD_CONTROL_PLANE_MIGRATIONS
-    .map((migration) => migration.id)
-    .filter((id) => !applied.has(id))
-  if (missing.length > 0) {
-    throw new Error(`Missing cloud control-plane migrations: ${missing.join(', ')}.`)
+  if (requireSchemaMigrations) {
+    const applied = new Set(migrations.map((migration) => migration.id))
+    const missing = CLOUD_CONTROL_PLANE_MIGRATIONS
+      .map((migration) => migration.id)
+      .filter((id) => !applied.has(id))
+    if (missing.length > 0) {
+      throw new Error(`Missing cloud control-plane migrations: ${missing.join(', ')}.`)
+    }
+  }
+  if (store.assertSchemaIntegrity) {
+    await store.assertSchemaIntegrity()
+  } else if (requireSchemaMigrations) {
+    throw new Error('Cloud control-plane store does not expose physical schema integrity validation.')
   }
 }
 
@@ -119,14 +126,6 @@ function checkBillingAdapter(config: CloudBillingConfig, adapter: BillingAdapter
   }
 }
 
-function isLoopbackHost(hostname: string) {
-  return hostname === 'localhost'
-    || hostname === '127.0.0.1'
-    || hostname === '::1'
-    || hostname === '[::1]'
-    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-}
-
 function assertPublicHttpsOrigin(value: string | null | undefined) {
   const raw = value?.trim()
   if (!raw) throw new Error('Public production readiness requires a configured public URL.')
@@ -136,8 +135,8 @@ function assertPublicHttpsOrigin(value: string | null | undefined) {
   } catch {
     throw new Error('Public URL is not a valid origin.')
   }
-  if (url.protocol !== 'https:' || isLoopbackHost(url.hostname) || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('Public production readiness requires an HTTPS non-loopback public origin.')
+  if (url.protocol !== 'https:' || isNonPublicCloudHost(url.hostname) || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('Public production readiness requires an HTTPS publicly routable origin.')
   }
 }
 

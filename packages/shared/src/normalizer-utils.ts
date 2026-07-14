@@ -50,7 +50,9 @@ export function readRecordNestedRecord(record: unknown, keys: string[]): JsonRec
   const source = asRecord(record)
   for (const key of keys) {
     const nested = asRecord(source[key])
-    if (Object.keys(nested).length > 0) return nested
+    for (const nestedKey in nested) {
+      if (Object.prototype.hasOwnProperty.call(nested, nestedKey)) return nested
+    }
   }
   return {}
 }

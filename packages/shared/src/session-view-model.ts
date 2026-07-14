@@ -79,10 +79,16 @@ export type HistoryItem = {
     title: string
     agent: string | null
     status: TaskRun['status']
+    error?: string | null
     sourceSessionId: string | null
     parentSessionId?: string | null
     startedAt?: string | null
     finishedAt?: string | null
+  }
+  error?: {
+    message: string
+    sessionId: string | null
+    taskRunId?: string | null
   }
   todos?: TodoItem[]
   tool?: {
@@ -91,6 +97,7 @@ export type HistoryItem = {
     status: string
     output?: unknown
     attachments?: MessageAttachment[]
+    outputPaths?: string[]
     agent?: string | null
     sourceSessionId?: string | null
   }
@@ -302,6 +309,7 @@ export function buildSessionStateFromItems(
         title: item.taskRun.title,
         agent: item.taskRun.agent,
         status: item.taskRun.status,
+        error: item.taskRun.error,
         sourceSessionId: item.taskRun.sourceSessionId,
         parentSessionId: item.taskRun.parentSessionId,
         startedAt: item.taskRun.startedAt,
@@ -309,6 +317,31 @@ export function buildSessionStateFromItems(
         order: itemOrder,
       }, itemTiming)
       next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'error' && item.error) {
+      const sessionError: SessionError = {
+        id: item.id,
+        sessionId: item.error.sessionId,
+        message: item.error.message,
+        order: itemOrder ?? nextOrderFrom(next.errors),
+      }
+      next.errors = [
+        ...next.errors.filter((error) => (
+          error.id !== sessionError.id
+          && (error.sessionId !== sessionError.sessionId || error.message !== sessionError.message)
+        )),
+        sessionError,
+      ]
+      const taskRunId = item.error.taskRunId || item.taskRunId
+      if (taskRunId) {
+        next.taskRuns = withTaskRun(next.taskRuns, taskRunId, (taskRun) => ({
+          ...taskRun,
+          status: 'error',
+          error: sessionError.message,
+        }), itemTiming)
+      }
       continue
     }
 
@@ -372,6 +405,7 @@ export function buildSessionStateFromItems(
           status: (item.tool?.status as ToolCall['status']) || 'running',
           output: item.tool?.output,
           attachments: item.tool?.attachments,
+          outputPaths: item.tool?.outputPaths,
           agent: item.tool?.agent || taskRun.agent,
           sourceSessionId: item.tool?.sourceSessionId || taskRun.sourceSessionId,
           order: existingTool?.order ?? itemOrder ?? nextOrderFrom(next.toolCalls, taskRun.toolCalls),
@@ -433,6 +467,7 @@ export function buildSessionStateFromItems(
         status: item.tool.status as ToolCall['status'],
         output: item.tool.output,
         attachments: item.tool.attachments,
+        outputPaths: item.tool.outputPaths,
         agent: item.tool.agent,
         sourceSessionId: item.tool.sourceSessionId,
         order: itemOrder ?? nextOrderFrom(next.toolCalls),

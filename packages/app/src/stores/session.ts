@@ -32,6 +32,7 @@ import { permissionSignature, type RunawaySample } from '../components/chat/perm
 // buffer without limit; a burst that repeats far more than this is still
 // clearly a loop.
 const RECENT_APPROVAL_LIMIT = 60
+const GLOBAL_ERROR_LIMIT = 50
 
 export type {
   CompactionNotice,
@@ -440,7 +441,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
   }),
 
   addGlobalError: (message) => set((state) => ({
-    globalErrors: [...state.globalErrors, { id: crypto.randomUUID(), sessionId: null, message, order: sessionViewTiming().nowMs }],
+    globalErrors: [
+      ...state.globalErrors,
+      { id: crypto.randomUUID(), sessionId: null, message, order: sessionViewTiming().nowMs },
+    ].slice(-GLOBAL_ERROR_LIMIT),
   })),
   dismissGlobalError: (id) => set((state) => ({
     globalErrors: state.globalErrors.filter((error) => error.id !== id),

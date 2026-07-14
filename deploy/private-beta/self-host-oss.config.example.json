@@ -5,7 +5,6 @@
     "OPEN_COWORK_CLOUD_DATABASE_URL",
     "OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS",
     "OPEN_COWORK_CLOUD_COOKIE_SECRET",
-    "OPEN_COWORK_GATEWAY_SERVICE_TOKEN",
     "OPEN_COWORK_GATEWAY_ADMIN_TOKEN",
     "OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET"
   ],
@@ -131,11 +130,6 @@
       "productName": "Open Cowork Self Host",
       "shortName": "OC",
       "supportUrl": "https://support.example.com/open-cowork"
-    },
-    "cloud": {
-      "baseUrl": "https://cowork.example.com",
-      "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
-      "allowInsecureHttp": false
     },
     "productMode": "cloud_channel",
     "server": {

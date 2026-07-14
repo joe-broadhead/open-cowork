@@ -477,7 +477,6 @@
       "additionalProperties": false,
       "properties": {
         "branding": { "$ref": "#/$defs/cloudPublicBranding" },
-        "cloud": { "$ref": "#/$defs/gatewayCloudConfig" },
         "server": { "$ref": "#/$defs/gatewayServerConfig" },
         "productMode": { "type": "string", "enum": ["cloud_channel", "standalone", "hybrid"], "description": "Gateway product mode. `cloud_channel` (the apps/gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup." },
         "mode": { "type": "string", "enum": ["self-host", "managed"] },
@@ -496,34 +495,6 @@
           "items": { "$ref": "#/$defs/gatewayProviderConfig" }
         }
       }
-    },
-    "gatewayCloudConfig": {
-      "type": "object",
-      "description": "Deprecated metadata-only gateway cloud binding. The gateway runtime ignores these fields; use OPEN_COWORK_CLOUD_BASE_URL, OPEN_COWORK_GATEWAY_SERVICE_TOKEN, and OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP from deployment secrets.",
-      "additionalProperties": false,
-      "properties": {
-        "baseUrl": {
-          "type": "string",
-          "maxLength": 2048,
-          "pattern": "^https?://.+"
-        },
-        "serviceToken": { "type": "string", "maxLength": 4096 },
-        "allowInsecureHttp": { "type": "boolean" }
-      },
-      "allOf": [{
-        "if": {
-          "properties": {
-            "allowInsecureHttp": { "const": true }
-          },
-          "required": ["allowInsecureHttp"]
-        },
-        "then": {},
-        "else": {
-          "properties": {
-            "baseUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" }
-          }
-        }
-      }]
     },
     "gatewayServerConfig": {
       "type": "object",
@@ -557,12 +528,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "cloudRequestMs": {
-          "type": "integer",
-          "description": "Deprecated metadata-only field. The gateway runtime ignores file-backed values; use OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS from deployment secrets/env.",
-          "minimum": 100,
-          "maximum": 120000
-        },
         "webhookDeliveryMs": { "type": "integer", "minimum": 100, "maximum": 120000 },
         "smtpMs": { "type": "integer", "minimum": 100, "maximum": 120000 },
         "shutdownDrainMs": { "type": "integer", "minimum": 100, "maximum": 120000 }
@@ -891,7 +856,7 @@
         "cookieSecretRef": { "type": "string", "maxLength": 512 },
         "allowedEmailDomains": { "$ref": "#/$defs/cloudStringList" },
         "allowSelfServiceSignup": { "type": "boolean" },
-        "signupMode": { "type": "string", "enum": ["disabled", "closed", "invite", "domain", "open"] },
+        "signupMode": { "type": "string", "enum": ["disabled", "invite", "domain", "open"] },
         "apiTokens": {
           "type": "object",
           "additionalProperties": false,

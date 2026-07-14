@@ -5,6 +5,10 @@ import { join } from 'path'
 import { SMALL_MODEL_USE_MAIN } from '../packages/shared/src/app-config.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 
+// Persisted fixtures intentionally declare the current clean-baseline ledger.
+// The schema-version test below also verifies this stays aligned with runtime.
+const CURRENT_SETTINGS_SCHEMA_VERSION = 1
+
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })
@@ -335,7 +339,7 @@ test('window zoom defaults and persists within the accessible desktop range', as
   }
 })
 
-test('loadSettings rejects settings from a newer schema version', async () => {
+test('loadSettings rejects a future schema without changing the settings file', async () => {
   const tempRoot = testTempDir('open-cowork-settings-future-schema-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
@@ -350,16 +354,19 @@ test('loadSettings rejects settings from a newer schema version', async () => {
 
   try {
     const { SETTINGS_SCHEMA_VERSION } = await importFreshSettingsModule('future-schema-constant')
-    writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    const settingsPath = join(userDataDir, 'settings.json')
+    const original = JSON.stringify({
       _schemaVersion: SETTINGS_SCHEMA_VERSION + 1,
       selectedProviderId: 'openrouter',
       selectedModelId: 'openrouter/auto',
-    }))
+    })
+    writeFileSync(settingsPath, original)
     const { loadSettings } = await importFreshSettingsModule('future-schema-load')
     assert.throws(
       () => loadSettings(),
-      /newer than supported/,
+      /requires exact settings schema version.*left untouched/,
     )
+    assert.equal(readFileSync(settingsPath, 'utf-8'), original)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -370,7 +377,46 @@ test('loadSettings rejects settings from a newer schema version', async () => {
   }
 })
 
-test('loadSettings reads plaintext development settings without encrypted-storage migration', async () => {
+test('loadSettings rejects missing and older schema ledgers without rewriting settings', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-noncurrent-schema-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+
+  try {
+    for (const [label, stored] of [
+      ['missing', { selectedProviderId: 'openrouter' }],
+      ['older', { _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION - 1, selectedProviderId: 'openrouter' }],
+    ] as const) {
+      const userDataDir = join(tempRoot, label)
+      const settingsPath = join(userDataDir, 'settings.json')
+      mkdirSync(userDataDir, { recursive: true })
+      const original = JSON.stringify(stored)
+      writeFileSync(settingsPath, original)
+      process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+      clearConfigCaches()
+
+      const { loadSettings } = await importFreshSettingsModule(`noncurrent-${label}`)
+      assert.throws(
+        () => loadSettings(),
+        /does not migrate settings in place.*left untouched/,
+      )
+      assert.equal(readFileSync(settingsPath, 'utf-8'), original)
+    }
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('loadSettings reads current plaintext development settings in plaintext mode', async () => {
   const tempRoot = testTempDir('open-cowork-settings-plaintext-dev-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
@@ -380,6 +426,7 @@ test('loadSettings reads plaintext development settings without encrypted-storag
   writeEmptyConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
   const plaintextSettings = {
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'openrouter',
     selectedModelId: 'openrouter/auto',
     providerCredentials: {
@@ -483,6 +530,7 @@ test('stored settings without optional permission fields inherit downstream ask 
   writeAskPermissionConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'openrouter',
     selectedModelId: 'openrouter/auto',
   }))
@@ -546,6 +594,7 @@ test('effective settings use a selected provider local default when the saved mo
   writeProviderDefaultConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'internal-gateway',
     selectedModelId: 'acme-large',
   }))
@@ -579,6 +628,7 @@ test('effective settings accept provider-prefixed model ids for configured provi
   writeProviderDefaultConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'internal-gateway',
     selectedModelId: 'internal-gateway/internal-fast',
   }))
@@ -612,6 +662,7 @@ test('effective settings accept an explicit provider-prefixed small model', asyn
   writeProviderDefaultConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'internal-gateway',
     selectedModelId: 'internal-balanced',
     selectedSmallModelId: 'internal-gateway/internal-fast',
@@ -646,6 +697,7 @@ test('effective settings let small model explicitly follow the selected main mod
   writeProviderDefaultConfig(configDir)
   mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'internal-gateway',
     selectedModelId: 'internal-balanced',
     selectedSmallModelId: SMALL_MODEL_USE_MAIN,
@@ -680,6 +732,7 @@ test('effective settings fall back to the first provider model when the provider
   writeProviderDefaultConfig(configDir, 'missing-model')
   mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     selectedProviderId: 'internal-gateway',
     selectedModelId: 'acme-large',
   }))

@@ -12,6 +12,7 @@ import { startSessionStatusReconciliation, stopSessionStatusReconciliation } fro
 import {
   handleWorkflowSessionError,
   handleWorkflowSessionIdle,
+  handleWorkflowSessionNeedsAttention,
 } from './workflow/workflow-service.ts'
 import {
   ensureTaskRunForChild,
@@ -39,6 +40,20 @@ const INTENTIONALLY_IGNORED_RUNTIME_EVENTS = new Set([
   'server.heartbeat',
   'session.diff',
   'session.next.model.switched',
+  'session.next.prompted',
+  'session.next.prompt.admitted',
+  'session.next.context.updated',
+  'session.next.text.started',
+  'session.next.reasoning.started',
+  'session.next.tool.input.started',
+  'session.next.tool.input.delta',
+  'session.next.tool.input.ended',
+  'session.next.retried',
+  'session.next.compaction.started',
+  'session.next.compaction.delta',
+  'session.next.revert.staged',
+  'session.next.revert.cleared',
+  'session.next.revert.committed',
 ])
 
 function runRuntimeSideEffect(scope: string, task: () => void | Promise<unknown>) {
@@ -116,7 +131,11 @@ function handleIdleTransition(input: {
     runRuntimeSideEffect('workflow idle handling', () => handleWorkflowSessionIdle(rootSessionId))
   } else {
     const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
-    if (taskRun) {
+    // A native step failure is followed by the same idle settlement path as a
+    // successful step. Preserve the terminal error written by session.error;
+    // otherwise the child briefly fails and is immediately projected as
+    // complete.
+    if (taskRun && taskRun.status !== 'error') {
       const updated = updateTaskRun(taskRun.id, { status: 'complete' })
       if (updated) emitTaskRun(win, updated)
     }
@@ -181,7 +200,8 @@ export function handleRuntimeSideEffectEvent(input: {
 
   switch (type) {
     case 'permission.asked':
-    case 'permission.updated': {
+    case 'permission.updated':
+    case 'permission.v2.asked': {
       const normalized = normalizePermissionEvent(properties)
       const permissionType = normalized.permissionType
       const permissionId = normalized.id
@@ -207,6 +227,7 @@ export function handleRuntimeSideEffectEvent(input: {
       const approval: PermissionRequest = {
         id: permissionId,
         sessionId: rootSessionId,
+        sourceSessionId: permissionSessionId,
         taskRunId,
         tool: title,
         input: normalized.input,
@@ -231,10 +252,14 @@ export function handleRuntimeSideEffectEvent(input: {
       if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
         win.webContents.send('permission:request', approval)
       }
+      if (type === 'permission.asked' || type === 'permission.v2.asked') {
+        handleWorkflowSessionNeedsAttention(rootSessionId)
+      }
       return true
     }
 
-    case 'permission.replied': {
+    case 'permission.replied':
+    case 'permission.v2.replied': {
       // The authoritative resolution event for a permission. When a request is
       // answered out-of-band (another client, an auto-approve rule, the SDK
       // itself) this is the only signal that arrives — without it the desktop
@@ -263,7 +288,8 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
-    case 'question.asked': {
+    case 'question.asked':
+    case 'question.v2.asked': {
       const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       const questionId = readString(readRecordValue(properties, 'id'))
@@ -299,11 +325,14 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
+      handleWorkflowSessionNeedsAttention(rootSessionId)
       return true
     }
 
     case 'question.replied':
-    case 'question.rejected': {
+    case 'question.rejected':
+    case 'question.v2.replied':
+    case 'question.v2.rejected': {
       const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       const requestId = readString(readRecordValue(properties, 'requestID'))
@@ -330,6 +359,53 @@ export function handleRuntimeSideEffectEvent(input: {
 
     case 'session.next.agent.switched':
       return handleAgentSwitchedEvent({ win, properties, dispatchRuntimeEvent })
+
+    case 'session.next.step.started': {
+      const actualSessionId = readEventSessionId(properties)
+      const rootSessionId = resolveRootSession(actualSessionId)
+      if (!rootSessionId || !actualSessionId) return true
+      clearRecentIdleEvent(actualSessionId)
+      if (rootSessionId === actualSessionId) {
+        touchSessionRecord(rootSessionId)
+        dispatchRuntimeEvent(win, {
+          type: 'busy',
+          sessionId: rootSessionId,
+          data: { type: 'busy' },
+        })
+      } else {
+        const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
+        if (taskRun) {
+          const updated = updateTaskRun(taskRun.id, { status: 'running' })
+          if (updated) emitTaskRun(win, updated)
+        }
+      }
+      return true
+    }
+
+    case 'session.next.step.ended': {
+      const finish = readString(readRecordValue(properties, 'finish'))
+      if (finish === 'tool-calls' || finish === 'tool_calls') return true
+      return handleIdleTransition({
+        win,
+        actualSessionId: readEventSessionId(properties),
+        dispatchRuntimeEvent,
+      })
+    }
+
+    case 'session.next.step.failed': {
+      handleRuntimeSideEffectEvent({
+        win,
+        type: 'session.error',
+        properties,
+        dispatchRuntimeEvent,
+        getMainWindow,
+      })
+      return handleIdleTransition({
+        win,
+        actualSessionId: readEventSessionId(properties),
+        dispatchRuntimeEvent,
+      })
+    }
 
     case 'session.idle':
       return handleIdleTransition({
@@ -372,7 +448,8 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
-    case 'session.compacted': {
+    case 'session.compacted':
+    case 'session.next.compaction.ended': {
       const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       if (!rootSessionId) return true
@@ -491,7 +568,7 @@ export function handleRuntimeSideEffectEvent(input: {
       const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       const todos = normalizeTodoItems(readRecordArray(properties, 'todos'))
-      if (!rootSessionId || todos.length === 0) return true
+      if (!rootSessionId) return true
 
       const taskRunId = actualSessionId && actualSessionId !== rootSessionId
         ? (getTaskRunIdForChild(actualSessionId)
@@ -519,9 +596,12 @@ export function handleRuntimeSideEffectEvent(input: {
       const errorPayload = asRecord(readRecordValue(properties, 'error'))
       if (!rootSessionId) return true
 
-      forgetSubmittedPrompt(rootSessionId)
+      const isRootSessionError = actualSessionId === rootSessionId
+      if (isRootSessionError) {
+        forgetSubmittedPrompt(rootSessionId)
+        stopSessionStatusReconciliation(rootSessionId)
+      }
       touchSessionRecord(rootSessionId)
-      stopSessionStatusReconciliation(rootSessionId)
       const message = extractRuntimeErrorMessage(properties, errorPayload)
       log('error', `Session error: ${message}`)
 
@@ -540,7 +620,9 @@ export function handleRuntimeSideEffectEvent(input: {
         data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
       })
       publishNotification(win, { type: 'error', sessionId: rootSessionId, message })
-      runRuntimeSideEffect('workflow session error handling', () => handleWorkflowSessionError(rootSessionId, message))
+      if (isRootSessionError) {
+        runRuntimeSideEffect('workflow session error handling', () => handleWorkflowSessionError(rootSessionId, message))
+      }
       return true
     }
 

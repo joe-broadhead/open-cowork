@@ -1,5 +1,5 @@
 import { nowIso, stableJson } from '../postgres-store-id-helpers.ts'
-import { redactOperationalText } from '../postgres-store-normalizers.ts'
+import { redactOperationalText } from '../operational-text-redaction.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from '../control-plane-store.ts'
 import {
   commandFromRow,
@@ -23,6 +23,7 @@ import {
   findPostgresWorkspaceEvent,
   replayOrRejectPostgresWorkspaceEvent,
 } from './workspace-events.ts'
+import { applyPostgresProjectedEventEffects } from './session-projection-effects.ts'
 import { encodeSsePgNotifyPayload } from '../sse-pg-notify.ts'
 import type {
   AppendProjectedSessionEventInput,
@@ -30,7 +31,9 @@ import type {
   AuditEventRecord,
   CommandQueueQuota,
   ControlPlaneSessionStatus,
+  CompleteWorkflowRunInput,
   EnqueueCommandInput,
+  FailWorkflowRunInput,
   ListSessionsPageInput,
   RecordAuditEventInput,
   RecoverSessionLeaseInput,
@@ -62,6 +65,8 @@ type PostgresSessionsRepositoryOptions = {
   emitSseNotify(payload: Parameters<typeof encodeSsePgNotifyPayload>[0]): void
   recordAuditEvent(executor: PgExecutor, input: RecordAuditEventInput): Promise<AuditEventRecord>
   quotaDeps: PostgresQuotaDomainDeps
+  completeWorkflowRun(executor: PgExecutor, input: CompleteWorkflowRunInput): Promise<unknown>
+  failWorkflowRun(executor: PgExecutor, input: FailWorkflowRunInput): Promise<unknown>
 }
 
 export class PostgresSessionsRepository {
@@ -166,7 +171,7 @@ export class PostgresSessionsRepository {
     // Defensively bound this per-user read so it can never become an unbounded
     // scan that grows with a user's lifetime session count; the result is ordered
     // most-recent-first, and UI callers that need to page beyond this use
-    // listSessionsPage (keyset cursor). Mirrors the listAllSessions cap.
+    // listSessionsPage uses a bounded keyset cursor for predictable query cost.
     const result = await this.options.pool.query(
       `SELECT s.*, p.view -> 'projectSource' AS projection_project_source
        FROM cloud_sessions s
@@ -230,15 +235,6 @@ export class PostgresSessionsRepository {
       nextCursor: rows.length > limit && items.length > 0 ? encodeSessionPageCursor(items[items.length - 1]!, input) : null,
       totalEstimate: rows.length > limit ? limit + 1 : rows.length,
     }
-  }
-
-  async listAllSessions() {
-    // Defensively bound this cross-tenant read so it can never become an unbounded
-    // full-table scan; it has no production caller (diagnostics/compat only).
-    const result = await this.options.pool.query(
-      `SELECT * FROM cloud_sessions ORDER BY updated_at DESC, tenant_id, session_id LIMIT 1000`,
-    )
-    return result.rows.map(sessionFromRow)
   }
 
   async listRunnableSessions(input: {
@@ -356,7 +352,7 @@ export class PostgresSessionsRepository {
     const result = await this.options.withTransaction(async (client) => {
       const sessionRow = await this.requireSession(input.tenantId, input.sessionId, client, true)
       await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
-      const session = sessionFromRow(sessionRow)
+      let session = sessionFromRow(sessionRow)
       const payload = input.payload || {}
       let sessionEventCreated = false
       let event: SessionEventRecord | null = null
@@ -456,6 +452,9 @@ export class PostgresSessionsRepository {
       )
       const currentProjection = currentRow ? projectionFromRow(currentRow) : null
       if ((currentProjection?.sequence || 0) >= event.sequence) {
+        session = await applyPostgresProjectedEventEffects(
+          client, session, input, new Date(event.createdAt), this.options,
+        )
         return {
           event,
           workspaceEvent,
@@ -477,9 +476,17 @@ export class PostgresSessionsRepository {
          RETURNING *`,
         [input.tenantId, input.sessionId, event.sequence, JSON.stringify(projected.view), updatedAt],
       )
-      await client.query(
-        `UPDATE cloud_sessions SET updated_at = $3 WHERE tenant_id = $1 AND session_id = $2`,
-        [input.tenantId, input.sessionId, updatedAt],
+      const updatedSessionResult = await client.query(
+        `UPDATE cloud_sessions
+         SET status = COALESCE($3, status), updated_at = $4
+         WHERE tenant_id = $1 AND session_id = $2
+         RETURNING *`,
+        [input.tenantId, input.sessionId, input.sessionStatus ?? null, updatedAt],
+      )
+      if (!updatedSessionResult.rows[0]) throw new Error(`Unknown session ${input.sessionId}.`)
+      session = sessionFromRow(updatedSessionResult.rows[0])
+      session = await applyPostgresProjectedEventEffects(
+        client, session, input, new Date(updatedAt), this.options, true,
       )
       return {
         event,

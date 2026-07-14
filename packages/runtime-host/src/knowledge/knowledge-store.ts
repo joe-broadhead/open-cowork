@@ -43,14 +43,79 @@ import {
   type KnowledgeWriteOptions,
 } from '@open-cowork/shared/node'
 import { getAppDataDir } from '../config-loader-core.js'
+import { initializeLocalSqliteSchema } from '../local-sqlite-schema.js'
 const KNOWLEDGE_DB_SCHEMA_VERSION = 1
 const KNOWLEDGE_SCHEMA_VERSION_KEY = 'schema_version'
-// Local aliases so the SQLite store body reads unchanged after the helper move.
-const snapshotLimit = knowledgeSnapshotLimit
-const jsonString = knowledgeJsonString
-const revisionFor = knowledgeRevisionFor
-const MAX_TITLE_BYTES = KNOWLEDGE_MAX_TITLE_BYTES
-const MAX_TEXT_BYTES = KNOWLEDGE_MAX_TEXT_BYTES
+
+const KNOWLEDGE_BASELINE_SQL = `
+  create table knowledge_meta (
+    key text primary key,
+    value text not null
+  );
+  create table knowledge_spaces (
+    id text primary key,
+    workspace_id text not null,
+    name text not null,
+    icon text,
+    hue text,
+    visibility text not null,
+    role text not null,
+    created_at text not null,
+    updated_at text not null
+  );
+  create table knowledge_pages (
+    id text primary key,
+    workspace_id text not null,
+    space_id text not null,
+    title text not null,
+    updated_by text not null,
+    updated_at text not null,
+    version integer not null,
+    revision text not null,
+    links_json text not null,
+    body_json text not null,
+    created_at text not null,
+    foreign key(space_id) references knowledge_spaces(id) on delete cascade
+  );
+  create table knowledge_page_versions (
+    id text primary key,
+    page_id text not null,
+    workspace_id text not null,
+    space_id text not null,
+    title text not null,
+    updated_by text not null,
+    updated_at text not null,
+    version integer not null,
+    revision text not null,
+    proposal_id text,
+    links_json text not null,
+    body_json text not null,
+    foreign key(page_id) references knowledge_pages(id) on delete cascade
+  );
+  create table knowledge_proposals (
+    id text primary key,
+    workspace_id text not null,
+    space_id text not null,
+    page_id text,
+    page_title text not null,
+    by_name text not null,
+    created_at text not null,
+    summary text not null,
+    add_count integer not null,
+    del_count integer not null,
+    status text not null,
+    reviewed_at text,
+    reviewed_by text,
+    links_json text not null,
+    body_json text not null,
+    foreign key(space_id) references knowledge_spaces(id) on delete cascade,
+    foreign key(page_id) references knowledge_pages(id) on delete set null
+  );
+  create index idx_knowledge_spaces_workspace on knowledge_spaces(workspace_id, name);
+  create index idx_knowledge_pages_workspace on knowledge_pages(workspace_id, space_id, title);
+  create index idx_knowledge_versions_page on knowledge_page_versions(page_id, version desc);
+  create index idx_knowledge_proposals_workspace on knowledge_proposals(workspace_id, status, created_at);
+`
 
 type DbRow = KnowledgeDbRow
 type KnowledgeStorageOptions = {
@@ -80,80 +145,27 @@ function ensureKnowledgeDbFileModes(dbPath = knowledgeDbPath()) {
 }
 
 function initDb(db: DatabaseSync) {
-  db.exec(`
-    create table if not exists knowledge_meta (
-      key text primary key,
-      value text not null
-    );
-    create table if not exists knowledge_spaces (
-      id text primary key,
-      workspace_id text not null,
-      name text not null,
-      icon text,
-      hue text,
-      visibility text not null,
-      role text not null,
-      created_at text not null,
-      updated_at text not null
-    );
-    create table if not exists knowledge_pages (
-      id text primary key,
-      workspace_id text not null,
-      space_id text not null,
-      title text not null,
-      updated_by text not null,
-      updated_at text not null,
-      version integer not null,
-      revision text not null,
-      links_json text not null,
-      body_json text not null,
-      created_at text not null,
-      foreign key(space_id) references knowledge_spaces(id) on delete cascade
-    );
-    create table if not exists knowledge_page_versions (
-      id text primary key,
-      page_id text not null,
-      workspace_id text not null,
-      space_id text not null,
-      title text not null,
-      updated_by text not null,
-      updated_at text not null,
-      version integer not null,
-      revision text not null,
-      proposal_id text,
-      links_json text not null,
-      body_json text not null,
-      foreign key(page_id) references knowledge_pages(id) on delete cascade
-    );
-    create table if not exists knowledge_proposals (
-      id text primary key,
-      workspace_id text not null,
-      space_id text not null,
-      page_id text,
-      page_title text not null,
-      by_name text not null,
-      created_at text not null,
-      summary text not null,
-      add_count integer not null,
-      del_count integer not null,
-      status text not null,
-      reviewed_at text,
-      reviewed_by text,
-      links_json text not null,
-      body_json text not null,
-      foreign key(space_id) references knowledge_spaces(id) on delete cascade,
-      foreign key(page_id) references knowledge_pages(id) on delete set null
-    );
-    create index if not exists idx_knowledge_spaces_workspace on knowledge_spaces(workspace_id, name);
-    create index if not exists idx_knowledge_pages_workspace on knowledge_pages(workspace_id, space_id, title);
-    create index if not exists idx_knowledge_versions_page on knowledge_page_versions(page_id, version desc);
-    create index if not exists idx_knowledge_proposals_workspace on knowledge_proposals(workspace_id, status, created_at);
-  `)
-  db.prepare(`
-    insert into knowledge_meta (key, value)
-    values (?, ?)
-    on conflict(key) do update set value = excluded.value
-  `).run(KNOWLEDGE_SCHEMA_VERSION_KEY, String(KNOWLEDGE_DB_SCHEMA_VERSION))
+  initializeLocalSqliteSchema(db, {
+    storeName: 'local knowledge store',
+    currentVersion: KNOWLEDGE_DB_SCHEMA_VERSION,
+    metaTable: 'knowledge_meta',
+    versionKey: KNOWLEDGE_SCHEMA_VERSION_KEY,
+    baselineSql: KNOWLEDGE_BASELINE_SQL,
+    tables: [
+      { name: 'knowledge_meta', columns: ['key', 'value'] },
+      { name: 'knowledge_spaces', columns: ['id', 'workspace_id', 'name', 'icon', 'hue', 'visibility', 'role', 'created_at', 'updated_at'] },
+      { name: 'knowledge_pages', columns: ['id', 'workspace_id', 'space_id', 'title', 'updated_by', 'updated_at', 'version', 'revision', 'links_json', 'body_json', 'created_at'] },
+      { name: 'knowledge_page_versions', columns: ['id', 'page_id', 'workspace_id', 'space_id', 'title', 'updated_by', 'updated_at', 'version', 'revision', 'proposal_id', 'links_json', 'body_json'] },
+      { name: 'knowledge_proposals', columns: ['id', 'workspace_id', 'space_id', 'page_id', 'page_title', 'by_name', 'created_at', 'summary', 'add_count', 'del_count', 'status', 'reviewed_at', 'reviewed_by', 'links_json', 'body_json'] },
+    ],
+    indexes: [
+      'idx_knowledge_spaces_workspace',
+      'idx_knowledge_pages_workspace',
+      'idx_knowledge_versions_page',
+      'idx_knowledge_proposals_workspace',
+    ],
+    recovery: 'Back up or export spaces, pages, page history, and proposals, then reset only knowledge.sqlite before recreating or importing that knowledge state.',
+  })
 }
 
 export function getKnowledgeDb() {
@@ -170,9 +182,9 @@ function openKnowledgeDb(dbPath: string) {
   if (existing) return existing
   const db = new DatabaseSync(dbPath)
   try {
+    initDb(db)
     db.exec('pragma journal_mode = WAL;')
     db.exec('pragma foreign_keys = ON;')
-    initDb(db)
     ensureKnowledgeDbFileModes(dbPath)
     knowledgeDbsByPath.set(dbPath, db)
     return db
@@ -198,11 +210,12 @@ function closeKnowledgeDbCache() {
 
 export function setKnowledgeDatabaseForTests(db: DatabaseSync | null) {
   closeKnowledgeDbCache()
-  knowledgeDbForTests = db
+  knowledgeDbForTests = null
   transactionCounter = 0
   if (db) {
-    db.exec('pragma foreign_keys = ON;')
     initDb(db)
+    db.exec('pragma foreign_keys = ON;')
+    knowledgeDbForTests = db
   }
 }
 
@@ -244,8 +257,8 @@ function ensureWorkspaceSeed(db: DatabaseSync, workspaceId: string, now = new Da
   const seed = knowledgeWorkspaceSeed(workspaceId, now)
   const { at, spaceId, pageId, versionId } = seed
   const { space, page } = seed
-  const linksJson = jsonString(page.links, 'Knowledge links')
-  const bodyJson = jsonString(page.body, 'Knowledge body')
+  const linksJson = knowledgeJsonString(page.links, 'Knowledge links')
+  const bodyJson = knowledgeJsonString(page.body, 'Knowledge body')
 
   db.prepare(`
     insert into knowledge_spaces (id, workspace_id, name, icon, hue, visibility, role, created_at, updated_at)
@@ -289,7 +302,7 @@ export function listKnowledgeSnapshot(options: InternalKnowledgeSnapshotOptions 
   const workspaceId = workspaceIdFrom(options.workspaceId)
   return withTransaction((db) => {
     ensureWorkspaceSeed(db, workspaceId)
-    const limit = snapshotLimit(options.limit)
+    const limit = knowledgeSnapshotLimit(options.limit)
     const spaceRows = (options.spaceId
       ? db.prepare('select * from knowledge_spaces where workspace_id = ? and id = ? order by name limit ?').all(workspaceId, options.spaceId, limit + 1)
       : db.prepare('select * from knowledge_spaces where workspace_id = ? order by name limit ?').all(workspaceId, limit + 1)) as DbRow[]
@@ -335,7 +348,7 @@ export function createKnowledgeProposal(input: InternalKnowledgeProposalInput, o
     const space = getSpace(db, workspaceId, spaceId)
     if (!space) throw new Error('Knowledge space was not found.')
     assertCanPropose(space)
-    const pageTitle = requiredString(input.pageTitle, 'Knowledge page title', MAX_TITLE_BYTES)
+    const pageTitle = requiredString(input.pageTitle, 'Knowledge page title', KNOWLEDGE_MAX_TITLE_BYTES)
     const page = input.pageId
       ? getPage(db, workspaceId, input.pageId)
       : getPageByTitle(db, workspaceId, spaceId, pageTitle)
@@ -355,16 +368,16 @@ export function createKnowledgeProposal(input: InternalKnowledgeProposalInput, o
       spaceId,
       page?.id || null,
       pageTitle,
-      optionalString(input.by, 'Knowledge proposal author', MAX_TITLE_BYTES) || 'you',
+      optionalString(input.by, 'Knowledge proposal author', KNOWLEDGE_MAX_TITLE_BYTES) || 'you',
       at,
-      requiredString(input.summary, 'Knowledge proposal summary', MAX_TEXT_BYTES),
+      requiredString(input.summary, 'Knowledge proposal summary', KNOWLEDGE_MAX_TEXT_BYTES),
       diff.add,
       diff.del,
       'pending',
       null,
       null,
-      jsonString(links, 'Knowledge proposal links'),
-      jsonString(body, 'Knowledge proposal body'),
+      knowledgeJsonString(links, 'Knowledge proposal links'),
+      knowledgeJsonString(body, 'Knowledge proposal body'),
     )
     const proposal = getProposal(db, id, workspaceId)
     if (!proposal) throw new Error('Knowledge proposal was not created.')
@@ -387,7 +400,7 @@ function updateProposalStatus(
   `).run(
     status,
     at,
-    optionalString(input?.reviewedBy, 'Knowledge reviewer', MAX_TITLE_BYTES) || 'you',
+    optionalString(input?.reviewedBy, 'Knowledge reviewer', KNOWLEDGE_MAX_TITLE_BYTES) || 'you',
     workspaceId,
     proposal.id,
   )
@@ -409,24 +422,24 @@ export function acceptKnowledgeProposal(proposalId: string, input: InternalKnowl
     const at = nowIso(input)
     const pageId = existing?.id || `page:${randomUUID()}`
     const version = (existing?.version || 0) + 1
-    const revision = revisionFor({ pageId, version, body: proposal.body, links: proposal.links })
+    const revision = knowledgeRevisionFor({ pageId, version, body: proposal.body, links: proposal.links })
     if (existing) {
       db.prepare(`
         update knowledge_pages
         set title = ?, updated_by = ?, updated_at = ?, version = ?, revision = ?, links_json = ?, body_json = ?
         where id = ?
-      `).run(proposal.pageTitle, proposal.by, at, version, revision, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'), pageId)
+      `).run(proposal.pageTitle, proposal.by, at, version, revision, knowledgeJsonString(proposal.links, 'Knowledge links'), knowledgeJsonString(proposal.body, 'Knowledge body'), pageId)
     } else {
       db.prepare(`
         insert into knowledge_pages (id, workspace_id, space_id, title, updated_by, updated_at, version, revision, links_json, body_json, created_at)
         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(pageId, workspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'), at)
+      `).run(pageId, workspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, knowledgeJsonString(proposal.links, 'Knowledge links'), knowledgeJsonString(proposal.body, 'Knowledge body'), at)
     }
     const versionId = `version:${pageId}:${version}`
     db.prepare(`
       insert into knowledge_page_versions (id, page_id, workspace_id, space_id, title, updated_by, updated_at, version, revision, proposal_id, links_json, body_json)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(versionId, pageId, workspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, proposal.id, jsonString(proposal.links, 'Knowledge links'), jsonString(proposal.body, 'Knowledge body'))
+    `).run(versionId, pageId, workspaceId, proposal.spaceId, proposal.pageTitle, proposal.by, at, version, revision, proposal.id, knowledgeJsonString(proposal.links, 'Knowledge links'), knowledgeJsonString(proposal.body, 'Knowledge body'))
 
     const reviewed = updateProposalStatus(db, proposal, workspaceId, 'accepted', input, at)
     const page = db.prepare('select * from knowledge_page_versions where id = ?').get(versionId) as DbRow | undefined
@@ -450,7 +463,7 @@ export function declineKnowledgeProposal(proposalId: string, input: InternalKnow
 
 export function listKnowledgePageHistory(pageId: string, options: InternalKnowledgeSnapshotOptions = {}): KnowledgePageVersion[] {
   const workspaceId = workspaceIdFrom(options.workspaceId)
-  const limit = snapshotLimit(options.limit)
+  const limit = knowledgeSnapshotLimit(options.limit)
   return withTransaction((db) => {
     ensureWorkspaceSeed(db, workspaceId)
     const page = getPage(db, workspaceId, requiredString(pageId, 'Knowledge page id', 512))
@@ -495,18 +508,18 @@ export function restoreKnowledgePageVersion(
     // copy of the chosen historical version, preserving the full audit trail.
     const at = nowIso(input)
     const version = page.version + 1
-    const restoredBy = optionalString(input.reviewedBy, 'Knowledge reviewer', MAX_TITLE_BYTES) || 'you'
-    const revision = revisionFor({ pageId: page.id, version, body: target.body, links: target.links })
+    const restoredBy = optionalString(input.reviewedBy, 'Knowledge reviewer', KNOWLEDGE_MAX_TITLE_BYTES) || 'you'
+    const revision = knowledgeRevisionFor({ pageId: page.id, version, body: target.body, links: target.links })
     db.prepare(`
       update knowledge_pages
       set title = ?, updated_by = ?, updated_at = ?, version = ?, revision = ?, links_json = ?, body_json = ?
       where id = ?
-    `).run(target.title, restoredBy, at, version, revision, jsonString(target.links, 'Knowledge links'), jsonString(target.body, 'Knowledge body'), page.id)
+    `).run(target.title, restoredBy, at, version, revision, knowledgeJsonString(target.links, 'Knowledge links'), knowledgeJsonString(target.body, 'Knowledge body'), page.id)
     const newVersionId = `version:${page.id}:${version}`
     db.prepare(`
       insert into knowledge_page_versions (id, page_id, workspace_id, space_id, title, updated_by, updated_at, version, revision, proposal_id, links_json, body_json)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(newVersionId, page.id, workspaceId, page.spaceId, target.title, restoredBy, at, version, revision, null, jsonString(target.links, 'Knowledge links'), jsonString(target.body, 'Knowledge body'))
+    `).run(newVersionId, page.id, workspaceId, page.spaceId, target.title, restoredBy, at, version, revision, null, knowledgeJsonString(target.links, 'Knowledge links'), knowledgeJsonString(target.body, 'Knowledge body'))
     const created = db.prepare('select * from knowledge_page_versions where id = ?').get(newVersionId) as DbRow | undefined
     if (!created) throw new Error('Knowledge page version was not created.')
     return { page: toVersion(created) }

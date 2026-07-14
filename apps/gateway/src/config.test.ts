@@ -352,6 +352,19 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
     OPEN_COWORK_CLOUD_BASE_URL: 'http://cloud.example.test',
     OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: 'true',
   }).cloud.baseUrl, 'http://cloud.example.test')
+
+  const localRuntimeConfig = {
+    server: { adminToken: 'admin-token' },
+    providers: [{ kind: 'fake' as const, channelBindingId: 'fake-binding' }],
+  }
+  for (const baseUrl of ['http://127.1.2.3:8787', 'http://[::1]:8787']) {
+    assert.equal(resolveGatewayConfig(localRuntimeConfig, {
+      OPEN_COWORK_CLOUD_BASE_URL: baseUrl,
+    }).cloud.baseUrl, baseUrl)
+  }
+  assert.throws(() => resolveGatewayConfig(localRuntimeConfig, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'http://127.attacker.example:8787',
+  }), /HTTPS|ALLOW_INSECURE_HTTP/)
 })
 
 test('gateway config accepts signed bridge providers without cloud control-plane changes', () => {
@@ -990,10 +1003,6 @@ test('gateway config loads the shared open-cowork config gateway section with al
           shortName: 'AC',
           supportUrl: 'https://support.acme.example/cowork',
         },
-        cloud: {
-          baseUrl: 'https://ignored-file-cloud.example',
-          serviceToken: 'ignored-file-service-token',
-        },
         server: {
           host: '127.0.0.1',
           port: 0,
@@ -1039,13 +1048,7 @@ test('gateway config overlays provider env credentials onto shared provider bind
     const configPath = join(tempRoot, 'open-cowork.config.json')
     writeFileSync(configPath, JSON.stringify({
       gateway: {
-        cloud: {
-          baseUrl: 'https://cowork.acme.example',
-          serviceToken: 'service-token-from-shared-config',
-          allowInsecureHttp: true,
-        },
         timeouts: {
-          cloudRequestMs: 100,
           webhookDeliveryMs: 1234,
         },
         providers: [{
@@ -1097,20 +1100,12 @@ test('gateway config lets explicit config path override config directory gateway
     writeFileSync(dirConfig, JSON.stringify({
       gateway: {
         branding: { productName: 'Directory Cowork' },
-        cloud: {
-          baseUrl: 'https://directory.acme.example',
-          serviceToken: 'directory-token',
-        },
         providers: [{ kind: 'fake', channelBindingId: 'directory-fake' }],
       },
     }))
     writeFileSync(pathConfig, JSON.stringify({
       gateway: {
         branding: { productName: 'Explicit Cowork' },
-        cloud: {
-          baseUrl: 'https://explicit.acme.example',
-          serviceToken: 'explicit-token',
-        },
         providers: [{ kind: 'fake', channelBindingId: 'explicit-fake' }],
       },
     }))
@@ -1143,10 +1138,6 @@ test('gateway config discovers JSONC shared config files from config directories
         "branding": {
           "productName": "JSONC Cowork",
         },
-        "cloud": {
-          "baseUrl": "https://cowork.acme.example",
-          "serviceToken": "ignored-file-service-token",
-        },
         "providers": [{
           "kind": "fake",
           "channelBindingId": "fake-binding",
@@ -1170,6 +1161,38 @@ test('gateway config discovers JSONC shared config files from config directories
   }
 })
 
+test('gateway config rejects file-backed cloud connection settings', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
+  try {
+    const configPath = join(tempRoot, 'open-cowork.config.json')
+    writeFileSync(configPath, JSON.stringify({
+      gateway: {
+        cloud: {
+          baseUrl: 'https://cowork.acme.example',
+        },
+      },
+    }))
+
+    assert.throws(() => loadGatewayConfig({
+      ...operatorEnv,
+      OPEN_COWORK_CONFIG_PATH: configPath,
+    }), /gateway cloud connection settings must use deployment environment variables/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('gateway config rejects file-backed cloud request timeouts', () => {
+  assert.throws(() => loadGatewayConfig({
+    ...operatorEnv,
+    OPEN_COWORK_GATEWAY_CONFIG_JSON: JSON.stringify({
+      timeouts: {
+        cloudRequestMs: 100,
+      },
+    }),
+  }), /cloudRequestMs must use OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS/)
+})
+
 test('gateway config rejects unallowlisted shared config env placeholders', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
   try {
@@ -1177,9 +1200,6 @@ test('gateway config rejects unallowlisted shared config env placeholders', () =
     writeFileSync(configPath, JSON.stringify({
       allowedEnvPlaceholders: [],
       gateway: {
-        cloud: {
-          baseUrl: 'https://cowork.acme.example',
-        },
         providers: [{
           kind: 'fake',
           channelBindingId: 'fake-binding',

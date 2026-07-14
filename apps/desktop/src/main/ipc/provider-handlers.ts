@@ -1,8 +1,10 @@
 import { getEffectiveSettings, getProviderCredentialValue } from '@open-cowork/runtime-host/settings'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getClient } from '@open-cowork/runtime-host/runtime'
-import { normalizeProviderListResponse, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
-import { refreshProviderCatalog, modelInfoKeys } from '@open-cowork/runtime-host'
+import { listNativeProviders, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
+import { connectNativeProviderApiKey, refreshProviderCatalog, modelInfoKeys } from '@open-cowork/runtime-host'
+import { unwrapNativeData } from '@open-cowork/runtime-host'
+import type { IntegrationInfo, IntegrationMethod, OpencodeClient, ProviderV2Info } from '@opencode-ai/sdk/v2'
 import type { IpcHandlerContext } from './context.ts'
 import {
   mergeRuntimeProviderModels,
@@ -17,12 +19,57 @@ import { getProviderDescriptor, getProviderDynamicCatalog, getPublicAppConfig, i
 import { log } from '@open-cowork/shared/node'
 type ElectronShell = typeof import('electron').shell
 const MAX_PROVIDER_MODEL_ID_LENGTH = 512
+const pendingOauthAttempts = new Map<string, { attemptID: string; mode: 'auto' | 'code' }>()
+
+function oauthAttemptKey(providerId: string, method: number) {
+  return `${providerId}\0${method}`
+}
+
+function projectIntegrationMethod(method: IntegrationMethod) {
+  if (method.type === 'oauth') {
+    return {
+      type: 'oauth' as const,
+      label: method.label,
+      ...(method.prompts ? { prompts: method.prompts } : {}),
+    }
+  }
+  if (method.type === 'key') {
+    return { type: 'api' as const, label: method.label || 'API key' }
+  }
+  return null
+}
+
+type ProjectedIntegrationMethod = NonNullable<ReturnType<typeof projectIntegrationMethod>>
+
+async function listNativeIntegrations(client: OpencodeClient) {
+  const response = await client.v2.integration.list(undefined, { throwOnError: true })
+  return unwrapNativeData<IntegrationInfo[]>(response)
+}
+
+async function resolveProviderIntegrationId(client: OpencodeClient, providerId: string) {
+  const response = await client.v2.provider.get({ providerID: providerId }, { throwOnError: true })
+  return unwrapNativeData<ProviderV2Info>(response).integrationID || providerId
+}
+
+export async function getNativeProviderAuthMethods(client: OpencodeClient) {
+  const [providerResponse, integrations] = await Promise.all([
+    client.v2.provider.list(undefined, { throwOnError: true }),
+    listNativeIntegrations(client),
+  ])
+  const providers = unwrapNativeData<ProviderV2Info[]>(providerResponse)
+  const byIntegration = new Map(integrations.map((integration) => [integration.id, integration]))
+  return Object.fromEntries(providers.map((provider) => {
+    const integration = byIntegration.get(provider.integrationID || provider.id)
+    return [provider.id, (integration?.methods || [])
+      .map(projectIntegrationMethod)
+      .filter((method): method is ProjectedIntegrationMethod => Boolean(method))]
+  }))
+}
 
 async function listRuntimeProviders() {
   const client = getClient()
   if (!client) return []
-  const result = await client.provider.list()
-  return normalizeProviderListResponse(result.data)
+  return listNativeProviders(client)
 }
 
 function normalizeProviderModelId(value: unknown) {
@@ -49,14 +96,7 @@ async function syncApiCredentialForConnectionTest(providerId: string) {
   const key = getProviderCredentialValue(settings, providerId, credential.key)
   if (!key) return false
 
-  await client.auth.set({
-    providerID: providerId,
-    auth: {
-      type: 'api',
-      key,
-      metadata: { source: 'open-cowork' },
-    },
-  }, { throwOnError: true })
+  await connectNativeProviderApiKey(client, providerId, key)
   return true
 }
 
@@ -136,8 +176,7 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
     const client = getClient()
     if (!client) return {}
     try {
-      const result = await client.provider.auth()
-      return result.data || {}
+      return await getNativeProviderAuthMethods(client)
     } catch (err) {
       context.logHandlerError('provider:auth-methods', err)
       return {}
@@ -164,12 +203,34 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
     const client = getClient()
     if (!client) throw new Error('OpenCode runtime is not running. Save your provider settings first, then try provider login again.')
     try {
-      const result = await client.provider.oauth.authorize({
-        providerID: providerId,
-        method,
+      const integrationID = await resolveProviderIntegrationId(client, providerId)
+      const integrationResponse = await client.v2.integration.get({ integrationID }, { throwOnError: true })
+      const integration = unwrapNativeData<IntegrationInfo>(integrationResponse)
+      const selected = integration.methods.filter((entry) => entry.type !== 'env')[method]
+      if (!selected || selected.type !== 'oauth') {
+        throw new Error(`Provider ${providerId} does not expose OAuth method ${method}.`)
+      }
+      const result = await client.v2.integration.connect.oauth({
+        integrationID,
+        methodID: selected.id,
         inputs,
+        label: 'Open Cowork',
+      }, { throwOnError: true })
+      const attempt = unwrapNativeData<{
+        attemptID: string
+        url: string
+        instructions: string
+        mode: 'auto' | 'code'
+      }>(result)
+      pendingOauthAttempts.set(oauthAttemptKey(providerId, method), {
+        attemptID: attempt.attemptID,
+        mode: attempt.mode,
       })
-      const authorization = normalizeProviderAuthorization(result.data)
+      const authorization = normalizeProviderAuthorization({
+        url: attempt.url,
+        instructions: attempt.instructions,
+        method: attempt.mode,
+      })
       if (authorization?.url) {
         try {
           const parsed = new URL(authorization.url)
@@ -198,12 +259,32 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
     const client = getClient()
     if (!client) throw new Error('OpenCode runtime is not running. Save your provider settings first, then try provider login again.')
     try {
-      const result = await client.provider.oauth.callback({
-        providerID: providerId,
-        method,
-        code,
-      })
-      return Boolean(result.data)
+      const key = oauthAttemptKey(providerId, method)
+      const pending = pendingOauthAttempts.get(key)
+      if (!pending) throw new Error(`No pending OAuth attempt exists for ${providerId}. Start login again.`)
+      const statusResponse = await client.v2.integration.attempt.status({
+        attemptID: pending.attemptID,
+      }, { throwOnError: true })
+      const status = unwrapNativeData<{ status: 'pending' | 'complete' | 'failed' | 'expired'; message?: string }>(statusResponse)
+      if (status.status === 'complete') {
+        pendingOauthAttempts.delete(key)
+        return true
+      }
+      if (status.status === 'failed') {
+        pendingOauthAttempts.delete(key)
+        throw new Error(status.message || `Provider login failed for ${providerId}.`)
+      }
+      if (status.status === 'expired') {
+        pendingOauthAttempts.delete(key)
+        throw new Error(`Provider login expired for ${providerId}. Start login again.`)
+      }
+      if (pending.mode === 'auto' && !code) return false
+      await client.v2.integration.attempt.complete({
+        attemptID: pending.attemptID,
+        ...(code ? { code } : {}),
+      }, { throwOnError: true })
+      pendingOauthAttempts.delete(key)
+      return true
     } catch (err) {
       context.logHandlerError(`provider:oauth-callback ${providerId}`, err)
       throw err
@@ -215,7 +296,18 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
     const client = getClient()
     if (!client) throw new Error('OpenCode runtime is not running. Start the runtime, then try provider sign-out again.')
     try {
-      await client.auth.remove({ providerID: providerId }, { throwOnError: true })
+      const integrationID = await resolveProviderIntegrationId(client, providerId)
+      const integrationResponse = await client.v2.integration.get({ integrationID }, { throwOnError: true })
+      const integration = unwrapNativeData<IntegrationInfo>(integrationResponse)
+      const credentialIds = integration.connections.flatMap((connection) => (
+        connection.type === 'credential' ? [connection.id] : []
+      ))
+      await Promise.all(credentialIds.map((credentialID) => (
+        client.v2.credential.remove({ credentialID }, { throwOnError: true })
+      )))
+      for (const key of pendingOauthAttempts.keys()) {
+        if (key.startsWith(`${providerId}\0`)) pendingOauthAttempts.delete(key)
+      }
       log('provider', `Removed OpenCode-native auth for ${providerId}`)
       return true
     } catch (err) {

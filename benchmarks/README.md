@@ -39,5 +39,9 @@ The current suite measures:
   local runs prefer a matching `perf-baseline.<platform>-<arch>-node<major>.json`
   before falling back to another baseline from the same platform and architecture,
   then the generic fallback.
+- Baseline metadata records the exact environment that generated the measurements.
+  The checked-in Linux Node 22 baseline exercises the supported engine floor;
+  contributors and CI use the newer reviewed patch pinned in `.nvmrc` on the same
+  LTS line.
 - The baseline is machine-specific enough that it should be refreshed intentionally after major local environment changes.
 - If the architecture changes enough that the workload is no longer representative, update the fixture generator in [scripts/perf-benchmark.ts](../scripts/perf-benchmark.ts) before refreshing the baseline.

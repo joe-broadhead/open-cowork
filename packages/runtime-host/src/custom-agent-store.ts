@@ -53,7 +53,8 @@ type ManagedAgentMetadata = {
   // contract. These UI selections are duplicated in the Open Cowork sidecar
   // because some SDK-native tools (for example websearch/webfetch/bash) cannot
   // be reliably reverse-mapped from permission keys without a live SDK tool
-  // catalog. Older files that lack these fields fall back to derivation below.
+  // catalog. Native OpenCode agent markdown may have no Open Cowork sidecar at
+  // all, so missing metadata is intentionally derived from that native contract.
   skillNames?: string[]
   toolIds?: string[]
   deniedToolPatterns?: string[]
@@ -790,13 +791,8 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       directory: scope === 'project' ? targetDirectory(scope, directory) : null,
       mode,
       name,
-      // `parseFrontmatter` is already called above and handles the
-      // "description is the first key" case correctly. The old regex
-      // helper required a newline before the key and silently dropped
-      // the description when it was the first frontmatter field —
-      // which is exactly how the UI writer serializes it, so every
-      // saved agent lost its description on reload and failed
-      // validation downstream.
+      // Keep all frontmatter reads on the parsed object so first-key fields
+      // and inline maps follow the same native OpenCode parsing contract.
       description: typeof frontmatter.description === 'string' ? frontmatter.description : '',
       instructions: readAgentInstructionsFromMarkdown(content),
       skillNames,

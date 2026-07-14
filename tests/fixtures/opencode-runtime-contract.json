@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "opencodeVersion": "1.17.18",
+  "opencodeVersion": "1.17.20",
   "requiredAssumptionIds": [
     "cloud-session-event-projection-contract",
     "opencode-plugin-remote-fail-closed",
@@ -54,21 +54,21 @@
       "id": "opencode-session-create-route",
       "owner": "desktop-runtime",
       "method": "POST",
-      "path": "/session",
+      "path": "/api/session",
       "tests": ["tests/cloud-opencode-runtime-adapter.test.ts"]
     },
     {
       "id": "opencode-session-prompt-route",
       "owner": "desktop-runtime",
       "method": "POST",
-      "path": "/session/{sessionID}/prompt_async",
+      "path": "/api/session/{sessionID}/prompt",
       "tests": ["tests/cloud-opencode-runtime-adapter.test.ts"]
     },
     {
       "id": "opencode-session-events-route",
       "owner": "desktop-runtime",
       "method": "GET",
-      "path": "/event",
+      "path": "/api/event",
       "tests": ["tests/cloud-opencode-runtime-adapter.test.ts", "tests/opencode-sdk-event-projection.test.ts"]
     }
   ],
@@ -76,21 +76,21 @@
     {
       "id": "client-method-question-reply",
       "owner": "desktop-runtime",
-      "method": "question.reply",
+      "method": "v2.session.question.reply",
       "evidence": "Open Cowork preserves OpenCode-native question replies at execution while projecting user-facing state.",
       "tests": ["tests/question-normalization.test.ts", "tests/cloud-app.test.ts"]
     },
     {
       "id": "client-method-question-reject",
       "owner": "desktop-runtime",
-      "method": "question.reject",
+      "method": "v2.session.question.reject",
       "evidence": "Open Cowork forwards rejections through durable commands without replacing OpenCode question handling.",
       "tests": ["tests/question-normalization.test.ts", "tests/cloud-app.test.ts"]
     },
     {
       "id": "client-method-permission-respond",
       "owner": "desktop-runtime",
-      "method": "permission.reply",
+      "method": "v2.session.permission.reply",
       "evidence": "Open Cowork gates remote approval responses but leaves permission execution semantics with OpenCode.",
       "tests": ["tests/permission-config.test.ts", "tests/cloud-app.test.ts"]
     }

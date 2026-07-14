@@ -1,5 +1,5 @@
 import type { QuotaPolicyCode } from './control-plane-errors.ts'
-import type { ControlPlaneCommandKind } from './control-plane-enums.ts'
+import type { ControlPlaneCommandKind, ControlPlaneSessionStatus } from './control-plane-enums.ts'
 import type {
   SessionEventRecord,
   SessionProjectionRecord,
@@ -9,6 +9,7 @@ import type {
 } from './control-plane-session-records.ts'
 import type { SessionCommandRecord } from './control-plane-worker-records.ts'
 import type { ConsumeUsageQuotaInput } from './control-plane-usage-inputs.ts'
+import type { CompleteWorkflowRunInput, FailWorkflowRunInput } from './control-plane-workflow-inputs.ts'
 
 // The control-plane's event-append / projection / command-enqueue input shapes
 // (plus the command-queue and workflow-run quota descriptors they carry),
@@ -49,6 +50,14 @@ export type WriteProjectionInput = {
 }
 
 export type AppendProjectedSessionEventInput = AppendEventInput & {
+  // Terminal/status effects are committed in the same store transaction as
+  // the event and projection. Runtime events are not replayable after an
+  // OpenCode process exits, so splitting these writes can permanently strand
+  // a workflow or expose a status with no durable causal event.
+  sessionStatus?: ControlPlaneSessionStatus
+  workflowTerminal?:
+    | { kind: 'completed'; input: CompleteWorkflowRunInput }
+    | { kind: 'failed'; input: FailWorkflowRunInput }
   workspace: (input: {
     session: SessionRecord
     event: SessionEventRecord

@@ -106,7 +106,7 @@ export class InMemoryIdentityDomain {
       role: input.role || 'member',
       status: 'active',
       updatedAt: input.createdAt,
-      actor: { actorType: 'system', actorId: 'compat.ensureUser' },
+      actor: { actorType: 'system', actorId: 'identity.ensureUser' },
     })
     return clone(record)
   }

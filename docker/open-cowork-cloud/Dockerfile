@@ -1,4 +1,4 @@
-FROM node:26-bookworm-slim@sha256:b16ca7b4dcfb20184e1c70f9ee30c6a75ed1da669cfafd6d2add4761b123d79f AS build
+FROM node:24.18.0-bookworm-slim@sha256:39a4259b6f744868a8228742ad45aa3026f97302e5eec2fa4a38b30ca0a66e12 AS build
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN pnpm cloud:build
 # No TypeScript source, tests, or scripts ship in the public runtime image.
 RUN node scripts/prune-cloud-runtime.mjs /runtime
 
-FROM node:26-bookworm-slim@sha256:b16ca7b4dcfb20184e1c70f9ee30c6a75ed1da669cfafd6d2add4761b123d79f
+FROM node:24.18.0-bookworm-slim@sha256:39a4259b6f744868a8228742ad45aa3026f97302e5eec2fa4a38b30ca0a66e12
 
 WORKDIR /app
 
@@ -56,9 +56,9 @@ EXPOSE 8787
 
 USER node
 
-# Probe readiness (/readyz: real DB/object-store/secret round-trip, 200/503), not bare
-# liveness (/healthz: unconditional 200) — an unhealthy backing service should mark the
-# container unhealthy so traffic is not routed to it. Helm probes already do this.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "const role=process.env.OPEN_COWORK_CLOUD_ROLE||'all-in-one'; if(role!=='web'&&role!=='all-in-one') process.exit(0); fetch('http://127.0.0.1:'+(process.env.OPEN_COWORK_CLOUD_PORT||'8787')+'/readyz').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
+# Web/all-in-one probes dependency readiness. Worker/scheduler probes their
+# dedicated loop-heartbeat listener so a wedged execution role is not reported
+# healthy merely because it has no web server.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "const role=process.env.OPEN_COWORK_CLOUD_ROLE||'all-in-one'; const web=role==='web'||role==='all-in-one'; const port=web?(process.env.OPEN_COWORK_CLOUD_PORT||'8787'):process.env.OPEN_COWORK_CLOUD_LIVENESS_PORT; if(!port) process.exit(1); fetch('http://127.0.0.1:'+port+(web?'/readyz':'/livez')).then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "--experimental-sqlite", "apps/desktop/dist/cloud/open-cowork-cloud.mjs"]

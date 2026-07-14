@@ -31,6 +31,9 @@
 {{- end }}
 {{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
+{{- if $.Values.cloud.runMigrations }}
+{{- fail "cloud.deploymentTier=public_production requires cloud.runMigrations=false; run cloud:migrate:start as a separately credentialed one-shot job before deploying long-running roles." }}
+{{- end }}
 {{- if not $.Values.image.digest }}
 {{- fail "cloud.deploymentTier=public_production requires image.digest so the Cloud deployment is bound to an immutable OCI artifact." }}
 {{- end }}
@@ -230,9 +233,12 @@ spec:
           env:
             - name: OPEN_COWORK_CLOUD_ROLE
               value: {{ $roleName | quote }}
-            {{- if eq $roleName "web" }}
+            # Kubernetes HTTP probes address the pod IP, so both the web server
+            # and the worker/scheduler heartbeat listener must bind all pod
+            # interfaces rather than loopback.
             - name: OPEN_COWORK_CLOUD_HOST
               value: "0.0.0.0"
+            {{- if eq $roleName "web" }}
             - name: OPEN_COWORK_CLOUD_PORT
               value: {{ $role.port | quote }}
             - name: OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS

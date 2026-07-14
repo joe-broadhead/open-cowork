@@ -57,7 +57,7 @@ test('launch readiness harness produces strict load report against cloud and gat
   let sessionCounter = 0
   const cloud = await listen(async (req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
-    if (url.pathname === '/healthz' || url.pathname === '/livez') return writeJson(res, 200, { ok: true })
+    if (url.pathname === '/livez' || url.pathname === '/readyz') return writeJson(res, 200, { ok: true })
     if (url.pathname === '/') {
       res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' })
       res.end('<!doctype html><title>Open Cowork Cloud</title>')
@@ -368,7 +368,7 @@ test('launch evidence manifest validator accepts template and completed private 
 test('launch failover drill emits redacted dry-run evidence without executing hooks', async () => {
   const cloud = await listen((req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
-    if (url.pathname === '/healthz') return writeJson(res, 200, { ok: true })
+    if (url.pathname === '/livez') return writeJson(res, 200, { ok: true })
     if (url.pathname === '/api/metrics') {
       res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
       res.end('open_cowork_cloud_command_queue_depth_estimate 0\n')
@@ -439,7 +439,7 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
 test('launch failover drill records operator hook evidence without executing shell text', async () => {
   const cloud = await listen((req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
-    if (url.pathname === '/healthz') return writeJson(res, 200, { ok: true })
+    if (url.pathname === '/livez') return writeJson(res, 200, { ok: true })
     if (url.pathname === '/api/metrics') {
       res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
       res.end('open_cowork_cloud_command_queue_depth_estimate 0\n')
@@ -517,7 +517,7 @@ test('launch readiness plan defaults to the local self-host beta tier', async ()
     assert.equal(parsed.ok, true)
     assert.equal(parsed.mode, 'plan')
     assert.equal(parsed.profileName, 'local-self-host-beta')
-    assert.ok(parsed.operations.includes('cloud-health'))
+    assert.ok(parsed.operations.includes('cloud-readiness'))
     assert.ok(parsed.operations.includes('cloud-liveness'))
     assert.ok(parsed.operations.includes('gateway-health'))
     const plan = readFileSync(parsed.planPath, 'utf8')

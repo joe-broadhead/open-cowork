@@ -147,7 +147,7 @@ export class PostgresChannelProviderEventsRepository {
        WHERE org_id = $1
          AND event_id = $2
          AND claimed_by = $7
-         AND ($8::text[] IS NULL OR metadata ->> 'channelBindingId' = ANY($8::text[]) OR NOT (metadata ? 'channelBindingId'))
+         AND ($8::text[] IS NULL OR metadata ->> 'channelBindingId' = ANY($8::text[]))
        RETURNING *`,
       [
         input.orgId,

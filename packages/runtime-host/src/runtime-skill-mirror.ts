@@ -6,12 +6,13 @@ import { log } from '@open-cowork/shared/node'
 
 const MANAGED_SKILL_MIRROR_REGISTRY = '.open-cowork-managed-skills.json'
 const MANAGED_SKILL_MIRROR_SCHEMA_VERSION = 1
+const MANAGED_SKILL_MIRROR_REGISTRY_KEYS = new Set(['schemaVersion', 'updatedAt', 'skills'])
+const MANAGED_SKILL_MIRROR_ENTRY_KEYS = new Set(['name', 'fingerprint'])
 
 type ManagedSkillMirrorRegistry = {
-  schemaVersion: number
+  schemaVersion: typeof MANAGED_SKILL_MIRROR_SCHEMA_VERSION
   updatedAt: string
-  skillNames?: string[]
-  skills?: Array<{
+  skills: Array<{
     name: string
     fingerprint: string
   }>
@@ -31,24 +32,39 @@ function normalizeSkillNames(value: unknown) {
   )).sort((a, b) => a.localeCompare(b))
 }
 
+function hasExactKeys(value: Record<string, unknown>, keys: ReadonlySet<string>) {
+  const actual = Object.keys(value)
+  return actual.length === keys.size && actual.every((key) => keys.has(key))
+}
+
 function readManagedSkillMirrorRegistry(root: string): ManagedSkillMirrorRegistry | null {
   try {
-    const raw = JSON.parse(readFileSync(registryPath(root), 'utf-8')) as Partial<ManagedSkillMirrorRegistry>
+    const parsed = JSON.parse(readFileSync(registryPath(root), 'utf-8')) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const raw = parsed as Record<string, unknown>
+    if (
+      !hasExactKeys(raw, MANAGED_SKILL_MIRROR_REGISTRY_KEYS)
+      || raw.schemaVersion !== MANAGED_SKILL_MIRROR_SCHEMA_VERSION
+      || typeof raw.updatedAt !== 'string'
+      || !raw.updatedAt.trim()
+      || !Array.isArray(raw.skills)
+      || raw.skills.some((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return true
+        const skill = entry as Record<string, unknown>
+        return !hasExactKeys(skill, MANAGED_SKILL_MIRROR_ENTRY_KEYS)
+          || typeof skill.name !== 'string'
+          || !skill.name.trim()
+          || typeof skill.fingerprint !== 'string'
+          || !skill.fingerprint.trim()
+      })
+    ) return null
+
     return {
-      schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0,
-      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : '',
-      skillNames: normalizeSkillNames(raw.skillNames),
-      skills: Array.isArray(raw.skills)
-        ? raw.skills
-          .filter((entry): entry is { name: string; fingerprint: string } => (
-            typeof entry?.name === 'string'
-            && entry.name.trim().length > 0
-            && typeof entry.fingerprint === 'string'
-            && entry.fingerprint.trim().length > 0
-          ))
-          .map((entry) => ({ name: entry.name.trim(), fingerprint: entry.fingerprint.trim() }))
-          .sort((a, b) => a.name.localeCompare(b.name))
-        : [],
+      schemaVersion: MANAGED_SKILL_MIRROR_SCHEMA_VERSION,
+      updatedAt: raw.updatedAt,
+      skills: (raw.skills as Array<{ name: string; fingerprint: string }>)
+        .map((entry) => ({ name: entry.name.trim(), fingerprint: entry.fingerprint.trim() }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     }
   } catch {
     return null

@@ -32,13 +32,14 @@ image:
 cloud:
   deploymentTier: public_production
   profile: full
+  runMigrations: false
   publicUrl: https://cowork.example.com
   existingSecret: open-cowork-cloud-secrets
   checkpoints:
     enabled: true
   auth:
     mode: oidc
-    signupMode: invite_only
+    signupMode: invite
     oidcIssuerUrl: https://issuer.example.com
     oidcClientId: OPEN_COWORK_OIDC_CLIENT_ID
   objectStore:
@@ -154,7 +155,7 @@ deployment repo before installing the chart:
 
 | Secret key | Runtime input |
 | --- | --- |
-| `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Postgres connection string |
+| `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Least-privilege runtime Postgres connection string; never a database owner or migrator URL |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` or `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | BYOK envelope key or secret-manager URI |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | Cookie signing secret |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal service token |
@@ -174,16 +175,23 @@ Create `open-cowork-gateway-secrets` separately:
 
 ## Rollout And Smoke
 
-1. Render manifests with `helm template` and inspect ingress, service account,
-   secret references, and role replicas.
-2. Apply or sync `open-cowork-cloud-secrets` and
+1. Create a dedicated runtime database principal. Run `cloud:migrate:start`
+   from the exact pinned Cloud image as a separately credentialed one-shot Job,
+   using the owner/migrator URL only there and passing the runtime role and
+   principal through `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE` and
+   `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL`. Delete the Job and its
+   privileged Secret after it succeeds.
+2. Render manifests with `helm template` and inspect ingress, service account,
+   secret references, role replicas, and
+   `OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false`.
+3. Apply or sync `open-cowork-cloud-secrets` and
    `open-cowork-gateway-secrets`.
-3. Install Cloud, wait for `web`, `worker`, and `scheduler` readiness, then
+4. Install Cloud, wait for `web`, `worker`, and `scheduler` readiness, then
    install Gateway.
-4. Route HTTPS traffic and keep `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true`
+5. Route HTTPS traffic and keep `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true`
    plus `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only behind trusted ingress or
    reverse proxy hops.
-5. Run the shared deployment gates:
+6. Run the shared deployment gates:
 
    ```bash
    pnpm deploy:validate

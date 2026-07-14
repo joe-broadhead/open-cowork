@@ -4,8 +4,6 @@ These recipes are thin provider-specific compositions of the same
 `open-cowork-cloud` and `open-cowork-gateway` images, roles, and adapters.
 Provider behavior should stay in deployment configuration, cloud services, and
 adapter wiring rather than in core runtime/session logic.
-Product names, image/package naming, release channels, and legacy Gateway
-migration policy are defined in `docs/oss-packaging-migration.md`.
 
 Use these invariants across every provider:
 
@@ -34,10 +32,8 @@ Use these invariants across every provider:
   command handling, and worker checkpoints. Local/self-host beta tiers remain
   available for demos and internal evaluation.
 - Wire Kubernetes probes to cloud `/livez` for liveness and `/readyz` for
-  dependency readiness. `/healthz` is a liveness alias of `/livez` (both report
-  process liveness), so either endpoint works as a basic reachability check —
-  the CI Compose smoke probes `/healthz` — but gate dependency readiness on
-  `/readyz`.
+  dependency readiness. The CI Compose smoke waits for `/readyz` before running
+  its end-to-end checks.
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
   replicas beyond one, and store checkpoints in a shared object store.
 - Keep billing optional for self-hosted OSS deployments. Use no billing

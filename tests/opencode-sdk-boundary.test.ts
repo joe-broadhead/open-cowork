@@ -11,6 +11,7 @@ const ignoredDirectories = new Set([
   '.open-cowork-test',
   'coverage',
   'dist',
+  'dist-browser',
   'node_modules',
   'release',
   'site',
@@ -25,23 +26,34 @@ const sourceRoots = [
   'packages',
 ] as const
 
+const runtimeAuthoritySourceRoots = [
+  'apps/desktop/src/main',
+  'apps/standalone-gateway/src',
+  'packages/cloud-server/src',
+  'packages/runtime-host/src',
+] as const
+
 const sdkImportPattern = /\bfrom\s+['"]@opencode-ai\/sdk(?:\/v2(?:\/server)?)?['"]|import\s*\(\s*['"]@opencode-ai\/sdk(?:\/v2(?:\/server)?)?['"]\s*\)/
 
 const allowedSdkImportPaths = new Set([
   'packages/cloud-server/src/app.ts',
   'packages/cloud-server/src/byok-runtime-config.ts',
   'packages/cloud-server/src/opencode-runtime-adapter.ts',
+  'packages/cloud-server/src/runtime-adapter.ts',
   'packages/cloud-server/src/worker-scoped-runtime-adapter.ts',
   'apps/desktop/src/main/event-subscriptions.ts',
   'apps/desktop/src/main/events.ts',
   'apps/desktop/src/main/ipc/context.ts',
+  'apps/desktop/src/main/ipc/provider-handlers.ts',
   'apps/desktop/src/main/question-normalization.ts',
   'apps/desktop/src/main/runtime-mcp-status-polling.ts',
   'apps/standalone-gateway/src/opencode.ts',
   'packages/runtime-host/src/agent-config.ts',
   'packages/runtime-host/src/agent-prompts.ts',
   'packages/runtime-host/src/opencode-adapter.ts',
+  'packages/runtime-host/src/opencode-v2.ts',
   'packages/runtime-host/src/permission-config.ts',
+  'packages/runtime-host/src/provider-utils.ts',
   'packages/runtime-host/src/runtime-config-builder.ts',
   'packages/runtime-host/src/runtime-managed-server-core.ts',
   'packages/runtime-host/src/runtime-managed-server.ts',
@@ -108,6 +120,79 @@ test('only runtime authority packages declare OpenCode runtime dependencies', ()
     'packages/runtime-host/package.json',
   ])
 })
+
+test('native-v2-covered capabilities do not regress to classic client methods', () => {
+  const forbidden = /\b(?:client|c|options\.client|result\.client)\.(?:session\.(?:create|get|messages|promptAsync|abort|status|children|revert|unrevert)|event\.subscribe|question\.(?:list|reply|reject)|permission\.(?:list|reply|reject)|provider\.(?:list|auth)|auth\.(?:set|remove)|command\.list|app\.agents|file\.list|find\.files)\s*\(/g
+  const violations: string[] = []
+  for (const sourceRoot of runtimeAuthoritySourceRoots) {
+    for (const filePath of sourceFiles(join(root, sourceRoot))) {
+      const relativePath = relative(root, filePath)
+      const source = stripComments(readFileSync(filePath, 'utf8'))
+      for (const match of source.matchAll(forbidden)) {
+        violations.push(`${relativePath}: ${match[0].trim()}`)
+      }
+    }
+  }
+  assert.deepEqual(violations, [], `covered capabilities must use client.v2.*:\n${violations.join('\n')}`)
+})
+
+const classicSdkGapAllowlist = new Map<string, number>([
+  ['apps/desktop/src/main/events.ts:mcp.status', 1],
+  ['apps/desktop/src/main/ipc-handlers.ts:mcp.auth.authenticate', 1],
+  ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.auth.authenticate', 1],
+  ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.auth.remove', 1],
+  ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.connect', 1],
+  ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.disconnect', 1],
+  ['apps/desktop/src/main/ipc/explorer-handlers.ts:file.read', 1],
+  ['apps/desktop/src/main/ipc/explorer-handlers.ts:file.status', 1],
+  ['apps/desktop/src/main/ipc/explorer-handlers.ts:find.symbols', 1],
+  ['apps/desktop/src/main/ipc/explorer-handlers.ts:find.text', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.delete', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.diff', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.share', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.summarize', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.unshare', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.update', 1],
+  ['apps/desktop/src/main/ipc/session-command-handlers.ts:session.command', 1],
+  ['apps/desktop/src/main/ipc/session-command-handlers.ts:session.todo', 1],
+  ['apps/desktop/src/main/ipc/session-handlers.ts:session.fork', 1],
+  ['apps/desktop/src/main/runtime-mcp-recovery.ts:mcp.connect', 2],
+  ['packages/runtime-host/src/runtime-tools.ts:tool.list', 1],
+  ['packages/runtime-host/src/session-history-loader.ts:session.diff', 1],
+  ['packages/runtime-host/src/session-history-loader.ts:session.todo', 2],
+  ['packages/runtime-host/src/session-history-loader.ts:session.update', 1],
+])
+
+test('classic SDK calls are limited to documented native-V2 capability gaps', () => {
+  const classicCall = /\b(?:client|options\.client)\.((?:session|mcp|tool|file|find)\.[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/g
+  const actual = new Map<string, number>()
+  for (const sourceRoot of runtimeAuthoritySourceRoots) {
+    for (const filePath of sourceFiles(join(root, sourceRoot))) {
+      const relativePath = relative(root, filePath)
+      const source = stripComments(readFileSync(filePath, 'utf8'))
+      for (const match of source.matchAll(classicCall)) {
+        const key = `${relativePath}:${match[1]}`
+        actual.set(key, (actual.get(key) || 0) + 1)
+      }
+    }
+  }
+
+  assert.deepEqual(
+    [...actual].sort(([a], [b]) => a.localeCompare(b)),
+    [...classicSdkGapAllowlist].sort(([a], [b]) => a.localeCompare(b)),
+    'classic calls must have an exact file-and-count allowlist entry; prefer client.v2.* whenever native V2 supports the capability',
+  )
+  for (const key of classicSdkGapAllowlist.keys()) {
+    const method = key.slice(key.indexOf(':') + 1)
+    assert.match(boundaryDoc, new RegExp(`\`${escapeRegex(method)}\``), `${method} must be documented as a native-V2 gap`)
+  }
+})
+
+function stripComments(source: string) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+}
 
 function sourceFiles(directory: string): string[] {
   const files: string[] = []

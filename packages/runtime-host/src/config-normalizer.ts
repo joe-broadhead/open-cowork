@@ -412,13 +412,6 @@ function normalizeGatewayConfig(raw: OpenCoworkConfig['gateway'] | undefined): O
     ...defaults,
     ...source,
     branding: normalizePublicBranding(source.branding),
-    cloud: {
-      ...(defaults.cloud || {}),
-      ...(source.cloud || {}),
-      allowInsecureHttp: typeof source.cloud?.allowInsecureHttp === 'boolean'
-        ? source.cloud.allowInsecureHttp
-        : defaults.cloud?.allowInsecureHttp,
-    },
     server: {
       ...(defaults.server || {}),
       ...(source.server || {}),

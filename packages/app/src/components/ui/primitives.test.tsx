@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -287,6 +287,35 @@ describe('Dialog', () => {
       expect(screen.queryByRole('dialog', { name: 'Review' })).not.toBeInTheDocument()
     })
     expect(opener).toHaveFocus()
+  })
+
+  it('restores focus to an explicit stable trigger when the opener unmounts', async () => {
+    const user = userEvent.setup()
+
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      const stableTriggerRef = useRef<HTMLButtonElement>(null)
+      return (
+        <>
+          <Button ref={stableTriggerRef}>New chat</Button>
+          {open ? (
+            <Dialog title="Cloud project" onClose={() => setOpen(false)} returnFocusRef={stableTriggerRef}>
+              <Button>Inside dialog</Button>
+            </Dialog>
+          ) : (
+            <Button onClick={() => setOpen(true)}>Open project</Button>
+          )}
+        </>
+      )
+    }
+
+    render(<Harness />)
+
+    await user.click(screen.getByRole('button', { name: 'Open project' }))
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog', { name: 'Cloud project' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New chat' })).toHaveFocus()
   })
 })
 

@@ -6,7 +6,6 @@
     "OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS",
     "OPEN_COWORK_CLOUD_COOKIE_SECRET",
     "OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET",
-    "OPEN_COWORK_GATEWAY_SERVICE_TOKEN",
     "OPEN_COWORK_GATEWAY_ADMIN_TOKEN"
   ],
   "branding": {
@@ -201,11 +200,6 @@
       "privacyUrl": "https://legal.example.com/privacy",
       "securityUrl": "https://security.example.com/open-cowork",
       "legalUrl": "https://legal.example.com/terms"
-    },
-    "cloud": {
-      "baseUrl": "https://cowork.example.com",
-      "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
-      "allowInsecureHttp": false
     },
     "productMode": "cloud_channel",
     "server": {

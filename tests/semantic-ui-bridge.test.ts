@@ -256,9 +256,9 @@ test('semantic UI bridge gates state-dependent approval and question actions', a
 })
 
 function createLocalActionContext(calls: {
-  permissions: Array<{ requestID: string; reply: string }>
-  questionReplies: Array<{ requestID: string; answers: string[][] }>
-  questionRejects: Array<{ requestID: string }>
+  permissions: Array<{ sessionID: string; requestID: string; reply: string }>
+  questionReplies: Array<{ sessionID: string; requestID: string; answers: string[][] }>
+  questionRejects: Array<{ sessionID: string; requestID: string }>
 }) {
   return {
     getMainWindow: () => null,
@@ -267,17 +267,25 @@ function createLocalActionContext(calls: {
       record: { id: 'session-local', directory: '/tmp/workspace' },
       directory: '/tmp/workspace',
       client: {
-        permission: {
-          reply: async (payload: { requestID: string; reply: string }) => {
-            calls.permissions.push(payload)
-          },
-        },
-        question: {
-          reply: async (payload: { requestID: string; answers: string[][] }) => {
-            calls.questionReplies.push(payload)
-          },
-          reject: async (payload: { requestID: string }) => {
-            calls.questionRejects.push(payload)
+        v2: {
+          session: {
+            permission: {
+              reply: async (payload: { sessionID: string; requestID: string; reply: string }) => {
+                calls.permissions.push(payload)
+              },
+            },
+            question: {
+              reply: async (payload: { sessionID: string; requestID: string; questionV2Reply: { answers: string[][] } }) => {
+                calls.questionReplies.push({
+                  sessionID: payload.sessionID,
+                  requestID: payload.requestID,
+                  answers: payload.questionV2Reply.answers,
+                })
+              },
+              reject: async (payload: { sessionID: string; requestID: string }) => {
+                calls.questionRejects.push(payload)
+              },
+            },
           },
         },
       },
@@ -321,9 +329,9 @@ test('semantic UI local action list is state-dependent and product-mode gated', 
 test('semantic UI local approval action uses OpenCode permission reply and audit metadata', async () => {
   const sessionId = 'semantic-ui-approval-session'
   const calls = { permissions: [], questionReplies: [], questionRejects: [] } as {
-    permissions: Array<{ requestID: string; reply: string }>
-    questionReplies: Array<{ requestID: string; answers: string[][] }>
-    questionRejects: Array<{ requestID: string }>
+    permissions: Array<{ sessionID: string; requestID: string; reply: string }>
+    questionReplies: Array<{ sessionID: string; requestID: string; answers: string[][] }>
+    questionRejects: Array<{ sessionID: string; requestID: string }>
   }
   try {
     sessionEngine.addApproval({
@@ -339,7 +347,11 @@ test('semantic UI local approval action uses OpenCode permission reply and audit
     })
 
     assert.equal(result.ok, true)
-    assert.deepEqual(calls.permissions, [{ requestID: 'approval-local', reply: 'once' }])
+    assert.deepEqual(calls.permissions, [{
+      sessionID: sessionId,
+      requestID: 'approval-local',
+      reply: 'once',
+    }])
     assert.equal((result.content as { audited?: boolean }).audited, true)
     assert.equal(sessionEngine.getPendingApprovals().some((entry) => entry.approval.id === 'approval-local'), false)
 
@@ -357,9 +369,9 @@ test('semantic UI local approval action uses OpenCode permission reply and audit
 test('semantic UI local question action uses OpenCode question reply path', async () => {
   const sessionId = 'semantic-ui-question-session'
   const calls = { permissions: [], questionReplies: [], questionRejects: [] } as {
-    permissions: Array<{ requestID: string; reply: string }>
-    questionReplies: Array<{ requestID: string; answers: string[][] }>
-    questionRejects: Array<{ requestID: string }>
+    permissions: Array<{ sessionID: string; requestID: string; reply: string }>
+    questionReplies: Array<{ sessionID: string; requestID: string; answers: string[][] }>
+    questionRejects: Array<{ sessionID: string; requestID: string }>
   }
   try {
     sessionEngine.setPendingQuestions(sessionId, [{
@@ -378,7 +390,11 @@ test('semantic UI local question action uses OpenCode question reply path', asyn
     })
 
     assert.equal(result.ok, true)
-    assert.deepEqual(calls.questionReplies, [{ requestID: 'question-local', answers: [['yes']] }])
+    assert.deepEqual(calls.questionReplies, [{
+      sessionID: sessionId,
+      requestID: 'question-local',
+      answers: [['yes']],
+    }])
     assert.equal((result.content as { auditEventType?: string }).auditEventType, 'semantic_ui.question.answer')
   } finally {
     sessionEngine.removeSession(sessionId)

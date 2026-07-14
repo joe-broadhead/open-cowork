@@ -30,6 +30,7 @@ export interface StandaloneGatewayRepository {
   renewDaemonLease(input: { leaseId: string; ownerId: string; leaseToken: string; ttlMs: number; now?: Date }): Promise<StandaloneGatewayDaemonLease | null>;
   releaseDaemonLease(input: { leaseId: string; ownerId: string; leaseToken: string }): Promise<boolean>;
   findOrCreateSession(input: StandalonePromptInput & { title?: string; now?: Date }): Promise<StandaloneGatewaySessionRecord>;
+  getSession(sessionId: string): Promise<StandaloneGatewaySessionRecord | null>;
   updateSessionRuntime(input: { sessionId: string; opencodeSessionId: string | null; status?: StandaloneGatewaySessionRecord["status"]; now?: Date }): Promise<StandaloneGatewaySessionRecord>;
   appendEvent(input: { sessionId: string; type: StandaloneGatewayEventType; payload?: Record<string, unknown>; now?: Date }): Promise<StandaloneGatewayEventRecord>;
   enqueueJob(input: { kind: StandaloneGatewayJobKind; sessionId?: string | null; payload?: Record<string, unknown>; availableAt?: Date; now?: Date }): Promise<StandaloneGatewayJobRecord>;
@@ -142,6 +143,11 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
     this.sessions.set(session.sessionId, session);
     await this.appendEvent({ sessionId: session.sessionId, type: "session.created", payload: { title: session.title }, now: input.now });
     return { ...this.requireSession(session.sessionId) };
+  }
+
+  async getSession(sessionId: string): Promise<StandaloneGatewaySessionRecord | null> {
+    const session = this.sessions.get(sessionId);
+    return session ? { ...session } : null;
   }
 
   async updateSessionRuntime(input: { sessionId: string; opencodeSessionId: string | null; status?: StandaloneGatewaySessionRecord["status"]; now?: Date }): Promise<StandaloneGatewaySessionRecord> {

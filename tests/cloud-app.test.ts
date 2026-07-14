@@ -1,7 +1,7 @@
 import { clearKnowledgeStoreCache } from '@open-cowork/runtime-host/knowledge/knowledge-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { IncomingMessage } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -24,6 +24,8 @@ import {
   resolveCloudOidcClientSecret,
   resolveCloudPublicBranding,
   listConfiguredByokProviderIds,
+  isLoopbackCloudHost,
+  isNonPublicCloudHost,
   signHeaderCloudAuthRequest,
   shouldRunCloudScheduler,
   shouldRunCloudWeb,
@@ -42,6 +44,7 @@ import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider
 import { createUnavailableSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import type {
   CloudRuntimeAdapter,
+  CloudRuntimeEvent,
   CloudRuntimeEventListener,
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
@@ -110,20 +113,39 @@ class FakeRuntime implements CloudRuntimeAdapter {
   }
 
   async emitAssistant(sessionId: string, content: string) {
+    await this.emit({
+      type: 'assistant.message',
+      payload: {
+        sessionId,
+        messageId: `${sessionId}:external`,
+        content,
+      },
+    })
+  }
+
+  async emit(event: CloudRuntimeEvent) {
     for (const listener of this.listeners) {
-      await listener({
-        type: 'assistant.message',
-        payload: {
-          sessionId,
-          messageId: `${sessionId}:external`,
-          content,
-        },
-      })
+      await listener(event)
     }
   }
 
   close() {
     this.closed = true
+  }
+}
+
+class AdmittedPromptRuntime extends FakeRuntime {
+  async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
+    this.prompts.push({ sessionId: input.sessionId, parts: input.parts, agent: input.agent })
+    return { events: [] }
+  }
+
+  emitIdle(sessionId: string) {
+    return this.emit({ type: 'session.idle', payload: { sessionId } })
+  }
+
+  emitRuntimeError(sessionId: string, message: string) {
+    return this.emit({ type: 'runtime.error', payload: { sessionId, message } })
   }
 }
 
@@ -204,6 +226,32 @@ test('cloud BYOK defaults include only provider descriptors with secret credenti
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text()) as Record<string, unknown>
+}
+
+async function reserveLoopbackPort(): Promise<number> {
+  const server = createServer()
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  return address.port
+}
+
+async function waitForResponse(url: string): Promise<Response> {
+  const deadline = Date.now() + 1_000
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      return await fetch(url)
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Timed out waiting for ${url}`)
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -546,14 +594,10 @@ test('cloud auth config requires explicit self-service opt-in for managed OIDC s
     OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS: 'example.test',
     OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP: 'true',
   }).signupMode, 'domain')
-  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+  assert.throws(() => resolveCloudAuthConfig(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
-  }).allowSelfServiceSignup, false)
-  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
-    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
-    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
-  }).signupMode, 'closed')
+  }), /Invalid cloud signup mode/)
   assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'disabled',
@@ -678,6 +722,28 @@ test('cloud auth mode none is local-only and insecure override refuses public ex
   }), /OPEN_COWORK_CLOUD_PUBLIC_URL/)
 })
 
+test('cloud loopback policy validates IP literals and rejects prefix-spoofed DNS names', () => {
+  for (const host of ['127.0.0.1', '127.1.2.3', '::1', '[::1]', '::ffff:7f00:1', '[::ffff:7f00:1]']) {
+    assert.equal(isLoopbackCloudHost(host), true, host)
+  }
+  for (const host of ['127.attacker.example', '127.0.0.1.attacker.example', 'fc-attacker.example', '203.0.113.10']) {
+    assert.equal(isLoopbackCloudHost(host), false, host)
+  }
+  for (const host of ['10.0.0.1', '169.254.1.1', '192.168.1.1', 'fc00::1', 'fe80::1', '::ffff:a00:1']) {
+    assert.equal(isNonPublicCloudHost(host), true, host)
+  }
+  for (const host of ['127.attacker.example', 'fc-attacker.example', '8.8.8.8', 'cloud.example.test']) {
+    assert.equal(isNonPublicCloudHost(host), false, host)
+  }
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '127.attacker.example',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: {},
+  }), /may only bind to loopback/)
+})
+
 test('cloud public header and OIDC auth require spoofing-resistant deployment settings', () => {
   assert.throws(() => assertCloudAuthDeploymentSafe({
     role: 'web',
@@ -722,7 +788,16 @@ test('cloud public header and OIDC auth require spoofing-resistant deployment se
     env: {},
   }))
 
-  for (const publicUrl of ['http://cloud.example.test', 'https://localhost', 'not-a-url']) {
+  for (const publicUrl of [
+    'http://cloud.example.test',
+    'https://localhost',
+    'https://[::ffff:127.0.0.1]',
+    'https://10.0.0.1',
+    'https://169.254.1.1',
+    'https://[fc00::1]',
+    'https://[fe80::1]',
+    'not-a-url',
+  ]) {
     assert.throws(() => assertCloudAuthDeploymentSafe({
       role: 'web',
       hostname: '0.0.0.0',
@@ -786,6 +861,7 @@ test('public production deployment guard fails closed without durable dependenci
   }
   const productionEnv = {
     OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_RUN_MIGRATIONS: 'false',
     OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
     OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
@@ -810,6 +886,17 @@ test('public production deployment guard fails closed without durable dependenci
     checkpointsEnabled: false,
     autoProcessCommands: false,
   }), /CHECKPOINTS_ENABLED=true/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: { ...productionEnv, OPEN_COWORK_CLOUD_RUN_MIGRATIONS: undefined },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /RUN_MIGRATIONS=false/)
 
   assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
     tier: 'public_production',
@@ -839,6 +926,7 @@ test('public production deployment guard enforces strong secrets and web auth po
   }
   const baseEnv = {
     OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_RUN_MIGRATIONS: 'false',
     OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
     OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
@@ -941,6 +1029,7 @@ test('public production cloud app rejects in-memory adapter overrides after depe
       OPEN_COWORK_CLOUD_ROLE: 'web',
       OPEN_COWORK_CLOUD_HOST: '127.0.0.1',
       OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: 'false',
+      OPEN_COWORK_CLOUD_RUN_MIGRATIONS: 'false',
       OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET,
       OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
@@ -1687,7 +1776,7 @@ test('cloud worker can checkpoint workspace state to object storage after comman
 
 test('cloud web and worker roles hand off workflow run execution through the control plane', async () => {
   const store = new InMemoryControlPlaneStore()
-  const runtime = new FakeRuntime()
+  const runtime = new AdmittedPromptRuntime()
   const web = await startCloudApp({
     config: DEFAULT_CONFIG,
     store,
@@ -1750,6 +1839,15 @@ test('cloud web and worker roles hand off workflow run execution through the con
     assert.equal(runtime.prompts[0]?.sessionId, 'session-1')
     assert.notEqual(runtime.prompts[0]?.sessionId, coworkSessionId)
 
+    const admittedWorkflow = asRecord((await readJson(await fetch(`${web.url}/api/workflows/${workflowId}`, {
+      headers: principalHeaders,
+    }))).workflow)
+    const admittedRun = asRecord(asArray(admittedWorkflow.runs).find((entry) => asRecord(entry).id === runId))
+    assert.equal(admittedRun.status, 'running')
+
+    await runtime.emitAssistant('session-1', 'runtime answer')
+    await runtime.emitIdle('session-1')
+
     const workflow = asRecord((await readJson(await fetch(`${web.url}/api/workflows/${workflowId}`, {
       headers: principalHeaders,
     }))).workflow)
@@ -1757,6 +1855,36 @@ test('cloud web and worker roles hand off workflow run execution through the con
     assert.equal(run.status, 'completed')
     assert.equal(run.summary, 'runtime answer')
     assert.equal(workflow.latestRunStatus, 'completed')
+
+    const restarted = await readJson(await fetch(`${web.url}/api/workflows/${workflowId}/run`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...principalHeaders,
+      },
+      body: JSON.stringify({}),
+    }))
+    const failedRunId = String(asRecord(restarted.run).id)
+    assert.equal(await worker.worker?.processAllSessionCommands(), 1)
+    assert.equal(runtime.prompts[1]?.sessionId, 'session-2')
+
+    const secondAdmittedWorkflow = asRecord((await readJson(await fetch(`${web.url}/api/workflows/${workflowId}`, {
+      headers: principalHeaders,
+    }))).workflow)
+    const secondAdmittedRun = asRecord(
+      asArray(secondAdmittedWorkflow.runs).find((entry) => asRecord(entry).id === failedRunId),
+    )
+    assert.equal(secondAdmittedRun.status, 'running')
+
+    await runtime.emitRuntimeError('session-2', 'delayed runtime failure')
+
+    const failedWorkflow = asRecord((await readJson(await fetch(`${web.url}/api/workflows/${workflowId}`, {
+      headers: principalHeaders,
+    }))).workflow)
+    const failedRun = asRecord(asArray(failedWorkflow.runs).find((entry) => asRecord(entry).id === failedRunId))
+    assert.equal(failedRun.status, 'failed')
+    assert.equal(failedRun.error, 'delayed runtime failure')
+    assert.equal(failedWorkflow.latestRunStatus, 'failed')
   } finally {
     await worker.close()
     await web.close()
@@ -1881,8 +2009,8 @@ test('cloud app wires OIDC auth mode instead of header demo auth', async () => {
   })
 
   try {
-    const health = await readJson(await fetch(`${app.url}/healthz`))
-    assert.equal(health.ok, true)
+    const liveness = await readJson(await fetch(`${app.url}/livez`))
+    assert.equal(liveness.ok, true)
 
     const response = await fetch(`${app.url}/api/config`, {
       headers: {
@@ -1924,6 +2052,33 @@ test('cloud app exposes separate liveness and dependency readiness endpoints', a
     assert.equal(checks.some((entry) => asRecord(entry).name === 'control_plane'), true)
     assert.equal(checks.some((entry) => asRecord(entry).name === 'object_store'), true)
     assert.equal(checks.some((entry) => asRecord(entry).name === 'secret_adapter'), true)
+  } finally {
+    await app.close()
+  }
+})
+
+test('cloud worker liveness server exposes only the canonical liveness route', async () => {
+  const livenessPort = await reserveLoopbackPort()
+  const app = await startCloudApp({
+    store: new InMemoryControlPlaneStore(),
+    runtime: new FakeRuntime(),
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+      OPEN_COWORK_CLOUD_LIVENESS_PORT: String(livenessPort),
+    },
+    hostname: '127.0.0.1',
+    workerPollMs: 60_000,
+  })
+
+  try {
+    assert.equal(app.server, null)
+    const baseUrl = `http://127.0.0.1:${livenessPort}`
+    const live = await waitForResponse(`${baseUrl}/livez`)
+    assert.equal(live.status, 200)
+    assert.equal((await readJson(live)).ok, true)
+    assert.equal((await fetch(`${baseUrl}/healthz`)).status, 404)
   } finally {
     await app.close()
   }
@@ -2099,6 +2254,7 @@ test('public production deployment guard rejects reusing the secret key as the c
   }
   const reusedKeyEnv = {
     OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_RUN_MIGRATIONS: 'false',
     OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
     OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_SECRET, // identical → crypto key reuse
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',

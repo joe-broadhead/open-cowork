@@ -83,6 +83,11 @@ export function buildManagedRuntimeEnvironment(input: {
   applyManagedHomeEnvironment(env, input.runtimePaths)
   env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
   env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
+  // Cowork supplies a deterministic, policy-filtered catalog through
+  // `skills.paths`. OpenCode also discovers ambient ~/.agents and project
+  // .agents/.claude skills unless this native runtime flag is set, which
+  // would bypass that catalog and managed-policy gating.
+  env.OPENCODE_DISABLE_EXTERNAL_SKILLS = '1'
   env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = 'true'
   env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
   if (input.serverAuth) {

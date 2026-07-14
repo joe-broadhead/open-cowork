@@ -1,24 +1,43 @@
-import { normalizeStoredSessionRecord } from '@open-cowork/runtime-host/session-registry-utils'
+import { normalizeStoredSessionRecord, type StoredSessionRecord } from '@open-cowork/runtime-host/session-registry-utils'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-test('normalizeStoredSessionRecord keeps Cowork-managed records and drops external ones', () => {
-  const normalizeDirectory = (value: string) => value
-  const toDisplayDirectory = (value: string) => value === '/runtime-home' ? null : value
-
-  const managed = normalizeStoredSessionRecord({
-    id: 'ses_managed',
+function storedRecord(overrides: Partial<StoredSessionRecord> = {}): StoredSessionRecord {
+  return {
+    id: 'ses_current',
+    title: undefined,
+    directory: null,
     opencodeDirectory: '/runtime-home',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:01.000Z',
+    kind: 'interactive',
+    workflowId: null,
+    runId: null,
+    providerId: null,
+    modelId: null,
+    composerAgentName: null,
+    composerModelId: null,
+    composerReasoningVariant: null,
+    summary: null,
+    parentSessionId: null,
+    changeSummary: null,
+    revertedMessageId: null,
     managedByCowork: true,
-  }, normalizeDirectory, toDisplayDirectory)
+    ...overrides,
+  }
+}
+
+test('normalizeStoredSessionRecord keeps exact current records and rejects non-current records', () => {
+  const normalizeDirectory = (value: string) => value
+  const toDisplayDirectory = (value: string) => value === '/runtime-home' ? null : value
+
+  const managed = normalizeStoredSessionRecord(storedRecord({
+    id: 'ses_managed',
+  }), normalizeDirectory, toDisplayDirectory)
 
   const external = normalizeStoredSessionRecord({
-    id: 'ses_external',
-    opencodeDirectory: '/external',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:01.000Z',
+    ...storedRecord({ id: 'ses_external', opencodeDirectory: '/external', directory: '/external' }),
+    managedByCowork: undefined,
   }, normalizeDirectory, toDisplayDirectory)
 
   assert.deepEqual(managed, {
@@ -46,12 +65,8 @@ test('normalizeStoredSessionRecord keeps Cowork-managed records and drops extern
 })
 
 test('normalizeStoredSessionRecord preserves session usage agent breakdowns', () => {
-  const record = normalizeStoredSessionRecord({
+  const record = normalizeStoredSessionRecord(storedRecord({
     id: 'ses_summary',
-    opencodeDirectory: '/runtime-home',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:01.000Z',
-    managedByCowork: true,
     summary: {
       messages: 3,
       userMessages: 1,
@@ -67,7 +82,7 @@ test('normalizeStoredSessionRecord preserves session usage agent breakdowns', ()
         tokens: { input: 10, output: 20, reasoning: 3, cacheRead: 4, cacheWrite: 5 },
       }],
     },
-  }, (value) => value, () => null)
+  }), (value) => value, () => null)
 
   assert.deepEqual(record?.summary?.agentBreakdown, [{
     agent: 'business-analyst',
@@ -78,12 +93,8 @@ test('normalizeStoredSessionRecord preserves session usage agent breakdowns', ()
 })
 
 test('normalizeStoredSessionRecord preserves synthetic diff summary provenance', () => {
-  const record = normalizeStoredSessionRecord({
+  const record = normalizeStoredSessionRecord(storedRecord({
     id: 'ses_changes',
-    opencodeDirectory: '/runtime-home',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:01.000Z',
-    managedByCowork: true,
     changeSummary: {
       files: 2,
       additions: 10,
@@ -91,7 +102,7 @@ test('normalizeStoredSessionRecord preserves synthetic diff summary provenance',
       source: 'mixed',
       synthetic: true,
     },
-  }, (value) => value, () => null)
+  }), (value) => value, () => null)
 
   assert.deepEqual(record?.changeSummary, {
     files: 2,

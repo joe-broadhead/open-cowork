@@ -159,9 +159,8 @@ Gateway can load the same central file as Desktop and Cloud through
 `OPEN_COWORK_CONFIG_PATH`, `OPEN_COWORK_CONFIG_DIR`, or
 `OPEN_COWORK_DOWNSTREAM_ROOT`. Gateway-specific env and
 `OPEN_COWORK_GATEWAY_CONFIG` / `OPEN_COWORK_GATEWAY_CONFIG_JSON` remain
-available as overrides. Gateway config JSON intentionally ignores
-`gateway.cloud.baseUrl`, `gateway.cloud.serviceToken`, and
-`gateway.cloud.allowInsecureHttp`, plus `gateway.timeouts.cloudRequestMs`; use
+available as overrides. Gateway cloud connection settings are not part of the
+file-backed product config; use
 `OPEN_COWORK_CLOUD_BASE_URL`, `OPEN_COWORK_GATEWAY_SERVICE_TOKEN`,
 `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP`, and
 `OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS` from your deployment secret
@@ -186,7 +185,7 @@ Production safety rules are enforced in config validation:
   a self-hosted demo
 - public `cloud.auth.mode=header` deployments require a header auth secret and
   signed timestamped identity headers from the trusted proxy
-- environment placeholders such as `{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}`
+- environment placeholders such as `{env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN}`
   only resolve when listed in `allowedEnvPlaceholders`
 
 Managed BYOK SaaS deployments should keep downstream-specific prices, project

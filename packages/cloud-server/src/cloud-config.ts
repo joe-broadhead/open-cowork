@@ -321,8 +321,7 @@ export function evaluateCloudProjectSourcePolicy(
 }
 
 // Abuse/quota and billing config resolvers (config defaults + env overrides → typed
-// config). Pure: no secrets read, no runtime adapters created. Extracted from
-// cloud/app.ts (which re-exports them for compatibility).
+// config). Pure: no secrets read and no runtime adapters created.
 export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudAbuseConfig {
   const defaults = config.cloud.abuse
   return {
@@ -446,7 +445,7 @@ export function parseCloudDeploymentTier(value: string | null | undefined): Clou
 }
 
 function inferSignupMode(input: {
-  requestedSignupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open' | null
+  requestedSignupMode?: 'disabled' | 'invite' | 'domain' | 'open' | null
   allowSelfServiceSignup: boolean
   allowedEmailDomains?: string[] | null
 }) {
@@ -469,7 +468,7 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     ? parseBoolean(requestedSelfService, false)
       : requestedSignupMode === 'open' || requestedSignupMode === 'domain'
         ? true
-      : requestedSignupMode === 'disabled' || requestedSignupMode === 'closed' || requestedSignupMode === 'invite'
+      : requestedSignupMode === 'disabled' || requestedSignupMode === 'invite'
         ? false
         : envSwitchedToOidc
           ? false

@@ -131,7 +131,10 @@ import type {
   ApiTokenChannelBindingGrantRecord,
   ListChannelIdentitiesInput,
 } from './control-plane-store.ts'
-import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
+import {
+  assertPostgresControlPlaneSchemaIntegrity,
+  runPostgresControlPlaneMigrations,
+} from './postgres-migrations.ts'
 import { CLOUD_SSE_NOTIFY_CHANNEL, encodeSsePgNotifyPayload } from './sse-pg-notify.ts'
 import { cloudPostgresPoolPlan, type CloudPostgresPoolConfig } from './postgres-pool-options.ts'
 import { normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
@@ -301,6 +304,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       emitSseNotify: (payload) => this.emitSseNotify(payload),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       quotaDeps: this.quotaDeps,
+      completeWorkflowRun: (executor, input) => this.workflows.completeWorkflowRun(input, executor),
+      failWorkflowRun: (executor, input) => this.workflows.failWorkflowRun(input, executor),
     })
     this.sessionIndexes = new PostgresSessionIndexesRepository({
       pool: this.pool,
@@ -381,8 +386,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const pool = options.pool || loadPgPool(options.connectionString)
     const store = new PostgresControlPlaneStore(pool, !options.pool)
     store.ssePgNotifyEnabled = options.ssePgNotify === true
-    if (options.runMigrations !== false) await store.runMigrations()
-    return store
+    try {
+      if (options.runMigrations !== false) await store.runMigrations()
+      return store
+    } catch (error) {
+      // A fail-closed baseline check can reject startup before a store is
+      // returned to its caller. Release only pools created here; injected pools
+      // remain caller-owned.
+      await store.close().catch(() => undefined)
+      throw error
+    }
   }
 
   // Best-effort SSE accelerator NOTIFY: ids only (Postgres NOTIFY payloads cap ~8000
@@ -402,6 +415,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async runMigrations() {
     await runPostgresControlPlaneMigrations(this.pool, (fn) => this.withTransaction(fn))
+  }
+
+  async assertSchemaIntegrity() {
+    await assertPostgresControlPlaneSchemaIntegrity(this.pool)
   }
 
   async createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }) {
@@ -1354,10 +1371,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async listSessionsPage(input: ListSessionsPageInput) {
     return this.sessions.listSessionsPage(input)
-  }
-
-  async listAllSessions() {
-    return this.sessions.listAllSessions()
   }
 
   async listRunnableSessions(input: {

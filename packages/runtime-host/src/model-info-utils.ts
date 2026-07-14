@@ -1,6 +1,6 @@
 import { asRecord } from '@open-cowork/shared'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
-// Merge normalized provider/model data from `client.provider.list()` with
+// Merge normalized provider/model data from the native V2 provider/model catalog with
 // the configured fallbacks (pricing + context limits pulled from the local
 // `open-cowork.config.json`). Kept as a pure function separate from
 // `runtime.ts` so the fallback + merge logic is unit-testable without

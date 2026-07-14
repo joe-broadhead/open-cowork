@@ -152,11 +152,16 @@ Actions:
 
 - **Add playbook** opens a setup chat.
 - **Open setup chat** reopens the Workflow Designer setup chat.
-- **Open latest run** reopens the most recent execution chat.
+- **Open latest run** reopens the exact execution chat represented by the
+  displayed run summary.
 - **Run** starts a manual run.
 - **Pause/Resume** controls scheduled and webhook execution.
-- **Archive** hides a playbook without deleting its history.
-- **Regenerate** rotates the webhook authorization secret.
+- **Archive** stops schedules and webhook triggers, then moves the playbook to
+  the archived view without deleting its history.
+- **Restore** returns an archived playbook to the active view; it does not run
+  the playbook automatically.
+- **Regenerate** rotates the webhook authorization secret after destructive
+  confirmation, invalidating the previous secret.
 
 ## When To Use Playbooks
 

@@ -37,6 +37,11 @@ type WorkflowState = {
   runs: CloudWorkflowRunRecord[]
 }
 
+export type InMemoryWorkflowsSnapshot = {
+  workflows: Array<[string, WorkflowState]>
+  workflowRuns: Array<[string, CloudWorkflowRunRecord]>
+}
+
 type InMemoryWorkflowsHost = {
   requireTenant(tenantId: string): void
   requireTenantUser(tenantId: string, userId: string): void
@@ -58,6 +63,20 @@ export class InMemoryWorkflowsDomain {
   // cross-domain reader of this state).
   allRuns(): IterableIterator<CloudWorkflowRunRecord> {
     return this.workflowRuns.values()
+  }
+
+  snapshot(): InMemoryWorkflowsSnapshot {
+    return {
+      workflows: clone([...this.workflows.entries()]),
+      workflowRuns: clone([...this.workflowRuns.entries()]),
+    }
+  }
+
+  restore(snapshot: InMemoryWorkflowsSnapshot) {
+    this.workflows.clear()
+    this.workflowRuns.clear()
+    for (const [entryKey, value] of clone(snapshot.workflows)) this.workflows.set(entryKey, value)
+    for (const [entryKey, value] of clone(snapshot.workflowRuns)) this.workflowRuns.set(entryKey, value)
   }
 
   createWorkflow(input: CreateWorkflowInput): CloudWorkflowRecord {

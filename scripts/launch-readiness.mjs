@@ -281,12 +281,12 @@ function createOperationPlan(options) {
 
   if (!options.skipCloud) {
     operations.push({
-      name: 'cloud-health',
+      name: 'cloud-readiness',
       category: 'read',
       target: 'cloud',
-      path: '/healthz',
+      path: '/readyz',
       acceptedStatus: [200],
-      run: () => requestJson(options.cloudUrl, operationsByName.get('cloud-health'), ''),
+      run: () => requestJson(options.cloudUrl, operationsByName.get('cloud-readiness'), ''),
     })
     operations.push({
       name: 'cloud-liveness',

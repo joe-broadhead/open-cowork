@@ -51,6 +51,11 @@ function makeStdioMcp(overrides: Partial<CustomMcpConfig> = {}): CustomMcpConfig
   }
 }
 
+function testAppDataDir() {
+  return process.env.OPEN_COWORK_USER_DATA_DIR?.trim()
+    || join(process.cwd(), '.open-cowork-test')
+}
+
 test('resolveCustomMcpRuntimeEntry does NOT inject Google creds when googleAuth is false / unset', () => {
   // Default case: nothing in env related to Google, regardless of whether
   // the user is signed in. Prevents arbitrary MCPs from ever seeing the
@@ -101,7 +106,7 @@ test('resolveCustomMcpRuntimeEntry injects GOOGLE_APPLICATION_CREDENTIALS when g
   // getAppDataDir() resolves to `electronApp.getPath('userData')` in
   // Electron, but in node:test it falls back to `join(cwd, '.open-cowork-test')`.
   // Seed the ADC file there so `getAdcPathIfAvailable()` finds it.
-  const adcDir = join(process.cwd(), '.open-cowork-test')
+  const adcDir = testAppDataDir()
   mkdirSync(adcDir, { recursive: true })
   const adcPath = join(adcDir, 'application_default_credentials.json')
   writeFileSync(adcPath, JSON.stringify({
@@ -172,7 +177,7 @@ test('listReadyGoogleAuthLocalMcpNames includes only ready local Google-auth MCP
   }
 }`)
 
-  const adcDir = join(process.cwd(), '.open-cowork-test')
+  const adcDir = testAppDataDir()
   mkdirSync(adcDir, { recursive: true })
   const adcPath = join(adcDir, 'application_default_credentials.json')
   writeFileSync(adcPath, JSON.stringify({

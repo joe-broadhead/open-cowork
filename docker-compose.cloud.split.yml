@@ -16,7 +16,7 @@ services:
       OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: local
       # Default to the in-container mount targets so a config dropped at the advertised
       # bind-mount path is actually loaded out-of-box. An explicit external value still
-      # wins (and the volume mounts the same path), so this stays backward-compatible.
+      # wins, and the volume mounts the same path.
       OPEN_COWORK_CONFIG_PATH: ${OPEN_COWORK_CONFIG_PATH:-/etc/open-cowork/open-cowork.config.json}
       OPEN_COWORK_CONFIG_DIR: ${OPEN_COWORK_CONFIG_DIR:-/etc/open-cowork/config}
       OPEN_COWORK_DOWNSTREAM_ROOT: ${OPEN_COWORK_DOWNSTREAM_ROOT:-/etc/open-cowork/downstream}
@@ -76,7 +76,7 @@ services:
       OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: local
       # Default to the in-container mount targets so a config dropped at the advertised
       # bind-mount path is actually loaded out-of-box. An explicit external value still
-      # wins (and the volume mounts the same path), so this stays backward-compatible.
+      # wins, and the volume mounts the same path.
       OPEN_COWORK_CONFIG_PATH: ${OPEN_COWORK_CONFIG_PATH:-/etc/open-cowork/open-cowork.config.json}
       OPEN_COWORK_CONFIG_DIR: ${OPEN_COWORK_CONFIG_DIR:-/etc/open-cowork/config}
       OPEN_COWORK_DOWNSTREAM_ROOT: ${OPEN_COWORK_DOWNSTREAM_ROOT:-/etc/open-cowork/downstream}
@@ -87,6 +87,7 @@ services:
       OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: 30000
       OPEN_COWORK_CLOUD_WORKER_ID: compose-worker-1
       OPEN_COWORK_CLOUD_WORKER_POLL_MS: 1000
+      OPEN_COWORK_CLOUD_LIVENESS_PORT: 8788
       OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: "true"
       OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork
       OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: minio
@@ -118,7 +119,7 @@ services:
       OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: local
       # Default to the in-container mount targets so a config dropped at the advertised
       # bind-mount path is actually loaded out-of-box. An explicit external value still
-      # wins (and the volume mounts the same path), so this stays backward-compatible.
+      # wins, and the volume mounts the same path.
       OPEN_COWORK_CONFIG_PATH: ${OPEN_COWORK_CONFIG_PATH:-/etc/open-cowork/open-cowork.config.json}
       OPEN_COWORK_CONFIG_DIR: ${OPEN_COWORK_CONFIG_DIR:-/etc/open-cowork/config}
       OPEN_COWORK_DOWNSTREAM_ROOT: ${OPEN_COWORK_DOWNSTREAM_ROOT:-/etc/open-cowork/downstream}
@@ -129,6 +130,7 @@ services:
       OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: 30000
       OPEN_COWORK_CLOUD_SCHEDULER_ID: compose-scheduler-1
       OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS: 1000
+      OPEN_COWORK_CLOUD_LIVENESS_PORT: 8788
       OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork
       OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: minio
       OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT: http://minio:9000
@@ -146,7 +148,7 @@ services:
         condition: service_completed_successfully
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     restart: unless-stopped
     environment:
       POSTGRES_DB: open_cowork
@@ -161,7 +163,7 @@ services:
       - open-cowork-cloud-postgres:/var/lib/postgresql/data
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -174,7 +176,7 @@ services:
       - open-cowork-cloud-minio:/data
 
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     depends_on:
       minio:
         condition: service_started

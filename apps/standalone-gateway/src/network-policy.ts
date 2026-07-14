@@ -1,17 +1,23 @@
-const privateIpv4Ranges = [
-  /^10\./,
-  /^127\./,
-  /^169\.254\./,
-  /^172\.(1[6-9]|2\d|3[0-1])\./,
-  /^192\.168\./,
-];
+import { BlockList, isIP } from "node:net";
+
+const privateAddresses = new BlockList();
+privateAddresses.addSubnet("10.0.0.0", 8, "ipv4");
+// Explicitly support tailnet/carrier-grade private routing.
+privateAddresses.addSubnet("100.64.0.0", 10, "ipv4");
+privateAddresses.addSubnet("127.0.0.0", 8, "ipv4");
+privateAddresses.addSubnet("169.254.0.0", 16, "ipv4");
+privateAddresses.addSubnet("172.16.0.0", 12, "ipv4");
+privateAddresses.addSubnet("192.168.0.0", 16, "ipv4");
+privateAddresses.addAddress("::1", "ipv6");
+privateAddresses.addSubnet("fc00::", 7, "ipv6");
+privateAddresses.addSubnet("fe80::", 10, "ipv6");
 
 export function isLoopbackOrPrivateHost(hostname: string, options: { allowPrivateDns?: boolean } = {}): boolean {
   const host = hostname.trim().toLowerCase().replace(/^\[(.*)]$/, "$1");
   if (!host) return false;
-  if (host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1") return true;
-  if (privateIpv4Ranges.some((pattern) => pattern.test(host))) return true;
-  if (host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return true;
+  if (host === "localhost") return true;
+  const ipVersion = isIP(host);
+  if (ipVersion) return privateAddresses.check(host, ipVersion === 4 ? "ipv4" : "ipv6");
   if (options.allowPrivateDns && (
     host.endsWith(".internal") ||
     host.endsWith(".local") ||

@@ -2,7 +2,6 @@
   "$schema": "../../../open-cowork.config.schema.json",
   "contractVersion": 1,
   "allowedEnvPlaceholders": [
-    "OPEN_COWORK_GATEWAY_SERVICE_TOKEN",
     "OPEN_COWORK_GATEWAY_ADMIN_TOKEN",
     "OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN",
     "OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET",
@@ -172,11 +171,6 @@
         "apiToken": "Example API token",
         "cloudUrl": "Example Cloud URL"
       }
-    },
-    "cloud": {
-      "baseUrl": "https://cowork.example.com",
-      "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
-      "allowInsecureHttp": false
     },
     "productMode": "cloud_channel",
     "server": {

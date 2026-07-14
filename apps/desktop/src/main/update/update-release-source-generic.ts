@@ -26,14 +26,20 @@ export function normalizeUpdateSourceUrl(
   }
 }
 
-export function channelFileName(channel: string) {
-  return `${channel}-mac.yml`
+export function channelFileName(channel: string, platform: NodeJS.Platform = process.platform) {
+  if (platform === 'darwin') return `${channel}-mac.yml`
+  if (platform === 'win32') return `${channel}.yml`
+  return `${channel}-linux.yml`
 }
 
-export function releaseFeedFileUrl(baseUrl: string, channel: string) {
+export function releaseFeedFileUrl(
+  baseUrl: string,
+  channel: string,
+  platform: NodeJS.Platform = process.platform,
+) {
   const base = new URL(baseUrl)
   if (!base.pathname.endsWith('/')) base.pathname += '/'
-  return new URL(channelFileName(channel), base).toString()
+  return new URL(channelFileName(channel, platform), base).toString()
 }
 
 export function genericReleaseSourceDescriptor(input: {

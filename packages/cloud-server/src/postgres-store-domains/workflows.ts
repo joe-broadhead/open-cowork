@@ -619,7 +619,7 @@ export class PostgresWorkflowsRepository {
     })
   }
 
-  async completeWorkflowRun(input: CompleteWorkflowRunInput) {
+  async completeWorkflowRun(input: CompleteWorkflowRunInput, executor?: PgExecutor) {
     return this.finishWorkflowRun({
       tenantId: input.tenantId,
       workflowId: input.workflowId,
@@ -631,10 +631,10 @@ export class PostgresWorkflowsRepository {
       nextRunAt: input.nextRunAt,
       leaseToken: input.leaseToken,
       finishedAt: input.finishedAt,
-    })
+    }, executor)
   }
 
-  async failWorkflowRun(input: FailWorkflowRunInput) {
+  async failWorkflowRun(input: FailWorkflowRunInput, executor?: PgExecutor) {
     return this.finishWorkflowRun({
       tenantId: input.tenantId,
       workflowId: input.workflowId,
@@ -646,7 +646,7 @@ export class PostgresWorkflowsRepository {
       nextRunAt: input.nextRunAt,
       leaseToken: input.leaseToken,
       finishedAt: input.finishedAt,
-    })
+    }, executor)
   }
 
   async getWorkflowRun(tenantId: string, runId: string) {
@@ -705,8 +705,8 @@ export class PostgresWorkflowsRepository {
     nextRunAt: string | null
     leaseToken?: string | null
     finishedAt?: Date
-  }): Promise<CloudWorkflowRunRecord | null> {
-    return this.options.withTransaction(async (client) => {
+  }, executor?: PgExecutor): Promise<CloudWorkflowRunRecord | null> {
+    const finish = async (client: PgExecutor) => {
       await this.requireWorkflow(input.tenantId, input.workflowId, client, true)
       const runRow = await this.maybeOne(
         `SELECT * FROM cloud_workflow_runs
@@ -765,7 +765,8 @@ export class PostgresWorkflowsRepository {
         ],
       )
       return workflowRunFromRow(result.rows[0]!)
-    })
+    }
+    return executor ? finish(executor) : this.options.withTransaction(finish)
   }
 
 

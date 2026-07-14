@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type {
   CloudProjectSnapshotInventory,
   CloudProjectSourceInput,
@@ -8,7 +8,7 @@ import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from '../../stores/session-w
 import { supportEntry, supportAllows, useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
-import { Button, Card, Icon, IconButton, Input, SegmentedControl } from '../ui'
+import { Button, Card, Dialog, Icon, Input, SegmentedControl } from '../ui'
 
 function describeThreadError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -44,6 +44,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
   const [snapshotInventory, setSnapshotInventory] = useState<CloudProjectSnapshotInventory | null>(null)
   const [projectBusy, setProjectBusy] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
+  const newThreadTriggerRef = useRef<HTMLButtonElement>(null)
   const workspaceSupportState = useActiveWorkspaceSupport()
 
   const normalizedWorkspaceId = normalizeWorkspaceId(activeWorkspaceId)
@@ -85,11 +86,11 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
     ? t('newThread.snapshotRequired', 'Choose a snapshot directory first.')
     : null
 
-  const closeProjectDialog = () => {
+  const closeProjectDialog = useCallback(() => {
     setShowCloudProjectDialog(false)
     setProjectError(null)
     setProjectBusy(false)
-  }
+  }, [])
 
   const createThread = async (directory?: string, projectSource?: CloudProjectSourceInput | null) => {
     if ((directory || projectSource) && projectDisabled) {
@@ -196,6 +197,7 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
   return (
     <div className="relative">
       <Button
+        ref={newThreadTriggerRef}
         onClick={() => setShowMenu(!showMenu)}
         variant="primary"
         size="sm"
@@ -265,21 +267,38 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
         </>
       )}
       {showCloudProjectDialog && (
-        <>
-          <ModalBackdrop onDismiss={closeProjectDialog} className="fixed inset-0 z-50" />
-          <div className="fixed inset-x-4 top-20 z-[60] mx-auto max-w-[520px] rounded-xl theme-popover p-4 shadow-xl">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-text">{t('newThread.cloudProjectTitle', 'Cloud project source')}</div>
-                <div className="text-2xs text-text-muted mt-1">{t('newChat.cloudProjectSubtitle', 'Start a cloud project chat from Git or an explicit uploaded snapshot.')}</div>
-              </div>
-              <IconButton
-                icon="x"
-                label={t('common.close', 'Close')}
+        <Dialog
+          title={t('newThread.cloudProjectTitle', 'Cloud project source')}
+          size="md"
+          onClose={closeProjectDialog}
+          returnFocusRef={newThreadTriggerRef}
+          footer={(
+            <>
+              <Button
+                type="button"
                 onClick={closeProjectDialog}
                 size="sm"
-              />
-            </div>
+                variant="ghost"
+              >
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                type="button"
+                disabled={projectBusy}
+                disabledReason={createProjectDisabledReason}
+                onClick={projectMode === 'git' ? createGitCloudThread : createSnapshotCloudThread}
+                size="sm"
+                variant="primary"
+                loading={projectBusy}
+              >
+                {t('newChat.createCloudProject', 'Create project chat')}
+              </Button>
+            </>
+          )}
+        >
+          <div className="text-2xs text-text-muted">
+            {t('newChat.cloudProjectSubtitle', 'Start a cloud project chat from Git or an explicit uploaded snapshot.')}
+          </div>
 
             <SegmentedControl
               className="mt-4 w-full"
@@ -360,34 +379,11 @@ export function NewThreadButton({ onClick, compact = false }: { onClick?: () => 
             )}
 
             {projectError && (
-              <div className="new-thread-error mt-3 rounded-md border px-3 py-2 text-xs">
+              <div className="new-thread-error mt-3 rounded-md border px-3 py-2 text-xs" role="alert" aria-live="assertive">
                 {projectError}
               </div>
             )}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                type="button"
-                onClick={closeProjectDialog}
-                size="sm"
-                variant="ghost"
-              >
-                {t('common.cancel', 'Cancel')}
-              </Button>
-              <Button
-                type="button"
-                disabled={projectBusy}
-                disabledReason={createProjectDisabledReason}
-                onClick={projectMode === 'git' ? createGitCloudThread : createSnapshotCloudThread}
-                size="sm"
-                variant="primary"
-                loading={projectBusy}
-              >
-                {t('newChat.createCloudProject', 'Create project chat')}
-              </Button>
-            </div>
-          </div>
-        </>
+        </Dialog>
       )}
     </div>
   )

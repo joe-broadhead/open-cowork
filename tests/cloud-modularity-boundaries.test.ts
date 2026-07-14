@@ -275,12 +275,16 @@ test('client surfaces do not import server-only cloud internals', () => {
 })
 
 test('high-volume cloud tables keep indexed and bounded query shapes', () => {
+  assert.match(
+    postgresSchema,
+    /id: CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID[\s\S]*transactional: false/,
+    'write-safe indexes must stay in the non-transactional baseline phase',
+  )
   assertIndexShape('cloud_sessions_user_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_user_status_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, status, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_user_profile_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, profile_name, updated_at DESC, session_id')
   assertIndexShape('cloud_sessions_session_id_idx', 'cloud_sessions', 'session_id')
   assertIndexShape('cloud_sessions_opencode_session_idx', 'cloud_sessions', 'opencode_session_id')
-  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_SESSION_LOOKUP_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
   assertIndexShape('cloud_workflows_webhook_lookup_idx', 'cloud_workflows', 'workflow_id, updated_at DESC, tenant_id')
   assertIndexShape('cloud_workflow_runs_workflow_recent_idx', 'cloud_workflow_runs', 'tenant_id, workflow_id, created_at DESC, run_id')
   assertIndexShape('cloud_workflow_runs_due_idx', 'cloud_workflow_runs', 'created_at, run_id', "WHERE claim_token IS NULL AND status IN ('queued', 'running')")
@@ -288,11 +292,7 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_channel_interactions_expiry_idx', 'cloud_channel_interactions', 'expires_at')
   assertIndexShape('cloud_webhook_replay_claims_seen_idx', 'cloud_webhook_replay_claims', 'seen_at_ms')
   assertIndexShape('cloud_memberships_account_idx', 'cloud_memberships', 'account_id, updated_at DESC')
-  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_PERFORMANCE_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
   assertIndexShape('cloud_artifact_index_task_idx', 'cloud_artifact_index', 'tenant_id, user_id, task_id, updated_at DESC, session_id, artifact_id', 'WHERE task_id IS NOT NULL')
-  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_MIGRATION_ID[\s\S]*transactional: false/)
-  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_WORKFLOW_RUN_RECENT_INDEX_MIGRATION_ID[\s\S]*transactional: false/)
-  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_WORKFLOW_WEBHOOK_LOOKUP_INDEX_MIGRATION_ID[\s\S]*transactional: false/)
   assertIndexShape('cloud_session_events_sequence_idx', 'cloud_session_events', 'tenant_id, session_id, sequence')
   assertIndexShape('cloud_workspace_events_sequence_idx', 'cloud_workspace_events', 'tenant_id, user_id, sequence')
   assertIndexShape('cloud_session_commands_available_idx', 'cloud_session_commands', 'status, available_at, tenant_id, session_id, created_sequence')
@@ -302,7 +302,6 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_workflow_runs_claim_idx', 'cloud_workflow_runs', 'tenant_id, status, claim_expires_at')
   assertIndexShape('cloud_workflow_runs_reaper_idx', 'cloud_workflow_runs', 'claim_expires_at, tenant_id, workflow_id, run_id', "WHERE claim_token IS NOT NULL")
   assert.match(postgresSchema, /cloud_workflow_runs_reaper_idx[\s\S]*AND claim_expires_at IS NOT NULL[\s\S]*AND status IN \('queued', 'running'\)/)
-  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
   assert.match(postgresMigrations, /SELECT pg_try_advisory_lock\(\$1, \$2\) AS locked/)
   assert.doesNotMatch(postgresMigrations, /SELECT pg_advisory_lock\(\$1, \$2\)/)
   const workflowRunBatchQuery = extractMethodSource(postgresWorkflowsDomain, 'listWorkflowRunsForWorkflows')

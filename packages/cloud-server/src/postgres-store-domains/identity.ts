@@ -84,7 +84,7 @@ export class PostgresIdentityRepository {
       role: input.role || 'member',
       status: 'active',
       updatedAt: input.createdAt,
-      actor: { actorType: 'system', actorId: 'compat.ensureUser' },
+      actor: { actorType: 'system', actorId: 'identity.ensureUser' },
     })
     return this.options.requireTenantUser(input.tenantId, input.userId)
   }

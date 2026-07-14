@@ -22,6 +22,7 @@ import {
   normalizeWorkflowSteps,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader-core.js'
+import { initializeLocalSqliteSchema } from '../local-sqlite-schema.js'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,
@@ -41,12 +42,74 @@ import {
   type WorkflowSecretStorageAdapter,
 } from './workflow-secret-storage.js'
 
-const WORKFLOW_DB_SCHEMA_VERSION = 3
+const WORKFLOW_DB_SCHEMA_VERSION = 1
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
 const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
 const VALID_STATUS = new Set<WorkflowStatus>(['active', 'paused', 'running', 'failed', 'archived'])
 const VALID_RUN_STATUS = new Set<WorkflowRunStatus>(['queued', 'running', 'completed', 'failed', 'cancelled'])
+
+const WORKFLOW_BASELINE_SQL = `
+  create table workflow_meta (
+    key text primary key,
+    value text not null
+  );
+  create table workflows (
+    id text primary key,
+    title text not null,
+    instructions text not null,
+    agent_name text not null,
+    skill_names_json text not null,
+    tool_ids_json text not null,
+    steps_json text not null default '[]',
+    status text not null,
+    project_directory text,
+    draft_session_id text,
+    triggers_json text not null,
+    created_at text not null,
+    updated_at text not null,
+    next_run_at text,
+    last_run_at text,
+    latest_run_id text,
+    latest_run_status text,
+    latest_run_session_id text,
+    latest_run_summary text
+  );
+  create table workflow_runs (
+    id text primary key,
+    workflow_id text not null,
+    session_id text,
+    trigger_type text not null,
+    trigger_payload_json text,
+    status text not null,
+    title text not null,
+    summary text,
+    error text,
+    created_at text not null,
+    started_at text,
+    finished_at text
+  );
+  create index idx_workflow_runs_workflow on workflow_runs(workflow_id, created_at);
+  create index idx_workflows_due on workflows(status, next_run_at);
+  create table workflow_webhook_rate_limits (
+    source text primary key,
+    window_started_at integer not null,
+    count integer not null
+  );
+  create table workflow_webhook_auth_failures (
+    scope text primary key,
+    source text not null,
+    auth_window_started_at integer not null,
+    auth_failure_count integer not null,
+    blocked_until integer not null
+  );
+  create table workflow_webhook_signatures (
+    key_hash text primary key,
+    seen_at integer not null,
+    status text not null check (status in ('pending', 'accepted'))
+  );
+  create index idx_workflow_webhook_signatures_seen_at on workflow_webhook_signatures(seen_at);
+`
 
 let workflowDb: DatabaseSync | null = null
 let workflowDbForTests: DatabaseSync | null = null
@@ -112,9 +175,12 @@ export function setWorkflowSecretStorageForTests(adapter: WorkflowSecretStorageA
 export function setWorkflowDatabaseForTests(db: DatabaseSync | null) {
   workflowDb?.close()
   workflowDb = null
-  workflowDbForTests = db
+  workflowDbForTests = null
   transactionCounter = 0
-  if (db) initDb(db)
+  if (db) {
+    initDb(db)
+    workflowDbForTests = db
+  }
 }
 
 function writeNow(options?: WorkflowWriteOptions) {
@@ -141,72 +207,27 @@ function workflowDraftOptions(options?: WorkflowDraftOptions): WorkflowDraftNorm
 }
 
 function initDb(db: DatabaseSync) {
-  db.exec(`
-    create table if not exists workflow_meta (
-      key text primary key,
-      value text not null
-    );
-    create table if not exists workflows (
-      id text primary key,
-      title text not null,
-      instructions text not null,
-      agent_name text not null,
-      skill_names_json text not null,
-      tool_ids_json text not null,
-      steps_json text not null default '[]',
-      status text not null,
-      project_directory text,
-      draft_session_id text,
-      triggers_json text not null,
-      created_at text not null,
-      updated_at text not null,
-      next_run_at text,
-      last_run_at text,
-      latest_run_id text,
-      latest_run_status text,
-      latest_run_session_id text,
-      latest_run_summary text
-    );
-    create table if not exists workflow_runs (
-      id text primary key,
-      workflow_id text not null,
-      session_id text,
-      trigger_type text not null,
-      trigger_payload_json text,
-      status text not null,
-      title text not null,
-      summary text,
-      error text,
-      created_at text not null,
-      started_at text,
-      finished_at text
-    );
-    create index if not exists idx_workflow_runs_workflow on workflow_runs(workflow_id, created_at);
-    create index if not exists idx_workflows_due on workflows(status, next_run_at);
-    create table if not exists workflow_webhook_rate_limits (
-      source text primary key,
-      window_started_at integer not null,
-      count integer not null
-    );
-    create table if not exists workflow_webhook_auth_failures (
-      scope text primary key,
-      source text not null,
-      auth_window_started_at integer not null,
-      auth_failure_count integer not null,
-      blocked_until integer not null
-    );
-    create table if not exists workflow_webhook_signatures (
-      key_hash text primary key,
-      seen_at integer not null,
-      status text not null check (status in ('pending', 'accepted'))
-    );
-    create index if not exists idx_workflow_webhook_signatures_seen_at on workflow_webhook_signatures(seen_at);
-  `)
-  db.prepare(`
-    insert into workflow_meta (key, value)
-    values (?, ?)
-    on conflict(key) do update set value = excluded.value
-  `).run(WORKFLOW_SCHEMA_VERSION_KEY, String(WORKFLOW_DB_SCHEMA_VERSION))
+  initializeLocalSqliteSchema(db, {
+    storeName: 'local workflow store',
+    currentVersion: WORKFLOW_DB_SCHEMA_VERSION,
+    metaTable: 'workflow_meta',
+    versionKey: WORKFLOW_SCHEMA_VERSION_KEY,
+    baselineSql: WORKFLOW_BASELINE_SQL,
+    tables: [
+      { name: 'workflow_meta', columns: ['key', 'value'] },
+      { name: 'workflows', columns: ['id', 'title', 'instructions', 'agent_name', 'skill_names_json', 'tool_ids_json', 'steps_json', 'status', 'project_directory', 'draft_session_id', 'triggers_json', 'created_at', 'updated_at', 'next_run_at', 'last_run_at', 'latest_run_id', 'latest_run_status', 'latest_run_session_id', 'latest_run_summary'] },
+      { name: 'workflow_runs', columns: ['id', 'workflow_id', 'session_id', 'trigger_type', 'trigger_payload_json', 'status', 'title', 'summary', 'error', 'created_at', 'started_at', 'finished_at'] },
+      { name: 'workflow_webhook_rate_limits', columns: ['source', 'window_started_at', 'count'] },
+      { name: 'workflow_webhook_auth_failures', columns: ['scope', 'source', 'auth_window_started_at', 'auth_failure_count', 'blocked_until'] },
+      { name: 'workflow_webhook_signatures', columns: ['key_hash', 'seen_at', 'status'] },
+    ],
+    indexes: [
+      'idx_workflow_runs_workflow',
+      'idx_workflows_due',
+      'idx_workflow_webhook_signatures_seen_at',
+    ],
+    recovery: 'Back up or export saved workflows and run history, then reset only workflows.sqlite before recreating or importing them.',
+  })
 }
 
 export function getWorkflowDb() {
@@ -215,8 +236,8 @@ export function getWorkflowDb() {
   const dbPath = workflowDbPath()
   const db = new DatabaseSync(dbPath)
   try {
-    db.exec('pragma journal_mode = WAL;')
     initDb(db)
+    db.exec('pragma journal_mode = WAL;')
     ensureWorkflowDbFileModes(dbPath)
     workflowDb = db
     return db

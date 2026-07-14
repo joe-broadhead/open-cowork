@@ -1,5 +1,7 @@
 {
-  "source": "opencode-gateway docs/api/mcp-tools.md",
+  "source": "https://github.com/joe-broadhead/opencode-gateway/blob/83049573c8fda3adc4e5286f84f319ce95bdecfc/docs/api/mcp-tools.md",
+  "sourceRevision": "83049573c8fda3adc4e5286f84f319ce95bdecfc",
+  "sourcePath": "docs/api/mcp-tools.md",
   "read": [
     "gateway_catalog",
     "gateway_dashboard",
@@ -81,7 +83,7 @@
     "gateway_human_gate_decide",
     "gateway_question_reply",
     "gateway_question_reject",
-    "gateway_permission_reply",
+    "gateway_permission_reject",
     "gateway_scheduler_pause",
     "gateway_scheduler_resume",
     "gateway_scheduler_run_once",
@@ -131,6 +133,7 @@
     "gateway_channel_send_to_roadmap"
   ],
   "admin": [
+    "gateway_permission_reply",
     "gateway_config_update",
     "gateway_restart",
     "gateway_backup_create",

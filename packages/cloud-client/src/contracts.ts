@@ -435,7 +435,7 @@ export type CloudAdminPolicyOverview = {
     status: string
   }
   signup: {
-    mode: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
+    mode: 'disabled' | 'invite' | 'domain' | 'open'
     allowSelfServiceSignup: boolean
     allowedEmailDomains: string[]
     invitesEnabled: boolean

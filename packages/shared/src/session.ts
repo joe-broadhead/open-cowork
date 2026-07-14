@@ -141,6 +141,7 @@ export interface ToolCall {
   status: 'running' | 'complete' | 'error'
   output?: unknown
   attachments?: MessageAttachment[]
+  outputPaths?: string[]
   agent?: string | null
   sourceSessionId?: string | null
   order: number
@@ -216,6 +217,7 @@ export interface TaskRun {
 export interface PendingApproval {
   id: string
   sessionId: string
+  sourceSessionId?: string | null
   workspaceId?: string | null
   taskRunId?: string | null
   tool: string

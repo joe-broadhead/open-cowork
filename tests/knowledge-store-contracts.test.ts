@@ -42,10 +42,9 @@ function makeSqliteStore(): StoreHandle {
 // --- pglite (real PostgreSQL in WASM) --------------------------------------
 async function makePgliteStore(connectionString: string, pool = createPglitePool()): Promise<StoreHandle> {
   void connectionString
-  // The cloud_knowledge_* tables live in the 016_cloud_knowledge migration; the
-  // four DDL statements are self-contained (FKs only reference each other), so
-  // applying them directly gives the store its schema without the full
-  // control-plane migration set.
+  // The cloud_knowledge_* statements are a self-contained baseline domain
+  // (their FKs only reference each other), so this contract can create only
+  // the schema it owns.
   for (const statement of CLOUD_CONTROL_PLANE_KNOWLEDGE_STATEMENTS) {
     await pool.query(statement)
   }

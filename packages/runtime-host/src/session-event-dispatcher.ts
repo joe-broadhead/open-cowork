@@ -27,6 +27,7 @@ export type RuntimeSessionEvent = {
     input?: Record<string, unknown>
     status?: string
     output?: unknown
+    outputPaths?: string[]
     agent?: string | null
     sourceSessionId?: string | null
     title?: string

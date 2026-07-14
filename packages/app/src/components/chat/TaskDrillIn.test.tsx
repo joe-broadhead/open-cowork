@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { axe } from 'vitest-axe'
 import { useSessionStore, type TaskRun } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { TaskDrillIn } from './TaskDrillIn'
@@ -385,5 +387,46 @@ describe('TaskDrillIn', () => {
 
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats the drawer as a modal, contains focus, and restores its trigger on close', async () => {
+    const user = userEvent.setup()
+    const rootTask = createTask()
+
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>Open task details</button>
+          <button type="button">Background task action</button>
+          {open ? (
+            <TaskDrillIn
+              rootTask={rootTask}
+              allTaskRuns={[rootTask]}
+              agentVisuals={{}}
+              rootSessionId="root-session"
+              onClose={() => setOpen(false)}
+            />
+          ) : null}
+        </>
+      )
+    }
+
+    render(<Harness />)
+    const trigger = screen.getByRole('button', { name: 'Open task details' })
+    await user.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: 'Code Reviewer drill-in' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Code Reviewer' })).toHaveFocus())
+    expect((await axe(dialog)).violations).toEqual([])
+
+    await user.tab()
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    expect(screen.getByRole('button', { name: 'Background task action' })).not.toHaveFocus()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Code Reviewer drill-in' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 })

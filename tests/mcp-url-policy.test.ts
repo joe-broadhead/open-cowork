@@ -112,6 +112,15 @@ test('evaluateHttpMcpUrlResolved rejects public-looking hostnames resolving to p
   }
 })
 
+test('evaluateHttpMcpUrl treats private-looking DNS prefixes as names and validates their answers', async () => {
+  assert.equal(evaluateHttpMcpUrl('https://127.attacker.example/mcp').ok, true)
+  const result = await evaluateHttpMcpUrlResolved('https://127.attacker.example/mcp', {
+    resolveHostname: async () => [{ address: '127.0.0.1', family: 4 }],
+  })
+  assert.equal(result.ok, false)
+  if (result.ok === false) assert.match(result.reason, /resolves to a loopback address/i)
+})
+
 test('evaluateHttpMcpUrlResolved allows private DNS answers when private networks are explicitly allowed', async () => {
   let resolverCalled = false
   const result = await evaluateHttpMcpUrlResolved('https://mcp.example.com/api', {

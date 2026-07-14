@@ -1,8 +1,6 @@
 import { buildModelInfoSnapshot } from './model-info-utils.js'
-import { asRecord, readString } from '@open-cowork/shared'
 import {
   createOpencodeClient,
-  type Auth as OpencodeAuth,
   type OpencodeClient as V2OpencodeClient,
   type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
@@ -19,7 +17,7 @@ import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.
 import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/workflow-tool-bridge.js'
 import { ensureKnowledgeToolBridge, stopKnowledgeToolBridge } from './knowledge/knowledge-tool-bridge.js'
 import { ensureSemanticUiBridge, stopSemanticUiBridge } from './semantic-ui-bridge.js'
-import { normalizeProviderListResponse } from './provider-utils.js'
+import { listNativeProviders } from './provider-utils.js'
 import { prepareShellEnvironment } from './shell-env.js'
 import {
   getRuntimeEnvPaths,
@@ -59,6 +57,7 @@ import {
 } from './runtime-process-cleanup.js'
 import { MAX_DIRECTORY_CLIENTS, runtimeState } from './runtime-state.js'
 import { sdkErrorMessage } from './sdk-error.js'
+import { connectNativeProviderApiKey } from './opencode-v2.js'
 export { getRuntimeHomeDir } from './runtime-paths.js'
 export { buildManagedRuntimeEnvironment } from './runtime-environment.js'
 export {
@@ -89,12 +88,6 @@ type CreateOpencodeOptions = OpencodeServerOptions & {
 
 type StartRuntimeOptions = {
   onUnexpectedExit?: ((event: ManagedOpencodeServerUnexpectedExit) => void) | null
-}
-
-type AppInfoCapableClient = {
-  app?: {
-    info?: () => Promise<{ data?: unknown }>
-  }
 }
 
 async function refreshAccessTokenLazy() {
@@ -171,9 +164,8 @@ export function getRuntimeOpencodeAuthPath() {
 
 // Provider auth is always app-owned: the managed runtime writes provider
 // auth under Cowork's runtime data directory, never into the user's real
-// OpenCode auth store. The symlink removal below clears any leftover
-// native-store bridge link created by older builds so the runtime auth
-// path is a regular app-owned file again (audit #869).
+// OpenCode auth store. Prevent path redirection by replacing any symlinked
+// target with a regular app-owned path before credentials can be written.
 export function ensureIsolatedProviderAuthStore() {
   const runtimeAuthPath = getRuntimeOpencodeAuthPath()
   mkdirSync(dirname(runtimeAuthPath), { recursive: true })
@@ -199,12 +191,7 @@ async function syncProviderApiAuth(c: V2OpencodeClient) {
     const key = getProviderCredentialValue(settings, providerID, apiKeyCredential.key)
     if (!key) return
     try {
-      const auth: OpencodeAuth = {
-        type: 'api',
-        key,
-        metadata: { source: 'open-cowork' },
-      }
-      await c.auth.set({ providerID, auth }, { throwOnError: true })
+      await connectNativeProviderApiKey(c, providerID, key)
       log('provider', `Synced OpenCode API auth for ${providerID}`)
     } catch (err) {
       log('provider', `Could not sync OpenCode API auth for ${providerID}: ${sdkErrorMessage(err)}`)
@@ -317,8 +304,7 @@ export function shouldEnableNativeWebSearch() {
 async function fetchModelInfo(c: V2OpencodeClient) {
   const configuredFallbacks = getConfiguredModelFallbacks()
   try {
-    const result = await c.provider.list()
-    const providers = normalizeProviderListResponse(result.data)
+    const providers = await listNativeProviders(c)
     const modelInfo = buildModelInfoSnapshot(providers, configuredFallbacks)
     runtimeState.setCachedModelInfo(modelInfo)
     log('runtime', `Loaded model info: ${Object.keys(modelInfo.pricing).length} models with pricing, ${Object.keys(modelInfo.contextLimits).length} with context limits`)
@@ -328,28 +314,15 @@ async function fetchModelInfo(c: V2OpencodeClient) {
   }
 }
 
-async function readSdkAppInfoVersion(client: V2OpencodeClient) {
-  const appInfo = (client as unknown as AppInfoCapableClient).app?.info
-  if (!appInfo) return null
-  try {
-    const result = await appInfo()
-    const data = asRecord(result.data)
-    const info = asRecord(data.info)
-    return readString(data.version) || readString(info.version)
-  } catch {
-    return null
-  }
-}
-
 async function logRuntimeVersions(
-  client: V2OpencodeClient,
   bundledOpencodeEnv: ReturnType<typeof applyBundledOpencodeCliEnvironment>,
 ) {
   const sdkVersion = getBundledOpencodeSdkVersion() || 'unknown'
-  const appInfoVersion = await readSdkAppInfoVersion(client)
-  const cliVersion = appInfoVersion || await readBundledOpencodeCliVersion(bundledOpencodeEnv)
-  const source = appInfoVersion ? 'sdk app.info' : 'cli --version'
-  log('runtime', `OpenCode runtime versions: sdk=${sdkVersion} cli=${cliVersion || 'unknown'} source=${source}`)
+  // Native V2 health intentionally reports only readiness, not a version.
+  // Read the exact bundled executable instead of falling back to classic
+  // `app.info`, keeping the runtime API boundary native-only.
+  const cliVersion = await readBundledOpencodeCliVersion(bundledOpencodeEnv)
+  log('runtime', `OpenCode runtime versions: sdk=${sdkVersion} cli=${cliVersion || 'unknown'} source=cli --version`)
 }
 
 async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
@@ -512,7 +485,7 @@ export async function startRuntime(
       )
 
       await registerStartedRuntime(result, plan)
-      await logRuntimeVersions(result.client, bundledOpencodeEnv)
+      await logRuntimeVersions(bundledOpencodeEnv)
       log('runtime', `OpenCode server started at ${result.server.url}`)
       return result.client
     } catch (err) {

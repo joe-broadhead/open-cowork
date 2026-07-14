@@ -7,7 +7,7 @@ import {
   digestSdkSnapshot,
   mapPortableEntryPath,
 } from '../scripts/opencode-portability-proof.ts'
-import { runtimePathsForPortability } from '@open-cowork/cloud-server/runtime-portability'
+import { runtimePathsForPortability } from '@open-cowork/cloud-server/runtime-snapshot-portability'
 
 test('OpenCode portability proof maps portable runtime paths into a separate restore root', () => {
   const sourceRuntimePaths = runtimePathsForPortability({
@@ -60,10 +60,18 @@ test('OpenCode portability proof snapshot digest compares the SDK surfaces used 
   const snapshot = {
     session: { id: 'session-1', title: 'Portability proof' },
     messages: [{
-      info: { id: 'message-1', role: 'user' },
-      parts: [{ type: 'text', text: 'hello' }],
+      id: 'message-1',
+      type: 'user',
+      text: 'hello',
     }],
-    todos: [],
+    history: [{
+      type: 'session.next.prompt.admitted',
+      data: {
+        messageID: 'message-1',
+        prompt: { text: 'hello' },
+        delivery: 'queue',
+      },
+    }],
     children: [],
     permissions: [],
     questions: [],
@@ -73,7 +81,7 @@ test('OpenCode portability proof snapshot digest compares the SDK surfaces used 
     sessionId: 'session-1',
     title: 'Portability proof',
     messages: [{ id: 'message-1', role: 'user', text: 'hello' }],
-    todos: [],
+    promptAdmissions: [{ messageId: 'message-1', text: 'hello', delivery: 'queue' }],
     childCount: 0,
     permissionCount: 0,
     questionCount: 0,

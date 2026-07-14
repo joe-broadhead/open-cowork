@@ -93,6 +93,7 @@ pnpm standalone-gateway:setup -- \
   --admin-token "$OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   --telegram-bot-token "$TELEGRAM_BOT_TOKEN" \
   --opencode-url http://127.0.0.1:4096 \
+  --runtime-root /var/lib/open-cowork/standalone-gateway \
   --output .env.standalone-gateway
 
 pnpm build:standalone-gateway

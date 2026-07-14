@@ -176,10 +176,12 @@ async function executeApprovalAction(
   if (!approvalId) return actionError(actionId, 'semantic-ui-action-input-invalid', 'approvalId is required.')
   const pending = sessionEngine.getPendingApprovals().find((entry) => entry.approval.id === approvalId)
   if (!pending) return actionError(actionId, 'semantic-ui-action-stale', 'The requested approval is no longer pending.')
-  const sessionId = pending.approval.sessionId || getPermissionSession(approvalId) || pending.sessionId
+  const sessionId = pending.approval.sessionId || pending.sessionId
+  const sourceSessionId = getPermissionSession(approvalId) || pending.approval.sourceSessionId || sessionId
   const { client } = await context.getSessionV2Client(sessionId)
   const allowed = actionId === 'approval.allow'
-  await client.permission.reply({
+  await client.v2.session.permission.reply({
+    sessionID: sourceSessionId,
     requestID: approvalId,
     reply: allowed ? 'once' : 'reject',
   }, {
@@ -218,15 +220,18 @@ async function executeQuestionAction(
   const questionId = normalizeQuestionRequestId(questionIdInput)
   const pending = sessionEngine.getPendingQuestions().find((entry) => entry.question.id === questionId)
   if (!pending) return actionError(actionId, 'semantic-ui-action-stale', 'The requested question is no longer pending.')
+  const sourceSessionId = pending.question.sourceSessionId || pending.sessionId
   const { client } = await context.getSessionV2Client(pending.sessionId)
   if (actionId === 'question.answer') {
     const answers = normalizeQuestionAnswers(input.answers)
-    await client.question.reply({
+    await client.v2.session.question.reply({
+      sessionID: sourceSessionId,
       requestID: questionId,
-      answers,
+      questionV2Reply: { answers },
     }, { throwOnError: true })
   } else {
-    await client.question.reject({
+    await client.v2.session.question.reject({
+      sessionID: sourceSessionId,
       requestID: questionId,
     }, { throwOnError: true })
   }

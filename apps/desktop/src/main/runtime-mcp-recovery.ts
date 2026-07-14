@@ -6,7 +6,7 @@ import { log } from '@open-cowork/shared/node'
 
 type RuntimeMcpClient = {
   mcp: {
-    connect(input: { name: string }): Promise<unknown>
+    connect(input: { name: string }, options?: { throwOnError?: boolean }): Promise<unknown>
   }
 }
 
@@ -71,7 +71,7 @@ export function createStartupMcpRecovery(options: {
       startupRecoveryAttempts.set(entry.name, attempts + 1)
       try {
         log('mcp', `Retrying local MCP startup for ${entry.name} (${attempts + 1}/${MAX_STARTUP_MCP_RECOVERY_ATTEMPTS})`)
-        await options.client.mcp.connect({ name: entry.name })
+        await options.client.mcp.connect({ name: entry.name }, { throwOnError: true })
       } catch (err: unknown) {
         log('error', `Local MCP recovery failed for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`)
       }
@@ -86,7 +86,7 @@ export function createStartupMcpRecovery(options: {
     for (const entry of disconnected) {
       try {
         log('mcp', `Refreshing Google-auth MCP ${entry.name}`)
-        await options.client.mcp.connect({ name: entry.name })
+        await options.client.mcp.connect({ name: entry.name }, { throwOnError: true })
       } catch (err: unknown) {
         log('error', `Google-auth MCP recovery failed for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`)
       }

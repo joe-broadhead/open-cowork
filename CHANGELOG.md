@@ -36,7 +36,27 @@ planned before broad distribution.
 
 ### Changed
 
-- Upgraded the bundled OpenCode SDK and embedded runtime to `1.17.18`.
+- Upgraded the bundled OpenCode SDK and embedded runtime to `1.17.20`.
+- Updated CI/development to Node `22.23.1` and production container images to
+  the Node `24.18.0` LTS line; Docker dependency automation now requires
+  deliberate review before crossing Node major versions.
+- Moved all OpenCode capabilities covered by the native V2 SDK onto
+  `client.v2`, including global event streaming, provider/model discovery,
+  credential connection, session lifecycle, questions, and permissions. The
+  few upstream V2 capability gaps now have an exact source-and-count allowlist
+  plus a documented removal path.
+- Refreshed the bundled OpenWiki and opencode-gateway skills and contract
+  fixtures against their July 2026 upstream interfaces. OpenWiki ingestion now
+  follows proposal/approval semantics and gateway execution uses a scoped
+  operator token instead of an administrator credential.
+- Hardened the production GCP reference around private Cloud SQL connectivity,
+  IAM database authentication, role-specific probes, explicit high
+  availability, least-privilege secret access, and Cloud SQL Auth Proxy
+  `2.23.0` across Terraform and Helm deployments.
+- Reduced the fresh browser startup graph from 219.7 KB to 204.0 KB gzipped by
+  moving setup authentication, diff inspection, home review, telemetry, and
+  studio-only UI behind explicit lazy boundaries. The 220 KB budget now has a
+  measured 16 KB safety margin and guards those boundaries in CI.
 - Simplified the product surface around Chat, Team, Tools & Skills, Projects,
   and Playbooks so Open Cowork stays a product layer on top of OpenCode rather
   than a second runtime or team-operations platform.
@@ -76,6 +96,16 @@ planned before broad distribution.
 - Cloud token hashing (API tokens, channel-interaction, SCIM, worker
   credentials) runs off the event loop, and cloud secret envelopes without a key
   id fail closed instead of being trial-decrypted against the key ring.
+- Signed-out browser clients now bootstrap only public configuration and defer
+  protected settings until authentication completes; unrelated API failures no
+  longer masquerade as expired sessions.
+- Desktop permission replies validate the requesting session and use native V2
+  response semantics. File snippets resolve real paths inside the workspace,
+  chart data URLs/spec sizes are bounded, and external links open without an
+  opener relationship.
+- Gateway-managed external execution is disabled unless an explicit
+  capability-scoped operator token file is configured; administrator token
+  material is no longer propagated to the managed runtime.
 
 ### Fixed
 
@@ -88,9 +118,47 @@ planned before broad distribution.
 - Bounded the session-status reconciler polling, session lineage tracking, and
   the cloud projection view cache so long-running sessions cannot grow them
   without limit.
+- Fixed workflow archive/restore controls, exact run-to-session navigation,
+  scheduler startup races, notification quiet hours, and failure isolation so
+  a delegated child failure cannot incorrectly terminalize its parent run.
+- Fixed post-login initialization and Health Center error handling so protected
+  settings are loaded before entering the app and partial service outages stay
+  visible instead of being reported as healthy empty results.
+- Improved keyboard and screen-reader behavior across the application shell,
+  command palette, avatar editor, new-thread dialog, and delegated-task drill-in
+  overlays, including stacked Escape handling and focus restoration.
+- Update discovery now selects platform-correct artifacts and rejects release
+  payloads that do not satisfy the current update schema.
+- Bounded renderer test concurrency to four workers so jsdom, axe, and
+  user-event suites remain deterministic under host CPU pressure.
 
 ### Removed
 
+- Removed the legacy cloud `/healthz` alias. Deployments must use `/livez` for
+  process liveness and `/readyz` for dependency readiness.
+- Removed the legacy `closed` cloud signup-mode alias. Deployments must use
+  `disabled`; invalid signup modes now fail configuration instead of silently
+  falling back.
+- Removed deprecated gateway cloud/timeout configuration, the obsolete update
+  schema-v1 install marker, old thread-index schema alteration paths, fabricated
+  workflow-step summaries, a dead cross-tenant session-listing API, and the
+  classic provider payload normalizer superseded by native V2 discovery.
+- Rebased the pre-release cloud and standalone-gateway databases onto clean
+  schema baselines. Historical compatibility DDL, data backfills, purge steps,
+  trigger replacements, and retired-index cleanup are no longer shipped; the
+  remaining two-phase cloud bootstrap separates transactional DDL from the
+  PostgreSQL-required concurrent-index phase. Only empty databases initialize a
+  missing clean-baseline ledger entry. If product tables already exist without
+  that entry, startup fails before schema mutation or stamping and operators
+  must recreate the pre-release database or restore a matching backup. Current
+  ledger-backed databases boot only after required production tables and Cloud
+  concurrent indexes pass physical integrity checks; an interrupted current
+  concurrent-index phase remains safely repairable under the migration lock.
+- Removed implicit local preview-store upgrades for settings, thread indexing,
+  workflows, coordination, artifact lifecycle/index metadata, and knowledge.
+  Empty stores create the current clean baseline; non-empty stores must declare
+  the exact current version and pass physical table/column/index validation or
+  fail before any DDL/version write with scoped backup/export and reset guidance.
 - Removed dormant product-surface references to Pulse, governance, and
   autonomous dreaming/improvement loops from current release notes. Channels and
   Team ship as default-enabled Studio surfaces and were not removed. The active

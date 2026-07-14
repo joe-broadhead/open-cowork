@@ -410,6 +410,7 @@ export class SessionEngine {
                   status: toolStatus,
                   output: data.output,
                   attachments: data.attachments,
+                  outputPaths: data.outputPaths,
                   agent: data.agent || taskRun.agent,
                   sourceSessionId: data.sourceSessionId || taskRun.sourceSessionId,
                 }, { order: this.nextSeq() })
@@ -432,6 +433,7 @@ export class SessionEngine {
             status: toolStatus,
             output: data.output,
             attachments: data.attachments,
+            outputPaths: data.outputPaths,
             agent: data.agent,
             sourceSessionId: data.sourceSessionId,
           }, { order: this.nextSeq() })

@@ -4,14 +4,14 @@ set -euo pipefail
 compose_file="${1:-docker-compose.cloud.split.yml}"
 project_suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-${RANDOM}"
 project_name="open-cowork-cloud-smoke-${project_suffix}"
-health_file="${TMPDIR:-/tmp}/open-cowork-cloud-healthz-${project_suffix}.json"
+ready_file="${TMPDIR:-/tmp}/open-cowork-cloud-readyz-${project_suffix}.json"
 live_file="${TMPDIR:-/tmp}/open-cowork-cloud-livez-${project_suffix}.json"
 gateway_health_file="${TMPDIR:-/tmp}/open-cowork-gateway-ready-${project_suffix}.json"
 gateway_smoke_url="${OPEN_COWORK_GATEWAY_SMOKE_URL:-}"
 
 cleanup() {
   docker compose -p "${project_name}" -f "${compose_file}" down -v --remove-orphans >/dev/null 2>&1 || true
-  rm -f "${health_file}" "${live_file}" "${gateway_health_file}"
+  rm -f "${ready_file}" "${live_file}" "${gateway_health_file}"
 }
 
 print_diagnostics() {
@@ -28,8 +28,8 @@ fi
 
 cloud_ready=false
 for _ in $(seq 1 90); do
-  if curl -fsS "http://127.0.0.1:8787/healthz" >"${health_file}"; then
-    cat "${health_file}"
+  if curl -fsS "http://127.0.0.1:8787/readyz" >"${ready_file}"; then
+    cat "${ready_file}"
     if ! curl -fsS "http://127.0.0.1:8787/livez" >"${live_file}"; then
       print_diagnostics
       exit 1
@@ -70,6 +70,6 @@ print_diagnostics
 if [ "${cloud_ready}" = true ] && [ -n "${gateway_smoke_url}" ]; then
   echo "open-cowork cloud+gateway compose smoke test did not reach ${gateway_smoke_url}" >&2
 else
-  echo "open-cowork-cloud compose smoke test did not reach /healthz and /livez" >&2
+  echo "open-cowork-cloud compose smoke test did not reach /readyz and /livez" >&2
 fi
 exit 1

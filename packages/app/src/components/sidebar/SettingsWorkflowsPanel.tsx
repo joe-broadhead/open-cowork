@@ -1,9 +1,8 @@
 import type { EffectiveAppSettings } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Input, Switch } from '../ui'
+import { Card, Input, Switch } from '../ui'
 import {
   fieldLabelCls,
-  panelCardCls,
   sectionLabelCls,
 } from './settings-panel-styles'
 
@@ -35,7 +34,7 @@ export function WorkflowSettingsPanel({
   return (
     <div className="flex flex-col gap-5">
       <span className={sectionLabelCls}>{t('settings.workflows.header', 'Playbook Preferences')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         {toggles.map((toggle) => {
           const enabled = settings[toggle.key]
           return (
@@ -52,10 +51,10 @@ export function WorkflowSettingsPanel({
             </div>
           )
         })}
-      </div>
+      </Card>
 
       <span className={sectionLabelCls}>{t('settings.workflows.quietHoursHeader', 'Quiet hours')}</span>
-      <div className={panelCardCls}>
+      <Card className="flex flex-col gap-4">
         <div className="text-2xs text-text-muted">
           {t('settings.workflows.quietHoursDescription', 'Desktop notifications are suppressed during this window. Scheduled and webhook runs can still start.')}
         </div>
@@ -81,7 +80,7 @@ export function WorkflowSettingsPanel({
             />
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

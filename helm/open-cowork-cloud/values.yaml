@@ -27,6 +27,9 @@ cloud:
   downstreamRoot: ""
   root: /data/open-cowork-cloud
   shutdownGraceMs: 300000
+  # Long-running roles must never own DDL in production. Run the pinned
+  # cloud:migrate:start image as a separately credentialed one-shot job.
+  runMigrations: false
   allowInsecureAuth: false
   allowInsecurePublicAuth: false
   auth:
@@ -106,7 +109,7 @@ cloudSqlProxy:
   enabled: false
   image:
     repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
-    tag: "2.22.0"
+    tag: "2.23.0"
     digest: ""
     pullPolicy: IfNotPresent
   instanceConnectionName: ""

@@ -4,6 +4,7 @@ import { normalizeChannelProviderIdentity, type ChannelProviderKind } from "@ope
 import { parseJsoncText, splitTrustedProxyCidrs } from "@open-cowork/shared";
 
 import { assertPrivateBindHost, assertPrivateOpenCodeEndpoint } from "./network-policy.js";
+import { normalizeStandaloneRuntimeRoot } from "./runtime-root.js";
 import type { StandaloneGatewayConfig, StandaloneGatewayProviderConfig } from "./types.js";
 
 export type StandaloneGatewayEnv = Record<string, string | undefined>;
@@ -19,6 +20,7 @@ export function loadStandaloneGatewayConfig(rawEnv: StandaloneGatewayEnv = proce
     : readString(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL);
   const adminToken = readRequired(env.OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN, "OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN");
   const opencodeBaseUrl = readRequired(env.OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL, "OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL");
+  const runtimeRoot = normalizeStandaloneRuntimeRoot(env.OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT);
   const allowPrivateDns = readBoolean(env.OPEN_COWORK_STANDALONE_GATEWAY_ALLOW_PRIVATE_DNS, false);
   const host = readString(env.OPEN_COWORK_STANDALONE_GATEWAY_HOST) || defaultHost;
   const publicBaseUrl = readNullable(env.OPEN_COWORK_STANDALONE_GATEWAY_PUBLIC_URL);
@@ -45,7 +47,13 @@ export function loadStandaloneGatewayConfig(rawEnv: StandaloneGatewayEnv = proce
     opencode: {
       baseUrl: assertPrivateOpenCodeEndpoint(opencodeBaseUrl, { allowPrivateDns }).toString().replace(/\/$/, ""),
       allowPrivateDns,
-      runtimeRoot: readNullable(env.OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT),
+      runtimeRoot,
+      executionTimeoutMs: readInteger(
+        env.OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS,
+        15 * 60 * 1000,
+        1_000,
+        24 * 60 * 60 * 1000,
+      ),
     },
     retention: {
       sessionDays: readInteger(env.OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_SESSION_DAYS, 90, 1, 3650),

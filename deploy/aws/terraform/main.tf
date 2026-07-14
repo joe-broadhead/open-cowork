@@ -31,26 +31,36 @@ locals {
       role          = "web"
       desired_count = var.web_desired_count
       public        = true
+      health_port   = 8787
+      health_path   = "/readyz"
     }
     worker = {
       role          = "worker"
       desired_count = var.worker_desired_count
       public        = false
+      health_port   = 8788
+      health_path   = "/livez"
     }
     scheduler = {
       role          = "scheduler"
       desired_count = 1
       public        = false
+      health_port   = 8788
+      health_path   = "/livez"
     }
   }
 
   common_env = [
     { name = "OPEN_COWORK_CLOUD_HOST", value = "0.0.0.0" },
     { name = "OPEN_COWORK_CLOUD_PORT", value = "8787" },
+    { name = "OPEN_COWORK_CLOUD_RUN_MIGRATIONS", value = "false" },
     { name = "OPEN_COWORK_CLOUD_OBJECT_STORE_KIND", value = "s3" },
     { name = "OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET", value = aws_s3_bucket.artifacts.bucket },
     { name = "OPEN_COWORK_CLOUD_OBJECT_STORE_REGION", value = var.region },
   ]
+
+  runtime_secret_arns  = distinct(concat(var.secret_arns, values(var.secret_env)))
+  migrator_secret_arns = distinct(values(var.migrator_secret_env))
 }
 
 # ---------------------------------------------------------------------------
@@ -100,21 +110,21 @@ resource "aws_security_group" "postgres" {
 }
 
 resource "aws_db_instance" "cloud" {
-  identifier                 = "${var.name_prefix}-postgres"
-  engine                     = "postgres"
-  engine_version             = var.postgres_engine_version
-  instance_class             = var.database_instance_class
-  allocated_storage          = var.database_allocated_storage_gb
-  db_name                    = "open_cowork_cloud"
-  username                   = var.database_user
+  identifier                  = "${var.name_prefix}-postgres"
+  engine                      = "postgres"
+  engine_version              = var.postgres_engine_version
+  instance_class              = var.database_instance_class
+  allocated_storage           = var.database_allocated_storage_gb
+  db_name                     = "open_cowork_cloud"
+  username                    = var.database_user
   manage_master_user_password = true # password lives in Secrets Manager, not state
-  db_subnet_group_name       = aws_db_subnet_group.cloud.name
-  vpc_security_group_ids     = [aws_security_group.postgres.id]
-  backup_retention_period    = 7
-  deletion_protection        = true
-  skip_final_snapshot        = false
-  final_snapshot_identifier  = "${var.name_prefix}-postgres-final"
-  storage_encrypted          = true
+  db_subnet_group_name        = aws_db_subnet_group.cloud.name
+  vpc_security_group_ids      = [aws_security_group.postgres.id]
+  backup_retention_period     = 7
+  deletion_protection         = true
+  skip_final_snapshot         = false
+  final_snapshot_identifier   = "${var.name_prefix}-postgres-final"
+  storage_encrypted           = true
 }
 
 # ---------------------------------------------------------------------------
@@ -172,18 +182,51 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
 }
 
 data "aws_iam_policy_document" "execution_secrets" {
-  count = length(var.secret_arns) > 0 ? 1 : 0
+  count = length(local.runtime_secret_arns) > 0 ? 1 : 0
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = var.secret_arns
+    resources = local.runtime_secret_arns
   }
 }
 
 resource "aws_iam_role_policy" "execution_secrets" {
-  count  = length(var.secret_arns) > 0 ? 1 : 0
+  count  = length(local.runtime_secret_arns) > 0 ? 1 : 0
   name   = "secrets-read"
   role   = aws_iam_role.task_execution.id
   policy = data.aws_iam_policy_document.execution_secrets[0].json
+}
+
+# Migration authority is isolated from every long-running task. The task is
+# materialized only after the operator supplies a dedicated migrator URL
+# secret; the runtime execution role can never read that secret.
+resource "aws_iam_role" "migrator_execution" {
+  name_prefix        = "${var.name_prefix}-migrator-exec-"
+  assume_role_policy = data.aws_iam_policy_document.task_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "migrator_execution" {
+  role       = aws_iam_role.migrator_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+data "aws_iam_policy_document" "migrator_execution_secrets" {
+  count = length(local.migrator_secret_arns) > 0 ? 1 : 0
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = local.migrator_secret_arns
+  }
+}
+
+resource "aws_iam_role_policy" "migrator_execution_secrets" {
+  count  = length(local.migrator_secret_arns) > 0 ? 1 : 0
+  name   = "migrator-secrets-read"
+  role   = aws_iam_role.migrator_execution.id
+  policy = data.aws_iam_policy_document.migrator_execution_secrets[0].json
+}
+
+resource "aws_iam_role" "migrator_task" {
+  name_prefix        = "${var.name_prefix}-migrator-task-"
+  assume_role_policy = data.aws_iam_policy_document.task_assume.json
 }
 
 resource "aws_iam_role" "task" {
@@ -234,15 +277,22 @@ resource "aws_ecs_task_definition" "cloud" {
       image     = var.cloud_image
       essential = true
       portMappings = [
-        { containerPort = 8787, protocol = "tcp" }
+        {
+          name          = each.key == "web" ? "http" : "livez"
+          containerPort = each.value.health_port
+          protocol      = "tcp"
+        }
       ]
       environment = concat(
         [{ name = "OPEN_COWORK_CLOUD_ROLE", value = each.value.role }],
         local.common_env,
+        each.key == "web" ? [] : [
+          { name = "OPEN_COWORK_CLOUD_LIVENESS_PORT", value = tostring(each.value.health_port) }
+        ],
       )
-      # OPEN_COWORK_CLOUD_CONTROL_PLANE_URL must arrive via secret_env (the RDS
-      # master password is Secrets-Manager-managed — see the recipe's Secret
-      # Inventory) along with the cookie/internal/BYOK secrets.
+      # OPEN_COWORK_CLOUD_CONTROL_PLANE_URL must arrive via secret_env as a
+      # least-privilege runtime URL. Never expose the RDS master/migrator
+      # secret to these long-running roles.
       secrets = [
         for env_name, arn in var.secret_env : { name = env_name, valueFrom = arn }
       ]
@@ -254,12 +304,83 @@ resource "aws_ecs_task_definition" "cloud" {
           awslogs-stream-prefix = each.key
         }
       }
+      # ECS does not honor the Dockerfile HEALTHCHECK after an explicit task
+      # healthCheck is configured. Keep the role contract in the task
+      # definition: web proves dependency readiness while execution-only roles
+      # prove their event-loop heartbeat on a separate, non-conflicting port.
+      healthCheck = {
+        command = [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:${each.value.health_port}${each.value.health_path}').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
     }
   ])
 }
 
+# Executable first-deploy/upgrade path. Apply with deploy_runtime_services=false,
+# run this exact digest-pinned task to success, then explicitly enable services.
+resource "aws_ecs_task_definition" "migrator" {
+  count = length(local.migrator_secret_arns) > 0 ? 1 : 0
+
+  family                   = "${var.name_prefix}-migrator"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory_mb
+  execution_role_arn       = aws_iam_role.migrator_execution.arn
+  task_role_arn            = aws_iam_role.migrator_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "open-cowork-cloud-migrator"
+      image     = var.cloud_image
+      essential = true
+      command = [
+        "node",
+        "--experimental-sqlite",
+        "apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs",
+      ]
+      environment = [
+        for env_name, value in var.migrator_env : { name = env_name, value = value }
+      ]
+      secrets = [
+        for env_name, arn in var.migrator_secret_env : { name = env_name, valueFrom = arn }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.cloud.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "migrator"
+        }
+      }
+    }
+  ])
+
+  lifecycle {
+    precondition {
+      condition     = contains(keys(var.migrator_secret_env), "OPEN_COWORK_CLOUD_CONTROL_PLANE_URL")
+      error_message = "migrator_secret_env must inject OPEN_COWORK_CLOUD_CONTROL_PLANE_URL from a dedicated migrator secret."
+    }
+    precondition {
+      condition     = contains(keys(var.migrator_env), "OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE") && contains(keys(var.migrator_env), "OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL")
+      error_message = "migrator_env must set the dedicated runtime database role and principal together."
+    }
+  }
+}
+
 resource "aws_ecs_service" "cloud" {
-  for_each = local.roles
+  # This hard gate keeps a first apply from booting services against an empty
+  # database. Enabling it is a separate reviewed apply after the migrator task
+  # has exited successfully.
+  for_each = var.deploy_runtime_services ? local.roles : {}
 
   name            = "${var.name_prefix}-${each.key}"
   cluster         = aws_ecs_cluster.cloud.id

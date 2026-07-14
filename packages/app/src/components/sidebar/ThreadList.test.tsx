@@ -207,6 +207,19 @@ describe('ThreadList', () => {
     expect(row).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('loads the changes viewer on demand from the thread action menu', async () => {
+    const diff = vi.fn(async () => [])
+    installRendererTestCoworkApi({ session: { diff } })
+    render(<ThreadList />)
+
+    const row = screen.getByRole('button', { name: /Current thread/ })
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View Changes' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Changes' })).toBeInTheDocument()
+    await waitFor(() => expect(diff).toHaveBeenCalledWith('session-1', undefined))
+  })
+
   it('hides local-only thread action menus in cloud workspaces', () => {
     useSessionStore.setState({
       activeWorkspaceId: 'cloud:acme',

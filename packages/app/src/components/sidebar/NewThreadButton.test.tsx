@@ -166,14 +166,31 @@ describe('NewThreadButton', () => {
 
     render(<NewThreadButton />)
 
-    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    const newChatTrigger = screen.getByRole('button', { name: 'New Chat' })
+    await user.click(newChatTrigger)
 
     expect(await screen.findByText('Cloud-safe action - start a synced cloud chat')).toBeTruthy()
     expect(screen.getByText('Cloud-safe action - choose Git or upload an explicit snapshot')).toBeTruthy()
     const projectButton = screen.getByRole('button', { name: /Open Project/ })
     await user.click(projectButton)
     expect(selectDirectory).not.toHaveBeenCalled()
-    expect(await screen.findByText('Cloud project source')).toBeTruthy()
+    const projectDialog = await screen.findByRole('dialog', { name: 'Cloud project source' })
+    expect(projectDialog).toHaveAttribute('aria-modal', 'true')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveFocus())
+
+    // Focus remains contained at both ends of the dialog's tab order.
+    await user.tab({ shift: true })
+    expect(screen.getByRole('button', { name: 'Create project chat' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveFocus()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Cloud project source' })).not.toBeInTheDocument()
+    expect(newChatTrigger).toHaveFocus()
+
+    await user.click(newChatTrigger)
+    await user.click(screen.getByRole('button', { name: /Open Project/ }))
+    expect(await screen.findByRole('dialog', { name: 'Cloud project source' })).toBeInTheDocument()
 
     await user.type(screen.getByPlaceholderText('https://github.com/org/repo.git'), 'https://github.com/acme/repo.git')
     await user.click(screen.getByRole('button', { name: 'Create project chat' }))

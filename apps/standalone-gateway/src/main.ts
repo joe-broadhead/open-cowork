@@ -29,21 +29,25 @@ if (command === "smoke") {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } else {
   const config = loadStandaloneGatewayConfig();
-  const opencode = createSdkOpenCodeAdapter({ baseUrl: config.opencode.baseUrl });
+  const opencode = createSdkOpenCodeAdapter({
+    baseUrl: config.opencode.baseUrl,
+    runtimeRoot: config.opencode.runtimeRoot,
+    allowPrivateDns: config.opencode.allowPrivateDns,
+    executionTimeoutMs: config.opencode.executionTimeoutMs,
+  });
 
   if (command === "doctor") {
     const databaseSecurityIssue = standaloneGatewayProductionDatabaseSecurityIssue(config);
     const repository = databaseSecurityIssue
       ? skippedDoctorRepository(databaseSecurityIssue)
-      : await createMigratedRepository(config);
+      : await createDoctorRepository(config);
     const result = await runStandaloneGatewayDoctor({ config, repository, opencode });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     await repository.close?.();
     process.exitCode = result.ok ? 0 : 1;
   } else if (command === "identity") {
     assertStandaloneGatewayProductionDatabaseSecurity(config);
-    const repository = await createStandaloneGatewayRepository(config);
-    await repository.migrate();
+    const repository = await createMigratedRepository(config);
     const action = process.argv[3] || "";
     if (action !== "upsert") {
       throw new Error("Unknown standalone gateway identity command. Use: identity upsert --provider <id> --external-user-id <id> --role <owner|admin|member|approver|viewer> [--status <active|disabled>] [--provider-workspace-id <id>].");
@@ -64,8 +68,7 @@ if (command === "smoke") {
     await repository.close?.();
   } else if (command === "serve") {
     assertStandaloneGatewayProductionDatabaseSecurity(config);
-    const repository = await createStandaloneGatewayRepository(config);
-    await repository.migrate();
+    const repository = await createMigratedRepository(config);
     const ownerId = `${hostname()}:${process.pid}`;
     const lease = await repository.acquireDaemonLease({
       leaseId: daemonLeaseId,
@@ -162,8 +165,24 @@ async function createStandaloneGatewayRepository(config: StandaloneGatewayConfig
 
 async function createMigratedRepository(config: StandaloneGatewayConfig): Promise<StandaloneGatewayRepository> {
   const repository = await createStandaloneGatewayRepository(config);
-  await repository.migrate();
-  return repository;
+  try {
+    await repository.migrate();
+    return repository;
+  } catch (error) {
+    await repository.close?.().catch(() => undefined);
+    throw error;
+  }
+}
+
+async function createDoctorRepository(
+  config: StandaloneGatewayConfig,
+): Promise<StandaloneGatewayRepository | Pick<StandaloneGatewayRepository, "readiness" | "close">> {
+  try {
+    return await createMigratedRepository(config);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return skippedDoctorRepository(`schema initialization failed: ${detail}`);
+  }
 }
 
 function skippedDoctorRepository(

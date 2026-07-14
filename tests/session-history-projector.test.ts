@@ -1,4 +1,5 @@
 import { projectSessionHistory } from '@open-cowork/runtime-host/session-history-projector'
+import { buildSessionStateFromItems } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 function textMessage(id: string, role: 'user' | 'assistant', text: string, created = 1) {
@@ -46,6 +47,124 @@ test('history projector keeps child task running when the child is idle but has 
   const taskRun = items.find((item) => item.type === 'task_run')
   assert.ok(taskRun?.taskRun)
   assert.equal(taskRun.taskRun?.status, 'running')
+})
+
+test('history projector restores root and child V2 session errors on reopen', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-v2-error',
+    cachedModelId: 'openai/gpt-5',
+    rootMessages: [
+      {
+        info: { id: 'root-delegation', role: 'assistant', time: { created: 1 } },
+        parts: [
+          { id: 'root-subtask', type: 'subtask', agent: 'general', description: 'Run failing child' },
+        ],
+      },
+      {
+        id: 'root-error-message',
+        type: 'assistant',
+        time: { created: 4, completed: 5 },
+        agent: 'build',
+        model: { providerID: 'openai', id: 'gpt-5' },
+        error: { type: 'unknown', message: 'root runtime failed' },
+        content: [],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-v2-error',
+      title: 'Run failing child',
+      parentSessionId: 'root-v2-error',
+      time: { created: 2, updated: 3 },
+    }],
+    statuses: {
+      'root-v2-error': { type: 'idle' },
+      'child-v2-error': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({
+      messages: [{
+        id: 'child-error-message',
+        type: 'assistant',
+        time: { created: 2, completed: 3 },
+        agent: 'general',
+        model: { providerID: 'openai', id: 'gpt-5-mini' },
+        error: { type: 'unknown', message: 'child runtime failed' },
+        content: [],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')
+  assert.equal(taskRun?.taskRun?.status, 'error')
+  assert.equal(taskRun?.taskRun?.error, 'child runtime failed')
+  const errorItems = items.filter((item) => item.type === 'error')
+  assert.deepEqual(
+    errorItems.map((item) => [item.error?.sessionId, item.error?.message]),
+    [
+      ['child-v2-error', 'child runtime failed'],
+      ['root-v2-error', 'root runtime failed'],
+    ],
+  )
+
+  const reopened = buildSessionStateFromItems(items)
+  assert.equal(reopened.taskRuns[0]?.status, 'error')
+  assert.equal(reopened.taskRuns[0]?.error, 'child runtime failed')
+  assert.deepEqual(
+    reopened.errors.map((error) => [error.sessionId, error.message]),
+    [
+      ['child-v2-error', 'child runtime failed'],
+      ['root-v2-error', 'root runtime failed'],
+    ],
+  )
+})
+
+test('history projector preserves native V2 tool attachments and output paths on reopen', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-native-tool',
+    cachedModelId: 'openai/gpt-5',
+    rootMessages: [{
+      id: 'assistant-native-tool',
+      type: 'assistant',
+      time: { created: 1, completed: 2 },
+      agent: 'build',
+      model: { providerID: 'openai', id: 'gpt-5' },
+      content: [{
+        id: 'tool-native-1',
+        type: 'tool',
+        name: 'write',
+        state: {
+          status: 'completed',
+          input: { path: '/workspace/report.md' },
+          content: [
+            { type: 'text', text: 'created' },
+            { type: 'file', uri: 'file:///workspace/report.md', mime: 'text/markdown', name: 'report.md' },
+          ],
+          outputPaths: ['/workspace/report.md'],
+        },
+      }],
+    }],
+    rootTodos: [],
+    children: [],
+    statuses: { 'root-native-tool': { type: 'idle' } },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const tool = items.find((item) => item.type === 'tool')?.tool
+  assert.deepEqual(tool?.output, [
+    'created',
+    { type: 'file', uri: 'file:///workspace/report.md', mime: 'text/markdown', name: 'report.md' },
+  ])
+  assert.deepEqual(tool?.attachments, [
+    { mime: 'text/markdown', url: 'file:///workspace/report.md', filename: 'report.md' },
+  ])
+  assert.deepEqual(tool?.outputPaths, ['/workspace/report.md'])
+
+  const reopened = buildSessionStateFromItems(items)
+  assert.deepEqual(reopened.toolCalls[0]?.attachments, [
+    { mime: 'text/markdown', url: 'file:///workspace/report.md', filename: 'report.md' },
+  ])
+  assert.deepEqual(reopened.toolCalls[0]?.outputPaths, ['/workspace/report.md'])
 })
 
 test('history projector uses a stable fallback timestamp for incomplete history', async () => {

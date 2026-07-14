@@ -60,17 +60,21 @@ still touch SDK event/types at the desktop edge.
 - `packages/cloud-server/src/app.ts`
 - `packages/cloud-server/src/byok-runtime-config.ts`
 - `packages/cloud-server/src/opencode-runtime-adapter.ts`
+- `packages/cloud-server/src/runtime-adapter.ts`
 - `packages/cloud-server/src/worker-scoped-runtime-adapter.ts`
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
+- `apps/desktop/src/main/ipc/provider-handlers.ts`
 - `apps/desktop/src/main/question-normalization.ts`
 - `apps/desktop/src/main/runtime-mcp-status-polling.ts`
 - `apps/standalone-gateway/src/opencode.ts`
 - `packages/runtime-host/src/agent-config.ts`
 - `packages/runtime-host/src/agent-prompts.ts`
 - `packages/runtime-host/src/opencode-adapter.ts`
+- `packages/runtime-host/src/opencode-v2.ts`
 - `packages/runtime-host/src/permission-config.ts`
+- `packages/runtime-host/src/provider-utils.ts`
 - `packages/runtime-host/src/runtime-config-builder.ts`
 - `packages/runtime-host/src/runtime-managed-server-core.ts`
 - `packages/runtime-host/src/runtime-managed-server.ts`
@@ -79,6 +83,33 @@ still touch SDK event/types at the desktop edge.
 - `packages/runtime-host/src/runtime-state.ts`
 - `packages/runtime-host/src/runtime.ts`
 - `packages/runtime-host/src/session-history-loader.ts`
+
+## Native V2 Capability Gaps
+
+The production boundary uses `client.v2.*` wherever OpenCode 1.17.20 exposes a
+working native route. A small classic-client allowlist remains for capabilities
+that the generated V2 client does not yet provide. The boundary test pins every
+remaining call by file, method, and count so this list cannot expand silently:
+
+- Session actions without working native V2 routes: `session.command`,
+  `session.delete`, `session.diff`, `session.fork`, `session.share`,
+  `session.summarize`, `session.todo`, `session.unshare`, and `session.update`.
+  OpenCode 1.17.20 generates `v2.session.compact`, but its server implementation
+  returns `OperationUnavailable`; the classic summarizer remains the qualified
+  route until the pinned runtime implements V2 compaction.
+- MCP lifecycle/authentication, which has no native V2 group:
+  `mcp.auth.authenticate`, `mcp.auth.remove`, `mcp.connect`, `mcp.disconnect`,
+  and `mcp.status`.
+- Explorer operations without working V2 equivalents: `file.status`,
+  `find.symbols`, and `find.text`. The generated `file.read` V2 method does not
+  expose the wildcard path required by `/api/fs/read/*`, so `file.read` remains
+  classic until the SDK can address a file. Directory listing and file finding
+  already use `v2.fs.list` and `v2.fs.find`.
+- Runtime tool discovery: `tool.list`; V2 exposes agents, commands, skills,
+  providers, and models, but not the effective tool catalog.
+
+Remove an allowlist entry as soon as the pinned SDK exposes a working native V2
+equivalent. Do not emulate these OpenCode-owned behaviors in Open Cowork.
 
 ## Shared Event Contract
 
@@ -112,7 +143,12 @@ Standalone Gateway has its own private OpenCode runtime boundary. SDK client
 objects and raw SDK events must stay inside
 `apps/standalone-gateway/src/opencode.ts`; the rest of the standalone app
 should consume normalized standalone events and durable Gateway repository
-records.
+records. Each channel delivery or queued job supplies a stable admission key,
+which the adapter maps to the native V2 prompt `id`. After admission, the
+adapter consumes `v2.session.events` from the returned `admittedSeq` rather
+than relying on the lossy global event tail. This preserves fast completions
+and crash retries without re-executing tool side effects. A bounded execution
+deadline interrupts the native session if no terminal event arrives.
 
 ## SDK v2 Upgrade Checklist
 

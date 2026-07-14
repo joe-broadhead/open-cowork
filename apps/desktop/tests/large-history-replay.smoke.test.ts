@@ -31,8 +31,14 @@ function makeSessionFixtures() {
       opencodeDirectory: '/tmp/open-cowork-smoke-fixture',
       createdAt,
       updatedAt,
+      kind: 'interactive' as const,
+      workflowId: null,
+      runId: null,
       providerId: 'openrouter',
       modelId: 'anthropic/claude-sonnet-4',
+      composerAgentName: null,
+      composerModelId: null,
+      composerReasoningVariant: null,
       summary: null,
       parentSessionId: null,
       changeSummary: null,
@@ -47,7 +53,10 @@ test('sidebar renders dozens of seeded threads without failing the virtualizer',
 
   const { page, cleanup } = await launchSmokeApp({
     seedBeforeLaunch: ({ dataRoot }) => {
-      writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify(fixtures, null, 2))
+      writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify({
+        schemaVersion: 1,
+        sessions: fixtures,
+      }, null, 2))
     },
   })
   try {

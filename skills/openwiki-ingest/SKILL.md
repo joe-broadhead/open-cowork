@@ -17,13 +17,16 @@ preserving where every fact came from.
 3. Check `mcp__openwiki__wiki.inbox_list` / `mcp__openwiki__wiki.inbox_read`
    before duplicating submitted material; use `mcp__openwiki__wiki.inbox_submit`
    only when the user wants a new reviewed inbox item.
-4. Create or suggest a source manifest before proposing page, fact, or take
+4. Use `mcp__openwiki__wiki.inbox_process` only when the user asks to turn an
+   existing inbox item into reviewable records. Prefer `dry_run` first; the
+   actual processing call requires approval and must not be treated as a read.
+5. Create or suggest a source manifest before proposing page, fact, or take
    changes that depend on it.
-5. Extract only factual claims from the artifact — no editorializing.
-6. Link proposed page text, facts, or takes back to the source and claim IDs
+6. Extract only factual claims from the artifact — no editorializing.
+7. Link proposed page text, facts, or takes back to the source and claim IDs
    so every statement is traceable.
-7. Content changes go through proposal tools. Write-workflow tools are
-   reserved for explicitly trusted maintainer loadouts.
+8. Content changes go through proposal tools. Direct-write and full maintainer
+   tools are reserved for explicitly trusted maintainer loadouts.
 
 ## Rules
 

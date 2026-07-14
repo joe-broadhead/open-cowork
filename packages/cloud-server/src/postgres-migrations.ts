@@ -1,6 +1,11 @@
+import { assertPostgresSchemaManifest } from '@open-cowork/shared/node'
 import {
+  CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
   CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS,
   CLOUD_CONTROL_PLANE_MIGRATIONS,
+  CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES,
+  CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST,
   type CloudControlPlaneMigration,
 } from './postgres-schema.ts'
 
@@ -14,10 +19,11 @@ type PgPool = PgExecutor & { connect(): Promise<PgClient> }
 export type PostgresTransactionRunner = <T>(fn: (client: PgClient) => Promise<T>) => Promise<T>
 
 const NON_TRANSACTIONAL_MIGRATION_LOCK_RETRY_MS = 50
+const SCHEMA_MIGRATIONS_TABLE = 'cloud_schema_migrations'
 
-// Minimal ledger DDL so the applied-set check below is safe on a fresh database
-// (the full definition also lives in migration 001's statements; IF NOT EXISTS
-// makes running it twice a no-op).
+// The ledger definition is part of the clean baseline. The migration runner
+// executes this only after proving the product schema has no untracked domain
+// tables.
 const SCHEMA_MIGRATIONS_LEDGER_DDL = `CREATE TABLE IF NOT EXISTS cloud_schema_migrations (
   id text PRIMARY KEY,
   applied_at timestamptz NOT NULL
@@ -36,25 +42,87 @@ export async function runPostgresControlPlaneMigrations(
       'SELECT pg_advisory_xact_lock($1, $2)',
       [...CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS],
     )
-    // Exempt DDL + one-shot backfills from the pool's statement_timeout — they can
-    // legitimately run longer than a normal query. SET LOCAL is transaction-scoped, so
-    // it auto-resets on commit and can't leak the exemption back into the pool.
+    // Baseline DDL can legitimately run longer than a normal query. SET LOCAL is
+    // transaction-scoped, so it auto-resets on commit and cannot leak the
+    // exemption back into the pool.
     await client.query('SET LOCAL statement_timeout = 0')
-    // Skip migrations already recorded — their statements (incl. one-shot
-    // backfills) must not re-execute on every boot. Bootstrap the ledger first
-    // so the SELECT can't fail (a failed query would poison the transaction).
+    const tablesBeforeMigration = await currentProductTables(client)
+    const ledgerExists = tablesBeforeMigration.has(SCHEMA_MIGRATIONS_TABLE)
+    const appliedBeforeMigration = ledgerExists
+      ? new Set(
+          (await client.query<{ id: string }>('SELECT id FROM cloud_schema_migrations')).rows
+            .map((row) => String(row.id)),
+        )
+      : new Set<string>()
+    if (!appliedBeforeMigration.has(CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID)) {
+      const existingDomainTables = [...tablesBeforeMigration]
+        .filter((tableName) => tableName !== SCHEMA_MIGRATIONS_TABLE)
+      if (existingDomainTables.length > 0) {
+        throw new Error(
+          `Refusing to apply the clean Cloud control-plane baseline because its migration ledger entry is missing while product tables already exist (${summarizeNames(existingDomainTables)}). `
+          + 'This pre-release baseline has no adoption or historical upgrade path. Recreate an empty Cloud schema, or restore a database whose cloud_schema_migrations ledger matches its schema.',
+        )
+      }
+    }
+    // The guard above must run before this first durable mutation. A ledger-only
+    // database is allowed to initialize only when it has no product domain tables.
     await client.query(SCHEMA_MIGRATIONS_LEDGER_DDL)
-    const applied = new Set(
-      (await client.query<{ id: string }>('SELECT id FROM cloud_schema_migrations')).rows.map((row) => String(row.id)),
-    )
+    const applied = ledgerExists
+      ? appliedBeforeMigration
+      : new Set(
+          (await client.query<{ id: string }>('SELECT id FROM cloud_schema_migrations')).rows
+            .map((row) => String(row.id)),
+        )
     for (const migration of CLOUD_CONTROL_PLANE_MIGRATIONS.filter((entry) => entry.transactional !== false)) {
       if (applied.has(migration.id)) continue
       for (const statement of migration.statements) await client.query(statement)
       await recordMigration(client, migration.id)
     }
+    await assertRequiredCloudTables(client)
   })
   for (const migration of CLOUD_CONTROL_PLANE_MIGRATIONS.filter((entry) => entry.transactional === false)) {
     await runNonTransactionalMigration(pool, migration)
+  }
+  await assertPostgresControlPlaneSchemaIntegrity(pool)
+}
+
+/**
+ * Assert that the current schema is physically complete, rather than trusting
+ * ledger rows alone. This is also used by production readiness probes.
+ */
+export async function assertPostgresControlPlaneSchemaIntegrity(executor: PgExecutor) {
+  const tables = await currentProductTables(executor)
+  if (!tables.has(SCHEMA_MIGRATIONS_TABLE)) {
+    throw new Error('Cloud control-plane schema integrity failed: cloud_schema_migrations is missing. Recreate an empty Cloud schema or restore a complete database backup.')
+  }
+  const applied = new Set(
+    (await executor.query<{ id: string }>('SELECT id FROM cloud_schema_migrations')).rows
+      .map((row) => String(row.id)),
+  )
+  const missingMigrations = CLOUD_CONTROL_PLANE_MIGRATIONS
+    .map((migration) => migration.id)
+    .filter((id) => !applied.has(id))
+  if (missingMigrations.length > 0) {
+    throw new Error(`Cloud control-plane schema integrity failed: missing migration ledger entries ${missingMigrations.join(', ')}.`)
+  }
+  await assertRequiredCloudTables(executor, tables)
+  if (!await allConcurrentIndexesValid(executor, CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES)) {
+    const validIndexes = await validConcurrentIndexes(executor, CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES)
+    const missingIndexes = CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES
+      .filter((indexName) => !validIndexes.has(indexName))
+    throw new Error(
+      `Cloud control-plane schema integrity failed: required concurrent indexes are missing or invalid (${summarizeNames(missingIndexes)}). `
+      + 'Restart migration initialization to repair an interrupted current-baseline index phase, or restore a complete database backup.',
+    )
+  }
+  try {
+    await assertPostgresSchemaManifest(executor, CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST, tables)
+  } catch (error) {
+    throw new Error(
+      `Cloud control-plane schema integrity failed: ${error instanceof Error ? error.message : String(error)} `
+      + 'The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Cloud schema or restore a complete database backup.',
+      { cause: error },
+    )
   }
 }
 
@@ -112,6 +180,11 @@ async function dropInvalidConcurrentIndexes(client: PgExecutor, indexNames: read
 
 async function allConcurrentIndexesValid(client: PgExecutor, indexNames: readonly string[]) {
   if (indexNames.length === 0) return true
+  return (await validConcurrentIndexes(client, indexNames)).size === indexNames.length
+}
+
+async function validConcurrentIndexes(client: PgExecutor, indexNames: readonly string[]) {
+  if (indexNames.length === 0) return new Set<string>()
   const result = await client.query<{ index_name: string }>(
     `SELECT c.relname AS index_name
      FROM pg_class c
@@ -122,7 +195,7 @@ async function allConcurrentIndexesValid(client: PgExecutor, indexNames: readonl
        AND i.indisvalid = true`,
     [indexNames],
   )
-  return new Set(result.rows.map((row) => row.index_name)).size === indexNames.length
+  return new Set(result.rows.map((row) => row.index_name))
 }
 
 async function invalidConcurrentIndexes(client: PgExecutor, indexNames: readonly string[]) {
@@ -146,6 +219,39 @@ function quoteIdentifier(value: string) {
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function currentProductTables(executor: PgExecutor) {
+  const tableNames = [SCHEMA_MIGRATIONS_TABLE, ...CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES]
+  const result = await executor.query<{ table_name: string }>(
+    `SELECT tablename AS table_name
+     FROM pg_catalog.pg_tables
+     WHERE schemaname = current_schema()
+       AND (
+         tablename = ANY($1::text[])
+         OR tablename LIKE 'cloud\\_%' ESCAPE '\\'
+         OR tablename = 'headless_agents'
+       )`,
+    [tableNames],
+  )
+  return new Set(result.rows.map((row) => String(row.table_name)))
+}
+
+async function assertRequiredCloudTables(executor: PgExecutor, existing?: ReadonlySet<string>) {
+  const tables = existing || await currentProductTables(executor)
+  const missing = CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES.filter((tableName) => !tables.has(tableName))
+  if (missing.length === 0) return
+  throw new Error(
+    `Cloud control-plane schema integrity failed: required production tables are missing (${summarizeNames(missing)}). `
+    + 'The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Cloud schema or restore a complete database backup.',
+  )
+}
+
+function summarizeNames(names: readonly string[]) {
+  const shown = names.slice(0, 8)
+  return names.length > shown.length
+    ? `${shown.join(', ')}, and ${names.length - shown.length} more`
+    : shown.join(', ')
 }
 
 async function recordMigration(executor: PgExecutor, id: string) {

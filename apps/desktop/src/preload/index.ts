@@ -394,7 +394,7 @@ const api: CoworkAPI = {
     list: (options) => invoke('tool:list', options),
   },
   command: {
-    list: () => invoke('command:list'),
+    list: (options) => invoke('command:list', options),
     run: (sessionId, name) => invoke('command:run', sessionId, name),
   },
   permission: {

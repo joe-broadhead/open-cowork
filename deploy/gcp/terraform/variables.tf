@@ -16,8 +16,13 @@ variable "name_prefix" {
 }
 
 variable "cloud_image" {
-  description = "Fully-qualified open-cowork-cloud image (e.g. REGION-docker.pkg.dev/PROJECT/REPO/open-cowork-cloud:TAG)."
+  description = "Fully qualified immutable open-cowork-cloud image reference ending in @sha256:<64 lowercase hex characters>."
   type        = string
+
+  validation {
+    condition     = can(regex("^[^[:space:]@/]+/[^[:space:]@]+@sha256:[0-9a-f]{64}$", var.cloud_image))
+    error_message = "cloud_image must be a fully qualified immutable image reference ending in @sha256:<64 lowercase hex characters>."
+  }
 }
 
 variable "vpc_self_link" {
@@ -25,8 +30,13 @@ variable "vpc_self_link" {
   type        = string
 }
 
+variable "vpc_subnetwork_self_link" {
+  description = "Regional subnet self link used for Cloud Run Direct VPC egress to private Cloud SQL."
+  type        = string
+}
+
 variable "database_tier" {
-  description = "Cloud SQL machine tier."
+  description = "Cloud SQL Enterprise-edition machine tier."
   type        = string
   default     = "db-custom-2-7680"
 }
@@ -34,12 +44,7 @@ variable "database_tier" {
 variable "postgres_version" {
   description = "Cloud SQL Postgres version."
   type        = string
-  default     = "POSTGRES_16"
-}
-
-variable "database_user" {
-  description = "IAM service-account database user (usually the runtime SA email without the .gserviceaccount.com suffix)."
-  type        = string
+  default     = "POSTGRES_17"
 }
 
 variable "web_min_instances" {
@@ -63,7 +68,24 @@ variable "worker_instances" {
 variable "web_allow_unauthenticated" {
   description = "Expose the web role publicly (true for OIDC-in-app auth; false behind IAP/LB)."
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "deploy_runtime_services" {
+  description = "Create long-running web/worker/scheduler services only after cloud:migrate:start has provisioned the least-privilege runtime database role. Keep false for the first infrastructure apply."
+  type        = bool
+  default     = false
+}
+
+variable "runtime_database_role" {
+  description = "NOLOGIN PostgreSQL group role created by cloud:migrate:start and granted to the runtime IAM database principal."
+  type        = string
+  default     = "open_cowork_runtime"
+
+  validation {
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.runtime_database_role))
+    error_message = "runtime_database_role must be a lowercase PostgreSQL identifier no longer than 63 characters."
+  }
 }
 
 variable "secret_ids" {

@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { assertPostgresSchemaManifest } from "@open-cowork/shared/node";
 
 import { standaloneRetentionCutoffs } from "./retention.js";
-import { standaloneGatewayMigrations } from "./schema.js";
+import {
+  STANDALONE_GATEWAY_BASELINE_MIGRATION_ID,
+  STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES,
+  STANDALONE_GATEWAY_SCHEMA_MANIFEST,
+  standaloneGatewayMigrations,
+} from "./schema.js";
 import {
   normalizeIdentityRole,
   normalizeIdentityStatus,
@@ -57,6 +63,8 @@ export interface CreateStandaloneGatewayPostgresRepositoryOptions {
 }
 
 type StandaloneDatabaseConfig = StandaloneGatewayConfig["database"];
+const STANDALONE_GATEWAY_SCHEMA_MIGRATIONS_TABLE = "standalone_gateway_schema_migrations";
+const STANDALONE_GATEWAY_MIGRATION_ADVISORY_LOCK_KEYS = [1_397_704_504, 1_731_276_783] as const;
 
 export async function createStandaloneGatewayPostgresRepository(
   database: string | StandaloneDatabaseConfig,
@@ -115,30 +123,47 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
   constructor(private readonly pool: PgLikePool) {}
 
   async migrate(): Promise<void> {
-    await this.pool.query(`CREATE TABLE IF NOT EXISTS standalone_gateway_schema_migrations (
-      id text PRIMARY KEY,
-      applied_at timestamptz NOT NULL DEFAULT now()
-    )`);
-    for (const migration of standaloneGatewayMigrations) {
-      const applied = await this.pool.query(
-        "SELECT id FROM standalone_gateway_schema_migrations WHERE id = $1",
-        [migration.id],
+    await this.withTransaction(async (client) => {
+      await client.query(
+        "SELECT pg_advisory_xact_lock($1, $2)",
+        [...STANDALONE_GATEWAY_MIGRATION_ADVISORY_LOCK_KEYS],
       );
-      if (applied.rows.length > 0) continue;
-      await this.withTransaction(async (client) => {
+      const tablesBeforeMigration = await currentStandaloneGatewayTables(client);
+      const ledgerExists = tablesBeforeMigration.has(STANDALONE_GATEWAY_SCHEMA_MIGRATIONS_TABLE);
+      const applied = ledgerExists
+        ? new Set((await client.query<{ id: string }>(
+            "SELECT id FROM standalone_gateway_schema_migrations",
+          )).rows.map((row) => String(row.id)))
+        : new Set<string>();
+      if (!applied.has(STANDALONE_GATEWAY_BASELINE_MIGRATION_ID)) {
+        const existingDomainTables = [...tablesBeforeMigration]
+          .filter((tableName) => tableName !== STANDALONE_GATEWAY_SCHEMA_MIGRATIONS_TABLE);
+        if (existingDomainTables.length > 0) {
+          throw new Error(
+            `Refusing to apply the clean Standalone Gateway baseline because its migration ledger entry is missing while product tables already exist (${summarizeSchemaNames(existingDomainTables)}). `
+            + "This pre-release baseline has no adoption or historical upgrade path. Recreate an empty Standalone Gateway schema, or restore a database whose standalone_gateway_schema_migrations ledger matches its schema.",
+          );
+        }
+      }
+      for (const migration of standaloneGatewayMigrations) {
+        if (applied.has(migration.id)) continue;
+        // This is the first durable mutation on a fresh schema. The fail-closed
+        // domain-table guard above must always run before it.
         await client.query(migration.sql);
         await client.query(
           "INSERT INTO standalone_gateway_schema_migrations (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
           [migration.id],
         );
-      });
-    }
+      }
+      await assertStandaloneGatewaySchemaIntegrity(client);
+    });
   }
 
   async readiness(): Promise<{ ok: boolean; detail: string }> {
     try {
       await this.pool.query("SELECT 1");
-      return { ok: true, detail: "postgres ready" };
+      await assertStandaloneGatewaySchemaIntegrity(this.pool);
+      return { ok: true, detail: "postgres ready; migration ledger and production tables verified" };
     } catch (error) {
       return { ok: false, detail: error instanceof Error ? error.message : String(error) };
     }
@@ -529,7 +554,7 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
     await this.pool.end?.();
   }
 
-  private async getSession(sessionId: string): Promise<StandaloneGatewaySessionRecord | null> {
+  async getSession(sessionId: string): Promise<StandaloneGatewaySessionRecord | null> {
     const result = await this.pool.query<SessionRow>(
       "SELECT * FROM standalone_gateway_sessions WHERE session_id = $1",
       [sessionId],
@@ -551,6 +576,60 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
       client.release?.();
     }
   }
+}
+
+export async function assertStandaloneGatewaySchemaIntegrity(executor: PgLikeClient): Promise<void> {
+  const tables = await currentStandaloneGatewayTables(executor);
+  if (!tables.has(STANDALONE_GATEWAY_SCHEMA_MIGRATIONS_TABLE)) {
+    throw new Error(
+      "Standalone Gateway schema integrity failed: standalone_gateway_schema_migrations is missing. Recreate an empty Standalone Gateway schema or restore a complete database backup.",
+    );
+  }
+  const applied = new Set((await executor.query<{ id: string }>(
+    "SELECT id FROM standalone_gateway_schema_migrations",
+  )).rows.map((row) => String(row.id)));
+  if (!applied.has(STANDALONE_GATEWAY_BASELINE_MIGRATION_ID)) {
+    throw new Error(
+      `Standalone Gateway schema integrity failed: missing migration ledger entry ${STANDALONE_GATEWAY_BASELINE_MIGRATION_ID}.`,
+    );
+  }
+  const missing = STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES.filter((tableName) => !tables.has(tableName));
+  if (missing.length > 0) {
+    throw new Error(
+      `Standalone Gateway schema integrity failed: required production tables are missing (${summarizeSchemaNames(missing)}). `
+      + "The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Standalone Gateway schema or restore a complete database backup.",
+    );
+  }
+  try {
+    await assertPostgresSchemaManifest(executor, STANDALONE_GATEWAY_SCHEMA_MANIFEST, tables);
+  } catch (error) {
+    throw new Error(
+      `Standalone Gateway schema integrity failed: ${error instanceof Error ? error.message : String(error)} `
+      + "The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Standalone Gateway schema or restore a complete database backup.",
+      { cause: error },
+    );
+  }
+}
+
+async function currentStandaloneGatewayTables(executor: PgLikeClient): Promise<Set<string>> {
+  const result = await executor.query<{ table_name: string }>(
+    `SELECT tablename AS table_name
+     FROM pg_catalog.pg_tables
+     WHERE schemaname = current_schema()
+       AND (
+         tablename = ANY($1::text[])
+         OR tablename LIKE 'standalone\\_gateway\\_%' ESCAPE '\\'
+       )`,
+    [[STANDALONE_GATEWAY_SCHEMA_MIGRATIONS_TABLE, ...STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES]],
+  );
+  return new Set(result.rows.map((row) => String(row.table_name)));
+}
+
+function summarizeSchemaNames(names: readonly string[]): string {
+  const shown = names.slice(0, 8);
+  return names.length > shown.length
+    ? `${shown.join(", ")}, and ${names.length - shown.length} more`
+    : shown.join(", ");
 }
 
 type LeaseRow = {

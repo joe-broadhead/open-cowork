@@ -454,6 +454,24 @@ state-migration plan.
 Renderer-only preference keys use the public `open-cowork.*` prefix. The app
 does not read unhyphenated preview preference keys.
 
+### Local durable schema baseline
+
+The pre-release desktop uses one clean schema baseline for settings and the
+local SQLite stores for thread indexing, workflows, coordination, artifact
+lifecycle/index metadata, and knowledge. An empty store may create that current
+baseline. A non-empty store is opened only when its ledger declares the exact
+current version and its required tables, columns, and indexes match the current
+shape; startup does not silently repair, re-version, or migrate it.
+
+When a preview store is older, newer, missing its ledger, or shape-drifted, Open
+Cowork fails closed before schema DDL or version writes and leaves its data
+untouched. Back up or export that product state, then reset/import only the
+named store. In particular, `thread-index.sqlite` and
+`artifact-lifecycle.sqlite` are mixed metadata stores: resetting either is not
+authorization to delete OpenCode sessions, project files, or underlying
+artifact files. The session-registry file envelope is outside this baseline;
+changing its reset/import contract requires a separate product decision.
+
 ## Sandbox artifacts
 
 Sandbox workspaces are real Cowork-managed directories under private app control.

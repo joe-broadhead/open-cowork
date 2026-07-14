@@ -33,6 +33,7 @@ export function createRootToolCall(id: string, update: Partial<ToolCall>, option
     status: (update.status as ToolCall['status']) || 'running',
     output: cloneRuntimeValue(update.output),
     attachments: cloneRuntimeValue(update.attachments),
+    outputPaths: cloneRuntimeValue(update.outputPaths),
     agent: update.agent || null,
     sourceSessionId: update.sourceSessionId || null,
     order: options.order,

@@ -165,16 +165,35 @@ export function HealthCenterPage() {
     setLoading(true)
     setError(null)
     try {
-      const [runtime, runtimeInputs, workspaces, pairings] = await Promise.all([
-        window.coworkApi.runtime.status().catch(() => null),
-        window.coworkApi.app.runtimeInputs().catch(() => null),
-        window.coworkApi.workspace.list().catch(() => []),
-        window.coworkApi.desktopPairing.list().catch(() => []),
+      const failures: string[] = []
+      const { surface } = await window.coworkApi.app.metadata()
+      const hasDesktopRuntime = surface === 'desktop'
+      const [runtimeResult, runtimeInputsResult, workspacesResult, pairingsResult] = await Promise.allSettled([
+        Promise.resolve().then(() => window.coworkApi.runtime.status()),
+        hasDesktopRuntime
+          ? Promise.resolve().then(() => window.coworkApi.app.runtimeInputs())
+          : Promise.resolve(null),
+        Promise.resolve().then(() => window.coworkApi.workspace.list()),
+        hasDesktopRuntime
+          ? Promise.resolve().then(() => window.coworkApi.desktopPairing.list())
+          : Promise.resolve([]),
       ])
-      const workspaceHealth = await Promise.all((workspaces || []).map(async (workspace) => ({
-        workspace,
-        support: await window.coworkApi.workspace.support(workspace.id).catch(() => []),
-      })))
+      const runtime = runtimeResult.status === 'fulfilled' ? runtimeResult.value : (failures.push('runtime status'), null)
+      const runtimeInputs = runtimeInputsResult.status === 'fulfilled' ? runtimeInputsResult.value : (failures.push('runtime inputs'), null)
+      const workspaces = workspacesResult.status === 'fulfilled' ? workspacesResult.value : (failures.push('workspaces'), [])
+      const pairings = pairingsResult.status === 'fulfilled' ? pairingsResult.value : (failures.push('pairings'), [])
+
+      const supportResults = await Promise.allSettled((workspaces || []).map((workspace) => (
+        window.coworkApi.workspace.support(workspace.id)
+      )))
+      const workspaceHealth = (workspaces || []).map((workspace, index) => {
+        const result = supportResults[index]
+        if (!result || result.status === 'rejected') {
+          failures.push(`support for ${workspace.label}`)
+          return { workspace, support: [] }
+        }
+        return { workspace, support: result.value }
+      })
       setSnapshot({
         runtime,
         runtimeInputs,
@@ -182,6 +201,11 @@ export function HealthCenterPage() {
         pairings,
         loadedAt: new Date().toISOString(),
       })
+      if (failures.length > 0) {
+        setError(t('health.refreshPartialFailure', 'Some health checks could not be loaded: {{checks}}', {
+          checks: failures.join(', '),
+        }))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -218,6 +242,10 @@ export function HealthCenterPage() {
       if (action === 'Sign in') await window.coworkApi.workspace.login(workspace.id)
       else await window.coworkApi.workspace.sync(workspace.id)
       await refresh()
+    } catch (err) {
+      setError(t('health.operationFailed', 'Health operation failed: {{message}}', {
+        message: err instanceof Error ? err.message : String(err),
+      }))
     } finally {
       setBusyAction(null)
     }
@@ -228,6 +256,10 @@ export function HealthCenterPage() {
     try {
       await window.coworkApi.runtime.restart()
       await refresh()
+    } catch (err) {
+      setError(t('health.operationFailed', 'Health operation failed: {{message}}', {
+        message: err instanceof Error ? err.message : String(err),
+      }))
     } finally {
       setBusyAction(null)
     }

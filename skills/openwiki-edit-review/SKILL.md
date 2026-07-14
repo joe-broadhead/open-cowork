@@ -26,9 +26,9 @@ propose; humans (or explicitly trusted maintainer loadouts) decide.
    better represented as governed memory. These require approval.
 6. Use `mcp__openwiki__wiki.comment_on_proposal` for non-decision review notes
    or missing-evidence requests.
-7. Never apply, publish, or commit proposals yourself. Those write-tier tools
-   are reserved for explicitly trusted maintainer loadouts and are not exposed
-   in this deployment's proposal tier.
+7. Never write pages directly or apply, publish, or commit proposals yourself.
+   OpenWiki's `write` and `write-full` profiles are reserved for explicitly
+   trusted maintainer loadouts and are not exposed in this deployment.
 
 ## Review checklist
 

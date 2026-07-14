@@ -87,7 +87,7 @@ export class CloudPrincipalService {
       email: principal.email,
     })
     const requiresExistingMembership = principal.authSource !== 'local' && principal.authSource !== 'api_token'
-      && (!this.identityPolicy.allowSelfServiceSignup || signupMode === 'disabled' || signupMode === 'closed' || signupMode === 'invite')
+      && (!this.identityPolicy.allowSelfServiceSignup || signupMode === 'disabled' || signupMode === 'invite')
     if (requiresExistingMembership) {
       const acceptableStatuses: ControlPlaneMembershipStatus[] = signupMode === 'invite'
         ? ['active', 'invited']

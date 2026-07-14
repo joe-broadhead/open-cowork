@@ -15,9 +15,9 @@ updates:
     ignore:
       - dependency-name: "opencode-ai"
       - dependency-name: "@opencode-ai/sdk"
-      # @types/node tracks the enforced runtime floor (.nvmrc / engines,
-      # pinned by tests/package-scripts.test.ts). Raising it is part of a
-      # deliberate Node-floor bump, not a routine types update.
+      # engines.node owns the supported runtime floor; .nvmrc separately pins
+      # the reviewed contributor/CI patch. @types/node stays on that Node major,
+      # and crossing a major requires a deliberate runtime-line review.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
     groups:
@@ -53,6 +53,11 @@ updates:
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5
+    # Production images stay on the active LTS line. Major runtime changes
+    # require an explicit compatibility and load-test pass.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore(docker)"
       include: "scope"
@@ -62,6 +67,10 @@ updates:
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5
+    # Keep Gateway on the same reviewed LTS runtime as Cloud.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore(docker)"
       include: "scope"

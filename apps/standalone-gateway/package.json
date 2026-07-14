@@ -23,7 +23,7 @@
     "@open-cowork/gateway-provider-webhook": "workspace:*",
     "@open-cowork/gateway-testing": "workspace:*",
     "@open-cowork/shared": "workspace:*",
-    "@opencode-ai/sdk": "1.17.18",
+    "@opencode-ai/sdk": "1.17.20",
     "pg": "^8.22.0"
   },
   "devDependencies": {

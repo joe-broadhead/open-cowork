@@ -1,4 +1,4 @@
-import { getClient } from '@open-cowork/runtime-host/runtime'
+import { getClient, getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '@open-cowork/runtime-host/native-customizations'
 import { readEffectiveSkillBundleFile } from '@open-cowork/runtime-host/effective-skills'
@@ -252,8 +252,71 @@ function mcpNamespaceFromPermissionPattern(pattern: string) {
   return match?.[1] || null
 }
 
+type NativePermissionRule = {
+  action: string
+  resource: string
+  effect: unknown
+}
+
+function nativePermissionRules(agent: unknown): NativePermissionRule[] {
+  const values = Array.isArray((agent as { permissions?: unknown }).permissions)
+    ? (agent as { permissions: unknown[] }).permissions
+    : []
+  return values.flatMap((value) => {
+    const rule = recordFrom(value)
+    const action = typeof rule.action === 'string' ? rule.action : ''
+    const resource = typeof rule.resource === 'string' ? rule.resource : ''
+    return action && resource ? [{ action, resource, effect: rule.effect }] : []
+  })
+}
+
+function effectiveNativePermission(
+  rules: readonly NativePermissionRule[],
+  action: string,
+  resource: string,
+) {
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    const rule = rules[index]
+    if (rule && patternMatches(rule.action, action) && patternMatches(rule.resource, resource)) {
+      return rule.effect
+    }
+  }
+  return null
+}
+
+function candidateResourcesForNativeAction(rules: readonly NativePermissionRule[], action: string) {
+  return Array.from(new Set([
+    '*',
+    ...rules
+      .filter((rule) => patternMatches(rule.action, action) || patternMatches(action, rule.action))
+      .map((rule) => rule.resource),
+  ]))
+}
+
+function nativeActionHasAllowedResource(rules: readonly NativePermissionRule[], action: string) {
+  return candidateResourcesForNativeAction(rules, action)
+    .some((resource) => permissionActionAllows(effectiveNativePermission(rules, action, resource)))
+}
+
 export function runtimeAgentToolIds(agent: unknown): string[] {
   const toolIds = new Set<string>()
+  const nativePermissions = nativePermissionRules(agent)
+  for (const toolId of NATIVE_RUNTIME_TOOL_IDS) {
+    if (nativeActionHasAllowedResource(nativePermissions, toolId)) toolIds.add(toolId)
+  }
+  for (const tool of getConfiguredToolsFromConfig()) {
+    if (getConfiguredToolPatterns(tool).some((pattern) => (
+      nativeActionHasAllowedResource(nativePermissions, pattern)
+    ))) {
+      toolIds.add(tool.id)
+    }
+  }
+  for (const rule of nativePermissions) {
+    const namespace = mcpNamespaceFromPermissionPattern(rule.action)
+    if (namespace && nativeActionHasAllowedResource(nativePermissions, rule.action)) {
+      toolIds.add(namespace)
+    }
+  }
   const permission = recordFrom((agent as { permission?: unknown }).permission)
   for (const [key, value] of Object.entries(permission)) {
     if (!permissionValueHasAllowedRule(value)) continue
@@ -286,7 +349,18 @@ function permissionBashAllowsWrite(value: unknown): boolean {
     .some((entry) => bashPatternLooksWriteCapable(entry.pattern))
 }
 
+function nativePermissionsAllowWrite(rules: readonly NativePermissionRule[]) {
+  if (Array.from(WRITE_TOOL_IDS).some((toolId) => nativeActionHasAllowedResource(rules, toolId))) {
+    return true
+  }
+  return candidateResourcesForNativeAction(rules, 'bash')
+    .filter(bashPatternLooksWriteCapable)
+    .some((resource) => permissionActionAllows(effectiveNativePermission(rules, 'bash', resource)))
+}
+
 export function runtimeAgentCanWrite(agent: unknown): boolean {
+  const nativePermissions = nativePermissionRules(agent)
+  if (nativePermissionsAllowWrite(nativePermissions)) return true
   const permission = recordFrom((agent as { permission?: unknown }).permission)
   return permissionValueHasAllowedRule(permission.edit)
     || permissionValueHasAllowedRule(permission.write)
@@ -304,20 +378,20 @@ function runtimeAgentSteps(agent: unknown): number | null {
 export async function authenticateMcpThroughRuntime(client: {
   mcp: {
     auth: {
-      remove?: (payload: { name: string }) => Promise<unknown>
-      authenticate: (payload: { name: string }) => Promise<unknown>
+      remove?: (payload: { name: string }, options?: { throwOnError?: boolean }) => Promise<unknown>
+      authenticate: (payload: { name: string }, options?: { throwOnError?: boolean }) => Promise<unknown>
     }
   }
 }, mcpName: string) {
   if (client.mcp.auth.remove) {
     try {
-      await client.mcp.auth.remove({ name: mcpName })
+      await client.mcp.auth.remove({ name: mcpName }, { throwOnError: true })
       log('mcp', `Cleared OAuth credentials for ${mcpName}`)
     } catch (err) {
       log('mcp', `OAuth credential clear skipped for ${mcpName}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
-  await client.mcp.auth.authenticate({ name: mcpName })
+  await client.mcp.auth.authenticate({ name: mcpName }, { throwOnError: true })
   invalidateRuntimeCapabilityCaches()
   return true
 }
@@ -354,7 +428,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       const client = getClient()
       if (!client) throw new Error('Runtime not started')
       try {
-        await client.mcp.connect({ name })
+        await client.mcp.connect({ name }, { throwOnError: true })
         log('mcp', `Connected: ${name}`)
         invalidateRuntimeCapabilityCaches()
         return true
@@ -370,7 +444,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       const client = getClient()
       if (!client) throw new Error('Runtime not started')
       try {
-        await client.mcp.disconnect({ name })
+        await client.mcp.disconnect({ name }, { throwOnError: true })
         log('mcp', `Disconnected: ${name}`)
         invalidateRuntimeCapabilityCaches()
         return true
@@ -418,20 +492,23 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   // slot that didn't flow through Cowork's config pipeline.
   context.ipcMain.handle('agents:runtime', async (): Promise<RuntimeAgentDescriptor[]> => {
     return timeAgentCatalogHandler('agents:runtime', async () => {
-      const client = getClient()
+      const directory = getRuntimeHomeDir()
+      const client = getClientForDirectory(directory)
       if (!client) return []
       try {
-        const response = await client.app.agents()
-        const agents = response.data || []
+        const response = await client.v2.agent.list({
+          location: { directory },
+        }, { throwOnError: true })
+        const agents = response.data.data
         return agents
-          .filter((agent) => agent.name)
+          .filter((agent) => agent.id)
           .map((agent): RuntimeAgentDescriptor => {
             const toolIds = runtimeAgentToolIds(agent)
             return {
-              name: agent.name,
+              name: agent.id,
               mode: agent.mode,
               description: agent.description || null,
-              model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
+              model: agent.model ? `${agent.model.providerID}/${agent.model.id}` : null,
               color: agent.color || null,
               // SDK's Agent type has no `disable` flag — runtime agents are by
               // definition the registered/enabled set.

@@ -63,8 +63,21 @@ OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true
 OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED=true
 OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN=...
 OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL=http://127.0.0.1:4096
+OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT=/var/lib/open-cowork/standalone-gateway
+OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS=900000
 OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_BOT_TOKEN=...
 ```
+
+`OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT` is required in every deployment
+mode. It must be an absolute, dedicated directory rather than a filesystem
+root. Provision it for the Gateway/OpenCode service account before startup.
+Standalone Gateway intentionally has no current-working-directory fallback:
+every native OpenCode V2 session is created at this explicit location, so a
+missing or ambiguous execution boundary fails closed.
+
+`OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS` bounds each
+admitted native execution (15 minutes by default). On expiry, the Gateway
+interrupts the OpenCode session and releases its serialized channel/job lane.
 
 Generate a starter env file:
 
@@ -72,6 +85,7 @@ Generate a starter env file:
 pnpm standalone-gateway:setup -- \
   --admin-token "$OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   --opencode-url http://127.0.0.1:4096 \
+  --runtime-root /var/lib/open-cowork/standalone-gateway \
   --telegram-bot-token "$TELEGRAM_BOT_TOKEN" \
   --output .env.standalone-gateway
 ```
@@ -92,6 +106,15 @@ URLs, and does not echo provided secrets to stdout when `--output` is used. Use
   single-process deployments. No database URL is required and the Postgres TLS
   gate does not apply. **Data is lost on restart and is not shared across
   replicas**, so it is not suitable for production team/enterprise use.
+
+Standalone Gateway uses one clean pre-release Postgres baseline. It initializes
+only an empty product schema when the baseline ledger entry is absent. If any
+Standalone Gateway domain table already exists without that entry, startup
+fails before creating or stamping the ledger; recreate the schema or restore a
+backup whose ledger matches its data. A present ledger entry is not enough on
+its own: migration startup and repository readiness also verify every required
+production table. The doctor reports the live repository failure and does not
+silently repair, adopt, or delete a drifted database.
 
 ### File config
 

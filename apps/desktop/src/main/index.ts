@@ -22,14 +22,14 @@ import { invalidateCustomAgentCatalogCache } from '@open-cowork/runtime-host/cus
 import { getRuntimeCatalogSnapshot } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
 import { resolveAppIconFile, appendE2ERemoteDebuggingSwitches, e2eWindowReadyProbeEnabled } from '@open-cowork/runtime-host'
 import './desktop-electron-hosts.ts'
-import { app, ipcMain, Menu, nativeImage, session as electronSession, utilityProcess } from 'electron'
+import { app, ipcMain, Menu, nativeImage, Notification, session as electronSession, utilityProcess } from 'electron'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { createApplicationMenuTemplate } from './app-menu.ts'
 import { subscribeToEvents } from './events.ts'
 import { assertConfigValid, getAppConfig, getBranding } from '@open-cowork/runtime-host/config'
 import { createPromiseChain, createSingleFlight } from './promise-chain.ts'
-import { configureWorkflowService, startWorkflowService, stopWorkflowService } from './workflow/workflow-service.ts'
+import { configureWorkflowService, runWorkflowSchedulerTick, startWorkflowService, stopWorkflowService } from './workflow/workflow-service.ts'
 import {
   configureRuntimeInitialization,
   getRuntimeInitializationStatus,
@@ -144,6 +144,9 @@ const eventSubscriptions = createRuntimeEventSubscriptionManager({
   },
 })
 
+// OpenCode 1.17.20 scopes `/api/event` to the directory carried by the SDK
+// client. Keep one subscription per live directory client so project sessions
+// receive their own text, tool, interaction, and terminal events.
 setDirectoryClientLifecycleHandlers({
   onCreate: (directory, client) => {
     eventSubscriptions.ensure(directory, client)
@@ -313,6 +316,7 @@ async function runBootRuntime(projectDirectory?: string | null) {
     runtimeProjectDirectory = normalizeRuntimeProjectDirectory(projectDirectory)
     setRuntimeInitializationPhase('connecting-events', 'Connecting event stream...')
     setRuntimeReady(true)
+    void runWorkflowSchedulerTick()
     log('main', 'OpenCode runtime started')
     telemetry.appLaunched()
     // Opt-in, content-free adoption signal (default off). Only coarse
@@ -492,7 +496,13 @@ void app.whenReady().then(async () => {
       },
     },
   })
-  configureWorkflowService({ getMainWindow })
+  configureWorkflowService({
+    getMainWindow,
+    showDesktopNotification(notification) {
+      if (!Notification.isSupported()) return
+      new Notification(notification).show()
+    },
+  })
   startWorkflowService()
   registerBrandingAssetProtocol()
   registerChartFrameAssetProtocol()

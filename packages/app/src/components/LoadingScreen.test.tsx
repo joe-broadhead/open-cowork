@@ -7,6 +7,7 @@ describe('LoadingScreen', () => {
     const { rerender } = render(<LoadingScreen brandName="Open Cowork" stage="boot" />)
     expect(screen.getByText('Open Cowork')).toBeInTheDocument()
     expect(screen.getByText('Starting up...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
 
     rerender(<LoadingScreen brandName="Open Cowork" stage="auth" />)
     expect(screen.getByText('Checking authentication...')).toBeInTheDocument()
@@ -46,5 +47,7 @@ describe('LoadingScreen', () => {
     expect(screen.getByText('Open Cowork could not start the runtime')).toBeInTheDocument()
     expect(screen.getByText('Provider model is missing.')).toBeInTheDocument()
     expect(screen.getByText('Fix the invalid runtime or config input, then relaunch the app.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Provider model is missing.')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

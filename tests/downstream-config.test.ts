@@ -35,7 +35,7 @@ test('downstream example validates and keeps Desktop Cloud Gateway branding alig
   assert.equal(config.cloud.publicBranding.productName, config.gateway.branding?.productName)
   assert.equal(config.cloud.publicBranding.logoUrl, config.gateway.branding?.logoUrl)
   assert.equal(config.cloud.publicBranding.supportUrl, config.gateway.branding?.supportUrl)
-  assert.equal(config.cloudDesktop.preconfiguredConnections[0]?.baseUrl, config.gateway.cloud?.baseUrl)
+  assert.match(gatewayValues, /cloudBaseUrl: https:\/\/cowork\.example\.com/)
 
   const publicConfig = buildPublicAppConfig(config, [])
   assert.equal(publicConfig.branding.name, 'Example Cowork')

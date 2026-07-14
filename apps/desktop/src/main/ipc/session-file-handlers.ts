@@ -1,9 +1,60 @@
 import { getSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { readFileCheckedSync } from '@open-cowork/shared/node'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { IpcHandlerContext } from './context.ts'
-import { MAX_FILE_SNIPPET_BYTES } from './session-handler-validation.ts'
+import { MAX_FILE_SNIPPET_BYTES, normalizeSessionId } from './session-handler-validation.ts'
 import { getBrandName } from '@open-cowork/runtime-host/config'
+
+interface PathContainmentSemantics {
+  isAbsolute: (path: string) => boolean
+  relative: (from: string, to: string) => string
+  sep: string
+}
+
+const nativePathSemantics: PathContainmentSemantics = { isAbsolute, relative, sep }
+
+export function isPathInsideRoot(
+  realRoot: string,
+  realPath: string,
+  pathSemantics: PathContainmentSemantics = nativePathSemantics,
+) {
+  const relativePath = pathSemantics.relative(realRoot, realPath)
+  return relativePath === '' || (
+    !pathSemantics.isAbsolute(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${pathSemantics.sep}`)
+  )
+}
+
+function normalizeSnippetRequest(request: unknown) {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    throw new Error('File snippet request must be an object.')
+  }
+  const record = request as Record<string, unknown>
+  const sessionId = normalizeSessionId(record.sessionId)
+  if (typeof record.filePath !== 'string' || !record.filePath.trim()) {
+    throw new Error('File snippet path is required.')
+  }
+  if (Buffer.byteLength(record.filePath, 'utf8') > 4096) {
+    throw new Error('File snippet path is too long.')
+  }
+  if (
+    typeof record.startLine !== 'number'
+    || typeof record.endLine !== 'number'
+    || !Number.isFinite(record.startLine)
+    || !Number.isFinite(record.endLine)
+  ) {
+    throw new Error('File snippet line range must be finite numbers.')
+  }
+  return {
+    sessionId,
+    filePath: record.filePath,
+    startLine: record.startLine as number,
+    endLine: record.endLine as number,
+  }
+}
+
 export function registerSessionFileHandlers(context: IpcHandlerContext) {
   // File-snippet reader used by the diff viewer's "Show N unchanged
   // lines" affordance. Reads a byte range from a file that must live
@@ -13,14 +64,13 @@ export function registerSessionFileHandlers(context: IpcHandlerContext) {
   // numbers so the caller can render the unchanged context inline.
   context.ipcMain.handle('session:file-snippet', async (
     _event,
-    request: { sessionId: string; filePath: string; startLine: number; endLine: number },
+    request: unknown,
   ) => {
-    const { sessionId, filePath, startLine, endLine } = request
+    const { sessionId, filePath, startLine, endLine } = normalizeSnippetRequest(request)
     const record = getSessionRecord(sessionId)
     if (!record) throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
 
     const root = record.opencodeDirectory || getRuntimeHomeDir()
-    const { resolve } = await import('path')
     const { realpathSync } = await import('fs')
 
     const absoluteRoot = resolve(root)
@@ -38,7 +88,7 @@ export function registerSessionFileHandlers(context: IpcHandlerContext) {
     } catch (err) {
       throw new Error('File is not available for snippet read.', { cause: err })
     }
-    if (!(realPath === realRoot || realPath.startsWith(`${realRoot}/`))) {
+    if (!isPathInsideRoot(realRoot, realPath)) {
       throw new Error('File snippet path escapes the session directory.')
     }
     let bytes: Buffer

@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../ConfirmDialog'
 export type WorkflowNavigationTarget = {
   workflowId: string
   runId?: string | null
+  run?: WorkflowRun | null
 }
 
 type Props = {
@@ -66,12 +67,6 @@ function workflowLastRunLabel(workflow: WorkflowSummary) {
   return t('workflows.lastRunNever', 'never')
 }
 
-function workflowDisplaySteps(workflow: WorkflowSummary) {
-  return workflow.steps?.length
-    ? workflow.steps
-    : [{ id: 'step-1', title: t('workflows.defaultStepTitle', 'Run saved instructions'), detail: workflow.instructions || null }]
-}
-
 function activeWebhookSecret(workflow: WorkflowSummary) {
   return workflow.triggers.find((trigger) => (
     trigger.enabled
@@ -103,9 +98,12 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<WorkflowSummary | null>(null)
+  const [webhookRegenerationTarget, setWebhookRegenerationTarget] = useState<WorkflowSummary | null>(null)
   const [highlightedTarget, setHighlightedTarget] = useState<WorkflowNavigationTarget | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
   const [runtimeConfigSource, setRuntimeConfigSource] = useState<EffectiveAppSettings['runtimeConfigSource']>('app')
   const refreshGenerationRef = useRef(0)
+  const settingsGenerationRef = useRef(0)
   const workflowCardRefs = useRef(new Map<string, HTMLDivElement>())
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
@@ -120,13 +118,28 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     () => payload.workflows.filter((workflow) => workflow.status !== 'archived'),
     [payload.workflows],
   )
+  const archivedWorkflows = useMemo(
+    () => payload.workflows.filter((workflow) => workflow.status === 'archived'),
+    [payload.workflows],
+  )
+  const workflowsForView = showArchived ? archivedWorkflows : activeWorkflows
   const visibleWorkflows = useMemo(() => {
-    if (!highlightedTarget) return activeWorkflows
-    if (activeWorkflows.some((workflow) => workflow.id === highlightedTarget.workflowId)) return activeWorkflows
+    if (!highlightedTarget) return workflowsForView
+    if (workflowsForView.some((workflow) => workflow.id === highlightedTarget.workflowId)) return workflowsForView
     const target = payload.workflows.find((workflow) => workflow.id === highlightedTarget.workflowId)
-    return target ? [target, ...activeWorkflows] : activeWorkflows
-  }, [activeWorkflows, highlightedTarget, payload.workflows])
-  const archivedCount = payload.workflows.length - activeWorkflows.length
+    return target ? [target, ...workflowsForView] : workflowsForView
+  }, [highlightedTarget, payload.workflows, workflowsForView])
+  const targetedRun = useMemo(() => {
+    const workflowId = highlightedTarget?.workflowId
+    const runId = highlightedTarget?.runId
+    if (!workflowId || !runId) return null
+    const currentRun = payload.runs.find((run) => run.id === runId && run.workflowId === workflowId)
+    if (currentRun) return currentRun
+    const suppliedRun = highlightedTarget.run
+    if (suppliedRun?.id === runId && suppliedRun.workflowId === workflowId) return suppliedRun
+    return null
+  }, [highlightedTarget, payload.runs])
+  const archivedCount = archivedWorkflows.length
   const activeCount = useMemo(
     () => activeWorkflows.filter((workflow) => workflow.status === 'active').length,
     [activeWorkflows],
@@ -135,6 +148,11 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     () => activeWorkflows.filter((workflow) => workflow.status === 'running').length,
     [activeWorkflows],
   )
+  const initialTargetArchived = useMemo(() => {
+    if (!initialTarget) return null
+    const targetWorkflow = payload.workflows.find((workflow) => workflow.id === initialTarget.workflowId)
+    return targetWorkflow ? targetWorkflow.status === 'archived' : null
+  }, [initialTarget, payload.workflows])
 
   const refresh = useCallback(async (generation = refreshGenerationRef.current + 1) => {
     refreshGenerationRef.current = generation
@@ -166,21 +184,24 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
   useEffect(() => {
     const generation = refreshGenerationRef.current + 1
     refreshGenerationRef.current = generation
-    const isCurrentRefresh = () => refreshGenerationRef.current === generation
+    const settingsGeneration = settingsGenerationRef.current + 1
+    settingsGenerationRef.current = settingsGeneration
+    const isCurrentSettingsRequest = () => settingsGenerationRef.current === settingsGeneration
     void refresh(generation)
     const settingsRequest = activeWorkspaceIsLocal
       ? window.coworkApi.settings.get()
       : window.coworkApi.settings.get(workspaceOptions)
     void settingsRequest.then((settings) => {
-      if (isCurrentRefresh()) setRuntimeConfigSource(settings.runtimeConfigSource === 'machine' ? 'machine' : 'app')
+      if (isCurrentSettingsRequest()) setRuntimeConfigSource(settings.runtimeConfigSource === 'machine' ? 'machine' : 'app')
     }).catch(() => {
-      if (isCurrentRefresh()) setRuntimeConfigSource('app')
+      if (isCurrentSettingsRequest()) setRuntimeConfigSource('app')
     })
     const unsubscribe = window.coworkApi.on.workflowUpdated(() => {
       void refresh()
     })
     return () => {
       refreshGenerationRef.current += 1
+      settingsGenerationRef.current += 1
       unsubscribe()
     }
   }, [activeWorkspaceIsLocal, refresh, workspaceOptions])
@@ -189,12 +210,17 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     if (!initialTarget || loading) return
     if (loadError && payload.workflows.length === 0) return
     setHighlightedTarget(initialTarget)
+    if (initialTargetArchived !== null) setShowArchived(initialTargetArchived)
     onInitialTargetHandled?.()
+  }, [initialTarget, initialTargetArchived, loadError, loading, onInitialTargetHandled, payload.workflows.length])
+
+  useEffect(() => {
+    if (!highlightedTarget) return
     const frame = window.requestAnimationFrame(() => {
-      workflowCardRefs.current.get(initialTarget.workflowId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      workflowCardRefs.current.get(highlightedTarget.workflowId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [initialTarget, loadError, loading, onInitialTargetHandled, payload.workflows.length])
+  }, [highlightedTarget, showArchived])
 
   const setWorkflowCardRef = useCallback((workflowId: string, node: HTMLDivElement | null) => {
     if (node) {
@@ -263,6 +289,17 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     await archiveWorkflow(target)
   }
 
+  const confirmWebhookRegeneration = async () => {
+    const target = webhookRegenerationTarget
+    setWebhookRegenerationTarget(null)
+    if (!target) return
+    await runAction(
+      target.id,
+      () => window.coworkApi.workflows.regenerateWebhookSecret(target.id),
+      t('workflows.webhookSecretRegenerated', 'Webhook secret regenerated.'),
+    )
+  }
+
   const copyWebhook = async (workflow: WorkflowSummary) => {
     const command = webhookCurlCommand(workflow)
     if (!command) return
@@ -301,6 +338,32 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+        {!loading || payload.workflows.length > 0 ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label={t('workflows.viewToggleLabel', 'Playbook views')}>
+            <Button
+              size="sm"
+              variant={showArchived ? 'secondary' : 'primary'}
+              aria-pressed={!showArchived}
+              onClick={() => {
+                setShowArchived(false)
+                setHighlightedTarget(null)
+              }}
+            >
+              {t('workflows.activeView', 'Active ({{count}})', { count: activeWorkflows.length })}
+            </Button>
+            <Button
+              size="sm"
+              variant={showArchived ? 'primary' : 'secondary'}
+              aria-pressed={showArchived}
+              onClick={() => {
+                setShowArchived(true)
+                setHighlightedTarget(null)
+              }}
+            >
+              {t('workflows.archivedView', 'Archived ({{count}})', { count: archivedCount })}
+            </Button>
+          </div>
+        ) : null}
         {loading && payload.workflows.length === 0 ? (
           <div className="grid gap-4">
             {Array.from({ length: 3 }).map((_, index) => (
@@ -318,22 +381,24 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
         ) : visibleWorkflows.length === 0 ? (
           <EmptyState
             icon="workflow"
-            title={t('workflows.emptyTitle', 'No playbooks yet')}
-            body={workflowListBlocked && workflowListReason
-              ? workflowListReason
-              : workflowDraftBlocked
-                ? activeWorkspaceIsLocal
-                  ? t('workflows.emptySetupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.')
-                  : t('workflows.emptyCloudManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.')
-                : t('workflows.emptyStartChat', 'Start with a setup chat. The Workflow Designer agent will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving anything.')}
+            title={showArchived ? t('workflows.emptyArchiveTitle', 'No archived playbooks') : t('workflows.emptyTitle', 'No playbooks yet')}
+            body={showArchived
+              ? t('workflows.emptyArchiveBody', 'Archived playbooks will appear here until you restore them.')
+              : workflowListBlocked && workflowListReason
+                ? workflowListReason
+                : workflowDraftBlocked
+                  ? activeWorkspaceIsLocal
+                    ? t('workflows.emptySetupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.')
+                    : t('workflows.emptyCloudManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.')
+                  : t('workflows.emptyStartChat', 'Start with a setup chat. The Workflow Designer agent will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving anything.')}
             action={(
               <Button
                 variant="primary"
-                onClick={() => void startDraft()}
-                disabled={workflowDraftBlocked}
-                disabledReason={!activeWorkspaceIsLocal ? t('workflows.cloudCreationManagedShort', 'Cloud playbook creation is managed by this cloud workspace.') : workflowDraftBlocked ? t('workflows.setupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source.') : null}
+                onClick={showArchived ? () => setShowArchived(false) : () => void startDraft()}
+                disabled={!showArchived && workflowDraftBlocked}
+                disabledReason={showArchived ? null : !activeWorkspaceIsLocal ? t('workflows.cloudCreationManagedShort', 'Cloud playbook creation is managed by this cloud workspace.') : workflowDraftBlocked ? t('workflows.setupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source.') : null}
               >
-                {t('workflows.addButton', 'Add playbook')}
+                {showArchived ? t('workflows.viewActiveButton', 'View active playbooks') : t('workflows.addButton', 'Add playbook')}
               </Button>
             )}
           />
@@ -349,12 +414,15 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
             ) : null}
             {visibleWorkflows.map((workflow) => {
               const isHighlighted = highlightedTarget?.workflowId === workflow.id
+              const isRunTarget = isHighlighted && Boolean(highlightedTarget?.runId)
+              const exactRun = isRunTarget ? targetedRun : null
               return (
               <div
                 key={workflow.id}
                 ref={(node) => setWorkflowCardRef(workflow.id, node)}
                 className={`rounded-lg border p-0.5 transition-colors ${isHighlighted ? 'border-accent bg-accent/10' : 'border-transparent bg-transparent'}`}
                 data-workflow-id={workflow.id}
+                data-workflow-run-id={exactRun?.id}
                 data-open-cowork-target={isHighlighted ? 'true' : undefined}
               >
               <Card variant="surface">
@@ -393,49 +461,77 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                         {t('workflows.openSetupChat', 'Open setup chat')}
                       </Button>
                     ) : null}
-                    {workflow.latestRunSessionId ? (
+                    {isRunTarget ? (
+                      exactRun?.sessionId ? (
+                        <Button size="sm" variant="secondary" onClick={() => onOpenThread(exactRun.sessionId!)}>
+                          {t('workflows.openTargetRun', 'Open this run')}
+                        </Button>
+                      ) : null
+                    ) : workflow.latestRunSessionId ? (
                       <Button size="sm" variant="secondary" onClick={() => onOpenThread(workflow.latestRunSessionId!)}>
                         {t('workflows.openLatestRun', 'Open latest run')}
                       </Button>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busyId === workflow.id || workflow.status === 'running'}
-                      disabledReason={workflowActionBlocked ? workflowActionReason : null}
-                      onClick={() => void runAction(workflow.id, () => (
-                        activeWorkspaceIsLocal
-                          ? window.coworkApi.workflows.runNow(workflow.id)
-                          : window.coworkApi.workflows.runNow(workflow.id, workspaceOptions)
-                      ), t('workflows.runStarted', 'Playbook run started.'))}
-                    >
-                      {t('workflows.runButton', 'Run')}
-                    </Button>
-                    {workflow.status === 'paused' ? (
-                      <Button size="sm" variant="secondary" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
-                        activeWorkspaceIsLocal
-                          ? window.coworkApi.workflows.resume(workflow.id)
-                          : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
-                      ), t('workflows.resumed', 'Playbook resumed.'))}>
-                        {t('workflows.resumeButton', 'Resume')}
+                    {workflow.status === 'archived' ? (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={busyId === workflow.id}
+                        disabledReason={workflowActionBlocked ? workflowActionReason : null}
+                        onClick={() => void runAction(workflow.id, () => (
+                          activeWorkspaceIsLocal
+                            ? window.coworkApi.workflows.resume(workflow.id)
+                            : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
+                        ), t('workflows.restored', 'Playbook restored.'))}
+                      >
+                        {t('workflows.restoreButton', 'Restore')}
                       </Button>
                     ) : (
-                      <Button size="sm" variant="secondary" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
-                        activeWorkspaceIsLocal
-                          ? window.coworkApi.workflows.pause(workflow.id)
-                          : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
-                      ), t('workflows.paused', 'Playbook paused.'))}>
-                        {t('workflows.pauseButton', 'Pause')}
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busyId === workflow.id || workflow.status === 'running' || workflow.status === 'paused'}
+                          disabledReason={workflowActionBlocked
+                            ? workflowActionReason
+                            : workflow.status === 'paused'
+                              ? t('workflows.resumeBeforeRunning', 'Resume this playbook before running it.')
+                              : null}
+                          onClick={() => void runAction(workflow.id, () => (
+                            activeWorkspaceIsLocal
+                              ? window.coworkApi.workflows.runNow(workflow.id)
+                              : window.coworkApi.workflows.runNow(workflow.id, workspaceOptions)
+                          ), t('workflows.runStarted', 'Playbook run started.'))}
+                        >
+                          {t('workflows.runButton', 'Run')}
+                        </Button>
+                        {workflow.status === 'paused' ? (
+                          <Button size="sm" variant="secondary" disabled={busyId === workflow.id} disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
+                            activeWorkspaceIsLocal
+                              ? window.coworkApi.workflows.resume(workflow.id)
+                              : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
+                          ), t('workflows.resumed', 'Playbook resumed.'))}>
+                            {t('workflows.resumeButton', 'Resume')}
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="secondary" disabled={busyId === workflow.id} disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
+                            activeWorkspaceIsLocal
+                              ? window.coworkApi.workflows.pause(workflow.id)
+                              : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
+                          ), t('workflows.paused', 'Playbook paused.'))}>
+                            {t('workflows.pauseButton', 'Pause')}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="danger" disabled={busyId === workflow.id} disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => setArchiveTarget(workflow)}>
+                          {t('workflows.archiveButton', 'Archive')}
+                        </Button>
+                      </>
                     )}
-                    <Button size="sm" variant="danger" disabled={busyId === workflow.id} disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => setArchiveTarget(workflow)}>
-                      {t('workflows.archiveButton', 'Archive')}
-                    </Button>
                   </div>
                 </div>
 
                 <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={t('workflows.stepsAriaLabel', '{{title}} steps', { title: workflow.title })}>
-                  {workflowDisplaySteps(workflow).map((step, index) => (
+                  {workflow.steps.map((step, index) => (
                     <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border-subtle bg-elevated p-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-border-subtle bg-surface-active text-xs font-bold text-text-secondary">
                         {index + 1}
@@ -467,15 +563,31 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                     </div>
                     <div className="mt-2 text-xs text-text-muted">{t('workflows.next', 'Next:')} {formatWorkflowDate(workflow.nextRunAt)}</div>
                   </div>
-                  <div className="rounded-md border border-border-subtle bg-elevated p-3">
-                    <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.latestRun', 'Latest run')}</div>
-                    <div className="mt-1">
-                      <Badge tone={runStatusTone(workflow.latestRunStatus)} className="capitalize">
-                        {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
-                      </Badge>
+                  {isRunTarget ? (
+                    <div className="rounded-md border border-accent/40 bg-accent/10 p-3" aria-label={t('workflows.targetRunAriaLabel', 'Targeted run {{runId}}', { runId: highlightedTarget?.runId || '' })}>
+                      <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.targetRun', 'Targeted run')}</div>
+                      <div className="mt-1">
+                        <Badge tone={runStatusTone(exactRun?.status)} className="capitalize">
+                          {exactRun?.status || t('workflows.runDetailsUnavailable', 'Details unavailable')}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-xs text-text-muted">
+                        {exactRun
+                          ? exactRun.summary || exactRun.error || t('workflows.runDate', 'Run created: {{date}}', { date: formatWorkflowDate(exactRun.createdAt) })
+                          : t('workflows.exactRunUnavailable', 'Run {{runId}} is not available in the current playbook data.', { runId: highlightedTarget?.runId || '' })}
+                      </div>
                     </div>
-                    <div className="mt-1 line-clamp-2 text-xs text-text-muted">{workflow.latestRunSummary || t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}</div>
-                  </div>
+                  ) : (
+                    <div className="rounded-md border border-border-subtle bg-elevated p-3">
+                      <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.latestRun', 'Latest run')}</div>
+                      <div className="mt-1">
+                        <Badge tone={runStatusTone(workflow.latestRunStatus)} className="capitalize">
+                          {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-xs text-text-muted">{workflow.latestRunSummary || t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}</div>
+                    </div>
+                  )}
                 </div>
 
                 {workflow.webhookUrl ? (
@@ -484,8 +596,8 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                     <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
                       {t('workflows.copyCurl', 'Copy curl')}
                     </Button>
-                    {activeWorkspaceIsLocal ? (
-                      <Button size="sm" variant="secondary" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), t('workflows.webhookSecretRegenerated', 'Webhook secret regenerated.'))}>
+                    {activeWorkspaceIsLocal && workflow.status !== 'archived' ? (
+                      <Button size="sm" variant="secondary" disabled={busyId === workflow.id} onClick={() => setWebhookRegenerationTarget(workflow)}>
                         {t('workflows.regenerate', 'Regenerate')}
                       </Button>
                     ) : null}
@@ -497,9 +609,6 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
             })}
           </div>
         )}
-        {archivedCount > 0 ? (
-          <div className="mt-4 text-xs text-text-muted">{t('workflows.archivedHidden', '{{count}} archived playbook{{plural}} hidden.', { count: archivedCount, plural: archivedCount === 1 ? '' : 's' })}</div>
-        ) : null}
       </div>
       <ConfirmDialog
         open={Boolean(archiveTarget)}
@@ -512,6 +621,18 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
         tone="danger"
         onConfirm={confirmArchive}
         onCancel={() => setArchiveTarget(null)}
+      />
+      <ConfirmDialog
+        open={Boolean(webhookRegenerationTarget)}
+        title={t('workflows.webhookRegenerateConfirmTitle', 'Regenerate this webhook secret?')}
+        body={webhookRegenerationTarget
+          ? t('workflows.webhookRegenerateConfirmBody', 'Regenerating the webhook secret for “{{title}}” immediately invalidates the current secret. Existing callers will stop working until they use the new secret.', { title: webhookRegenerationTarget.title })
+          : undefined}
+        confirmLabel={t('workflows.webhookRegenerateConfirmAction', 'Regenerate secret')}
+        cancelLabel={t('workflows.webhookRegenerateConfirmCancel', 'Keep current secret')}
+        tone="danger"
+        onConfirm={confirmWebhookRegeneration}
+        onCancel={() => setWebhookRegenerationTarget(null)}
       />
     </div>
   )

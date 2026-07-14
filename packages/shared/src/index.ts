@@ -231,6 +231,7 @@ export * from './remote-approval-policy.js'
 export * from './resource-identity.js'
 export * from './runtime.js'
 export * from './runtime-event-normalizers.js'
+export * from './runtime-event-sanitizer.js'
 export * from './semantic-ui.js'
 export * from './session.js'
 export * from './session-import.js'
@@ -416,7 +417,7 @@ export interface CoworkAPI {
     list: (options?: ToolListOptions) => Promise<RuntimeToolDescriptor[]>
   }
   command: {
-    list: () => Promise<Array<{ name: string; description?: string; source?: string }>>
+    list: (options?: RuntimeContextOptions) => Promise<Array<{ name: string; description?: string; source?: string }>>
     run: (sessionId: string, name: string) => Promise<boolean>
   }
   provider: {

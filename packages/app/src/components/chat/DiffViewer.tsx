@@ -12,9 +12,13 @@ interface Props {
   // (uses SDK session.diff?messageID=). Header label reflects the scope.
   messageId?: string
   onClose: () => void
+  // ThreadList owns an eager modal shell so lazy chunk loading and render
+  // failures remain modal. Embedded mode renders only the diff controls and
+  // content inside that shell; direct callers retain the standalone dialog.
+  embedded?: boolean
 }
 
-export function DiffViewer({ sessionId, messageId, onClose }: Props) {
+export function DiffViewer({ sessionId, messageId, onClose, embedded = false }: Props) {
   const [diffs, setDiffs] = useState<SessionFileDiff[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedFile, setExpandedFile] = useState<string | null>(null)
@@ -45,8 +49,53 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
   }, [])
 
   const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, { onEscape: onClose })
+  useFocusTrap(dialogRef, { onEscape: onClose, active: !embedded })
   const title = messageId ? t('diff.changesFromMessage', 'Changes from this message') : t('diff.changes', 'Changes')
+  const subtitle = !loading
+    ? t('diff.filesChanged', '{{count}} file(s) changed', { count: String(diffs.length) })
+    : null
+
+  const fileContent = (
+    <div className="flex-1 overflow-y-auto">
+      {loading && (
+        <div className="px-4 py-8 text-xs text-text-muted text-center" role="status" aria-live="polite">
+          {t('diff.loading', 'Loading changes...')}
+        </div>
+      )}
+
+      {!loading && diffs.length === 0 && (
+        <div className="px-4 py-8 text-xs text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
+      )}
+
+      {diffs.map((diff) => (
+        <DiffFileRow
+          key={diff.file}
+          sessionId={sessionId}
+          diff={diff}
+          expanded={expandedFile === diff.file}
+          filePath={diff.file}
+          onToggle={handleToggleFile}
+          viewMode={viewMode}
+        />
+      ))}
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <section
+        className="desktop-diff-view flex min-h-0 flex-col"
+        aria-label={title}
+        data-diff-view="true"
+      >
+        <div className="flex min-h-8 items-center justify-end gap-3 border-b border-border-subtle pb-3">
+          {subtitle ? <span className="me-auto text-xs text-text-muted">{subtitle}</span> : null}
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </div>
+        {fileContent}
+      </section>
+    )
+  }
 
   return (
     <>
@@ -60,7 +109,7 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
       >
         <DiffView
           title={title}
-          subtitle={!loading ? t('diff.filesChanged', '{{count}} file(s) changed', { count: String(diffs.length) }) : undefined}
+          subtitle={subtitle || undefined}
           className="desktop-diff-view flex-1 min-h-0"
           actions={(
             <>
@@ -74,27 +123,7 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
             </>
           )}
         >
-          <div className="flex-1 overflow-y-auto">
-            {loading && (
-              <div className="px-4 py-8 text-xs text-text-muted text-center">{t('diff.loading', 'Loading changes...')}</div>
-            )}
-
-            {!loading && diffs.length === 0 && (
-              <div className="px-4 py-8 text-xs text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
-            )}
-
-            {diffs.map((diff) => (
-              <DiffFileRow
-                key={diff.file}
-                sessionId={sessionId}
-                diff={diff}
-                expanded={expandedFile === diff.file}
-                filePath={diff.file}
-                onToggle={handleToggleFile}
-                viewMode={viewMode}
-              />
-            ))}
-          </div>
+          {fileContent}
         </DiffView>
       </div>
     </>

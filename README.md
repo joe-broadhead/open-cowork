@@ -207,7 +207,8 @@ renderer.
 
 ### Requirements
 
-- Node `>=22.13`
+- Node `>=22.13` (supported floor). For development and CI parity, use the
+  exact version pinned in [`.nvmrc`](.nvmrc).
 - pnpm `10.32.1` via Corepack
 - Python `>=3.11` for docs builds
 
@@ -215,7 +216,7 @@ renderer.
 
 ```bash
 node -v
-# Expected: v22.13.0 or newer
+# Supported: v22.13.0 or newer; CI uses the exact .nvmrc version
 
 corepack enable
 corepack prepare pnpm@10.32.1 --activate

@@ -78,14 +78,6 @@ function validateGatewaySemantics(config: Partial<OpenCoworkConfig>, source: str
     throw new Error(formatConfigError(source, 'gateway.server.adminToken', 'is required when public gateway metrics or diagnostics are enabled'))
   }
 
-  const cloudBaseUrl = typeof gateway.cloud?.baseUrl === 'string' ? gateway.cloud.baseUrl.trim() : ''
-  if (cloudBaseUrl) {
-    const url = new URL(cloudBaseUrl)
-    if (url.protocol === 'http:' && gateway.cloud?.allowInsecureHttp !== true && !isLoopbackHost(url.hostname)) {
-      throw new Error(formatConfigError(source, 'gateway.cloud.baseUrl', 'must use HTTPS unless gateway.cloud.allowInsecureHttp is true'))
-    }
-  }
-
   for (const [index, provider] of (gateway.providers || []).entries()) {
     if (provider.enabled === false) continue
     const kind = provider.kind

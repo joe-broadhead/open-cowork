@@ -54,6 +54,7 @@ test('buildPendingApproval uses explicit descriptions and permission fallbacks',
   assert.deepEqual(buildPendingApproval('session-1', {
     type: 'approval',
     id: 'approval-1',
+    sourceSessionId: 'child-1',
     taskRunId: 'task-1',
     tool: 'bash',
     input: { command: 'pwd' },
@@ -61,6 +62,7 @@ test('buildPendingApproval uses explicit descriptions and permission fallbacks',
   }, 1_700_000_000_000), {
     id: 'approval-1',
     sessionId: 'session-1',
+    sourceSessionId: 'child-1',
     taskRunId: 'task-1',
     tool: 'bash',
     input: { command: 'pwd' },
@@ -69,6 +71,7 @@ test('buildPendingApproval uses explicit descriptions and permission fallbacks',
 
   const fallback = buildPendingApproval('session-1', { type: 'approval' }, 1_700_000_000_001)
   assert.equal(fallback.id, 'session-1:approval:1700000000001')
+  assert.equal(fallback.sourceSessionId, null)
   assert.equal(fallback.tool, 'permission')
   assert.deepEqual(fallback.input, {})
   assert.equal(fallback.description, 'Permission requested')

@@ -110,9 +110,10 @@ test('permission.asked emits an approval event for the resolved root session', (
   assert.deepEqual(sent, [{
     channel: 'permission:request',
     data: {
-      id: 'perm-1',
-      sessionId: 'root-session',
-      taskRunId: 'child:child-session',
+          id: 'perm-1',
+          sessionId: 'root-session',
+          sourceSessionId: 'child-session',
+          taskRunId: 'child:child-session',
       tool: 'Run shell command',
       input: { command: 'echo hello' },
       description: 'Sub-Agent: Run shell command',
@@ -218,11 +219,97 @@ test('permission.asked accepts SDK payloads nested under permission', () => {
   assert.deepEqual(sent[0]?.data, {
     id: 'perm-2',
     sessionId: 'root-session',
+    sourceSessionId: 'root-session',
     taskRunId: null,
     tool: 'bash',
     input: { command: 'pwd' },
     description: 'bash',
   })
+})
+
+test('permission.v2.asked projects native action, resources, save rules, and source ownership', () => {
+  const collector = createDispatchCollector()
+  const { win, sent } = createWindowSendCollector()
+  trackParentSession('native-root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.v2.asked',
+    properties: {
+      id: 'native-permission-1',
+      sessionID: 'native-root-session',
+      action: 'file.read',
+      resources: ['README.md'],
+      save: ['README.md'],
+      source: { sessionID: 'native-root-session', messageID: 'assistant-1', callID: 'call-1' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events, [{
+    type: 'approval',
+    sessionId: 'native-root-session',
+    data: {
+      type: 'approval',
+      id: 'native-permission-1',
+      taskRunId: null,
+      tool: 'file.read',
+      input: {
+        resources: ['README.md'],
+        save: ['README.md'],
+        source: { sessionID: 'native-root-session', messageID: 'assistant-1', callID: 'call-1' },
+      },
+      description: 'file.read',
+      sourceSessionId: 'native-root-session',
+    },
+  }])
+  assert.equal(sent[0]?.channel, 'permission:request')
+})
+
+test('question.v2.asked projects native prompts and reply ownership', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+  trackParentSession('native-question-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'question.v2.asked',
+    properties: {
+      id: 'native-question-1',
+      sessionID: 'native-question-session',
+      questions: [{
+        header: 'Scope',
+        question: 'Run all checks?',
+        options: [{ label: 'Yes', description: 'Run everything' }],
+        multiple: false,
+        custom: true,
+      }],
+      tool: { messageID: 'assistant-1', callID: 'call-1' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events, [{
+    type: 'question_asked',
+    sessionId: 'native-question-session',
+    data: {
+      type: 'question_asked',
+      id: 'native-question-1',
+      questions: [{
+        header: 'Scope',
+        question: 'Run all checks?',
+        options: [{ label: 'Yes', description: 'Run everything' }],
+        multiple: false,
+        custom: true,
+      }],
+      tool: { messageId: 'assistant-1', callId: 'call-1' },
+      sourceSessionId: 'native-question-session',
+    },
+  }])
 })
 
 test('permission.asked merges nested tool details with top-level request ids', () => {
@@ -264,9 +351,10 @@ test('permission.asked merges nested tool details with top-level request ids', (
   assert.deepEqual(sent[0], {
     channel: 'permission:request',
     data: {
-      id: 'perm-3',
-      sessionId: 'root-session',
-      taskRunId: null,
+        id: 'perm-3',
+        sessionId: 'root-session',
+        sourceSessionId: 'root-session',
+        taskRunId: null,
       tool: 'Run shell command',
       input: { command: 'pwd' },
       description: 'Run shell command',
@@ -596,6 +684,7 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
       output: undefined,
       agent: null,
       attachments: undefined,
+      outputPaths: undefined,
       taskRunId: 'child:child-session',
       sourceSessionId: 'child-session',
     },
@@ -1486,6 +1575,35 @@ test('session.error resolves camelCase session ids and nested provider messages'
   }])
 })
 
+test('todo.updated dispatches an empty authoritative list to clear stale todos', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'todo.updated',
+    properties: {
+      sessionID: 'root-session',
+      todos: [],
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events, [{
+    type: 'todos',
+    sessionId: 'root-session',
+    data: {
+      type: 'todos',
+      todos: [],
+      taskRunId: null,
+    },
+  }])
+})
+
 test('session.error marks child task failed without dropping lineage', () => {
   const collector = createDispatchCollector()
   const { win, sent } = createWindowSendCollector()
@@ -1537,6 +1655,44 @@ test('session.error marks child task failed without dropping lineage', () => {
       message: 'Provider terminated the child session',
     },
   }])
+})
+
+test('native child step failure remains terminal after idle settlement', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+  registerTaskRun({
+    id: 'task-1',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Analyze data',
+    agent: 'analyst',
+    childSessionId: 'child-session',
+    status: 'running',
+  })
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.next.step.failed',
+    properties: {
+      sessionID: 'child-session',
+      assistantMessageID: 'assistant-1',
+      error: { message: 'Provider terminated the child step' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.equal(getTaskRun('task-1')?.status, 'error')
+  assert.equal(
+    collector.events.filter((event) => (
+      (event as { data?: { type?: string } }).data?.type === 'error'
+    )).length,
+    1,
+  )
 })
 
 // The widened error extractor should surface payloads whose message lives

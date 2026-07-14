@@ -41,7 +41,6 @@ Choose one org signup mode per environment:
 
 - `disabled`: operators create orgs manually. Use for private beta and internal
   enterprise installs.
-- `closed`: backward-compatible alias for `disabled`.
 - `invite`: users can join only with an invite token or approved membership
   record. Use for design partners and paid trials.
 - `domain`: users can self-serve when their email domain is allowlisted.
@@ -168,7 +167,7 @@ new key as failed metadata only when that is safe for the provider.
 
 ## Launch Gates
 
-Private beta can run with manual billing, closed/invite org signup mode, and a
+Private beta can run with manual billing, disabled/invite org signup mode, and a
 small number of managed gateway channels. Public self-serve requires:
 
 - the private beta launch package in `docs/runbooks/private-beta-launch.md`

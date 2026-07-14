@@ -1,6 +1,7 @@
 export interface PermissionRequest {
   id: string
   sessionId: string
+  sourceSessionId?: string | null
   workspaceId?: string | null
   taskRunId?: string | null
   tool: string

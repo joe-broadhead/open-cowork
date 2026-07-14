@@ -3,6 +3,31 @@ import {
   readRecordValue,
   readString,
 } from './normalizer-utils.js'
+import {
+  RUNTIME_EVENT_MAX_COLLECTION_ENTRIES,
+  sanitizeRuntimeEventValue,
+} from './runtime-event-sanitizer.js'
+
+function hasEnumerableOwnProperty(value: Record<string, unknown>) {
+  for (const key in value) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) return true
+  }
+  return false
+}
+
+function boundedRecord(value: unknown) {
+  const source = asRecord(value)
+  const output: Record<string, unknown> = {}
+  let count = 0
+  for (const key in source) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue
+    if (count >= RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) break
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
+    output[key] = source[key]
+    count += 1
+  }
+  return output
+}
 
 function readFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
@@ -54,13 +79,13 @@ export function extractRuntimeErrorMessage(
   // "An error occurred" on its own is not useful when debugging which of
   // 300+ OpenRouter models failed.
   try {
-    const payload = error && Object.keys(error).length > 0
+    const payload = error && hasEnumerableOwnProperty(error)
       ? error
-      : properties && Object.keys(properties).length > 0
+      : properties && hasEnumerableOwnProperty(properties)
         ? properties
         : null
     if (payload) {
-      const serialized = JSON.stringify(payload)
+      const serialized = JSON.stringify(sanitizeRuntimeEventValue(payload))
       if (serialized && serialized !== '{}') return serialized
     }
   } catch {
@@ -75,7 +100,7 @@ function readNestedRecord(
 ) {
   for (const key of keys) {
     const nested = asRecord(readRecordValue(record, key))
-    if (Object.keys(nested).length > 0) return nested
+    if (hasEnumerableOwnProperty(nested)) return nested
   }
   return null
 }
@@ -86,20 +111,33 @@ export function normalizePermissionEvent(properties: Record<string, unknown> | n
     || readFirstString(properties, ['id', 'requestID', 'requestId'])
   const sessionId = readFirstString(permission, ['sessionID', 'sessionId'])
     || readFirstString(properties, ['sessionID', 'sessionId'])
-  const permissionType = readFirstString(permission, ['type', 'permission'])
-    || readFirstString(properties, ['type', 'permission'])
+  const permissionType = readFirstString(permission, ['action', 'type', 'permission'])
+    || readFirstString(properties, ['action', 'type', 'permission'])
     || 'permission'
-  const title = readFirstString(permission, ['title', 'tool', 'name'])
-    || readFirstString(properties, ['title', 'tool', 'name'])
+  const title = readFirstString(permission, ['title', 'tool', 'name', 'action'])
+    || readFirstString(properties, ['title', 'tool', 'name', 'action'])
     || permissionType
   const metadata = asRecord(readRecordValue(permission, 'metadata'))
   const outerMetadata = asRecord(readRecordValue(properties, 'metadata'))
   const nestedInput = asRecord(readRecordValue(permission, 'input'))
   const outerInput = asRecord(readRecordValue(properties, 'input'))
-  let input = outerInput
-  if (Object.keys(nestedInput).length > 0) input = nestedInput
-  if (Object.keys(outerMetadata).length > 0) input = outerMetadata
-  if (Object.keys(metadata).length > 0) input = metadata
+  let input = boundedRecord(outerInput)
+  if (hasEnumerableOwnProperty(nestedInput)) input = boundedRecord(nestedInput)
+  if (hasEnumerableOwnProperty(outerMetadata)) input = boundedRecord(outerMetadata)
+  if (hasEnumerableOwnProperty(metadata)) input = boundedRecord(metadata)
+
+  const resources = readRecordValue(permission, 'resources') || readRecordValue(properties, 'resources')
+  const save = readRecordValue(permission, 'save') || readRecordValue(properties, 'save')
+  const source = boundedRecord(readRecordValue(permission, 'source') || readRecordValue(properties, 'source'))
+  if (Array.isArray(resources)) {
+    input.resources = resources.slice(0, RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)
+  }
+  if (Array.isArray(save)) {
+    input.save = save.slice(0, RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)
+  }
+  if (hasEnumerableOwnProperty(source)) {
+    input.source = source
+  }
 
   return {
     id,

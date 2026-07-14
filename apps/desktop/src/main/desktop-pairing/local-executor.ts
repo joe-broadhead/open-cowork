@@ -4,7 +4,17 @@ import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 import { getSessionRecord, listSessionRecords, toRendererSession, toSessionRecord, touchSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { getClientForDirectory } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
-import { normalizeSessionInfo } from '@open-cowork/runtime-host'
+import {
+  createNativeSession,
+  findNativePermissionSession,
+  findNativeQuestionSession,
+  getNativeSession,
+  interruptNativeSession,
+  listNativePendingPermissions,
+  listNativePendingQuestions,
+  normalizeSessionInfo,
+  promptNativeSession,
+} from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
@@ -63,6 +73,71 @@ function rendererSessionFromSdk(input: {
   }
 }
 
+const MAX_NATIVE_SESSION_ANCESTRY_DEPTH = 64
+type NativeOpencodeClient = Parameters<typeof getNativeSession>[0]
+
+async function nativeSessionBelongsToRoot(
+  client: NativeOpencodeClient,
+  rootSessionId: string,
+  sourceSessionId: string,
+) {
+  if (sourceSessionId === rootSessionId) return true
+  const seen = new Set<string>([sourceSessionId])
+  let currentSessionId = sourceSessionId
+
+  for (let depth = 0; depth < MAX_NATIVE_SESSION_ANCESTRY_DEPTH; depth += 1) {
+    let session
+    try {
+      session = await getNativeSession(client, currentSessionId)
+    } catch {
+      return false
+    }
+    const parentSessionId = session.parentID
+    if (!parentSessionId) return false
+    if (parentSessionId === rootSessionId) return true
+    if (seen.has(parentSessionId)) return false
+    seen.add(parentSessionId)
+    currentSessionId = parentSessionId
+  }
+  return false
+}
+
+async function resolveNativePermissionOwner(
+  client: NativeOpencodeClient,
+  rootSessionId: string,
+  permissionId: string,
+) {
+  const sourceSessionId = findNativePermissionSession(
+    await listNativePendingPermissions(client),
+    permissionId,
+  )
+  if (
+    !sourceSessionId
+    || !await nativeSessionBelongsToRoot(client, rootSessionId, sourceSessionId)
+  ) {
+    throw new Error('Permission request is not pending for this paired session.')
+  }
+  return sourceSessionId
+}
+
+async function resolveNativeQuestionOwner(
+  client: NativeOpencodeClient,
+  rootSessionId: string,
+  requestId: string,
+) {
+  const sourceSessionId = findNativeQuestionSession(
+    await listNativePendingQuestions(client),
+    requestId,
+  )
+  if (
+    !sourceSessionId
+    || !await nativeSessionBelongsToRoot(client, rootSessionId, sourceSessionId)
+  ) {
+    throw new Error('Question request is not pending for this paired session.')
+  }
+  return sourceSessionId
+}
+
 export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): DesktopPairingCommandExecutor {
   return {
     async createSession() {
@@ -71,8 +146,9 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
       const client = getClientForDirectory(opencodeDirectory)
       if (!client) throw new Error('Runtime not started')
       const settings = getEffectiveSettings()
-      const result = await client.session.create({}, { throwOnError: true })
-      const session = normalizeSessionInfo(result.data)
+      const session = normalizeSessionInfo(await createNativeSession(client, {
+        location: { directory: opencodeDirectory },
+      }))
       if (!session) throw new Error('Runtime returned an invalid session payload')
       trackParentSession(session.id)
       const record = upsertSessionRecord(
@@ -115,13 +191,12 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
       if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
       trackParentSession(input.sessionId)
       touchSessionRecord(input.sessionId)
-      await client.session.promptAsync({
+      await promptNativeSession(client, {
         sessionID: input.sessionId,
         parts: promptParts(text, attachments),
-        ...(model ? { model } : {}),
-        ...(options.variant ? { variant: options.variant } : {}),
+        model: model ? { ...model, variant: options.variant || undefined } : null,
         agent,
-      }, { throwOnError: true })
+      })
       startSessionStatusReconciliation(input.sessionId, {
         getMainWindow: context.getMainWindow,
         onIdle: (_win, sessionId) => context.reconcileIdleSession(sessionId),
@@ -135,12 +210,18 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
     async abort(sessionId) {
       const { client } = await context.getSessionClient(sessionId)
       stopSessionStatusReconciliation(sessionId)
-      await client.session.abort({ sessionID: sessionId })
+      await interruptNativeSession(client, sessionId)
     },
 
     async respondPermission(input) {
       const { client } = await context.getSessionV2Client(input.sessionId)
-      await client.permission.reply({
+      const sourceSessionId = await resolveNativePermissionOwner(
+        client,
+        input.sessionId,
+        input.permissionId,
+      )
+      await client.v2.session.permission.reply({
+        sessionID: sourceSessionId,
         requestID: input.permissionId,
         reply: input.allowed ? 'once' : 'reject',
       }, { throwOnError: true })
@@ -148,15 +229,27 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
 
     async replyQuestion(input) {
       const { client } = await context.getSessionV2Client(input.sessionId)
-      await client.question.reply({
+      const sourceSessionId = await resolveNativeQuestionOwner(
+        client,
+        input.sessionId,
+        input.requestId,
+      )
+      await client.v2.session.question.reply({
+        sessionID: sourceSessionId,
         requestID: input.requestId,
-        answers: input.answers,
+        questionV2Reply: { answers: input.answers as string[][] },
       }, { throwOnError: true })
     },
 
     async rejectQuestion(input) {
       const { client } = await context.getSessionV2Client(input.sessionId)
-      await client.question.reject({
+      const sourceSessionId = await resolveNativeQuestionOwner(
+        client,
+        input.sessionId,
+        input.requestId,
+      )
+      await client.v2.session.question.reject({
+        sessionID: sourceSessionId,
         requestID: input.requestId,
       }, { throwOnError: true })
     },

@@ -15,6 +15,10 @@ import {
   handleMessagePartDeltaEvent,
   handleMessagePartUpdatedEvent,
   handleMessageUpdatedEvent,
+  handleNativeStepEndedEvent,
+  handleNativeTextDeltaEvent,
+  handleNativeTextEndedEvent,
+  handleNativeToolEvent,
   sweepSessionScopedMessageState,
 } from './event-message-handlers.ts'
 import { handleRuntimeSideEffectEvent } from './event-runtime-handlers.ts'
@@ -43,7 +47,7 @@ export async function subscribeToEvents(
 ) {
   const scopeLabel = directory ? ` [${directory}]` : ''
   log('events', `Subscribing to SSE event stream${scopeLabel}`)
-  const result = await client.event.subscribe({}, signal ? { signal } : undefined)
+  const result = await client.v2.event.subscribe(signal ? { signal } : undefined)
   const stream = result.stream
   log('events', `SSE stream connected${scopeLabel}`)
 
@@ -98,6 +102,64 @@ export async function subscribeToEvents(
             break
           }
 
+          case 'session.next.text.delta':
+          case 'session.next.reasoning.delta': {
+            handleNativeTextDeltaEvent(
+              win,
+              dispatchRuntimeEvent,
+              data.properties,
+              messageState,
+              data.type === 'session.next.text.delta' ? 'text' : 'reasoning',
+            )
+            break
+          }
+
+          case 'session.next.text.ended':
+          case 'session.next.reasoning.ended': {
+            handleNativeTextEndedEvent(
+              win,
+              dispatchRuntimeEvent,
+              data.properties,
+              messageState,
+              cachedModelId,
+              data.type === 'session.next.text.ended' ? 'text' : 'reasoning',
+            )
+            break
+          }
+
+          case 'session.next.tool.called':
+          case 'session.next.tool.progress':
+          case 'session.next.tool.success':
+          case 'session.next.tool.failed': {
+            handleNativeToolEvent(
+              win,
+              dispatchRuntimeEvent,
+              data.type,
+              data.properties,
+              messageState,
+              cachedModelId,
+            )
+            break
+          }
+
+          case 'session.next.step.ended': {
+            handleNativeStepEndedEvent(
+              win,
+              dispatchRuntimeEvent,
+              data.properties,
+              messageState,
+              cachedModelId,
+            )
+            handleRuntimeSideEffectEvent({
+              win,
+              type: data.type,
+              properties: data.properties,
+              dispatchRuntimeEvent,
+              getMainWindow,
+            })
+            break
+          }
+
           default:
             if (!handleRuntimeSideEffectEvent({
               win,
@@ -129,7 +191,7 @@ export async function subscribeToEvents(
 
 export async function getMcpStatus(client: OpencodeClient) {
   try {
-    const result = await client.mcp.status()
+    const result = await client.mcp.status(undefined, { throwOnError: true })
     const entries = normalizeMcpStatusEntries(result.data)
     if (entries.length === 0) {
       log('mcp', 'mcp.status() returned no data')

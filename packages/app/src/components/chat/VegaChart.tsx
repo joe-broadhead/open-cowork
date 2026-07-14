@@ -4,7 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { t } from '../../helpers/i18n'
 import { applyVegaTheme, makeInteractiveVegaSpecResponsive, type VegaChartTheme } from './vega-chart-utils'
-import { shouldHandleChartFrameMessage } from './vega-chart-message-utils'
+import { normalizeChartFrameMessage, shouldHandleChartFrameMessage } from './vega-chart-message-utils'
 import { attachmentFromArtifact, buildChartRerenderPrompt, dispatchComposerCompose } from './composer-events'
 
 interface Props {
@@ -22,13 +22,6 @@ interface Props {
   toolName?: string
   taskRunId?: string | null
 }
-
-type ChartFrameMessage =
-  | { type: 'chart-frame-ready' }
-  | { type: 'chart-ready'; requestId: number; height: number }
-  | { type: 'chart-error'; requestId: number; message: string }
-  | { type: 'chart-capture'; requestId: number; dataUrl: string }
-  | { type: 'chart-capture-error'; requestId: number; message: string }
 
 const DEFAULT_FRAME_HEIGHT = 360
 const FRAME_READY_TIMEOUT_MS = 3_000
@@ -129,7 +122,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
   }, [canCapture, specSignature])
 
   useEffect(() => {
-    const handleMessage = (event: MessageEvent<ChartFrameMessage>) => {
+    const handleMessage = (event: MessageEvent<unknown>) => {
       if (!shouldHandleChartFrameMessage({
         frameWindow: iframeRef.current?.contentWindow || null,
         eventSource: event.source,
@@ -139,8 +132,8 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
         return
       }
 
-      const data = event.data
-      if (!data || typeof data !== 'object' || !('type' in data)) return
+      const data = normalizeChartFrameMessage(event.data)
+      if (!data) return
 
       if (data.type === 'chart-frame-ready') {
         if (frameReadyTimeoutRef.current) {
@@ -190,7 +183,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
 
       if (data.type === 'chart-ready') {
         setError(null)
-        setFrameHeight(Math.max(180, data.height))
+        setFrameHeight(data.height)
         // Kick off a capture the first time we see a chart-ready that
         // matches the current spec. Debounced via capturedForSpecRef so
         // the ResizeObserver-driven repeat chart-ready messages don't

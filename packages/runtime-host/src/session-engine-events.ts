@@ -40,6 +40,7 @@ export function buildPendingApproval(sessionId: string, data: RuntimeEventData, 
   return {
     id: typeof data.id === 'string' ? data.id : `${sessionId}:approval:${nowMs}`,
     sessionId,
+    sourceSessionId: typeof data.sourceSessionId === 'string' ? data.sourceSessionId : null,
     taskRunId: data.taskRunId || null,
     tool: typeof data.tool === 'string' ? data.tool : 'permission',
     input: data.input || {},

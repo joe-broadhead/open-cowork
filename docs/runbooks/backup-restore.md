@@ -109,7 +109,7 @@ az storage blob sync --source "$OPEN_COWORK_BACKUP_DIR/object-store/" --destinat
 ```
 
 5. Start only the cloud web role.
-6. Verify `GET /healthz`, `GET /api/workspace`, `GET /api/diagnostics`, and
+6. Verify `GET /readyz`, `GET /api/workspace`, `GET /api/diagnostics`, and
    `GET /api/metrics` with an operator token.
 7. Verify session lists, durable projections, artifact metadata, BYOK metadata,
    billing state, workflow definitions, channel bindings, and delivery cursors.
@@ -145,7 +145,9 @@ are explicitly recorded.
 
 - Do not hand-edit sessions, projections, or delivery cursors during normal
   recovery. Use service APIs and retry/dead-letter controls.
-- Do not drop additive schema columns as part of rollback. Ship a forward fix.
+- Do not hand-edit baseline ledger rows or drop individual schema objects as
+  part of rollback. Restore the matching pre-release database backup or
+  recreate an empty schema, then ship a corrected clean baseline.
 - Do not resume workers until object storage is restored or checkpoint restores
   will fail and workers may regenerate divergent state.
 - Do not restore local Desktop threads into cloud automatically. Local Desktop

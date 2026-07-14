@@ -1,6 +1,18 @@
 import { writeFileSync } from 'node:fs'
+import { BlockList, isIP } from 'node:net'
+import { isAbsolute, normalize, parse } from 'node:path'
 
 const SENSITIVE_ARGS = ['adminToken', 'telegramBotToken', 'webhookSharedSecret']
+const privateOpencodeAddresses = new BlockList()
+privateOpencodeAddresses.addSubnet('10.0.0.0', 8, 'ipv4')
+privateOpencodeAddresses.addSubnet('100.64.0.0', 10, 'ipv4')
+privateOpencodeAddresses.addSubnet('127.0.0.0', 8, 'ipv4')
+privateOpencodeAddresses.addSubnet('169.254.0.0', 16, 'ipv4')
+privateOpencodeAddresses.addSubnet('172.16.0.0', 12, 'ipv4')
+privateOpencodeAddresses.addSubnet('192.168.0.0', 16, 'ipv4')
+privateOpencodeAddresses.addAddress('::1', 'ipv6')
+privateOpencodeAddresses.addSubnet('fc00::', 7, 'ipv6')
+privateOpencodeAddresses.addSubnet('fe80::', 10, 'ipv6')
 
 const args = parseArgs(process.argv.slice(2))
 if (args.help) {
@@ -22,6 +34,8 @@ const env = [
   'OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL=postgres://open_cowork:replace-with-password@127.0.0.1:5432/open_cowork_gateway',
   `OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN=${args.adminToken || 'replace-with-random-admin-token'}`,
   `OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL=${args.opencodeUrl || 'http://127.0.0.1:4096'}`,
+  `OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT=${normalizeRuntimeRoot(args.runtimeRoot || '/var/lib/open-cowork/standalone-gateway')}`,
+  'OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS=900000',
   'OPEN_COWORK_STANDALONE_GATEWAY_HOST=127.0.0.1',
   'OPEN_COWORK_STANDALONE_GATEWAY_PORT=8795',
   'OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=false',
@@ -81,8 +95,24 @@ function validateArgs(parsed) {
   if (parsed.output && !parsed.telegramBotToken) {
     throw new Error('--telegram-bot-token is required when writing a deployable env file.')
   }
+  if (parsed.output && !parsed.runtimeRoot) {
+    throw new Error('--runtime-root is required when writing a deployable env file.')
+  }
   const opencodeUrl = parsed.opencodeUrl || 'http://127.0.0.1:4096'
   assertPrivateOpencodeUrl(opencodeUrl)
+  normalizeRuntimeRoot(parsed.runtimeRoot || '/var/lib/open-cowork/standalone-gateway')
+}
+
+function normalizeRuntimeRoot(value) {
+  const input = typeof value === 'string' ? value.trim() : ''
+  if (!input || !isAbsolute(input)) {
+    throw new Error('--runtime-root must be an absolute path.')
+  }
+  const runtimeRoot = normalize(input)
+  if (runtimeRoot === parse(runtimeRoot).root) {
+    throw new Error('--runtime-root must be a dedicated directory, not a filesystem root.')
+  }
+  return runtimeRoot
 }
 
 function assertPrivateOpencodeUrl(value) {
@@ -95,14 +125,10 @@ function assertPrivateOpencodeUrl(value) {
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('--opencode-url must use http or https.')
   }
-  const host = url.hostname.toLowerCase()
+  const host = url.hostname.toLowerCase().replace(/^\[(.*)]$/, '$1')
+  const ipVersion = isIP(host)
   const privateHost = host === 'localhost'
-    || host === '127.0.0.1'
-    || host === '::1'
-    || host === '[::1]'
-    || host.startsWith('10.')
-    || host.startsWith('192.168.')
-    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    || (ipVersion > 0 && privateOpencodeAddresses.check(host, ipVersion === 4 ? 'ipv4' : 'ipv6'))
   if (!privateHost) {
     throw new Error('--opencode-url must point at loopback or private network OpenCode. Do not expose OpenCode publicly.')
   }
@@ -119,6 +145,7 @@ Options:
   --output <path>                 Write an env file with mode 0600.
   --admin-token <token>           Operator token for dashboard, metrics, diagnostics, and delivery controls.
   --opencode-url <url>            Private OpenCode URL. Defaults to http://127.0.0.1:4096.
+  --runtime-root <absolute-path>   Dedicated OpenCode workspace root. Required with --output.
   --telegram-bot-token <token>    Telegram provider token.
   --webhook-shared-secret <value> Optional signed webhook ingress secret.
   --print                         Print placeholder env to stdout.

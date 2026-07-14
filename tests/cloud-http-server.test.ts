@@ -369,13 +369,13 @@ async function waitForStreamReaderClosed(
   throw new Error('Timed out waiting for SSE reader to close.')
 }
 
-test('cloud HTTP server exposes health, config, session create/list/get, prompt, and abort', async () => {
+test('cloud HTTP server exposes liveness, config, session create/list/get, prompt, and abort', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
   try {
-    const health = await readJson(await fetch(`${baseUrl}/healthz`))
-    assert.equal(health.ok, true)
-    assert.equal(health.role, 'all-in-one')
+    const liveness = await readJson(await fetch(`${baseUrl}/livez`))
+    assert.equal(liveness.ok, true)
+    assert.equal(liveness.role, 'all-in-one')
 
     // GET / serves the UNIFIED RENDERER SPA (the one-UI-codebase cutover; the
     // bespoke website is gone), not a server-rendered website shell. This needs
@@ -2852,6 +2852,7 @@ test('cloud HTTP server readiness fails closed when no readiness callback is con
   try {
     const live = await readJson(await fetch(`${baseUrl}/livez`))
     assert.equal(live.ok, true)
+    assert.equal((await fetch(`${baseUrl}/healthz`)).status, 404)
 
     const response = await fetch(`${baseUrl}/readyz`)
     assert.equal(response.status, 503)
@@ -2876,7 +2877,7 @@ test('cloud HTTP server returns machine-readable rate-limit and auth-backoff res
   })
   const baseUrl = await fixture.server.listen()
   try {
-    assert.equal((await fetch(`${baseUrl}/healthz`)).status, 200)
+    assert.equal((await fetch(`${baseUrl}/livez`)).status, 200)
     assert.equal((await fetch(`${baseUrl}/api/config`)).status, 401)
     const authBlocked = await fetch(`${baseUrl}/api/config`)
     assert.equal(authBlocked.status, 429)
@@ -5520,26 +5521,26 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(ungrantedProviderEventCompleteByRecordedBinding.status, 404)
 
-    const legacyProviderEventClaim = store.claimChannelProviderEvent({
+    const unscopedProviderEventClaim = store.claimChannelProviderEvent({
       orgId: org.orgId,
       provider: 'telegram',
       providerInstanceId: 'telegram-prod',
       externalWorkspaceId: 'bot-1',
-      providerEventId: 'provider-event-legacy-complete',
+      providerEventId: 'provider-event-unscoped-complete',
       eventType: 'message',
-      claimedBy: 'gateway-legacy',
+      claimedBy: 'gateway-unscoped',
       ttlMs: 30_000,
-      metadata: { providerMessageId: 'legacy-message' },
+      metadata: { providerMessageId: 'unscoped-message' },
     })
-    const legacyProviderEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${legacyProviderEventClaim.event.eventId}/complete`, {
+    const unscopedProviderEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${unscopedProviderEventClaim.event.eventId}/complete`, {
       method: 'POST',
       headers: gatewayOnlyHeaders,
       body: JSON.stringify({
-        claimedBy: 'gateway-legacy',
+        claimedBy: 'gateway-unscoped',
         status: 'processed',
       }),
     })
-    assert.equal(legacyProviderEventComplete.status, 200)
+    assert.equal(unscopedProviderEventComplete.status, 404)
 
     const wrongWorkspacePrompt = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
       method: 'POST',
@@ -6054,7 +6055,7 @@ test('cloud HTTP server attaches request ids and emits observability records', a
   const baseUrl = await fixture.server.listen()
 
   try {
-    const response = await fetch(`${baseUrl}/healthz`, {
+    const response = await fetch(`${baseUrl}/livez`, {
       headers: { 'x-request-id': 'request-1' },
     })
     assert.equal(response.status, 200)
@@ -6066,7 +6067,7 @@ test('cloud HTTP server attaches request ids and emits observability records', a
     assert.equal((metrics[0] as Record<string, unknown>).name, 'cloud.http.server.duration_ms')
     assert.equal((spans[0] as Record<string, unknown>).name, 'cloud.http.request')
     assert.equal(((logs[0] as Record<string, unknown>).attributes as Record<string, unknown>).request_id, 'request-1')
-    assert.equal(((logs[0] as Record<string, unknown>).attributes as Record<string, unknown>)['url.path'], '/healthz')
+    assert.equal(((logs[0] as Record<string, unknown>).attributes as Record<string, unknown>)['url.path'], '/livez')
   } finally {
     await fixture.server.close()
   }
@@ -6099,9 +6100,9 @@ test('cloud HTTP server exposes operator-scoped Prometheus metrics', async () =>
   const baseUrl = await fixture.server.listen()
 
   try {
-    const health = await fetch(`${baseUrl}/healthz`)
-    assert.equal(health.status, 200)
-    await health.text()
+    const liveness = await fetch(`${baseUrl}/livez`)
+    assert.equal(liveness.status, 200)
+    await liveness.text()
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     const metrics = await fetch(`${baseUrl}/api/metrics`)
@@ -6160,9 +6161,9 @@ test('cloud HTTP server metrics require operator-scoped API token access', async
       headers: { authorization: 'Bearer worker-token' },
     })).status, 200)
 
-    const health = await fetch(`${baseUrl}/healthz`)
-    assert.equal(health.status, 200)
-    await health.text()
+    const liveness = await fetch(`${baseUrl}/livez`)
+    assert.equal(liveness.status, 200)
+    await liveness.text()
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     const metrics = await fetch(`${baseUrl}/api/metrics`, {
@@ -6475,6 +6476,17 @@ test('cloud HTTP OIDC browser login redirects through callback and issues sessio
   const baseUrl = await fixture.server.listen()
 
   try {
+    if (browserRendererBuildExists()) {
+      const shell = await (await fetch(`${baseUrl}/`)).text()
+      const bootstrapMatch = shell.match(/<script id="cowork-bootstrap" type="application\/json">([\s\S]*?)<\/script>/)
+      assert.ok(bootstrapMatch, 'renderer shell carries its public bootstrap')
+      const bootstrap = JSON.parse(bootstrapMatch[1] || '{}') as Record<string, unknown>
+      assert.deepEqual(Object.keys(bootstrap).sort(), ['authRequired', 'sessionEventTypes'])
+      assert.equal(bootstrap.authRequired, true)
+      assert.equal(Array.isArray(bootstrap.sessionEventTypes), true)
+      assert.doesNotMatch(JSON.stringify(bootstrap), /cookie|secret|tenant|provider/i)
+    }
+
     const login = await fetch(`${baseUrl}/auth/login?returnTo=/cloud`, { redirect: 'manual' })
     assert.equal(login.status, 302)
     assert.equal(login.headers.get('location'), 'https://auth.example.test/authorize?state=state-1')

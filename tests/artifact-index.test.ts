@@ -424,6 +424,7 @@ test('local artifact index lists persisted artifacts without hydrating sessions'
       indexLocalSessionArtifactsFromView({
         sessionId: `session-${index}`,
         sessionTitle: `Session ${index}`,
+        tasks: [],
         view: sessionViewWithArtifacts([{
           id: `session-${index}:tool-${index}:/tmp/report-${index}.md`,
           toolId: `tool-${index}`,

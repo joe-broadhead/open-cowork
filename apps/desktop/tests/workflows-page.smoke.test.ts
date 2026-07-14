@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
+import { setWorkflowDatabaseForTests } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 function seedWorkflow(dataRoot: string) {
@@ -9,51 +10,7 @@ function seedWorkflow(dataRoot: string) {
   const id = randomUUID()
   const now = new Date().toISOString()
   try {
-    db.exec(`
-      pragma journal_mode = WAL;
-      create table if not exists workflow_meta (
-        key text primary key,
-        value text not null
-      );
-      create table if not exists workflows (
-        id text primary key,
-        title text not null,
-        instructions text not null,
-        agent_name text not null,
-        skill_names_json text not null,
-        tool_ids_json text not null,
-        steps_json text not null default '[]',
-        status text not null,
-        project_directory text,
-        draft_session_id text,
-        triggers_json text not null,
-        created_at text not null,
-        updated_at text not null,
-        next_run_at text,
-        last_run_at text,
-        latest_run_id text,
-        latest_run_status text,
-        latest_run_session_id text,
-        latest_run_summary text
-      );
-      create table if not exists workflow_runs (
-        id text primary key,
-        workflow_id text not null,
-        session_id text,
-        trigger_type text not null,
-        trigger_payload_json text,
-        status text not null,
-        title text not null,
-        summary text,
-        error text,
-        created_at text not null,
-        started_at text,
-        finished_at text
-      );
-      create index if not exists idx_workflow_runs_workflow on workflow_runs(workflow_id, created_at);
-      create index if not exists idx_workflows_due on workflows(status, next_run_at);
-    `)
-    db.prepare('insert into workflow_meta (key, value) values (?, ?)').run('schema_version', '1')
+    setWorkflowDatabaseForTests(db)
     db.prepare(`
       insert into workflows (
         id,
@@ -87,6 +44,7 @@ function seedWorkflow(dataRoot: string) {
     )
     return id
   } finally {
+    setWorkflowDatabaseForTests(null)
     db.close()
   }
 }

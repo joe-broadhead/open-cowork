@@ -5,7 +5,12 @@ import { createRequire } from 'node:module'
 
 import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
 import { ControlPlaneQuotaExceededError } from '@open-cowork/cloud-server/control-plane-store'
-import { CLOUD_CONTROL_PLANE_MIGRATIONS } from '@open-cowork/cloud-server/postgres-schema'
+import {
+  CLOUD_CONTROL_PLANE_MIGRATIONS,
+  CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
+  CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
+} from '@open-cowork/cloud-server/postgres-schema'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
@@ -132,6 +137,85 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
       assert.deepEqual(migrations?.map((migration) => migration.id), EXPECTED_MIGRATION_APPLY_ORDER)
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
+    }
+  })
+})
+
+test('real Postgres cloud baseline refuses untracked product tables before ledger mutation', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withIsolatedPostgresSchema(async (connectionString) => {
+    const pool = pgPool(connectionString)
+    try {
+      await pool.query('CREATE TABLE cloud_tenants (tenant_id text PRIMARY KEY)')
+      await assert.rejects(
+        () => createPostgresControlPlaneStore({ connectionString, pool: pool as never }),
+        /Refusing to apply the clean Cloud control-plane baseline[\s\S]*Recreate an empty Cloud schema/,
+      )
+      const result = await pool.query(
+        `SELECT to_regclass('cloud_schema_migrations') AS ledger,
+                to_regclass('cloud_tenants') AS domain_table`,
+      ) as { rows: Array<{ ledger: string | null, domain_table: string | null }> }
+      assert.equal(result.rows[0]?.ledger, null)
+      assert.equal(result.rows[0]?.domain_table, 'cloud_tenants')
+    } finally {
+      await pool.end()
+    }
+  })
+})
+
+test('real Postgres cloud baseline rejects ledger-only schema drift', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withIsolatedPostgresSchema(async (connectionString) => {
+    const pool = pgPool(connectionString)
+    try {
+      await pool.query(`CREATE TABLE cloud_schema_migrations (
+        id text PRIMARY KEY,
+        applied_at timestamptz NOT NULL
+      )`)
+      await pool.query(
+        `INSERT INTO cloud_schema_migrations (id, applied_at) VALUES ($1, now()), ($2, now())`,
+        [CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID, CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID],
+      )
+      await assert.rejects(
+        () => createPostgresControlPlaneStore({ connectionString, pool: pool as never }),
+        /required production tables are missing/,
+      )
+      const result = await pool.query('SELECT count(*)::int AS count FROM cloud_schema_migrations') as {
+        rows: Array<{ count: number }>
+      }
+      assert.equal(result.rows[0]?.count, 2)
+    } finally {
+      await pool.end()
+    }
+  })
+})
+
+test('real Postgres cloud baseline repairs a missing current concurrent index despite its ledger row', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withIsolatedPostgresSchema(async (connectionString) => {
+    const pool = pgPool(connectionString)
+    const indexName = CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES[0]!
+    try {
+      await createPostgresControlPlaneStore({ connectionString, pool: pool as never })
+      assert.match(indexName, /^[a-z0-9_]+$/)
+      await pool.query(`DROP INDEX "${indexName}"`)
+
+      await createPostgresControlPlaneStore({ connectionString, pool: pool as never })
+
+      const result = await pool.query(
+        `SELECT i.indisvalid AS valid
+         FROM pg_class c
+         JOIN pg_index i ON i.indexrelid = c.oid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = current_schema() AND c.relname = $1`,
+        [indexName],
+      ) as { rows: Array<{ valid: boolean }> }
+      assert.equal(result.rows[0]?.valid, true)
+    } finally {
+      await pool.end()
     }
   })
 })

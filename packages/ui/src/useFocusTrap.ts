@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 
 // Traps keyboard focus inside a container while it's mounted. Use for
 // modal dialogs, slide-over panels, and destructive-confirmation
@@ -32,6 +32,8 @@ const FOCUSABLE_SELECTOR = [
 export type FocusTrapOptions = {
   onEscape?: () => void
   active?: boolean
+  /** Override the element restored on teardown when the opening control is transient. */
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
@@ -56,6 +58,7 @@ export function useFocusTrap(
   const previousActive = useRef<HTMLElement | null>(null)
   const active = options?.active !== false
   const onEscape = options?.onEscape
+  const returnFocusRef = options?.returnFocusRef
 
   useEffect(() => {
     if (!active) return
@@ -108,15 +111,15 @@ export function useFocusTrap(
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      const previous = previousActive.current
-      if (previous && typeof previous.focus === 'function') {
+      const returnTarget = returnFocusRef?.current || previousActive.current
+      if (returnTarget && typeof returnTarget.focus === 'function') {
         // Guard against restoring focus to a detached node (e.g. the
         // trigger button itself was unmounted by the same interaction
         // that closed the modal).
-        if (document.contains(previous)) {
-          previous.focus()
+        if (document.contains(returnTarget)) {
+          returnTarget.focus()
         }
       }
     }
-  }, [active, containerRef, onEscape])
+  }, [active, containerRef, onEscape, returnFocusRef])
 }

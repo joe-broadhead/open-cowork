@@ -1,6 +1,14 @@
-import { normalizeSessionInfo, normalizeSessionMessages, normalizeSessionStatuses, type NormalizedSessionMessage } from './opencode-adapter.js'
+import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from './opencode-adapter.js'
+import {
+  getNativeSession,
+  listNativeActiveSessionIds,
+  listNativePendingPermissions,
+  listNativePendingQuestions,
+  listNativeSessions,
+  listNativeSessionMessages,
+} from './opencode-v2.js'
 import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString } from '@open-cowork/shared'
-import type { OpencodeClient, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
+import type { OpencodeClient, PermissionV2Request, QuestionV2Request } from '@opencode-ai/sdk/v2'
 import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir } from './runtime.js'
 import { getBrandName } from './config-loader-core.js'
@@ -21,15 +29,15 @@ import {
   type TaskStatus,
 } from './session-history-task-binding.js'
 
-type QuestionListResult = { data?: QuestionRequest[] }
-type PermissionListResult = { data?: PermissionRequest[] }
+type QuestionListResult = { data?: QuestionV2Request[] }
+type PermissionListResult = { data?: PermissionV2Request[] }
 
 async function listPendingQuestions(client: OpencodeClient): Promise<QuestionListResult> {
-  return client.question.list(undefined, { throwOnError: true })
+  return { data: await listNativePendingQuestions(client) }
 }
 
 async function listPendingPermissions(client: OpencodeClient): Promise<PermissionListResult> {
-  return client.permission.list(undefined, { throwOnError: true })
+  return { data: await listNativePendingPermissions(client) }
 }
 
 type SessionSyncOptions = {
@@ -64,7 +72,6 @@ export type SessionHistoryViewIndexHandler = (input: {
 }) => void | Promise<void>
 
 const CHILD_SNAPSHOT_PREFETCH_CONCURRENCY = 8
-const CHILD_GRAPH_DISCOVERY_CONCURRENCY = 8
 
 type ChildSnapshot = { messages: unknown[]; todos: unknown[] }
 
@@ -137,40 +144,6 @@ export function createBoundedChildSnapshotLoader(options: {
     load(id: string) {
       return ensure(id)
     },
-  }
-}
-
-function createAsyncLimiter(concurrency: number) {
-  const limit = Math.max(1, Math.floor(concurrency))
-  const queue: Array<() => void> = []
-  let active = 0
-
-  const acquire = async () => {
-    if (active < limit) {
-      active += 1
-      return
-    }
-    await new Promise<void>((resolve) => {
-      queue.push(() => {
-        active += 1
-        resolve()
-      })
-    })
-  }
-
-  const release = () => {
-    active -= 1
-    const next = queue.shift()
-    if (next) next()
-  }
-
-  return async function runLimited<T>(task: () => Promise<T>): Promise<T> {
-    await acquire()
-    try {
-      return await task()
-    } finally {
-      release()
-    }
   }
 }
 
@@ -257,7 +230,8 @@ function isChildQuestion(sessionId: string, question: PendingQuestion) {
 }
 
 function isChildApproval(sessionId: string, approval: PendingApproval | Omit<PendingApproval, 'order'>) {
-  return approval.sessionId !== sessionId || Boolean(approval.taskRunId?.startsWith('child:'))
+  return Boolean(approval.sourceSessionId && approval.sourceSessionId !== sessionId)
+    || Boolean(approval.taskRunId?.startsWith('child:'))
 }
 
 function dropApprovalOrder(approval: PendingApproval): Omit<PendingApproval, 'order'> {
@@ -307,9 +281,14 @@ function normalizePendingApprovals(
       return {
         sourceSessionId,
         id: readString(approval.id) || '',
-        permission: readString(approval.permission) || 'permission',
+        permission: readString(approval.action) || readString(approval.permission) || 'permission',
         tool: readString(approval.tool),
-        metadata: asRecord(approval.metadata),
+        metadata: {
+          ...asRecord(approval.metadata),
+          ...(Array.isArray(approval.resources) ? { resources: approval.resources } : {}),
+          ...(Array.isArray(approval.save) ? { save: approval.save } : {}),
+          ...(Object.keys(asRecord(approval.source)).length > 0 ? { source: asRecord(approval.source) } : {}),
+        },
       }
     })
     .filter((approval) => Boolean(
@@ -320,6 +299,7 @@ function normalizePendingApprovals(
     .map((approval) => ({
       id: approval.id,
       sessionId,
+      sourceSessionId: approval.sourceSessionId,
       taskRunId: approval.sourceSessionId !== sessionId
         ? `child:${approval.sourceSessionId}`
         : null,
@@ -451,34 +431,34 @@ export function createSessionHistoryService(
   async function loadChildSessionsRecursive(
     client: OpencodeClient,
     parentSessionId: string,
-    seen = new Set<string>(),
-    runChildrenRequest = createAsyncLimiter(CHILD_GRAPH_DISCOVERY_CONCURRENCY),
+    directory: string,
   ): Promise<{ children: ChildSessionRecord[]; complete: boolean }> {
-    seen.add(parentSessionId)
-
-    const childrenResult = await runChildrenRequest(() => client.session.children({ sessionID: parentSessionId })).catch((err) => {
+    const sessions = await listNativeSessions(client, { directory }).catch((err) => {
       logHistoryError('session:messages children', parentSessionId, err)
       return null
     })
-    if (!childrenResult) return { children: [], complete: false }
-
-    const directChildren = readRecordArray({ value: readResponseData(childrenResult) }, 'value')
-      .map((entry) => normalizeChildSessionRecord(entry, parentSessionId))
-      .filter((entry): entry is ChildSessionRecord => Boolean(entry))
-      .filter((entry) => {
-        if (seen.has(entry.id)) return false
-        seen.add(entry.id)
-        return true
-      })
-
-    const nestedChildren = await Promise.all(
-      directChildren.map(async (child) => loadChildSessionsRecursive(client, child.id, seen, runChildrenRequest)),
-    )
-
-    return {
-      children: directChildren.concat(nestedChildren.flatMap((entry) => entry.children)),
-      complete: nestedChildren.every((entry) => entry.complete),
+    if (!sessions) return { children: [], complete: false }
+    const byParent = new Map<string, ChildSessionRecord[]>()
+    for (const entry of sessions) {
+      const parentID = entry.parentID
+      if (!parentID) continue
+      const child = normalizeChildSessionRecord(entry, parentID)
+      if (!child) continue
+      const existing = byParent.get(parentID)
+      if (existing) existing.push(child)
+      else byParent.set(parentID, [child])
     }
+    const children: ChildSessionRecord[] = []
+    const seen = new Set<string>([parentSessionId])
+    const queue = [...(byParent.get(parentSessionId) || [])]
+    while (queue.length > 0) {
+      const child = queue.shift()
+      if (!child || seen.has(child.id)) continue
+      seen.add(child.id)
+      children.push(child)
+      queue.push(...(byParent.get(child.id) || []))
+    }
+    return { children, complete: true }
   }
 
   async function loadSessionHistory(sessionId: string, options: LoadSessionHistoryOptions = {}) {
@@ -494,18 +474,17 @@ export function createSessionHistoryService(
         permissionResult,
         sessionInfoResult,
       ] = await Promise.all([
-        client.session.messages({
-          sessionID: sessionId,
-        }, {
-          throwOnError: true,
-        }),
-        client.session.todo({ sessionID: sessionId }).catch((err) => {
+        listNativeSessionMessages(client, sessionId),
+        // OpenCode 1.17.20 has no native `/api/session/:id/todo` equivalent.
+        // Keep its current classic `/session/:id/todo` API because omitting it
+        // would break todo reopen parity; this is an explicit native-v2 gap.
+        client.session.todo({ sessionID: sessionId }, { throwOnError: true }).catch((err) => {
           logHistoryError('session:messages todo', sessionId, err)
           return { data: [] }
         }),
-        client.session.status().catch((err) => {
+        listNativeActiveSessionIds(client).catch((err) => {
           logHistoryError('session:messages status', sessionId, err)
-          return { data: {} }
+          return null as Set<string> | null
         }),
         deps.listPendingQuestions(questionClient).then((result) => ({
           complete: true,
@@ -524,25 +503,28 @@ export function createSessionHistoryService(
         // Pull SDK-owned session fields (summary, revert, parentID) so the
         // sidebar chip + header linkage stay in sync with what OpenCode knows
         // without needing an extra round-trip from the renderer.
-        client.session.get({ sessionID: sessionId }).catch((err) => {
+        getNativeSession(client, sessionId).catch((err) => {
           logHistoryError('session:messages get', sessionId, err)
-          return { data: null }
+          return null
         }),
       ])
 
-      const rootMessages = normalizeSessionMessages(rootMessagesResult.data)
+      const rootMessages = normalizeSessionMessages(rootMessagesResult)
       const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
       const childGraph = includeChildGraph
         ? await loadChildSessionsRecursive(
             client,
             sessionId,
-            new Set<string>(),
-            createAsyncLimiter(CHILD_GRAPH_DISCOVERY_CONCURRENCY),
+            record?.opencodeDirectory || getRuntimeHomeDir(),
           )
         : { children: [], complete: true }
       const children = childGraph.children
-      const statuses = normalizeSessionStatuses(readResponseData(statusResult))
       const descendantSessionIds = new Set([sessionId, ...children.map((child) => child.id)])
+      const statuses = Object.fromEntries(
+        Array.from(descendantSessionIds, (id) => [id, {
+          type: statusResult ? (statusResult.has(id) ? 'busy' : 'idle') : null,
+        }]),
+      )
       const questions = normalizePendingQuestions(readResponseData(questionResult.result), sessionId, descendantSessionIds)
       const approvals = normalizePendingApprovals(readResponseData(permissionResult.result), sessionId, descendantSessionIds)
       const cachedModelId = deps.getCachedModelId()
@@ -552,18 +534,15 @@ export function createSessionHistoryService(
         concurrency: CHILD_SNAPSHOT_PREFETCH_CONCURRENCY,
         load: async (childId) => {
           const [result, childTodoResult] = await Promise.all([
-            client.session.messages({
-              sessionID: childId,
-            }, {
-              throwOnError: true,
-            }),
-            client.session.todo({ sessionID: childId }).catch((err) => {
+            listNativeSessionMessages(client, childId),
+            // Same explicit native-v2 capability gap as the root todo load.
+            client.session.todo({ sessionID: childId }, { throwOnError: true }).catch((err) => {
               logHistoryError('session:messages child todo', childId, err)
               return { data: [] }
             }),
           ])
           return {
-            messages: normalizeSessionMessages(result.data),
+            messages: normalizeSessionMessages(result),
             todos: readRecordArray({ value: readResponseData(childTodoResult) }, 'value'),
           }
         },
@@ -592,7 +571,7 @@ export function createSessionHistoryService(
           modelId: latestModeledItem.modelId || null,
         })
       }
-      const sessionInfo = normalizeSessionInfo(sessionInfoResult?.data)
+      const sessionInfo = normalizeSessionInfo(sessionInfoResult)
       if (sessionInfo) {
         let title = sessionInfo.title
         if (isDefaultSdkSessionTitle(title)) {
@@ -600,7 +579,11 @@ export function createSessionHistoryService(
             || fallbackSessionTitleFromHistory(rootMessages)
           if (fallbackTitle) {
             try {
-              await client.session.update({ sessionID: sessionId, title: fallbackTitle })
+              // Session V2 has no title/update endpoint in 1.17.20.
+              await client.session.update(
+                { sessionID: sessionId, title: fallbackTitle },
+                { throwOnError: true },
+              )
               title = fallbackTitle
               log('session', `Auto-renamed ${shortSessionId(sessionId)} from default SDK title`)
             } catch (err) {
@@ -701,9 +684,10 @@ export function createSessionHistoryService(
       if (!progressive) {
         try {
           const { client, record } = await deps.getSessionClient(sessionId)
+          // Session V2 has no diff endpoint in 1.17.20.
           const diffResult = await client.session.diff({
             sessionID: sessionId,
-          }).catch((err) => {
+          }, { throwOnError: true }).catch((err) => {
             logHistoryError('session:diff summary', sessionId, err)
             return { data: [] }
           })

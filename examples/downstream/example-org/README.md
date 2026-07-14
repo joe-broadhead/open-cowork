@@ -55,13 +55,15 @@ audited file:
 - `cloudDesktop` pins the desktop app to the configured cloud org.
 - `gateway.productMode=cloud_channel` makes this a Cloud Channel Gateway, not
   a Standalone Team Gateway runtime.
-- `gateway.providers` controls headless channel bindings; `gateway.branding`,
-  `gateway.cloud`, and `gateway.server` control the gateway label, cloud URL,
-  and public URL.
+- `gateway.providers` controls headless channel bindings; `gateway.branding`
+  and `gateway.server` control the gateway label, server, and public URL.
 
-Secrets are deliberately not hardcoded. Gateway service tokens and channel
-credentials are referenced with `{env:...}` placeholders listed in
-`allowedEnvPlaceholders`; Kubernetes, Compose, or a VPS process manager should
-supply those values from the provider secret manager. The separate
+Secrets are deliberately not hardcoded. Channel credentials are referenced
+with `{env:...}` placeholders listed in `allowedEnvPlaceholders`; the Gateway
+service token and cloud connection are deployment-only environment settings.
+Set `OPEN_COWORK_CLOUD_BASE_URL`, `OPEN_COWORK_GATEWAY_SERVICE_TOKEN`, and
+`OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS` in Kubernetes, Compose, or the
+VPS process manager from the provider secret manager. File-backed Gateway
+cloud connection fields are intentionally rejected. The separate
 `gateway-values.yaml` file shows the equivalent Helm wiring when operators
 prefer chart values over the shared config file.

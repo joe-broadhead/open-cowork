@@ -47,6 +47,8 @@ for (const phrase of [
   'backup',
   'retention',
   'OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS',
+  'OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT',
+  'OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS',
 ]) {
   if (!standaloneDocs.includes(phrase)) throw new Error(`Standalone Gateway docs must mention: ${phrase}`)
 }
@@ -68,6 +70,8 @@ function assertPublicSafeStandaloneEnv(contents) {
   for (const variable of [
     'OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=false',
     'OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS=',
+    'OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT=/var/lib/open-cowork/standalone-gateway',
+    'OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS=900000',
   ]) {
     if (!contents.includes(variable)) {
       throw new Error(`deploy/standalone-gateway/standalone.env.example must include ${variable}`)

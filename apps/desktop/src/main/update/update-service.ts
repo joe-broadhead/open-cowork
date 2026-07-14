@@ -37,7 +37,7 @@ let availableUpdateVersion: string | null = null
 let downloadedUpdateVersion: string | null = null
 
 interface UpdateInstallCapabilityResource {
-  schemaVersion?: number
+  schemaVersion?: 2
   signedInstallEligible: boolean
   feedConfigured: boolean
   releaseSourceKind?: string
@@ -114,9 +114,9 @@ function sourceErrorCapability(
 function normalizeEmbeddedCapability(value: unknown): UpdateInstallCapabilityResource | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
-  if (record.schemaVersion !== 1 && record.schemaVersion !== 2) return null
+  if (record.schemaVersion !== 2) return null
   return {
-    schemaVersion: typeof record.schemaVersion === 'number' ? record.schemaVersion : undefined,
+    schemaVersion: 2,
     signedInstallEligible: record.signedInstallEligible === true,
     feedConfigured: record.feedConfigured === true,
     releaseSourceKind: typeof record.releaseSourceKind === 'string' ? record.releaseSourceKind : undefined,
@@ -326,6 +326,7 @@ async function getUpdateInstallContext(options: UpdateServiceOptions = {}): Prom
       fetchImpl: options.fetchImpl,
       getAuthState: options.getAuthState,
       isPackaged: options?.isPackaged ?? (electronApp?.isPackaged === true),
+      platform: options.platform ?? process.platform,
       refreshGoogleAccessToken: options.refreshGoogleAccessToken,
     })
   } catch (error) {

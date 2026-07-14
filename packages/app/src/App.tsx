@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
-import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionComposerPreferences, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionComposerPreferences, SessionInfo, SessionPromptOptions, WorkflowRun } from '@open-cowork/shared'
 import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
-import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
 import { AppShellNotices } from './components/layout/AppShellNotices'
 import { Toaster } from './components/ui/Toaster'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
-import { HomePage } from './components/HomePage'
 import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-types'
 import { appHashFor, parseAppHash } from './browser-url-routing'
 import {
@@ -26,23 +24,13 @@ import {
   type ViewTransitionDocument,
 } from './app-helpers'
 import { PaletteFallback, RouteFallback } from './components/layout/RouteFallback'
+import { AppRoutes } from './components/layout/AppRoutes'
 import { isDesktopRuntime } from './runtime-env'
 import type { WorkflowNavigationTarget } from './components/workflows/WorkflowsPage'
 import type { CapabilityNavigationTarget } from './components/capabilities/CapabilitiesPage'
 
-const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
-const ProjectsBoardPage = lazy(() => import('./components/projects/ProjectsBoardPage').then((m) => ({ default: m.ProjectsBoardPage })))
-const KnowledgePage = lazy(() => import('./components/studio/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
-const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })))
-const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
-const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
-const HealthCenterPage = lazy(() => import('./components/health/HealthCenterPage').then((m) => ({ default: m.HealthCenterPage })))
-const AdminPage = lazy(() => import('./components/admin/AdminPage').then((m) => ({ default: m.AdminPage })))
-const StudioApprovalsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioApprovalsPage })))
-const StudioArtifactsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioArtifactsPage })))
-const StudioChannelsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioChannelsPage })))
-const PrimitiveGallery = lazy(() => import('./components/ui/PrimitiveGallery').then((m) => ({ default: m.PrimitiveGallery })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
+const StatusBar = lazy(() => import('./components/layout/StatusBar').then((m) => ({ default: m.StatusBar })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { useAppGlobalEvents } from './hooks/useAppGlobalEvents'
@@ -113,6 +101,7 @@ export function App() {
   const [previewNoticeDismissed, setPreviewNoticeDismissed] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
+  const [settingsChecked, setSettingsChecked] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<AppView>(initialAppView)
@@ -125,6 +114,8 @@ export function App() {
   const [workflowNavigationTarget, setWorkflowNavigationTarget] = useState<WorkflowNavigationTarget | null>(null)
   const [capabilityNavigationTarget, setCapabilityNavigationTarget] = useState<CapabilityNavigationTarget | null>(null)
   const initialBrowserHashRef = useRef(typeof window === 'undefined' ? '' : window.location.hash)
+  const mainContentRef = useRef<HTMLElement>(null)
+  const previousViewRef = useRef<AppView>(view)
   const [bootChatDeepLinkPending, setBootChatDeepLinkPending] = useState(() => {
     if (!browserUrlRoutingEnabled()) return false
     const parsed = parseAppHash(initialBrowserHashRef.current, { devMode: UI_PRIMITIVES_ENABLED })
@@ -153,6 +144,20 @@ export function App() {
     }
     apply()
   }, [config?.features])
+
+  // SPA navigation does not trigger the browser's native document-focus reset.
+  // Move focus to the main landmark only when the app-level view actually
+  // changes; ordinary state updates must leave the user's current control alone.
+  useEffect(() => {
+    const previousView = previousViewRef.current
+    previousViewRef.current = view
+    if (previousView === view) return
+    mainContentRef.current?.focus({ preventScroll: true })
+  }, [view])
+
+  const focusMainContent = useCallback(() => {
+    mainContentRef.current?.focus({ preventScroll: true })
+  }, [])
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
@@ -212,7 +217,15 @@ export function App() {
     runtimeError,
     refreshRuntimeState,
     handleRuntimeRestart,
-  } = useRuntimeHealth(loadSessions, reportAppError)
+  } = useRuntimeHealth(
+    loadSessions,
+    reportAppError,
+    authChecked
+      && Boolean(config)
+      && (!config?.auth.enabled || authenticated)
+      && settingsChecked
+      && !needsSetup,
+  )
 
   const createAndActivateSession = useCallback(async (directory?: string, options?: SessionPromptOptions): Promise<SessionInfo | null> => {
     try {
@@ -311,10 +324,20 @@ export function App() {
     if (action.routeKey === 'workflow' || action.routeKey === 'workflow-run') {
       const workflowId = action.routeParams.workflowId
       if (workflowId) {
-        setWorkflowNavigationTarget({
-          workflowId,
-          runId: action.routeKey === 'workflow-run' ? action.routeParams.runId || null : null,
-        })
+        const runId = action.routeKey === 'workflow-run' ? action.routeParams.runId || null : null
+        const value = action.value
+        const exactRun = runId
+          && value
+          && typeof value === 'object'
+          && 'id' in value
+          && value.id === runId
+          && 'workflowId' in value
+          && value.workflowId === workflowId
+          ? value as WorkflowRun
+          : null
+        setWorkflowNavigationTarget(action.routeKey === 'workflow-run'
+          ? { workflowId, runId, run: exactRun }
+          : { workflowId, runId: null })
       }
       navigateView('playbooks')
       return
@@ -580,17 +603,22 @@ export function App() {
 
     async function bootstrap() {
       try {
-        // Session records live in the local registry on disk, so we can
-        // populate the thread list the moment auth/config resolves — no
-        // need to wait for the OpenCode runtime to boot (2–3s later).
-        void loadSessions()
-
-        const [appConfig, authState, settings, appMetadata] = await Promise.all([
-          window.coworkApi.app.config(),
+        const [authState, appMetadata] = await Promise.all([
           window.coworkApi.auth.status(),
-          window.coworkApi.settings.get(),
           window.coworkApi.app.metadata(),
         ])
+        if (cancelled) return
+        // Browser config is principal-protected. Resolve auth first so the
+        // browser adapter can return its minimal public signed-out config
+        // without making a second unauthorized request.
+        const appConfig = await window.coworkApi.app.config()
+        if (cancelled) return
+
+        // Protected settings and session APIs must not run until the server has
+        // established an authenticated principal. In the browser build the SPA
+        // itself is public, while these APIs correctly return 401 pre-login.
+        const signedOut = appConfig.auth.enabled && !authState.authenticated
+        const settings = signedOut ? null : await window.coworkApi.settings.get()
         if (cancelled) return
 
         setBootstrapError(null)
@@ -608,9 +636,15 @@ export function App() {
         applyAppearancePreferences()
         setAuthenticated(authState.authenticated)
         setUserEmail(authState.email || '')
+        setSettingsChecked(Boolean(settings))
         // The desktop connect-a-model setup is desktop-only; the cloud manages
         // providers/models server-side, so the browser build never gates on it.
-        setNeedsSetup(isDesktopRuntime() && !isSetupComplete(settings, appConfig))
+        setNeedsSetup(Boolean(settings && isDesktopRuntime() && !isSetupComplete(settings, appConfig)))
+        if (!signedOut) {
+          // Session records do not depend on the OpenCode runtime being ready,
+          // so populate the thread list as soon as auth/config/settings resolve.
+          void loadSessions()
+        }
       } catch (err) {
         const message = 'Could not finish loading the app shell. Restart the app and try again.'
         setBootstrapError(message)
@@ -625,13 +659,6 @@ export function App() {
       cancelled = true
     }
   }, [loadSessions, reportAppError])
-
-  useEffect(() => {
-    if (!config || !authChecked) return
-    if (config.auth.enabled && !authenticated) return
-    if (needsSetup) return
-    void refreshRuntimeState()
-  }, [authChecked, authenticated, config, needsSetup, refreshRuntimeState])
 
   const authReady = authChecked && !!config && !(config.auth.enabled && !authenticated) && !needsSetup
   const adminAccess = useAdminAccessState(authReady)
@@ -678,13 +705,19 @@ export function App() {
       <>
         <LoginScreen
           brandName={config.branding.name}
-          onLoggedIn={(email) => {
-            setAuthenticated(true)
-            setUserEmail(email)
-            window.coworkApi.settings.get().then((settings) => {
+          onLoggedIn={async (email) => {
+            try {
+              const settings = await window.coworkApi.settings.get()
+              setAuthenticated(true)
+              setUserEmail(email)
               setNeedsSetup(isDesktopRuntime() && !isSetupComplete(settings, config))
-              if (!isDesktopRuntime() || isSetupComplete(settings, config)) void refreshRuntimeState()
-            }).catch((err) => reportAppError('Could not load settings after sign-in. Try again.', err, 'login'))
+              setSettingsChecked(true)
+              void loadSessions()
+            } catch (err) {
+              const message = 'Could not load settings after sign-in. Try again.'
+              reportAppError(message, err, 'login')
+              throw new Error(message, { cause: err })
+            }
           }}
         />
         <Toaster />
@@ -723,6 +756,18 @@ export function App() {
   const showPreviewNotice = Boolean(metadata?.preview && !previewNoticeDismissed)
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
+      <a
+        href="#main-content"
+        className="app-skip-link"
+        onClick={(event) => {
+          // Browser builds use the hash for SPA routing, so keep the skip link
+          // from replacing the current route while still exposing a real href.
+          event.preventDefault()
+          focusMainContent()
+        }}
+      >
+        {t('accessibility.skipToMain', 'Skip to main content')}
+      </a>
       {isDesktopRuntime() ? <TitleBar view={view} /> : null}
       <AppShellNotices
         metadata={metadata}
@@ -748,107 +793,40 @@ export function App() {
           collapsed={sidebarCollapsed}
           onExpandSidebar={ensureSidebarVisible}
         />
-        <main className="flex-1 flex flex-col min-h-0 min-w-0">
+        <main
+          ref={mainContentRef}
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 flex flex-col min-h-0 min-w-0"
+        >
           <ViewErrorBoundary resetKey={view} onBackHome={() => navigateView('home')}>
-            {view === 'home' && (
-              <HomePage
-                brandName={config.branding.name}
-                homeBranding={config.branding.home}
-                onStartThread={startThreadFromHome}
-                onOpenThread={(sessionId) => void openExistingThread(sessionId)}
-                onNavigate={navigateView}
-              />
-            )}
-            {view === 'chat' && (
-              <Suspense fallback={<RouteFallback />}>
-                <ChatView onNavigate={navigateView} />
-              </Suspense>
-            )}
-            {view === 'projects' && (
-              <Suspense fallback={<RouteFallback />}>
-                <ProjectsBoardPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
-              </Suspense>
-            )}
-            {view === 'knowledge' && (
-              <Suspense fallback={<RouteFallback />}>
-                <KnowledgePage />
-              </Suspense>
-            )}
-            {view === 'approvals' && (
-              <Suspense fallback={<RouteFallback />}>
-                <StudioApprovalsPage onOpenChat={() => navigateView('chat')} onOpenHome={() => navigateView('home')} />
-              </Suspense>
-            )}
-            {view === 'playbooks' && (
-              <Suspense fallback={<RouteFallback />}>
-                <WorkflowsPage
-                  onOpenThread={(sessionId) => void openExistingThread(sessionId)}
-                  initialTarget={workflowNavigationTarget}
-                  onInitialTargetHandled={() => setWorkflowNavigationTarget(null)}
-                />
-              </Suspense>
-            )}
-            {view === 'team' && (
-              <Suspense fallback={<RouteFallback />}>
-                <AgentsPage
-                  initialDraft={agentBuilderSeed}
-                  onClearDraft={() => setAgentBuilderSeed(null)}
-                  onClose={() => navigateView('chat')}
-                  onOpenCapabilities={() => navigateView('tools')}
-                  onTestAgent={(agentName, directory) => void testAgentInNewThread(agentName, directory)}
-                  onStartAgentChat={(agentName, directory) => void startPrimaryCustomAgentThread(agentName, directory)}
-                />
-              </Suspense>
-            )}
-            {view === 'channels' && (
-              <Suspense fallback={<RouteFallback />}>
-                <StudioChannelsPage onOpenSettings={openSidebarSettings} />
-              </Suspense>
-            )}
-            {view === 'tools' && (
-              <Suspense fallback={<RouteFallback />}>
-                <CapabilitiesPage
-                  onClose={() => navigateView('chat')}
-                  initialTarget={capabilityNavigationTarget}
-                  onInitialTargetHandled={() => setCapabilityNavigationTarget(null)}
-                  onCreateAgent={(seed) => {
-                    setAgentBuilderSeed(seed)
-                    navigateView('team')
-                  }}
-                />
-              </Suspense>
-            )}
-            {view === 'artifacts' && (
-              <Suspense fallback={<RouteFallback />}>
-                <StudioArtifactsPage onOpenChat={() => navigateView('chat')} />
-              </Suspense>
-            )}
-            {view === 'health' && (
-              <Suspense fallback={<RouteFallback />}>
-                <HealthCenterPage />
-              </Suspense>
-            )}
-            {view === 'admin' && adminAccessible && (
-              <Suspense fallback={<RouteFallback label={t('admin.loading', 'Loading admin controls…')} />}>
-                <AdminPage />
-              </Suspense>
-            )}
-            {view === 'admin' && !adminAccessible && (
-              <RouteFallback
-                label={adminAccess.checked
-                  ? t('admin.unavailable', 'Admin is not available for this account.')
-                  : t('admin.checkingAccess', 'Checking admin access…')}
-              />
-            )}
-            {view === 'ui-primitives' && (
-              <Suspense fallback={<RouteFallback />}>
-                <PrimitiveGallery />
-              </Suspense>
-            )}
+            <AppRoutes
+              view={view}
+              config={config}
+              adminAccess={adminAccess}
+              agentBuilderSeed={agentBuilderSeed}
+              workflowNavigationTarget={workflowNavigationTarget}
+              capabilityNavigationTarget={capabilityNavigationTarget}
+              onStartThread={startThreadFromHome}
+              onOpenThread={openExistingThread}
+              onNavigate={navigateView}
+              onOpenSettings={openSidebarSettings}
+              onClearAgentBuilderSeed={() => setAgentBuilderSeed(null)}
+              onTestAgent={testAgentInNewThread}
+              onStartAgentChat={startPrimaryCustomAgentThread}
+              onCreateAgent={(seed) => {
+                setAgentBuilderSeed(seed)
+                navigateView('team')
+              }}
+              onWorkflowNavigationHandled={() => setWorkflowNavigationTarget(null)}
+              onCapabilityNavigationHandled={() => setCapabilityNavigationTarget(null)}
+            />
           </ViewErrorBoundary>
         </main>
       </div>
-      <StatusBar />
+      <Suspense fallback={<RouteFallback compact />}>
+        <StatusBar />
+      </Suspense>
       {showCommandPalette && (
         <ViewErrorBoundary
           resetKey="command-palette"

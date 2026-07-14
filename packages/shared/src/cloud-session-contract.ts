@@ -1,6 +1,12 @@
 export const CLOUD_SESSION_PROJECTION_CONTRACT_VERSION = 1
 export const CLOUD_PROJECTION_SYNC_CONTRACT_VERSION = 1
 export const CLOUD_AUTOMATION_EVENT_STREAM_VERSION = 1
+export const CLOUD_SESSION_SSE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024
+// Leave room for the event envelope and another queued event within the
+// connection-level SSE cap. The projection applies this as an aggregate budget
+// across all inline tool attachments in one tool call.
+export const CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES = CLOUD_SESSION_SSE_MAX_BUFFERED_BYTES / 2
+export const CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES = 128
 
 export type CloudSessionProjectionFacet =
   | 'messages'

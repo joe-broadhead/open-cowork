@@ -302,7 +302,7 @@ same session list, projection, and SSE contracts.
 
 ### Cloud Web Workbench readiness gates
 
-The browser workbench has its own release gates because `/healthz` only proves
+The browser workbench has its own release gates because `/livez` only proves
 the server is alive. Cloud Web is the browser build of the desktop renderer, so
 its UI is covered by the renderer suite, while the cloud control-plane behavior
 is covered by the cloud HTTP and continuation suites. Run these before provider
@@ -772,7 +772,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal-only token for operational endpoints such as scheduler tick probes. Keep it in a platform secret store. |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF` | Optional env secret ref for the internal operational token. |
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
-| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `closed` remains a backward-compatible alias for `disabled`; `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. |
+| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. Invalid values fail startup validation. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
 | `OPEN_COWORK_CLOUD_ORG_MODE` | Deployment topology: `multi-org` (default) preserves multi-tenant behaviour; `single-org` funnels every principal into one auto-bootstrapped org and skips tenant switching, for single-tenant self-host installs. |
 | `OPEN_COWORK_CLOUD_SINGLE_ORG_ID` | Org/tenant id used as the single org when `OPEN_COWORK_CLOUD_ORG_MODE=single-org` (default `default`). Ignored in `multi-org` mode. |
@@ -1020,7 +1020,9 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_ROOT` | Filesystem root for cloud runtime working data (logs, ephemeral workspaces, and the filesystem object-store adapter). Compose references set `/data/open-cowork-cloud`. |
 | `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER` | Deployment tier that gates production safety checks: `local` for demos, `public_production` for hosted deployments (rejects insecure auth, weak secrets, ephemeral storage, and other unsafe defaults). |
 | `OPEN_COWORK_CLOUD_CORS_ORIGIN` | Single allowed CORS origin for the cloud HTTP/SSE API. Leave unset for same-origin browser access; set it when a separate first-party origin must call the API. |
-| `OPEN_COWORK_CLOUD_RUN_MIGRATIONS` | Defaults to `true` so the web/worker boot path applies embedded schema migrations. Set `false` for change-managed rollouts that run `pnpm cloud:migrate` as a separate step. |
+| `OPEN_COWORK_CLOUD_RUN_MIGRATIONS` | Defaults to `true` for local/self-host development. Public production fails closed unless this is explicitly `false`; run the exact pinned image's `cloud:migrate:start` entrypoint separately with a short-lived migrator credential. |
+| `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE` | Migrator-only PostgreSQL role name for the least-privilege runtime role that should receive the application DML grants. Set only on the separately credentialed `cloud:migrate:start` job, together with `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL`; do not set either variable on long-running roles. |
+| `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL` | Migrator-only PostgreSQL login/IAM principal that receives membership in `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE`. The principal must already exist; the migration job validates that neither identity is privileged before granting runtime access. |
 | `OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE` | Explicit operator acknowledgement that non-durable control-plane/object storage is acceptable. Required to start a `public_production` tier on ephemeral storage; keep unset so accidental ephemeral storage fails closed. |
 | `OPEN_COWORK_CLOUD_LIVENESS_PORT` | Optional dedicated port for a minimal liveness server (separate from the main HTTP port). `0`/unset disables it; the main `/livez` route remains available. |
 | `OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES` | Maximum cached OpenCode runtimes a worker keeps warm (default `100`). Bounds worker memory under many concurrent sessions. |
@@ -1157,7 +1159,6 @@ browser is not the only protection.
 - `GET /readyz` reports dependency readiness for the control plane, object
   store, secret adapter, billing adapter, auth config, and role-specific worker
   dependencies. Kubernetes readiness probes should use this route.
-- `GET /healthz` remains available as a backward-compatible liveness route.
 - `GET /api/runtime/status` reports the active role/profile, whether this
   process can execute runtime commands, and whether commands are handled inline
   or by durable worker polling.
