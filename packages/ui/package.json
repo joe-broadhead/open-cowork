@@ -41,8 +41,8 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "corepack pnpm --filter @open-cowork/shared build && tsc",
-    "test": "corepack pnpm build && node test/public-import-smoke.mjs",
+    "build": "pnpm --filter @open-cowork/shared build && tsc",
+    "test": "pnpm build && node test/public-import-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

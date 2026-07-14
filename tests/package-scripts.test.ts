@@ -72,52 +72,52 @@ function sourceWorkspacePackageDirs(): string[] {
 
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
   assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
-    'corepack pnpm build:shared',
-    'corepack pnpm --filter @open-cowork/runtime-host build',
-    'corepack pnpm design-tokens:build',
+    'pnpm build:shared',
+    'pnpm --filter @open-cowork/runtime-host build',
+    'pnpm design-tokens:build',
     'node scripts/ensure-electron-binary.mjs',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test')), [
-    'corepack pnpm test:prepare',
-    'corepack pnpm --filter=./packages/* test',
-    'corepack pnpm --filter=./mcps/* test',
-    'corepack pnpm --filter @open-cowork/gateway test',
-    'corepack pnpm --filter @open-cowork/standalone-gateway test',
+    'pnpm test:prepare',
+    'pnpm --filter=./packages/* test',
+    'pnpm --filter=./mcps/* test',
+    'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test:coverage:node')), [
-    'corepack pnpm test:prepare',
-    'corepack pnpm --filter=./packages/* test',
-    'corepack pnpm --filter=./mcps/* test',
-    'corepack pnpm --filter @open-cowork/gateway test',
-    'corepack pnpm --filter @open-cowork/standalone-gateway test',
+    'pnpm test:prepare',
+    'pnpm --filter=./packages/* test',
+    'pnpm --filter=./mcps/* test',
+    'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/run-workspace-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test:coverage')), [
-    'corepack pnpm test:coverage:node',
-    'corepack pnpm test:coverage:renderer',
+    'pnpm test:coverage:node',
+    'pnpm test:coverage:renderer',
     'node scripts/coverage-summary.mjs --check',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test:windows-prepackage')), [
-    'corepack pnpm test:prepare',
-    'corepack pnpm --filter @open-cowork/cloud-client build',
+    'pnpm test:prepare',
+    'pnpm --filter @open-cowork/cloud-client build',
     'node scripts/check-preload-channels.mjs',
     'node scripts/run-node-tests.mjs tests/artifact-index.test.ts tests/session-artifact-access.test.ts tests/ipc-handler-registration.test.ts tests/desktop-after-pack.test.ts tests/update-service.test.ts tests/update-check-version.test.ts tests/update-release-source.test.ts tests/release-windows-signing-mode.test.ts tests/runtime-environment.test.ts tests/packaged-executable-preflight.test.ts tests/windows-signing-targets.test.ts',
   ])
 
-  assert.equal(requireScript('test:coverage:renderer'), 'corepack pnpm --filter @open-cowork/app test:coverage:renderer')
+  assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/app test:coverage:renderer')
 })
 
 test('root lint script runs all release gate checks', () => {
   assert.deepEqual(splitScriptSteps(requireScript('lint')), [
     'eslint . --max-warnings 0',
-    'corepack pnpm design-tokens:check',
+    'pnpm design-tokens:check',
     'node scripts/lint.mjs',
     'node scripts/check-design-token-usage.mjs',
     'node scripts/check-import-cycles.mjs',
@@ -221,21 +221,21 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:smoke'), 'node scripts/smoke-deployment.mjs')
   assert.equal(requireScript('deploy:smoke:strict'), 'node scripts/strict-deployment-smoke.mjs')
   assert.deepEqual(splitScriptSteps(requireScript('deploy:desktop:smoke')), [
-    'corepack pnpm build:shared',
+    'pnpm build:shared',
     'node --no-warnings --experimental-strip-types scripts/desktop-cloud-sync-smoke.mjs',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('deploy:gateway:smoke')), [
-    'corepack pnpm build:gateway',
+    'pnpm build:gateway',
     'node scripts/gateway-cloud-smoke.mjs',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('deploy:standalone-gateway:smoke')), [
-    'corepack pnpm build:standalone-gateway',
+    'pnpm build:standalone-gateway',
     'node apps/standalone-gateway/dist/main.js smoke',
   ])
   assert.equal(requireScript('deploy:standalone-gateway:validate'), 'node scripts/validate-standalone-gateway.mjs')
   assert.deepEqual(splitScriptSteps(requireScript('deploy:continuation:smoke')), [
-    'corepack pnpm build:gateway',
-    'corepack pnpm build:shared',
+    'pnpm build:gateway',
+    'pnpm build:shared',
     'node --no-warnings --experimental-strip-types scripts/cloud-continuation-smoke.mjs',
   ])
   assert.equal(requireScript('deploy:gcp:preflight'), 'node scripts/gcp-reference-preflight.mjs')
@@ -256,36 +256,36 @@ test('root deployment scripts expose provider smoke gates', () => {
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {
-  assert.equal(requireScript('build:desktop'), 'corepack pnpm --filter @open-cowork/desktop build')
-  assert.equal(requireScript('build:mcps'), 'corepack pnpm --filter=./mcps/* build')
-  assert.equal(requireScript('build:packages'), 'corepack pnpm --workspace-concurrency=1 --filter=./packages/* build')
-  assert.equal(requireScript('build:gateway'), 'corepack pnpm --filter @open-cowork/gateway build')
-  assert.equal(requireScript('build:standalone-gateway'), 'corepack pnpm --filter @open-cowork/standalone-gateway build')
+  assert.equal(requireScript('build:desktop'), 'pnpm --filter @open-cowork/desktop build')
+  assert.equal(requireScript('build:mcps'), 'pnpm --filter=./mcps/* build')
+  assert.equal(requireScript('build:packages'), 'pnpm --workspace-concurrency=1 --filter=./packages/* build')
+  assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
+  assert.equal(requireScript('build:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway build')
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
-    'corepack pnpm build:packages',
-    'corepack pnpm design-tokens:build',
-    'corepack pnpm build:mcps',
-    'corepack pnpm build:gateway',
-    'corepack pnpm build:standalone-gateway',
-    'corepack pnpm --filter @open-cowork/desktop build',
+    'pnpm build:packages',
+    'pnpm design-tokens:build',
+    'pnpm build:mcps',
+    'pnpm build:gateway',
+    'pnpm build:standalone-gateway',
+    'pnpm --filter @open-cowork/desktop build',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('dist')), [
-    'corepack pnpm build',
-    'corepack pnpm --filter @open-cowork/desktop dist',
+    'pnpm build',
+    'pnpm --filter @open-cowork/desktop dist',
   ])
 })
 
 test('desktop direct scripts prepare generated tokens and shared UI artifacts', () => {
-  assert.equal(requireScript('ui:build', desktopPackageJson), 'corepack pnpm --filter @open-cowork/ui build')
+  assert.equal(requireScript('ui:build', desktopPackageJson), 'pnpm --filter @open-cowork/ui build')
   assert.deepEqual(splitScriptSteps(requireScript('deps:build', desktopPackageJson)), [
-    'corepack pnpm tokens:build',
-    'corepack pnpm ui:build',
+    'pnpm tokens:build',
+    'pnpm ui:build',
   ])
-  assert.equal(requireScript('predev', desktopPackageJson), 'corepack pnpm deps:build')
-  assert.equal(requireScript('prebuild', desktopPackageJson), 'corepack pnpm deps:build')
-  assert.equal(requireScript('pretypecheck', desktopPackageJson), 'corepack pnpm deps:build')
+  assert.equal(requireScript('predev', desktopPackageJson), 'pnpm deps:build')
+  assert.equal(requireScript('prebuild', desktopPackageJson), 'pnpm deps:build')
+  assert.equal(requireScript('pretypecheck', desktopPackageJson), 'pnpm deps:build')
 })
 
 test('shared renderer package owns the renderer test + browser build scripts', () => {
@@ -300,28 +300,28 @@ test('shared renderer package owns the renderer test + browser build scripts', (
 
 test('root typecheck script covers package, MCP, gateway, and desktop surfaces', () => {
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
-    'corepack pnpm build:packages',
-    'corepack pnpm design-tokens:build',
-    'corepack pnpm typecheck:cloud-server',
-    'corepack pnpm typecheck:mcps',
-    'corepack pnpm typecheck:gateway',
-    'corepack pnpm typecheck:standalone-gateway',
-    'corepack pnpm --filter @open-cowork/desktop build:electron',
-    'corepack pnpm --filter @open-cowork/desktop typecheck',
+    'pnpm build:packages',
+    'pnpm design-tokens:build',
+    'pnpm typecheck:cloud-server',
+    'pnpm typecheck:mcps',
+    'pnpm typecheck:gateway',
+    'pnpm typecheck:standalone-gateway',
+    'pnpm --filter @open-cowork/desktop build:electron',
+    'pnpm --filter @open-cowork/desktop typecheck',
   ])
 
-  assert.equal(requireScript('typecheck:cloud-server'), 'corepack pnpm --filter @open-cowork/cloud-server typecheck')
-  assert.equal(requireScript('typecheck:mcps'), 'corepack pnpm --filter=./mcps/* typecheck')
-  assert.equal(requireScript('typecheck:gateway'), 'corepack pnpm --filter @open-cowork/gateway typecheck')
-  assert.equal(requireScript('typecheck:standalone-gateway'), 'corepack pnpm --filter @open-cowork/standalone-gateway typecheck')
+  assert.equal(requireScript('typecheck:cloud-server'), 'pnpm --filter @open-cowork/cloud-server typecheck')
+  assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
+  assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
+  assert.equal(requireScript('typecheck:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway typecheck')
 })
 
 test('packaged e2e script fails before smoke discovery without a packaged executable', () => {
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged')), [
-    'corepack pnpm --filter @open-cowork/desktop test:e2e:packaged',
+    'pnpm --filter @open-cowork/desktop test:e2e:packaged',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional')), [
-    'corepack pnpm --filter @open-cowork/desktop test:e2e:packaged:optional',
+    'pnpm --filter @open-cowork/desktop test:e2e:packaged:optional',
   ])
 
   // The packaged-executable guard must stay first so a missing packaged build
@@ -329,13 +329,13 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
   // by smoke-helpers) are rebuilt and smoke discovery begins.
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged', desktopPackageJson)), [
     'node ../../scripts/require-packaged-executable.mjs',
-    'corepack pnpm --dir ../.. build:shared',
-    'corepack pnpm --dir ../.. --filter @open-cowork/runtime-host build',
+    'pnpm --dir ../.. build:shared',
+    'pnpm --dir ../.. --filter @open-cowork/runtime-host build',
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional', desktopPackageJson)), [
-    'corepack pnpm --dir ../.. build:shared',
-    'corepack pnpm --dir ../.. --filter @open-cowork/runtime-host build',
+    'pnpm --dir ../.. build:shared',
+    'pnpm --dir ../.. --filter @open-cowork/runtime-host build',
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
 

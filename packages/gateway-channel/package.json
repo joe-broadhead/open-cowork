@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "corepack pnpm --filter @open-cowork/gateway-channel build && node --no-warnings --experimental-strip-types --test src/*.test.ts"
+    "test": "pnpm --filter @open-cowork/gateway-channel build && node --no-warnings --experimental-strip-types --test src/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

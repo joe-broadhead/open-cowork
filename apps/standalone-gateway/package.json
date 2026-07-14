@@ -9,9 +9,9 @@
     "open-cowork-gateway-standalone": "./dist/main.js"
   },
   "scripts": {
-    "build": "corepack pnpm --filter @open-cowork/shared build && corepack pnpm --filter @open-cowork/gateway-channel build && corepack pnpm --filter @open-cowork/gateway-provider-telegram build && corepack pnpm --filter @open-cowork/gateway-provider-webhook build && corepack pnpm --filter @open-cowork/gateway-testing build && tsc",
-    "typecheck": "corepack pnpm --filter @open-cowork/shared build && corepack pnpm --filter @open-cowork/gateway-channel build && corepack pnpm --filter @open-cowork/gateway-provider-telegram build && corepack pnpm --filter @open-cowork/gateway-provider-webhook build && corepack pnpm --filter @open-cowork/gateway-testing build && tsc --noEmit",
-    "test": "corepack pnpm build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
+    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-testing build && tsc",
+    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-testing build && tsc --noEmit",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
     "start": "node dist/main.js serve",
     "doctor": "node dist/main.js doctor",
     "identity": "node dist/main.js identity",

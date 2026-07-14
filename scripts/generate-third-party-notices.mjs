@@ -199,7 +199,7 @@ function resolvePnpmInvocation() {
   if (npmExecPath && /(?:^|[/\\])pnpm(?:\.cjs)?$/i.test(npmExecPath)) {
     return { command: process.execPath, args: [npmExecPath] }
   }
-  return { command: 'corepack', args: ['pnpm'] }
+  return { command: 'pnpm', args: [] }
 }
 
 const pnpmInvocation = resolvePnpmInvocation()
