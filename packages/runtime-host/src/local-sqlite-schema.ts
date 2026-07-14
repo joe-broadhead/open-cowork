@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 
 type LocalSqliteTableShape = {
   name: string
@@ -19,7 +19,18 @@ export type LocalSqliteSchemaDefinition = {
 type SqliteSchemaObject = {
   type?: unknown
   name?: unknown
+  tableName?: unknown
+  sql?: unknown
 }
+
+type CanonicalSqliteSchemaObject = {
+  type: string
+  name: string
+  tableName: string
+  sql: string
+}
+
+const canonicalSchemaCache = new Map<string, readonly CanonicalSqliteSchemaObject[]>()
 
 class LocalSqliteSchemaError extends Error {
   constructor(message: string) {
@@ -34,11 +45,70 @@ function quoteIdentifier(value: string) {
 
 function currentSchemaObjects(db: DatabaseSync) {
   return db.prepare(`
-    select type, name
+    select type, name, tbl_name as tableName, sql
     from sqlite_schema
     where name not like 'sqlite_%'
     order by type, name
   `).all() as SqliteSchemaObject[]
+}
+
+function normalizeSchemaSql(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+}
+
+function canonicalObject(entry: SqliteSchemaObject): CanonicalSqliteSchemaObject | null {
+  if (
+    typeof entry.type !== 'string'
+    || typeof entry.name !== 'string'
+    || typeof entry.tableName !== 'string'
+  ) return null
+  return {
+    type: entry.type,
+    name: entry.name,
+    tableName: entry.tableName,
+    sql: normalizeSchemaSql(entry.sql),
+  }
+}
+
+function canonicalBaselineObjects(definition: LocalSqliteSchemaDefinition) {
+  const cacheKey = JSON.stringify([
+    definition.storeName,
+    definition.baselineSql,
+    definition.tables.map((entry) => entry.name),
+    definition.indexes,
+  ])
+  const cached = canonicalSchemaCache.get(cacheKey)
+  if (cached) return cached
+  const baseline = new DatabaseSync(':memory:')
+  try {
+    baseline.exec(definition.baselineSql)
+    const objects = currentSchemaObjects(baseline)
+      .map(canonicalObject)
+      .filter((entry): entry is CanonicalSqliteSchemaObject => Boolean(entry))
+    const expectedTables = [...definition.tables].map((entry) => entry.name).sort()
+    const actualTables = objects
+      .filter((entry) => entry.type === 'table')
+      .map((entry) => entry.name)
+      .sort()
+    const expectedIndexes = [...definition.indexes].sort()
+    const actualIndexes = objects
+      .filter((entry) => entry.type === 'index')
+      .map((entry) => entry.name)
+      .sort()
+    if (
+      JSON.stringify(expectedTables) !== JSON.stringify(actualTables)
+      || JSON.stringify(expectedIndexes) !== JSON.stringify(actualIndexes)
+    ) {
+      throw new Error(
+        `The ${definition.storeName} baseline manifest is inconsistent with its DDL.`,
+      )
+    }
+    const frozen = Object.freeze(objects.map((entry) => Object.freeze(entry)))
+    canonicalSchemaCache.set(cacheKey, frozen)
+    return frozen
+  } finally {
+    baseline.close()
+  }
 }
 
 function schemaError(
@@ -90,43 +160,45 @@ function readDeclaredVersion(
 }
 
 function assertCurrentShape(
-  db: DatabaseSync,
   definition: LocalSqliteSchemaDefinition,
   objects: readonly SqliteSchemaObject[],
 ) {
-  const tableNames = new Set(
-    objects
-      .filter((entry) => entry.type === 'table' && typeof entry.name === 'string')
-      .map((entry) => entry.name as string),
-  )
-  const indexNames = new Set(
-    objects
-      .filter((entry) => entry.type === 'index' && typeof entry.name === 'string')
-      .map((entry) => entry.name as string),
-  )
+  // Build the expected catalog in an isolated in-memory database. This keeps
+  // validation read-only for the durable database while making the baseline
+  // DDL itself the sole source of truth for column order/type/nullability,
+  // defaults, PK/FK/CHECK constraints, and exact index expressions/predicates.
+  const expected = canonicalBaselineObjects(definition)
+  const actual = objects
+    .map(canonicalObject)
+    .filter((entry): entry is CanonicalSqliteSchemaObject => Boolean(entry))
+  const expectedByIdentity = new Map(expected.map((entry) => [`${entry.type}:${entry.name}`, entry]))
+  const actualByIdentity = new Map(actual.map((entry) => [`${entry.type}:${entry.name}`, entry]))
 
-  for (const table of definition.tables) {
-    if (!tableNames.has(table.name)) {
-      throw schemaError(definition, `the current schema table ${table.name} is missing.`)
-    }
-    const rows = db.prepare(`pragma table_info(${quoteIdentifier(table.name)})`).all() as Array<{ name?: unknown }>
-    const columns = rows
-      .map((row) => row.name)
-      .filter((name): name is string => typeof name === 'string')
+  const unexpected = actual.filter((entry) => !expectedByIdentity.has(`${entry.type}:${entry.name}`))
+  if (unexpected.length > 0) {
+    throw schemaError(
+      definition,
+      `the database contains unexpected schema objects (${unexpected.slice(0, 8).map((entry) => `${entry.type} ${entry.name}`).join(', ')}).`,
+    )
+  }
+  const missing = expected.filter((entry) => !actualByIdentity.has(`${entry.type}:${entry.name}`))
+  if (missing.length > 0) {
+    throw schemaError(
+      definition,
+      `the current schema objects are missing (${missing.slice(0, 8).map((entry) => `${entry.type} ${entry.name}`).join(', ')}).`,
+    )
+  }
+  for (const expectedObject of expected) {
+    const actualObject = actualByIdentity.get(`${expectedObject.type}:${expectedObject.name}`)
     if (
-      columns.length !== table.columns.length
-      || columns.some((column, index) => column !== table.columns[index])
+      !actualObject
+      || actualObject.tableName !== expectedObject.tableName
+      || actualObject.sql !== expectedObject.sql
     ) {
       throw schemaError(
         definition,
-        `table ${table.name} does not match the required current columns.`,
+        `${expectedObject.type} ${expectedObject.name} does not match its canonical current definition.`,
       )
-    }
-  }
-
-  for (const index of definition.indexes) {
-    if (!indexNames.has(index)) {
-      throw schemaError(definition, `the current schema index ${index} is missing.`)
     }
   }
 }
@@ -137,7 +209,7 @@ function createBaseline(db: DatabaseSync, definition: LocalSqliteSchemaDefinitio
     db.exec(definition.baselineSql)
     db.prepare(`insert into ${quoteIdentifier(definition.metaTable)} (key, value) values (?, ?)`)
       .run(definition.versionKey, String(definition.currentVersion))
-    assertCurrentShape(db, definition, currentSchemaObjects(db))
+    assertCurrentShape(definition, currentSchemaObjects(db))
     db.exec('commit')
   } catch (error) {
     try {
@@ -173,7 +245,7 @@ export function initializeLocalSqliteSchema(
 
   try {
     readDeclaredVersion(db, definition, objects)
-    assertCurrentShape(db, definition, objects)
+    assertCurrentShape(definition, objects)
   } catch (error) {
     if (error instanceof LocalSqliteSchemaError) throw error
     throw schemaError(definition, 'the declared current schema could not be validated.')

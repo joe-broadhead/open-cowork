@@ -100,4 +100,16 @@ test('cloud workspace registry rejects cleartext non-loopback cloud URLs', () =>
     normalizeCloudWorkspaceBaseUrl('http://127.0.0.1:8787'),
     'http://127.0.0.1:8787',
   )
+  assert.equal(
+    normalizeCloudWorkspaceBaseUrl('http://127.1.2.3:8787'),
+    'http://127.1.2.3:8787',
+  )
+  assert.equal(
+    normalizeCloudWorkspaceBaseUrl('http://[::1]:8787'),
+    'http://[::1]:8787',
+  )
+  assert.throws(
+    () => normalizeCloudWorkspaceBaseUrl('http://127.attacker.example:8787'),
+    /https, except for localhost/,
+  )
 })

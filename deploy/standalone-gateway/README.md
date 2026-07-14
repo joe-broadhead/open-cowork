@@ -23,6 +23,7 @@ does not require Open Cowork Cloud.
 pnpm standalone-gateway:setup -- \
   --admin-token "$OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   --opencode-url http://127.0.0.1:4096 \
+  --runtime-root /var/lib/open-cowork/standalone-gateway \
   --telegram-bot-token "$TELEGRAM_BOT_TOKEN" \
   --output .env.standalone-gateway
 ```
@@ -47,6 +48,11 @@ pnpm --filter @open-cowork/standalone-gateway start
 ## Production Requirements
 
 - OpenCode must stay loopback/private. Never expose the OpenCode port publicly.
+- `OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT` must name a provisioned,
+  absolute, dedicated workspace directory; the Gateway does not fall back to
+  its process working directory or allow a filesystem root.
+- Keep `OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS` bounded
+  for the deployment workload; the default is 900000 (15 minutes).
 - `OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL` must point to durable Postgres.
 - Dashboard access requires `OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN`.
 - Provider webhook ingress must use shared-secret/HMAC verification.

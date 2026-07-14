@@ -19,6 +19,7 @@ test('standalone gateway setup writes deployable env without echoing secrets', (
       '--admin-token', 'gateway-admin-token',
       '--telegram-bot-token', 'telegram-bot-token',
       '--opencode-url', 'http://127.0.0.1:4096',
+      '--runtime-root', '/var/lib/open-cowork/standalone-gateway',
       '--output', output,
     ])
     assert.equal(result.status, 0, result.stderr)
@@ -48,10 +49,41 @@ test('standalone gateway setup refuses public OpenCode URLs', () => {
     '--admin-token', 'gateway-admin-token',
     '--telegram-bot-token', 'telegram-bot-token',
     '--opencode-url', 'https://opencode.example.test',
+    '--runtime-root', '/var/lib/open-cowork/standalone-gateway',
     '--output', '.env.standalone-gateway',
   ])
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /must point at loopback or private network OpenCode/)
+})
+
+test('standalone gateway setup validates literal IPv4 and IPv6 before private-range classification', () => {
+  for (const url of [
+    'http://127.1.2.3:4096',
+    'http://10.0.0.1:4096',
+    'http://172.31.0.1:4096',
+    'http://192.168.1.1:4096',
+    'http://100.64.0.1:4096',
+    'http://[::1]:4096',
+    'http://[fd00::1]:4096',
+    'http://[fe80::1]:4096',
+    'http://[::ffff:127.0.0.1]:4096',
+    'http://[::ffff:10.0.0.1]:4096',
+  ]) {
+    const result = runSetup(['--opencode-url', url, '--print'])
+    assert.equal(result.status, 0, `${url}: ${result.stderr}`)
+  }
+
+  for (const url of [
+    'https://127.attacker.example',
+    'https://10.attacker.example',
+    'https://192.168.attacker.example',
+    'https://fc-attacker.example',
+    'https://[::ffff:8.8.8.8]',
+  ]) {
+    const result = runSetup(['--opencode-url', url, '--print'])
+    assert.notEqual(result.status, 0, url)
+    assert.match(result.stderr, /must point at loopback or private network OpenCode/)
+  }
 })
 
 test('standalone gateway setup refuses to print provided secrets by default', () => {

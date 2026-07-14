@@ -290,7 +290,7 @@ export function setupIpcHandlers(
 
     log('mcp', `Auto-authenticating newly added MCP ${name}`)
     try {
-      await client.mcp.auth.authenticate({ name })
+      await client.mcp.auth.authenticate({ name }, { throwOnError: true })
       log('mcp', `OAuth complete for ${name}`)
     } catch (error) {
       logHandlerError(`custom:add-mcp auth ${name}`, error)

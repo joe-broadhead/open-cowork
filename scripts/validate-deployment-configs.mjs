@@ -1754,6 +1754,8 @@ function validateSetupHealthCenter() {
     'must point at loopback or private network OpenCode',
     'OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=false',
     'OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS=',
+    'OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT=',
+    'OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS=',
     'pnpm --filter @open-cowork/standalone-gateway doctor',
     'pnpm deploy:standalone-gateway:smoke',
   ]) {
@@ -2212,6 +2214,25 @@ function validateDocs() {
     assertNoProviderHostedUrls(path, recipe)
   }
 
+  for (const phrase of [
+    'health_port   = 8787',
+    'health_path   = "/readyz"',
+    'health_port   = 8788',
+    'health_path   = "/livez"',
+    'OPEN_COWORK_CLOUD_LIVENESS_PORT',
+    'containerPort = each.value.health_port',
+    'healthCheck = {',
+    'each.value.health_path',
+    'for_each = var.deploy_runtime_services ? local.roles : {}',
+    'resource "aws_ecs_task_definition" "migrator"',
+    'apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs',
+    'migrator_secret_env',
+  ]) {
+    assertIncludes('deploy/aws/terraform/main.tf', phrase)
+  }
+  assertIncludes('deploy/aws/terraform/README.md', 'OPEN_COWORK_CLOUD_LIVENESS_PORT=8788')
+  assertIncludes('deploy/aws/terraform/README.md', 'deploy_runtime_services=false')
+
   const gatewayAppliance = read('docs/gateway-appliance.md')
   for (const phrase of [
     'Remote Cloud',
@@ -2348,6 +2369,7 @@ function validateGcpReference() {
     'deploy/gcp/README.md',
     'deploy/gcp/gke/values.gke.yaml.example',
     'deploy/gcp/gke/external-secret.example.yaml',
+    'deploy/gcp/gke/migrate-job.example.yaml',
     'deploy/gcp/gke/managed-certificate.example.yaml',
     'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
     'deploy/gcp/smoke/README.md',
@@ -2389,6 +2411,9 @@ function validateGcpReference() {
     'pnpm deploy:continuation:smoke',
     'kubectl apply -f deploy/gcp/gke/external-secret.example.yaml',
     'kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml',
+    'gke/migrate-job.example.yaml',
+    '--database-roles=cloudsqlsuperuser',
+    'open-cowork-cloud migrations and runtime grants applied',
     'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
     'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS',
     'Rollback order',
@@ -2397,6 +2422,12 @@ function validateGcpReference() {
     if (!gcpReadme.includes(phrase)) {
       throw new Error(`deploy/gcp/README.md must include ${phrase}`)
     }
+  }
+
+  const migrationGateIndex = gcpReadme.indexOf('kubectl apply -f PRIVATE_DEPLOYMENT_REPO/migrate-job.yaml')
+  const runtimeInstallIndex = gcpReadme.indexOf('helm upgrade --install open-cowork-cloud', migrationGateIndex)
+  if (migrationGateIndex < 0 || runtimeInstallIndex <= migrationGateIndex) {
+    throw new Error('deploy/gcp/README.md must run and verify the one-shot migration Job before installing long-running Helm roles')
   }
 
   const gkeValues = read('deploy/gcp/gke/values.gke.yaml.example')
@@ -2424,10 +2455,40 @@ function validateGcpReference() {
     'cloud.google.com/neg',
     'kubernetes.io/ingress.class: gce',
     'kubernetes.io/ingress.allow-http: "false"',
+    'privateIp: true',
+    'autoIamAuthn: true',
   ]) {
     if (!gkeValues.includes(phrase)) {
       throw new Error(`deploy/gcp/gke/values.gke.yaml.example must include ${phrase}`)
     }
+  }
+
+
+  const migrationJob = read('deploy/gcp/gke/migrate-job.example.yaml')
+  for (const phrase of [
+    'kind: ServiceAccount',
+    'name: open-cowork-cloud-migrator',
+    'iam.gke.io/gcp-service-account: open-cowork-cloud-migrator@PROJECT.iam.gserviceaccount.com',
+    'kind: Job',
+    'name: open-cowork-cloud-migrate',
+    'restartPolicy: Always',
+    'gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.23.0@sha256:54e23cad9aeeedbf88ab75f993146631b878035f702b31c51885a932e0c7286c',
+    'REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud@sha256:REPLACE_WITH_CLOUD_DIGEST',
+    '--private-ip',
+    '--auto-iam-authn',
+    '--run-connection-test',
+    'apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs',
+    'OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE',
+    'open_cowork_runtime',
+    'OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL',
+    'open-cowork-cloud@PROJECT.iam',
+  ]) {
+    if (!migrationJob.includes(phrase)) {
+      throw new Error(`deploy/gcp/gke/migrate-job.example.yaml must include ${phrase}`)
+    }
+  }
+  if (/^kind: Secret$/m.test(migrationJob) || /:latest\b/.test(migrationJob)) {
+    throw new Error('deploy/gcp/gke/migrate-job.example.yaml must not carry Kubernetes Secrets or mutable latest image tags')
   }
 
   const externalSecret = read('deploy/gcp/gke/external-secret.example.yaml')

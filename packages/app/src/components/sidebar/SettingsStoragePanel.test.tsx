@@ -106,7 +106,7 @@ describe('StoragePanel', () => {
     }))
     installRendererTestCoworkApi({
       app: {
-        metadata: vi.fn(async () => ({ version: '1.0.0', preview: false })),
+        metadata: vi.fn(async () => ({ version: '1.0.0', preview: false, surface: 'desktop' as const })),
         checkUpdates: vi.fn(async () => ({
           status: 'ok',
           currentVersion: '1.0.0',

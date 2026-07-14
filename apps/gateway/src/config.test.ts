@@ -352,6 +352,19 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
     OPEN_COWORK_CLOUD_BASE_URL: 'http://cloud.example.test',
     OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: 'true',
   }).cloud.baseUrl, 'http://cloud.example.test')
+
+  const localRuntimeConfig = {
+    server: { adminToken: 'admin-token' },
+    providers: [{ kind: 'fake' as const, channelBindingId: 'fake-binding' }],
+  }
+  for (const baseUrl of ['http://127.1.2.3:8787', 'http://[::1]:8787']) {
+    assert.equal(resolveGatewayConfig(localRuntimeConfig, {
+      OPEN_COWORK_CLOUD_BASE_URL: baseUrl,
+    }).cloud.baseUrl, baseUrl)
+  }
+  assert.throws(() => resolveGatewayConfig(localRuntimeConfig, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'http://127.attacker.example:8787',
+  }), /HTTPS|ALLOW_INSECURE_HTTP/)
 })
 
 test('gateway config accepts signed bridge providers without cloud control-plane changes', () => {

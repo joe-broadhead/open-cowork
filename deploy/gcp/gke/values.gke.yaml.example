@@ -11,6 +11,7 @@ cloud:
   deploymentTier: public_production
   profile: full
   root: /data/open-cowork-cloud
+  runMigrations: false
   existingSecret: open-cowork-cloud-secrets
   auth:
     mode: oidc
@@ -62,7 +63,10 @@ cloudSqlProxy:
   instanceConnectionName: PROJECT:REGION:INSTANCE
   address: 127.0.0.1
   port: 5432
-  privateIp: false
+  privateIp: true
+  # Runtime pods use the dedicated open-cowork-cloud IAM database principal;
+  # the separately credentialed migration Job uses a different GSA/KSA pair.
+  autoIamAuthn: true
   structuredLogs: true
   runConnectionTest: true
   healthCheck:

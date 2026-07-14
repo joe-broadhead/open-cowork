@@ -40,6 +40,13 @@ describe("webhook delivery URL policy", () => {
     });
     expect(addresses).toEqual([{ address: "93.184.216.34", family: 4 }]);
   });
+
+  it("does not classify private-looking DNS prefixes as IP literals and still checks their answers", async () => {
+    const url = validateWebhookDeliveryUrl("https://127.attacker.example/gateway");
+    await expect(resolveWebhookDeliveryAddresses(url, {
+      resolveHostname: async () => [{ address: "127.0.0.1", family: 4 }],
+    })).rejects.toThrow("resolved to a private or reserved address");
+  });
 });
 
 describe("WebhookProvider", () => {

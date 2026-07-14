@@ -684,6 +684,7 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
       output: undefined,
       agent: null,
       attachments: undefined,
+      outputPaths: undefined,
       taskRunId: 'child:child-session',
       sourceSessionId: 'child-session',
     },
@@ -1654,6 +1655,44 @@ test('session.error marks child task failed without dropping lineage', () => {
       message: 'Provider terminated the child session',
     },
   }])
+})
+
+test('native child step failure remains terminal after idle settlement', () => {
+  const collector = createDispatchCollector()
+  const { win } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+  registerTaskRun({
+    id: 'task-1',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Analyze data',
+    agent: 'analyst',
+    childSessionId: 'child-session',
+    status: 'running',
+  })
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.next.step.failed',
+    properties: {
+      sessionID: 'child-session',
+      assistantMessageID: 'assistant-1',
+      error: { message: 'Provider terminated the child step' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.equal(getTaskRun('task-1')?.status, 'error')
+  assert.equal(
+    collector.events.filter((event) => (
+      (event as { data?: { type?: string } }).data?.type === 'error'
+    )).length,
+    1,
+  )
 })
 
 // The widened error extractor should surface payloads whose message lives

@@ -37,7 +37,7 @@ export type { AgentColor }
 let settingsCache: AppSettings | null = null
 let settingsSecretStorageForTests: SecretStorageAdapter | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 10
+export const SETTINGS_SCHEMA_VERSION = 1
 export const DEFAULT_WINDOW_ZOOM_FACTOR = 1
 export const MIN_WINDOW_ZOOM_FACTOR = 0.8
 export const MAX_WINDOW_ZOOM_FACTOR = 1.5

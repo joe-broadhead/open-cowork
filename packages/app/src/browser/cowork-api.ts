@@ -1184,12 +1184,8 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
     // -- runtime (status from cloud; restart/await are Electron-only) ------
     runtime: {
       status: async (): Promise<RuntimeStatus> => {
-        try {
-          const raw = await request<Partial<RuntimeStatus>>(endpoint('runtimeStatus'))
-          return { ready: Boolean(raw?.ready), error: raw?.error ?? null, ...raw }
-        } catch {
-          return { ready: true, error: null }
-        }
+        const raw = await request<Partial<RuntimeStatus>>(endpoint('runtimeStatus'))
+        return { ready: Boolean(raw?.ready), error: raw?.error ?? null, ...raw }
       },
       awaitInitialization: async (): Promise<RuntimeLoadingStatus> => ({
         phase: 'ready',
@@ -1217,7 +1213,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
 
     // -- app ---------------------------------------------------------------
     app: {
-      metadata: async (): Promise<AppMetadata> => ({ version: '0.0.0', preview: false }),
+      metadata: async (): Promise<AppMetadata> => ({ version: '0.0.0', preview: false, surface: 'browser' }),
       // The cloud /api/config returns a different shape than the renderer's
       // PublicAppConfig; default every required field (the renderer hard-reads
       // config.auth.enabled) and let the cloud response override what it provides.

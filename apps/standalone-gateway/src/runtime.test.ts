@@ -59,6 +59,7 @@ test("standalone runtime prompts private OpenCode and persists projected events"
   await runtime.handleMessage(provider, providerConfig, message("message-1", "build the thing"));
 
   assert.equal(opencode.prompts.length, 1);
+  assert.equal(opencode.prompts[0]?.admissionId, "standalone:channel:cli-standalone::event-message-1");
   assert.equal((await repository.listSessions())[0]?.status, "idle");
   const snapshot = await repository.dashboardSnapshot();
   assert.equal(snapshot.sessions[0]?.provider, "cli-standalone");
@@ -177,8 +178,8 @@ test("standalone runtime stops claiming jobs the instant the lease is inactive",
   const repository = new InMemoryStandaloneGatewayRepository();
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const runtime = createStandaloneGatewayRuntime({ repository, opencode });
-  await repository.enqueueJob({ kind: "prompt", payload: { text: "job one" } });
-  await repository.enqueueJob({ kind: "prompt", payload: { text: "job two" } });
+  await repository.enqueueJob({ kind: "prompt", payload: { text: "job one", opencodeSessionId: "oc-job-one" } });
+  await repository.enqueueJob({ kind: "prompt", payload: { text: "job two", opencodeSessionId: "oc-job-two" } });
 
   // isActive() === false (lease lost) → the claim loop breaks before touching the queue.
   assert.equal(await runtime.runDueJobs("worker-1", { isActive: () => false }), 0);
@@ -190,14 +191,58 @@ test("standalone runtime executes prompt jobs against OpenCode before completing
   const repository = new InMemoryStandaloneGatewayRepository();
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const runtime = createStandaloneGatewayRuntime({ repository, opencode });
-  await repository.enqueueJob({ kind: "prompt", payload: { text: "run the report", opencodeSessionId: "oc-existing" } });
+  const job = await repository.enqueueJob({ kind: "prompt", payload: { text: "run the report", opencodeSessionId: "oc-existing" } });
 
   assert.equal(await runtime.runDueJobs("worker-1"), 1);
 
-  assert.deepEqual(opencode.prompts, [{ opencodeSessionId: "oc-existing", text: "run the report" }]);
+  assert.deepEqual(opencode.prompts, [{
+    opencodeSessionId: "oc-existing",
+    admissionId: `standalone:job:${job.jobId}`,
+    text: "run the report",
+  }]);
   const snapshot = await repository.dashboardSnapshot();
   assert.equal(snapshot.jobs[0]?.status, "completed");
   assert.equal(snapshot.jobs[0]?.lastError, null);
+});
+
+test("standalone runtime persists a queued job session binding before prompt admission", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const session = await repository.findOrCreateSession({
+    provider: "cli-standalone",
+    providerKind: "cli",
+    channelBindingId: "cli",
+    target: { provider: "cli-standalone", providerKind: "cli", chatId: "chat-job", threadId: "thread-job" },
+    externalUserId: "user-job",
+    text: "durable job",
+  });
+  let bindingObservedBeforePrompt = false;
+  const prompts: Array<{ opencodeSessionId: string; admissionId: string }> = [];
+  const opencode: StandaloneOpenCodeAdapter = {
+    async createSession() {
+      return { opencodeSessionId: "oc-durable-job" };
+    },
+    async prompt(input) {
+      bindingObservedBeforePrompt = (await repository.getSession(session.sessionId))?.opencodeSessionId === input.opencodeSessionId;
+      prompts.push({ opencodeSessionId: input.opencodeSessionId, admissionId: input.admissionId });
+    },
+    async health() {
+      return { ok: true, detail: "ready" };
+    },
+  };
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const job = await repository.enqueueJob({
+    kind: "prompt",
+    sessionId: session.sessionId,
+    payload: { text: "durable job" },
+  });
+
+  assert.equal(await runtime.runDueJobs("worker-1"), 1);
+  assert.equal(bindingObservedBeforePrompt, true);
+  assert.deepEqual(prompts, [{
+    opencodeSessionId: "oc-durable-job",
+    admissionId: `standalone:job:${job.jobId}`,
+  }]);
+  assert.equal((await repository.getSession(session.sessionId))?.status, "idle");
 });
 
 test("standalone runtime fails prompt jobs that carry no prompt text", async () => {
@@ -308,6 +353,43 @@ test("standalone runtime records failed prompts durably", async () => {
   const snapshot = await repository.dashboardSnapshot();
   assert.equal(snapshot.sessions[0]?.status, "failed");
   assert.equal(snapshot.audits[0]?.action, "standalone.prompt.failed");
+});
+
+test("standalone runtime treats a projected terminal error as failure even when an adapter returns normally", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
+  const runtime = createStandaloneGatewayRuntime({
+    repository,
+    opencode: {
+      async createSession() {
+        return { opencodeSessionId: "oc-terminal-error" };
+      },
+      async prompt(input) {
+        await input.onEvent({
+          type: "session.error",
+          payload: { message: "terminal step failed", apiKey: "synthetic-value" },
+        });
+      },
+      async health() {
+        return { ok: true, detail: "ready" };
+      },
+    },
+  });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await assert.rejects(
+    () => runtime.handleMessage(provider, providerConfig, {
+      ...message("message-terminal", "fail in stream"),
+      target: { provider: "cli-standalone", providerKind: "cli", chatId: "chat-terminal", threadId: "thread-terminal" },
+    }),
+    /terminal step failed/,
+  );
+
+  const snapshot = await repository.dashboardSnapshot();
+  assert.equal(snapshot.sessions[0]?.status, "failed");
+  assert.equal(snapshot.audits.some((audit) => audit.action === "standalone.prompt"), false);
+  assert.equal(snapshot.audits[0]?.action, "standalone.prompt.failed");
+  assert.equal(provider.sent.length, 0);
 });
 
 test("standalone runtime records failed session creation durably", async () => {

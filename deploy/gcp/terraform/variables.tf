@@ -68,7 +68,24 @@ variable "worker_instances" {
 variable "web_allow_unauthenticated" {
   description = "Expose the web role publicly (true for OIDC-in-app auth; false behind IAP/LB)."
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "deploy_runtime_services" {
+  description = "Create long-running web/worker/scheduler services only after cloud:migrate:start has provisioned the least-privilege runtime database role. Keep false for the first infrastructure apply."
+  type        = bool
+  default     = false
+}
+
+variable "runtime_database_role" {
+  description = "NOLOGIN PostgreSQL group role created by cloud:migrate:start and granted to the runtime IAM database principal."
+  type        = string
+  default     = "open_cowork_runtime"
+
+  validation {
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.runtime_database_role))
+    error_message = "runtime_database_role must be a lowercase PostgreSQL identifier no longer than 63 characters."
+  }
 }
 
 variable "secret_ids" {

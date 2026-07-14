@@ -206,4 +206,40 @@ describe('HealthCenterPage', () => {
     expect(alert).toHaveTextContent('workspaces')
     expect(alert).toHaveTextContent('pairings')
   })
+
+  it('skips desktop-only health sources on the browser surface', async () => {
+    const runtimeInputsProbe = vi.fn(() => {
+      throw new Error('desktop runtime inputs must not be queried in the browser')
+    })
+    const pairings = vi.fn(async () => {
+      throw new Error('desktop pairings must not be queried in the browser')
+    })
+    installRendererTestCoworkApi({
+      app: {
+        metadata: vi.fn(async () => ({ version: '0.0.0', preview: false, surface: 'browser' as const })),
+        runtimeInputs: runtimeInputsProbe,
+      },
+      runtime: {
+        status: vi.fn(async () => ({ ready: true, error: null })),
+      },
+      workspace: {
+        list: vi.fn(async () => [{
+          ...workspaces[1],
+          status: 'online',
+          active: true,
+        }]),
+        support: vi.fn(async () => []),
+      },
+      desktopPairing: {
+        list: pairings,
+      },
+    })
+
+    render(<HealthCenterPage />)
+
+    expect(await screen.findByText('Acme Cloud')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(runtimeInputsProbe).not.toHaveBeenCalled()
+    expect(pairings).not.toHaveBeenCalled()
+  })
 })

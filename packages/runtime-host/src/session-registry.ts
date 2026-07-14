@@ -1,4 +1,4 @@
-import { writeFileAtomic } from '@open-cowork/shared/node'
+import { quarantineCorruptFile, writeFileAtomic } from '@open-cowork/shared/node'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
@@ -7,6 +7,8 @@ import { log } from '@open-cowork/shared/node'
 import { getRuntimeHomeDir } from './runtime.js'
 import { isSandboxWorkspaceDir } from './runtime-paths.js'
 import { normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils.js'
+
+export const SESSION_REGISTRY_SCHEMA_VERSION = 1
 
 export interface SessionRecord {
   id: string
@@ -35,6 +37,11 @@ let saveTimer: NodeJS.Timeout | null = null
 let registryWriteInProgress = false
 let registryWriteRequestedDuringWrite = false
 const SAVE_DEBOUNCE_MS = 2000
+
+type SessionRegistryFile = {
+  schemaVersion: typeof SESSION_REGISTRY_SCHEMA_VERSION
+  sessions: StoredSessionRecord[]
+}
 
 function getRegistryDir() {
   const dir = getAppDataDir()
@@ -87,18 +94,30 @@ function loadRegistryMap() {
   }
 
   try {
-    const raw = JSON.parse(readFileSync(path, 'utf-8')) as StoredSessionRecord[]
+    const raw = JSON.parse(readFileSync(path, 'utf-8')) as unknown
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('Session registry must be an object.')
+    }
+    const file = raw as Partial<SessionRegistryFile>
+    if (
+      Object.keys(file).length !== 2
+      || file.schemaVersion !== SESSION_REGISTRY_SCHEMA_VERSION
+      || !Array.isArray(file.sessions)
+    ) {
+      throw new Error('Session registry schema is not current.')
+    }
 
-    for (const item of raw || []) {
+    for (const item of file.sessions) {
       const record = normalizeStoredSessionRecord(
         item,
         normalizeOpencodeDirectory,
         toDisplayDirectory,
       )
-      if (!record) continue
+      if (!record) throw new Error('Session registry contains a non-current record.')
       next.set(record.id, record)
     }
   } catch (err: unknown) {
+    quarantineCorruptFile(path)
     log('session', `Failed to load session registry: ${err instanceof Error ? err.message : String(err)}`)
   }
 
@@ -114,7 +133,11 @@ function writeRegistryMapSnapshot(map: Map<string, SessionRecord>) {
   // session index on disk. writeFileAtomic handles tmp-suffix + fsync
   // + rename uniformly with the rest of the app's credential-bearing
   // writes.
-  writeFileAtomic(getRegistryPath(), JSON.stringify(records, null, 2), { mode: 0o600 })
+  const payload: SessionRegistryFile = {
+    schemaVersion: SESSION_REGISTRY_SCHEMA_VERSION,
+    sessions: records,
+  }
+  writeFileAtomic(getRegistryPath(), JSON.stringify(payload, null, 2), { mode: 0o600 })
 }
 
 function writeRegistryMap(map: Map<string, SessionRecord>) {

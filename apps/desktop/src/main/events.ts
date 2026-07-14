@@ -191,7 +191,7 @@ export async function subscribeToEvents(
 
 export async function getMcpStatus(client: OpencodeClient) {
   try {
-    const result = await client.mcp.status()
+    const result = await client.mcp.status(undefined, { throwOnError: true })
     const entries = normalizeMcpStatusEntries(result.data)
     if (entries.length === 0) {
       log('mcp', 'mcp.status() returned no data')

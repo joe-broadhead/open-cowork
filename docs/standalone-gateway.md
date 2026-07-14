@@ -63,8 +63,21 @@ OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true
 OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED=true
 OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN=...
 OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL=http://127.0.0.1:4096
+OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT=/var/lib/open-cowork/standalone-gateway
+OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS=900000
 OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_BOT_TOKEN=...
 ```
+
+`OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT` is required in every deployment
+mode. It must be an absolute, dedicated directory rather than a filesystem
+root. Provision it for the Gateway/OpenCode service account before startup.
+Standalone Gateway intentionally has no current-working-directory fallback:
+every native OpenCode V2 session is created at this explicit location, so a
+missing or ambiguous execution boundary fails closed.
+
+`OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_EXECUTION_TIMEOUT_MS` bounds each
+admitted native execution (15 minutes by default). On expiry, the Gateway
+interrupts the OpenCode session and releases its serialized channel/job lane.
 
 Generate a starter env file:
 
@@ -72,6 +85,7 @@ Generate a starter env file:
 pnpm standalone-gateway:setup -- \
   --admin-token "$OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   --opencode-url http://127.0.0.1:4096 \
+  --runtime-root /var/lib/open-cowork/standalone-gateway \
   --telegram-bot-token "$TELEGRAM_BOT_TOKEN" \
   --output .env.standalone-gateway
 ```

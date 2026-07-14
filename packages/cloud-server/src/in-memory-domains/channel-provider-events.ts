@@ -124,7 +124,6 @@ function providerEventMatchesChannelBindingScope(
   channelBindingIds: readonly string[] | null | undefined,
 ) {
   if (channelBindingIds === null || channelBindingIds === undefined) return true
-  if (!Object.prototype.hasOwnProperty.call(event.metadata, 'channelBindingId')) return true
   const bindingId = typeof event.metadata.channelBindingId === 'string' ? event.metadata.channelBindingId : null
   return bindingId !== null && channelBindingIds.includes(bindingId)
 }

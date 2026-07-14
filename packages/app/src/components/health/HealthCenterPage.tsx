@@ -166,11 +166,17 @@ export function HealthCenterPage() {
     setError(null)
     try {
       const failures: string[] = []
+      const { surface } = await window.coworkApi.app.metadata()
+      const hasDesktopRuntime = surface === 'desktop'
       const [runtimeResult, runtimeInputsResult, workspacesResult, pairingsResult] = await Promise.allSettled([
-        window.coworkApi.runtime.status(),
-        window.coworkApi.app.runtimeInputs(),
-        window.coworkApi.workspace.list(),
-        window.coworkApi.desktopPairing.list(),
+        Promise.resolve().then(() => window.coworkApi.runtime.status()),
+        hasDesktopRuntime
+          ? Promise.resolve().then(() => window.coworkApi.app.runtimeInputs())
+          : Promise.resolve(null),
+        Promise.resolve().then(() => window.coworkApi.workspace.list()),
+        hasDesktopRuntime
+          ? Promise.resolve().then(() => window.coworkApi.desktopPairing.list())
+          : Promise.resolve([]),
       ])
       const runtime = runtimeResult.status === 'fulfilled' ? runtimeResult.value : (failures.push('runtime status'), null)
       const runtimeInputs = runtimeInputsResult.status === 'fulfilled' ? runtimeInputsResult.value : (failures.push('runtime inputs'), null)

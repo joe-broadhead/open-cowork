@@ -12,6 +12,8 @@ import type { CloudObservabilityAdapter } from '@open-cowork/cloud-server/observ
 import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
 import type {
   CloudRuntimeAdapter,
+  CloudRuntimeEvent,
+  CloudRuntimeEventListener,
   CloudRuntimeExecutionContext,
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
@@ -277,6 +279,102 @@ test('worker-scoped runtime cache evicts least-recently-used idle runtimes', asy
     rmSync(root, { recursive: true, force: true })
   }
   assert.deepEqual(closed, ['session-a', 'session-b'])
+})
+
+test('worker-scoped runtime preserves admitted V2 runs and awaits terminal event persistence', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-active-cache-'))
+  const store = seededStore()
+  const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'))
+  const innerListeners = new Map<string, CloudRuntimeEventListener>()
+  const closed: string[] = []
+  const projectedEvents: CloudRuntimeEvent[] = []
+  let releaseTerminal!: () => void
+  const terminalGate = new Promise<void>((resolve) => { releaseTerminal = resolve })
+  const runtime = createWorkerScopedRuntimeAdapter({
+    paths: createCloudPathProvider(root),
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
+    env: { PATH: process.env.PATH },
+    config: DEFAULT_CONFIG,
+    byokSecrets,
+    maxRuntimeEntries: 1,
+    runtimeIdleTtlMs: 60_000,
+    runtimeFactory(input) {
+      return {
+        async createSession() {
+          return {
+            id: `runtime-${input.execution.sessionId}`,
+            title: 'Runtime session',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          }
+        },
+        async promptSession() {
+          // V2 prompt admission returns before the background agent settles.
+        },
+        async abortSession() {},
+        subscribeEvents(listener) {
+          innerListeners.set(input.execution.sessionId, listener)
+          return () => { innerListeners.delete(input.execution.sessionId) }
+        },
+        async close() {
+          closed.push(input.execution.sessionId)
+        },
+      }
+    },
+  })
+
+  try {
+    await runtime.subscribeEvents?.(async (event: CloudRuntimeEvent) => {
+      projectedEvents.push(event)
+      if (event.type === 'session.idle' && event.payload.sessionId === 'session-a') {
+        await terminalGate
+      }
+    })
+    await runtime.promptSession({
+      sessionId: 'runtime-a',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-a' },
+    })
+    await runtime.promptSession({
+      sessionId: 'runtime-b',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-b' },
+    })
+    assert.deepEqual(closed, [], 'over-limit eviction must not terminate admitted background runs')
+
+    const terminalListener = innerListeners.get('session-a')
+    assert.ok(terminalListener)
+    await terminalListener({
+      type: 'session.idle',
+      payload: { sessionId: 'runtime-a-child' },
+    })
+    assert.deepEqual(closed, [], 'a child session becoming idle must not evict its active root runtime')
+    assert.equal(
+      projectedEvents.some((event) => event.type === 'session.idle' && event.payload.opencodeSessionId === 'runtime-a-child'),
+      false,
+      'a child terminal must not be projected as the product root terminal',
+    )
+
+    let terminalPersisted = false
+    const terminalDelivery = Promise.resolve(terminalListener({
+      type: 'session.idle',
+      payload: { sessionId: 'runtime-a' },
+    })).then(() => { terminalPersisted = true })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(terminalPersisted, false, 'inner event delivery must await the durable outer listener')
+    assert.deepEqual(closed, [], 'routing an in-flight terminal event must keep the runtime alive')
+
+    releaseTerminal()
+    await terminalDelivery
+    assert.equal(terminalPersisted, true)
+    assert.deepEqual(closed, ['session-a'], 'settled runs become eligible for over-limit eviction')
+  } finally {
+    releaseTerminal()
+    await runtime.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('worker-scoped BYOK runtime resolves KMS references only during worker config injection', async () => {

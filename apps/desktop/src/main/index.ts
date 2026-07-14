@@ -144,10 +144,17 @@ const eventSubscriptions = createRuntimeEventSubscriptionManager({
   },
 })
 
-// Native `/api/event` is server-wide and carries an explicit location on each
-// event. One base-client stream observes every directory; opening one stream
-// per scoped client would duplicate every event and every UI projection.
-setDirectoryClientLifecycleHandlers({})
+// OpenCode 1.17.20 scopes `/api/event` to the directory carried by the SDK
+// client. Keep one subscription per live directory client so project sessions
+// receive their own text, tool, interaction, and terminal events.
+setDirectoryClientLifecycleHandlers({
+  onCreate: (directory, client) => {
+    eventSubscriptions.ensure(directory, client)
+  },
+  onEvict: (directory) => {
+    eventSubscriptions.stop(directory)
+  },
+})
 
 async function runtimePrerequisitesSatisfied() {
   return (await getAuthStateLazy()).authenticated && isSetupComplete()

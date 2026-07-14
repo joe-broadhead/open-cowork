@@ -7,7 +7,7 @@ import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 
 // Persisted fixtures intentionally declare the current clean-baseline ledger.
 // The schema-version test below also verifies this stays aligned with runtime.
-const CURRENT_SETTINGS_SCHEMA_VERSION = 10
+const CURRENT_SETTINGS_SCHEMA_VERSION = 1
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')

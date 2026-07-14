@@ -61,13 +61,14 @@ test('runtime delta coalescer folds consecutive append deltas into one routed ev
   })
 
   for (const token of ['Hel', 'lo', ' ', 'wor', 'ld']) {
-    coalescer.handle(appendDelta('s1', 'm1', token))
+    await coalescer.handle(appendDelta('s1', 'm1', token))
   }
   // All five tokens are still buffered inside the open flush window — nothing materialized.
   assert.equal(routed.length, 0)
   assert.ok(scheduled)
 
   scheduled!()
+  await coalescer.flushAll()
   // One materialize covers the whole window, with the exact concatenated text.
   assert.equal(routed.length, 1)
   assert.equal(routed[0]!.payload.content, 'Hello world')
@@ -83,17 +84,17 @@ test('runtime delta coalescer flushes pending deltas before a boundary event, in
     clearTimer: () => {},
   })
 
-  coalescer.handle(appendDelta('s1', 'm1', 'Hello'))
-  coalescer.handle(appendDelta('s1', 'm1', ' world'))
+  await coalescer.handle(appendDelta('s1', 'm1', 'Hello'))
+  await coalescer.handle(appendDelta('s1', 'm1', ' world'))
   // A non-append boundary (tool call) must flush the buffered text FIRST so the transcript
   // order stays deltas → tool.
-  coalescer.handle({ type: 'tool.call', payload: { sessionId: 's1', id: 't1', name: 'read' } })
+  await coalescer.handle({ type: 'tool.call', payload: { sessionId: 's1', id: 't1', name: 'read' } })
 
   assert.deepEqual(routed.map((event) => event.type), ['assistant.message', 'tool.call'])
   assert.equal(routed[0]!.payload.content, 'Hello world')
 
   // A delta for a DIFFERENT message flushes the previous buffer before starting a new window.
-  coalescer.handle(appendDelta('s1', 'm2', 'next'))
+  await coalescer.handle(appendDelta('s1', 'm2', 'next'))
   // m1 had nothing pending (already flushed by the boundary); m2 is now buffered.
   assert.equal(routed.length, 2)
   await coalescer.flushAll()
@@ -110,10 +111,10 @@ test('runtime delta coalescer keeps separate sessions independent', async () => 
     clearTimer: () => {},
   })
 
-  coalescer.handle(appendDelta('s1', 'm1', 'a'))
-  coalescer.handle(appendDelta('s2', 'm2', 'b'))
+  await coalescer.handle(appendDelta('s1', 'm1', 'a'))
+  await coalescer.handle(appendDelta('s2', 'm2', 'b'))
   // A boundary for s1 must not flush s2's pending delta.
-  coalescer.handle({ type: 'session.idle', payload: { sessionId: 's1' } })
+  await coalescer.handle({ type: 'session.idle', payload: { sessionId: 's1' } })
   assert.deepEqual(routed.map((event) => `${event.type}:${event.payload.sessionId}`), [
     'assistant.message:s1',
     'session.idle:s1',
@@ -145,7 +146,7 @@ async function streamTokens(
 
   if (options.coalesce) {
     const coalescer = createRuntimeDeltaCoalescer({ route })
-    for (const token of tokens) coalescer.handle(appendDelta(sessionId, messageId, token))
+    for (const token of tokens) await coalescer.handle(appendDelta(sessionId, messageId, token))
     await coalescer.flushAll()
   } else {
     for (const token of tokens) await route(appendDelta(sessionId, messageId, token))

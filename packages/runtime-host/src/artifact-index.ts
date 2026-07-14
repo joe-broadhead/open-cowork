@@ -26,7 +26,7 @@ import { sessionEngine } from './session-engine.js'
 import { listSessionRecords, type SessionRecord } from './session-registry.js'
 import { setSessionHistoryViewIndexHandler, syncSessionView } from './session-history-loader.js'
 
-const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 2
+const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 1
 const ARTIFACT_LIFECYCLE_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
 const DEFAULT_INDEX_LIMIT = 100

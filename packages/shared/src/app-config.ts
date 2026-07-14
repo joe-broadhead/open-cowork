@@ -373,6 +373,7 @@ export interface AppI18nConfig {
 export interface AppMetadata {
   version: string
   preview: boolean
+  surface: 'desktop' | 'browser'
 }
 
 export type RuntimePermissionPolicy = 'allow' | 'ask' | 'deny'

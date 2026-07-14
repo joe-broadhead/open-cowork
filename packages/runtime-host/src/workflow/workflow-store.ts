@@ -42,7 +42,7 @@ import {
   type WorkflowSecretStorageAdapter,
 } from './workflow-secret-storage.js'
 
-const WORKFLOW_DB_SCHEMA_VERSION = 3
+const WORKFLOW_DB_SCHEMA_VERSION = 1
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
 const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'

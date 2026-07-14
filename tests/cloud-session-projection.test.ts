@@ -257,6 +257,116 @@ test('cloud assistant chunks keep projection running until explicit idle event',
   assert.equal((await store.getSessionForTenant(principal.tenantId, sessionId))?.status, 'idle')
 })
 
+test('cloud projection bounds but does not rewrite intentional transcript content', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const service = new CloudSessionService(
+    store,
+    new FakeRuntime(),
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+  )
+  const principal = {
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    email: 'user@example.test',
+  }
+  const created = await service.createSession(principal)
+  const sessionId = created.session.sessionId
+  const prompt = 'Email alice@example.com about /Users/alice/private-project/report.md'
+  const answer = 'Use https://files.example/report?signature=keep-this-query'
+
+  await service.appendProductEvent(principal, sessionId, {
+    type: 'prompt.submitted',
+    payload: { messageId: 'user-1', text: prompt },
+  })
+  await service.appendRuntimeEvent({
+    tenantId: principal.tenantId,
+    sessionId,
+    event: {
+      type: 'assistant.message',
+      payload: { messageId: 'assistant-1', content: answer },
+    },
+  })
+
+  const events = await store.listSessionEvents(principal.tenantId, sessionId)
+  assert.equal(asRecord(events.find((event) => event.type === 'prompt.submitted')?.payload).text, prompt)
+  assert.equal(asRecord(events.find((event) => event.type === 'assistant.message')?.payload).content, answer)
+  const view = asRecord(asRecord((await service.getSessionView(principal, sessionId)).projection).view)
+  assert.deepEqual(asArray(view.messages).map((message) => asRecord(message).content), [prompt, answer])
+})
+
+test('cloud runtime errors remain terminal through trailing idle without a successful run watch', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const service = new CloudSessionService(
+    store,
+    new FakeRuntime(),
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+  )
+  const principal = {
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    email: 'user@example.test',
+  }
+  const created = await service.createSession(principal)
+  const sessionId = created.session.sessionId
+  const org = await store.ensureOrgForTenant({ tenantId: principal.tenantId, orgId: principal.tenantId, name: 'Tenant 1' })
+  const agent = await store.createHeadlessAgent({
+    agentId: 'error-watch-agent',
+    orgId: org.orgId,
+    tenantId: principal.tenantId,
+    profileName: 'full',
+    name: 'Error watch agent',
+  })
+  const binding = await store.createChannelBinding({
+    bindingId: 'error-watch-binding',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    provider: 'telegram',
+    externalWorkspaceId: 'error-watch-workspace',
+    displayName: 'Error watch channel',
+  })
+  await service.createCloudCoordinationWatch(principal, {
+    workspaceId: `cloud:${principal.tenantId}`,
+    target: { kind: 'session', id: sessionId },
+    events: ['run.finished'],
+    channel: {
+      provider: 'telegram',
+      agentId: agent.agentId,
+      channelBindingId: binding.bindingId,
+      target: { chatId: 'error-watch-chat' },
+    },
+    recipient: { role: 'member' },
+  })
+
+  await service.appendRuntimeEvent({
+    tenantId: principal.tenantId,
+    sessionId,
+    event: { type: 'runtime.error', payload: { message: 'terminal step failure' } },
+  })
+  await service.appendRuntimeEvent({
+    tenantId: principal.tenantId,
+    sessionId,
+    event: { type: 'session.idle', payload: { sessionId } },
+  })
+  await service.appendRuntimeEvent({
+    tenantId: principal.tenantId,
+    sessionId,
+    event: { type: 'session.status', payload: { sessionId, statusType: 'idle' } },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  const view = asRecord(asRecord((await service.getSessionView(principal, sessionId)).projection).view)
+  assert.equal(view.status, 'errored')
+  assert.equal((await store.getSessionForTenant(principal.tenantId, sessionId))?.status, 'errored')
+  const events = await store.listSessionEvents(principal.tenantId, sessionId)
+  assert.equal(asRecord(events.at(-1)?.payload).preserveError, true)
+  const deliveries = await store.listChannelDeliveries({
+    orgId: org.orgId,
+    channelBindingId: binding.bindingId,
+    limit: 10,
+  })
+  assert.equal(deliveries.some((delivery) => delivery.eventType === 'run.finished'), false)
+})
+
 test('cloud session projection repair rebuilds durable view from ordered event log', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })

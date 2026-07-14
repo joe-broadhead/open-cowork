@@ -12,8 +12,57 @@ import { describeStandaloneRetention, runStandaloneGatewayRetention } from "../d
 import {
   STANDALONE_GATEWAY_BASELINE_MIGRATION_ID,
   STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES,
+  STANDALONE_GATEWAY_SCHEMA_MANIFEST,
   standaloneGatewayMigrations,
 } from "../dist/schema.js";
+
+function standalonePhysicalCatalogResult(sql: string) {
+  if (sql.includes("JOIN pg_catalog.pg_attribute attribute ON")) {
+    return { rows: STANDALONE_GATEWAY_SCHEMA_MANIFEST.columns.map((column) => ({
+      table_name: column.tableName,
+      column_name: column.columnName,
+      ordinal: column.ordinal,
+      data_type: column.dataType,
+      not_null: column.notNull,
+      default_expression: column.defaultExpression,
+    })) };
+  }
+  if (sql.includes("FROM pg_catalog.pg_constraint constraint_row")) {
+    return { rows: STANDALONE_GATEWAY_SCHEMA_MANIFEST.constraints.map((constraint) => ({
+      table_name: constraint.tableName,
+      kind: constraint.kind,
+      columns: constraint.columns,
+      referenced_schema: constraint.referencedSchema === '@current-schema' ? 'public' : constraint.referencedSchema,
+      referenced_is_current_schema: constraint.referencedSchema === '@current-schema',
+      referenced_table: constraint.referencedTable,
+      referenced_columns: constraint.referencedColumns,
+      update_action: constraint.updateAction,
+      delete_action: constraint.deleteAction,
+      match_type: constraint.matchType,
+      is_deferrable: constraint.deferrable,
+      is_initially_deferred: constraint.initiallyDeferred,
+      is_validated: constraint.validated,
+      is_local: constraint.locallyDefined,
+      inheritance_count: constraint.inheritanceCount,
+      no_inherit: constraint.noInherit,
+      check_expression: constraint.checkExpression,
+    })) };
+  }
+  if (sql.includes("FROM pg_catalog.pg_index index_row")) {
+    return { rows: STANDALONE_GATEWAY_SCHEMA_MANIFEST.indexes.map((index) => ({
+      index_name: index.indexName,
+      table_name: index.tableName,
+      access_method: index.accessMethod,
+      is_unique: index.unique,
+      nulls_not_distinct: index.nullsNotDistinct,
+      is_valid: true,
+      key_expressions: index.keyExpressions,
+      predicate: index.predicate,
+    })) };
+  }
+  if (sql.includes("FROM pg_catalog.pg_trigger trigger_row")) return { rows: [] };
+  return null;
+}
 
 function fakeProviderKey(...parts: string[]) {
   return parts.join("-");
@@ -306,6 +355,8 @@ test("postgres repository adapter maps readiness and daemon lease rows without a
   const pool = {
     async query(sql: string, params?: unknown[]) {
       queries.push(sql);
+      const catalog = standalonePhysicalCatalogResult(sql);
+      if (catalog) return catalog;
       if (sql === "SELECT 1") return { rows: [] };
       if (sql.includes("FROM pg_catalog.pg_tables")) {
         return {
@@ -594,6 +645,8 @@ test("postgres repository migrations skip the applied clean baseline", async () 
   const pool = {
     async query(sql: string, params?: unknown[]) {
       queries.push({ sql, params });
+      const catalog = standalonePhysicalCatalogResult(sql);
+      if (catalog) return catalog;
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 };
       if (sql.includes("FROM pg_catalog.pg_tables")) {
         const requested = (params?.[0] as string[]) || [];
@@ -671,13 +724,14 @@ test("postgres repository readiness rejects a ledger-only schema", async () => {
 });
 
 test("standalone clean baseline includes current authorization and retention schema", () => {
+  assert.equal(STANDALONE_GATEWAY_SCHEMA_MANIFEST.tableNames.includes("standalone_gateway_schema_migrations"), true);
   assert.equal(standaloneGatewayMigrations.length, 1);
   const baseline = standaloneGatewayMigrations[0];
   assert.ok(baseline);
   assert.equal(baseline.id, "0001_standalone_gateway_baseline");
   assert.match(baseline.sql, /provider_workspace_id text NOT NULL DEFAULT ''/);
   assert.match(baseline.sql, /standalone_gateway_sessions_provider_workspace_thread_unique/);
-  assert.match(baseline.sql, /standalone_gateway_channel_identities_provider_workspace_user_unique/);
+  assert.match(baseline.sql, /standalone_gateway_identities_workspace_user_uq/);
   assert.match(baseline.sql, /CHECK \(role IN \('owner', 'admin', 'member', 'approver', 'viewer'\)\)/);
   assert.match(baseline.sql, /CHECK \(status IN \('active', 'disabled'\)\)/);
   assert.match(baseline.sql, /standalone_gateway_sessions_retention_idx/);

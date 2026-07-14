@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
+import { lazy, Suspense, useCallback, useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
@@ -161,8 +161,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const menuRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+  const diffReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const closeMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const focusRowTimerRef = useRef<number | null>(null)
+  const closeDiffViewer = useCallback(() => {
+    setDiffSessionId(null)
+  }, [])
 
   const interactiveSessions = useMemo(
     () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive'),
@@ -363,6 +367,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       focusRowTimerRef.current = null
       rowRefs.current.get(sessionId)?.focus()
     }, 0)
+  }
+
+  const openDiffViewer = (sessionId: string) => {
+    diffReturnFocusRef.current = rowRefs.current.get(sessionId) || null
+    setDiffSessionId(sessionId)
+    setMenuId(null)
   }
 
   const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -632,7 +642,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             {t('thread.copyToCloud', 'Copy to Cloud...')}
           </button>
           {interactiveSessions.find(s => s.id === menuId)?.directory && (
-            <button type="button" onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
+            <button type="button" onClick={() => openDiffViewer(menuId)}
               role="menuitem"
               className="ui-popover-item text-xs">
               {t('thread.viewChanges', 'View Changes')}
@@ -649,27 +659,34 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
         </div>
       )}
       {diffSessionId && (
-        <ViewErrorBoundary
-          resetKey={`diff-viewer:${diffSessionId}`}
-          title={t('error.panelErrorTitle', 'This panel failed to render.')}
-          body={t('error.panelErrorBody', 'The rest of the app recovered. Close this panel and try again.')}
-          actionLabel={t('error.closePanel', 'Close panel')}
-          onBackHome={() => setDiffSessionId(null)}
+        <Dialog
+          title={t('diff.changes', 'Changes')}
+          size="lg"
+          onClose={closeDiffViewer}
+          returnFocusRef={diffReturnFocusRef}
         >
-          <Suspense
-            fallback={(
-              <div
-                className="fixed top-[8%] left-1/2 z-50 w-[960px] max-w-[95vw] -translate-x-1/2 rounded-xl theme-popover px-4 py-8 text-center text-xs text-text-muted shadow-2xl"
-                role="status"
-                aria-live="polite"
-              >
-                {t('diff.loading', 'Loading changes...')}
-              </div>
-            )}
+          <ViewErrorBoundary
+            resetKey={`diff-viewer:${diffSessionId}`}
+            title={t('error.panelErrorTitle', 'This panel failed to render.')}
+            body={t('error.panelErrorBody', 'The rest of the app recovered. Close this panel and try again.')}
+            actionLabel={t('error.closePanel', 'Close panel')}
+            onBackHome={closeDiffViewer}
           >
-            <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
-          </Suspense>
-        </ViewErrorBoundary>
+            <Suspense
+              fallback={(
+                <div
+                  className="flex min-h-28 items-center justify-center px-4 py-8 text-center text-xs text-text-muted"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {t('diff.loading', 'Loading changes...')}
+                </div>
+              )}
+            >
+              <DiffViewer embedded sessionId={diffSessionId} onClose={closeDiffViewer} />
+            </Suspense>
+          </ViewErrorBoundary>
+        </Dialog>
       )}
       {copyDialog && (
         <Dialog

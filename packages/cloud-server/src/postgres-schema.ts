@@ -1,3 +1,5 @@
+import { createPostgresSchemaManifest } from '@open-cowork/shared/node'
+
 export const CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID = '001_cloud_control_plane_baseline'
 export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID = '002_cloud_control_plane_concurrent_indexes'
 export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
@@ -1238,3 +1240,8 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     transactional: false,
   },
 ] as const
+
+export const CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST = createPostgresSchemaManifest([
+  ...CLOUD_CONTROL_PLANE_BASELINE_STATEMENTS,
+  ...CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_STATEMENTS,
+])

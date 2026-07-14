@@ -53,7 +53,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      const result = await client.session.share({ sessionID: sessionId })
+      const result = await client.session.share({ sessionID: sessionId }, { throwOnError: true })
       const url = normalizeShareUrl(result.data)
       log('session', `Shared ${shortSessionId(sessionId)} hasUrl=${!!url}`)
       return url
@@ -67,7 +67,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      await client.session.unshare({ sessionID: sessionId })
+      await client.session.unshare({ sessionID: sessionId }, { throwOnError: true })
       log('session', `Unshared ${shortSessionId(sessionId)}`)
       return true
     } catch (err) {
@@ -86,6 +86,9 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const { client } = await context.getSessionClient(sessionId)
     log('session', `Summarizing ${shortSessionId(sessionId)}`)
     try {
+      // OpenCode 1.17.20 advertises v2.session.compact in the generated SDK,
+      // but the server method is still an OperationUnavailable stub. Keep the
+      // working native classic route until the pinned runtime implements V2.
       await client.session.summarize({ sessionID: sessionId }, { throwOnError: true })
       startSessionStatusReconciliation(sessionId, {
         getMainWindow: context.getMainWindow,
@@ -134,9 +137,10 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('session:children', async (_event, sessionIdInput: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)
-    const { client } = await context.getSessionClient(sessionId)
+    const { client, record } = await context.getSessionClient(sessionId)
     try {
-      return (await listNativeSessions(client)).filter((session) => session.parentID === sessionId)
+      const directory = record?.opencodeDirectory || getRuntimeHomeDir()
+      return (await listNativeSessions(client, { directory })).filter((session) => session.parentID === sessionId)
     } catch (err) {
       context.logHandlerError(`session:children ${shortSessionId(sessionId)}`, err)
       return []
@@ -150,7 +154,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
       const result = await client.session.diff({
         sessionID: sessionId,
         ...(messageId ? { messageID: messageId } : {}),
-      })
+      }, { throwOnError: true })
       const diffs = normalizeSessionFileDiffs(result.data || [])
       if (messageId) return diffs
 
@@ -169,7 +173,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const title = normalizeSessionTitle(titleInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      await client.session.update({ sessionID: sessionId, title })
+      await client.session.update({ sessionID: sessionId, title }, { throwOnError: true })
       log('session', `Renamed ${shortSessionId(sessionId)}`)
       const record = updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
       if (record) getThreadIndexService().upsertThreadFromSessionRecord(record)
@@ -188,7 +192,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
         throw new Error('Confirmation required before deleting a thread.')
       }
       const record = context.ensureSessionRecord(sessionId)
-      await client.session.delete({ sessionID: sessionId })
+      await client.session.delete({ sessionID: sessionId }, { throwOnError: true })
       clearPermissionsForSession(sessionId)
       removeParentSession(sessionId)
       removeSessionRecord(sessionId)

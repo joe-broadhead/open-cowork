@@ -310,12 +310,17 @@ test('gateway workspace registry rejects legacy secret-bearing records and enfor
 
   assert.deepEqual(registry.list(), [])
   assert.throws(() => registry.upsert({ baseUrl: 'http://gateway.example.test' }), /https/)
+  assert.throws(() => registry.upsert({ baseUrl: 'http://127.attacker.example' }), /https/)
 
   const persisted = registry.upsert({ baseUrl: 'https://gateway.example.test/admin/?token=secret#frag', label: 'Persisted Gateway' })
   const local = registry.upsert({ baseUrl: 'http://127.0.0.1:8790/?token=secret#frag', label: 'Local Gateway' })
+  const alternateLoopback = registry.upsert({ baseUrl: 'http://127.1.2.3:8790', label: 'Alternate Loopback' })
+  const ipv6Loopback = registry.upsert({ baseUrl: 'http://[::1]:8790', label: 'IPv6 Loopback' })
 
   assert.equal(persisted.baseUrl, 'https://gateway.example.test/admin')
   assert.equal(local.baseUrl, 'http://127.0.0.1:8790')
+  assert.equal(alternateLoopback.baseUrl, 'http://127.1.2.3:8790')
+  assert.equal(ipv6Loopback.baseUrl, 'http://[::1]:8790')
   assert.doesNotMatch(readFileSync(path, 'utf-8'), /should-not-surface|token=secret/)
 })
 

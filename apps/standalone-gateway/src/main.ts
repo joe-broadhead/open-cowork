@@ -29,7 +29,12 @@ if (command === "smoke") {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } else {
   const config = loadStandaloneGatewayConfig();
-  const opencode = createSdkOpenCodeAdapter({ baseUrl: config.opencode.baseUrl });
+  const opencode = createSdkOpenCodeAdapter({
+    baseUrl: config.opencode.baseUrl,
+    runtimeRoot: config.opencode.runtimeRoot,
+    allowPrivateDns: config.opencode.allowPrivateDns,
+    executionTimeoutMs: config.opencode.executionTimeoutMs,
+  });
 
   if (command === "doctor") {
     const databaseSecurityIssue = standaloneGatewayProductionDatabaseSecurityIssue(config);

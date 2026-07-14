@@ -304,6 +304,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       emitSseNotify: (payload) => this.emitSseNotify(payload),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       quotaDeps: this.quotaDeps,
+      completeWorkflowRun: (executor, input) => this.workflows.completeWorkflowRun(input, executor),
+      failWorkflowRun: (executor, input) => this.workflows.failWorkflowRun(input, executor),
     })
     this.sessionIndexes = new PostgresSessionIndexesRepository({
       pool: this.pool,

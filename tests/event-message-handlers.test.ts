@@ -398,7 +398,11 @@ test('native v2 tool terminal events retain called metadata and step events proj
     assistantMessageID: 'assistant-2',
     callID: 'call-1',
     structured: { bytes: 42 },
-    content: [{ type: 'text', text: 'file body' }],
+    content: [
+      { type: 'text', text: 'file body' },
+      { type: 'file', uri: 'file:///workspace/report.md', mime: 'text/markdown', name: 'report.md' },
+    ],
+    outputPaths: ['/workspace/report.md'],
     provider: { executed: true, metadata: { openai: { responseId: 'response-1' } } },
   }, messageState, 'openai/gpt-5')
   handleNativeStepEndedEvent(win, collector.dispatch, {
@@ -410,7 +414,7 @@ test('native v2 tool terminal events retain called metadata and step events proj
   }, messageState, 'openai/gpt-5')
 
   const toolEvents = collector.events.filter((event) => (event as { type?: string }).type === 'tool_call') as Array<{
-    data: { name?: string; input?: unknown; status?: string; output?: unknown }
+    data: { name?: string; input?: unknown; status?: string; output?: unknown; outputPaths?: string[] }
   }>
   assert.equal(toolEvents.length, 2)
   assert.deepEqual(toolEvents[1]?.data, {
@@ -419,9 +423,13 @@ test('native v2 tool terminal events retain called metadata and step events proj
     name: 'read',
     input: { path: 'README.md' },
     status: 'complete',
-    output: [{ type: 'text', text: 'file body' }],
+    output: [
+      { type: 'text', text: 'file body' },
+      { type: 'file', uri: 'file:///workspace/report.md', mime: 'text/markdown', name: 'report.md' },
+    ],
     agent: null,
-    attachments: undefined,
+    attachments: [{ mime: 'text/markdown', url: 'file:///workspace/report.md', filename: 'report.md' }],
+    outputPaths: ['/workspace/report.md'],
     taskRunId: null,
     sourceSessionId: 'native-tool-session',
   })

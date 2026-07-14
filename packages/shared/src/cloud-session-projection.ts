@@ -15,7 +15,16 @@ import {
   normalizeCloudProjectSource,
   type CloudProjectSource,
 } from './project-source.js'
-import type { CloudSessionProjectionEventRecord } from './cloud-session-contract.js'
+import {
+  CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES,
+  CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES,
+  type CloudSessionProjectionEventRecord,
+} from './cloud-session-contract.js'
+import {
+  RUNTIME_EVENT_MAX_COLLECTION_ENTRIES,
+  sanitizeRuntimeEventRecord,
+  sanitizeRuntimeEventValue,
+} from './runtime-event-sanitizer.js'
 export {
   CLOUD_PROJECTED_SESSION_EVENT_TYPES,
   CLOUD_AUTOMATION_EVENT_STREAM_VERSION,
@@ -23,6 +32,9 @@ export {
   CLOUD_SESSION_EVENT_CONTRACT,
   CLOUD_SESSION_EVENT_TYPES,
   CLOUD_SESSION_PROJECTION_CONTRACT_VERSION,
+  CLOUD_SESSION_SSE_MAX_BUFFERED_BYTES,
+  CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES,
+  CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES,
   cloudProjectionFenceIdentityKey,
   cloudProjectionFenceObserved,
   cloudSessionEventContractFor,
@@ -258,17 +270,86 @@ function normalizeTodos(value: unknown): TodoItem[] {
     : []
 }
 
+const CLOUD_TOOL_DATA_URL_PATTERN = /^data:([a-z0-9][a-z0-9.+-]{0,63}\/[a-z0-9][a-z0-9.+-]{0,127});base64,([a-z0-9+/]*={0,2})$/i
+
+function cloudToolAttachmentFilename(value: string) {
+  // Work from a bounded tail before finding the basename so hostile metadata
+  // cannot force an unbounded split/allocation merely to be discarded.
+  const tail = value.slice(-4_096)
+  const basename = tail.slice(Math.max(tail.lastIndexOf('/'), tail.lastIndexOf('\\')) + 1)
+  let filename = ''
+  let bytes = 0
+  for (const character of basename) {
+    const codePoint = character.codePointAt(0) || 0
+    if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) continue
+    const size = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4
+    if (bytes + size > CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES) break
+    filename += character
+    bytes += size
+  }
+  const normalized = filename.trim()
+  return normalized && normalized !== '.' && normalized !== '..' ? normalized : undefined
+}
+
+function cloudToolAttachment(value: unknown): MessageAttachment | null {
+  const record = asRecord(value)
+  const mime = readString(record.mime).toLowerCase()
+  const url = readString(record.url, readString(record.uri))
+  if (!mime || !url || url.length > CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES) return null
+  const match = CLOUD_TOOL_DATA_URL_PATTERN.exec(url)
+  if (!match || match[1]?.toLowerCase() !== mime || !match[2] || match[2].length % 4 !== 0) return null
+  const rawFilename = readString(record.filename, readString(record.name))
+  const filename = cloudToolAttachmentFilename(rawFilename)
+  return filename ? { mime, url, filename } : { mime, url }
+}
+
+export function normalizeCloudToolAttachments(value: unknown): MessageAttachment[] {
+  if (!Array.isArray(value)) return []
+  const attachments: MessageAttachment[] = []
+  const seen = new Set<string>()
+  let totalBytes = 0
+  for (const candidate of value.slice(0, RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)) {
+    const attachment = cloudToolAttachment(candidate)
+    if (!attachment) continue
+    const key = `${attachment.url}\0${attachment.mime}\0${attachment.filename || ''}`
+    if (seen.has(key)) continue
+    if (totalBytes + attachment.url.length > CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES) break
+    seen.add(key)
+    totalBytes += attachment.url.length
+    attachments.push(attachment)
+  }
+  return attachments
+}
+
+export function sanitizeCloudToolOutput(value: unknown, managedOutputPaths?: unknown): unknown {
+  const record = asRecord(value)
+  if (readString(record.type) === 'file') return undefined
+  const sanitized = sanitizeRuntimeEventValue(value, { managedPaths: managedOutputPaths })
+  // A file-only collection becomes empty after the recursive sanitizer drops
+  // its unsafe file descriptors. Omit it rather than projecting a misleading
+  // empty output value that suggests the tool returned structured data.
+  if (Array.isArray(value) && Array.isArray(sanitized) && sanitized.length === 0) return undefined
+  if (
+    value && typeof value === 'object' && !Array.isArray(value)
+    && sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
+    && Object.keys(sanitized as Record<string, unknown>).length === 0
+  ) return undefined
+  return sanitized
+}
+
 function normalizeToolCall(value: unknown): ToolCall | null {
   const record = asRecord(value)
   const id = readString(record.id)
   if (!id) return null
+  const output = record.output !== undefined ? sanitizeCloudToolOutput(record.output, record.outputPaths) : undefined
+  const attachments = normalizeCloudToolAttachments(record.attachments)
   return {
     id,
     name: readString(record.name, 'tool'),
-    input: cloneProjectionValue(asRecord(record.input)),
+    input: sanitizeRuntimeEventRecord(record.input),
     status: normalizeToolStatus(record.status),
-    ...(record.output !== undefined ? { output: cloneProjectionValue(record.output) } : {}),
-    ...(Array.isArray(record.attachments) ? { attachments: cloneProjectionValue(record.attachments as ToolCall['attachments']) } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
     agent: readNullableString(record.agent),
     sourceSessionId: readNullableString(record.sourceSessionId),
     order: readNumber(record.order),
@@ -533,13 +614,15 @@ function toolCallFromPayload(
   event: CloudProjectionEventRecord,
 ): ToolCall {
   const id = eventPayloadId(payload, ['id', 'callId', 'toolCallId'], `${session.sessionId}:tool:${event.sequence}`)
+  const output = payload.output !== undefined ? sanitizeCloudToolOutput(payload.output, payload.outputPaths) : undefined
+  const attachments = normalizeCloudToolAttachments(payload.attachments)
   return {
     id,
     name: readString(payload.name, readString(payload.tool, 'tool')),
-    input: cloneProjectionValue(asRecord(payload.input)),
+    input: sanitizeRuntimeEventRecord(payload.input),
     status: normalizeToolStatus(payload.status),
-    ...(payload.output !== undefined ? { output: cloneProjectionValue(payload.output) } : {}),
-    ...(Array.isArray(payload.attachments) ? { attachments: cloneProjectionValue(payload.attachments as ToolCall['attachments']) } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
     agent: readNullableString(payload.agent),
     sourceSessionId: readNullableString(payload.sourceSessionId),
     order: event.sequence,
@@ -787,6 +870,8 @@ export function reduceCloudSessionProjectionEvent(
             ...projectedToolCall,
             name: readString(payload.name, readString(payload.tool)) || existingToolCall.name,
             input: Object.keys(projectedToolCall.input).length > 0 ? projectedToolCall.input : existingToolCall.input,
+            ...(payload.output === undefined && existingToolCall.output !== undefined ? { output: existingToolCall.output } : {}),
+            ...(!Array.isArray(payload.attachments) && existingToolCall.attachments ? { attachments: existingToolCall.attachments } : {}),
           }
         : projectedToolCall
       const next = {
@@ -821,13 +906,14 @@ export function reduceCloudSessionProjectionEvent(
     case 'permission.resolved': {
       const permissionId = eventPayloadId(payload, ['permissionId', 'id', 'requestId', 'requestID'], '')
       const pendingApproval = current.pendingApprovals.find((entry) => entry.id === permissionId)
+      const reply = readString(payload.reply, readString(payload.response))
       const resolvedApproval = permissionId ? normalizeResolvedApproval({
         id: permissionId,
         sessionId: session.sessionId,
         taskRunId: pendingApproval?.taskRunId ?? readNullableString(payload.taskRunId),
         tool: pendingApproval?.tool || readString(payload.tool, 'permission'),
         description: pendingApproval?.description || readString(payload.description, 'Permission resolved'),
-        allowed: payload.allowed === true || payload.response === true || payload.response === 'allow' || payload.response === 'once',
+        allowed: payload.allowed === true || reply === 'allow' || reply === 'once' || reply === 'always',
         order: event.sequence,
         resolvedAt: eventTime,
       }) : null
@@ -912,7 +998,10 @@ export function reduceCloudSessionProjectionEvent(
     case 'session.idle':
       return {
         ...current,
-        status: 'idle',
+        // OpenCode can emit a trailing native idle after a terminal step
+        // failure. Error is the stronger state until a later busy/running
+        // transition proves that a new turn has started.
+        status: current.status === 'errored' ? 'errored' : 'idle',
         isGenerating: false,
         updatedAt: eventTime,
       }
@@ -921,7 +1010,7 @@ export function reduceCloudSessionProjectionEvent(
       const status = statusType === 'busy' || statusType === 'running'
         ? 'running'
         : statusType === 'idle'
-          ? 'idle'
+          ? current.status === 'errored' ? 'errored' : 'idle'
           : current.status
       return {
         ...current,

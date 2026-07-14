@@ -144,6 +144,28 @@ describe('browser shim authentication bootstrap', () => {
   })
 })
 
+describe('browser shim runtime health', () => {
+  it('identifies the browser surface and propagates runtime endpoint failures', async () => {
+    installFetch((url) => (
+      url.endsWith('/api/runtime/status')
+        ? jsonResponse({ error: 'runtime unavailable' }, 503)
+        : jsonResponse({})
+    ))
+
+    const api = createBrowserCoworkApi({})
+
+    await expect(api.app.metadata()).resolves.toEqual({
+      version: '0.0.0',
+      preview: false,
+      surface: 'browser',
+    })
+    await expect(api.runtime.status()).rejects.toMatchObject({
+      message: 'runtime unavailable',
+      status: 503,
+    })
+  })
+})
+
 // F4 presigned artifact UPLOAD: the shim must take the direct-to-store fast path when the cloud
 // advertises it (begin -> direct PUT -> finalize), and fall back to the buffered upload only when
 // the server explicitly reports unsupported or the direct PUT fails. Begin API failures propagate.

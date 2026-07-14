@@ -93,6 +93,52 @@ test('runtimeAgentToolIds derives modern permission-backed tools', () => {
   }), ['bash', 'charts', 'custom_reports', 'read', 'skills'])
 })
 
+test('runtimeAgentToolIds expands native v2 action globs and ignores denied rules', () => {
+  const toolIds = runtimeAgentToolIds({
+    permissions: [
+      { action: '*', resource: '*', effect: 'ask' },
+      { action: 'mcp__blocked__*', resource: '*', effect: 'deny' },
+    ],
+  })
+
+  assert.equal(toolIds.includes('bash'), true)
+  assert.equal(toolIds.includes('edit'), true)
+  assert.equal(toolIds.includes('read'), true)
+  assert.equal(toolIds.includes('blocked'), false)
+})
+
+test('native v2 permissions use last matching rule for tools and write access', () => {
+  const permissions = [
+    { action: '*', resource: '*', effect: 'allow' },
+    { action: 'bash', resource: '*', effect: 'deny' },
+    { action: 'edit', resource: '*', effect: 'deny' },
+    { action: 'write', resource: '*', effect: 'deny' },
+    { action: 'apply_patch', resource: '*', effect: 'deny' },
+    { action: 'todowrite', resource: '*', effect: 'deny' },
+    { action: 'mcp__blocked__*', resource: '*', effect: 'deny' },
+  ]
+
+  const toolIds = runtimeAgentToolIds({ permissions })
+  assert.equal(toolIds.includes('read'), true)
+  assert.equal(toolIds.includes('bash'), false)
+  assert.equal(toolIds.includes('edit'), false)
+  assert.equal(toolIds.includes('write'), false)
+  assert.equal(toolIds.includes('apply_patch'), false)
+  assert.equal(toolIds.includes('todowrite'), false)
+  assert.equal(toolIds.includes('blocked'), false)
+  assert.equal(runtimeAgentCanWrite({ permissions }), false)
+})
+
+test('native v2 permissions allow a later narrow rule to override an earlier deny', () => {
+  const permissions = [
+    { action: 'bash', resource: '*', effect: 'deny' },
+    { action: 'bash', resource: 'git status*', effect: 'ask' },
+  ]
+
+  assert.equal(runtimeAgentToolIds({ permissions }).includes('bash'), true)
+  assert.equal(runtimeAgentCanWrite({ permissions }), false)
+})
+
 test('runtimeAgentCanWrite keeps read-only bash allowlists read-only', () => {
   assert.equal(runtimeAgentCanWrite({
     permission: {
@@ -108,5 +154,29 @@ test('runtimeAgentCanWrite keeps read-only bash allowlists read-only', () => {
         'git commit*': 'allow',
       },
     },
+  }), true)
+})
+
+test('runtimeAgentCanWrite classifies native v2 bash and wildcard permissions', () => {
+  assert.equal(runtimeAgentCanWrite({
+    permissions: [
+      { action: 'bash', resource: 'git status*', effect: 'allow' },
+      { action: 'bash', resource: 'grep *', effect: 'ask' },
+    ],
+  }), false)
+  assert.equal(runtimeAgentCanWrite({
+    permissions: [
+      { action: 'bash', resource: 'git commit*', effect: 'ask' },
+    ],
+  }), true)
+  assert.equal(runtimeAgentCanWrite({
+    permissions: [
+      { action: 'bash', resource: '*', effect: 'deny' },
+    ],
+  }), false)
+  assert.equal(runtimeAgentCanWrite({
+    permissions: [
+      { action: '*', resource: '*', effect: 'allow' },
+    ],
   }), true)
 })

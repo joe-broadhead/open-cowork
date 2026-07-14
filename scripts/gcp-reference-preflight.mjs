@@ -30,6 +30,7 @@ const requiredFiles = [
   'deploy/gcp/README.md',
   'deploy/gcp/gke/values.gke.yaml.example',
   'deploy/gcp/gke/external-secret.example.yaml',
+  'deploy/gcp/gke/migrate-job.example.yaml',
   'deploy/gcp/gke/managed-certificate.example.yaml',
   'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
   'deploy/gcp/smoke/README.md',

@@ -811,6 +811,18 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(providerEventReclaim.claimed, true)
       assert.deepEqual(providerEventReclaim.event.metadata, {})
+      assert.equal(
+        await store.completeChannelProviderEvent({
+          orgId: org.orgId,
+          eventId: providerEventReclaim.event.eventId,
+          claimedBy: 'gateway-c',
+          channelBindingIds: [`${prefix}-binding`],
+          status: 'processed',
+          updatedAt: new Date('2026-01-01T00:00:32.000Z'),
+        }),
+        null,
+        'scoped completion must reject provider events without binding metadata',
+      )
 
       const workerPool = await store.createManagedWorkerPool({
         poolId: `${prefix}-pool`,
@@ -1310,6 +1322,86 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(completedRun?.status, 'completed')
       assert.equal((await store.getWorkflowRun(tenantId, `${prefix}-run`))?.status, 'completed')
+
+      // A runtime terminal event, session status, and workflow terminal state
+      // are one commit. Deliberately fail the workflow lease fence after the
+      // event/projection work has begun and prove every durable surface rolls
+      // back; then repeat with the valid fence and prove all three advance.
+      const atomicWorkflowId = `${prefix}-atomic-workflow`
+      const atomicRunId = `${prefix}-atomic-run`
+      await store.createWorkflow({
+        tenantId,
+        userId,
+        workflowId: atomicWorkflowId,
+        draft: { title: 'Atomic terminal', instructions: 'Fail atomically', agentName: 'default', triggers: [] },
+      })
+      const atomicRun = await store.createWorkflowRun({
+        tenantId,
+        userId,
+        workflowId: atomicWorkflowId,
+        runId: atomicRunId,
+        triggerType: 'manual',
+      })
+      const atomicSessionId = atomicRun.sessionId!
+      await store.createSession({
+        tenantId,
+        userId,
+        sessionId: atomicSessionId,
+        opencodeSessionId: `${prefix}-atomic-runtime`,
+        profileName: 'default',
+        title: 'Atomic terminal session',
+      })
+      await store.attachWorkflowRunSession({
+        tenantId,
+        workflowId: atomicWorkflowId,
+        runId: atomicRunId,
+        sessionId: atomicSessionId,
+      })
+      const atomicLease = await store.claimSessionLease(tenantId, atomicSessionId, `${prefix}-atomic-worker`)
+      assert.ok(atomicLease)
+      const appendAtomicFailure = (terminalWorkflowId: string) => store.appendProjectedSessionEvent({
+        tenantId,
+        sessionId: atomicSessionId,
+        eventId: `${prefix}-atomic-runtime-error`,
+        type: 'runtime.error',
+        payload: { message: 'atomic failure' },
+        leaseToken: atomicLease!.leaseToken,
+        sessionStatus: 'errored',
+        workflowTerminal: {
+          kind: 'failed',
+          input: {
+            tenantId,
+            workflowId: terminalWorkflowId,
+            runId: atomicRunId,
+            error: 'atomic failure',
+            nextStatus: 'active',
+            nextRunAt: null,
+          },
+        },
+        workspace: ({ event: projectedEvent }) => ({
+          eventId: `${atomicSessionId}:${projectedEvent.eventId}`,
+          entityType: 'session',
+          entityId: atomicSessionId,
+          operation: 'update',
+          projectionVersion: projectedEvent.sequence,
+        }),
+        project: ({ event: projectedEvent }) => ({
+          view: { ...projectedView(projectedEvent), status: 'errored', errors: [{ id: 'runtime', message: 'atomic failure' }] },
+          updatedAt: new Date(projectedEvent.createdAt),
+        }),
+      })
+      await assert.rejects(async () => appendAtomicFailure(`${atomicWorkflowId}-missing`), /Unknown workflow/i)
+      assert.equal((await store.getSessionForTenant(tenantId, atomicSessionId))?.status, 'running')
+      assert.equal((await store.getSessionEventStats(tenantId, atomicSessionId)).count, 0)
+      assert.equal(await store.getSessionProjection(tenantId, atomicSessionId), null)
+      assert.equal((await store.getWorkflowRun(tenantId, atomicRunId))?.status, 'running')
+
+      const atomicTerminal = await appendAtomicFailure(atomicWorkflowId)
+      assert.equal(atomicTerminal.session.status, 'errored')
+      assert.equal((await store.getSessionForTenant(tenantId, atomicSessionId))?.status, 'errored')
+      assert.equal((await store.getSessionEventStats(tenantId, atomicSessionId)).count, 1)
+      assert.equal((await store.getSessionProjection(tenantId, atomicSessionId))?.view.status, 'errored')
+      assert.equal((await store.getWorkflowRun(tenantId, atomicRunId))?.status, 'failed')
       for (let index = 0; index < pagedWorkflowIds.length; index += 1) {
         const runId = `${pagedWorkflowIds[index]}-run`
         await store.createWorkflowRun({

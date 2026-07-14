@@ -230,7 +230,8 @@ function isChildQuestion(sessionId: string, question: PendingQuestion) {
 }
 
 function isChildApproval(sessionId: string, approval: PendingApproval | Omit<PendingApproval, 'order'>) {
-  return approval.sourceSessionId !== sessionId || Boolean(approval.taskRunId?.startsWith('child:'))
+  return Boolean(approval.sourceSessionId && approval.sourceSessionId !== sessionId)
+    || Boolean(approval.taskRunId?.startsWith('child:'))
 }
 
 function dropApprovalOrder(approval: PendingApproval): Omit<PendingApproval, 'order'> {
@@ -430,8 +431,9 @@ export function createSessionHistoryService(
   async function loadChildSessionsRecursive(
     client: OpencodeClient,
     parentSessionId: string,
+    directory: string,
   ): Promise<{ children: ChildSessionRecord[]; complete: boolean }> {
-    const sessions = await listNativeSessions(client).catch((err) => {
+    const sessions = await listNativeSessions(client, { directory }).catch((err) => {
       logHistoryError('session:messages children', parentSessionId, err)
       return null
     })
@@ -476,7 +478,7 @@ export function createSessionHistoryService(
         // OpenCode 1.17.20 has no native `/api/session/:id/todo` equivalent.
         // Keep its current classic `/session/:id/todo` API because omitting it
         // would break todo reopen parity; this is an explicit native-v2 gap.
-        client.session.todo({ sessionID: sessionId }).catch((err) => {
+        client.session.todo({ sessionID: sessionId }, { throwOnError: true }).catch((err) => {
           logHistoryError('session:messages todo', sessionId, err)
           return { data: [] }
         }),
@@ -513,6 +515,7 @@ export function createSessionHistoryService(
         ? await loadChildSessionsRecursive(
             client,
             sessionId,
+            record?.opencodeDirectory || getRuntimeHomeDir(),
           )
         : { children: [], complete: true }
       const children = childGraph.children
@@ -533,7 +536,7 @@ export function createSessionHistoryService(
           const [result, childTodoResult] = await Promise.all([
             listNativeSessionMessages(client, childId),
             // Same explicit native-v2 capability gap as the root todo load.
-            client.session.todo({ sessionID: childId }).catch((err) => {
+            client.session.todo({ sessionID: childId }, { throwOnError: true }).catch((err) => {
               logHistoryError('session:messages child todo', childId, err)
               return { data: [] }
             }),
@@ -577,7 +580,10 @@ export function createSessionHistoryService(
           if (fallbackTitle) {
             try {
               // Session V2 has no title/update endpoint in 1.17.20.
-              await client.session.update({ sessionID: sessionId, title: fallbackTitle })
+              await client.session.update(
+                { sessionID: sessionId, title: fallbackTitle },
+                { throwOnError: true },
+              )
               title = fallbackTitle
               log('session', `Auto-renamed ${shortSessionId(sessionId)} from default SDK title`)
             } catch (err) {
@@ -681,7 +687,7 @@ export function createSessionHistoryService(
           // Session V2 has no diff endpoint in 1.17.20.
           const diffResult = await client.session.diff({
             sessionID: sessionId,
-          }).catch((err) => {
+          }, { throwOnError: true }).catch((err) => {
             logHistoryError('session:diff summary', sessionId, err)
             return { data: [] }
           })

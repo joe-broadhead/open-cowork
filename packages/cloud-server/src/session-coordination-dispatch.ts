@@ -124,7 +124,7 @@ export class CloudCoordinationDispatchService {
     const conversationTarget = { kind: 'conversation' as const, id: input.sessionId }
     const payload = input.payload || {}
     const occurredAt = event.createdAt
-    if (input.type === 'session.idle') {
+    if (input.type === 'session.idle' && payload.preserveError !== true) {
       return {
         eventType: 'run.finished',
         workspaceId,

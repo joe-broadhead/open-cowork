@@ -21,8 +21,10 @@ import type {
   CommandQueueQuota,
   ConsumeUsageQuotaInput,
   ControlPlaneSessionStatus,
+  CompleteWorkflowRunInput,
   CreateSessionInput,
   EnqueueCommandInput,
+  FailWorkflowRunInput,
   ListCloudArtifactIndexInput,
   ListCloudArtifactIndexResult,
   ListCloudLaunchpadSessionSummariesInput,
@@ -74,6 +76,10 @@ type InMemorySessionsHost = {
   findWorkspaceEvent(tenantId: string, userId: string, eventId: string): WorkspaceEventRecord | null
   snapshotWorkspaceEvents(): unknown
   restoreWorkspaceEvents(snapshot: unknown): void
+  snapshotWorkflows(): unknown
+  restoreWorkflows(snapshot: unknown): void
+  completeWorkflowRun(input: CompleteWorkflowRunInput): unknown
+  failWorkflowRun(input: FailWorkflowRunInput): unknown
   assertCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): void
   consumeUsageQuota(input: ConsumeUsageQuotaInput): QuotaConsumptionRecord
   snapshotUsageQuotaCounters(): unknown
@@ -300,6 +306,7 @@ export class InMemorySessionsDomain {
     const session = this.requireSession(input.tenantId, input.sessionId)
     const sessionBefore = clone(session)
     const workspaceBefore = this.host.snapshotWorkspaceEvents()
+    const workflowsBefore = this.host.snapshotWorkflows()
     try {
       const eventExisted = Boolean(input.eventId && session.events.some((event) => event.eventId === input.eventId))
       const event = this.appendSessionEvent(input)
@@ -324,6 +331,7 @@ export class InMemorySessionsDomain {
       })
       const currentProjection = session.projection ? clone(session.projection) : null
       if ((currentProjection?.sequence || 0) >= event.sequence) {
+        this.applyProjectedEventEffects(session, input, event.createdAt)
         return {
           event,
           workspaceEvent,
@@ -347,6 +355,7 @@ export class InMemorySessionsDomain {
         leaseToken: input.leaseToken,
         updatedAt: projected.updatedAt ?? new Date(event.createdAt),
       })
+      this.applyProjectedEventEffects(session, input, projection.updatedAt)
       return {
         event,
         workspaceEvent,
@@ -359,7 +368,24 @@ export class InMemorySessionsDomain {
     } catch (error) {
       this.sessions.set(sessionKey, sessionBefore)
       this.host.restoreWorkspaceEvents(workspaceBefore)
+      this.host.restoreWorkflows(workflowsBefore)
       throw error
+    }
+  }
+
+  private applyProjectedEventEffects(
+    session: SessionState,
+    input: AppendProjectedSessionEventInput,
+    updatedAt: string,
+  ) {
+    if (input.sessionStatus) {
+      session.record.status = input.sessionStatus
+      session.record.updatedAt = updatedAt
+    }
+    if (input.workflowTerminal?.kind === 'completed') {
+      this.host.completeWorkflowRun(input.workflowTerminal.input)
+    } else if (input.workflowTerminal?.kind === 'failed') {
+      this.host.failWorkflowRun(input.workflowTerminal.input)
     }
   }
 
@@ -916,9 +942,9 @@ export class InMemorySessionsDomain {
 
   private assertLeaseTokenIfPresent(session: SessionState, leaseToken: string | null | undefined): void {
     if (leaseToken === undefined) return
-    if (!session.lease || session.lease.leaseToken !== leaseToken || session.lease.leaseExpiresAt <= Date.now()) {
-      throw new Error('Worker lease is stale.')
-    }
+    if (!session.lease) throw new Error('Worker lease is stale (missing).')
+    if (session.lease.leaseToken !== leaseToken) throw new Error('Worker lease is stale (token mismatch).')
+    if (session.lease.leaseExpiresAt <= Date.now()) throw new Error('Worker lease is stale (expired).')
   }
 }
 

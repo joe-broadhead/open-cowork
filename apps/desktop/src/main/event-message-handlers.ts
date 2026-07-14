@@ -1,7 +1,12 @@
 import { chooseTaskTitle, extractAgentName, isPlaceholderTaskTitle, normalizeAgentName } from '@open-cowork/runtime-host/task-run-utils'
 import type { RuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { nextSessionScopedFallbackId } from '@open-cowork/runtime-host/runtime-fallback-ids'
-import { normalizeMessagePart, normalizeSessionInfo } from '@open-cowork/runtime-host'
+import {
+  normalizeMessagePart,
+  normalizeSessionInfo,
+  normalizeToolAttachments,
+  normalizeToolOutputPaths,
+} from '@open-cowork/runtime-host'
 import { asRecord, deriveToolStatus, readRecordValue, readString } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
 import { resolveDisplayCost } from './pricing.ts'
@@ -861,6 +866,7 @@ function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
         || extractAgentName(title, state.title)
         || null,
       attachments: attachments.length > 0 ? attachments : undefined,
+      outputPaths: state.outputPaths.length > 0 ? state.outputPaths : undefined,
       taskRunId,
       sourceSessionId: ctx.actualSessionId,
     },
@@ -951,20 +957,6 @@ function nativeToolKey(sessionID: string, callID: string) {
   return `${sessionID}\0${callID}`
 }
 
-function nativeToolAttachments(content: unknown) {
-  return Array.isArray(content)
-    ? content.flatMap((entry) => {
-        const record = asRecord(entry)
-        if (readString(readRecordValue(record, 'type')) !== 'file') return []
-        const url = readString(readRecordValue(record, 'uri'))
-        const mime = readString(readRecordValue(record, 'mime'))
-        if (!url || !mime) return []
-        const filename = readString(readRecordValue(record, 'name')) || undefined
-        return [{ mime, url, ...(filename ? { filename } : {}) }]
-      })
-    : []
-}
-
 export function handleNativeToolEvent(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
@@ -984,6 +976,11 @@ export function handleNativeToolEvent(
   const structured = readRecordValue(properties, 'structured')
   const content = readRecordValue(properties, 'content')
   const result = readRecordValue(properties, 'result')
+  const attachments = normalizeToolAttachments(readRecordValue(previousState, 'attachments'), content)
+  const outputPaths = normalizeToolOutputPaths(
+    readRecordValue(previousState, 'outputPaths'),
+    readRecordValue(properties, 'outputPaths'),
+  )
   const output = result !== undefined
     ? result
     : content !== undefined
@@ -1012,7 +1009,8 @@ export function handleNativeToolEvent(
         ...asRecord(structured),
         ...providerMetadata,
       },
-      attachments: nativeToolAttachments(content),
+      attachments,
+      outputPaths,
       status: type === 'session.next.tool.success'
         ? 'completed'
         : type === 'session.next.tool.failed'

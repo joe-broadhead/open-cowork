@@ -1,4 +1,5 @@
 import { connectNativeProviderApiKey, createNativeSession, normalizeMcpStatusEntries, normalizeRuntimeCommands, normalizeRuntimeEventEnvelope, normalizeSessionInfo, normalizeSessionMessages, normalizeSessionStatuses, normalizeShareUrl } from '@open-cowork/runtime-host'
+import { RUNTIME_EVENT_MAX_COLLECTION_ENTRIES } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type {
@@ -47,6 +48,43 @@ test('normalizeSessionMessages projects info and parts into typed records', () =
   assert.equal(messages[0].parts[1].callId, 'call_1')
   assert.deepEqual(messages[0].parts[1].state.input, { q: 'opencode' })
   assert.deepEqual(messages[0].structured, { kind: 'summary', answer: 42 })
+})
+
+test('runtime adapter preserves the complete message aggregate while bounding content per message', () => {
+  let contentReads = 0
+  const content = new Array(RUNTIME_EVENT_MAX_COLLECTION_ENTRIES * 4)
+  for (let index = 0; index < content.length; index += 1) {
+    Object.defineProperty(content, index, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        contentReads += 1
+        return { type: 'text', id: `part-${index}`, text: `chunk-${index}` }
+      },
+    })
+  }
+  const message = {
+    id: 'msg_bounded',
+    type: 'assistant',
+    time: { created: 1 },
+    model: { providerID: 'openrouter', modelID: 'test/model' },
+    content,
+  }
+  const messages = normalizeSessionMessages([
+    message,
+    ...Array.from({ length: RUNTIME_EVENT_MAX_COLLECTION_ENTRIES * 4 }, (_, index) => ({
+      id: `msg-${index}`,
+      type: 'assistant',
+      time: { created: 1 },
+      model: { providerID: 'openrouter', modelID: 'test/model' },
+      content: [],
+    })),
+  ])
+
+  assert.equal(messages.length, (RUNTIME_EVENT_MAX_COLLECTION_ENTRIES * 4) + 1)
+  assert.equal(messages[0]?.parts.length, RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)
+  assert.equal(messages.at(-1)?.id, `msg-${(RUNTIME_EVENT_MAX_COLLECTION_ENTRIES * 4) - 1}`)
+  assert.ok(contentReads <= RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)
 })
 
 test('normalizeRuntimeEventEnvelope unwraps payload envelopes', () => {
@@ -152,6 +190,60 @@ test('native assistant replay preserves V2 ModelRef provider and model ids', () 
 
   assert.equal(messages[0]?.info.model.providerId, 'openai')
   assert.equal(messages[0]?.info.model.modelId, 'gpt-5')
+})
+
+test('native assistant replay preserves and bounds the V2 session-level error', () => {
+  const messages = normalizeSessionMessages([{
+    id: 'assistant-error-1',
+    type: 'assistant',
+    time: { created: 1, completed: 2 },
+    agent: 'build',
+    model: { providerID: 'openai', id: 'gpt-5' },
+    error: {
+      type: 'unknown',
+      message: `provider failed token=${'x'.repeat(80_000)}`,
+    },
+    content: [],
+  }])
+
+  assert.ok(messages[0]?.error)
+  assert.equal(messages[0]?.error?.includes('x'.repeat(1_000)), false)
+  assert.match(messages[0]?.error || '', /\[REDACTED_TOKEN\]|\[TRUNCATED_RUNTIME_VALUE\]/)
+  assert.equal(messages[0]?.time.updated, 2)
+})
+
+test('native assistant replay preserves V2 tool file content, attachments, and output paths', () => {
+  const messages = normalizeSessionMessages([{
+    id: 'assistant-tool-1',
+    type: 'assistant',
+    time: { created: 1, completed: 2 },
+    agent: 'build',
+    model: { providerID: 'openai', id: 'gpt-5' },
+    content: [{
+      id: 'tool-1',
+      type: 'tool',
+      name: 'write',
+      state: {
+        status: 'completed',
+        input: { path: '/workspace/report.md' },
+        content: [
+          { type: 'text', text: 'created' },
+          { type: 'file', uri: 'file:///workspace/report.md', mime: 'text/markdown', name: 'report.md' },
+        ],
+        outputPaths: ['/workspace/report.md'],
+      },
+    }],
+  }])
+
+  const tool = messages[0]?.parts[0]
+  assert.deepEqual(tool?.state.output, [
+    'created',
+    { type: 'file', uri: 'file:///workspace/report.md', mime: 'text/markdown', name: 'report.md' },
+  ])
+  assert.deepEqual(tool?.state.attachments, [
+    { mime: 'text/markdown', url: 'file:///workspace/report.md', filename: 'report.md' },
+  ])
+  assert.deepEqual(tool?.state.outputPaths, ['/workspace/report.md'])
 })
 
 test('normalizeMcpStatusEntries maps named status objects', () => {

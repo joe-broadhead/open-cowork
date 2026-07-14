@@ -8,6 +8,7 @@ import {
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_MIGRATIONS,
   CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES,
+  CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST,
 } from '../packages/cloud-server/src/postgres-schema.ts'
 
 // A fake Postgres that models the migration ledger, physical product tables,
@@ -30,6 +31,100 @@ function createFakePostgres() {
     if (sql.includes('FROM pg_catalog.pg_tables')) {
       const requested = (values[0] as string[]) || []
       return { rows: requested.filter((name) => tables.has(name)).map((name) => ({ table_name: name })) }
+    }
+    if (sql.includes('JOIN pg_catalog.pg_attribute attribute ON')) {
+      return {
+        rows: CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.columns.map((column) => ({
+          table_name: column.tableName,
+          column_name: column.columnName,
+          ordinal: column.ordinal,
+          data_type: column.dataType,
+          not_null: column.notNull,
+          default_expression: column.defaultExpression,
+        })),
+      }
+    }
+    if (sql.includes('FROM pg_catalog.pg_constraint constraint_row')) {
+      return {
+        rows: CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.constraints.map((constraint) => ({
+          table_name: constraint.tableName,
+          kind: constraint.kind,
+          columns: constraint.columns,
+          referenced_schema: constraint.referencedSchema === '@current-schema' ? 'public' : constraint.referencedSchema,
+          referenced_is_current_schema: constraint.referencedSchema === '@current-schema',
+          referenced_table: constraint.referencedTable,
+          referenced_columns: constraint.referencedColumns,
+          update_action: constraint.updateAction,
+          delete_action: constraint.deleteAction,
+          match_type: constraint.matchType,
+          is_deferrable: constraint.deferrable,
+          is_initially_deferred: constraint.initiallyDeferred,
+          is_validated: constraint.validated,
+          is_local: constraint.locallyDefined,
+          inheritance_count: constraint.inheritanceCount,
+          no_inherit: constraint.noInherit,
+          check_expression: constraint.checkExpression,
+        })),
+      }
+    }
+    if (sql.includes('FROM pg_catalog.pg_index index_row')) {
+      return {
+        rows: CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.indexes.map((index) => ({
+          index_name: index.indexName,
+          table_name: index.tableName,
+          access_method: index.accessMethod,
+          is_unique: index.unique,
+          nulls_not_distinct: index.nullsNotDistinct,
+          is_valid: !invalidIndexes.has(index.indexName),
+          key_expressions: index.keyExpressions,
+          predicate: index.predicate,
+        })),
+      }
+    }
+    if (sql.includes('FROM pg_catalog.pg_proc procedure')) {
+      return {
+        rows: CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.functions.map((fn, index) => ({
+          function_oid: index + 1,
+          function_schema: 'public',
+          function_name: fn.functionName,
+          identity_arguments: fn.identityArguments,
+          language: fn.language,
+          result_type: fn.resultType,
+          body: fn.body,
+          security_definer: fn.securityDefiner,
+          volatility: fn.volatility === 'immutable' ? 'i' : fn.volatility === 'stable' ? 's' : 'v',
+          leakproof: fn.leakproof,
+          is_strict: fn.strict,
+          parallel_safety: fn.parallelSafety === 'safe' ? 's' : fn.parallelSafety === 'restricted' ? 'r' : 'u',
+          configuration: fn.configuration,
+        })),
+      }
+    }
+    if (sql.includes('FROM pg_catalog.pg_trigger trigger_row')) {
+      return {
+        rows: CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.triggers.map((trigger) => ({
+          trigger_name: trigger.triggerName,
+          table_name: trigger.tableName,
+          function_oid: CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.functions.findIndex((fn) => (
+            fn.functionName === trigger.functionName
+            && fn.identityArguments === trigger.functionIdentityArguments
+          )) + 1,
+          function_schema: 'public',
+          function_is_current_schema: true,
+          function_name: trigger.functionName,
+          function_identity_arguments: trigger.functionIdentityArguments,
+          function_arguments_hex: Buffer
+            .from([...trigger.functionArguments, ''].join('\0'), 'utf8')
+            .toString('hex'),
+          trigger_definition: trigger.whenExpression
+            ? `CREATE TRIGGER ${trigger.triggerName} WHEN (${trigger.whenExpression}) EXECUTE FUNCTION ${trigger.functionName}()`
+            : `CREATE TRIGGER ${trigger.triggerName} EXECUTE FUNCTION ${trigger.functionName}()`,
+          old_transition_table: trigger.oldTransitionTable,
+          new_transition_table: trigger.newTransitionTable,
+          type_mask: trigger.typeMask,
+          enabled: trigger.enabled,
+        })),
+      }
     }
     if (sql.startsWith('CREATE TABLE IF NOT EXISTS cloud_schema_migrations')) {
       tables.add('cloud_schema_migrations')
@@ -143,6 +238,7 @@ test('cloud current baseline repairs an interrupted invalid concurrent index pha
 })
 
 test('cloud schema starts from clean pre-release baselines without historical upgrade data paths', () => {
+  assert.equal(CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.tableNames.includes('cloud_schema_migrations'), true)
   assert.deepEqual(
     CLOUD_CONTROL_PLANE_MIGRATIONS.map((migration) => migration.id),
     [CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID, CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID],

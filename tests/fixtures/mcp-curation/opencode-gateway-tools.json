@@ -1,6 +1,6 @@
 {
-  "source": "https://github.com/joe-broadhead/opencode-gateway/blob/5a2a7017bdd5b6c6326d6aaa81dfb8c691f1736a/docs/api/mcp-tools.md",
-  "sourceRevision": "5a2a7017bdd5b6c6326d6aaa81dfb8c691f1736a",
+  "source": "https://github.com/joe-broadhead/opencode-gateway/blob/83049573c8fda3adc4e5286f84f319ce95bdecfc/docs/api/mcp-tools.md",
+  "sourceRevision": "83049573c8fda3adc4e5286f84f319ce95bdecfc",
   "sourcePath": "docs/api/mcp-tools.md",
   "read": [
     "gateway_catalog",

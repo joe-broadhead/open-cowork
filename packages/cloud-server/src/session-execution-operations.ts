@@ -275,39 +275,93 @@ export class CloudSessionExecutionService {
     } catch (error) {
       if (options.signal?.aborted) throw error
       const message = error instanceof Error ? error.message : String(error)
-      await this.appendProjectedEvent({
+      await this.appendRuntimeFailure({
         tenantId: command.tenantId,
         sessionId: command.sessionId,
-        type: 'runtime.error',
+        message,
         payload: { commandId: command.commandId, message },
+        eventId: `${command.sessionId}:command:${command.commandId}:runtime-error`,
         leaseToken: lease.leaseToken,
       })
-      await this.workflowOperations.failWorkflowRunForSession(command.tenantId, command.sessionId, message, lease.leaseToken)
       await this.store.failSessionCommand(lease, command.commandId, message)
       throw error
     }
   }
 
-  appendRuntimeEvent(input: {
+  async appendRuntimeEvent(input: {
     tenantId: string
     sessionId: string
     event: CloudRuntimeEvent
     leaseToken?: string | null
   }): Promise<SessionEventRecord> {
     if (input.event.type === 'session.idle') {
-      return this.updateStatusThenAppendRuntimeEvent(input, 'idle')
+      const session = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
+      if (session?.status === 'errored') {
+        return this.appendProjectedEvent({
+          tenantId: input.tenantId,
+          sessionId: input.sessionId,
+          type: input.event.type,
+          eventId: input.event.eventId,
+          payload: { ...input.event.payload, preserveError: true },
+          leaseToken: input.leaseToken,
+        })
+      }
+      const summary = await this.workflowOperations.workflowSummaryForSession(input.tenantId, input.sessionId)
+      const workflowCompletion = await this.workflowOperations.prepareWorkflowRunCompletion(
+        input.tenantId,
+        input.sessionId,
+        summary,
+        input.leaseToken,
+      )
+      const event = await this.appendProjectedEvent({
+        tenantId: input.tenantId,
+        sessionId: input.sessionId,
+        type: input.event.type,
+        eventId: input.event.eventId,
+        payload: input.event.payload,
+        leaseToken: input.leaseToken,
+        sessionStatus: 'idle',
+        ...(workflowCompletion
+          ? { workflowTerminal: { kind: 'completed' as const, input: workflowCompletion } }
+          : {}),
+      })
+      if (workflowCompletion) {
+        await this.workflowOperations.publishWorkflowRunCompletion(input.sessionId, workflowCompletion)
+      }
+      return event
     } else if (input.event.type === 'session.status') {
       const statusType = readString(input.event.payload.statusType)
       if (statusType === 'busy' || statusType === 'running' || statusType === 'idle') {
+        if (statusType === 'idle') {
+          const session = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
+          if (session?.status === 'errored') {
+            return this.appendProjectedEvent({
+              tenantId: input.tenantId,
+              sessionId: input.sessionId,
+              type: input.event.type,
+              eventId: input.event.eventId,
+              payload: { ...input.event.payload, preserveError: true },
+              leaseToken: input.leaseToken,
+            })
+          }
+        }
         return this.updateStatusThenAppendRuntimeEvent(input, statusType === 'idle' ? 'idle' : 'running')
       }
     } else if (input.event.type === 'runtime.error') {
-      return this.updateStatusThenAppendRuntimeEvent(input, 'errored')
+      return this.appendRuntimeFailure({
+        tenantId: input.tenantId,
+        sessionId: input.sessionId,
+        message: readString(input.event.payload.message) || 'OpenCode runtime reported an error.',
+        payload: input.event.payload,
+        eventId: input.event.eventId,
+        leaseToken: input.leaseToken,
+      })
     }
     return this.appendProjectedEvent({
       tenantId: input.tenantId,
       sessionId: input.sessionId,
       type: input.event.type,
+      eventId: input.event.eventId,
       payload: input.event.payload,
       leaseToken: input.leaseToken,
     })
@@ -322,19 +376,47 @@ export class CloudSessionExecutionService {
     },
     status: SessionRecord['status'],
   ) {
-    await this.store.updateSessionStatus({
-      tenantId: input.tenantId,
-      sessionId: input.sessionId,
-      status,
-      leaseToken: input.leaseToken,
-    })
     return this.appendProjectedEvent({
       tenantId: input.tenantId,
       sessionId: input.sessionId,
       type: input.event.type,
+      eventId: input.event.eventId,
       payload: input.event.payload,
       leaseToken: input.leaseToken,
+      sessionStatus: status,
     })
+  }
+
+  private async appendRuntimeFailure(input: {
+    tenantId: string
+    sessionId: string
+    message: string
+    payload: Record<string, unknown>
+    eventId?: string
+    leaseToken?: string | null
+  }) {
+    const workflowFailure = await this.workflowOperations.prepareWorkflowRunFailure(
+      input.tenantId,
+      input.sessionId,
+      input.message,
+      input.leaseToken,
+    )
+    const event = await this.appendProjectedEvent({
+      tenantId: input.tenantId,
+      sessionId: input.sessionId,
+      type: 'runtime.error',
+      eventId: input.eventId,
+      payload: input.payload,
+      leaseToken: input.leaseToken,
+      sessionStatus: 'errored',
+      ...(workflowFailure
+        ? { workflowTerminal: { kind: 'failed' as const, input: workflowFailure } }
+        : {}),
+    })
+    if (workflowFailure) {
+      await this.workflowOperations.publishWorkflowRunFailure(input.sessionId, workflowFailure)
+    }
+    return event
   }
 
   private async executePromptCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
@@ -383,12 +465,6 @@ export class CloudSessionExecutionService {
     for (const event of result?.events || []) {
       await this.applyRuntimeEvent(lease, command.sessionId, event)
     }
-    await this.workflowOperations.completeWorkflowRunForSession(
-      command.tenantId,
-      command.sessionId,
-      this.workflowOperations.workflowSummaryFromRuntimeEvents(result?.events || []),
-      lease.leaseToken,
-    )
   }
 
   private async executeAbortCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {

@@ -96,7 +96,7 @@ test('thread index store searches, facets, and cursor-pages 5k seeded threads', 
       }
     }
   }
-  assert.equal(THREAD_INDEX_SCHEMA_VERSION, 2)
+  assert.equal(THREAD_INDEX_SCHEMA_VERSION, 1)
 }))
 
 test('thread index store keeps user tags, smart filters, and suggestions separate', () => withStore('tags', (store) => {

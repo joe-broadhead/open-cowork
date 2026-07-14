@@ -12,6 +12,7 @@ test("standalone doctor checks product mode, repository, OpenCode, schema, and p
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });
@@ -56,6 +57,7 @@ test("standalone doctor fails closed for team Postgres without verified TLS", as
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CA_PATH: "/certs/ca.pem",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });
@@ -91,6 +93,7 @@ test("standalone doctor reports production TLS failure without connecting to Pos
       OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:1/gateway",
       OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
       OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+      OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
       OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
       OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
     },
@@ -112,6 +115,7 @@ test("standalone doctor fails closed when no prompt-capable identity is configur
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });
@@ -132,6 +136,7 @@ test("standalone doctor ignores prompt-capable identities for unconfigured provi
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });
@@ -157,6 +162,7 @@ test("standalone doctor does not query identity authorization after repository r
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });
@@ -185,6 +191,7 @@ test("standalone doctor redacts secret-looking readiness details", async () => {
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });

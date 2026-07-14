@@ -76,7 +76,7 @@ export function CommandPalette({
 
     const contextOptions = currentProjectDirectory ? { directory: currentProjectDirectory } : undefined
     void Promise.all([
-      window.coworkApi.command.list().catch(() => [] as RuntimeCommand[]),
+      window.coworkApi.command.list(contextOptions).catch(() => [] as RuntimeCommand[]),
       window.coworkApi.app.builtinAgents().catch(() => [] as BuiltInAgentDetail[]),
       window.coworkApi.agents.list(contextOptions).catch(() => [] as CustomAgentSummary[]),
     ]).then(([runtimeCommands, runtimeBuiltinAgents, runtimeCustomAgents]) => {

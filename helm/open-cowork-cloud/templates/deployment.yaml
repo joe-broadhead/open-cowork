@@ -31,6 +31,9 @@
 {{- end }}
 {{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
+{{- if $.Values.cloud.runMigrations }}
+{{- fail "cloud.deploymentTier=public_production requires cloud.runMigrations=false; run cloud:migrate:start as a separately credentialed one-shot job before deploying long-running roles." }}
+{{- end }}
 {{- if not $.Values.image.digest }}
 {{- fail "cloud.deploymentTier=public_production requires image.digest so the Cloud deployment is bound to an immutable OCI artifact." }}
 {{- end }}

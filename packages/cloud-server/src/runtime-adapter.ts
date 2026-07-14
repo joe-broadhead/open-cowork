@@ -22,6 +22,8 @@ export type CloudRuntimePromptPart =
   | { type: 'file'; mime: string; url: string; filename?: string }
 
 export type CloudRuntimeEvent = {
+  /** Stable for retries within the receiving process; never derived from payload secrets. */
+  eventId?: string
   type: CloudProjectedSessionEventType
   payload: Record<string, unknown>
 }
@@ -41,6 +43,8 @@ export type CloudRuntimeSubscribeOptions = {
 
 export type CloudPromptResult = {
   events?: CloudRuntimeEvent[]
+  admissionId?: string
+  admittedSequence?: number
 }
 
 export type CloudRuntimeExecutionContext = {
@@ -108,13 +112,17 @@ export function createSdkCloudRuntimeAdapter(
     },
     async promptSession(input) {
       const messageId = opencodeMessageId(input.messageId)
-      await promptNativeSession(client, {
+      const admitted = await promptNativeSession(client, {
         sessionID: input.sessionId,
         parts: input.parts,
         agent: input.agent,
         messageID: messageId,
         signal: input.signal,
       })
+      return {
+        admissionId: admitted.id,
+        admittedSequence: admitted.admittedSeq,
+      }
     },
     async abortSession(input) {
       await interruptNativeSession(client, input.sessionId, input.signal)

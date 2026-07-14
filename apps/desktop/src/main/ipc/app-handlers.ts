@@ -242,6 +242,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return {
       version,
       preview: version.startsWith('0.'),
+      surface: 'desktop' as const,
     }
   })
 

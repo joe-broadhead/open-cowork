@@ -43,7 +43,7 @@ import {
 import { getAppDataDir } from '../config-loader-core.js'
 import { initializeLocalSqliteSchema } from '../local-sqlite-schema.js'
 
-const COORDINATION_DB_SCHEMA_VERSION = 2
+const COORDINATION_DB_SCHEMA_VERSION = 1
 const COORDINATION_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
 const MAX_TITLE_BYTES = 240

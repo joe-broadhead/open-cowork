@@ -820,7 +820,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       const result = await client.session.fork({
         sessionID: sessionId,
         ...(messageId ? { messageID: messageId } : {}),
-      })
+      }, { throwOnError: true })
       const session = normalizeSessionInfo(result.data)
       if (!session) return null
       log('session', `Forked ${shortSessionId(sessionId)} -> ${shortSessionId(session.id)}${messageId ? ' at message' : ''}`)

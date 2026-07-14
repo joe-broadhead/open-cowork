@@ -1,9 +1,11 @@
+import { assertPostgresSchemaManifest } from '@open-cowork/shared/node'
 import {
   CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
   CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS,
   CLOUD_CONTROL_PLANE_MIGRATIONS,
   CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES,
+  CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST,
   type CloudControlPlaneMigration,
 } from './postgres-schema.ts'
 
@@ -111,6 +113,15 @@ export async function assertPostgresControlPlaneSchemaIntegrity(executor: PgExec
     throw new Error(
       `Cloud control-plane schema integrity failed: required concurrent indexes are missing or invalid (${summarizeNames(missingIndexes)}). `
       + 'Restart migration initialization to repair an interrupted current-baseline index phase, or restore a complete database backup.',
+    )
+  }
+  try {
+    await assertPostgresSchemaManifest(executor, CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST, tables)
+  } catch (error) {
+    throw new Error(
+      `Cloud control-plane schema integrity failed: ${error instanceof Error ? error.message : String(error)} `
+      + 'The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Cloud schema or restore a complete database backup.',
+      { cause: error },
     )
   }
 }

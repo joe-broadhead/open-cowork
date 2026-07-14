@@ -29,9 +29,14 @@ provider "google" {
 
 locals {
   # Cloud SQL PostgreSQL service-account usernames omit the
-  # `.gserviceaccount.com` suffix. Derive this from the runtime identity so the
-  # database principal and Cloud Run service account cannot drift apart.
-  database_user = trimsuffix(google_service_account.cloud.email, ".gserviceaccount.com")
+  # `.gserviceaccount.com` suffix. Runtime and migration identities are
+  # deliberately separate: only the one-shot migrator receives DDL authority.
+  runtime_database_user  = trimsuffix(google_service_account.runtime.email, ".gserviceaccount.com")
+  migrator_database_user = trimsuffix(google_service_account.migrator.email, ".gserviceaccount.com")
+  database_service_accounts = {
+    runtime  = google_service_account.runtime.email
+    migrator = google_service_account.migrator.email
+  }
 
   # Keep the connector immutable and auditable. Automatic IAM database
   # authentication is provided by the v2 Cloud SQL Auth Proxy; a plain Cloud
@@ -74,27 +79,35 @@ locals {
   common_env = {
     OPEN_COWORK_CLOUD_HOST                = "0.0.0.0"
     OPEN_COWORK_CLOUD_PORT                = "8787"
-    OPEN_COWORK_CLOUD_CONTROL_PLANE_URL   = "postgresql://${urlencode(local.database_user)}@127.0.0.1:5432/${google_sql_database.cloud.name}?sslmode=disable"
+    OPEN_COWORK_CLOUD_CONTROL_PLANE_URL   = "postgresql://${urlencode(local.runtime_database_user)}@127.0.0.1:5432/${google_sql_database.cloud.name}?sslmode=disable"
+    OPEN_COWORK_CLOUD_RUN_MIGRATIONS      = "false"
     OPEN_COWORK_CLOUD_OBJECT_STORE_KIND   = "gcs"
     OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET = google_storage_bucket.artifacts.name
   }
 }
 
-resource "google_service_account" "cloud" {
-  account_id   = "${var.name_prefix}-cloud"
+resource "google_service_account" "runtime" {
+  account_id   = "${var.name_prefix}-runtime"
   display_name = "Open Cowork Cloud runtime"
 }
 
+resource "google_service_account" "migrator" {
+  account_id   = "${var.name_prefix}-migrator"
+  display_name = "Open Cowork Cloud database migrator"
+}
+
 resource "google_project_iam_member" "cloud_sql_client" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.cloud.email}"
+  for_each = local.database_service_accounts
+  project  = var.project_id
+  role     = "roles/cloudsql.client"
+  member   = "serviceAccount:${each.value}"
 }
 
 resource "google_project_iam_member" "cloud_sql_instance_user" {
-  project = var.project_id
-  role    = "roles/cloudsql.instanceUser"
-  member  = "serviceAccount:${google_service_account.cloud.email}"
+  for_each = local.database_service_accounts
+  project  = var.project_id
+  role     = "roles/cloudsql.instanceUser"
+  member   = "serviceAccount:${each.value}"
 }
 
 resource "google_storage_bucket" "artifacts" {
@@ -112,7 +125,7 @@ resource "google_storage_bucket" "artifacts" {
 resource "google_storage_bucket_iam_member" "artifacts_rw" {
   bucket = google_storage_bucket.artifacts.name
   role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.cloud.email}"
+  member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
 resource "google_sql_database_instance" "cloud" {
@@ -177,8 +190,18 @@ resource "google_sql_database" "cloud" {
   instance = google_sql_database_instance.cloud.name
 }
 
-resource "google_sql_user" "cloud" {
-  name           = local.database_user
+resource "google_sql_user" "runtime" {
+  name     = local.runtime_database_user
+  instance = google_sql_database_instance.cloud.name
+  password = null # IAM database authentication; no password in state.
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+  # The migration command creates a NOLOGIN group role and grants only runtime
+  # CRUD/sequence privileges to this principal. Never assign an admin DB role.
+  deletion_policy = "ABANDON"
+}
+
+resource "google_sql_user" "migrator" {
+  name           = local.migrator_database_user
   instance       = google_sql_database_instance.cloud.name
   password       = null # IAM database authentication; no password in state.
   type           = "CLOUD_IAM_SERVICE_ACCOUNT"
@@ -193,16 +216,19 @@ resource "google_secret_manager_secret_iam_member" "cloud_secrets" {
   for_each  = local.runtime_secret_ids
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cloud.email}"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 
 resource "google_cloud_run_v2_service" "cloud" {
-  for_each = local.roles
+  # First apply with deploy_runtime_services=false, run the one-shot migration
+  # and runtime-role grant command as the migrator identity, then enable these
+  # long-running least-privilege services in a second reviewed apply.
+  for_each = var.deploy_runtime_services ? local.roles : {}
 
   depends_on = [
     google_project_iam_member.cloud_sql_client,
     google_project_iam_member.cloud_sql_instance_user,
-    google_sql_user.cloud,
+    google_sql_user.runtime,
   ]
 
   name     = "${var.name_prefix}-${each.key}"
@@ -210,7 +236,7 @@ resource "google_cloud_run_v2_service" "cloud" {
   ingress  = each.value.ingress
 
   template {
-    service_account = google_service_account.cloud.email
+    service_account = google_service_account.runtime.email
 
     scaling {
       min_instance_count = each.value.min_instances
@@ -333,7 +359,7 @@ resource "google_cloud_run_v2_service" "cloud" {
 
 # Only the web role accepts public traffic.
 resource "google_cloud_run_v2_service_iam_member" "web_public" {
-  count    = var.web_allow_unauthenticated ? 1 : 0
+  count    = var.deploy_runtime_services && var.web_allow_unauthenticated ? 1 : 0
   name     = google_cloud_run_v2_service.cloud["web"].name
   location = var.region
   role     = "roles/run.invoker"

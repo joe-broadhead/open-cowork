@@ -3,8 +3,9 @@
 Reference IaC for the [GCP recipe](../README.md): the `open-cowork-cloud`
 image split into Cloud Run roles (public `web`, internal always-on `worker`
 and `scheduler`), Cloud SQL Postgres with PITR, a versioned GCS artifact
-bucket, and Secret Manager wiring — all running as a dedicated service
-account with resource-scoped grants.
+bucket, and Secret Manager wiring — all running as dedicated service
+identities with resource-scoped grants. A separate migration identity owns DDL;
+long-running services never receive `cloudsqlsuperuser`.
 
 ```bash
 terraform init
@@ -15,6 +16,26 @@ terraform plan \
   -var vpc_self_link=projects/PROJECT/global/networks/NETWORK \
   -var vpc_subnetwork_self_link=projects/PROJECT/regions/REGION/subnetworks/SUBNET
 ```
+
+The first apply intentionally leaves `deploy_runtime_services=false`. It
+creates Cloud SQL, the runtime and migrator IAM principals, storage, and
+secrets, but no long-running web/worker/scheduler revision. Start a private-IP
+Cloud SQL Auth Proxy with automatic IAM auth while impersonating the
+`migrator_service_account`, then run the pinned image's migration entrypoint:
+
+```bash
+export OPEN_COWORK_CLOUD_CONTROL_PLANE_URL="postgresql://$(terraform output -raw migrator_database_principal)@127.0.0.1:5432/open_cowork_cloud?sslmode=disable"
+export OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL="$(terraform output -raw runtime_database_principal)"
+export OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE="$(terraform output -raw runtime_database_role)"
+node --experimental-sqlite apps/desktop/dist/cloud/open-cowork-cloud-migrate.mjs
+terraform apply -var deploy_runtime_services=true # include the same reviewed variables as the first apply
+```
+
+The migration command applies the current schema, creates a non-login runtime
+group role, grants only table CRUD and sequence access, installs matching
+default privileges, and grants that role to the runtime IAM principal. Run it
+from the immutable `cloud_image` or an exact checkout of the same commit. Do
+not enable runtime services until it succeeds.
 
 Notes:
 
@@ -34,32 +55,27 @@ Notes:
   Terraform state. Injected secrets automatically receive accessor IAM;
   `secret_ids` is only needed for secrets the runtime fetches without direct
   environment injection.
-- **The shared runtime identity is a documented reference limitation.** This
-  module uses one service account for all three roles, so that principal has
-  bucket Object Admin and `cloudsqlsuperuser`. Do not carry that layout into a
-  managed multi-tenant deployment. First bootstrap app-specific PostgreSQL
-  group roles and `ALTER DEFAULT PRIVILEGES` with a separate migration identity;
-  then give web, worker, and scheduler distinct service accounts/IAM database
-  users and only their required database and bucket grants. A Google-only
-  Terraform module cannot safely create those in-database roles, and assigning
-  `cloudsqlsuperuser` to every runtime identity would only multiply privilege.
+- **Runtime and migration authority are separate.** Web, worker, and scheduler
+  share one least-privilege runtime service account because they operate on the
+  same product data, object bucket, and secret set. That principal has no DDL or
+  database-administration role. A distinct migrator service account receives
+  `cloudsqlsuperuser` and is never attached to a long-running service.
 - **Database IAM is identity-bound.** The module derives the PostgreSQL IAM
   username from its runtime service account and grants that identity Cloud SQL
   Client plus Cloud SQL Instance User; operators cannot configure a mismatched
-  database principal. A digest-pinned Cloud SQL Auth Proxy 2.23 sidecar uses
+  database principals. A digest-pinned Cloud SQL Auth Proxy 2.23 sidecar uses
   automatic IAM database authentication, private IP, and a startup gate; the
   application connects only to its local listener. Direct VPC egress through
   `vpc_self_link` and `vpc_subnetwork_self_link` is required for that private
   route. Provision private-service access first, use a subnet in `region` with
   at least a `/26`, and allow outbound TCP 443 and 3307. The proxy connection
   test receives Cloud Run's full 240-second startup allowance because Direct
-  VPC establishment can exceed one minute. Because this module creates a
-  dedicated database instance and the app runs its own schema migrations, that
-  identity receives Cloud SQL's `cloudsqlsuperuser` database role; do not share
-  the instance with unrelated applications. Cloud SQL cannot delete PostgreSQL
-  users while database roles remain assigned, so Terraform abandons this IAM
-  database principal when its resource is removed; retire the service account
-  and clean up the principal deliberately during instance replacement.
+  VPC establishment can exceed one minute. Every long-running role receives
+  `OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false`; only the reviewed one-shot migrator
+  applies schema changes. Cloud SQL IAM principals use `ABANDON` deletion policy
+  because users with database-role membership cannot be removed through the
+  Admin API; retire both service accounts and clean up their principals during
+  instance replacement.
 - **Database availability is production-first.** PostgreSQL 17 is provisioned
   explicitly as Cloud SQL Enterprise edition to match the configurable
   `db-custom-*` tier. Regional high availability is enabled so a zonal outage
@@ -84,5 +100,5 @@ Notes:
   the Cloud web/API server.
 - **SSE**: web revisions drain gracefully; clients re-attach and replay from
   their cursor, so `web_max_instances > 1` is safe.
-- Run migrations (`cloud:migrate:start`) as a Cloud Run job or one-off
-  execution against the same image before first boot.
+- Keep `web_allow_unauthenticated=false` unless in-app OIDC and public-production
+  policy have been configured and reviewed. Public invocation is opt-in.

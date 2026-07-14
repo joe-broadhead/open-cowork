@@ -16,6 +16,73 @@ const MAX_TEXT_BYTES = 512
 const MAX_URL_BYTES = 2048
 const MAX_ALLOWLIST = 128
 const MAX_AUDIT_EVENTS = 5_000
+const DESKTOP_PAIRING_STORE_SCHEMA_VERSION = 1
+const DESKTOP_PAIRING_STATUSES = new Set<DesktopPairingRecord['status']>([
+  'paired_online',
+  'paired_offline',
+  'disabled',
+  'revoked',
+  'error',
+])
+const DESKTOP_PAIRING_AUDIT_ACTIONS = new Set<DesktopPairingAuditEvent['action']>([
+  'pairing.created',
+  'pairing.updated',
+  'pairing.enabled',
+  'pairing.disabled',
+  'pairing.connected',
+  'pairing.offline',
+  'pairing.revoked',
+  'command.accepted',
+  'command.completed',
+  'command.failed',
+  'command.blocked',
+  'remote.event.published',
+])
+const DESKTOP_PAIRING_RECORD_KEYS = new Set([
+  'id',
+  'label',
+  'deviceName',
+  'status',
+  'enabled',
+  'brokerUrl',
+  'allowedWorkspaceIds',
+  'allowedSessionIds',
+  'policy',
+  'lastConnectedAt',
+  'lastHeartbeatAt',
+  'lastCommandSequence',
+  'error',
+  'createdAt',
+  'updatedAt',
+  'revokedAt',
+])
+const DESKTOP_PAIRING_POLICY_KEYS = new Set([
+  'allowRemotePrompts',
+  'allowRemoteAbort',
+  'remoteApprovals',
+  'remoteQuestions',
+  'exposeArtifactBodies',
+  'exposeLocalPaths',
+  'exposeLocalMcpDetails',
+  'allowRemoteAttachments',
+])
+const DESKTOP_PAIRING_STATE_KEYS = new Set(['schemaVersion', 'pairings', 'audit'])
+const DESKTOP_PAIRING_AUDIT_REQUIRED_KEYS = new Set([
+  'id',
+  'pairingId',
+  'action',
+  'actorId',
+  'actorLabel',
+  'workspaceId',
+  'sessionId',
+  'commandId',
+  'reason',
+  'createdAt',
+])
+const DESKTOP_PAIRING_AUDIT_ALLOWED_KEYS = new Set([
+  ...DESKTOP_PAIRING_AUDIT_REQUIRED_KEYS,
+  'metadata',
+])
 
 export type DesktopPairingStore = {
   list(): DesktopPairingRecord[]
@@ -105,6 +172,66 @@ function normalizeDecisionPolicy(value: unknown, fallback: DesktopPairingPolicy[
   return fallback
 }
 
+function hasExactKeys(value: Record<string, unknown>, keys: ReadonlySet<string>) {
+  const actual = Object.keys(value)
+  return actual.length === keys.size && actual.every((key) => keys.has(key))
+}
+
+function hasRequiredAllowedKeys(
+  value: Record<string, unknown>,
+  requiredKeys: ReadonlySet<string>,
+  allowedKeys: ReadonlySet<string>,
+) {
+  const actual = Object.keys(value)
+  return actual.every((key) => allowedKeys.has(key))
+    && [...requiredKeys].every((key) => Object.prototype.hasOwnProperty.call(value, key))
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
+function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
+
+function isExactPersistedPolicy(value: unknown): value is DesktopPairingPolicy {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const policy = value as Record<string, unknown>
+  if (!hasExactKeys(policy, DESKTOP_PAIRING_POLICY_KEYS)) return false
+  return typeof policy.allowRemotePrompts === 'boolean'
+    && typeof policy.allowRemoteAbort === 'boolean'
+    && (policy.remoteApprovals === 'disabled' || policy.remoteApprovals === 'local_confirmation' || policy.remoteApprovals === 'remote_allowed')
+    && (policy.remoteQuestions === 'disabled' || policy.remoteQuestions === 'local_confirmation' || policy.remoteQuestions === 'remote_allowed')
+    && typeof policy.exposeArtifactBodies === 'boolean'
+    && typeof policy.exposeLocalPaths === 'boolean'
+    && typeof policy.exposeLocalMcpDetails === 'boolean'
+    && typeof policy.allowRemoteAttachments === 'boolean'
+}
+
+function isExactPersistedPairingRecord(value: unknown): value is DesktopPairingRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  if (!hasExactKeys(record, DESKTOP_PAIRING_RECORD_KEYS)) return false
+  return typeof record.id === 'string'
+    && typeof record.label === 'string'
+    && typeof record.deviceName === 'string'
+    && DESKTOP_PAIRING_STATUSES.has(record.status as DesktopPairingRecord['status'])
+    && typeof record.enabled === 'boolean'
+    && isStringOrNull(record.brokerUrl)
+    && isStringList(record.allowedWorkspaceIds)
+    && (record.allowedSessionIds === null || isStringList(record.allowedSessionIds))
+    && isExactPersistedPolicy(record.policy)
+    && isStringOrNull(record.lastConnectedAt)
+    && isStringOrNull(record.lastHeartbeatAt)
+    && Number.isSafeInteger(record.lastCommandSequence)
+    && Number(record.lastCommandSequence) >= 0
+    && isStringOrNull(record.error)
+    && typeof record.createdAt === 'string'
+    && typeof record.updatedAt === 'string'
+    && isStringOrNull(record.revokedAt)
+}
+
 export function normalizeDesktopPairingPolicy(
   value: unknown,
   fallback: DesktopPairingPolicy = DEFAULT_DESKTOP_PAIRING_POLICY,
@@ -182,27 +309,19 @@ export function updateDesktopPairingRecord(
 }
 
 function normalizeRecord(value: unknown): DesktopPairingRecord | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const raw = value as Partial<DesktopPairingRecord>
+  if (!isExactPersistedPairingRecord(value)) return null
+  const raw = value
   try {
-    const policy = normalizeDesktopPairingPolicy(raw.policy)
-    const status = raw.status === 'paired_online'
-      || raw.status === 'paired_offline'
-      || raw.status === 'disabled'
-      || raw.status === 'revoked'
-      || raw.status === 'error'
-      ? raw.status
-      : raw.enabled ? 'paired_offline' : 'disabled'
-    const allowedWorkspaceIds = normalizeStringList(raw.allowedWorkspaceIds, 'Allowed workspace ids', ['local'])
+    const policy = raw.policy
+    const status = raw.status
+    const allowedWorkspaceIds = normalizeStringList(raw.allowedWorkspaceIds, 'Allowed workspace ids', [])
     if (!allowedWorkspaceIds.includes('local')) throw new Error('Desktop pairing must allow the Local workspace explicitly.')
     return {
       id: normalizeId(raw.id),
       label: boundedText(raw.label, 'Desktop pairing label'),
-      deviceName: optionalText(raw.deviceName, 'Desktop pairing device name') || 'Desktop',
+      deviceName: boundedText(raw.deviceName, 'Desktop pairing device name'),
       status,
-      enabled: status === 'revoked'
-        ? false
-        : typeof raw.enabled === 'boolean' ? raw.enabled : status !== 'disabled',
+      enabled: status === 'revoked' ? false : raw.enabled,
       brokerUrl: normalizeDesktopPairingBrokerUrl(raw.brokerUrl),
       allowedWorkspaceIds,
       allowedSessionIds: Array.isArray(raw.allowedSessionIds)
@@ -211,9 +330,7 @@ function normalizeRecord(value: unknown): DesktopPairingRecord | null {
       policy,
       lastConnectedAt: normalizeIso(raw.lastConnectedAt, 'Desktop pairing last connection time', null),
       lastHeartbeatAt: normalizeIso(raw.lastHeartbeatAt, 'Desktop pairing last heartbeat time', null),
-      lastCommandSequence: typeof raw.lastCommandSequence === 'number' && Number.isFinite(raw.lastCommandSequence)
-        ? Math.max(0, Math.floor(raw.lastCommandSequence))
-        : 0,
+      lastCommandSequence: raw.lastCommandSequence,
       error: nullableText(raw.error, 'Desktop pairing error'),
       createdAt: normalizeRequiredIso(raw.createdAt, 'Desktop pairing creation time'),
       updatedAt: normalizeRequiredIso(raw.updatedAt, 'Desktop pairing update time'),
@@ -226,8 +343,28 @@ function normalizeRecord(value: unknown): DesktopPairingRecord | null {
 
 function normalizeAuditEvent(value: unknown): DesktopPairingAuditEvent | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const raw = value as Partial<DesktopPairingAuditEvent>
+  const record = value as Record<string, unknown>
+  if (!hasRequiredAllowedKeys(
+    record,
+    DESKTOP_PAIRING_AUDIT_REQUIRED_KEYS,
+    DESKTOP_PAIRING_AUDIT_ALLOWED_KEYS,
+  )) return null
+  if (
+    !isStringOrNull(record.actorId)
+    || !isStringOrNull(record.actorLabel)
+    || !isStringOrNull(record.workspaceId)
+    || !isStringOrNull(record.sessionId)
+    || !isStringOrNull(record.commandId)
+    || !isStringOrNull(record.reason)
+    || (record.metadata !== undefined && (
+      !record.metadata
+      || typeof record.metadata !== 'object'
+      || Array.isArray(record.metadata)
+    ))
+  ) return null
+  const raw = record as DesktopPairingAuditEvent
   try {
+    if (!DESKTOP_PAIRING_AUDIT_ACTIONS.has(raw.action as DesktopPairingAuditEvent['action'])) return null
     return {
       id: normalizeId(raw.id, 'Desktop pairing audit id'),
       pairingId: normalizeId(raw.pairingId),
@@ -238,9 +375,7 @@ function normalizeAuditEvent(value: unknown): DesktopPairingAuditEvent | null {
       sessionId: nullableText(raw.sessionId, 'Desktop pairing audit session id'),
       commandId: nullableText(raw.commandId, 'Desktop pairing audit command id'),
       reason: nullableText(raw.reason, 'Desktop pairing audit reason'),
-      metadata: raw.metadata && typeof raw.metadata === 'object' && !Array.isArray(raw.metadata)
-        ? raw.metadata as Record<string, unknown>
-        : undefined,
+      ...(raw.metadata ? { metadata: raw.metadata } : {}),
       createdAt: normalizeRequiredIso(raw.createdAt, 'Desktop pairing audit creation time'),
     }
   } catch {
@@ -253,6 +388,9 @@ function sortRecords(records: DesktopPairingRecord[]) {
 }
 
 type DesktopPairingState = { pairings: DesktopPairingRecord[]; audit: DesktopPairingAuditEvent[] }
+type DesktopPairingStateFile = DesktopPairingState & {
+  schemaVersion: typeof DESKTOP_PAIRING_STORE_SCHEMA_VERSION
+}
 
 export class FileDesktopPairingStore implements DesktopPairingStore {
   private readonly path: string
@@ -326,16 +464,26 @@ export class FileDesktopPairingStore implements DesktopPairingStore {
     if (this.cache && mtimeMs !== null && this.cache.mtimeMs === mtimeMs) return this.cache.state
     try {
       const parsed = JSON.parse(readFileSync(this.path, 'utf-8')) as unknown
-      const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? parsed as { pairings?: unknown; audit?: unknown }
-        : {}
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Desktop pairing state must be an object.')
+      }
+      const record = parsed as Partial<DesktopPairingStateFile>
+      if (
+        !hasExactKeys(record as Record<string, unknown>, DESKTOP_PAIRING_STATE_KEYS)
+        || record.schemaVersion !== DESKTOP_PAIRING_STORE_SCHEMA_VERSION
+        || !Array.isArray(record.pairings)
+        || !Array.isArray(record.audit)
+      ) {
+        throw new Error('Desktop pairing state schema is not current.')
+      }
+      const pairings = record.pairings.map(normalizeRecord)
+      const audit = record.audit.map(normalizeAuditEvent)
+      if (pairings.some((entry) => !entry) || audit.some((entry) => !entry)) {
+        throw new Error('Desktop pairing state contains a non-current record.')
+      }
       const state: DesktopPairingState = {
-        pairings: Array.isArray(record.pairings)
-          ? record.pairings.map(normalizeRecord).filter((entry): entry is DesktopPairingRecord => Boolean(entry))
-          : [],
-        audit: Array.isArray(record.audit)
-          ? record.audit.map(normalizeAuditEvent).filter((entry): entry is DesktopPairingAuditEvent => Boolean(entry))
-          : [],
+        pairings: pairings as DesktopPairingRecord[],
+        audit: audit as DesktopPairingAuditEvent[],
       }
       if (mtimeMs !== null) this.cache = { mtimeMs, state }
       return state
@@ -350,16 +498,20 @@ export class FileDesktopPairingStore implements DesktopPairingStore {
   }
 
   private writeState(state: DesktopPairingState) {
-    const safeState: DesktopPairingState = {
-      pairings: sortRecords(state.pairings)
-        .map(normalizeRecord)
-        .filter((entry): entry is DesktopPairingRecord => Boolean(entry)),
-      audit: state.audit
-        .map(normalizeAuditEvent)
-        .filter((entry): entry is DesktopPairingAuditEvent => Boolean(entry))
-        .slice(-MAX_AUDIT_EVENTS),
+    const pairings = sortRecords(state.pairings).map(normalizeRecord)
+    const audit = state.audit.map(normalizeAuditEvent).slice(-MAX_AUDIT_EVENTS)
+    if (pairings.some((entry) => !entry) || audit.some((entry) => !entry)) {
+      throw new Error('Desktop pairing state contains a non-current record.')
     }
-    writeFileAtomic(this.path, JSON.stringify(safeState, null, 2), { mode: 0o600 })
+    const safeState: DesktopPairingState = {
+      pairings: pairings as DesktopPairingRecord[],
+      audit: audit as DesktopPairingAuditEvent[],
+    }
+    const payload: DesktopPairingStateFile = {
+      schemaVersion: DESKTOP_PAIRING_STORE_SCHEMA_VERSION,
+      ...safeState,
+    }
+    writeFileAtomic(this.path, JSON.stringify(payload, null, 2), { mode: 0o600 })
     const mtimeMs = this.currentMtimeMs()
     this.cache = mtimeMs !== null ? { mtimeMs, state: safeState } : null
   }

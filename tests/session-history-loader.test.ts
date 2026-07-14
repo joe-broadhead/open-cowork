@@ -13,14 +13,14 @@ type SessionMock = {
   status?: () => Promise<{ data: Record<string, unknown> }>
   get?: (input: { sessionID: string }) => Promise<{ data: unknown }>
   children?: (input: { sessionID: string }) => Promise<{ data: unknown[] }>
-  list?: () => Promise<{ data: unknown[] }>
+  list?: (input: { directory?: string; limit?: number; order?: string; cursor?: string }) => Promise<{ data: unknown[] }>
   diff?: (...args: any[]) => Promise<unknown>
   update?: (...args: any[]) => Promise<unknown>
 }
 
 function createNativeHistoryClient(session: SessionMock, rootSessionId: string) {
-  const listAllSessions = async () => {
-    if (session.list) return (await session.list()).data
+  const listAllSessions = async (input: { directory?: string; limit?: number; order?: string; cursor?: string }) => {
+    if (session.list) return (await session.list(input)).data
     if (!session.children) return []
     const seen = new Set<string>()
     const result: unknown[] = []
@@ -53,7 +53,9 @@ function createNativeHistoryClient(session: SessionMock, rootSessionId: string) 
         get: async (input: { sessionID: string }) => ({
           data: { data: session.get ? (await session.get(input)).data : null },
         }),
-        list: async () => ({ data: { data: await listAllSessions(), cursor: {} } }),
+        list: async (input: { directory?: string; limit?: number; order?: string; cursor?: string }) => ({
+          data: { data: await listAllSessions(input), cursor: {} },
+        }),
       },
     },
   } as any
@@ -148,6 +150,7 @@ test('bounded child snapshot prefetch handles early rejections while preserving 
 
 test('createSessionHistoryService discovers the full child graph from one native session list', async () => {
   const rootSessionId = 'session-wide'
+  const projectDirectory = '/workspace/project-wide'
   const childCount = 16
   const childrenByParent = new Map<string, Array<Record<string, unknown>>>()
   const directChildren = Array.from({ length: childCount }, (_, index) => ({
@@ -176,13 +179,14 @@ test('createSessionHistoryService discovers the full child graph from one native
           todo: async () => ({ data: [] }),
           status: async () => ({ data: {} }),
           get: async () => ({ data: null }),
-          list: async () => {
+          list: async (input) => {
             listCalls += 1
+            assert.equal(input.directory, projectDirectory)
             return { data: Array.from(childrenByParent.values()).flat() }
           },
       }, rootSessionId),
       questionClient: { id: 'question-client' },
-      record: null,
+      record: { opencodeDirectory: projectDirectory } as never,
     }),
     listPendingQuestions: async () => ({ data: [] }),
     listPendingPermissions: async () => ({ data: [] }),
@@ -223,6 +227,75 @@ test('createSessionHistoryService discovers the full child graph from one native
   assert.equal(result.childGraphComplete, true)
   assert.equal(result.childLineage.length, childCount * 2)
   assert.equal(new Set(result.childLineage.map((child) => child.id)).size, childCount * 2)
+})
+
+test('createSessionHistoryService preserves the final message in histories longer than one safety window', async () => {
+  const messageCount = 300
+  const nativeMessages = Array.from({ length: messageCount }, (_, index) => ({
+    id: `assistant-${index}`,
+    type: 'assistant',
+    time: { created: index + 1, completed: index + 1 },
+    agent: 'build',
+    model: { providerID: 'openai', id: 'gpt-5' },
+    content: [{ type: 'text', id: `text-${index}`, text: `answer-${index}` }],
+  }))
+  let projectedMessageCount = 0
+  let projectedFinalMessage: Record<string, unknown> | null = null
+
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: createNativeHistoryClient({
+        messages: async () => ({ data: nativeMessages }),
+        todo: async () => ({ data: [] }),
+        status: async () => ({ data: {} }),
+        get: async () => ({ data: null }),
+        list: async () => ({ data: [] }),
+      }, 'long-session'),
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async (input) => {
+      projectedMessageCount = input.rootMessages.length
+      projectedFinalMessage = input.rootMessages.at(-1) as Record<string, unknown> | null
+      return []
+    },
+    getCachedModelId: () => '',
+    updateSessionRecord: () => null,
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {},
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => createEmptySessionView(),
+    },
+  })
+
+  await service.loadSessionHistory('long-session')
+
+  assert.equal(projectedMessageCount, messageCount)
+  assert.equal(projectedFinalMessage?.id, `assistant-${messageCount - 1}`)
+  assert.equal(
+    ((projectedFinalMessage?.parts as Array<Record<string, unknown>> | undefined)?.[0]?.text),
+    `answer-${messageCount - 1}`,
+  )
 })
 
 test('createSessionHistoryService loads questions and updates provider/model from projected history', async () => {
@@ -373,6 +446,7 @@ test('createSessionHistoryService loads questions and updates provider/model fro
 test('createSessionHistoryService replaces SDK default titles from first user message', async () => {
   const updates: Array<Record<string, unknown>> = []
   const sdkTitleUpdates: Array<Record<string, unknown>> = []
+  const sdkTitleUpdateOptions: Array<Record<string, unknown> | undefined> = []
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
       client: createNativeHistoryClient({
@@ -395,8 +469,9 @@ test('createSessionHistoryService replaces SDK default titles from first user me
               time: { created: 1, updated: 2 },
             },
           }),
-          update: async (input: Record<string, unknown>) => {
+          update: async (input: Record<string, unknown>, options?: Record<string, unknown>) => {
             sdkTitleUpdates.push(input)
+            sdkTitleUpdateOptions.push(options)
             return { data: {} }
           },
       }, 'session-title-fallback'),
@@ -442,6 +517,7 @@ test('createSessionHistoryService replaces SDK default titles from first user me
     sessionID: 'session-title-fallback',
     title: 'Please compare the Q2 launch risks and summarize the blockers.',
   }])
+  assert.deepEqual(sdkTitleUpdateOptions, [{ throwOnError: true }])
   assert.equal(updates[0]?.title, 'Please compare the Q2 launch risks and summarize the blockers.')
 })
 
@@ -841,10 +917,20 @@ test('createSessionHistoryService preserves existing child pending state when ch
     description: 'Sub-Agent: bash',
     order: 7,
   }
+  const staleRootApproval: SessionView['pendingApprovals'][number] = {
+    id: 'approval-root-resolved',
+    sessionId: 'session-incomplete-graph',
+    sourceSessionId: null,
+    taskRunId: null,
+    tool: 'bash',
+    input: { command: 'echo resolved' },
+    description: 'Resolved root approval',
+    order: 8,
+  }
   const view: SessionView = {
     ...createEmptySessionView(),
     pendingQuestions: [existingQuestion],
-    pendingApprovals: [existingApproval],
+    pendingApprovals: [existingApproval, staleRootApproval],
   }
   let writtenQuestions: SessionView['pendingQuestions'] = []
   let writtenApprovals: Array<Omit<SessionView['pendingApprovals'][number], 'order'>> = []
@@ -935,6 +1021,7 @@ test('createSessionHistoryService preserves existing child pending state when ch
     'approval-root',
     'approval-child-existing',
   ])
+  assert.equal(writtenApprovals.some((approval) => approval.id === staleRootApproval.id), false)
   assert.equal('order' in (writtenApprovals[1] || {}), false)
   assert.equal(service.isSessionPartiallyHydrated('session-incomplete-graph'), true)
 

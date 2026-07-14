@@ -1,5 +1,9 @@
 import { chunkText } from "@open-cowork/gateway-channel";
 import type { ChannelProvider, IncomingChannelMessage } from "@open-cowork/gateway-channel";
+import {
+  sanitizeRuntimeEventRecord,
+  sanitizeRuntimeEventValue,
+} from "@open-cowork/shared";
 
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
 import { canIdentityPrompt } from "./repository.js";
@@ -33,15 +37,67 @@ export function createStandaloneGatewayRuntime(input: {
     const text = stringField(job.payload, "text");
     if (!text) throw new Error("Prompt job payload is missing a non-empty \"text\" field.");
     const sessionId = job.sessionId;
-    const opencodeSessionId = stringField(job.payload, "opencodeSessionId")
-      || (await opencode.createSession({ title: text.slice(0, 80) })).opencodeSessionId;
-    await opencode.prompt({
-      opencodeSessionId,
-      text,
-      onEvent: async (event) => {
-        if (sessionId) await appendRuntimeEvent(repository, sessionId, event);
-      },
-    });
+    const storedSession = sessionId ? await repository.getSession(sessionId) : null;
+    if (sessionId && !storedSession) {
+      throw new Error(`Prompt job references unknown standalone gateway session ${sessionId}.`);
+    }
+    const payloadSessionId = stringField(job.payload, "opencodeSessionId");
+    if (
+      payloadSessionId
+      && storedSession?.opencodeSessionId
+      && payloadSessionId !== storedSession.opencodeSessionId
+    ) {
+      throw new Error("Prompt job OpenCode session does not match its durable standalone session binding.");
+    }
+    let opencodeSessionId = storedSession?.opencodeSessionId || payloadSessionId;
+    if (!opencodeSessionId) {
+      if (!storedSession) {
+        throw new Error("Prompt job requires a durable sessionId or an existing opencodeSessionId.");
+      }
+      const created = await opencode.createSession({ title: text.slice(0, 80) });
+      const bound = await repository.updateSessionRuntime({
+        sessionId: storedSession.sessionId,
+        opencodeSessionId: created.opencodeSessionId,
+        status: "running",
+      });
+      opencodeSessionId = bound.opencodeSessionId;
+    } else if (storedSession) {
+      await repository.updateSessionRuntime({
+        sessionId: storedSession.sessionId,
+        opencodeSessionId,
+        status: "running",
+      });
+    }
+    if (!opencodeSessionId) throw new Error("Prompt job could not establish a durable OpenCode session binding.");
+    let runtimeFailure: string | null = null;
+    try {
+      await opencode.prompt({
+        opencodeSessionId,
+        admissionId: `standalone:job:${job.jobId}`,
+        text,
+        onEvent: async (event) => {
+          runtimeFailure ||= runtimeFailureFromEvent(event);
+          if (sessionId) await appendRuntimeEvent(repository, sessionId, event);
+        },
+      });
+      if (runtimeFailure) throw new Error(runtimeFailure);
+      if (storedSession) {
+        await repository.updateSessionRuntime({
+          sessionId: storedSession.sessionId,
+          opencodeSessionId,
+          status: "idle",
+        });
+      }
+    } catch (error) {
+      if (storedSession) {
+        await repository.updateSessionRuntime({
+          sessionId: storedSession.sessionId,
+          opencodeSessionId,
+          status: "failed",
+        }).catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   return {
@@ -81,6 +137,7 @@ export function createStandaloneGatewayRuntime(input: {
         });
         await repository.appendEvent({ sessionId: session.sessionId, type: "user.message", payload: { text, providerMessageId: message.providerMessageId } });
         let runtimeSession = session;
+        let projectedRuntimeFailure = false;
         try {
           if (!runtimeSession.opencodeSessionId) {
             runtimeSession = await repository.updateSessionRuntime({
@@ -90,10 +147,14 @@ export function createStandaloneGatewayRuntime(input: {
             });
           }
           const assistantTexts: string[] = [];
+          let runtimeFailure: string | null = null;
           await opencode.prompt({
             opencodeSessionId: runtimeSession.opencodeSessionId || session.sessionId,
+            admissionId: `standalone:channel:${provider.id}:${providerWorkspaceId || ""}:${message.providerEventId || message.id}`,
             text,
             onEvent: async (event) => {
+              runtimeFailure ||= runtimeFailureFromEvent(event);
+              projectedRuntimeFailure ||= event.type === "session.error";
               if (event.type === "assistant.message") {
                 const assistantText = stringField(objectRecord(event.payload), "text");
                 if (assistantText) assistantTexts.push(assistantText);
@@ -101,6 +162,7 @@ export function createStandaloneGatewayRuntime(input: {
               await appendRuntimeEvent(repository, session.sessionId, event);
             },
           });
+          if (runtimeFailure) throw new Error(runtimeFailure);
           await repository.updateSessionRuntime({
             sessionId: session.sessionId,
             opencodeSessionId: runtimeSession.opencodeSessionId,
@@ -117,11 +179,14 @@ export function createStandaloneGatewayRuntime(input: {
             sessionId: session.sessionId,
           });
         } catch (error) {
-          await repository.appendEvent({
-            sessionId: session.sessionId,
-            type: "session.error",
-            payload: { message: error instanceof Error ? error.message : String(error) },
-          });
+          const errorMessage = sanitizeRuntimeErrorMessage(error);
+          if (!projectedRuntimeFailure) {
+            await repository.appendEvent({
+              sessionId: session.sessionId,
+              type: "session.error",
+              payload: { message: errorMessage },
+            });
+          }
           await repository.updateSessionRuntime({
             sessionId: session.sessionId,
             opencodeSessionId: runtimeSession.opencodeSessionId,
@@ -132,7 +197,7 @@ export function createStandaloneGatewayRuntime(input: {
             providerKind: provider.kind,
             channelBindingId: providerConfig.channelBindingId,
             sessionId: session.sessionId,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage,
           });
           throw error;
         }
@@ -272,9 +337,27 @@ async function appendRuntimeEvent(repository: StandaloneGatewayRepository, sessi
   await repository.appendEvent({
     sessionId,
     type: event.type,
-    payload: {
+    payload: sanitizeRuntimeEventRecord({
       entityId: event.entityId,
       ...(event.payload || {}),
-    },
+    }),
   });
+}
+
+function runtimeFailureFromEvent(event: StandaloneRuntimeEvent): string | null {
+  if (event.type !== "session.error") return null;
+  const payload = event.payload || {};
+  return sanitizeRuntimeErrorMessage(
+    payload.message
+      ?? payload.error
+      ?? "OpenCode runtime reported a terminal session failure.",
+  );
+}
+
+function sanitizeRuntimeErrorMessage(error: unknown): string {
+  const candidate = error instanceof Error ? error.message : String(error);
+  const sanitized = sanitizeRuntimeEventValue(candidate);
+  return typeof sanitized === "string" && sanitized
+    ? sanitized
+    : "OpenCode runtime reported a terminal session failure.";
 }

@@ -4,7 +4,7 @@
 // channel fan-out) all carry real body logic, moved verbatim so behavior is
 // byte-identical. CloudSessionService keeps thin delegators for the public API and the
 // core command-execution path calls back into completeWorkflowRunForSession /
-// failWorkflowRunForSession / workflowSummaryFromRuntimeEvents on this collaborator.
+// failWorkflowRunForSession / workflowSummaryForSession on this collaborator.
 // The two cross-cutting session/billing dependencies (createCloudSessionRecord and
 // assertBillingAllowed) are passed as callbacks, mirroring how the channel domain
 // service is composed. Workflow-draft validation continues to live in
@@ -27,7 +27,9 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  CompleteWorkflowRunInput,
   ControlPlaneStore,
+  FailWorkflowRunInput,
   SessionCommandRecord,
   SessionRecord,
 } from './control-plane-store.ts'
@@ -36,7 +38,6 @@ import { CloudServiceError } from './cloud-service-error.ts'
 import { ControlPlaneQuotaExceededError } from './control-plane-errors.ts'
 import { type CloudRuntimePolicy } from './cloud-config.ts'
 import type { BillingAction } from './billing-adapter.ts'
-import type { CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
 import {
   toWorkflowRun,
@@ -433,12 +434,13 @@ export class CloudWorkflowOperationsService {
     return `workflow:${workflow.tenantId}:${workflow.id}:${run.id}:prompt`
   }
 
-  workflowSummaryFromRuntimeEvents(events: CloudRuntimeEvent[]) {
-    const assistant = events
-      .slice()
-      .reverse()
-      .find((event) => event.type === 'assistant.message')
-    const content = assistant ? readString(asRecord(assistant.payload).content) : ''
+  async workflowSummaryForSession(tenantId: string, sessionId: string) {
+    const projection = await this.store.getSessionProjection(tenantId, sessionId)
+    const messages = asRecord(projection?.view).messages
+    const assistant = Array.isArray(messages)
+      ? messages.slice().reverse().find((message) => asRecord(message).role === 'assistant')
+      : null
+    const content = assistant ? readString(asRecord(assistant).content) : ''
     return content ? content.slice(0, 500) : null
   }
 
@@ -448,29 +450,45 @@ export class CloudWorkflowOperationsService {
     summary: string | null,
     leaseToken?: string | null,
   ) {
+    const completion = await this.prepareWorkflowRunCompletion(tenantId, sessionId, summary, leaseToken)
+    if (!completion) return
+    await this.store.completeWorkflowRun(completion)
+    await this.publishWorkflowRunCompletion(sessionId, completion)
+  }
+
+  async prepareWorkflowRunCompletion(
+    tenantId: string,
+    sessionId: string,
+    summary: string | null,
+    leaseToken?: string | null,
+  ): Promise<CompleteWorkflowRunInput | null> {
     const run = await this.store.getWorkflowRunBySession(tenantId, sessionId)
-    if (!run || workflowRunTerminal(run.status)) return
+    if (!run || (workflowRunTerminal(run.status) && run.status !== 'completed')) return null
     const workflow = await this.store.getWorkflowForTenant(tenantId, run.workflowId)
-    if (!workflow) return
-    const now = new Date()
+    if (!workflow) return null
+    const now = run.status === 'completed' && run.finishedAt ? new Date(run.finishedAt) : new Date()
     const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
-    await this.store.completeWorkflowRun({
+    return {
       tenantId,
       workflowId: workflow.id,
       runId: run.id,
-      summary,
+      summary: run.status === 'completed' ? run.summary : summary,
       nextStatus,
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
       leaseToken,
       finishedAt: now,
-    })
-    await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
+    }
+  }
+
+  async publishWorkflowRunCompletion(sessionId: string, completion: CompleteWorkflowRunInput) {
+    const finishedAt = completion.finishedAt || new Date()
+    await this.enqueueWorkflowChannelDeliveries(completion.tenantId, sessionId, {
       eventType: 'workflow.completed',
-      workflowId: workflow.id,
-      runId: run.id,
+      workflowId: completion.workflowId,
+      runId: completion.runId,
       status: 'completed',
-      summary,
-      finishedAt: now.toISOString(),
+      summary: completion.summary,
+      finishedAt: finishedAt.toISOString(),
     })
   }
 
@@ -480,29 +498,45 @@ export class CloudWorkflowOperationsService {
     error: string,
     leaseToken?: string | null,
   ) {
+    const failure = await this.prepareWorkflowRunFailure(tenantId, sessionId, error, leaseToken)
+    if (!failure) return
+    await this.store.failWorkflowRun(failure)
+    await this.publishWorkflowRunFailure(sessionId, failure)
+  }
+
+  async prepareWorkflowRunFailure(
+    tenantId: string,
+    sessionId: string,
+    error: string,
+    leaseToken?: string | null,
+  ): Promise<FailWorkflowRunInput | null> {
     const run = await this.store.getWorkflowRunBySession(tenantId, sessionId)
-    if (!run || workflowRunTerminal(run.status)) return
+    if (!run || (workflowRunTerminal(run.status) && run.status !== 'failed')) return null
     const workflow = await this.store.getWorkflowForTenant(tenantId, run.workflowId)
-    if (!workflow) return
-    const now = new Date()
+    if (!workflow) return null
+    const now = run.status === 'failed' && run.finishedAt ? new Date(run.finishedAt) : new Date()
     const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
-    await this.store.failWorkflowRun({
+    return {
       tenantId,
       workflowId: workflow.id,
       runId: run.id,
-      error,
+      error: run.status === 'failed' ? run.error || error : error,
       nextStatus,
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
       leaseToken,
       finishedAt: now,
-    })
-    await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
+    }
+  }
+
+  async publishWorkflowRunFailure(sessionId: string, failure: FailWorkflowRunInput) {
+    const finishedAt = failure.finishedAt || new Date()
+    await this.enqueueWorkflowChannelDeliveries(failure.tenantId, sessionId, {
       eventType: 'workflow.failed',
-      workflowId: workflow.id,
-      runId: run.id,
+      workflowId: failure.workflowId,
+      runId: failure.runId,
       status: 'failed',
-      error,
-      finishedAt: now.toISOString(),
+      error: failure.error,
+      finishedAt: finishedAt.toISOString(),
     })
   }
 

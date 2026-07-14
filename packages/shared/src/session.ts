@@ -141,6 +141,7 @@ export interface ToolCall {
   status: 'running' | 'complete' | 'error'
   output?: unknown
   attachments?: MessageAttachment[]
+  outputPaths?: string[]
   agent?: string | null
   sourceSessionId?: string | null
   order: number

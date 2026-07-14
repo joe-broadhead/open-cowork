@@ -24,6 +24,7 @@ type TaskRunSnapshot = {
   title: string
   agent: string | null
   status: TaskStatus
+  error?: string | null
   sourceSessionId: string | null
   parentSessionId?: string | null
   // Carry the child session's created/updated timestamps so the
@@ -48,6 +49,11 @@ export type ProjectedHistoryItem = {
   modelId?: string | null
   taskRunId?: string
   taskRun?: TaskRunSnapshot
+  error?: {
+    message: string
+    sessionId: string | null
+    taskRunId?: string | null
+  }
   todos?: TodoItem[]
   tool?: {
     name: string
@@ -55,6 +61,7 @@ export type ProjectedHistoryItem = {
     status: string
     output?: unknown
     attachments?: Array<{ mime: string; url: string; filename?: string }>
+    outputPaths?: string[]
     agent?: string | null
     sourceSessionId?: string | null
   }
@@ -253,6 +260,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const directChildren = childrenForParent(sessionId)
   const rootStatus = statusFor(sessionId).type || null
   const childCompletesById = new Map<string, boolean>()
+  const childErrorsById = new Map<string, string>()
 
   let sequence = 0
   const nextOrder = () => ++sequence
@@ -296,6 +304,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
     if (!childId) return 'queued'
+    if (childErrorsById.has(childId)) return 'error'
     const status = statusFor(childId).type
     const isTerminal = childCompletesById.get(childId)
     if (status === 'busy') return 'running'
@@ -311,6 +320,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     title: string
     agent: string | null
     status: TaskStatus
+    error?: string | null
     sourceSessionId: string | null
     parentSessionId?: string | null
     startedAt?: string | null
@@ -588,6 +598,19 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const modelMeta = getHistoryModelMeta(msg)
     const { fullText } = collectHistoryTextParts(parts)
 
+    if (msg.error) {
+      pushItem({
+        type: 'error',
+        id: `history-error:${msgId}`,
+        timestamp: ts,
+        sequence: nextOrder(),
+        error: {
+          message: msg.error,
+          sessionId,
+        },
+      }, tsMs)
+    }
+
     let textIndex = 0
     let reasoningIndex = 0
     let taskToolChildBinder: ReturnType<typeof createOrderedTaskToolChildBinder> | null = null
@@ -737,6 +760,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             input: state.input,
             status: deriveToolStatus({ hasOutput: state.output !== undefined, hasError: state.error !== undefined }),
             output: state.output,
+            ...(state.attachments.length > 0 ? { attachments: state.attachments } : {}),
+            ...(state.outputPaths.length > 0 ? { outputPaths: state.outputPaths } : {}),
             agent: typeof state.metadata.agent === 'string'
               ? state.metadata.agent
               : typeof part.metadata.agent === 'string'
@@ -802,6 +827,22 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       const role = info.role || msg.role || 'assistant'
       const modelMeta = getHistoryModelMeta(msg)
       const { fullText } = collectHistoryTextParts(parts)
+
+      if (msg.error) {
+        childErrorsById.set(child.id, msg.error)
+        pushItem({
+          type: 'error',
+          id: `history-error:${child.id}:${info.id || msg.id}`,
+          timestamp: ts,
+          sequence: nextOrder(),
+          taskRunId: taskId,
+          error: {
+            message: msg.error,
+            sessionId: child.id,
+            taskRunId: taskId,
+          },
+        }, tsMs)
+      }
 
       for (const part of parts) {
         if (part.type === 'agent' && taskRunItem?.taskRun) {
@@ -937,7 +978,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
               input: state.input,
               status: deriveToolStatus({ hasOutput: toolOutput !== undefined, hasError: state.error !== undefined }),
               output: toolOutput,
-              attachments: state.attachments,
+              ...(state.attachments.length > 0 ? { attachments: state.attachments } : {}),
+              ...(state.outputPaths.length > 0 ? { outputPaths: state.outputPaths } : {}),
               agent: normalizeAgentName(
                 (typeof state.metadata.agent === 'string' ? state.metadata.agent : null)
                 || (typeof part.metadata.agent === 'string' ? part.metadata.agent : null),
@@ -969,6 +1011,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       const nextStatus = getTaskStatus(child.id)
       const timing = timingFromChild(child, nextStatus)
       taskRunItem.taskRun.status = nextStatus
+      taskRunItem.taskRun.error = childErrorsById.get(child.id) || null
       taskRunItem.taskRun.startedAt = timing.startedAt
       taskRunItem.taskRun.finishedAt = timing.finishedAt
     }

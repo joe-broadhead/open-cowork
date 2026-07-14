@@ -970,6 +970,7 @@ test('gateway loopback operator bypass is denied when the socket remoteAddress i
   assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('')), false)
   assert.equal(isLoopbackOperatorBypassRequest(config, makeReq(undefined)), false)
   assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('127.0.0.1', { host: 'gateway.example.test' })), false)
+  assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('127.0.0.1', { host: '127.attacker.example' })), false)
   assert.equal(isLoopbackOperatorBypassRequest(config, makeReq('127.0.0.1', {
     host: '127.0.0.1',
     'x-forwarded-for': '203.0.113.10, 127.0.0.1',

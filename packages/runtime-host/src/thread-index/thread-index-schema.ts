@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { initializeLocalSqliteSchema } from '../local-sqlite-schema.js'
 
-export const THREAD_INDEX_SCHEMA_VERSION = 2
+export const THREAD_INDEX_SCHEMA_VERSION = 1
 
 const THREAD_INDEX_SCHEMA_VERSION_KEY = 'schema_version'
 

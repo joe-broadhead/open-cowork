@@ -10,6 +10,7 @@ import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-c
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from '@open-cowork/cloud-server/session-event-bus'
 import { CloudSessionProjectionService } from '@open-cowork/cloud-server/session-projection-service'
 import { createCloudProjectionFenceToken } from '../packages/shared/dist/cloud-session-projection.js'
+import { RUNTIME_EVENT_REDACTED } from '../packages/shared/dist/runtime-event-sanitizer.js'
 
 test('control plane domain contracts expose narrow stores for cloud subservices', async () => {
   const store = new InMemoryControlPlaneStore()
@@ -49,6 +50,83 @@ test('control plane domain contracts expose narrow stores for cloud subservices'
   assert.equal(event.type, 'assistant.message')
   assert.equal(projection?.sequence, event.sequence)
   assert.equal(typeof channelStore.createHeadlessAgent, 'function')
+})
+
+test('cloud projection boundary sanitizes every durable event payload', async () => {
+  const store = new InMemoryControlPlaneStore()
+  await store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  await store.ensureUser({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    email: 'user@example.test',
+    role: 'owner',
+  })
+  await store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    opencodeSessionId: 'runtime-session-1',
+    profileName: 'default',
+    title: 'Sanitized projection',
+  })
+
+  const projections = new CloudSessionProjectionService(
+    store,
+    new CloudSessionEventBus(),
+    new CloudWorkspaceEventBus(),
+  )
+  const permission = await projections.appendProjectedEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    type: 'permission.requested',
+    payload: {
+      permissionId: 'permission-1',
+      sessionId: 'session-1',
+      tool: 'bash',
+      description: 'Approve command',
+      input: {
+        authorization: 'Bearer projection-secret',
+        path: '/Volumes/Private/project/result.txt',
+      },
+    },
+  })
+  const failure = await projections.appendProjectedEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    type: 'runtime.error',
+    payload: {
+      commandId: 'command-1',
+      message: 'connection postgresql://runtime-user:runtime-password@127.0.0.1/open_cowork failed in /usr/local/bin',
+    },
+  })
+  const dataUrl = `data:text/plain;base64,${'YWFh'.repeat(20_000)}`
+  const tool = await projections.appendProjectedEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    type: 'tool.call',
+    payload: {
+      id: 'tool-1',
+      name: 'read',
+      input: {},
+      status: 'complete',
+      attachments: [{ mime: 'text/plain', url: dataUrl, filename: 'result.txt' }],
+    },
+  })
+
+  const durable = JSON.stringify([permission.payload, failure.payload])
+  assert.equal(durable.includes('projection-secret'), false)
+  assert.equal(durable.includes('runtime-user'), false)
+  assert.equal(durable.includes('runtime-password'), false)
+  assert.equal(durable.includes('/Volumes/Private'), false)
+  assert.equal(durable.includes('/usr/local'), false)
+  assert.equal(
+    ((permission.payload.input as Record<string, unknown>).authorization),
+    RUNTIME_EVENT_REDACTED,
+  )
+  assert.equal(
+    ((tool.payload.attachments as Array<{ url: string }>)[0]?.url),
+    dataUrl,
+  )
 })
 
 test('cloud projection service waits for session-scoped fence checkpoints', async () => {

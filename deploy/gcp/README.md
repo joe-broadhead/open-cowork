@@ -99,12 +99,16 @@ Use separate service accounts where possible:
   Cloud SQL, reads/writes Cloud Storage, executes OpenCode runtime work.
 - `open-cowork-cloud-scheduler`: connects to Cloud SQL and writes scheduler
   audit/heartbeat state.
+- `open-cowork-cloud-migrator`: used only by the reviewed one-shot migration
+  Job. It receives Cloud SQL IAM login plus the `cloudsqlsuperuser` database
+  role, and must never be attached to web, worker, or scheduler pods.
 - `open-cowork-gateway`: reads channel credentials, uses a scoped cloud API
   token, writes Gateway logs/metrics.
 
 Minimum IAM bindings:
 
-- Cloud SQL Client for cloud roles that connect through Cloud SQL.
+- Cloud SQL Client and Cloud SQL Instance User for the runtime and migration
+  identities that connect through automatic IAM database authentication.
 - Secret Manager Secret Accessor for the exact secrets each role needs.
 - Storage Object Admin on the Open Cowork bucket for worker roles; narrower
   reader/writer roles can be split later.
@@ -116,6 +120,10 @@ Minimum IAM bindings:
   `iam.gke.io/gcp-service-account: open-cowork-cloud@PROJECT.iam.gserviceaccount.com`.
   Bind that KSA to the matching GCP service account, or replace it in your
   private overlay with role-specific KSAs/GSAs.
+- `gke/migrate-job.example.yaml` creates a distinct, short-lived
+  `open-cowork-cloud-migrator` KSA. Bind it only to the matching migrator GSA,
+  inspect the completed Job, then delete both Job and KSA before Helm starts
+  the long-running roles.
 
 Template commands for the shared reference service account:
 
@@ -129,6 +137,10 @@ gcloud iam service-accounts add-iam-policy-binding \
 gcloud projects add-iam-policy-binding PROJECT \
   --member serviceAccount:open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
   --role roles/cloudsql.client
+
+gcloud projects add-iam-policy-binding PROJECT \
+  --member serviceAccount:open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
+  --role roles/cloudsql.instanceUser
 ```
 
 Grant Secret Manager and Cloud Storage access at the narrowest practical scope
@@ -191,8 +203,12 @@ When the GKE values enable `cloudSqlProxy`, store
 for example:
 
 ```text
-postgres://open_cowork:PASSWORD@127.0.0.1:5432/open_cowork?sslmode=disable
+postgresql://open-cowork-cloud%40PROJECT.iam@127.0.0.1:5432/open_cowork_cloud?sslmode=disable
 ```
+
+That URL contains no password: the pinned proxy supplies short-lived IAM
+database credentials for the runtime GSA. Keep `cloudSqlProxy.autoIamAuthn=true`
+and do not reuse the migrator database username in this long-running secret.
 
 Do not put the raw database URL in Helm values for
 `cloud.deploymentTier=public_production`; keep it in Secret Manager or the
@@ -204,8 +220,10 @@ history.
 1. Create or select a GCP project and region.
 2. Create Artifact Registry repository and publish `open-cowork-cloud` and
    `open-cowork-gateway` images.
-3. Create Cloud SQL PostgreSQL, enable backups/PITR, create a database, and
-   capture the connection name for `cloudSqlProxy.instanceConnectionName`:
+3. Create private-IP Cloud SQL PostgreSQL, enable backups/PITR plus the
+   `cloudsql.iam_authentication` database flag, create the
+   `open_cowork_cloud` database, and capture the connection name for
+   `cloudSqlProxy.instanceConnectionName`:
 
    ```bash
    gcloud sql instances describe INSTANCE \
@@ -215,9 +233,49 @@ history.
 
 4. Create a private Cloud Storage bucket with versioning/lifecycle policy.
 5. Create Secret Manager secrets listed above.
-6. Create or select a GKE cluster with Workload Identity and bind the
-   `open-cowork-cloud` Kubernetes service account to the configured GCP
-   service account.
+6. Create or select a VPC-native GKE cluster with Workload Identity. Create
+   separate runtime and migration GSAs, grant both Cloud SQL Client and Cloud
+   SQL Instance User, add separate IAM database users, and bind each GSA only
+   to its matching KSA. The migration database user alone receives
+   `cloudsqlsuperuser`:
+
+   ```bash
+   gcloud iam service-accounts create open-cowork-cloud --project PROJECT
+   gcloud iam service-accounts create open-cowork-cloud-migrator --project PROJECT
+
+   for GSA in open-cowork-cloud open-cowork-cloud-migrator; do
+     gcloud projects add-iam-policy-binding PROJECT \
+       --member="serviceAccount:${GSA}@PROJECT.iam.gserviceaccount.com" \
+       --role=roles/cloudsql.client
+     gcloud projects add-iam-policy-binding PROJECT \
+       --member="serviceAccount:${GSA}@PROJECT.iam.gserviceaccount.com" \
+       --role=roles/cloudsql.instanceUser
+   done
+
+   gcloud sql users create open-cowork-cloud@PROJECT.iam \
+     --project=PROJECT \
+     --instance=INSTANCE \
+     --type=cloud_iam_service_account
+   gcloud sql users create open-cowork-cloud-migrator@PROJECT.iam \
+     --project=PROJECT \
+     --instance=INSTANCE \
+     --type=cloud_iam_service_account \
+     --database-roles=cloudsqlsuperuser
+
+   gcloud iam service-accounts add-iam-policy-binding \
+     open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
+     --project=PROJECT \
+     --role=roles/iam.workloadIdentityUser \
+     --member="serviceAccount:PROJECT.svc.id.goog[open-cowork/open-cowork-cloud]"
+   gcloud iam service-accounts add-iam-policy-binding \
+     open-cowork-cloud-migrator@PROJECT.iam.gserviceaccount.com \
+     --project=PROJECT \
+     --role=roles/iam.workloadIdentityUser \
+     --member="serviceAccount:PROJECT.svc.id.goog[open-cowork/open-cowork-cloud-migrator]"
+   ```
+
+   Grant Secret Manager and Cloud Storage access only to the runtime GSA. The
+   migrator does not need either and must not inherit runtime credentials.
 7. Create the namespace, then install External Secrets Operator if using
    `gke/external-secret.example.yaml`. Apply the ExternalSecret before Helm so
    the chart's non-optional `open-cowork-cloud-secrets` reference is ready:
@@ -250,16 +308,43 @@ history.
    temporarily set `roles.<role>.updateStrategy.rollingUpdate.maxUnavailable=1`
    and `maxSurge=0` for the migration window. Production overlays should prefer
    enough capacity for the default zero-unavailable rollout.
-10. Render and install:
+10. Before Helm creates any long-running role, copy
+    `gke/migrate-job.example.yaml` into the private deployment repo and replace
+    `PROJECT`, `REGION`, `INSTANCE`, and `REPLACE_WITH_CLOUD_DIGEST`. Apply the
+    manifest, wait for the pinned one-shot migration command, and require its
+    runtime-grant success message:
+
+    ```bash
+    kubectl apply -f PRIVATE_DEPLOYMENT_REPO/migrate-job.yaml
+    kubectl wait \
+      --namespace open-cowork \
+      --for=condition=complete \
+      --timeout=30m \
+      job/open-cowork-cloud-migrate
+    kubectl logs \
+      --namespace open-cowork \
+      job/open-cowork-cloud-migrate \
+      --container migrate
+    # Required final line: open-cowork-cloud migrations and runtime grants applied
+    kubectl delete -f PRIVATE_DEPLOYMENT_REPO/migrate-job.yaml
+    ```
+
+    The manifest pins both images, runs the Cloud SQL Auth Proxy as a native
+    sidecar with automatic IAM authentication, connects as the migration GSA,
+    and provisions the `open_cowork_runtime` NOLOGIN group role for the
+    runtime IAM principal. It contains no password or service-account key.
+    Inspect logs before deletion; if the Job fails, leave Helm uninstalled and
+    diagnose it rather than bypassing the migration gate.
+11. Render and install the long-running roles with migrations disabled:
 
    ```bash
    helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
      --namespace open-cowork \
      --create-namespace \
-     --values deploy/gcp/gke/values.gke.yaml.example
+     --values PRIVATE_DEPLOYMENT_REPO/values.gke.yaml
    ```
 
-11. Route HTTPS traffic to the web Ingress and run deployment smoke:
+12. Route HTTPS traffic to the web Ingress and run deployment smoke:
 
     ```bash
     OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
@@ -274,7 +359,7 @@ history.
     IP forwarded by the GCP load balancer. Keep those settings enabled for
     public GCE Ingress deployments.
 
-12. Run the GCP infra smoke after Cloud Storage and Secret Manager are wired:
+13. Run the GCP infra smoke after Cloud Storage and Secret Manager are wired:
 
     ```bash
     OPEN_COWORK_GCP_PROJECT=PROJECT \
@@ -294,7 +379,7 @@ history.
     `OPEN_COWORK_GCP_SQL_INSTANCE`. Set `OPEN_COWORK_GCP_ALLOW_NO_PITR=true`
     only for a documented non-production exception.
 
-13. Run the Desktop cloud-sync smoke with an admin-scoped token so the script
+14. Run the Desktop cloud-sync smoke with an admin-scoped token so the script
     can issue and revoke an ephemeral Desktop token. Keep tokens in the shell
     environment or your private deployment repo secret store; do not pass them
     on the command line:
@@ -314,7 +399,7 @@ history.
     checks; the full #496 acceptance gate should run prompts against a worker
     with BYOK/model credentials configured.
 
-14. Run the Gateway cloud smoke with an admin-scoped Cloud token and, when a
+15. Run the Gateway cloud smoke with an admin-scoped Cloud token and, when a
     managed Gateway endpoint is deployed, its Gateway admin token. Keep all
     tokens in the shell environment or your private deployment repo secret
     store; do not pass them on the command line:
@@ -337,7 +422,7 @@ history.
     provider remains loopback-only; do not expose fake ingress on public
     Gateway deployments.
 
-15. Run the Web/Desktop/Gateway continuation smoke with an admin-scoped Cloud
+16. Run the Web/Desktop/Gateway continuation smoke with an admin-scoped Cloud
     token. This is the #498 gate and should run after the Cloud, Desktop, and
     Gateway smoke gates are green:
 
@@ -359,7 +444,7 @@ history.
     `OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION`; launch gates
     should enable it.
 
-16. Run the strict production smoke wrapper after the individual Cloud,
+17. Run the strict production smoke wrapper after the individual Cloud,
     Desktop, Gateway, and Continuation smokes are green:
 
     ```bash
@@ -375,7 +460,7 @@ history.
     revocation, managed Gateway checks, and rich continuation projection all
     pass.
 
-17. Run the launch load and soak gates for the selected target profile. Keep
+18. Run the launch load and soak gates for the selected target profile. Keep
     tokens in environment variables or a private deployment repo secret store;
     do not commit real project ids, service names, domains, or tokens:
 
@@ -442,8 +527,14 @@ Do not use `auth.mode=none` for public Cloud Run URLs.
 
 ## Migrations And Rollback
 
-Cloud control-plane migrations run idempotently on app startup under Postgres
-advisory locks. Before a production rollout:
+Long-running Cloud roles must set `OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false` and
+connect through the least-privilege runtime principal. Run
+`cloud:migrate:start` once from the exact pinned image with the separate
+migrator identity; pass the runtime role/principal so the command applies the
+required DML grants, then remove the privileged migration workload. For GKE,
+use `gke/migrate-job.example.yaml` and keep it ahead of the Helm install in the
+fresh-install runbook; do not fold its GSA/KSA into the runtime chart. Before a
+production rollout:
 
 - apply to a staging clone first,
 - run smoke checks against an already-populated database,

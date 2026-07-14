@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { assertPostgresSchemaManifest } from "@open-cowork/shared/node";
 
 import { standaloneRetentionCutoffs } from "./retention.js";
 import {
   STANDALONE_GATEWAY_BASELINE_MIGRATION_ID,
   STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES,
+  STANDALONE_GATEWAY_SCHEMA_MANIFEST,
   standaloneGatewayMigrations,
 } from "./schema.js";
 import {
@@ -552,7 +554,7 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
     await this.pool.end?.();
   }
 
-  private async getSession(sessionId: string): Promise<StandaloneGatewaySessionRecord | null> {
+  async getSession(sessionId: string): Promise<StandaloneGatewaySessionRecord | null> {
     const result = await this.pool.query<SessionRow>(
       "SELECT * FROM standalone_gateway_sessions WHERE session_id = $1",
       [sessionId],
@@ -592,11 +594,21 @@ export async function assertStandaloneGatewaySchemaIntegrity(executor: PgLikeCli
     );
   }
   const missing = STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES.filter((tableName) => !tables.has(tableName));
-  if (missing.length === 0) return;
-  throw new Error(
-    `Standalone Gateway schema integrity failed: required production tables are missing (${summarizeSchemaNames(missing)}). `
-    + "The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Standalone Gateway schema or restore a complete database backup.",
-  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Standalone Gateway schema integrity failed: required production tables are missing (${summarizeSchemaNames(missing)}). `
+      + "The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Standalone Gateway schema or restore a complete database backup.",
+    );
+  }
+  try {
+    await assertPostgresSchemaManifest(executor, STANDALONE_GATEWAY_SCHEMA_MANIFEST, tables);
+  } catch (error) {
+    throw new Error(
+      `Standalone Gateway schema integrity failed: ${error instanceof Error ? error.message : String(error)} `
+      + "The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Standalone Gateway schema or restore a complete database backup.",
+      { cause: error },
+    );
+  }
 }
 
 async function currentStandaloneGatewayTables(executor: PgLikeClient): Promise<Set<string>> {

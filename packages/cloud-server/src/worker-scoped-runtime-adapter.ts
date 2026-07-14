@@ -52,6 +52,8 @@ type RuntimeEntry = {
   adapter: CloudRuntimeAdapter
   unsubscribe: (() => void | Promise<void>) | null
   activeUses: number
+  executionActive: boolean
+  nativeRootSessionId: string | null
   lastUsedAt: number
 }
 
@@ -97,21 +99,66 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
   const sweepTimer = setInterval(() => { void evictRuntimes() }, Math.max(1_000, Math.floor(runtimeIdleTtlMs / 2)))
   sweepTimer.unref?.()
 
-  async function subscribeRuntimeEvents(context: CloudRuntimeExecutionContext, adapter: CloudRuntimeAdapter) {
+  function eventStartsExecution(event: CloudRuntimeEvent) {
+    return event.type === 'session.status'
+      && (event.payload.statusType === 'busy' || event.payload.statusType === 'running')
+  }
+
+  function eventSettlesExecution(event: CloudRuntimeEvent) {
+    return event.type === 'session.idle'
+      || event.type === 'session.aborted'
+      || event.type === 'runtime.error'
+      || (event.type === 'session.status' && event.payload.statusType === 'idle')
+  }
+
+  function eventNativeSessionId(event: CloudRuntimeEvent) {
+    return typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
+  }
+
+  function eventBelongsToNativeRoot(entry: RuntimeEntry, event: CloudRuntimeEvent) {
+    const eventSessionId = eventNativeSessionId(event)
+    return !entry.nativeRootSessionId || !eventSessionId || eventSessionId === entry.nativeRootSessionId
+  }
+
+  async function subscribeRuntimeEvents(context: CloudRuntimeExecutionContext, entry: RuntimeEntry) {
+    const { adapter } = entry
     if (!adapter.subscribeEvents || listeners.size === 0) return null
     const unsubscribe = await adapter.subscribeEvents(
-      (event) => {
+      async (event) => {
+        const belongsToNativeRoot = eventBelongsToNativeRoot(entry, event)
         const mapped = mapRuntimeEventToCoworkSession(context, event)
-        for (const listener of listeners.keys()) {
-          void listener(mapped)
+        // OpenCode child sessions share this directory stream, but Cloud's
+        // product session terminal state belongs to the admitted native root.
+        // Projecting a child's idle/error onto the root would complete or fail
+        // the product run while its orchestrator is still working.
+        if (!belongsToNativeRoot && eventSettlesExecution(mapped)) return
+        if (belongsToNativeRoot && eventStartsExecution(mapped)) entry.executionActive = true
+        entry.activeUses += 1
+        entry.lastUsedAt = Date.now()
+        try {
+          // Propagate durable-boundary backpressure and failures all the way
+          // into the SDK stream. Promise.all keeps multiple product listeners
+          // concurrent without allowing the next runtime event to overtake.
+          await Promise.all([...listeners.keys()].map((listener) => listener(mapped)))
+        } finally {
+          // Child sessions share the root runtime's directory-scoped stream. A
+          // delegated child becoming idle must not make the still-running root
+          // eligible for eviction.
+          if (belongsToNativeRoot && eventSettlesExecution(mapped)) entry.executionActive = false
+          entry.activeUses = Math.max(0, entry.activeUses - 1)
+          entry.lastUsedAt = Date.now()
+          // Do not await unsubscribe from inside the callback that the inner
+          // stream itself is awaiting; an async unsubscribe could otherwise
+          // deadlock terminal delivery. Eligibility is already updated.
+          void evictRuntimes()
         }
       },
       {
         onError(error) {
-          for (const entry of listeners.values()) entry.onError?.(error)
+          for (const subscription of listeners.values()) subscription.onError?.(error)
         },
         onDroppedEvent(event) {
-          for (const entry of listeners.values()) entry.onDroppedEvent?.(event)
+          for (const subscription of listeners.values()) subscription.onDroppedEvent?.(event)
         },
       },
     )
@@ -142,7 +189,10 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
   async function closeRuntime(key: string, entry: RuntimeEntry, reason: 'idle_ttl' | 'max_entries' | 'shutdown' | 'unexpected_exit') {
     // A dead child must be evicted even mid-request (the adapter is already broken), so the
     // next access rebuilds; idle/max eviction keeps the in-use guard.
-    if (reason !== 'unexpected_exit' && entry.activeUses > 0) return false
+    if (
+      (reason === 'idle_ttl' || reason === 'max_entries')
+      && (entry.activeUses > 0 || entry.executionActive)
+    ) return false
     if (runtimes.get(key) !== entry) return true
     runtimes.delete(key)
     try {
@@ -161,7 +211,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
 
   async function evictRuntimes(now = Date.now()) {
     const candidates = Array.from(runtimes.entries())
-      .filter(([, entry]) => entry.activeUses === 0)
+      .filter(([, entry]) => entry.activeUses === 0 && !entry.executionActive)
       .sort(([, left], [, right]) => left.lastUsedAt - right.lastUsedAt)
     for (const [key, entry] of candidates) {
       const expired = now - entry.lastUsedAt >= runtimeIdleTtlMs
@@ -224,27 +274,35 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
         if (current) void closeRuntime(key, current, 'unexpected_exit')
       },
     })
-    const unsubscribe = await subscribeRuntimeEvents(context, adapter)
-    const entry = {
+    const entry: RuntimeEntry = {
       adapter,
-      unsubscribe,
+      unsubscribe: null,
       activeUses: 0,
+      executionActive: false,
+      nativeRootSessionId: null,
       lastUsedAt: Date.now(),
     }
     runtimes.set(key, entry)
+    try {
+      entry.unsubscribe = await subscribeRuntimeEvents(context, entry)
+    } catch (error) {
+      runtimes.delete(key)
+      await adapter.close?.()
+      throw error
+    }
     await recordRuntimeEntryCount()
     return { key, entry }
   }
 
   async function withRuntime<T>(
     contextInput: CloudRuntimeExecutionContext | null | undefined,
-    callback: (adapter: CloudRuntimeAdapter) => Promise<T>,
+    callback: (adapter: CloudRuntimeAdapter, entry: RuntimeEntry) => Promise<T>,
   ) {
     const { entry } = await getRuntimeEntry(contextInput)
     entry.activeUses += 1
     entry.lastUsedAt = Date.now()
     try {
-      return await callback(entry.adapter)
+      return await callback(entry.adapter, entry)
     } finally {
       entry.activeUses = Math.max(0, entry.activeUses - 1)
       entry.lastUsedAt = Date.now()
@@ -258,10 +316,32 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       return withRuntime(input?.context, (adapter) => adapter.createSession({ profileName: input?.profileName || undefined }))
     },
     async promptSession(input) {
-      return withRuntime(input.context, (adapter) => adapter.promptSession(input))
+      return withRuntime(input.context, async (adapter, entry) => {
+        const backgroundExecution = Boolean(adapter.subscribeEvents)
+        if (backgroundExecution) {
+          entry.nativeRootSessionId = input.sessionId
+          entry.executionActive = true
+        }
+        try {
+          const result = await adapter.promptSession(input)
+          // Synchronous/fake adapters own execution for the lifetime of this
+          // call. Native V2 adapters only admit work here and settle through
+          // the subscribed idle/error event.
+          if (!backgroundExecution || result?.events?.some(eventSettlesExecution)) {
+            entry.executionActive = false
+          }
+          return result
+        } catch (error) {
+          entry.executionActive = false
+          throw error
+        }
+      })
     },
     async abortSession(input) {
-      return withRuntime(input.context, (adapter) => adapter.abortSession(input))
+      return withRuntime(input.context, async (adapter, entry) => {
+        await adapter.abortSession(input)
+        entry.executionActive = false
+      })
     },
     async replyToQuestion(input) {
       return withRuntime(input.context, (adapter) => {
@@ -295,7 +375,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       for (const [key, entry] of runtimes.entries()) {
         if (entry.unsubscribe) continue
         const [tenantId, sessionId] = key.split('\0')
-        entry.unsubscribe = await subscribeRuntimeEvents({ tenantId: tenantId!, sessionId: sessionId! }, entry.adapter)
+        entry.unsubscribe = await subscribeRuntimeEvents({ tenantId: tenantId!, sessionId: sessionId! }, entry)
       }
       return unsubscribeListener
     },

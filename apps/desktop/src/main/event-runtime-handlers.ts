@@ -131,7 +131,11 @@ function handleIdleTransition(input: {
     runRuntimeSideEffect('workflow idle handling', () => handleWorkflowSessionIdle(rootSessionId))
   } else {
     const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
-    if (taskRun) {
+    // A native step failure is followed by the same idle settlement path as a
+    // successful step. Preserve the terminal error written by session.error;
+    // otherwise the child briefly fails and is immediately projected as
+    // complete.
+    if (taskRun && taskRun.status !== 'error') {
       const updated = updateTaskRun(taskRun.id, { status: 'complete' })
       if (updated) emitTaskRun(win, updated)
     }

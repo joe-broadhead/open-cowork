@@ -1,3 +1,5 @@
+import { createPostgresSchemaManifest } from "@open-cowork/shared/node";
+
 export const STANDALONE_GATEWAY_BASELINE_MIGRATION_ID = "0001_standalone_gateway_baseline";
 
 export const STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES = [
@@ -131,7 +133,7 @@ CREATE INDEX IF NOT EXISTS standalone_gateway_jobs_claim_idx
   ON standalone_gateway_jobs (status, available_at, claim_expires_at);
 CREATE INDEX IF NOT EXISTS standalone_gateway_audit_created_idx
   ON standalone_gateway_audit_events (created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_channel_identities_provider_workspace_user_unique
+CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_identities_workspace_user_uq
   ON standalone_gateway_channel_identities (provider, provider_workspace_id, external_user_id);
 
 CREATE INDEX IF NOT EXISTS standalone_gateway_channel_identities_prompt_auth_idx
@@ -156,6 +158,10 @@ CREATE INDEX IF NOT EXISTS standalone_gateway_artifacts_session_retention_idx
   ON standalone_gateway_artifacts (session_id, created_at);
   `,
 }];
+
+export const STANDALONE_GATEWAY_SCHEMA_MANIFEST = createPostgresSchemaManifest(
+  standaloneGatewayMigrations.map((migration) => migration.sql),
+);
 
 export function standaloneGatewaySchemaContainsProductionTables(sql = standaloneGatewayMigrations.map((migration) => migration.sql).join("\n")): boolean {
   return STANDALONE_GATEWAY_REQUIRED_TABLE_NAMES.every((table) => sql.includes(table));

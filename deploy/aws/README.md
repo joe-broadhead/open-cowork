@@ -29,6 +29,7 @@ helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.tag=IMAGE_TAG \
   --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
   --set cloud.profile=full \
+  --set cloud.runMigrations=false \
   --set cloud.publicUrl=https://cowork.example.com \
   --set cloud.auth.mode=oidc \
   --set cloud.auth.oidcIssuerUrl=https://cognito-idp.REGION.amazonaws.com/POOL_ID \
@@ -61,6 +62,12 @@ Keep ECS/Fargate task definitions aligned with the same environment variables
 used by the Helm chart: `OPEN_COWORK_CLOUD_ROLE`, control-plane URL,
 object-store settings, secret key, and checkpoint settings.
 
+The checked-in ECS reference gives each role an explicit container health
+contract. Web maps `8787` and probes `/readyz`; worker and scheduler set
+`OPEN_COWORK_CLOUD_LIVENESS_PORT=8788`, map that separate heartbeat port, and
+probe `/livez`. Do not point execution-only role health checks at the web port:
+those roles intentionally do not start the Cloud HTTP/API server.
+
 When the envelope key is read directly by the app, set
 `OPEN_COWORK_CLOUD_SECRET_KEY_REF` to an AWS Secrets Manager URI such as
 `aws-sm://open-cowork/cloud-secret-key?region=REGION`.
@@ -72,7 +79,7 @@ or ECS task secrets. The names below are runtime keys, not committed values:
 
 | Secret key | Runtime input |
 | --- | --- |
-| `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | RDS PostgreSQL connection string |
+| `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` | Least-privilege runtime RDS PostgreSQL connection string; never the master/migrator URL |
 | `OPEN_COWORK_CLOUD_SECRET_KEY` or `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | BYOK envelope key or `aws-sm://...` reference |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | Cookie signing secret |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal service token |
@@ -83,15 +90,19 @@ or ECS task secrets. The names below are runtime keys, not committed values:
 
 ## Rollout And Smoke
 
-1. Render Helm or ECS task definitions and verify `web`, `worker`,
+1. Create a dedicated runtime database login. Run `cloud:migrate:start` from
+   the exact pinned image once with a separate master/migrator URL and the
+   runtime principal, then remove that privileged URL from the task. Verify
+   every long-running role sets `OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false`.
+2. Render Helm or ECS task definitions and verify `web`, `worker`,
    `scheduler`, and Gateway are separate scalable services.
-2. Confirm RDS PITR, S3 versioning/lifecycle, CloudWatch JSON logs, and OTLP
+3. Confirm RDS PITR, S3 versioning/lifecycle, CloudWatch JSON logs, and OTLP
    export or collector wiring are enabled.
-3. Route HTTPS through ALB, CloudFront, or ingress and set
+4. Route HTTPS through ALB, CloudFront, or ingress and set
    `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` plus
    `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only for trusted AWS forwarding
    hops.
-4. Run the shared gates:
+5. Run the shared gates:
 
    ```bash
    pnpm deploy:validate

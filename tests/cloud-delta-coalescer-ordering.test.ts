@@ -11,6 +11,7 @@ import type {
 } from '@open-cowork/cloud-server/runtime-adapter'
 import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 import {
+  createRetryingRuntimeEventRouter,
   createRuntimeDeltaCoalescer,
   createSessionSerializedRuntimeEventRouter,
 } from '@open-cowork/cloud-server/app'
@@ -148,6 +149,75 @@ test('a failed route does not wedge the session chain', async () => {
   // ...but later events on the same session still route (the chain is not poisoned).
   await serialized({ type: 'session.idle', payload: { sessionId: 's1' } })
   assert.deepEqual(appended, ['session.idle'])
+})
+
+test('runtime event retries reuse one idempotency key with bounded exponential delays', async () => {
+  const attemptedIds: Array<string | undefined> = []
+  const delays: number[] = []
+  const route = createRetryingRuntimeEventRouter({
+    route: async (event) => {
+      attemptedIds.push(event.eventId)
+      if (attemptedIds.length < 3) throw new Error('transient append failure')
+    },
+    maxAttempts: 4,
+    baseDelayMs: 10,
+    sleep: async (delayMs) => { delays.push(delayMs) },
+  })
+
+  await route({ type: 'session.idle', payload: { sessionId: 's1' } })
+
+  assert.equal(attemptedIds.length, 3)
+  assert.ok(attemptedIds[0]?.startsWith('runtime:s1:'))
+  assert.deepEqual(new Set(attemptedIds).size, 1)
+  assert.deepEqual(delays, [10, 20])
+})
+
+test('runtime event retries reject after the configured attempt budget', async () => {
+  let attempts = 0
+  const route = createRetryingRuntimeEventRouter({
+    route: async () => {
+      attempts += 1
+      throw new Error('durable store unavailable')
+    },
+    maxAttempts: 3,
+    baseDelayMs: 0,
+    sleep: async () => {},
+  })
+
+  await assert.rejects(
+    route({ type: 'session.idle', payload: { sessionId: 's1' } }),
+    /durable store unavailable/,
+  )
+  assert.equal(attempts, 3)
+})
+
+test('coalescer handle applies backpressure until the durable boundary finishes', async () => {
+  const started: string[] = []
+  let releaseDelta!: () => void
+  const deltaGate = new Promise<void>((resolve) => { releaseDelta = resolve })
+  const coalescer = createRuntimeDeltaCoalescer({
+    route: async (event) => {
+      started.push(event.type)
+      if (event.type === 'assistant.message') await deltaGate
+    },
+    setTimer: () => 1 as unknown as ReturnType<typeof setTimeout>,
+    clearTimer: () => {},
+  })
+
+  await coalescer.handle(appendDelta('s1', 'm1', 'pending'))
+  let boundaryFinished = false
+  const boundary = coalescer
+    .handle({ type: 'session.idle', payload: { sessionId: 's1' } })
+    .then(() => { boundaryFinished = true })
+  await yieldTicks(1)
+
+  assert.deepEqual(started, ['assistant.message'])
+  assert.equal(boundaryFinished, false)
+
+  releaseDelta()
+  await boundary
+  assert.deepEqual(started, ['assistant.message', 'session.idle'])
+  assert.equal(boundaryFinished, true)
 })
 
 // End-to-end invariant against the REAL store/service append path (multiple awaits per

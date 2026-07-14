@@ -5,6 +5,10 @@ import { setWorkflowDatabaseForTests } from '@open-cowork/runtime-host/workflow/
 import { setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
 import { setArtifactLifecycleDatabaseForTests } from '@open-cowork/runtime-host/artifact-index'
 import { setKnowledgeDatabaseForTests } from '@open-cowork/runtime-host/knowledge/knowledge-store'
+import {
+  initializeLocalSqliteSchema,
+  type LocalSqliteSchemaDefinition,
+} from '../packages/runtime-host/src/local-sqlite-schema.ts'
 
 type StoreAdapter = {
   name: string
@@ -54,6 +58,9 @@ function currentVersion(store: StoreAdapter) {
 }
 
 function snapshot(db: DatabaseSync) {
+  const hasSentinel = Boolean(db.prepare(`
+    select 1 from sqlite_schema where type = 'table' and name = 'sentinel_payload'
+  `).get())
   return {
     schema: db.prepare(`
       select type, name, sql
@@ -61,11 +68,11 @@ function snapshot(db: DatabaseSync) {
       where name not like 'sqlite_%'
       order by type, name
     `).all(),
-    sentinel: db.prepare(`
+    sentinel: hasSentinel ? db.prepare(`
       select name, payload
       from sentinel_payload
       order by name
-    `).all(),
+    `).all() : [],
   }
 }
 
@@ -134,11 +141,6 @@ test('current local SQLite ledgers do not mask missing indexes or column drift',
       try {
         store.initialize(db)
         store.reset()
-        db.exec(`
-          create table sentinel_payload (name text primary key, payload text not null);
-          insert into sentinel_payload (name, payload) values ('proof', 'must-survive');
-        `)
-
         if (scenario === 'missing-index') {
           const index = db.prepare(`
             select name
@@ -164,7 +166,7 @@ test('current local SQLite ledgers do not mask missing indexes or column drift',
 
         assert.throws(
           () => store.initialize(db),
-          scenario === 'missing-index' ? /current schema index .* is missing/ : /required current columns/,
+          /schema objects are missing|canonical current definition/,
           `${store.name} should reject ${scenario}`,
         )
         assert.deepEqual(snapshot(db), before, `${store.name} must not repair ${scenario}`)
@@ -172,6 +174,67 @@ test('current local SQLite ledgers do not mask missing indexes or column drift',
         store.reset()
         db.close()
       }
+    }
+  }
+})
+
+const canonicalDefinition: LocalSqliteSchemaDefinition = {
+  storeName: 'schema-integrity fixture',
+  currentVersion: 1,
+  metaTable: 'fixture_meta',
+  versionKey: 'schema_version',
+  baselineSql: `
+    create table fixture_meta (
+      key text primary key,
+      value text not null
+    );
+    create table fixture_parent (
+      id text primary key,
+      label text not null
+    );
+    create table fixture_child (
+      id text primary key,
+      parent_id text not null,
+      state text not null default 'new' check (state in ('new', 'done')),
+      foreign key(parent_id) references fixture_parent(id) on delete cascade
+    );
+    create index idx_fixture_child_parent on fixture_child(parent_id, state);
+  `,
+  tables: [
+    { name: 'fixture_meta', columns: ['key', 'value'] },
+    { name: 'fixture_parent', columns: ['id', 'label'] },
+    { name: 'fixture_child', columns: ['id', 'parent_id', 'state'] },
+  ],
+  indexes: ['idx_fixture_child_parent'],
+  recovery: 'Reset only the test fixture.',
+}
+
+test('local SQLite canonical validation rejects type, null, default, key, check, FK, index, and unexpected-object drift', () => {
+  const drifts = new Map<string, (sql: string) => string>([
+    ['type', (sql) => sql.replace('parent_id text not null', 'parent_id integer not null')],
+    ['nullability', (sql) => sql.replace("state text not null default 'new'", "state text default 'new'")],
+    ['default', (sql) => sql.replace("default 'new'", "default 'old'")],
+    ['primary key', (sql) => sql.replace('create table fixture_child (\n      id text primary key', 'create table fixture_child (\n      id text not null')],
+    ['check', (sql) => sql.replace("state in ('new', 'done')", "state in ('new', 'blocked')")],
+    ['foreign key', (sql) => sql.replace('on delete cascade', 'on delete set null')],
+    ['same-name index', (sql) => sql.replace('fixture_child(parent_id, state)', 'fixture_child(state, parent_id)')],
+    ['unexpected object', (sql) => `${sql}\ncreate table fixture_legacy (id text primary key);`],
+  ])
+
+  for (const [name, mutate] of drifts) {
+    const db = new DatabaseSync(':memory:')
+    try {
+      db.exec(mutate(canonicalDefinition.baselineSql))
+      db.prepare(`insert into fixture_meta (key, value) values ('schema_version', '1')`).run()
+      const before = snapshot(db)
+      assert.throws(
+        () => initializeLocalSqliteSchema(db, canonicalDefinition),
+        /canonical current definition|unexpected schema objects/,
+        `${name} drift must fail closed`,
+      )
+      assert.deepEqual(snapshot(db), before, `${name} validation must remain read-only`)
+    } finally {
+      db.close()
     }
   }
 })

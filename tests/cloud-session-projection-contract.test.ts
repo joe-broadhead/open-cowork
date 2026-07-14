@@ -27,6 +27,10 @@ import {
   reduceCloudSessionProjectionEvent,
   waitForCloudProjectionFence,
 } from '../packages/shared/dist/cloud-session-projection.js'
+import {
+  RUNTIME_EVENT_REDACTED,
+  RUNTIME_EVENT_TRUNCATED,
+} from '../packages/shared/dist/runtime-event-sanitizer.js'
 
 function baseSession(overrides = {}) {
   return {
@@ -543,11 +547,20 @@ test('cloud projection reducer covers durable runtime event state transitions', 
   assert.equal(view.status, 'errored')
   assert.equal(view.errors[0]?.id, 'command-1')
 
-  view = reduceCloudSessionProjectionEvent(session, view, event(15, 'session.aborted'))
+  view = reduceCloudSessionProjectionEvent(session, view, event(15, 'session.idle'))
+  assert.equal(view.status, 'errored')
+
+  view = reduceCloudSessionProjectionEvent(session, view, event(16, 'session.status', { statusType: 'busy' }))
+  assert.equal(view.status, 'running')
+
+  view = reduceCloudSessionProjectionEvent(session, view, event(17, 'session.idle'))
   assert.equal(view.status, 'idle')
 
-  view = reduceCloudSessionProjectionEvent(session, view, event(16, 'unknown.event'))
-  assert.equal(view.updatedAt, '2026-05-28T10:15:00.000Z')
+  view = reduceCloudSessionProjectionEvent(session, view, event(18, 'session.aborted'))
+  assert.equal(view.status, 'idle')
+
+  view = reduceCloudSessionProjectionEvent(session, view, event(19, 'unknown.event'))
+  assert.equal(view.updatedAt, '2026-05-28T10:18:00.000Z')
 })
 
 test('assistant.message append-mode deltas accumulate streamed text without dropping whitespace', () => {
@@ -568,6 +581,38 @@ test('assistant.message append-mode deltas accumulate streamed text without drop
   view = reduceCloudSessionProjectionEvent(session, view, event(4, 'assistant.message', { messageId: 'msg-1', content: 'Hello world' }))
   assert.equal(view.messages.length, 1)
   assert.equal(view.messages[0]?.content, 'Hello world')
+})
+
+test('cloud projection re-sanitizes tool payloads loaded from durable state', () => {
+  const session = baseSession()
+  const view = reduceCloudSessionProjectionEvent(
+    session,
+    createCloudSessionProjectionView(session),
+    event(1, 'tool.call', {
+      id: 'unsafe-tool',
+      name: 'custom',
+      status: 'complete',
+      input: {
+        nested: { accessToken: 'persisted-secret' },
+        path: 'file:///Users/alice/private/input.txt',
+      },
+      output: {
+        apiKey: 'persisted-api-key',
+        huge: 'x'.repeat(2 * 1_024 * 1_024),
+        file: { type: 'file', url: 'https://files.example/private', content: 'private file' },
+      },
+    }),
+  )
+
+  const [tool] = view.toolCalls
+  assert.ok(tool)
+  assert.deepEqual(tool.input.nested, { accessToken: RUNTIME_EVENT_REDACTED })
+  assert.equal(tool.input.path, '[REDACTED_LOCAL_FILE_URL]')
+  const serialized = JSON.stringify(tool)
+  assert.equal(serialized.includes('persisted-secret'), false)
+  assert.equal(serialized.includes('persisted-api-key'), false)
+  assert.equal(serialized.includes('private file'), false)
+  assert.equal(serialized.includes(RUNTIME_EVENT_TRUNCATED), true)
 })
 
 test('cloud projection normalization filters malformed cached fields', () => {
@@ -639,7 +684,7 @@ test('cloud projection normalization owns nested cached structures', () => {
   const messageAttachments = [{ mime: 'text/plain', url: 'https://example.test/a.txt', filename: 'before.txt' }]
   const toolInput = { command: 'pwd', args: ['before'] }
   const toolOutput = { chunks: [{ text: 'before' }] }
-  const toolAttachments = [{ mime: 'text/plain', url: 'https://example.test/tool.txt', filename: 'tool-before.txt' }]
+  const toolAttachments = [{ mime: 'text/plain', url: 'data:text/plain;base64,YmVmb3Jl', filename: 'tool-before.txt' }]
   const taskTranscript = [{ id: 'segment-1', content: 'before', order: 1 }]
   const taskReasoning = [{ id: 'reasoning-1', content: 'before', order: 1 }]
   const taskCompactions = [{ id: 'compaction-1', status: 'compacted', auto: true, overflow: false, order: 1 }]
@@ -707,7 +752,7 @@ test('cloud projection normalization owns nested cached structures', () => {
   assert.deepEqual(normalized.toolCalls[0]?.output, { chunks: [{ text: 'before' }] })
   assert.deepEqual(normalized.toolCalls[0]?.attachments, [{
     mime: 'text/plain',
-    url: 'https://example.test/tool.txt',
+    url: 'data:text/plain;base64,YmVmb3Jl',
     filename: 'tool-before.txt',
   }])
   assert.deepEqual(normalized.taskRuns[0]?.transcript, [{ id: 'segment-1', content: 'before', order: 1 }])

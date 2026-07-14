@@ -5521,26 +5521,26 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(ungrantedProviderEventCompleteByRecordedBinding.status, 404)
 
-    const legacyProviderEventClaim = store.claimChannelProviderEvent({
+    const unscopedProviderEventClaim = store.claimChannelProviderEvent({
       orgId: org.orgId,
       provider: 'telegram',
       providerInstanceId: 'telegram-prod',
       externalWorkspaceId: 'bot-1',
-      providerEventId: 'provider-event-legacy-complete',
+      providerEventId: 'provider-event-unscoped-complete',
       eventType: 'message',
-      claimedBy: 'gateway-legacy',
+      claimedBy: 'gateway-unscoped',
       ttlMs: 30_000,
-      metadata: { providerMessageId: 'legacy-message' },
+      metadata: { providerMessageId: 'unscoped-message' },
     })
-    const legacyProviderEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${legacyProviderEventClaim.event.eventId}/complete`, {
+    const unscopedProviderEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${unscopedProviderEventClaim.event.eventId}/complete`, {
       method: 'POST',
       headers: gatewayOnlyHeaders,
       body: JSON.stringify({
-        claimedBy: 'gateway-legacy',
+        claimedBy: 'gateway-unscoped',
         status: 'processed',
       }),
     })
-    assert.equal(legacyProviderEventComplete.status, 200)
+    assert.equal(unscopedProviderEventComplete.status, 404)
 
     const wrongWorkspacePrompt = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
       method: 'POST',

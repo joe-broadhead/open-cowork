@@ -60,7 +60,8 @@ export interface StandaloneGatewayConfig {
   opencode: {
     baseUrl: string;
     allowPrivateDns: boolean;
-    runtimeRoot: string | null;
+    runtimeRoot: string;
+    executionTimeoutMs: number;
   };
   retention: {
     sessionDays: number;

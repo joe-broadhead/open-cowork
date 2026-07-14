@@ -214,6 +214,10 @@ describe('CommandPalette', () => {
       />,
     )
 
+    await waitFor(() => expect(window.coworkApi.command.list).toHaveBeenCalledWith({
+      directory: '/tmp/project',
+    }))
+
     await user.type(screen.getByRole('searchbox', { name: 'Search command palette' }), 'build')
     await user.click(await screen.findByRole('option', { name: /Use Build/ }))
 

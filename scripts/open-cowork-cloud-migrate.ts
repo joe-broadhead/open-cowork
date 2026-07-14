@@ -1,6 +1,10 @@
 import { getAppConfig } from '@open-cowork/runtime-host/config'
 import { resolveCloudControlPlaneUrl } from '../packages/cloud-server/src/app.ts'
-import { createPostgresControlPlaneStore } from '../packages/cloud-server/src/postgres-control-plane-store.ts'
+import {
+  createPostgresControlPlaneStore,
+  loadPgPool,
+} from '../packages/cloud-server/src/postgres-control-plane-store.ts'
+import { provisionPostgresRuntimeRole } from '../packages/cloud-server/src/postgres-runtime-role.ts'
 
 // Standalone control-plane migration step for change-managed / blue-green rollouts:
 // run the schema migrations once up front (with the web/worker instances booted via
@@ -19,7 +23,35 @@ if (!url) {
 const store = await createPostgresControlPlaneStore({ connectionString: url, runMigrations: false })
 try {
   await store.runMigrations()
-  process.stdout.write('open-cowork-cloud migrations applied\n')
 } finally {
   await store.close()
 }
+
+const runtimeRole = process.env.OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE?.trim() || ''
+const runtimePrincipal = process.env.OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL?.trim() || ''
+if (Boolean(runtimeRole) !== Boolean(runtimePrincipal)) {
+  throw new Error(
+    'Set OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE and OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL together when provisioning least-privilege runtime access.',
+  )
+}
+if (runtimeRole && runtimePrincipal) {
+  const pool = loadPgPool(url)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await provisionPostgresRuntimeRole(client, { role: runtimeRole, principal: runtimePrincipal })
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+    await pool.end()
+  }
+}
+
+process.stdout.write(
+  runtimeRole
+    ? 'open-cowork-cloud migrations and runtime grants applied\n'
+    : 'open-cowork-cloud migrations applied\n',
+)

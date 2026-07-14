@@ -11,8 +11,19 @@ variable "name_prefix" {
 }
 
 variable "cloud_image" {
-  description = "Fully-qualified open-cowork-cloud image (e.g. ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-cloud:TAG)."
+  description = "Fully-qualified immutable open-cowork-cloud image digest."
   type        = string
+
+  validation {
+    condition     = can(regex("^[^[:space:]@/]+/[^[:space:]@]+@sha256:[0-9a-f]{64}$", var.cloud_image))
+    error_message = "cloud_image must be a fully-qualified immutable image reference ending in @sha256:<64 lowercase hex characters>."
+  }
+}
+
+variable "deploy_runtime_services" {
+  description = "Create long-running web/worker/scheduler services only after the digest-pinned migrator task succeeds. Keep false for the first infrastructure apply and for every pre-migration upgrade apply."
+  type        = bool
+  default     = false
 }
 
 variable "vpc_id" {
@@ -97,6 +108,18 @@ variable "secret_arns" {
 
 variable "secret_env" {
   description = "Environment variable name -> Secrets Manager secret ARN map injected into every role (values stay in Secrets Manager, never in state)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "migrator_secret_env" {
+  description = "Migrator-only environment variable -> Secrets Manager ARN map. Must contain OPEN_COWORK_CLOUD_CONTROL_PLANE_URL using a short-lived owner/migrator credential; never reuse it in secret_env."
+  type        = map(string)
+  default     = {}
+}
+
+variable "migrator_env" {
+  description = "Non-secret migrator environment. Set OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE and OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL so the one-shot task provisions the runtime boundary."
   type        = map(string)
   default     = {}
 }

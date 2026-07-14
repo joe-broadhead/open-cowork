@@ -90,7 +90,10 @@ test(
 
     const paths = createSmokePaths({
       seedBeforeLaunch: ({ dataRoot }) => {
-        writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify([makePackagedSeedSession()], null, 2))
+        writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify({
+          schemaVersion: 1,
+          sessions: [makePackagedSeedSession()],
+        }, null, 2))
       },
     })
     let firstLaunch: SmokeSession | null = null

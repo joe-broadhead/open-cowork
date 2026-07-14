@@ -2,7 +2,7 @@ import { createPostgresKnowledgeStore } from '@open-cowork/runtime-host/knowledg
 import type { WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import { constantTimeEquals as constantTimeStringEqual } from '@open-cowork/shared/node'
 import { mkdir } from 'node:fs/promises'
 import { createServer, type IncomingMessage } from 'node:http'
@@ -78,6 +78,7 @@ import {
   buildKnowledgeAgentRuntimeAugmentation,
 } from './knowledge-agent-runtime.ts'
 import { createUnavailableRuntimeAdapter } from './unavailable-runtime-adapter.ts'
+import { isLoopbackCloudHost, isNonPublicCloudHost } from './cloud-host-policy.ts'
 import {
   createObjectWorkspaceCheckpointStore,
   defaultCloudSessionCheckpointRoots,
@@ -656,17 +657,7 @@ export function createCloudDesktopAuthConfig(auth: CloudAuthConfig): CloudDeskto
   }
 }
 
-export function isLoopbackCloudHost(hostname: string | null | undefined) {
-  const host = (hostname || '').trim().toLowerCase()
-  if (!host) return false
-  return host === 'localhost'
-    || host === '::1'
-    || host === '[::1]'
-    || host === '::ffff:127.0.0.1'
-    || host === '[::ffff:127.0.0.1]'
-    || host === '127.0.0.1'
-    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
-}
+export { isLoopbackCloudHost, isNonPublicCloudHost } from './cloud-host-policy.ts'
 
 function parseDeploymentOrigin(value: string | null | undefined, label: string) {
   const text = value?.trim()
@@ -686,8 +677,8 @@ function parseDeploymentOrigin(value: string | null | undefined, label: string) 
 function assertPublicHttpsOrigin(value: string | null | undefined, label: string) {
   const url = parseDeploymentOrigin(value, label)
   if (!url) return null
-  if (url.protocol !== 'https:' || isLoopbackCloudHost(url.hostname)) {
-    throw new Error(`${label} for public deployments must use HTTPS with a non-loopback host.`)
+  if (url.protocol !== 'https:' || isNonPublicCloudHost(url.hostname)) {
+    throw new Error(`${label} for public deployments must use HTTPS with a publicly routable host.`)
   }
   return url
 }
@@ -695,7 +686,7 @@ function assertPublicHttpsOrigin(value: string | null | undefined, label: string
 function publicUrlEnablesStrictTransportSecurity(value: string | null | undefined) {
   try {
     const url = parseDeploymentOrigin(value, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
-    return Boolean(url && url.protocol === 'https:' && !isLoopbackCloudHost(url.hostname))
+    return Boolean(url && url.protocol === 'https:' && !isNonPublicCloudHost(url.hostname))
   } catch {
     return false
   }
@@ -831,6 +822,10 @@ export function assertCloudProductionDeploymentSafe(input: {
   const objectStore = resolveCloudObjectStoreConfig(input.config, input.env)
   if (objectStore.kind === 'filesystem' || objectStore.kind === 'unavailable' || !objectStore.bucket) {
     throw new Error('Public production cloud deployments require durable provider-backed object storage with a bucket/container. Filesystem object storage is local/self-host-beta only.')
+  }
+
+  if (parseBoolean(envValue(input.env, RUN_MIGRATIONS_ENV), true)) {
+    throw new Error(`Public production cloud deployments require ${RUN_MIGRATIONS_ENV}=false. Apply migrations from the exact pinned image with a separately credentialed one-shot cloud:migrate:start job before starting long-running roles.`)
   }
 
   if (!hasProductionSecretMaterial(input.env, 'OPEN_COWORK_CLOUD_SECRET_KEY', 'OPEN_COWORK_CLOUD_SECRET_KEY_REF')) {
@@ -1030,6 +1025,44 @@ export function createSessionSerializedRuntimeEventRouter(
   }
 }
 
+export const DEFAULT_RUNTIME_EVENT_ROUTE_ATTEMPTS = 6
+
+/**
+ * Runtime stream events are not replayable after the OpenCode process exits.
+ * Retry transient durable-boundary failures in place, using one generated id
+ * for every attempt so a commit followed by a response failure is idempotent.
+ */
+export function createRetryingRuntimeEventRouter(options: {
+  route: (event: CloudRuntimeEvent) => Promise<void>
+  maxAttempts?: number
+  baseDelayMs?: number
+  sleep?: (delayMs: number) => Promise<void>
+}): (event: CloudRuntimeEvent) => Promise<void> {
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? DEFAULT_RUNTIME_EVENT_ROUTE_ATTEMPTS))
+  const baseDelayMs = Math.max(0, Math.floor(options.baseDelayMs ?? 50))
+  const sleep = options.sleep ?? ((delayMs: number) => new Promise<void>((resolveSleep) => {
+    setTimeout(resolveSleep, delayMs)
+  }))
+  return async (event) => {
+    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : 'unscoped'
+    const retryableEvent = event.eventId
+      ? event
+      : { ...event, eventId: `runtime:${sessionId}:${randomUUID()}` }
+    let lastError: unknown = null
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await options.route(retryableEvent)
+        return
+      } catch (error) {
+        lastError = error
+        if (attempt === maxAttempts) break
+        await sleep(Math.min(1_000, baseDelayMs * (2 ** (attempt - 1))))
+      }
+    }
+    throw lastError
+  }
+}
+
 // Token-granular `assistant.message` append deltas (projected from the SDK
 // `message.part.delta`) arrive one per token. Materializing each one rewrites the WHOLE
 // session projection (+ ~5 DB round-trips per event), so M streamed tokens cost O(M²)
@@ -1042,9 +1075,9 @@ export function createSessionSerializedRuntimeEventRouter(
 // `existing + (d1 + d2 + … + dN)` is byte-identical to `((existing + d1) + d2) … + dN`.
 // Non-append events flush the session's pending delta FIRST so transcript order is
 // preserved (deltas land before the snapshot/tool/idle that follows them). The coalescer
-// invokes route() synchronously in transcript order; the production route is additionally
-// wrapped in createSessionSerializedRuntimeEventRouter so the multi-await append path
-// cannot re-order those calls durably (issue #855). Pending deltas
+// serializes handling per session before invoking route(); the production route is also
+// wrapped in createSessionSerializedRuntimeEventRouter as a durable-boundary safeguard.
+// Pending deltas
 // are flushed when the session goes idle (a boundary), and `flushAll` flushes any tail on
 // shutdown, so no token is lost. Sequence ordering is preserved: coalescing only reduces
 // the number of appended events; the survivors stay monotonic and in arrival order.
@@ -1057,7 +1090,7 @@ type RuntimeDeltaPending = {
 }
 
 export type RuntimeDeltaCoalescer = {
-  handle(event: CloudRuntimeEvent): void
+  handle(event: CloudRuntimeEvent): Promise<void>
   flushAll(): Promise<void>
 }
 
@@ -1082,19 +1115,31 @@ export function createRuntimeDeltaCoalescer(options: {
   const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
   const clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle))
   const pendingBySession = new Map<string, RuntimeDeltaPending>()
+  const tailBySession = new Map<string, Promise<void>>()
 
-  // Flush the buffered append for a session. Returns the route promise so shutdown can
-  // await it; timer/boundary flushes ignore the return (fire-and-forget, matching the
-  // existing per-event routing).
-  const flushSession = (sessionId: string): Promise<void> => {
-    const pending = pendingBySession.get(sessionId)
-    if (!pending) return Promise.resolve()
-    pendingBySession.delete(sessionId)
-    if (pending.timer) clearTimer(pending.timer)
-    return options.route(pending.event)
+  const enqueueSession = (sessionId: string, operation: () => Promise<void>) => {
+    const previous = tailBySession.get(sessionId) ?? Promise.resolve()
+    const next = previous.then(operation)
+    // A rejected operation must remain visible to its caller without poisoning later
+    // events on the same session. Keep a non-rejecting tail solely for serialization.
+    const guarded = next.then(() => {}, () => {})
+    tailBySession.set(sessionId, guarded)
+    void guarded.then(() => {
+      if (tailBySession.get(sessionId) === guarded) tailBySession.delete(sessionId)
+    })
+    return next
   }
 
-  const handle = (event: CloudRuntimeEvent) => {
+  // Called only from that session's ordered operation queue.
+  const flushSession = async (sessionId: string): Promise<void> => {
+    const pending = pendingBySession.get(sessionId)
+    if (!pending) return
+    pendingBySession.delete(sessionId)
+    if (pending.timer) clearTimer(pending.timer)
+    await options.route(pending.event)
+  }
+
+  const processEvent = async (event: CloudRuntimeEvent) => {
     const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
 
     if (sessionId && isAppendDeltaEvent(event)) {
@@ -1114,8 +1159,12 @@ export function createRuntimeDeltaCoalescer(options: {
       }
       // A delta for a different message (or none buffered): flush the old one first to keep
       // order, then start a fresh window for this message.
-      if (pending) void flushSession(sessionId)
-      const timer = setTimer(() => { void flushSession(sessionId) }, flushDelayMs)
+      if (pending) await flushSession(sessionId)
+      const timer = setTimer(() => {
+        // Timer flushes enter the same session queue as source events. A boundary already
+        // received can therefore never be overtaken by a later timer continuation.
+        void enqueueSession(sessionId, () => flushSession(sessionId))
+      }, flushDelayMs)
       pendingBySession.set(sessionId, {
         event: { ...event, payload: { ...event.payload } },
         messageId,
@@ -1126,18 +1175,29 @@ export function createRuntimeDeltaCoalescer(options: {
 
     // Boundary event: flush this session's pending deltas before routing it so the
     // transcript order (deltas → snapshot/tool/idle) is preserved. Both route() calls are
-    // issued synchronously in transcript order; DURABLE ordering additionally requires the
-    // route itself to serialize per session (the production wiring wraps routeRuntimeEvent
-    // in createSessionSerializedRuntimeEventRouter — issue #855).
-    // INVARIANT: these are fire-and-forget (`void`), so `options.route` must never reject —
-    // the production wiring pre-wraps it in `.catch(recordLoopError)`. Keep that catch if you
-    // rewire the route, or these calls will surface as unhandled promise rejections.
-    if (sessionId) void flushSession(sessionId)
-    void options.route(event)
+    // processed on one session queue; the durable route is additionally serialized as a
+    // defence in depth against callers that use it outside this coalescer (issue #855).
+    // Returning the durable route promise supplies natural backpressure to the
+    // SDK subscription. At most one routed event plus one coalesced pending
+    // delta exists per session, rather than an unbounded promise tail.
+    if (sessionId) await flushSession(sessionId)
+    await options.route(event)
+  }
+
+  const handle = (event: CloudRuntimeEvent) => {
+    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
+    return sessionId
+      ? enqueueSession(sessionId, () => processEvent(event))
+      : processEvent(event)
   }
 
   const flushAll = async () => {
-    await Promise.all([...pendingBySession.keys()].map((sessionId) => flushSession(sessionId)))
+    // First let already-enqueued source events populate/flush their buffers. A caller may
+    // invoke flushAll immediately after handle() without awaiting the individual handles.
+    await Promise.all([...tailBySession.values()])
+    await Promise.all([...pendingBySession.keys()].map((sessionId) => (
+      enqueueSession(sessionId, () => flushSession(sessionId))
+    )))
   }
 
   return { handle, flushAll }
@@ -1688,30 +1748,37 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         // Serialized per session (issue #855): the coalescer issues route() calls
         // synchronously in transcript order (flushed delta, then boundary); the wrapper
         // guarantees those appends persist in exactly that order.
-        route: createSessionSerializedRuntimeEventRouter((event) => routeRuntimeEvent(store, worker, event).catch((error) => recordLoopError(
+        route: ((serializedRoute) => (event: CloudRuntimeEvent) => serializedRoute(event).catch((error) => recordLoopError(
           observability,
           'cloud.worker.runtime_event.error',
           error,
           { event_type: event.type },
-        ))),
+        )))(createSessionSerializedRuntimeEventRouter(createRetryingRuntimeEventRouter({
+          route: (event) => routeRuntimeEvent(store, worker, event),
+        }))),
       })
     : null
   const runtimeUnsubscribe = runtimeDeltaCoalescer && runtime.subscribeEvents
-    ? await runtime.subscribeEvents((event) => {
-        runtimeDeltaCoalescer.handle(event)
-      }, {
-        onDroppedEvent(event) {
-          void recordCloudMetric(observability, {
+    ? await runtime.subscribeEvents((event) => runtimeDeltaCoalescer.handle(event), {
+      onDroppedEvent(event) {
+        void recordCloudMetric(observability, {
             name: 'open_cowork_cloud_opencode_events_dropped_total',
             value: 1,
             unit: '1',
             attributes: {
               sdk_event_type: event.sdkEventType || 'unknown',
               reason: event.reason,
-            },
-          })
-        },
-      })
+          },
+        })
+      },
+      onError(error) {
+        void recordLoopError(
+          observability,
+          'cloud.worker.runtime_event_stream.error',
+          error,
+        )
+      },
+    })
     : null
   // Worker/scheduler roles run no HTTP server, so a liveness heartbeat + a tiny /livez
   // server lets the orchestrator restart a wedged-event-loop pod. The web (and all-in-one)

@@ -326,7 +326,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
   })
   private readonly coordinationWatchesDomain = new InMemoryCoordinationWatchesDomain()
-  private readonly workflowsDomain = new InMemoryWorkflowsDomain({
+  private readonly workflowsDomain: InMemoryWorkflowsDomain = new InMemoryWorkflowsDomain({
     requireTenant: (tenantId) => { this.requireTenant(tenantId) },
     requireTenantUser: (tenantId, userId) => { this.requireTenantUser(tenantId, userId) },
     assertWorkflowRunQuota: (input) => { this.quotaDomain.assertWorkflowRunQuota(input) },
@@ -376,7 +376,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly usageQuotaDomain = new InMemoryUsageQuotaDomain({
     orgExists: (orgId) => this.orgExists(orgId),
   })
-  private readonly sessionsDomain = new InMemorySessionsDomain({
+  private readonly sessionsDomain: InMemorySessionsDomain = new InMemorySessionsDomain({
     sessions: this.sessions,
     artifactIndex: this.artifactIndex,
     launchpadSessionSummaries: this.launchpadSessionSummaries,
@@ -391,6 +391,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     restoreWorkspaceEvents: (snapshot) => {
       this.workspaceEventsDomain.restore(snapshot as Parameters<InMemoryWorkspaceEventsDomain['restore']>[0])
     },
+    snapshotWorkflows: () => this.workflowsDomain.snapshot(),
+    restoreWorkflows: (snapshot) => {
+      this.workflowsDomain.restore(snapshot as Parameters<InMemoryWorkflowsDomain['restore']>[0])
+    },
+    completeWorkflowRun: (input) => this.workflowsDomain.completeWorkflowRun(input),
+    failWorkflowRun: (input) => this.workflowsDomain.failWorkflowRun(input),
     assertCommandQueueQuota: (input) => { this.quotaDomain.assertCommandQueueQuota(input) },
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
     snapshotUsageQuotaCounters: () => this.usageQuotaDomain.snapshotCounters(),
@@ -1601,7 +1607,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     this.sessionsDomain.assertSessionBelongsToUser(tenantId, sessionId, userId)
   }
 
-  private sessionHasCommands(tenantId: string, sessionId: string) {
+  private sessionHasCommands(tenantId: string, sessionId: string): boolean {
     return this.sessionsDomain.sessionHasCommands(tenantId, sessionId)
   }
 }

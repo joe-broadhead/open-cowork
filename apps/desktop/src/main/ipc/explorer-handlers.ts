@@ -127,14 +127,14 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
       const result = await client.file.read({
         path,
         directory: resolvedDirectory,
-      })
+      }, { throwOnError: true })
       return normalizeFileContent(result.data)
     })
   })
 
   context.ipcMain.handle('explorer:file-status', async (_event, directory?: string | null): Promise<FileStatus[]> => {
     return runExplorerOperation(context, directory, [], 'explorer:file-status', async (client, resolvedDirectory) => {
-      const result = await client.file.status({ directory: resolvedDirectory })
+      const result = await client.file.status({ directory: resolvedDirectory }, { throwOnError: true })
       return normalizeFileStatuses(result.data)
     })
   })
@@ -164,7 +164,7 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
       const result = await client.find.symbols({
         query: trimmed,
         directory: resolvedDirectory,
-      })
+      }, { throwOnError: true })
       return normalizeExplorerSymbols(result.data)
     })
   })
@@ -176,7 +176,7 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
       const result = await client.find.text({
         pattern: trimmed,
         directory: resolvedDirectory,
-      })
+      }, { throwOnError: true })
       return normalizeTextMatches(result.data)
     })
   })

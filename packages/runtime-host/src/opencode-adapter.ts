@@ -1,4 +1,19 @@
-import { asArray, asRecord, readBoolean, readRecordNumber, readRecordString, readString, type JsonRecord } from '@open-cowork/shared'
+import {
+  asArray,
+  asRecord,
+  CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES,
+  CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES,
+  readBoolean,
+  readRecordNumber,
+  readRecordString,
+  readString,
+  RUNTIME_EVENT_MAX_COLLECTION_ENTRIES,
+  RUNTIME_EVENT_MAX_STRING_BYTES,
+  sanitizeRuntimeEventValue,
+  type JsonRecord,
+  type MessageAttachment,
+  type TodoItem,
+} from '@open-cowork/shared'
 import type {
   Event as SdkEvent,
   GlobalEvent as SdkGlobalEvent,
@@ -12,11 +27,20 @@ import type {
   SessionMessagesResponse as SdkV2SessionMessagesPage,
   SessionV2Info as SdkV2SessionInfo,
 } from '@opencode-ai/sdk/v2'
-import type {
-  TodoItem,
-} from '@open-cowork/shared'
 type SdkSessionMessage = SdkClassicSessionMessagesResponse extends Array<infer T> ? T : never
 type SdkRuntimeEventEnvelope = SdkEvent | SdkGlobalEvent | { payload: SdkEvent | SdkGlobalEvent }
+const MAX_RUNTIME_OUTPUT_PATH_LENGTH = 4_096
+
+function boundedArray(value: unknown): unknown[] {
+  return asArray(value).slice(0, RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)
+}
+
+function hasEnumerableOwnProperty(value: Record<string, unknown>) {
+  for (const key in value) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) return true
+  }
+  return false
+}
 
 export type NormalizedTokens = {
   input: number
@@ -25,11 +49,7 @@ export type NormalizedTokens = {
   cache: { read: number; write: number }
 }
 
-export type NormalizedAttachment = {
-  mime: string
-  url: string
-  filename?: string
-}
+export type NormalizedAttachment = MessageAttachment
 
 export type NormalizedToolState = {
   input: JsonRecord
@@ -38,6 +58,7 @@ export type NormalizedToolState = {
   result?: unknown
   error?: unknown
   attachments: NormalizedAttachment[]
+  outputPaths: string[]
   metadata: JsonRecord
   title: string | null
   raw: string | null
@@ -97,6 +118,7 @@ export type NormalizedSessionMessage = {
   }
   info: NormalizedSessionInfo
   parts: NormalizedMessagePart[]
+  error: string | null
   structured?: unknown
 }
 
@@ -149,13 +171,52 @@ function normalizeTokens(value: unknown): NormalizedTokens {
   }
 }
 
-function normalizeAttachment(value: unknown): NormalizedAttachment | null {
+function normalizeAttachment(value: unknown): MessageAttachment | null {
   const record = asRecord(value)
   const mime = readRecordString(record, ['mime'])
   const url = readRecordString(record, ['url', 'uri'])
-  if (!mime || !url) return null
-  const filename = readRecordString(record, ['filename', 'name']) || undefined
+  if (!mime || mime.length > 192 || !url || url.length > CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES) return null
+  const rawFilename = readRecordString(record, ['filename', 'name'])
+  const filename = rawFilename?.slice(0, CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES) || undefined
   return filename ? { mime, url, filename } : { mime, url }
+}
+
+export function normalizeToolAttachments(...values: unknown[]): MessageAttachment[] {
+  const attachments: MessageAttachment[] = []
+  const seen = new Map<string, Set<string>>()
+  let totalUrlBytes = 0
+  for (const value of values) {
+    for (const candidate of boundedArray(value)) {
+      if (attachments.length >= RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) return attachments
+      const attachment = normalizeAttachment(candidate)
+      if (!attachment) continue
+      if (totalUrlBytes + attachment.url.length > CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES) return attachments
+      const key = `${attachment.mime}\0${attachment.filename || ''}`
+      const matches = seen.get(attachment.url)
+      if (matches?.has(key)) continue
+      if (matches) matches.add(key)
+      else seen.set(attachment.url, new Set([key]))
+      totalUrlBytes += attachment.url.length
+      attachments.push(attachment)
+    }
+  }
+  return attachments
+}
+
+export function normalizeToolOutputPaths(...values: unknown[]): string[] {
+  const paths: string[] = []
+  const seen = new Set<string>()
+  for (const value of values) {
+    for (const candidate of boundedArray(value)) {
+      if (paths.length >= RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) return paths
+      if (typeof candidate !== 'string' || candidate.length === 0) continue
+      const path = candidate.slice(0, MAX_RUNTIME_OUTPUT_PATH_LENGTH)
+      if (seen.has(path)) continue
+      seen.add(path)
+      paths.push(path)
+    }
+  }
+  return paths
 }
 
 function normalizeToolState(value: unknown): NormalizedToolState {
@@ -166,9 +227,8 @@ function normalizeToolState(value: unknown): NormalizedToolState {
     output: record.output,
     result: record.result,
     error: record.error,
-    attachments: asArray(record.attachments)
-      .map(normalizeAttachment)
-      .filter((entry): entry is NormalizedAttachment => Boolean(entry)),
+    attachments: normalizeToolAttachments(record.attachments, record.content),
+    outputPaths: normalizeToolOutputPaths(record.outputPaths),
     metadata: asRecord(record.metadata),
     title: readRecordString(record, ['title']),
     raw: readRecordString(record, ['raw']),
@@ -206,7 +266,7 @@ export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | nu
     sessionID: readRecordString(record, ['sessionID', 'sessionId']),
     time: {
       created: readRecordNumber(time, ['created']) || undefined,
-      updated: readRecordNumber(time, ['updated']) || undefined,
+      updated: readRecordNumber(time, ['updated', 'completed']) || undefined,
     },
     model: {
       providerId: readRecordString(model, ['providerID', 'providerId']) || readRecordString(record, ['providerID', 'providerId']),
@@ -233,6 +293,7 @@ function normalizeV2ToolContent(value: unknown) {
 
 function parsePendingToolInput(value: unknown): JsonRecord {
   if (typeof value !== 'string' || !value.trim()) return {}
+  if (value.length > RUNTIME_EVENT_MAX_STRING_BYTES) return {}
   try {
     const parsed = JSON.parse(value) as unknown
     return asRecord(parsed)
@@ -246,13 +307,12 @@ function normalizeV2ToolPart(value: unknown): NormalizedMessagePart | null {
   if (readRecordString(record, ['type']) !== 'tool') return null
   const state = asRecord(record.state)
   const status = readRecordString(state, ['status'])
-  const content = asArray(state.content).map(normalizeV2ToolContent)
+  const content = boundedArray(state.content).map(normalizeV2ToolContent)
   const input = status === 'pending'
     ? parsePendingToolInput(state.input)
     : asRecord(state.input)
-  const attachments = asArray(state.attachments)
-    .map(normalizeAttachment)
-    .filter((entry): entry is NormalizedAttachment => Boolean(entry))
+  const attachments = normalizeToolAttachments(state.attachments, state.content)
+  const outputPaths = normalizeToolOutputPaths(state.outputPaths)
   return {
     type: 'tool',
     id: readRecordString(record, ['id']),
@@ -283,6 +343,7 @@ function normalizeV2ToolPart(value: unknown): NormalizedMessagePart | null {
       result: state.result,
       error: state.error,
       attachments,
+      outputPaths,
       metadata: asRecord(asRecord(record.provider).resultMetadata),
       title: readRecordString(record, ['name']),
       raw: typeof state.input === 'string' ? state.input : null,
@@ -338,7 +399,7 @@ function normalizeV2SessionMessage(value: unknown): NormalizedSessionMessage | n
   if (type === 'user') {
     const text = readRecordString(record, ['text'])
     if (text) addPart(simplePart('text', `${id}:text`, text))
-    for (const file of asArray(record.files)) {
+    for (const file of boundedArray(record.files)) {
       const attachment = normalizeAttachment(file)
       if (!attachment) continue
       const part = simplePart('file', null, null)
@@ -346,7 +407,7 @@ function normalizeV2SessionMessage(value: unknown): NormalizedSessionMessage | n
       parts.push(part)
     }
   } else if (type === 'assistant') {
-    for (const content of asArray(record.content)) {
+    for (const content of boundedArray(record.content)) {
       const contentRecord = asRecord(content)
       const contentType = readRecordString(contentRecord, ['type'])
       if (contentType === 'text' || contentType === 'reasoning') {
@@ -398,7 +459,19 @@ function normalizeV2SessionMessage(value: unknown): NormalizedSessionMessage | n
     time: info.time,
     info,
     parts,
+    error: normalizeSessionMessageError(record),
   }
+}
+
+function normalizeSessionMessageError(value: unknown): string | null {
+  const record = asRecord(value)
+  const error = asRecord(record.error)
+  const message = readRecordString(error, ['message'])
+    || readRecordString(record, ['error'])
+    || null
+  if (!message) return null
+  const sanitized = sanitizeRuntimeEventValue(message)
+  return typeof sanitized === 'string' && sanitized ? sanitized : null
 }
 
 export function normalizeSessionMessage(value: SdkSessionMessage | SdkMessage | SdkV2SessionMessage): NormalizedSessionMessage | null
@@ -428,8 +501,11 @@ export function normalizeSessionMessage(value: unknown): NormalizedSessionMessag
     role: info.role || readRecordString(record, ['role']) || 'assistant',
     time: info.time,
     info,
+    error: normalizeSessionMessageError({
+      error: record.error ?? asRecord(record.info).error,
+    }),
     structured: record.structured,
-    parts: asArray(record.parts)
+    parts: boundedArray(record.parts)
       .map(normalizeMessagePart)
       .filter((part): part is NormalizedMessagePart => Boolean(part)),
   }
@@ -440,8 +516,12 @@ export function normalizeSessionMessages(value: unknown): NormalizedSessionMessa
 export function normalizeSessionMessages(value: unknown): NormalizedSessionMessage[] {
   const record = asRecord(value)
   const messages = Array.isArray(value) ? value : asArray(record.data)
-  return messages
-    .map(normalizeSessionMessage)
+  // The V2 history client has already paginated this aggregate. Applying the
+  // per-event collection cap here silently discarded every message after the
+  // first page-sized window (and, because history is ascending, discarded the
+  // newest conversation state). Keep structural bounds inside each message,
+  // while preserving the complete SDK-owned history across pages.
+  return messages.map(normalizeSessionMessage)
     .filter((message): message is NormalizedSessionMessage => Boolean(message))
 }
 
@@ -467,9 +547,7 @@ export function normalizeMessagePart(value: unknown): NormalizedMessagePart | nu
     overflow: readBoolean(record.overflow),
     reason: readRecordString(record, ['reason']),
     metadata: asRecord(record.metadata),
-    attachments: asArray(record.attachments)
-      .map(normalizeAttachment)
-      .filter((entry): entry is NormalizedAttachment => Boolean(entry)),
+    attachments: normalizeToolAttachments(record.attachments),
     state: normalizeToolState(record.state),
     tokens: normalizeTokens(record.tokens),
     cost: readRecordNumber(record, ['cost']),
@@ -491,9 +569,9 @@ export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntime
   if (!type) return null
   const sourceProperties = asRecord(source.properties)
   const nestedProperties = asRecord(nested.properties)
-  const properties = Object.keys(sourceProperties).length > 0
+  const properties = hasEnumerableOwnProperty(sourceProperties)
     ? sourceProperties
-    : Object.keys(nestedProperties).length > 0
+    : hasEnumerableOwnProperty(nestedProperties)
       ? nestedProperties
       : nested
   return {
@@ -506,19 +584,28 @@ export function normalizeSessionStatuses(value: Record<string, SdkSessionStatus>
 export function normalizeSessionStatuses(value: unknown): Record<string, NormalizedSessionStatus>
 export function normalizeSessionStatuses(value: unknown): Record<string, NormalizedSessionStatus> {
   const record = asRecord(value)
-  return Object.fromEntries(
-    Object.entries(record).map(([sessionId, status]) => {
-      const normalized = asRecord(status)
-      return [sessionId, { type: readRecordString(normalized, ['type']) }]
-    }),
-  )
+  const statuses: Record<string, NormalizedSessionStatus> = {}
+  let count = 0
+  for (const sessionId in record) {
+    if (!Object.prototype.hasOwnProperty.call(record, sessionId)) continue
+    if (count >= RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) break
+    if (sessionId === '__proto__' || sessionId === 'constructor' || sessionId === 'prototype') continue
+    const normalized = asRecord(record[sessionId])
+    statuses[sessionId] = { type: readRecordString(normalized, ['type']) }
+    count += 1
+  }
+  return statuses
 }
 
 export function normalizeMcpStatusEntries(value: Record<string, SdkMcpStatus>): NormalizedMcpStatusEntry[]
 export function normalizeMcpStatusEntries(value: unknown): NormalizedMcpStatusEntry[]
 export function normalizeMcpStatusEntries(value: unknown): NormalizedMcpStatusEntry[] {
   const record = asRecord(value)
-  return Object.entries(record).map(([name, status]) => {
+  const entries: NormalizedMcpStatusEntry[] = []
+  for (const name in record) {
+    if (!Object.prototype.hasOwnProperty.call(record, name)) continue
+    if (entries.length >= RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) break
+    const status = record[name]
     const normalized = asRecord(status)
     const reportedStatus = readRecordString(normalized, ['status'])
     const error = readMcpStatusError(normalized)
@@ -531,13 +618,14 @@ export function normalizeMcpStatusEntries(value: unknown): NormalizedMcpStatusEn
       rawStatus: rawStatus || undefined,
     }
     if (error) entry.error = error
-    return entry
-  })
+    entries.push(entry)
+  }
+  return entries
 }
 
 export function normalizeRuntimeCommands(value: unknown): NormalizedRuntimeCommand[] {
   const commands: NormalizedRuntimeCommand[] = []
-  for (const entry of asArray(value)) {
+  for (const entry of boundedArray(value)) {
     const record = asRecord(entry)
     const name = readRecordString(record, ['name'])
     if (!name) continue

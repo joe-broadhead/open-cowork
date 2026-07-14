@@ -91,9 +91,12 @@ working native route. A small classic-client allowlist remains for capabilities
 that the generated V2 client does not yet provide. The boundary test pins every
 remaining call by file, method, and count so this list cannot expand silently:
 
-- Session actions without native V2 routes: `session.command`,
+- Session actions without working native V2 routes: `session.command`,
   `session.delete`, `session.diff`, `session.fork`, `session.share`,
   `session.summarize`, `session.todo`, `session.unshare`, and `session.update`.
+  OpenCode 1.17.20 generates `v2.session.compact`, but its server implementation
+  returns `OperationUnavailable`; the classic summarizer remains the qualified
+  route until the pinned runtime implements V2 compaction.
 - MCP lifecycle/authentication, which has no native V2 group:
   `mcp.auth.authenticate`, `mcp.auth.remove`, `mcp.connect`, `mcp.disconnect`,
   and `mcp.status`.
@@ -140,7 +143,12 @@ Standalone Gateway has its own private OpenCode runtime boundary. SDK client
 objects and raw SDK events must stay inside
 `apps/standalone-gateway/src/opencode.ts`; the rest of the standalone app
 should consume normalized standalone events and durable Gateway repository
-records.
+records. Each channel delivery or queued job supplies a stable admission key,
+which the adapter maps to the native V2 prompt `id`. After admission, the
+adapter consumes `v2.session.events` from the returned `admittedSeq` rather
+than relying on the lossy global event tail. This preserves fast completions
+and crash retries without re-executing tool side effects. A bounded execution
+deadline interrupts the native session if no terminal event arrives.
 
 ## SDK v2 Upgrade Checklist
 

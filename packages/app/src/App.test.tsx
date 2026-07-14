@@ -395,7 +395,7 @@ function installAppApi(options: {
   appConfig?: PublicAppConfig
   authState?: AuthState
   settings?: EffectiveAppSettings
-  metadata?: { version: string; preview: boolean }
+  metadata?: { version: string; preview: boolean; surface: 'desktop' | 'browser' }
   runtimeStatuses?: RuntimeStatus[]
 } = {}) {
   const listeners: AppListeners = {}
@@ -404,7 +404,7 @@ function installAppApi(options: {
   const api = installRendererTestCoworkApi({
     app: {
       config: vi.fn(async () => options.appConfig || config),
-      metadata: vi.fn(async () => options.metadata || { version: '0.0.0', preview: true }),
+      metadata: vi.fn(async () => options.metadata || { version: '0.0.0', preview: true, surface: 'desktop' as const }),
     },
     auth: {
       status: vi.fn(async () => options.authState || { authenticated: true, email: 'joe@example.com' }),
