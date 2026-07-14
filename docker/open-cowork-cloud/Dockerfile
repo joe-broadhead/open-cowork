@@ -1,4 +1,4 @@
-FROM node:24.18.0-bookworm-slim@sha256:39a4259b6f744868a8228742ad45aa3026f97302e5eec2fa4a38b30ca0a66e12 AS build
+FROM node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS build
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN pnpm cloud:build
 # No TypeScript source, tests, or scripts ship in the public runtime image.
 RUN node scripts/prune-cloud-runtime.mjs /runtime
 
-FROM node:24.18.0-bookworm-slim@sha256:39a4259b6f744868a8228742ad45aa3026f97302e5eec2fa4a38b30ca0a66e12
+FROM node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
 
 WORKDIR /app
 
