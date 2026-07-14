@@ -16,10 +16,9 @@ const ignoredDirectories = new Set([
 
 test('cloud control-plane facade files stay within documented compatibility budgets', () => {
   const budgets = [
-    { path: 'packages/cloud-server/src/http-server.ts', maxLines: 2_000 },
-    { path: 'packages/cloud-server/src/in-memory-control-plane-store.ts', maxLines: 4_200 },
-    { path: 'packages/cloud-server/src/postgres-control-plane-store.ts', maxLines: 4_400 },
-    { path: 'packages/cloud-server/src/session-service.ts', maxLines: 4_200 },
+    { path: 'packages/cloud-server/src/http-server.ts', maxLines: 1_930 },
+    { path: 'packages/cloud-server/src/in-memory-control-plane-store.ts', maxLines: 1_750 },
+    { path: 'packages/cloud-server/src/session-service.ts', maxLines: 2_030 },
   ]
 
   for (const budget of budgets) {

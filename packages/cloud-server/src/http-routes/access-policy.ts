@@ -57,10 +57,10 @@ export function principalCanUseGatewayOnlyRoute(principal: CloudPrincipal, input
 
 export function routeAllowsOperationalToken(principal: CloudPrincipal, input: GatewayRouteAccessInput) {
   if (principal.authSource !== 'api_token') return false
-  const operational = (principalHasOrgAdminRole(principal) && Boolean(principal.tokenScopes?.includes('operator')))
-    || Boolean(principal.tokenScopes?.includes('worker-internal'))
-  if (!operational || input.method !== 'GET') return false
-  if (input.resource === 'metrics' || input.resource === 'diagnostics') return true
+  const adminOperator = principalHasOrgAdminRole(principal) && Boolean(principal.tokenScopes?.includes('operator'))
+  const workerInternal = Boolean(principal.tokenScopes?.includes('worker-internal'))
+  if ((!adminOperator && !workerInternal) || input.method !== 'GET') return false
+  if (input.resource === 'metrics' || input.resource === 'diagnostics') return adminOperator
   if (input.resource === 'workers' && input.sessionId === 'heartbeats' && !input.action) return true
   return input.resource === 'runtime' && input.sessionId === 'status' && !input.action
 }

@@ -8,6 +8,7 @@ const DEFAULT_SUITE = 'deploy/scenarios/local-desktop-scenarios.json'
 const DEFAULT_OUTPUT_DIR = '.open-cowork-test/live-scenarios'
 const EXECUTION_OUTPUT_MAX_BUFFER_BYTES = 8 * 1024 * 1024
 const FAILURE_SNIPPET_BYTES = 2000
+const DEFAULT_SCENARIO_TIMEOUT_MS = 120_000
 
 const TOKEN_PATTERNS = [
   /\bAuthorization:\s*Bearer\s+\S+/gi,
@@ -23,7 +24,7 @@ const TOKEN_PATTERNS = [
   /\bsk-or(?:-[a-z0-9]+)?-[A-Za-z0-9]{20,}\b/g,
   /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g,
   /\bsk-[A-Za-z0-9_-]{20,}\b/g,
-  /\boc(?:c|gw)_[A-Za-z0-9_-]{20,}\b/g,
+  /\boc(?:c|gw|w)_[A-Za-z0-9_-]{20,}\b/g,
   /\b[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password)[A-Za-z0-9_-]*\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{16,}['"]?/gi,
 ]
 const HOME_PATH_PATTERNS = [
@@ -95,6 +96,9 @@ function validateScenario(scenario, index) {
   requireStringArray(scenario, 'steps', label)
   requireStringArray(scenario, 'expectedOutcomes', label)
   requireStringArray(scenario, 'evidence', label)
+  if (scenario.timeoutMs !== undefined && (!Number.isInteger(scenario.timeoutMs) || scenario.timeoutMs <= 0)) {
+    throw new Error(`${label}.timeoutMs must be a positive integer when set`)
+  }
   if (!Array.isArray(scenario.command) || scenario.command.length === 0 || scenario.command.some((part) => typeof part !== 'string' || !part.trim())) {
     throw new Error(`${label}.command must be a non-empty argv array`)
   }
@@ -177,6 +181,12 @@ function failureSnippet(stdout, stderr, error) {
   return sanitizeEvidenceText(text).slice(0, FAILURE_SNIPPET_BYTES)
 }
 
+function scenarioTimeoutMs(scenario) {
+  return Number.isInteger(scenario.timeoutMs) && scenario.timeoutMs > 0
+    ? scenario.timeoutMs
+    : DEFAULT_SCENARIO_TIMEOUT_MS
+}
+
 function scenarioFailureTaxonomy(scenario) {
   return {
     productSurface: sanitizeEvidenceText(scenario.productSurface),
@@ -213,7 +223,10 @@ function runScenario(scenario, options) {
     cwd: process.cwd(),
     encoding: 'utf8',
     maxBuffer: EXECUTION_OUTPUT_MAX_BUFFER_BYTES,
+    timeout: scenarioTimeoutMs(scenario),
+    killSignal: 'SIGTERM',
   })
+  const timedOut = result.error?.code === 'ETIMEDOUT'
   const rawStdout = result.stdout || ''
   const rawStderr = result.stderr || ''
   const stdout = sanitizeEvidenceText(rawStdout)
@@ -239,6 +252,8 @@ function runScenario(scenario, options) {
     redactionsApplied: stdout !== rawStdout || stderr !== rawStderr,
     exitCode: result.status,
     signal: result.signal,
+    timedOut,
+    timeoutMs: scenarioTimeoutMs(scenario),
     failureReason: result.status === 0 && !result.error ? undefined : failureSnippet(stdout, stderr, result.error),
   }
 }
@@ -297,6 +312,8 @@ export function runScenarioSuite(options = {}) {
       title: result.title,
       exitCode: result.exitCode,
       signal: result.signal,
+      timedOut: result.timedOut === true,
+      timeoutMs: result.timeoutMs,
       failureReason: result.failureReason || '',
     }))
   const jsonPath = join(outputDir, 'live-scenario-evidence.json')

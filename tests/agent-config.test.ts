@@ -33,9 +33,7 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: [
       'mcp__github__*',
-      'github_*',
       'mcp__perplexity__*',
-      'perplexity_*',
     ],
   }) as Record<string, any>
 
@@ -62,7 +60,6 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   assert.equal(agents.build.permission.skill, 'allow')
   assert.equal(agents.build.permission['mcp__*'], 'deny')
   assert.equal(agents.build.permission['mcp__github__*'], 'deny')
-  assert.equal(agents.build.permission['github_*'], 'deny')
   assert.equal(agents.build.permission.websearch, 'allow')
   assert.equal(agents.plan.permission.task.explore, 'allow')
   assert.equal(agents.plan.permission.todowrite, 'deny')
@@ -75,8 +72,8 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   assert.equal(agents.general.permission.todowrite, 'deny')
   assert.equal(agents.general.prompt, undefined)
   assert.equal(agents.general.permission.skill, 'allow')
-  assert.equal(agents.research.permission['github_*'], 'deny')
-  assert.equal(agents.research.permission['perplexity_*'], 'deny')
+  assert.equal(agents.research.permission['mcp__github__*'], 'deny')
+  assert.equal(agents.research.permission['mcp__perplexity__*'], 'deny')
   assert.equal(agents.explore.prompt, undefined)
   assert.equal(agents.explore.permission.skill, 'allow')
   assert.equal(agents.explore.description.includes('Read-only codebase'), true)
@@ -155,18 +152,13 @@ test('agent tool ceilings downgrade and remove exact MCP grants under broad MCP 
     'mcp__skills__*',
     'mcp__agents__*',
     'mcp__workflows__*',
-    'charts_*',
-    'skills_*',
-    'agents_*',
-    'workflows_*',
   ]
   const askAgents = buildOpenCoworkAgentConfig({
     allToolPatterns: mcpPatterns,
-    askToolPatterns: ['mcp__*', 'charts_*', 'skills_*', 'agents_*', 'workflows_*'],
+    askToolPatterns: ['mcp__*'],
   }) as Record<string, any>
 
   assert.equal(askAgents.charts.permission['mcp__charts__*'], 'ask')
-  assert.equal(askAgents.charts.permission['charts_*'], 'ask')
   assert.equal(askAgents.autoresearch.permission['mcp__agents__preview_agent'], 'ask')
   assert.equal(askAgents.autoresearch.permission['mcp__skills__list_skill_bundles'], 'ask')
   assert.equal(askAgents['agent-builder'].permission['mcp__agents__preview_agent'], 'ask')
@@ -624,7 +616,6 @@ test('configured built-in agent prompts instruct the model to load attached skil
     /Call `skill` with `\{"name":"chart-creator"\}`\./,
   )
   assert.equal(agents.charts.permission['mcp__charts__*'], 'allow')
-  assert.equal(agents.charts.permission['charts_*'], 'allow')
   assert.equal(agents.plan.permission.task.charts, 'allow')
   assert.match(
     agents['skill-builder'].prompt,

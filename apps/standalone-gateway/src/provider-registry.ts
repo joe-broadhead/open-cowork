@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders } from "node:http";
 
-import type { ChannelProvider, IncomingChannelMessage } from "@open-cowork/gateway-channel";
+import { type ChannelProvider, type IncomingChannelMessage, WebhookProviderNotFoundError } from "@open-cowork/gateway-channel";
 import { TelegramProvider } from "@open-cowork/gateway-provider-telegram";
 import { WebhookProvider } from "@open-cowork/gateway-provider-webhook";
 
@@ -52,7 +52,7 @@ export function createStandaloneProviderRegistry(config: StandaloneGatewayConfig
     },
     async handleWebhook(id, payload, headers, rawBody) {
       const registration = this.get(id);
-      if (!registration) throw new Error(`Unknown standalone gateway provider ${id}.`);
+      if (!registration) throw new WebhookProviderNotFoundError(`Unknown standalone gateway provider ${id}.`);
       if (registration.config.kind === "telegram") {
         await (registration.provider as TelegramProvider).handleWebhookUpdate(payload, {
           headers,
@@ -67,7 +67,7 @@ export function createStandaloneProviderRegistry(config: StandaloneGatewayConfig
         });
         return;
       }
-      throw new Error(`Standalone provider ${id} does not expose webhook ingress.`);
+      throw new WebhookProviderNotFoundError(`Standalone provider ${id} does not expose webhook ingress.`);
     },
   };
 }

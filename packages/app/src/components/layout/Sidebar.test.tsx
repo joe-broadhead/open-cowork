@@ -1140,7 +1140,7 @@ describe('Sidebar', () => {
     })
   })
 
-  it('keeps legacy logo data URLs as a fallback', () => {
+  it('does not render inline logo data URLs', () => {
     render(
       <Sidebar
         currentView="home"
@@ -1148,17 +1148,17 @@ describe('Sidebar', () => {
         branding={{
           top: {
             variant: 'logo',
-            logoDataUrl: 'data:image/png;base64,AAAA',
+            logoUrl: 'data:image/png;base64,AAAA' as never,
             ariaLabel: 'Acme AI workspace',
           },
         }}
       />,
     )
 
-    expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeTruthy()
+    expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeNull()
   })
 
-  it('prefers resolved logo URLs over legacy logo data URLs', () => {
+  it('renders resolved logo asset URLs', () => {
     render(
       <Sidebar
         currentView="home"
@@ -1167,7 +1167,6 @@ describe('Sidebar', () => {
           top: {
             variant: 'logo',
             logoUrl: 'open-cowork-asset://branding/acme-logo.svg',
-            logoDataUrl: 'data:image/png;base64,AAAA',
             ariaLabel: 'Acme AI workspace',
           },
         }}
@@ -1175,7 +1174,6 @@ describe('Sidebar', () => {
     )
 
     expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toBeTruthy()
-    expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeNull()
   })
 
   it('falls back instead of rendering an empty top-brand card for incompatible variants', () => {
@@ -1248,7 +1246,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: 'Unsafe help' })).toBeNull()
   })
 
-  it('does not expose deprecated operational navigation buttons', () => {
+  it('does not expose retired operational navigation buttons', () => {
     const onViewChange = vi.fn()
     render(
       <Sidebar

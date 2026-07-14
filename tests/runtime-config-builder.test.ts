@@ -120,39 +120,27 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     assert.equal(runtimeConfig.mcp.warehouse.url, 'https://warehouse.example.test/mcp')
     assert.equal(runtimeConfig.mcp.analytics.url, 'https://analytics.example.test/mcp')
     assert.equal(runtimeConfig.permission['mcp__warehouse__*'], 'ask')
-    assert.equal(runtimeConfig.permission['warehouse_*'], 'ask')
     assert.equal(runtimeConfig.permission['mcp__analytics__*'], 'allow')
-    assert.equal(runtimeConfig.permission['analytics_*'], 'allow')
     assert.equal(runtimeConfig.agent.build.permission['mcp__warehouse__*'], 'ask')
-    assert.equal(runtimeConfig.agent.build.permission['warehouse_*'], 'ask')
     assert.equal(runtimeConfig.agent.build.permission['mcp__analytics__*'], 'allow')
-    assert.equal(runtimeConfig.agent.build.permission['analytics_*'], 'allow')
     assert.equal(runtimeConfig.permission.bash, 'allow')
     assert.equal(runtimeConfig.permission.write, 'deny')
 
     saveSettings({ mcpPermission: 'ask' })
     const askMcpConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(askMcpConfig.permission['mcp__analytics__*'], 'ask')
-    assert.equal(askMcpConfig.permission['analytics_*'], 'ask')
     assert.equal(askMcpConfig.permission['mcp__warehouse__*'], 'ask')
-    assert.equal(askMcpConfig.permission['warehouse_*'], 'ask')
     assert.equal(askMcpConfig.permission['mcp__clock__*'], 'ask')
-    assert.equal(askMcpConfig.permission['clock_*'], 'ask')
     assert.equal(askMcpConfig.agent.build.permission['mcp__clock__*'], 'ask')
-    assert.equal(askMcpConfig.agent.build.permission['clock_*'], 'ask')
     assert.equal(askMcpConfig.agent.build.permission['mcp__analytics__*'], 'ask')
-    assert.equal(askMcpConfig.agent.build.permission['analytics_*'], 'ask')
 
     saveSettings({ mcpPermission: 'deny' })
     const denyMcpConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.equal(denyMcpConfig.mcp.analytics, undefined)
     assert.equal(denyMcpConfig.mcp.warehouse, undefined)
     assert.equal(denyMcpConfig.permission['mcp__analytics__*'], 'deny')
-    assert.equal(denyMcpConfig.permission['analytics_*'], 'deny')
     assert.equal(denyMcpConfig.permission['mcp__warehouse__*'], 'deny')
-    assert.equal(denyMcpConfig.permission['warehouse_*'], 'deny')
     assert.equal(denyMcpConfig.agent.build.permission['mcp__analytics__*'], 'deny')
-    assert.equal(denyMcpConfig.agent.build.permission['analytics_*'], 'deny')
   } finally {
     removeCustomMcp({
       scope: 'project',
@@ -498,7 +486,6 @@ test('runtime custom-agent markdown is capped by effective global permissions be
     },
     {
       'mcp__analytics__*': 'allow',
-      'analytics_*': 'allow',
       webfetch: 'ask',
       websearch: 'allow',
       write: 'ask',
@@ -529,7 +516,6 @@ test('runtime custom-agent markdown is capped by effective global permissions be
     assert.match(markdown, /task: deny/)
     assert.match(markdown, /external_directory:\n[ ]{4}"\*": deny\n[ ]{4}"\/tmp\/analytics\/\*": deny/)
     assert.match(markdown, /"mcp__analytics__\*": deny/)
-    assert.match(markdown, /"analytics_\*": deny/)
     assert.match(markdown, /model: "openrouter\/deepseek\/deepseek-v4-pro"/)
     assert.match(markdown, /variant: "draft"/)
     assert.match(markdown, /temperature: 0.2/)
@@ -555,7 +541,6 @@ test('runtime custom-agent markdown is capped by effective global permissions be
     assert.match(restoredMarkdown, /task: allow/)
     assert.match(restoredMarkdown, /external_directory:\n[ ]{4}"\*": deny\n[ ]{4}"\/tmp\/analytics\/\*": allow/)
     assert.match(restoredMarkdown, /"mcp__analytics__\*": allow/)
-    assert.match(restoredMarkdown, /"analytics_\*": allow/)
     assert.match(restoredMarkdown, /model: "openrouter\/deepseek\/deepseek-v4-pro"/)
     assert.match(restoredMarkdown, /variant: "draft"/)
     assert.match(restoredMarkdown, /temperature: 0.2/)
@@ -624,7 +609,6 @@ test('custom agent permission overrides preserve nested guardrails and exact leg
     assert.equal(permission.websearch, 'allow')
     assert.equal(permission['mcp__*'], 'deny')
     assert.equal(permission.mcp__github__pull_request_read, 'allow')
-    assert.equal(permission.github_pull_request_read, 'allow')
   } finally {
     clearSettingsCache()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR

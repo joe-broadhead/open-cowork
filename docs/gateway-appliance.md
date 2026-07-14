@@ -33,9 +33,8 @@ through this daemon.
 
 Provider tiers, capabilities, signing requirements, and test expectations are
 tracked in [Gateway Provider Readiness](gateway-provider-readiness.md).
-Product naming, historical `opencode-agent-gateway` migration, and compatibility
-alias policy are tracked in
-[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+Product naming, Gateway product-mode boundaries, and compatibility policy are tracked in
+[Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 
 ## Product Modes
 
@@ -199,17 +198,11 @@ macOS and Mac mini:
 | Public bind | Set `OPEN_COWORK_GATEWAY_PUBLIC_URL=https://...` and `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; never enable loopback bypass, fake provider, or CLI provider. |
 | Kubernetes/managed | Use the Helm chart with `replicaCount: 1`, `gateway.existingSecret`, HTTPS ingress, and an admin token. Use one release per channel-binding shard until distributed stream ownership is implemented. |
 
-## Migration Notes
+## Mode Notes
 
-Existing deployments that use only `OPEN_COWORK_GATEWAY_MODE=self-host` or
-`managed` continue to behave as Cloud Channel Gateway deployments. New configs
-should add `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` or
-`"productMode": "cloud_channel"` for clarity.
-
-If you are migrating from the historical `opencode-agent-gateway` prototype,
-read [OSS Packaging and Gateway Migration](oss-packaging-migration.md) before
-moving state. The old Gateway-owned Postgres and OpenCode runtime state is not
-safe to import into Cloud automatically.
+Cloud Channel Gateway configs should declare
+`OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` or
+`"productMode": "cloud_channel"` so the execution authority is explicit.
 
 Do not set `standalone` on this daemon. Standalone Team Gateway uses a separate
 app/package layout at `apps/standalone-gateway` so it can own private

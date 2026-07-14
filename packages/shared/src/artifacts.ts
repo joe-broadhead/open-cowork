@@ -220,6 +220,6 @@ export interface ChartSaveArtifactRequest {
   toolCallId: string
   toolName: string
   dataUrl: string
-  taskRunId?: string | null
+  taskRunId: string | null
   chart?: ChartArtifactSource | null
 }

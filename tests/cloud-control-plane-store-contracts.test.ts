@@ -97,6 +97,12 @@ test('pglite webhook security store enforces fail-closed rate limit / auth backo
       [legacyRawReplayKey],
     )
     assert.equal(legacyRows.rows.length, 0)
+    assert.equal(await store.claimSignature({
+      key: legacyRawReplayKey,
+      nowMs: nowMs + 2,
+      windowMs: 60_000,
+      cacheLimit: 100,
+    }), null)
   } finally {
     await store.close?.()
   }

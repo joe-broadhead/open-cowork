@@ -21,13 +21,7 @@ export function findChartArtifactTool(view: SessionView, request: ChartSaveArtif
   }
 
   const rootTool = view.toolCalls.find((tool) => toolMatchesChartArtifactRequest(tool, request))
-  if (rootTool) return rootTool
-
-  for (const taskRun of view.taskRuns) {
-    const taskTool = taskRun.toolCalls.find((tool) => toolMatchesChartArtifactRequest(tool, request))
-    if (taskTool) return taskTool
-  }
-  return null
+  return rootTool || null
 }
 
 export function isKnownChartArtifactToolCall(view: SessionView, request: ChartSaveArtifactRequest) {

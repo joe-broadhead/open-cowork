@@ -147,7 +147,7 @@ function resolvePublicBranding(branding: BrandingConfig): BrandingConfig {
   const nextTop = {
     ...top,
     ...(logoUrl
-      ? { logoUrl, logoDataUrl: undefined }
+      ? { logoUrl }
       : {}),
   }
   return {

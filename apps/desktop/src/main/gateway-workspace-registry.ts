@@ -25,12 +25,7 @@ export type GatewayWorkspaceRegistry = {
   touchSync(workspaceId: string, syncedAt: string, now?: Date): GatewayWorkspaceConnectionRecord | null
 }
 
-type StoredGatewayWorkspaceConnection = Partial<GatewayWorkspaceConnectionRecord> & {
-  token?: unknown
-  accessToken?: unknown
-  apiKey?: unknown
-  secret?: unknown
-}
+const SECRET_BEARING_RECORD_FIELDS = new Set(['token', 'accessToken', 'apiKey', 'secret'])
 
 function defaultRegistryPath() {
   const dir = getAppDataDir()
@@ -73,7 +68,8 @@ function nullableIsoText(value: unknown) {
 
 function normalizeRecord(value: unknown): GatewayWorkspaceConnectionRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const raw = value as StoredGatewayWorkspaceConnection
+  const raw = value as Partial<GatewayWorkspaceConnectionRecord>
+  if (Object.keys(raw).some((key) => SECRET_BEARING_RECORD_FIELDS.has(key))) return null
   if (typeof raw.baseUrl !== 'string' || !raw.baseUrl.trim()) return null
   let baseUrl: string
   try {

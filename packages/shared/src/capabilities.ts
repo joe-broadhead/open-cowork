@@ -174,7 +174,7 @@ export interface CapabilityBundleResourceIdentity {
   id: string
 }
 
-export type CapabilityBundleResourceSelector = string | CapabilityBundleResourceIdentity
+export type CapabilityBundleResourceSelector = CapabilityBundleResourceIdentity
 
 export interface CapabilityBundlePermission {
   kind: CapabilityBundlePermissionKind

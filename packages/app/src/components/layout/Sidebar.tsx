@@ -68,12 +68,6 @@ function visibleNavItems(items: SidebarNavItem[], features: DesktopFeatureFlags 
   return items.filter((item) => !item.feature || isDesktopFeatureEnabled(features, item.feature))
 }
 
-function safeLogoDataUrl(value: string | undefined) {
-  const trimmed = value?.trim()
-  if (!trimmed || trimmed.length > 65_536) return undefined
-  return /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(trimmed) ? trimmed : undefined
-}
-
 function safeLogoUrl(value: string | undefined) {
   const trimmed = value?.trim()
   if (!trimmed || trimmed.length > 1024) return undefined
@@ -86,7 +80,7 @@ function safeLogoUrl(value: string | undefined) {
 }
 
 function logoSource(top: BrandingSidebarTopConfig) {
-  return safeLogoUrl(top.logoUrl) || safeLogoDataUrl(top.logoDataUrl)
+  return safeLogoUrl(top.logoUrl)
 }
 
 function safeExternalHref(value: string | undefined) {

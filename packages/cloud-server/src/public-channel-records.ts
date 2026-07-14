@@ -49,7 +49,7 @@ function sanitizePublicString(value: string) {
       const separator = match.includes(':') ? ':' : '='
       return `${match.split(separator)[0]}${separator}[redacted]`
     })
-    .replace(/\boc(?:c|gw)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
+    .replace(/\boc(?:c|gw|w)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
     .replace(/\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
     .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, 'sk-[redacted]')
     .slice(0, 512)

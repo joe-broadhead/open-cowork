@@ -475,18 +475,17 @@ test('config normalization applies layer precedence without loader state', () =>
   assert.equal(config.cloud.publicBranding.theme?.surfaceHover, '#ecefed')
   assert.equal(config.cloud.publicBranding.theme?.accentHover, '#13845d')
   assert.equal(config.cloud.publicBranding.theme?.accentForeground, '#ffffff')
-  assert.equal(config.cloud.publicBranding.theme?.focus, 'rgba(45, 107, 86, 0.28)')
-  assert.equal(config.cloud.publicBranding.theme?.amber, '#8a5a14')
-  assert.equal(config.cloud.publicBranding.theme?.red, '#9d3630')
-  assert.equal(config.cloud.publicBranding.theme?.green, '#1f6b46')
+  assert.equal(config.cloud.publicBranding.theme?.focus, 'rgba(47, 107, 240, 0.52)')
+  assert.equal(config.cloud.publicBranding.theme?.amber, '#e0913a')
+  assert.equal(config.cloud.publicBranding.theme?.red, '#d6587e')
+  assert.equal(config.cloud.publicBranding.theme?.green, '#3f9a8f')
   assert.equal(config.cloud.publicBranding.theme?.bgImage, 'none')
 })
 
-test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
+test('public branding omits logo URLs when logoAsset cannot resolve', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-config-branding-fallback-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
   const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
-  const logoDataUrl = 'data:image/png;base64,AAAA'
 
   writeFileSync(configPath, JSON.stringify({
     branding: {
@@ -494,7 +493,6 @@ test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve',
         top: {
           variant: 'logo',
           logoAsset: 'branding/missing-logo.svg',
-          logoDataUrl,
         },
       },
     },
@@ -507,7 +505,6 @@ test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve',
     assert.doesNotThrow(() => assertConfigValid())
     const top = getPublicAppConfig().branding.sidebar?.top
     assert.equal(top?.logoUrl, undefined)
-    assert.equal(top?.logoDataUrl, logoDataUrl)
   } finally {
     if (previousOverride === undefined) {
       delete process.env.OPEN_COWORK_CONFIG_PATH

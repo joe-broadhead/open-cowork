@@ -344,25 +344,6 @@ export function brandThemeToPublicBrandingTheme(theme: BrandThemeTokens): Public
 
 export const DEFAULT_DARK_PUBLIC_BRANDING_THEME = brandThemeToPublicBrandingTheme(DEFAULT_DARK_BRAND_THEME)
 
-export const LEGACY_LIGHT_PUBLIC_BRANDING_THEME: PublicBrandingThemeTokens = {
-  background: '#f5f6f3',
-  surface: '#ffffff',
-  mutedSurface: '#ecefed',
-  border: '#d8ddd7',
-  borderStrong: '#b9c4bc',
-  text: '#18211c',
-  mutedText: '#66736b',
-  accent: '#2d6b56',
-  accentStrong: '#1f503f',
-  focus: 'rgba(45, 107, 86, 0.28)',
-  warn: '#8a5a14',
-  danger: '#9d3630',
-  ok: '#1f6b46',
-  bgImage: 'none',
-  shadowCard: '0 8px 24px rgba(24, 33, 28, 0.08)',
-  shadowElevated: '0 16px 40px rgba(24, 33, 28, 0.12)',
-}
-
 const CSS_NAMED_COLORS: Record<string, string> = {
   aliceblue: '#f0f8ff',
   antiquewhite: '#faebd7',
@@ -661,14 +642,6 @@ export function isPublicBrandingColorToken(value: string | undefined) {
   return cssColorLuminance(value) !== null
 }
 
-export function isLegacyLightPublicBrandingTheme(theme: PublicBrandingThemeTokens): boolean {
-  return [theme.background, theme.surface, theme.mutedSurface]
-    .some((value) => {
-      const luminance = cssColorLuminance(value)
-      return luminance !== null && luminance > 0.55
-    })
-}
-
 export function derivePublicBrandingThemeTokens(theme: PublicBrandingThemeTokens): PublicBrandingThemeTokens {
   const derived: PublicBrandingThemeTokens = { ...theme }
   const token = (value: string | undefined) => typeof value === 'string' && value.trim() ? value : undefined
@@ -676,25 +649,6 @@ export function derivePublicBrandingThemeTokens(theme: PublicBrandingThemeTokens
     if (token(derived[key])) return
     const next = token(value)
     if (next) derived[key] = next
-  }
-  const hasLegacyLightSurface = isLegacyLightPublicBrandingTheme(theme)
-
-  if (hasLegacyLightSurface) {
-    assign('background', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.background)
-    assign('surface', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.surface)
-    assign('mutedSurface', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.mutedSurface)
-    assign('border', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.border)
-    assign('text', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.text)
-    assign('mutedText', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.mutedText)
-    assign('accent', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.accent)
-    assign('accentStrong', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.accentStrong)
-    assign('focus', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.focus)
-    assign('warn', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.warn)
-    assign('danger', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.danger)
-    assign('ok', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.ok)
-    assign('bgImage', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.bgImage)
-    assign('shadowCard', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.shadowCard)
-    assign('shadowElevated', LEGACY_LIGHT_PUBLIC_BRANDING_THEME.shadowElevated)
   }
 
   assign('elevated', derived.surface || derived.mutedSurface)

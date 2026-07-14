@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { WebhookAuthError } from "@open-cowork/gateway-channel";
+
 import { loadStandaloneGatewayConfig } from "../dist/config.js";
 import { FakeStandaloneOpenCodeAdapter } from "../dist/opencode.js";
 import { createStandaloneProviderRegistry } from "../dist/provider-registry.js";
@@ -57,7 +59,7 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
       headers: { authorization: "Bearer standalone-admin-token" },
     });
     assert.equal(adminReady.status, 200);
-    assert.match(JSON.stringify(await adminReady.json()), /product-mode/);
+    assert.match(JSON.stringify(await adminReady.json()), /productMode/);
     assert.equal((await fetch(`${url}/dashboard`)).status, 401);
     const badWebhook = await fetch(`${url}/webhooks/webhook`, {
       method: "POST",
@@ -101,8 +103,8 @@ test("standalone server hides unexpected webhook exception details", async (t) =
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const providers = {
     async handleWebhook() {
-      const error = new Error("provider failed while reading /private/standalone-gateway-config");
-      error.stack = "Error: provider failed\n    at /private/standalone-gateway-config.ts:1:1";
+      const error = new Error("provider failed while reading /Users/alice/private/standalone-gateway-config");
+      error.stack = "Error: provider failed\n    at /Users/alice/private/standalone-gateway-config.ts:1:1";
       throw error;
     },
   };
@@ -121,6 +123,9 @@ test("standalone server hides unexpected webhook exception details", async (t) =
     assert.deepEqual(body, { ok: false, error: "internal_server_error" });
     assert.doesNotMatch(JSON.stringify(body), /private|standalone-gateway-config|provider failed/);
     assert.equal(stderr.mock.callCount(), 1);
+    const stderrText = String(stderr.mock.calls[0]?.arguments[0] || "");
+    assert.doesNotMatch(stderrText, /alice|private|standalone-gateway-config/);
+    assert.match(stderrText, /\[REDACTED_HOME\]|\[redacted\]/i);
   } finally {
     await server.close();
   }
@@ -139,7 +144,7 @@ test("standalone server sanitizes webhook verification failures", async () => {
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const providers = {
     async handleWebhook() {
-      throw new Error("Webhook signature verification failed for /private/provider-hook");
+      throw new WebhookAuthError("Webhook signature verification failed for /private/provider-hook");
     },
   };
   const server = createStandaloneGatewayServer({ config, repository, opencode, providers });

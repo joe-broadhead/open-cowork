@@ -12,8 +12,8 @@ The workspace ownership, sync, status/reason, and non-sync guarantees that
 downstream builds must preserve are defined in
 [Product Contract](product-contract.md).
 The public product names, package/image names, release-channel language, and
-legacy Gateway migration policy are defined in
-[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+Gateway product-mode policy are defined in
+[Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 The versioned downstream configuration, branding, packaging, template hygiene,
 and extension contract is defined in
 [Downstream Contract](downstream-contract.md). Current public config files use

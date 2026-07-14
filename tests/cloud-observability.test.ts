@@ -102,6 +102,58 @@ test('cloud HTTP request observation emits log, metric, and span records', async
   assert.equal((spans[0] as Record<string, unknown>).status, 'ok')
 })
 
+test('cloud observability helpers sanitize records before custom adapters receive them', async () => {
+  const logs: unknown[] = []
+  const metrics: unknown[] = []
+  const spans: unknown[] = []
+  const adapter: CloudObservabilityAdapter = {
+    log(record) { logs.push(record) },
+    metric(record) { metrics.push(record) },
+    span(record) { spans.push(record) },
+  }
+  const signedUrl = 'https://bucket.example.test/object.txt?X-Amz-Signature=secret'
+  const workerCredential = `ocw_mwcred_${'a'.repeat(16)}_${'b'.repeat(32)}`
+
+  await recordCloudHttpRequest(adapter, {
+    requestId: workerCredential,
+    method: 'POST',
+    path: `/api/sessions?download=${encodeURIComponent(signedUrl)}`,
+    statusCode: 500,
+    durationMs: 42,
+    role: 'web',
+    profileName: 'full',
+    timestamp: new Date('2026-01-01T00:00:01.000Z'),
+  })
+  await recordCloudMetric(adapter, {
+    name: `cloud.metric.${workerCredential}`,
+    value: 1,
+    attributes: {
+      token: workerCredential,
+      object_store_url: signedUrl,
+      local_path: '/Users/alice/acme-private',
+      error_message: `failed Bearer ${workerCredential}`,
+    },
+  })
+  await recordCloudWorkerMetric(adapter, {
+    name: `open_cowork_cloud_worker_${workerCredential}_total`,
+    workerId: workerCredential,
+    tenantId: workerCredential,
+    sessionId: workerCredential,
+    status: `failed ${workerCredential}`,
+  })
+  await recordCloudSchedulerMetric(adapter, {
+    name: `open_cowork_cloud_scheduler_${workerCredential}_total`,
+    schedulerId: workerCredential,
+    status: `failed ${workerCredential}`,
+  })
+
+  const text = JSON.stringify({ logs, metrics, spans })
+  assert.equal(text.includes(workerCredential), false)
+  assert.equal(text.includes('X-Amz-Signature=secret'), false)
+  assert.equal(text.includes('/Users/alice'), false)
+  assert.match(text, /\[redacted\]|\[REDACTED_TOKEN\]/)
+})
+
 test('cloud observability record helpers isolate telemetry sink failures', async () => {
   const adapter: CloudObservabilityAdapter = {
     log() { throw new Error('log sink unavailable') },
