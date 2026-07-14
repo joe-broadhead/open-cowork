@@ -28,7 +28,7 @@
 
 It brings the power of OpenCode into a desktop experience that developers love and less technical teams can actually use.
 
-[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Workflows](docs/workflows.md) • [Configuration](docs/configuration.md) • [Open Cowork Cloud](docs/open-cowork-cloud.md) • [Packaging & Migration](docs/oss-packaging-migration.md) • [Downstream](docs/downstream.md) • [Roadmap](docs/roadmap.md)
+[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Workflows](docs/workflows.md) • [Configuration](docs/configuration.md) • [Open Cowork Cloud](docs/open-cowork-cloud.md) • [Packaging & Modes](docs/packaging-and-product-modes.md) • [Downstream](docs/downstream.md) • [Roadmap](docs/roadmap.md)
 
 </div>
 
@@ -81,7 +81,7 @@ gated, and reported through the workspace support matrix.
 
 The public product names, OCI image names, and Gateway mode split are
 documented in
-[OSS Packaging and Gateway Migration](docs/oss-packaging-migration.md).
+[Packaging and Gateway Product Modes](docs/packaging-and-product-modes.md).
 
 ## Why it exists
 

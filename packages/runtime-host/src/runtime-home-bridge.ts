@@ -29,7 +29,7 @@ const DEFAULT_TOOLING_BRIDGE_ENTRIES = [
   '.config/pnpm',
 ] as const
 
-const SENSITIVE_UNBRIDGED_ENTRIES = [
+const FORBIDDEN_TOOLING_BRIDGE_ENTRIES = [
   '.config/gh-copilot',
 ] as const
 
@@ -85,7 +85,7 @@ export function syncRuntimeHomeToolingBridge(options?: {
   const entries = options?.entries || getRuntimeHomeToolingBridgeEntries()
   const enabled = options?.enabled !== false
 
-  for (const relativePath of SENSITIVE_UNBRIDGED_ENTRIES) {
+  for (const relativePath of FORBIDDEN_TOOLING_BRIDGE_ENTRIES) {
     removeLinkedTargetIfPresent(join(runtimeHome, relativePath), join(realHome, relativePath))
   }
 

@@ -23,7 +23,7 @@ and config together.
 
 Playbooks appear across Desktop, Cloud, and Gateway deployments according to
 the product mode. The release and packaging names for those modes are defined
-in [OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+in [Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 
 The product rule is simple:
 

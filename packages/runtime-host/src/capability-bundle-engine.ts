@@ -69,7 +69,7 @@ function resourceIdentityKey(identity: Pick<CapabilityBundleResourceIdentity, 'k
 }
 
 function cloneResourceSelector(selector: CapabilityBundleResourceSelector): CapabilityBundleResourceSelector {
-  return typeof selector === 'string' ? selector : { ...selector }
+  return { ...selector }
 }
 
 function resourceIdentity(resource: CapabilityBundleResource | CapabilityBundleLifecycleResource): CapabilityBundleResourceIdentity {
@@ -82,25 +82,24 @@ function isResourceKind(value: unknown): value is CapabilityBundleResourceKind {
 
 type ResourceIdentitySet = {
   exact: Set<string>
-  legacyIds: Set<string>
 }
 
 function createResourceIdentitySet(identities: CapabilityBundleResourceSelector[] = []): ResourceIdentitySet {
   const exact = new Set<string>()
-  const legacyIds = new Set<string>()
   for (const identity of identities) {
-    if (typeof identity === 'string') legacyIds.add(identity)
-    else exact.add(resourceIdentityKey(identity))
+    if (!identity || typeof identity !== 'object') continue
+    if (!isResourceKind(identity.kind) || !readExactId(identity.id)) continue
+    exact.add(resourceIdentityKey(identity))
   }
-  return { exact, legacyIds }
+  return { exact }
 }
 
 function resourceIdentitySetIsEmpty(set: ResourceIdentitySet) {
-  return set.exact.size === 0 && set.legacyIds.size === 0
+  return set.exact.size === 0
 }
 
 function resourceIdentitySetHasResource(set: ResourceIdentitySet, resource: Pick<CapabilityBundleResourceIdentity, 'kind' | 'id'>) {
-  return set.exact.has(resourceIdentityKey(resource)) || set.legacyIds.has(resource.id)
+  return set.exact.has(resourceIdentityKey(resource))
 }
 
 type CapabilityBundleResourceCandidate = {
@@ -117,22 +116,14 @@ function resourceCandidateFromSelector(
   selector: CapabilityBundleResourceSelector,
   resources: CapabilityBundleResource[],
 ): CapabilityBundleResourceCandidate[] {
-  if (typeof selector !== 'string') {
-    const resource = resources.find((entry) => resourceIdentityKey(entry) === resourceIdentityKey(selector)) || null
-    return [{ kind: resource?.kind || selector.kind, id: selector.id, resource }]
-  }
-
-  const matches = resources.filter((resource) => resource.id === selector)
-  if (matches.length > 0) {
-    return matches.map((resource) => ({ kind: resource.kind, id: resource.id, resource }))
-  }
-  return [{ kind: 'bundle', id: selector, resource: null }]
+  const resource = resources.find((entry) => resourceIdentityKey(entry) === resourceIdentityKey(selector)) || null
+  return [{ kind: resource?.kind || selector.kind, id: selector.id, resource }]
 }
 
 function resourceIdentitySetHasCandidate(set: ResourceIdentitySet, candidate: CapabilityBundleResourceCandidate) {
   if (candidate.resource) return resourceIdentitySetHasResource(set, candidate.resource)
   if (candidate.kind !== 'bundle' && set.exact.has(resourceIdentityKey({ kind: candidate.kind, id: candidate.id }))) return true
-  return set.legacyIds.has(candidate.id)
+  return false
 }
 
 function installActionResourceKey(action: CapabilityBundleInstallPlanAction) {
@@ -206,15 +197,6 @@ function normalizePermission(value: unknown, issues: CapabilityBundleIssue[], in
 }
 
 function normalizeResourceSelector(value: unknown, issues: CapabilityBundleIssue[], field: string, index: number): CapabilityBundleResourceSelector | null {
-  if (typeof value === 'string') {
-    const id = readExactId(value)
-    if (!id) {
-      pushIssue(issues, 'invalid_uninstall_resource_id', `Bundle uninstall ${field}[${index}] must use an exact canonical id.`)
-      return null
-    }
-    return id
-  }
-
   const record = asRecord(value)
   const kind = readNonEmptyString(record.kind)
   const id = readExactId(record.id)

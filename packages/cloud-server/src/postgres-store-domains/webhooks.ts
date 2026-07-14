@@ -115,15 +115,15 @@ export class PostgresWebhooksRepository {
       )
       const result = await client.query(
         `INSERT INTO cloud_webhook_replay_claims (replay_key, seen_at_ms, status)
-         SELECT $1, $3, 'pending'
+         SELECT $1, $2, 'pending'
          WHERE NOT EXISTS (
            SELECT 1
            FROM cloud_webhook_replay_claims
-           WHERE replay_key = $1 OR replay_key = $2
+           WHERE replay_key = $1 OR replay_key = $3
          )
          ON CONFLICT (replay_key) DO NOTHING
          RETURNING replay_key`,
-        [replayKey, input.key, input.nowMs],
+        [replayKey, input.nowMs, input.key],
       )
       await client.query(
         `DELETE FROM cloud_webhook_replay_claims

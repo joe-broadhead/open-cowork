@@ -106,8 +106,8 @@ The canonical contract for workspace ownership, surface support, sync rules,
 status/reason vocabulary, and downstream boundaries lives in
 [Product Contract](product-contract.md). This section summarizes the
 architectural boundary.
-The canonical naming, packaging, release-channel, and legacy Gateway migration
-contract lives in [OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+The canonical naming, packaging, release-channel, and Gateway product-mode
+contract lives in [Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 
 Open Cowork exposes Desktop, Cloud Web, and Gateway surfaces through explicit
 workspace authorities:

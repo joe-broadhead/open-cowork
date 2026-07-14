@@ -512,11 +512,9 @@ function deriveToolIdsFromPermission(
     .filter((tool) => getConfiguredToolPatterns(tool).some((pattern) => patterns.has(pattern)))
     .map((tool) => tool.id)
 
-  // Back-compat for custom agents saved before we duplicated the exact
-  // builder selections into the Open Cowork sidecar. SDK-native tools
-  // such as `websearch` / `webfetch` are represented as direct permission
-  // keys, not MCP patterns, so there is nothing to reverse-map through
-  // configured tool metadata.
+  // OpenCode-native agent files can be edited outside the builder. SDK-native
+  // tools such as `websearch` / `webfetch` are represented as direct permission
+  // keys, not MCP patterns, so expose those direct keys as selected tools.
   const nativeToolIds = Array.from(patterns)
     .filter((pattern) => !pattern.startsWith('mcp__') && /^[a-z][a-z0-9_-]*$/.test(pattern))
 

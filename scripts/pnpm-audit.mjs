@@ -106,8 +106,10 @@ function stripJsonFlag(args) {
 
 function runAudit(args) {
   const auditArgs = ['audit', '--json', ...stripJsonFlag(args)]
-  const command = process.env.OPEN_COWORK_PNPM_AUDIT_BIN || 'pnpm'
-  return spawnSync(command, auditArgs, {
+  const overrideCommand = process.env.OPEN_COWORK_PNPM_AUDIT_BIN
+  const command = overrideCommand || 'pnpm'
+  const commandArgs = overrideCommand ? auditArgs : auditArgs
+  return spawnSync(command, commandArgs, {
     cwd: repoRoot,
     encoding: 'utf8',
     shell: process.platform === 'win32',

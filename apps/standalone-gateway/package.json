@@ -18,12 +18,12 @@
     "smoke": "node dist/main.js smoke"
   },
   "dependencies": {
-    "@open-cowork/shared": "workspace:*",
     "@open-cowork/gateway-channel": "workspace:*",
     "@open-cowork/gateway-provider-telegram": "workspace:*",
     "@open-cowork/gateway-provider-webhook": "workspace:*",
     "@open-cowork/gateway-testing": "workspace:*",
-    "@opencode-ai/sdk": "1.17.14",
+    "@open-cowork/shared": "workspace:*",
+    "@opencode-ai/sdk": "1.17.18",
     "pg": "^8.22.0"
   },
   "devDependencies": {

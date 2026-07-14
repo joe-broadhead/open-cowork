@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "opencodeVersion": "1.17.14",
+  "opencodeVersion": "1.17.18",
   "requiredAssumptionIds": [
     "cloud-session-event-projection-contract",
     "opencode-plugin-remote-fail-closed",

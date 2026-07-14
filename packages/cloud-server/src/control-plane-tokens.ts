@@ -20,7 +20,7 @@ export async function hashSecretWithRandomSalt(plaintext: string) {
 }
 
 // Verify a v2 per-secret-salted scrypt hash. Any stored hash that is not in the
-// `scrypt-v2:<salt>:<hash>` shape fails closed — there is no constant-salt legacy fallback.
+// `scrypt-v2:<salt>:<hash>` shape fails closed — there is no constant-salt fallback.
 export async function verifySecretHash(plaintext: string, storedHash: string) {
   const parts = storedHash.split(':')
   if (parts[0] === scryptHashPrefixV2 && parts[1] && parts[2]) {

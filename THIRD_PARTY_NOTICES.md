@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `a4b02f0c951c90d93e1d6d8284c58a5bfa828147bb60e5963569ce689656c56c`
+- pnpm lockfile SHA-256: `250527c02cd0235b56013fb6b39a41360eedb71c57e8d7c27e4181203947d8cb`
 - Production package entries: 373
 - Bundled license directories: 359 (14 package entries have no standalone license file or are workspace links)
 
@@ -40,7 +40,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.2.0 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.2.0/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
-| @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
+| @opencode-ai/sdk | 1.17.18 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.17.18.tgz |
 | @smithy/core | 3.29.1 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__core@3.29.1/ | https://github.com/smithy-lang/smithy-typescript.git |
 | @smithy/credential-provider-imds | 4.4.6 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__credential-provider-imds@4.4.6/ | https://github.com/smithy-lang/smithy-typescript.git |
 | @smithy/fetch-http-handler | 5.6.3 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__fetch-http-handler@5.6.3/ | https://github.com/smithy-lang/smithy-typescript.git |
@@ -255,19 +255,19 @@ Each package remains licensed under its own license terms. The table below is pr
 | object-inspect | 1.13.4 | MIT | THIRD_PARTY_LICENSES/object-inspect@1.13.4/ | git://github.com/inspect-js/object-inspect.git |
 | on-finished | 2.4.1 | MIT | THIRD_PARTY_LICENSES/on-finished@2.4.1/ | jshttp/on-finished |
 | once | 1.4.0 | ISC | THIRD_PARTY_LICENSES/once@1.4.0/ | git://github.com/isaacs/once |
-| opencode-ai | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.15.5/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.15.5.tgz |
-| opencode-darwin-arm64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-arm64@1.15.5/ | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.15.5.tgz |
-| opencode-darwin-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-x64@1.15.5/ | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.15.5.tgz |
-| opencode-darwin-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.15.5.tgz |
-| opencode-linux-arm64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-arm64@1.15.5/ | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.15.5.tgz |
-| opencode-linux-arm64-musl | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-arm64-musl@1.15.5/ | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.15.5.tgz |
-| opencode-linux-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.15.5.tgz |
-| opencode-linux-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.15.5.tgz |
-| opencode-linux-x64-baseline-musl | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-baseline-musl@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.15.5.tgz |
-| opencode-linux-x64-musl | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-musl@1.15.5/ | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.15.5.tgz |
-| opencode-windows-arm64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-arm64@1.15.5/ | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.15.5.tgz |
-| opencode-windows-x64 | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64@1.15.5/ | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.15.5.tgz |
-| opencode-windows-x64-baseline | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64-baseline@1.15.5/ | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.15.5.tgz |
+| opencode-ai | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.17.18/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.17.18.tgz |
+| opencode-darwin-arm64 | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-arm64@1.17.18/ | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.17.18.tgz |
+| opencode-darwin-x64 | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-x64@1.17.18/ | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.17.18.tgz |
+| opencode-darwin-x64-baseline | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-darwin-x64-baseline@1.17.18/ | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.17.18.tgz |
+| opencode-linux-arm64 | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-linux-arm64@1.17.18/ | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.17.18.tgz |
+| opencode-linux-arm64-musl | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-linux-arm64-musl@1.17.18/ | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.17.18.tgz |
+| opencode-linux-x64 | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64@1.17.18/ | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.17.18.tgz |
+| opencode-linux-x64-baseline | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-baseline@1.17.18/ | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.17.18.tgz |
+| opencode-linux-x64-baseline-musl | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-baseline-musl@1.17.18/ | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.17.18.tgz |
+| opencode-linux-x64-musl | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-linux-x64-musl@1.17.18/ | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.17.18.tgz |
+| opencode-windows-arm64 | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-windows-arm64@1.17.18/ | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.17.18.tgz |
+| opencode-windows-x64 | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64@1.17.18/ | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.17.18.tgz |
+| opencode-windows-x64-baseline | 1.17.18 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64-baseline@1.17.18/ | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.17.18.tgz |
 | package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |
 | path-data-parser | 0.1.0 | MIT | THIRD_PARTY_LICENSES/path-data-parser@0.1.0/ | git+https://github.com/pshihn/path-data-parser.git |

@@ -153,7 +153,7 @@ test('runtime status records component verification reports as doctor checks', (
       components: [{
         id: 'opencode-cli',
         kind: 'opencode-cli',
-        version: '1.17.14',
+        version: '1.17.18',
         path: '/Users/alice/private/opencode',
         sha256: `sha256:${'a'.repeat(64)}`,
         observedSha256: `${'b'.repeat(64)}`,

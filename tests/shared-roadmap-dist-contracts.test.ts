@@ -92,7 +92,7 @@ function bundle(overrides: Partial<CapabilityBundleManifest> = {}): CapabilityBu
       { kind: 'skill', id: 'dist-skill', ownedByBundle: true },
     ],
     permissions: [],
-    uninstall: { removes: ['dist-skill'], preserves: [] },
+    uninstall: { removes: [{ kind: 'skill', id: 'dist-skill' }], preserves: [] },
     ...overrides,
   }
 }
@@ -265,8 +265,13 @@ test('dist capability lifecycle removes and preserves installed resources across
       { kind: 'command', id: 'operator-command', ownedByBundle: true },
     ],
     uninstall: {
-      removes: ['dist-skill', 'old-agent', 'operator-workflow', 'missing-resource'],
-      preserves: ['operator-command'],
+      removes: [
+        { kind: 'skill', id: 'dist-skill' },
+        { kind: 'agent', id: 'old-agent' },
+        { kind: 'workflow', id: 'operator-workflow' },
+        { kind: 'command', id: 'missing-resource' },
+      ],
+      preserves: [{ kind: 'command', id: 'operator-command' }],
     },
   }), {
     productMode: 'desktop-local',
@@ -274,8 +279,10 @@ test('dist capability lifecycle removes and preserves installed resources across
   })
 
   const uninstallPlan = planCapabilityBundleUninstall(installed.state.bundles[0]!.manifest, {
-    installedResourceIds: installed.state.resources.map((resource) => resource.id),
-    userOwnedResourceIds: installed.state.resources.filter((resource) => resource.owner === 'user').map((resource) => resource.id),
+    installedResourceIds: installed.state.resources.map((resource) => ({ kind: resource.kind, id: resource.id })),
+    userOwnedResourceIds: installed.state.resources
+      .filter((resource) => resource.owner === 'user')
+      .map((resource) => ({ kind: resource.kind, id: resource.id })),
   })
 
   assert.deepEqual(uninstallPlan.actions.map((action) => `${action.action}:${action.kind}:${action.id}`), [
@@ -307,9 +314,12 @@ test('dist capability lifecycle removes and preserves installed resources across
   })
   const updatePlan = planCapabilityBundleUpdate(installed.state.bundles[0]!.manifest, next, {
     productMode: 'desktop-local',
-    installedResourceIds: installed.state.resources.map((resource) => resource.id),
-    userOwnedResourceIds: ['operator-workflow'],
-    existingResourceIds: ['external-resource', 'operator-workflow'],
+    installedResourceIds: installed.state.resources.map((resource) => ({ kind: resource.kind, id: resource.id })),
+    userOwnedResourceIds: [{ kind: 'workflow', id: 'operator-workflow' }],
+    existingResourceIds: [
+      { kind: 'workflow', id: 'external-resource' },
+      { kind: 'workflow', id: 'operator-workflow' },
+    ],
   })
 
   assert.equal(updatePlan.blocked, false)
@@ -365,7 +375,7 @@ test('dist capability planning covers local experimental and blocked resource br
     ],
   }), {
     productMode: 'desktop-local',
-    existingResourceIds: ['provider-resource'],
+    existingResourceIds: [{ kind: 'provider', id: 'provider-resource' }],
   })
 
   assert.equal(plan.blocked, true)

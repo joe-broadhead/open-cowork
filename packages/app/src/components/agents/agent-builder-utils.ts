@@ -1,5 +1,4 @@
 import {
-  isLegacyMcpAliasPermissionKey,
   isMcpPermissionRulePattern,
   validateCustomAgentDraft,
   VALID_CUSTOM_AGENT_NAME,
@@ -90,7 +89,6 @@ function permissionFamilyForPattern(pattern: string): CustomAgentPermissionKey |
   if (pattern === 'external_directory') return 'external_directory'
   if (pattern === 'edit' || pattern === 'write' || pattern === 'apply_patch') return 'edit'
   if (pattern.startsWith('mcp__')) return 'mcp'
-  if (isLegacyMcpAliasPermissionKey(pattern)) return 'mcp'
   return null
 }
 
@@ -228,7 +226,7 @@ function validatePermissionOverrideRules(draft: CustomAgentConfig): AgentDraftIs
       if (override.key === 'mcp' && !isMcpPermissionRulePattern(pattern)) {
         issues.push({
           code: `permission_rule_pattern_invalid_mcp_${index}`,
-          message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.',
+          message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.',
         })
       }
     }
@@ -370,8 +368,8 @@ export function compileAgentPreview(
   }
 }
 
-// Legacy derived attributes used by older compact cards. The primary
-// builder summary now uses the deterministic shared capability profile.
+// Derived meter attributes used by compact agent cards. The primary builder
+// summary uses the deterministic shared capability profile.
 export interface AgentAttributes {
   breadth: number  // 0..5 — skills coverage
   range: number    // 0..5 — tool count (reach)
