@@ -103,9 +103,7 @@ Cowork copy and layout.
 image bundled under the package `branding/` resource directory, such as
 `branding/acme-logo.svg`. The app rejects absolute paths, traversal, remote
 URLs, missing files, and non-image extensions before exposing the asset to the
-renderer. Legacy `logoDataUrl` values are still accepted as a compatibility
-fallback, but new downstream builds should ship image assets instead of base64
-config blobs.
+renderer.
 
 `branding.sidebar.top.mediaSize` controls the logo/icon media size in pixels
 and defaults to `28`. Values must be between `16` and `96`. `mediaFit` accepts
@@ -168,8 +166,6 @@ brand presentation keys such as `background`, `surface`, `elevated`, `text`,
 `mutedText`, `accent`, `accent2`, `accentHover`, `accentForeground`, semantic
 tones, `shadowCard`, `shadowElevated`, and `bgImage`. Do not use public branding to
 fork spacing, radius, control heights, typography scale, or runtime behavior.
-Legacy light partial theme overrides are still normalized for existing
-deployments.
 
 ## Environment placeholders
 

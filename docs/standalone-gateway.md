@@ -14,9 +14,9 @@ Use the `gateway-only` topology profile for this deployment path. The profile
 is documented in [Deployment Topologies](deployment-topologies.md) and in
 `deploy/topologies/topology-profiles.json`.
 
-Product naming, historical `opencode-agent-gateway` migration, release-channel
-policy, and compatibility aliases are documented in
-[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+Product naming, release-channel policy, Gateway product-mode boundaries, and
+compatibility aliases are documented in
+[Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 
 This is not the Cloud Channel Gateway. Cloud Channel Gateway is a Cloud client.
 Standalone Gateway is an execution authority.

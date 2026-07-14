@@ -29,7 +29,7 @@ test('capability bundle schema requires collections and accepts kind-qualified u
     permissions: [],
     uninstall: {
       removes: [{ kind: 'skill', id: 'shared-id' }],
-      preserves: ['shared-id', { kind: 'workflow', id: 'shared-id' }],
+      preserves: [{ kind: 'workflow', id: 'shared-id' }],
     },
   }]
   assert.doesNotThrow(() => validateResolvedConfig(config, 'capability bundle config'))
@@ -170,7 +170,7 @@ test('branding rejects unsafe links and logo URLs', () => {
   config.branding.sidebar = {
     top: {
       variant: 'logo',
-      logoDataUrl: 'https://cdn.example.test/logo.png',
+      logoAsset: 'https://cdn.example.test/logo.png',
     },
     lower: {
       linkLabel: 'Help',

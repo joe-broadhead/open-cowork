@@ -369,7 +369,7 @@ export function validateChartSaveArtifactRequest(record: Record<string, unknown>
     toolCallId: requiredString(record, 'toolCallId', 'Tool call id', MAX_IPC_ID_BYTES),
     toolName: requiredString(record, 'toolName', 'Tool name', MAX_IPC_ID_BYTES),
     dataUrl,
-    taskRunId: optionalNullableString(record, 'taskRunId', 'Task run id', MAX_IPC_ID_BYTES),
+    taskRunId: optionalNullableString(record, 'taskRunId', 'Task run id', MAX_IPC_ID_BYTES) ?? null,
     chart: chart as ChartSaveArtifactRequest['chart'],
   }
 }

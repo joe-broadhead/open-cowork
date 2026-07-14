@@ -134,7 +134,7 @@ own branding, providers, skills, and workflows.
     the headless channel client for Telegram, Slack, email, webhooks, and
     future channels. Standalone Gateway remains a separate appliance mode.
 
-    [:octicons-arrow-right-24: OSS Packaging and Gateway Migration](oss-packaging-migration.md)
+    [:octicons-arrow-right-24: Packaging and Gateway Product Modes](packaging-and-product-modes.md)
 
 </div>
 
@@ -148,7 +148,7 @@ own branding, providers, skills, and workflows.
 | **Power user** | Schedule recurring work, build skills | [Playbooks](workflows.md) → [Workflow Recipes](workflow-recipes.md) |
 | **Downstream distributor** | Ship a branded internal build | [Configuration](configuration.md) → [Downstream Customization](downstream.md) |
 | **Contributor** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
-| **Operator / release manager** | Cut a release, run the gates | [OSS Packaging and Gateway Migration](oss-packaging-migration.md) → [Packaging and Releases](packaging-and-releases.md) |
+| **Operator / release manager** | Cut a release, run the gates | [Packaging and Gateway Product Modes](packaging-and-product-modes.md) → [Packaging and Releases](packaging-and-releases.md) |
 | **Security reviewer** | Confirm the threat model holds | [Security Model](security-model.md) → [Telemetry and Privacy](privacy.md) |
 
 </div>
@@ -263,5 +263,5 @@ own branding, providers, skills, and workflows.
 - [Glossary](glossary.md) — every term that shows up across these docs.
 - [Getting Started](getting-started.md) — install, sign in, run a session.
 - [Architecture](architecture.md) — the layers, the invariants, and why they're invariants.
-- [OSS Packaging and Gateway Migration](oss-packaging-migration.md) — product
-  names, package boundaries, release channels, and gateway migration policy.
+- [Packaging and Gateway Product Modes](packaging-and-product-modes.md) — product
+  names, package boundaries, release channels, and Gateway product-mode policy.

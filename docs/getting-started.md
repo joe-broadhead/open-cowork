@@ -24,8 +24,8 @@ Cloud plus Cloud Channel Gateway if you need synced Desktop/Web/chat sessions.
 Start with Standalone Gateway only when you intentionally want a chat-first
 private appliance with no Cloud dependency.
 
-The naming, package, image, release-channel, and legacy Gateway migration
-contract is in [OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+The naming, package, image, release-channel, and Gateway product-mode contract
+is in [Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 
 ## Verify toolchain first
 

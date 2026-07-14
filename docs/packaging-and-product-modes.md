@@ -1,9 +1,9 @@
 ---
-title: OSS Packaging and Gateway Migration
+title: Packaging and Gateway Product Modes
 description: Product names, package boundaries, release channels, and support policy for Open Cowork Desktop, Cloud, and Gateway.
 ---
 
-# OSS Packaging and Gateway Migration
+# Packaging and Gateway Product Modes
 
 Open Cowork is one open-source product family with multiple deployable
 surfaces. The names below are the public names to use in docs, releases,
@@ -31,8 +31,8 @@ operator docs:
 - **Standalone Gateway** means `apps/standalone-gateway`: it owns a private
   OpenCode runtime and Gateway Postgres for Gateway-only deployments.
 
-Do not use `OpenCode Gateway` for new Open Cowork docs except when describing
-the historical standalone prototype.
+Do not use `OpenCode Gateway` for new Open Cowork docs; OpenCode is the
+runtime and Open Cowork owns the Gateway product surfaces.
 
 ## Package and Image Names
 
@@ -77,7 +77,7 @@ a Standalone Gateway session; they should not be merged implicitly.
 | `v0.x` preview | Public OSS preview. APIs and packaging may still move. | CI, docs, checksums, SBOM/provenance, explicit unsigned macOS notice while applicable |
 | private hosted beta | Managed BYOK beta for design partners. May use private ops evidence outside this repo. | private beta evidence, launch evidence manifest, BYOK redaction, restore/failover drills |
 | public beta | Public hosted BYOK. No enterprise promise yet. | load/soak, supply-chain, abuse, billing, support, and deployment evidence |
-| `v1.x` stable | Broad OSS release baseline. | signed/notarized macOS or explicit platform policy, stable docs, migration notes, release gates |
+| `v1.x` stable | Broad OSS release baseline. | signed/notarized macOS or explicit platform policy, stable docs, state-change notes, release gates |
 | enterprise-ready | Downstream/internal enterprise deployments. | SSO/OIDC, audit/export, backup/restore, operator runbooks, support SLA, tenant isolation evidence |
 
 Cloud and Gateway images must use the same release tag as the source release
@@ -113,7 +113,7 @@ Before a release that touches Desktop, Cloud, Gateway, packaging, or docs:
 
 ## Validation
 
-Run these checks after editing packaging, naming, migration, or release docs:
+Run these checks after editing packaging, naming, product-mode, or release docs:
 
 ```bash
 pnpm docs:build

@@ -152,10 +152,10 @@ export type IconProps = Omit<ComponentPropsWithoutRef<'svg'>, 'aria-hidden' | 'c
  *
  * COLOUR STATES (only four): default/decorative = text-text-muted; hover/active
  * foreground = text-text (brightens on the SAME container's hover, never its own
- * timeline); accent = text-accent, reserved for the ONE primary/active/live icon
- * per view (the surgical-accent allow-list); a status-hue glyph is deprecated for
- * status — use the 6px status DOT instead (green/amber/red), reserving coloured
- * glyphs for inline prose alerts only.
+   * timeline); accent = text-accent, reserved for the ONE primary/active/live icon
+   * per view (the surgical-accent allow-list). Status should use the 6px status
+   * DOT instead (green/amber/red), reserving coloured glyphs for inline prose alerts
+   * only.
  *
  * Prefer a bare glyph; use an icon-TILE (bg + radius) only for a section/category
  * avatar, an empty-state focal icon, or the active nav item.

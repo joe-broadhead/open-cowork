@@ -906,6 +906,20 @@ function assertCloudProductionCoreAdaptersSafe(input: {
   }
 }
 
+function assertCloudWebhookSecurityStoreSafe(input: {
+  tier: CloudDeploymentTier
+  role: CloudRuntimePolicy['role']
+  store: ControlPlaneStore
+}) {
+  if (!shouldRunCloudWeb(input.role)) return
+  if (input.tier === 'local') return
+  if (isWorkflowWebhookSecurityStore(input.store)) return
+  throw new Error(
+    'Cloud web deployments outside the local tier require a durable workflow webhook security store '
+    + 'for cross-replica replay protection, request rate limiting, and auth backoff.',
+  )
+}
+
 // Encrypt/decrypt boot canary (audit P2-17). A worker or scheduler whose envelope key
 // cannot round-trip would only discover it when revealing a real BYOK secret mid-run —
 // after it had already claimed work. Verify the adapter round-trips at boot so a wrong,
@@ -1391,6 +1405,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     store,
     objectStore,
     secretAdapter,
+  })
+  assertCloudWebhookSecurityStoreSafe({
+    tier: envOptions.deploymentTier,
+    role: policy.role,
+    store,
   })
   if (shouldRunCloudWorker(policy.role) || shouldRunCloudScheduler(policy.role)) {
     assertSecretAdapterRoundTrips(secretAdapter)

@@ -44,7 +44,7 @@ const secretScanAllowlist = new Set([
 const privateSdkAccessAllowlist = new Set([
   'scripts/lint.mjs',
 ])
-const legacyNamingAllowlist = new Set([
+const historicalNamingAllowlist = new Set([
   'AGENTS.md',
   '.github/workflows/release.yml',
   'docs/architecture.md',
@@ -166,8 +166,8 @@ function lintFile(fullPath) {
     if (ext === '.tsx') validateIconButtonLabels(relPath, content)
   }
 
-  if (/\bopencowork\b/.test(content) && !isLegacyNamingAllowed(relPath)) {
-    errors.push(`${relPath}: use "open-cowork" publicly; legacy "opencowork" is allowed only for documented back-compat namespaces`)
+  if (/\bopencowork\b/.test(content) && !isHistoricalNamingAllowed(relPath)) {
+    errors.push(`${relPath}: use "open-cowork" publicly; "opencowork" is allowed only for documented bundle-id/on-disk namespaces`)
   }
 
   if (shouldScanSecrets && !secretScanAllowlist.has(relPath)) {
@@ -212,8 +212,8 @@ function shouldScanSecretPath(relPath) {
   return secretScanExtensions.has(extname(relPath)) || secretScanFilenames.has(basename(relPath))
 }
 
-function isLegacyNamingAllowed(relPath) {
-  return legacyNamingAllowlist.has(relPath)
+function isHistoricalNamingAllowed(relPath) {
+  return historicalNamingAllowlist.has(relPath)
 }
 
 function validateArchitectureSdkVersionPolicy() {

@@ -41,6 +41,7 @@ function suite(scenarios = [scenario(), scenario({ id: 'two' }), scenario({ id: 
 test('live scenario suite validation requires five fully-described scenarios', () => {
   assert.throws(() => validateScenarioSuite(suite([scenario()])), /at least five/)
   assert.doesNotThrow(() => validateScenarioSuite(suite()))
+  assert.throws(() => validateScenarioSuite(suite([scenario({ timeoutMs: 0 }), scenario({ id: 'two' }), scenario({ id: 'three' }), scenario({ id: 'four' }), scenario({ id: 'five' })])), /timeoutMs/)
   assert.throws(() => validateScenarioSuite(suite([scenario(), scenario(), scenario({ id: 'three' }), scenario({ id: 'four' }), scenario({ id: 'five' })])), /Duplicate/)
 })
 
@@ -142,6 +143,39 @@ test('live scenario evidence runner records sanitized failing scenario details',
     assert.match(report.failures?.[0]?.failureReason || '', /\[REDACTED_TOKEN\]/)
     assert.match(report.failures?.[0]?.failureReason || '', /\/Users\/\[REDACTED_HOME\]/)
     assert.doesNotMatch(readFileSync(jsonPath, 'utf8'), /sk-123456/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('live scenario evidence runner bounds each executed scenario with a timeout', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-live-scenarios-timeout-'))
+  try {
+    const suitePath = join(root, 'suite.json')
+    const outputDir = join(root, 'evidence')
+    writeFileSync(suitePath, JSON.stringify(suite([
+      scenario({
+        id: 'timeout-scenario',
+        timeoutMs: 50,
+        command: ['node', '-e', 'setTimeout(() => process.stdout.write("late"), 5000)'],
+      }),
+      scenario({ id: 'two' }),
+      scenario({ id: 'three' }),
+      scenario({ id: 'four' }),
+      scenario({ id: 'five' }),
+    ]), null, 2))
+
+    const { report } = runScenarioSuite({
+      suite: suitePath,
+      outputDir,
+      execute: true,
+    })
+
+    assert.equal(report.ok, false)
+    assert.equal(report.counts.fail, 1)
+    assert.equal(report.failures?.[0]?.id, 'timeout-scenario')
+    assert.equal(report.failures?.[0]?.timedOut, true)
+    assert.equal(report.failures?.[0]?.timeoutMs, 50)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

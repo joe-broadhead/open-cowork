@@ -31,13 +31,7 @@ export type CloudWorkspaceRegistry = {
   touchSync(workspaceId: string, syncedAt: string, now?: Date): CloudWorkspaceConnectionRecord | null
 }
 
-type StoredCloudWorkspaceConnection = Partial<CloudWorkspaceConnectionRecord> & {
-  token?: unknown
-  accessToken?: unknown
-  refreshToken?: unknown
-  apiKey?: unknown
-  secret?: unknown
-}
+const SECRET_BEARING_RECORD_FIELDS = new Set(['token', 'accessToken', 'refreshToken', 'apiKey', 'secret'])
 
 function defaultRegistryPath() {
   return join(getAppDataDir(), 'cloud-workspaces.json')
@@ -78,7 +72,8 @@ function nullableIsoText(value: unknown) {
 
 function normalizeRecord(value: unknown): CloudWorkspaceConnectionRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const raw = value as StoredCloudWorkspaceConnection
+  const raw = value as Partial<CloudWorkspaceConnectionRecord>
+  if (Object.keys(raw).some((key) => SECRET_BEARING_RECORD_FIELDS.has(key))) return null
   if (typeof raw.baseUrl !== 'string' || !raw.baseUrl.trim()) return null
   let baseUrl: string
   try {

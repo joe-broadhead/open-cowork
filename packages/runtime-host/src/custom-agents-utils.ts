@@ -10,7 +10,6 @@ import {
   type ConfiguredTool,
 } from './config-loader-core.js'
 import {
-  isLegacyMcpAliasPermissionKey,
   isMcpPermissionRulePattern,
   validateCustomAgentDraft,
   type AgentColor,
@@ -26,7 +25,7 @@ import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite }
 import { validateCustomAgentContentLimits } from './custom-content-limits.js'
 import { getEffectiveSettings } from './settings.js'
 
-export { isLegacyMcpAliasPermissionKey, isMcpPermissionRulePattern } from '@open-cowork/shared'
+export { isMcpPermissionRulePattern } from '@open-cowork/shared'
 
 export type CustomSkillLike = {
   name: string
@@ -240,7 +239,7 @@ function validatePermissionOverrideRules(overrides?: CustomAgentPermissionOverri
       if (isMcpPermissionRulePattern(pattern)) continue
       issues.push({
         code: `permission_rule_pattern_invalid_mcp_${overrideIndex}_${ruleIndex}`,
-        message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.',
+        message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.',
       })
     }
   }
@@ -606,7 +605,7 @@ function applyCustomAgentRuntimePermissionCeilings(permission: Record<string, un
 
 function maximumPermissionActionForKey(permissionKey: string): CustomAgentPermissionAction | null {
   const settings = getEffectiveSettings()
-  if (permissionKey === 'mcp__*' || permissionKey.startsWith('mcp__') || isLegacyMcpAliasPermissionKey(permissionKey)) {
+  if (permissionKey === 'mcp__*' || permissionKey.startsWith('mcp__')) {
     return settings.mcpPermission
   }
   switch (permissionKey) {
@@ -649,7 +648,6 @@ function permissionFamilyForPattern(pattern: string): CustomAgentPermissionKey |
   if (pattern === 'external_directory') return 'external_directory'
   if (pattern === 'edit' || pattern === 'write' || pattern === 'apply_patch') return 'edit'
   if (pattern.startsWith('mcp__')) return 'mcp'
-  if (isLegacyMcpAliasPermissionKey(pattern)) return 'mcp'
   return null
 }
 
@@ -674,18 +672,10 @@ function overrideGrantsWriteAccess(override: CustomAgentPermissionOverride): boo
     (override.rules || []).some((rule) => rule.action === 'allow' || rule.action === 'ask')
 }
 
-function legacyAliasForMcpPermissionPattern(pattern: string) {
-  return expandMcpToolPermissionPatterns([pattern]).find((entry) => entry !== pattern) || null
-}
-
 function mcpPermissionKeysForDefaultOverride(permission: Record<string, unknown>) {
   const keys = new Set(['mcp__*'])
   for (const key of Object.keys(permission)) {
     if (key.startsWith('mcp__')) {
-      keys.add(key)
-      const alias = legacyAliasForMcpPermissionPattern(key)
-      if (alias) keys.add(alias)
-    } else if (isLegacyMcpAliasPermissionKey(key)) {
       keys.add(key)
     }
   }

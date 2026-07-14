@@ -203,8 +203,8 @@ describe('validateAgentDraft', () => {
     const cases: Array<[string, boolean]> = [
       ['mcp__github__pull_request_read', true],
       ['mcp__github_api__repos_*', true],
-      ['github_pull_request_read', true],
-      ['github_*', true],
+      ['github_pull_request_read', false],
+      ['github_*', false],
       ['mcp__github/delete_repo', false],
       ['mcp__github_', false],
       ['mcp___github__delete_repo', false],

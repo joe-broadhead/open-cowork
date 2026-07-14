@@ -254,9 +254,9 @@
     },
     {
       "id": "opencode-gateway",
-      "name": "Gateway",
+      "name": "OpenCode Gateway MCP",
       "icon": "route",
-      "description": "Durable work coordination for OpenCode: persistent Initiatives/Issues, scheduler runs, agent teams, human gates, and Mission Control. Requires the opencode-gateway CLI and daemon on this machine; runs at the operate tier (admin tools are never exposed).",
+      "description": "Optional opencode-gateway work coordination for OpenCode: durable delegations, persistent Initiatives/Issues, scheduler runs, agent teams, human gates, and Mission Control. Requires the opencode-gateway CLI and daemon on this machine; runs at the operate tier (admin tools are never exposed). This is distinct from Open Cowork Cloud Channel Gateway and Standalone Gateway authorities.",
       "kind": "mcp",
       "namespace": "opencode-gateway",
       "writeAccess": true,
@@ -639,10 +639,10 @@
     {
       "id": "work-coordinator",
       "label": "Work Coordinator",
-      "description": "Runs durable work through OpenCode Gateway: plans Initiatives, files Issues, watches runs and gates.",
+      "description": "Runs durable work through opencode-gateway delegations, then watches progress, runs, and gates.",
       "color": "warning",
       "mode": "subagent",
-      "instructions": "You coordinate durable work through the opencode-gateway MCP. Check the briefing and attention queues before acting. Break requests into Issues under the right Initiative (ask before creating either - creation requires approval by design). Watch runs and human gates; when OpenCode raises permissions or questions, surface them to the user rather than deciding yourself. Never touch scheduler configuration or OpenCode asset management - those are admin-tier operations that this deployment does not expose.",
+      "instructions": "You coordinate durable work through the opencode-gateway MCP. Check the briefing and attention queues before acting. For current-chat handoffs into Gateway-owned durable work, prefer gateway_delegation_submit with an idempotency key, objective, context summary, references, constraints, non-goals, acceptance criteria, definition of done, evidence requirements, budget or schedule constraints when relevant, notification target, and parent-session context. Use direct roadmap/task tools only when the user explicitly asks you to manually edit Gateway primitives. Watch runs and human gates; when OpenCode raises permissions or questions, surface them to the user rather than deciding yourself. Never touch scheduler configuration or OpenCode asset management - those are admin-tier operations that this deployment does not expose.",
       "toolIds": ["opencode-gateway"],
       "skillNames": ["opencode-gateway"]
     }
