@@ -47,8 +47,7 @@ export class WebhookProviderNotFoundError extends ChannelWebhookError {
 
 /**
  * Resolve the stable webhook error code for classification. Returns the code of
- * a {@link ChannelWebhookError} (or any error carrying a matching string `code`),
- * else null so the caller can fall back to a legacy heuristic.
+ * a {@link ChannelWebhookError} or any error carrying a matching string `code`.
  */
 export function channelWebhookErrorCode(error: unknown): ChannelWebhookErrorCode | null {
   if (error instanceof ChannelWebhookError) return error.code;

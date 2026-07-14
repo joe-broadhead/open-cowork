@@ -25,7 +25,6 @@ export type CloudWorkspaceCacheRecord = {
   workspaceId: string
   sessions: SessionInfo[]
   views: Record<string, SessionView>
-  eventCursors: Record<string, number>
   workflows: WorkflowListPayload | null
   settings: CloudTransportSettingMetadata[]
   artifactsBySession: Record<string, SessionArtifact[]>
@@ -145,17 +144,6 @@ function normalizeProjectSourceSummary(value: unknown): CloudProjectSourceSummar
   return null
 }
 
-function normalizeEventCursors(value: unknown): Record<string, number> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const cursors: Record<string, number> = {}
-  for (const [scope, sequence] of Object.entries(value as Record<string, unknown>)) {
-    if (!scope || Buffer.byteLength(scope, 'utf8') > 512) continue
-    if (typeof sequence !== 'number' || !Number.isFinite(sequence) || sequence < 0) continue
-    cursors[scope] = Math.floor(sequence)
-  }
-  return cursors
-}
-
 function normalizeWorkflowList(value: unknown): WorkflowListPayload | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const record = value as Partial<WorkflowListPayload>
@@ -242,7 +230,6 @@ function normalizeRecord(value: unknown): CloudWorkspaceCacheRecord | null {
     workspaceId,
     sessions,
     views,
-    eventCursors: normalizeEventCursors(raw.eventCursors),
     workflows: normalizeWorkflowList(raw.workflows),
     settings: normalizeSettings(raw.settings),
     artifactsBySession: normalizeArtifactsBySession(raw.artifactsBySession),
@@ -339,8 +326,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
     this.scheduleCursorFlush()
   }
 
-  // Lazily load cursors from the dedicated file; on first run migrate any cursors that
-  // were previously stored inline in the (encrypted) records file.
+  // Lazily load cursors from the dedicated file.
   private loadCursorState(): Map<string, Map<string, number>> {
     if (this.cursorState) return this.cursorState
     const state = new Map<string, Map<string, number>>()
@@ -359,15 +345,6 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
           }
         }
       } catch { /* corrupt cursor file → start empty; cursors are advisory */ }
-    } else {
-      // Migration: seed from the inline cursors in the legacy records file.
-      for (const record of this.readRecords()) {
-        const scopeMap = new Map<string, number>()
-        for (const [scope, seq] of Object.entries(record.eventCursors || {})) {
-          if (typeof seq === 'number' && Number.isFinite(seq) && seq >= 0) scopeMap.set(scope, Math.floor(seq))
-        }
-        if (scopeMap.size > 0) state.set(record.workspaceId, scopeMap)
-      }
     }
     this.cursorState = state
     return state
@@ -480,7 +457,6 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       workspaceId: id,
       sessions: sessions.map(normalizeSessionInfo).filter((session): session is SessionInfo => Boolean(session)),
       views: this.mode === 'full' ? existing?.views || {} : {},
-      eventCursors: existing?.eventCursors || {},
       workflows: existing?.workflows || null,
       settings: existing?.settings || [],
       artifactsBySession: existing?.artifactsBySession || {},
@@ -533,7 +509,6 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       workspaceId,
       sessions: [],
       views: {},
-      eventCursors: {},
       workflows: null,
       settings: [],
       artifactsBySession: {},

@@ -132,6 +132,27 @@ test('workspace gateway supports managed preconfigured cloud orgs', () => {
   assert.equal(managed ? gateway.remove(event(1), managed.id) : true, false)
 })
 
+test('cloud workspace registry rejects legacy secret-bearing connection records', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-cloud-workspace-legacy-secret-'))
+  const path = join(root, 'cloud-workspaces.json')
+  writeFileSync(path, JSON.stringify([{
+    baseUrl: 'https://cloud.example.test/admin/?token=secret#frag',
+    label: 'Legacy Cloud',
+    accessToken: 'should-not-surface',
+    refreshToken: 'should-not-surface',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+  }]))
+  const registry = new FileCloudWorkspaceRegistry(path)
+
+  assert.deepEqual(registry.list(), [])
+
+  const current = registry.upsert({ baseUrl: 'https://cloud.example.test/admin/?token=secret#frag', label: 'Current Cloud' })
+
+  assert.equal(current.baseUrl, 'https://cloud.example.test/admin')
+  assert.doesNotMatch(readFileSync(path, 'utf-8'), /should-not-surface|token=secret/)
+})
+
 test('workspace gateway tracks active workspace per sender', () => {
   const gateway = createWorkspaceGateway({
     cloudRegistry: null,
@@ -274,7 +295,7 @@ test('workspace gateway registers standalone Gateway workspaces without treating
   assert.equal(workspaceGateway.list(event(1)).find((entry) => entry.id === workspace.id)?.lastSyncedAt, result.syncedAt)
 })
 
-test('gateway workspace registry enforces safe metadata-only URLs', () => {
+test('gateway workspace registry rejects legacy secret-bearing records and enforces safe metadata-only URLs', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-url-'))
   const path = join(root, 'gateway-workspaces.json')
   writeFileSync(path, JSON.stringify([{
@@ -287,15 +308,13 @@ test('gateway workspace registry enforces safe metadata-only URLs', () => {
   }]))
   const registry = new FileGatewayWorkspaceRegistry(path)
 
-  const [persisted] = registry.list()
-
-  assert.equal(persisted?.baseUrl, 'https://gateway.example.test/admin')
-  assert.equal(Object.hasOwn(persisted as object, 'token'), false)
-  assert.equal(Object.hasOwn(persisted as object, 'accessToken'), false)
+  assert.deepEqual(registry.list(), [])
   assert.throws(() => registry.upsert({ baseUrl: 'http://gateway.example.test' }), /https/)
 
+  const persisted = registry.upsert({ baseUrl: 'https://gateway.example.test/admin/?token=secret#frag', label: 'Persisted Gateway' })
   const local = registry.upsert({ baseUrl: 'http://127.0.0.1:8790/?token=secret#frag', label: 'Local Gateway' })
 
+  assert.equal(persisted.baseUrl, 'https://gateway.example.test/admin')
   assert.equal(local.baseUrl, 'http://127.0.0.1:8790')
   assert.doesNotMatch(readFileSync(path, 'utf-8'), /should-not-surface|token=secret/)
 })

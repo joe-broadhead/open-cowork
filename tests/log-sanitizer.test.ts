@@ -75,6 +75,19 @@ test('sanitizeForExport still applies token redaction', () => {
   assert.ok(!exported.includes('dev'))
 })
 
+test('sanitizeLogMessage and sanitizeForExport redact managed-worker credentials', () => {
+  const credential = `ocw_mwcred_${'a'.repeat(16)}_${'b'.repeat(32)}`
+
+  const log = sanitizeLogMessage(`worker authorization failed for ${credential}`)
+  assert.equal(log.includes(credential), false)
+  assert.match(log, /\[REDACTED_TOKEN\]/)
+
+  const exported = sanitizeForExport(`/Users/dev/repo worker=${credential}`)
+  assert.equal(exported.includes(credential), false)
+  assert.match(exported, /\[REDACTED_TOKEN\]/)
+  assert.equal(exported.includes('/Users/dev'), false)
+})
+
 test('sanitizeForExport redacts generic bearer authorization headers', () => {
   const exported = sanitizeForExport('curl -H "Authorization: Bearer opaque-token-from-docs" https://api.example.test')
   assert.ok(!exported.includes('opaque-token-from-docs'))

@@ -1079,11 +1079,6 @@
           "maxLength": 512,
           "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+\\.(svg|png|jpg|jpeg|webp|gif)$"
         },
-        "logoDataUrl": {
-          "type": "string",
-          "maxLength": 65536,
-          "pattern": "^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$"
-        },
         "mediaSize": {
           "type": "integer",
           "minimum": 16,
@@ -1192,10 +1187,7 @@
       "required": ["kind", "id"]
     },
     "capabilityBundleResourceSelector": {
-      "oneOf": [
-        { "$ref": "#/$defs/capabilityBundleId" },
-        { "$ref": "#/$defs/capabilityBundleResourceIdentity" }
-      ]
+      "$ref": "#/$defs/capabilityBundleResourceIdentity"
     },
     "capabilityBundlePermission": {
       "type": "object",

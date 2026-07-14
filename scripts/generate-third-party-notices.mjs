@@ -194,9 +194,18 @@ function collectDependencyNodes(node, packages) {
   }
 }
 
+function resolvePnpmInvocation() {
+  const npmExecPath = process.env.npm_execpath
+  if (npmExecPath && /(?:^|[/\\])pnpm(?:\.cjs)?$/i.test(npmExecPath)) {
+    return { command: process.execPath, args: [npmExecPath] }
+  }
+  return { command: 'pnpm', args: [] }
+}
+
+const pnpmInvocation = resolvePnpmInvocation()
 const listJson = execFileSync(
-  'pnpm',
-  ['list', '--prod', '--recursive', '--json', '--depth', 'Infinity'],
+  pnpmInvocation.command,
+  [...pnpmInvocation.args, 'list', '--prod', '--recursive', '--json', '--depth', 'Infinity'],
   { cwd: rootDir, encoding: 'utf8', maxBuffer: 100 * 1024 * 1024 },
 )
 const workspaceNodes = JSON.parse(listJson)

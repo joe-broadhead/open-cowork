@@ -63,7 +63,7 @@ and linked from the release Go/No-Go report.
 - [ ] README matches current product behavior
 - [ ] config docs match `open-cowork.config.json`
 - [ ] packaging and release docs match the workflows
-- [ ] [OSS Packaging and Gateway Migration](oss-packaging-migration.md) matches
+- [ ] [Packaging and Gateway Product Modes](packaging-and-product-modes.md) matches
       the current Desktop, Cloud, Gateway, Standalone Gateway, image, package,
       and compatibility-alias behavior
 - [ ] if a primary UI route changed, `pnpm screenshots` has regenerated
@@ -118,8 +118,8 @@ and linked from the release Go/No-Go report.
       private promotion manifest for the exact tag commit.
 - [ ] Cloud Channel Gateway and Standalone Gateway are not described as the
       same product mode in release notes, docs, or deployment assets
-- [ ] any `opencode-gateway` or `opencode-agent-gateway` compatibility alias
-      points at the matching Open Cowork artifact and is marked as legacy
+- [ ] any Gateway compatibility alias points at the matching Open Cowork
+      artifact and names the product mode it targets
 - [ ] macOS, Windows, and Linux packaging scripts (`dist:ci:mac`, `dist:ci:win`, `dist:ci:linux`) still match Electron Builder config
 - [ ] release workflow is still tag-driven only
 - [ ] release tag will be an annotated signed tag and GitHub shows it as verified

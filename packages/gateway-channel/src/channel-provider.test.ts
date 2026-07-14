@@ -131,7 +131,7 @@ describe("channel provider utilities", () => {
     expect(isChannelProviderId("Matrix-main")).toBe(false);
   });
 
-  it("derives inbound and outbound file modes from legacy file capability flags", () => {
+  it("derives file modes from coarse file capability flags", () => {
     const capabilities = normalizeChannelCapabilities({
       threads: false,
       messageEditing: false,

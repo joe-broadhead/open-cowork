@@ -10,8 +10,8 @@ import {
 import { Badge, Button, Card, Icon, entityChroma, type BadgeTone } from '../ui'
 import type { CapabilityLinkedTool } from './capabilities-page-support.ts'
 
-// Maps the legacy `var(--color-*)` tone strings carried on chips to the
-// canonical Badge tones so every pill shares the shared pill material.
+// Maps token-style chip colors to canonical Badge tones so every pill shares
+// the shared pill material.
 function badgeToneForCssTone(tone: string | undefined): BadgeTone {
   if (!tone) return 'neutral'
   if (tone.includes('accent')) return 'accent'

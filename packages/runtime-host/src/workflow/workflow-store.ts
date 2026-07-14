@@ -202,11 +202,6 @@ function initDb(db: DatabaseSync) {
     );
     create index if not exists idx_workflow_webhook_signatures_seen_at on workflow_webhook_signatures(seen_at);
   `)
-  const columns = new Set((db.prepare('pragma table_info(workflows)').all() as Array<{ name?: unknown }>)
-    .map((column) => String(column.name || '')))
-  if (!columns.has('steps_json')) {
-    db.exec(`alter table workflows add column steps_json text not null default '[]'`)
-  }
   db.prepare(`
     insert into workflow_meta (key, value)
     values (?, ?)

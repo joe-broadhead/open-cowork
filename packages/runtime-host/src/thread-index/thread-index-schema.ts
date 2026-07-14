@@ -21,7 +21,7 @@ function recordThreadIndexSchemaVersion(db: DatabaseSync) {
 
 // `create table if not exists` cannot add a column to a table that already exists, so databases
 // created under an earlier thread-index schema need the columns backfilled. This is idempotent
-// forward migration for existing on-disk databases (not old-format back-compat): a fresh install
+// forward migration for existing on-disk databases; a fresh install
 // gets the columns from CREATE TABLE and these ALTERs are no-ops.
 function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
   const rows = db.prepare(`pragma table_info(${tableName})`).all() as Array<{ name?: string }>

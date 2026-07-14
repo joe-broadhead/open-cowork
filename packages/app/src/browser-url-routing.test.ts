@@ -16,7 +16,7 @@ describe('parseAppHash', () => {
     }
   })
 
-  it('rejects the removed legacy view aliases', () => {
+  it('rejects removed view aliases', () => {
     expect(parseAppHash('#/threads').view).toBeNull()
     expect(parseAppHash('#/workflows').view).toBeNull()
     expect(parseAppHash('#/agents').view).toBeNull()

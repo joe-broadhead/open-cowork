@@ -8,7 +8,6 @@ import {
   DEFAULT_PUBLIC_BRANDING,
   derivePublicBrandingThemeTokens,
   emitRootTokensCss,
-  isLegacyLightPublicBrandingTheme,
 } from '../packages/shared/dist/index.js'
 
 function declarations(block: string) {
@@ -126,7 +125,6 @@ test('design docs describe the shared Cloud Web and Desktop token contract', () 
   assert.match(designTokens, /surfaceHover/)
   assert.match(designTokens, /shadowElevated/)
   assert.match(configuration, /Cloud Web defaults to the shared Desktop Mercury graphite palette/)
-  assert.match(configuration, /Legacy light partial theme overrides/)
   assert.match(downstream, /should not fork Cloud Web\s+layout CSS/)
   assert.match(downstreamContract, /bypass the Desktop\/Cloud Web drift gates/)
   assert.match(cloudWeb, /Visual QA Checklist/)
@@ -147,9 +145,5 @@ test('public branding light detection handles accepted literal color tokens', ()
   assert.ok((cssColorLuminance('rgba(255, 255, 255, 0.4)') ?? 1) < 0.55)
   assert.equal(cssColorLuminance('radial-gradient(circle, #fff, #000)'), null)
 
-  assert.equal(isLegacyLightPublicBrandingTheme({ surface: '#fff' }), true)
-  assert.equal(isLegacyLightPublicBrandingTheme({ surface: 'rgb(255, 255, 255)' }), true)
-  assert.equal(isLegacyLightPublicBrandingTheme({ surface: 'white' }), true)
-  assert.equal(isLegacyLightPublicBrandingTheme({ surface: 'hsl(0, 0%, 100%)' }), true)
-  assert.equal(derivePublicBrandingThemeTokens({ surface: '#fff' }).text, '#18211c')
+  assert.equal(derivePublicBrandingThemeTokens({ surface: '#fff' }).text, undefined)
 })

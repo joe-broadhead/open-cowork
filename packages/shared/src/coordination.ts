@@ -549,9 +549,9 @@ export function isCoordinationWatchEvent(value: unknown): value is CoordinationW
 }
 
 // Lenient read-side coercers shared by the SQLite and Postgres CoordinationWatch row
-// mappers so a malformed or legacy-shaped persisted row degrades identically on both
-// backends. Writes are validated by the stricter normalizers in each store; these only
-// guard already-stored data and must never throw.
+// mappers so malformed persisted rows degrade identically on both backends. Writes are
+// validated by the stricter normalizers in each store; these only guard already-stored
+// data and must never throw.
 export function coerceCoordinationWatchChannel(value: unknown): CoordinationWatchChannel {
   const record = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>

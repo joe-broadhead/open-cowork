@@ -138,6 +138,7 @@ function redactCloudAttributeString(value: string) {
     .replace(/\b(?:enc|plain):v1:[A-Za-z0-9_-]+\b/g, '[redacted-secret]')
     .replace(/\b(?:gcp-sm|aws-sm|azure-kv):\/\/[^\s"'<>]+/gi, '[redacted-secret-ref]')
     .replace(/\bhttps:\/\/[A-Za-z0-9.-]+\.vault\.azure\.net\/secrets\/[^\s"'<>]+/gi, '[redacted-secret-ref]')
+    .replace(/oc(?:c|gw|w)_[A-Za-z0-9_-]{20,}/g, '[redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
   // Email redaction is already done by sanitizeLogMessage above; the previous local
   // copy here was both redundant and a ReDoS (overlapping domain/TLD quantifiers).
@@ -159,6 +160,44 @@ export function sanitizeCloudObservabilityAttributes(attributes: CloudObservabil
     if (cleanValue !== undefined) sanitized[cleanKey] = cleanValue
   }
   return sanitized
+}
+
+function sanitizeObservabilityName(value: string, fallback: string) {
+  const cleaned = redactCloudAttributeString(value || fallback).slice(0, MAX_STRING_LENGTH)
+  return cleaned || fallback
+}
+
+function sanitizeCloudLogRecord(record: CloudLogRecord): CloudLogRecord {
+  return {
+    ...record,
+    name: sanitizeObservabilityName(record.name, 'cloud.log'),
+    message: record.message === undefined
+      ? undefined
+      : redactCloudAttributeString(record.message).slice(0, MAX_STRING_LENGTH),
+    attributes: sanitizeCloudObservabilityAttributes(record.attributes),
+  }
+}
+
+function sanitizeCloudMetricRecord(record: CloudMetricRecord): CloudMetricRecord {
+  return {
+    ...record,
+    name: sanitizeObservabilityName(record.name, 'cloud.metric'),
+    unit: record.unit === undefined
+      ? undefined
+      : redactCloudAttributeString(record.unit).slice(0, 64),
+    attributes: sanitizeCloudObservabilityAttributes(record.attributes),
+  }
+}
+
+function sanitizeCloudSpanRecord(record: CloudSpanRecord): CloudSpanRecord {
+  return {
+    ...record,
+    name: sanitizeObservabilityName(record.name, 'cloud.span'),
+    attributes: sanitizeCloudObservabilityAttributes(record.attributes),
+    statusMessage: record.statusMessage == null
+      ? record.statusMessage
+      : redactCloudAttributeString(record.statusMessage).slice(0, MAX_STRING_LENGTH),
+  }
 }
 
 function prometheusMetricName(name: string) {
@@ -257,7 +296,8 @@ export async function recordCloudLog(
   record: CloudLogRecord,
 ) {
   if (!observability) return
-  await observeBestEffort(() => observability.log(record))
+  const sanitized = sanitizeCloudLogRecord(record)
+  await observeBestEffort(() => observability.log(sanitized))
 }
 
 export async function recordCloudMetric(
@@ -265,7 +305,8 @@ export async function recordCloudMetric(
   record: CloudMetricRecord,
 ) {
   if (!observability) return
-  await observeBestEffort(() => observability.metric(record))
+  const sanitized = sanitizeCloudMetricRecord(record)
+  await observeBestEffort(() => observability.metric(sanitized))
 }
 
 export function createCompositeCloudObservability(adapters: Array<CloudObservabilityAdapter | null | undefined>): CloudObservabilityAdapter {
@@ -273,13 +314,16 @@ export function createCompositeCloudObservability(adapters: Array<CloudObservabi
   if (active.length === 0) return createNoopCloudObservability()
   return {
     async log(record) {
-      await observeAllBestEffort(active.map((adapter) => () => adapter.log(record)))
+      const sanitized = sanitizeCloudLogRecord(record)
+      await observeAllBestEffort(active.map((adapter) => () => adapter.log(sanitized)))
     },
     async metric(record) {
-      await observeAllBestEffort(active.map((adapter) => () => adapter.metric(record)))
+      const sanitized = sanitizeCloudMetricRecord(record)
+      await observeAllBestEffort(active.map((adapter) => () => adapter.metric(sanitized)))
     },
     async span(record) {
-      await observeAllBestEffort(active.map((adapter) => () => adapter.span(record)))
+      const sanitized = sanitizeCloudSpanRecord(record)
+      await observeAllBestEffort(active.map((adapter) => () => adapter.span(sanitized)))
     },
     renderPrometheus() {
       return active.map((adapter) => {
@@ -571,7 +615,7 @@ export async function recordCloudHttpRequest(
     'cloud.role': input.role,
     'cloud.profile': input.profileName,
   }
-  await observeBestEffort(() => observability.log({
+  await recordCloudLog(observability, {
     level: input.statusCode >= 500 ? 'error' : input.statusCode >= 400 ? 'warn' : 'info',
     name: 'cloud.http.request',
     message: `${input.method} ${input.path} ${input.statusCode}`,
@@ -580,15 +624,15 @@ export async function recordCloudHttpRequest(
       duration_ms: input.durationMs,
     },
     timestamp,
-  }))
-  await observeBestEffort(() => observability.metric({
+  })
+  await recordCloudMetric(observability, {
     name: 'cloud.http.server.duration_ms',
     value: input.durationMs,
     unit: 'ms',
     attributes,
     timestamp,
-  }))
-  await observeBestEffort(() => observability.metric({
+  })
+  await recordCloudMetric(observability, {
     name: 'open_cowork_cloud_http_requests_total',
     value: 1,
     unit: '1',
@@ -600,8 +644,8 @@ export async function recordCloudHttpRequest(
       'cloud.profile': input.profileName,
     },
     timestamp,
-  }))
-  await observeBestEffort(() => observability.metric({
+  })
+  await recordCloudMetric(observability, {
     name: 'open_cowork_cloud_http_request_duration_ms',
     value: input.durationMs,
     unit: 'ms',
@@ -613,8 +657,8 @@ export async function recordCloudHttpRequest(
       'cloud.profile': input.profileName,
     },
     timestamp,
-  }))
-  await observeBestEffort(() => observability.span({
+  })
+  await observeBestEffort(() => observability.span(sanitizeCloudSpanRecord({
     name: 'cloud.http.request',
     startTime: new Date(timestamp.getTime() - input.durationMs),
     endTime: timestamp,
@@ -623,7 +667,7 @@ export async function recordCloudHttpRequest(
       duration_ms: input.durationMs,
     },
     status,
-  }))
+  })))
 }
 
 export async function recordCloudWorkerMetric(
@@ -639,9 +683,8 @@ export async function recordCloudWorkerMetric(
     timestamp?: Date
   },
 ) {
-  if (!observability) return
   const timestamp = input.timestamp || new Date()
-  await observeBestEffort(() => observability.metric({
+  await recordCloudMetric(observability, {
     name: input.name,
     value: input.value ?? 1,
     unit: input.name.endsWith('_ms') ? 'ms' : '1',
@@ -652,7 +695,7 @@ export async function recordCloudWorkerMetric(
       status: input.status || undefined,
     },
     timestamp,
-  }))
+  })
 }
 
 export async function recordCloudSchedulerMetric(
@@ -666,9 +709,8 @@ export async function recordCloudSchedulerMetric(
     timestamp?: Date
   },
 ) {
-  if (!observability) return
   const timestamp = input.timestamp || new Date()
-  await observeBestEffort(() => observability.metric({
+  await recordCloudMetric(observability, {
     name: input.name,
     value: input.value ?? 1,
     unit: input.name.endsWith('_ms') ? 'ms' : '1',
@@ -677,7 +719,7 @@ export async function recordCloudSchedulerMetric(
       status: input.status || undefined,
     },
     timestamp,
-  }))
+  })
 }
 
 function parseJsonHeaders(value: string | null) {

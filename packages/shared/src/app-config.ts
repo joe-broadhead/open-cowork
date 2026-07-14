@@ -52,7 +52,6 @@ export interface BrandingSidebarTopConfig {
   icon?: string
   logoAsset?: string
   logoUrl?: string
-  logoDataUrl?: string
   mediaSize?: number
   mediaFit?: BrandingSidebarMediaFit
   mediaAlign?: BrandingSidebarMediaAlign

@@ -252,16 +252,8 @@ function mcpNamespaceFromPermissionPattern(pattern: string) {
   return match?.[1] || null
 }
 
-function legacyRuntimeAgentToolIds(agent: unknown): string[] {
-  const tools = recordFrom((agent as { tools?: unknown }).tools)
-  return Object.entries(tools)
-    .filter(([, enabled]) => enabled === true)
-    .map(([toolId]) => toolId)
-    .sort((a, b) => a.localeCompare(b))
-}
-
 export function runtimeAgentToolIds(agent: unknown): string[] {
-  const toolIds = new Set(legacyRuntimeAgentToolIds(agent))
+  const toolIds = new Set<string>()
   const permission = recordFrom((agent as { permission?: unknown }).permission)
   for (const [key, value] of Object.entries(permission)) {
     if (!permissionValueHasAllowedRule(value)) continue
@@ -295,8 +287,6 @@ function permissionBashAllowsWrite(value: unknown): boolean {
 }
 
 export function runtimeAgentCanWrite(agent: unknown): boolean {
-  const legacyWriteToolIds = new Set(['bash', ...WRITE_TOOL_IDS])
-  if (legacyRuntimeAgentToolIds(agent).some((toolId) => legacyWriteToolIds.has(toolId))) return true
   const permission = recordFrom((agent as { permission?: unknown }).permission)
   return permissionValueHasAllowedRule(permission.edit)
     || permissionValueHasAllowedRule(permission.write)

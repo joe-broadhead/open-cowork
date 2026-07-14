@@ -6140,6 +6140,7 @@ test('cloud HTTP server metrics require operator-scoped API token access', async
       if (authorization === 'Bearer operator-token') return principal('operator-token', 'admin', 'api_token', ['operator'])
       if (authorization === 'Bearer gateway-token') return principal('gateway-token', 'admin', 'api_token', ['gateway'])
       if (authorization === 'Bearer desktop-token') return principal('desktop-token', 'admin', 'api_token', ['desktop'])
+      if (authorization === 'Bearer worker-token') return principal('worker-token', 'member', 'api_token', ['worker-internal'])
       return principal('member-1', 'member', 'user')
     },
   })
@@ -6152,6 +6153,12 @@ test('cloud HTTP server metrics require operator-scoped API token access', async
     assert.equal((await fetch(`${baseUrl}/api/metrics`, {
       headers: { authorization: 'Bearer desktop-token' },
     })).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, {
+      headers: { authorization: 'Bearer worker-token' },
+    })).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/workers/heartbeats`, {
+      headers: { authorization: 'Bearer worker-token' },
+    })).status, 200)
 
     const health = await fetch(`${baseUrl}/healthz`)
     assert.equal(health.status, 200)

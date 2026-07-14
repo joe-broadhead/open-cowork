@@ -13,7 +13,7 @@ understand and that map cleanly onto OpenCode:
 
 Desktop is one Open Cowork surface. Cloud, Gateway, Standalone Gateway, Mobile,
 and Teams naming and package boundaries are defined in
-[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+[Packaging and Gateway Product Modes](packaging-and-product-modes.md).
 
 Team dashboards, incident-control dashboards, and unsupervised autonomous
 learning controls are not part of the active app surface. User-invoked

@@ -36,8 +36,8 @@ const TOKEN_PATTERNS = [
   /\bdapi[0-9a-f]{32}\b/g,
   // Hugging Face tokens are `hf_` plus an opaque blob.
   /\bhf_[A-Za-z0-9]{20,}\b/g,
-  // Open Cowork service/gateway tokens and Telegram bot tokens.
-  /\boc(?:c|gw)_[A-Za-z0-9_-]{20,}\b/g,
+  // Open Cowork cloud, gateway, and managed-worker credentials plus Telegram bot tokens.
+  /\boc(?:c|gw|w)_[A-Za-z0-9_-]{20,}\b/g,
   /\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g,
   // Google OAuth client secrets.
   /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g,

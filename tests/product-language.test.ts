@@ -87,7 +87,7 @@ test('desktop guide documents focused product language and density standards', (
   }
 })
 
-test('workflow renderer surface uses workflow filenames and route key', () => {
+test('saved-workflow renderer surface uses workflow filenames and playbooks route key', () => {
   const stalePaths = [
     'packages/app/src/components/automations',
     'apps/desktop/tests/automations-page.smoke.test.ts',
@@ -99,7 +99,8 @@ test('workflow renderer surface uses workflow filenames and route key', () => {
 
   assert.deepEqual(stalePaths, [])
   assert.deepEqual(staleWorkflowNames, [])
-  assert.match(appTypes, /'workflows'/)
+  assert.match(appTypes, /'playbooks'/)
+  assert.doesNotMatch(appTypes, /'workflows'/)
   assert.doesNotMatch(appTypes, /'automations'/)
 })
 
