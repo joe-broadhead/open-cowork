@@ -110,6 +110,7 @@ nav:
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
       - OpenWiki Knowledge Base: openwiki.md
+      - OpenCode Gateway: opencode-gateway.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md

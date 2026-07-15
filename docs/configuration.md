@@ -648,11 +648,14 @@ It also ships one command-launched bundled MCP (`type: local` with a
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
   queries
 
-OpenWiki and opencode-gateway are no longer shipped as default MCP entries.
+OpenWiki and OpenCode Gateway are no longer shipped as default MCP entries.
 Current OpenWiki is an optional documentation CLI workflow (see
-[OpenWiki](openwiki.md)); current opencode-gateway is an OpenCode plugin/runtime
-wrapper installed and run through its own `init`, `doctor`, `warm`, and `serve`
-commands rather than `opencode-gateway mcp`.
+[OpenWiki](openwiki.md)). OpenCode Gateway is an optional external durable-work
+coordinator with its own daemon, dashboard, OpenCode profile installer, and
+`gateway_*` MCP tools (see [OpenCode Gateway](opencode-gateway.md)). Add it as
+a user-managed or downstream MCP only when the local Gateway daemon and
+credential file are intentionally provisioned; do not bundle it as a default
+public app dependency.
 
 User-added MCPs are stored separately from the shipped config.
 

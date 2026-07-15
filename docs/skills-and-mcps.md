@@ -67,6 +67,17 @@ short tool name such as `bar_chart`.
     reports as not installed until the `time-keep` binary is on PATH —
     the built-in `clock` MCP stays the zero-install fallback.
 
+-   :material-source-branch-sync: **OpenCode Gateway MCP** <span class="status-badge external">external</span>
+
+    ---
+
+    Optional sibling service for durable Initiatives, Issues, scheduler
+    runs, Mission Control, and channel operations. It is not bundled as a
+    default Open Cowork MCP; install and run OpenCode Gateway separately,
+    then add its `gateway` stdio MCP only for trusted local/downstream
+    profiles. Use the `read`, `operate`, or `admin` tool tier deliberately.
+    See [OpenCode Gateway](opencode-gateway.md).
+
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 
     ---
