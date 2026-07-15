@@ -4,7 +4,7 @@ import { PluginIcon } from '../plugins/PluginIcon'
 import { McpRestrictionPanel } from './McpRestrictionPanel'
 import { resolveMissingSkillTools } from './agent-builder-utils'
 import { t } from '../../helpers/i18n'
-import { Button, Input } from '../ui'
+import { Button, Input } from '@open-cowork/ui'
 
 type Props = {
   catalog: AgentCatalog

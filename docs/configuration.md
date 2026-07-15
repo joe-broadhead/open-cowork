@@ -107,8 +107,8 @@ renderer.
 
 `branding.sidebar.top.mediaSize` controls the logo/icon media size in pixels
 and defaults to `28`. Values must be between `16` and `96`. `mediaFit` accepts
-`vertical` or `horizontal`: leave it unset to preserve the legacy square
-bounding box, use `vertical` for square or tall marks whose height should define
+`bounded` (the explicit default square bounding box), `vertical`, or
+`horizontal`. Use `vertical` for square or tall marks whose height should define
 the sidebar presence, and use `horizontal` for wide wordmarks whose width should
 be fixed. `mediaAlign` accepts `start`, `center`, or `end` and controls
 icon/logo placement for icon-only or logo-only branding.
@@ -341,9 +341,9 @@ dynamic list is overlaid beneath them, deduplicated by id.
       "openrouter": {
         "name": "OpenRouter",
         "credentials": [ ... ],
-        "defaultModel": "deepseek/deepseek-v4-flash:free",
+        "defaultModel": "qwen/qwen3-coder-flash",
         "models": [
-          { "id": "deepseek/deepseek-v4-flash:free", "name": "DeepSeek V4 Flash (free)" },
+          { "id": "qwen/qwen3-coder-flash", "name": "Qwen3 Coder Flash" },
           { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4" }
         ],
         "dynamicCatalog": {
@@ -643,25 +643,19 @@ The upstream core ships these packaged-source MCPs:
 - `skills`
 - `workflows`
 
-It also ships three command-launched bundled MCPs (`type: local` with a
+It also ships one command-launched bundled MCP (`type: local` with a
 `command` launcher rather than a packaged `packageName`):
-- `openwiki` — OpenWiki knowledge base: fusion search, cited reads, claim
-  tracing, facts/takes, inbox and governance reads, graph queries, and
-  approval-gated inbox processing plus proposal-safe edit/fact/take/source
-  workflows (see [OpenWiki](openwiki.md))
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
   queries
-- `opencode-gateway` — durable work coordination: persistent
-  Initiatives/Issues, scheduler runs, teams, blueprints, project bindings,
-  environments, channel sends, and diagnostics. The bundled launcher uses the
-  Gateway operate tier: read-tier tools are auto-allowed, operate-tier tools
-  ask, and admin-tier tools are absent. OpenCode permission approval is
-  deliberately admin-tier; the operate surface exposes only safe rejection.
-  Gateway's hardened loopback rejects mutations without a capability token, so
-  this integration stays disabled until the user supplies the absolute path to
-  an owner-only operator-token file also configured in the Gateway daemon via
-  `OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE`. Do not use Gateway's
-  auto-provisioned admin token for this operate-tier client.
+
+OpenWiki and OpenCode Gateway are no longer shipped as default MCP entries.
+Current OpenWiki is an optional documentation CLI workflow (see
+[OpenWiki](openwiki.md)). OpenCode Gateway is an optional external durable-work
+coordinator with its own daemon, dashboard, OpenCode profile installer, and
+`gateway_*` MCP tools (see [OpenCode Gateway](opencode-gateway.md)). Add it as
+a user-managed or downstream MCP only when the local Gateway daemon and
+credential file are intentionally provisioned; do not bundle it as a default
+public app dependency.
 
 User-added MCPs are stored separately from the shipped config.
 

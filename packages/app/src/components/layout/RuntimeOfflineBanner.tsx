@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { t } from '../../helpers/i18n'
-import { Button, Icon } from '../ui'
+import { Button, Icon } from '@open-cowork/ui'
 
 interface Props {
   error: string

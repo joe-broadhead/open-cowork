@@ -2,12 +2,8 @@ import type { ReactElement, ReactNode } from 'react'
 import type { CapabilitySkill, CapabilityTool } from '@open-cowork/shared'
 import { PluginIcon } from '../plugins/PluginIcon'
 import {
-  BreadthIcon,
-  BuiltinIcon,
-  CustomIcon,
-  RuntimeIcon,
-} from '../agents/agent-attribute-icons'
-import { Badge, Button, Card, Icon, entityChroma, type BadgeTone } from '../ui'
+  BreadthIcon, BuiltinIcon, CustomIcon, RuntimeIcon, } from '../agents/agent-attribute-icons'
+import { Badge, Button, Card, Icon, entityChroma, type BadgeTone } from '@open-cowork/ui'
 import type { CapabilityLinkedTool } from './capabilities-page-support.ts'
 
 // Maps token-style chip colors to canonical Badge tones so every pill shares

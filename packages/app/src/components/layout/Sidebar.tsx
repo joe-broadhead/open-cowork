@@ -1,13 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
-  BrandingSidebarConfig,
-  BrandingSidebarLowerConfig,
-  BrandingSidebarTopConfig,
-  DesktopFeatureFlags,
-  DesktopFeatureKey,
-  WorkspaceApiSupport,
-  WorkspaceInfo,
-} from '@open-cowork/shared'
+  BrandingSidebarConfig, BrandingSidebarLowerConfig, BrandingSidebarTopConfig, DesktopFeatureFlags, DesktopFeatureKey, WorkspaceApiSupport, WorkspaceInfo, } from '@open-cowork/shared'
 import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
@@ -17,7 +10,7 @@ import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
-import { Button, Card, Icon, Input, type BadgeTone, type IconName } from '../ui'
+import { Button, Card, Icon, Input, type BadgeTone, type IconName } from '@open-cowork/ui'
 import { countDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 import { useEscape } from '../../hooks/useEscape'
 
@@ -138,6 +131,7 @@ function renderableSidebarTopVariant(
 const BRAND_MEDIA_SIZE_DEFAULT = 28
 const BRAND_MEDIA_SIZE_MIN = 16
 const BRAND_MEDIA_SIZE_MAX = 96
+const BRAND_MEDIA_FIT_DEFAULT: NonNullable<BrandingSidebarTopConfig['mediaFit']> = 'bounded'
 
 function sidebarBrandMediaSize(value: number | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return BRAND_MEDIA_SIZE_DEFAULT
@@ -145,8 +139,8 @@ function sidebarBrandMediaSize(value: number | undefined) {
 }
 
 function sidebarBrandMediaFit(value: BrandingSidebarTopConfig['mediaFit']) {
-  if (value === 'horizontal' || value === 'vertical') return value
-  return 'bounded'
+  if (value === 'bounded' || value === 'horizontal' || value === 'vertical') return value
+  return BRAND_MEDIA_FIT_DEFAULT
 }
 
 function sidebarBrandMediaAlign(value: BrandingSidebarTopConfig['mediaAlign'], iconOnly: boolean) {

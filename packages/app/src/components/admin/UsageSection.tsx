@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Badge, SegmentedControl } from '../ui'
+import { Badge, SegmentedControl } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 import { AdminSectionHeader, AdminStateBlock, AdminTable } from './AdminPrimitives'
 import { useAdminResource } from './useAdminResource'

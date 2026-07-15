@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { PendingApproval } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, Icon } from '../ui'
+import { Badge, Button, Card, Icon } from '@open-cowork/ui'
 import {
   describePermission,
   detectRunawayApprovals,

@@ -741,8 +741,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
   }
 
   const reconcileSessionHistory = async (state: DurableSessionSubscriptionState) => {
-    // 1.17.20 exposes this finite durable counterpart even though session.wait
-    // is not implemented. Querying it after active-set quiescence closes the
+    // OpenCode exposes this finite durable counterpart even when session.wait
+    // is unavailable. Querying it after active-set quiescence closes the
     // race where the live durable tail has not observed the final commit yet.
     if (typeof client.v2.session.history !== 'function') return
     while (!controller.signal.aborted) {
@@ -794,7 +794,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
         } catch (error) {
           if (controller.signal.aborted) break
           if (isSessionWaitCapabilityUnavailable(error)) {
-            // OpenCode 1.17.20 advertises wait in the SDK but its server method
+            // Some OpenCode v2 runtimes advertise wait in the SDK while the server method
             // is an OperationUnavailable stub. Detect only that typed 503 once;
             // auth and transport failures must keep retrying the preferred API.
             waitCapabilityUnavailable = true

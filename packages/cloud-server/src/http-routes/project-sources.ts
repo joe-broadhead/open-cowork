@@ -7,13 +7,13 @@ export async function handleProjectSourcesApiRoute(input: CloudApiRouteInput): P
 
   if (itemId === 'validate' && !action && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    tools.writeJson(res, 200, options.service.validateProjectSource(normalizeCloudProjectSource(body.projectSource)), options.corsOrigin)
+    tools.writeJson(res, 200, options.service.domains.projectSources.validateProjectSource(normalizeCloudProjectSource(body.projectSource)), options.corsOrigin)
     return true
   }
 
   if (itemId === 'snapshots' && !action && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
-    const uploaded = await options.service.uploadProjectSnapshot(context.principal, {
+    const uploaded = await options.service.domains.projectSources.uploadProjectSnapshot(context.principal, {
       title: tools.readString(body.title),
       files: Array.isArray(body.files) ? body.files as CloudProjectSnapshotUploadInput['files'] : [],
       excluded: Array.isArray(body.excluded) ? body.excluded as CloudProjectSnapshotUploadInput['excluded'] : [],

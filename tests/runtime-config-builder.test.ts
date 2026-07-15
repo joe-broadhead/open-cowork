@@ -1002,7 +1002,7 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
     assert.equal(runtimeConfig.small_model, 'openrouter/anthropic/claude-sonnet-4')
     assert.equal(runtimeConfig.provider.openrouter.name, 'OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.options.apiKey, 'sk-or-test')
-    assert.equal(runtimeConfig.provider.openrouter.models['deepseek/deepseek-v4-flash:free'].name, 'DeepSeek V4 Flash (free) via OpenRouter')
+    assert.equal(runtimeConfig.provider.openrouter.models['qwen/qwen3-coder-flash'].name, 'Qwen3 Coder Flash via OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.models['anthropic/claude-sonnet-4'].name, 'Claude Sonnet 4 via OpenRouter')
   } finally {
     saveSettings(originalSettings)
@@ -1015,7 +1015,7 @@ test('buildRuntimeConfig uses the user-selected small model for OpenCode lightwe
   saveSettings({
     selectedProviderId: 'openrouter',
     selectedModelId: 'anthropic/claude-sonnet-4',
-    selectedSmallModelId: 'deepseek/deepseek-v4-flash:free',
+    selectedSmallModelId: 'qwen/qwen3-coder-flash',
     providerCredentials: {
       openrouter: {
         apiKey: 'sk-or-test',
@@ -1027,7 +1027,7 @@ test('buildRuntimeConfig uses the user-selected small model for OpenCode lightwe
     const runtimeConfig = buildRuntimeConfig()
 
     assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.equal(runtimeConfig.small_model, 'openrouter/deepseek/deepseek-v4-flash:free')
+    assert.equal(runtimeConfig.small_model, 'openrouter/qwen/qwen3-coder-flash')
   } finally {
     saveSettings(originalSettings)
   }

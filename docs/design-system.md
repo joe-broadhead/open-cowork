@@ -67,9 +67,9 @@ a pure token override with no component edits.
 ## Primitives
 
 Shared React primitives live in `packages/ui` and are exported as the private
-workspace package `@open-cowork/ui`. Desktop keeps compatibility re-export
-shims in `packages/app/src/components/ui/`, but new primitive work
-should happen in the package:
+workspace package `@open-cowork/ui`. Desktop no longer keeps a private UI
+barrel; app-local UI files are explicit wrappers/tests only, and new primitive
+work should happen in the package:
 
 - `Button` and `IconButton` for actions. `IconButton` requires a `label` prop; `pnpm lint` fails if a usage omits it.
 - `Input`, `Select`, and `SegmentedControl` for form controls.

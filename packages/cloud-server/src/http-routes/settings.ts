@@ -11,14 +11,14 @@ export async function handleSettingsApiRoute(input: CloudApiRouteInput): Promise
   const settingKey = settingId ? decodeURIComponent(settingId) : null
   if (!settingKey && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      settings: await options.service.listSettingMetadata(context.principal),
+      settings: await options.service.domains.settings.listSettingMetadata(context.principal),
     }, options.corsOrigin)
     return true
   }
 
   if (settingKey && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      setting: await options.service.getSettingMetadata(context.principal, settingKey),
+      setting: await options.service.domains.settings.getSettingMetadata(context.principal, settingKey),
     }, options.corsOrigin)
     return true
   }
@@ -32,7 +32,7 @@ export async function handleSettingsApiRoute(input: CloudApiRouteInput): Promise
       return true
     }
     tools.writeJson(res, 200, {
-      setting: await options.service.setSettingMetadata(context.principal, {
+      setting: await options.service.domains.settings.setSettingMetadata(context.principal, {
         key: keyName,
         value,
       }),

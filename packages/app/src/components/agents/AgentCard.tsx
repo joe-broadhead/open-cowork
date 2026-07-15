@@ -1,16 +1,11 @@
 import { useRef, useState } from 'react'
 import type {
-  AgentCapabilityProfile,
-  AgentCatalog,
-  AgentColor,
-  CustomAgentConfig,
-  CustomAgentIssue,
-} from '@open-cowork/shared'
+  AgentCapabilityProfile, AgentCatalog, AgentColor, CustomAgentConfig, CustomAgentIssue, } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from './AgentAvatar'
 import { AvatarEditor } from './AvatarEditor'
 import { PluginIcon } from '../plugins/PluginIcon'
-import { AgentCapabilityProfileView, Badge, type BadgeTone } from '../ui'
+import { AgentCapabilityProfileView, Badge, type BadgeTone } from '@open-cowork/ui'
 import { agentTone } from './agent-builder-utils'
 
 // Portrait card shown on the left of the builder. It stays focused on

@@ -620,14 +620,14 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         create: vi.fn(async (input: { name: string; color?: string }) => ({
           id: 'tag-1',
           name: input.name,
-          color: input.color || '#64748b',
+          color: input.color || 'var(--color-text-muted)',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         })),
         update: vi.fn(async (tagId: string, input: { name: string; color?: string }) => ({
           id: tagId,
           name: input.name,
-          color: input.color || '#64748b',
+          color: input.color || 'var(--color-text-muted)',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-02T00:00:00.000Z',
         })),

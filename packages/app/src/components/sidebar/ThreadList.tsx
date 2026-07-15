@@ -10,7 +10,7 @@ import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
 import { cloudGitRepositoryLabel } from '@open-cowork/shared'
 import type { CloudProjectSourceSummary, SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
-import { Badge, Button, Card, Dialog, EmptyState, Input, Select } from '../ui'
+import { Badge, Button, Card, Dialog, EmptyState, Input, Select } from '@open-cowork/ui'
 
 const DiffViewer = lazy(() => import('../chat/DiffViewer').then((module) => ({
   default: module.DiffViewer,

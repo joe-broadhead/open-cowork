@@ -1686,7 +1686,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
               }
             }
             if (restoredCheckpointEntries === 0) {
-              const source = await service.getSessionProjectSource(lease.tenantId, lease.sessionId)
+              const source = await service.domains.projectSources.getSessionProjectSource(lease.tenantId, lease.sessionId)
               if (source) {
                 await projectSources.restoreProjectSource({
                   tenantId: lease.tenantId,

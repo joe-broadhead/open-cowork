@@ -1,10 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HomeComposer } from './home/HomeComposer'
 import type {
-  BrandingHomeConfig,
-  LaunchpadFeedPayload,
-  LaunchpadFreshArtifactItem,
-} from '@open-cowork/shared'
+  BrandingHomeConfig, LaunchpadFeedPayload, LaunchpadFreshArtifactItem, } from '@open-cowork/shared'
 import { useSessionStore, type PrimaryAgentMode } from '../stores/session'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
@@ -17,12 +14,7 @@ import { useMentionableAgents } from './chat/useChatInputRuntime'
 import type { Attachment } from './chat/chat-input-types'
 import type { HomePromptOptions } from './home/home-prompt-options'
 import {
-  Card,
-  EmptyState,
-  Icon,
-  IconButton,
-  type IconName,
-} from './ui'
+  Card, EmptyState, Icon, IconButton, type IconName } from '@open-cowork/ui'
 import { MAX_MOTION_ITEMS } from './launchpad/constants'
 
 const LaunchpadMotionGrid = lazy(() => import('./launchpad/LaunchpadMotionGrid').then((module) => ({

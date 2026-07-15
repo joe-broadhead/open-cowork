@@ -1,5 +1,5 @@
 import type { ChannelProvider, IncomingChannelMessage } from '@open-cowork/gateway-channel'
-import type { CloudChannelProviderId } from '@open-cowork/cloud-client'
+import type { CloudChannelProviderId } from '@open-cowork/cloud-client/domains/channels'
 
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayProviderConfig } from './config.js'

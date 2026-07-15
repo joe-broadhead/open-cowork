@@ -86,7 +86,7 @@ still touch SDK event/types at the desktop edge.
 
 ## Native V2 Capability Gaps
 
-The production boundary uses `client.v2.*` wherever OpenCode 1.17.20 exposes a
+The production boundary uses `client.v2.*` wherever OpenCode 1.18.1 exposes a
 working native route. A small classic-client allowlist remains for capabilities
 that the generated V2 client does not yet provide. The boundary test pins every
 remaining call by file, method, and count so this list cannot expand silently:
@@ -94,7 +94,7 @@ remaining call by file, method, and count so this list cannot expand silently:
 - Session actions without working native V2 routes: `session.command`,
   `session.delete`, `session.diff`, `session.fork`, `session.share`,
   `session.summarize`, `session.todo`, `session.unshare`, and `session.update`.
-  OpenCode 1.17.20 generates `v2.session.compact`, but its server implementation
+  OpenCode 1.18.1 generates `v2.session.compact`, but its server implementation
   returns `OperationUnavailable`; the classic summarizer remains the qualified
   route until the pinned runtime implements V2 compaction.
 - MCP lifecycle/authentication, which has no native V2 group:

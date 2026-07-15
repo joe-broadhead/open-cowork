@@ -176,44 +176,38 @@ workflows, channels, BYOK, billing, settings, and thread index code can be
 tested independently. Postgres row mappers live under `postgres-domains/`
 so SQL result shapes are owned beside their domain instead of being embedded
 in the compatibility store facade. HTTP routes live under `http-routes/`, and the
-`@open-cowork/cloud-client` package exposes both the backward-compatible
-top-level barrel and domain barrels under `src/domains/`.
+`@open-cowork/cloud-client` package exposes a deliberately tiny top-level
+adapter/error entry plus typed domain barrels under `src/domains/`.
 
-Cloud source files should stay below 2,000 lines. A handful of former facades
+Cloud source files should stay below 2,000 lines. The former facades below now
 carry explicit line budgets that are ratcheted to just above their current size
-so a decomposed file cannot silently re-grow. Most now sit under the 2,000-line
-limit; only `postgres-control-plane-store.ts` and the compatibility
-`session-service.ts` facade still exceed it today. These budgets are
-implementation backlogs, not target architecture:
+so a decomposed file cannot silently re-grow. These budgets are implementation
+backlogs, not target architecture:
 
-- `postgres-control-plane-store.ts` (budget 2,820 lines): the only file still
-  above the 2,000-line limit. Compatibility implementation for the full
+- `postgres-control-plane-store.ts` (budget 2,000 lines): decomposed below the
+  2,000-line limit and ratcheted. Compatibility implementation for the full
   Postgres-backed store plus webhook security store and managed work claim
-  fencing (now including the enterprise SSO + SCIM sync-queue delegation).
-  Domain row mappers belong in `postgres-domains/` / `postgres-store-domains/`.
-- `in-memory-control-plane-store.ts` (budget 1,750 lines): decomposed below the
+  fencing. Domain row mappers belong in `postgres-domains/` /
+  `postgres-store-domains/`.
+- `in-memory-control-plane-store.ts` (budget 1,620 lines): decomposed below the
   2,000-line limit and ratcheted. Compatibility implementation for the full
   domain store contract, including managed work claim fencing until the store
   contract is split further.
-- `http-server.ts` (budget 1,800 lines): decomposed below the 2,000-line limit
+- `http-server.ts` (budget 1,930 lines): decomposed below the 2,000-line limit
   and ratcheted. Compatibility Cloud HTTP/SSE entry point that wires shared
   route modules, HTML/CSP serving, pre-auth health, and streaming lifecycles
   while route handlers continue moving into `http-routes/`.
-- `session-service.ts` (budget 2,030 lines, ratcheted down from 2,720): a thin
-  orchestration **facade** whose real logic already lives in ~30 cohesive
-  sub-services it composes — `services/byok-service.ts`, `member-service.ts`,
-  `role-service.ts`, `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,
+- `session-service.ts` (budget 1,205 lines): a thin orchestration **facade**
+  whose real logic lives in cohesive sub-services it composes —
+  `services/byok-service.ts`, `member-service.ts`, `role-service.ts`,
+  `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,
   `channel-domain-service.ts`, `usage-governance-service.ts`,
   `entitlement-service.ts`, and more, plus `session-execution-operations.ts`,
-  `session-coordination-dispatch.ts`, and the projection service. About 156 of
-  its ~168 methods are one-line delegators; only a handful carry orchestration
-  logic. The remaining architectural drag is the **flat 168-method surface**
-  every route funnels through. The tightened budget freezes that surface — new
-  capabilities must be added to a sub-service, not as a new facade delegator —
-  and the staged next step (a large, route-by-route change) is to have HTTP
-  routes depend on the narrow sub-services directly, the way the store already
-  exposes `ProjectionControlPlaneStore` / `SessionControlPlaneStore` slices,
-  retiring the facade delegators domain by domain (#914).
+  `session-coordination-dispatch.ts`, and the projection service. Route-facing
+  CRUD/list operations now go through the explicit `service.domains.*` handle
+  instead of re-growing direct facade forwards. New capabilities must be added
+  to the owning sub-service/domain handle, not as another `CloudSessionService`
+  one-line delegator.
 
 New cloud domains should not be added to those exception files. Add a domain
 contract, service, route module, or client domain module first, then wire the

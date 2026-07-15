@@ -129,7 +129,7 @@ export function normalizeCloudWatchRecipient(input: CloudApiRouteInput, body: Re
 }
 
 export async function requireCloudWatchInWorkspace(input: CloudApiRouteInput, watchId: string, workspaceId: string) {
-  const watch = await input.options.service.getCloudCoordinationWatch(input.context.principal, workspaceId, watchId)
+  const watch = await input.options.service.domains.coordination.getCloudCoordinationWatch(input.context.principal, workspaceId, watchId)
   if (!watch || watch.workspaceId !== workspaceId) {
     input.tools.writeError(input.res, 404, 'Coordination watch was not found.', input.options.corsOrigin)
     return null
@@ -177,7 +177,7 @@ export async function emitCloudTaskWatchEvents(
     })
   }
   for (const event of events) {
-    await input.options.service.emitCloudCoordinationWatchEvent(input.context.principal, event)
+    await input.options.service.domains.coordination.emitCloudCoordinationWatchEvent(input.context.principal, event)
   }
 }
 
@@ -204,7 +204,7 @@ async function validateWatchChannelAuthority(
   if (!provider || !agentId || !channelBindingId) {
     throw new Error('Watch channel provider, agent id, and channel binding id are required.')
   }
-  await input.options.service.validateChannelDeliveryTarget(input.context.principal, {
+  await input.options.service.domains.channels.validateChannelDeliveryTarget(input.context.principal, {
     agentId,
     channelBindingId,
     sessionBindingId: input.tools.readString(channel.sessionBindingId),

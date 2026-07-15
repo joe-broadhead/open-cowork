@@ -1,14 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 import type {
-  CloudProjectSnapshotInventory,
-  CloudProjectSourceInput,
-} from '@open-cowork/shared'
+  CloudProjectSnapshotInventory, CloudProjectSourceInput, } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from '../../stores/session-workspace-keys'
 import { supportEntry, supportAllows, useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
-import { Button, Card, Dialog, Icon, Input, SegmentedControl } from '../ui'
+import { Button, Card, Dialog, Icon, Input, SegmentedControl } from '@open-cowork/ui'
 
 function describeThreadError(error: unknown) {
   return error instanceof Error ? error.message : String(error)

@@ -733,7 +733,7 @@ test('cloud OpenCode reconnect recovers missed children and suppresses an unknow
   subscription()
 })
 
-test('cloud OpenCode runtime subscription retries transient wait failures then detects the typed 1.17.20 fallback once', async () => {
+test('cloud OpenCode runtime subscription retries transient wait failures then detects the typed 1.18.1 fallback once', async () => {
   const delivered: CloudRuntimeEvent[] = []
   const errors: unknown[] = []
   let waitCalls = 0

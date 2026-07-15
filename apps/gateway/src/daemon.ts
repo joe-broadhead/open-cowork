@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { channelWebhookErrorCode, constantTimeStringEqual } from '@open-cowork/gateway-channel'
-import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client'
+import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client/domains/channels'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'

@@ -15,19 +15,13 @@ import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { TodoListView } from './TodoListView'
 import { AgentRunLane } from './AgentRunLane'
 import {
-  buildOrchestrationTree,
-  formatAgentName,
-  formatCost,
-  formatTokensCompact,
-  groupMaxElapsed,
-  sumTokens,
-} from './agent-run-utils'
+  buildOrchestrationTree, formatAgentName, formatCost, formatTokensCompact, groupMaxElapsed, sumTokens, } from './agent-run-utils'
 import { buildTaskTimeline } from './task-timeline-utils'
 import { useLiveNow } from './useLiveNow'
 import { useTaskDrillInLayout } from './useTaskDrillInLayout'
 import { listArtifactsForTools } from './session-artifacts'
 import { statusLabel } from '../../helpers/status-label'
-import { Badge, Button, Card, IconButton, type BadgeTone } from '../ui'
+import { Badge, Button, Card, IconButton, type BadgeTone } from '@open-cowork/ui'
 
 function statusBadgeTone(status: TaskRun['status']): BadgeTone {
   if (status === 'error') return 'danger'
@@ -228,7 +222,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
     <>
       <div
         className="no-drag fixed inset-0 z-40"
-        style={{ background: 'rgba(0,0,0,0.4)' }}
+        style={{ background: 'color-mix(in srgb, var(--color-base) 62%, transparent)' }}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -240,7 +234,7 @@ export const TaskDrillIn = memo(function TaskDrillInComponent({
           maxWidth: '92vw',
           background: 'var(--color-base)',
           borderLeft: '1px solid var(--color-border-subtle)',
-          boxShadow: '0 0 40px rgba(0,0,0,0.35)',
+          boxShadow: '0 0 40px color-mix(in srgb, var(--color-base) 70%, transparent)',
           animation: 'task-drill-in-drawer-in 180ms ease-out both',
         }}
         role="dialog"

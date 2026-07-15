@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { summarizeMcpConnections } from '../../helpers/mcp-status-summary'
-import { Button, Icon } from '../ui'
+import { Button, Icon } from '@open-cowork/ui'
 
 export function McpStatus() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)

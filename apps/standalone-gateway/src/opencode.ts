@@ -133,7 +133,7 @@ export function createSdkOpenCodeAdapter(options: {
       void input.title; // Native sessions derive their title from the first prompt.
       try {
         const client = await createClient();
-        // OpenCode 1.17.20 requires an object body for POST /api/session. Its
+        // OpenCode v2 requires an object body for POST /api/session. Its
         // generated SDK strips an empty object, so the explicit location is
         // both the execution boundary and what keeps the native body present.
         const created = await client.v2.session.create({
@@ -171,7 +171,7 @@ export function createSdkOpenCodeAdapter(options: {
         }
 
         // Permission and question requests are process-level control events in
-        // OpenCode 1.17.20; they are not guaranteed to be present in the
+        // OpenCode v2; they are not guaranteed to be present in the
         // per-session transcript. Establish this connection before admitting
         // the prompt so a fast request cannot fall into an HTTP-to-SSE gap.
         const controlSubscription = await waitForEventConnection(

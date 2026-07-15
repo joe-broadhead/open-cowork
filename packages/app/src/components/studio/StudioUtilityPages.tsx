@@ -1,40 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ApprovalsQueueSurface,
-  ArtifactsLibrarySurface,
-  ChannelsGatewaySurface,
-  type ApprovalsQueuePermissionItem,
-  type ApprovalsQueueQuestionItem,
-} from '@open-cowork/ui'
+  ApprovalsQueueSurface, ArtifactsLibrarySurface, ChannelsGatewaySurface, type ApprovalsQueuePermissionItem, type ApprovalsQueueQuestionItem, } from '@open-cowork/ui'
 import {
-  defaultArtifactStatusForKind,
-  inferArtifactKind,
-  isSafeArtifactOpenTarget,
-  type ArtifactIndexEntry,
-  type ArtifactIndexPayload,
-  type ArtifactStatus,
-  channelProviderLabel,
-  type ChannelAgentRecord,
-  type ChannelBindingPublicRecord,
-  type ChannelDeliveryPublicRecord,
-  type ChannelIdentityPublicRecord,
-  type ChannelProviderKind,
-  type ChannelProviderStatus,
-  type CoordinationWatch,
-  type CoordinationWatchInput,
-} from '@open-cowork/shared'
+  defaultArtifactStatusForKind, inferArtifactKind, isSafeArtifactOpenTarget, type ArtifactIndexEntry, type ArtifactIndexPayload, type ArtifactStatus, channelProviderLabel, type ChannelAgentRecord, type ChannelBindingPublicRecord, type ChannelDeliveryPublicRecord, type ChannelIdentityPublicRecord, type ChannelProviderKind, type ChannelProviderStatus, type CoordinationWatch, type CoordinationWatchInput, } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
 import {
-  Badge,
-  Button,
-  Card,
-  Dialog,
-  Icon,
-  StudioPageHeader,
-} from '../ui'
+  Badge, Button, Card, Dialog, Icon, StudioPageHeader } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import {
   approvalQueueActionKey,

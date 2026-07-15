@@ -3,7 +3,7 @@ import type {
   ChannelTarget,
 } from '@open-cowork/gateway-channel'
 
-import type { CloudTransportSessionEvent } from '@open-cowork/cloud-client'
+import type { CloudTransportSessionEvent } from '@open-cowork/cloud-client/domains/transport'
 
 import {
   executeRenderOperation,

@@ -3,7 +3,8 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { Badge, Button, Card, EmptyState, ErrorState, Icon, Skeleton, StudioPageHeader, entityChroma, toast, type BadgeTone } from '../ui'
+import { Badge, Button, Card, EmptyState, ErrorState, Icon, Skeleton, StudioPageHeader, entityChroma, type BadgeTone } from '@open-cowork/ui'
+import { toast } from '../ui/Toaster'
 import { ConfirmDialog } from '../ConfirmDialog'
 
 export type WorkflowNavigationTarget = {

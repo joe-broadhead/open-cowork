@@ -1,7 +1,7 @@
 import { Component, createRef, type ErrorInfo, type ReactNode } from 'react'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
-import { Button } from '../ui'
+import { Button } from '@open-cowork/ui'
 
 interface ViewErrorBoundaryProps {
   children: ReactNode

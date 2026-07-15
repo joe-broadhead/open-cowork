@@ -1,5 +1,5 @@
 import type { Attachment } from './chat-input-types'
-import { Icon, IconButton } from '../ui'
+import { Icon, IconButton } from '@open-cowork/ui'
 
 type ChatInputAttachmentsProps = {
   attachments: Attachment[]

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { DesktopPairingAuditEvent, DesktopPairingPublicRecord } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, Input, type BadgeTone } from '../ui'
+import { Badge, Button, Card, Input, type BadgeTone } from '@open-cowork/ui'
 
 function statusLabel(record: DesktopPairingPublicRecord) {
   if (record.status === 'paired_online') return t('settings.pairing.status.online', 'Online')

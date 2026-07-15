@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from 'react'
-import { entityChroma } from '../ui'
+import { entityChroma } from '@open-cowork/ui'
 
 const icons: Record<string, (size: number) => ReactElement> = {
   google: (s) => (

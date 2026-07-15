@@ -9,13 +9,10 @@ import { ChatInputModelMenu } from '../chat/ChatInputModelMenu'
 import { ChatInputReasoningMenu, formatReasoningVariantLabel } from '../chat/ChatInputReasoningMenu'
 import { ChatInputToolbar } from '../chat/ChatInputToolbar'
 import {
-  detectInlineTrigger,
-  filesToAttachments,
-  resolveDirectAgentInvocation,
-} from '../chat/chat-input-utils'
+  detectInlineTrigger, filesToAttachments, resolveDirectAgentInvocation, } from '../chat/chat-input-utils'
 import { useChatRuntimeSelection, useReasoningVariantSelection } from '../chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from '../chat/chat-input-types'
-import { Icon } from '../ui'
+import { Icon } from '@open-cowork/ui'
 import { constrainedPrimaryAgentMode, nextAllowedPrimaryAgentMode } from '../../helpers/primary-agent-mode'
 import type { HomePromptOptions } from './home-prompt-options'
 

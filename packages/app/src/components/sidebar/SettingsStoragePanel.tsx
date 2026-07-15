@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
-  SandboxCleanupResult,
-  SandboxStorageStats,
-} from '@open-cowork/shared'
+  SandboxCleanupResult, SandboxStorageStats, } from '@open-cowork/shared'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { Card, toast } from '../ui'
+import { Card } from '@open-cowork/ui'
+import { toast } from '../ui/Toaster'
 import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
 import { sectionLabelCls } from './settings-panel-styles'
 

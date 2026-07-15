@@ -22,6 +22,14 @@
       "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js"
     },
+    "./domains/admin": {
+      "types": "./dist/domains/admin.d.ts",
+      "import": "./dist/domains/admin.js"
+    },
+    "./domains/admin-governance": {
+      "types": "./dist/domains/admin-governance.d.ts",
+      "import": "./dist/domains/admin-governance.js"
+    },
     "./domains/artifacts": {
       "types": "./dist/domains/artifacts.d.ts",
       "import": "./dist/domains/artifacts.js"

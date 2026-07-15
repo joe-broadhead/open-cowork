@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  KnowledgePage as KnowledgePageRecord,
-  KnowledgePageBlock as KnowledgePageBlockRecord,
-  KnowledgePageLink,
-  KnowledgePageVersion,
-  KnowledgeProposal,
-  KnowledgeSnapshotPayload,
-  KnowledgeSpace,
-} from '@open-cowork/shared'
+  KnowledgePage as KnowledgePageRecord, KnowledgePageBlock as KnowledgePageBlockRecord, KnowledgePageLink, KnowledgePageVersion, KnowledgeProposal, KnowledgeSnapshotPayload, KnowledgeSpace, } from '@open-cowork/shared'
 import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
 import { KNOWLEDGE_VISIBILITIES, knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
@@ -15,26 +8,7 @@ import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
 import { RestrictedState } from '../RestrictedState'
 import {
-  Badge,
-  Button,
-  Card,
-  Dialog,
-  EmptyState,
-  Icon,
-  type IconName,
-  Input,
-  KnowledgeGraph,
-  SegmentedControl,
-  Select,
-  Skeleton,
-  StudioPageHeader,
-  WikiPage,
-  WikiProposeEditDialog,
-  type WikiProposeEditSubmit,
-  WikiSpaceRail,
-  type WikiPageBlock,
-  type WikiSpace,
-} from '../ui'
+  Badge, Button, Card, Dialog, EmptyState, Icon, type IconName, Input, KnowledgeGraph, SegmentedControl, Select, Skeleton, StudioPageHeader, WikiPage, WikiProposeEditDialog, type WikiProposeEditSubmit, WikiSpaceRail, type WikiPageBlock, type WikiSpace } from '@open-cowork/ui'
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
   spaces: [],

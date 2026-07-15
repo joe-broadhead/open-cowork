@@ -143,7 +143,7 @@ export function buildManagedOpencodeServerEnvironment(
       throw new Error('Managed OpenCode config writer must return an opencode.json or opencode.jsonc path.')
     }
     // OPENCODE_CONFIG_CONTENT is consumed only by OpenCode's classic config
-    // layer in 1.17.20. OPENCODE_CONFIG_DIR is shared by the classic and V2
+    // layer. OPENCODE_CONFIG_DIR is shared by the classic and V2
     // layers, so one native file keeps both execution surfaces in lockstep and
     // avoids Linux's per-environment-string E2BIG limit at every config size.
     delete next.OPENCODE_CONFIG

@@ -72,13 +72,13 @@ export async function handlePolicyApiRoute(input: CloudApiRouteInput): Promise<b
 
   if (itemId === 'effective' && !action && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      policy: await options.service.getEffectiveManagedPolicy(context.principal),
+      policy: await options.service.domains.policy.getEffectiveManagedPolicy(context.principal),
     }, options.corsOrigin)
     return true
   }
 
   if (!itemId && req.method === 'GET') {
-    const record = await options.service.getManagedPolicy(context.principal)
+    const record = await options.service.domains.policy.getManagedPolicy(context.principal)
     tools.writeJson(res, 200, {
       policy: record,
       view: toManagedDesktopPolicyView(record),
@@ -95,7 +95,7 @@ export async function handlePolicyApiRoute(input: CloudApiRouteInput): Promise<b
       tools.writeError(res, 400, error instanceof Error ? error.message : 'Invalid policy update.', options.corsOrigin)
       return true
     }
-    const record = await options.service.setManagedPolicy(context.principal, request)
+    const record = await options.service.domains.policy.setManagedPolicy(context.principal, request)
     tools.writeJson(res, 200, {
       policy: record,
       view: toManagedDesktopPolicyView(record),

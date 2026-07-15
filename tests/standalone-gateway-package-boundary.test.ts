@@ -10,7 +10,7 @@ test('standalone gateway is a separate execution authority package', () => {
   const standalonePackage = readPackage('apps/standalone-gateway/package.json')
   assert.equal(standalonePackage.name, '@open-cowork/standalone-gateway')
   assert.equal(standalonePackage.private, true)
-  assert.equal(standalonePackage.dependencies?.['@opencode-ai/sdk'], '1.17.20')
+  assert.equal(standalonePackage.dependencies?.['@opencode-ai/sdk'], '1.18.1')
   assert.equal(standalonePackage.dependencies?.pg, '^8.22.0')
   assert.equal(standalonePackage.dependencies?.['@open-cowork/cloud-client'], undefined)
 
