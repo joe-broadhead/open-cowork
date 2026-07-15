@@ -359,12 +359,12 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Advanced/ }))
-    await user.type(screen.getByLabelText('Model ID'), 'deepseek/deepseek-v4-flash:free')
+    await user.type(screen.getByLabelText('Model ID'), 'qwen/qwen3-coder:free')
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
     expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
-      selectedSmallModelId: 'deepseek/deepseek-v4-flash:free',
+      selectedSmallModelId: 'qwen/qwen3-coder:free',
     })
   })
 
@@ -376,7 +376,7 @@ describe('SettingsPanel', () => {
       providers: {
         ...config.providers,
         available: config.providers.available.map((provider) => provider.id === 'openrouter'
-          ? { ...provider, smallModel: 'deepseek/deepseek-v4-flash:free' }
+          ? { ...provider, smallModel: 'qwen/qwen3-coder:free' }
           : provider),
       },
     }
