@@ -464,9 +464,10 @@ URL credentials, or local home-directory paths.
   fixed release yet, add only its `CVE-*` or `GHSA-*` identifier to
   `pnpm.auditConfig.ignoreCves` or `pnpm.auditConfig.ignoreGhsas` in the root
   `package.json`. `scripts/pnpm-audit.mjs` enforces that allowlist around
-  `pnpm audit --json`. The PR must include a justification, impact notes, and
-  an owner/date for removal; the entry is removed once a patched release ships
-  and is re-reviewed during monthly maintenance.
+  the installed pnpm dependency graph and npm Bulk Advisory API. The PR must
+  include a justification, impact notes, and an owner/date for removal; the
+  entry is removed once a patched release ships and is re-reviewed during
+  monthly maintenance.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

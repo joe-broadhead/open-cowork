@@ -70,6 +70,9 @@ importers:
       knip:
         specifier: ^6.24.0
         version: 6.24.0
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       pg:
         specifier: ^8.22.0
         version: 8.22.0
