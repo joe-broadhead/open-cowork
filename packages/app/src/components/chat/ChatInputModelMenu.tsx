@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 import type { ChatInputModelEntry } from './chat-input-types'
-import { Badge, Card, Icon, Input } from '../ui'
+import { Badge, Card, Icon, Input } from '@open-cowork/ui'
 
 type ChatInputModelMenuProps = {
   visible: boolean

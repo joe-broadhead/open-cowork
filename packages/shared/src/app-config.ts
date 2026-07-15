@@ -44,7 +44,7 @@ export interface BrandThemeDefinition {
 }
 
 export type BrandingSidebarTopVariant = 'icon' | 'text' | 'icon-text' | 'logo' | 'logo-text'
-export type BrandingSidebarMediaFit = 'vertical' | 'horizontal'
+export type BrandingSidebarMediaFit = 'bounded' | 'vertical' | 'horizontal'
 export type BrandingSidebarMediaAlign = 'start' | 'center' | 'end'
 
 export interface BrandingSidebarTopConfig {

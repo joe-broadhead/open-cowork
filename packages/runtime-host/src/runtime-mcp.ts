@@ -132,7 +132,7 @@ function isOAuthMcp(builtin: BundleMcp): boolean {
   return builtin.authMode === 'oauth'
 }
 
-// A bundled MCP that runs an EXTERNAL command (e.g. the openwiki CLI) is only
+// A bundled MCP that runs an EXTERNAL command (for example a user-installed CLI) is only
 // spawnable when that binary actually resolves. Skip it cleanly otherwise —
 // same principle as the auth/credential prerequisites below: the UI should
 // show an install CTA, not a confusing SDK spawn failure.

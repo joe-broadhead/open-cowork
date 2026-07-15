@@ -1,22 +1,15 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import type {
-  EffectiveAppSettings,
-  PublicAppConfig,
-  SandboxCleanupResult,
-  SandboxStorageStats,
-} from '@open-cowork/shared'
+  EffectiveAppSettings, PublicAppConfig, SandboxCleanupResult, SandboxStorageStats, } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
-  getAppearancePreferences,
-  saveAppearancePreferences,
-  type AppearancePreferences,
-} from '../../helpers/theme'
+  getAppearancePreferences, saveAppearancePreferences, type AppearancePreferences, } from '../../helpers/theme'
 import { useSessionStore } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { Badge, Button, Dialog, Input, Skeleton, Switch } from '../ui'
+import { Badge, Button, Dialog, Input, Skeleton, Switch } from '@open-cowork/ui'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
 import { LanguagePicker } from './SettingsLanguagePicker'

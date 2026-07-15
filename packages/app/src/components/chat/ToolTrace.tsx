@@ -10,7 +10,7 @@ import { VegaChart } from './VegaChart'
 import { attachmentFromArtifact, dispatchComposerCompose } from './composer-events'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
 import { AGENT_LABELS, SUB_AGENT_IDS, buildCustomMcpToolTraceRules, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
-import { Badge, Button, Card, Icon, type BadgeTone } from '../ui'
+import { Badge, Button, Card, Icon, type BadgeTone } from '@open-cowork/ui'
 
 // Cache parsed chart output by ToolCall identity. `tryParseChartOutput`
 // returns a fresh object (and a freshly-parsed spec) on every call —

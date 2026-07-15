@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AgentCatalog, CustomMcpConfig, CustomMcpTestResult } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Button, Input } from '../ui'
+import { Button, Input } from '@open-cowork/ui'
 
 type Props = {
   catalog: AgentCatalog

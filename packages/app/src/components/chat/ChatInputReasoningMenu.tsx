@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
-import { Card, Icon } from '../ui'
+import { Card, Icon } from '@open-cowork/ui'
 
 type ChatInputReasoningMenuProps = {
   visible: boolean

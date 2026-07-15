@@ -64,9 +64,7 @@ export function agentChroma(color?: AgentColor | string | null): string {
     case 'success': return 'var(--color-green)'
     case 'warning': return 'var(--color-amber)'
     case 'info': return 'var(--color-info)'
-    // No semantic "secondary identity" token exists; a violet tuned to sit
-    // beside the accent without competing keeps it from reading grey.
-    case 'secondary': return '#7c6fd6'
+    case 'secondary': return 'color-mix(in srgb, var(--color-accent) 70%, var(--color-info))'
     case 'primary':
     case 'accent':
     default: return 'var(--color-accent)'

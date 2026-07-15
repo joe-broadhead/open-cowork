@@ -475,7 +475,7 @@ export function createSessionHistoryService(
         sessionInfoResult,
       ] = await Promise.all([
         listNativeSessionMessages(client, sessionId),
-        // OpenCode 1.17.20 has no native `/api/session/:id/todo` equivalent.
+        // OpenCode's v2 surface has no native `/api/session/:id/todo` equivalent.
         // Keep its current classic `/session/:id/todo` API because omitting it
         // would break todo reopen parity; this is an explicit native-v2 gap.
         client.session.todo({ sessionID: sessionId }, { throwOnError: true }).catch((err) => {
@@ -579,7 +579,7 @@ export function createSessionHistoryService(
             || fallbackSessionTitleFromHistory(rootMessages)
           if (fallbackTitle) {
             try {
-              // Session V2 has no title/update endpoint in 1.17.20.
+              // Session V2 has no title/update endpoint yet.
               await client.session.update(
                 { sessionID: sessionId, title: fallbackTitle },
                 { throwOnError: true },
@@ -684,7 +684,7 @@ export function createSessionHistoryService(
       if (!progressive) {
         try {
           const { client, record } = await deps.getSessionClient(sessionId)
-          // Session V2 has no diff endpoint in 1.17.20.
+          // Session V2 has no diff endpoint yet.
           const diffResult = await client.session.diff({
             sessionID: sessionId,
           }, { throwOnError: true }).catch((err) => {

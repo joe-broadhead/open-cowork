@@ -1,7 +1,7 @@
 import type { EffectiveAppSettings, PublicAppConfig, RuntimePermissionPolicy } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { sectionLabelCls } from './settings-panel-styles'
-import { Badge, Card, SegmentedControl, Switch } from '../ui'
+import { Badge, Card, SegmentedControl, Switch } from '@open-cowork/ui'
 
 const PERMISSION_RANK: Record<RuntimePermissionPolicy, number> = {
   deny: 0,

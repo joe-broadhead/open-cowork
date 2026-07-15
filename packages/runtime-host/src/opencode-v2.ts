@@ -51,7 +51,7 @@ export async function createNativeSession(
   if (!directory) {
     throw new Error('OpenCode V2 session creation requires an explicit location directory.')
   }
-  // OpenCode 1.17.20 validates POST /api/session as an object body. The
+  // OpenCode v2 validates POST /api/session as an object body. The
   // generated SDK omits the body when every optional field is absent, so send
   // the already-selected runtime location as the smallest semantically neutral
   // native field. OpenCode still owns session ids, agent choice, and execution.

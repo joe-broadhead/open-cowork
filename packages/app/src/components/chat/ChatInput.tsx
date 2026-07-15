@@ -11,7 +11,7 @@ import { ChatInputInlinePicker } from './ChatInputInlinePicker'
 import { ChatInputModelMenu } from './ChatInputModelMenu'
 import { ChatInputReasoningMenu, formatReasoningVariantLabel } from './ChatInputReasoningMenu'
 import { ChatInputToolbar } from './ChatInputToolbar'
-import { IconButton, Kbd, Textarea } from '../ui'
+import { IconButton, Kbd, Textarea } from '@open-cowork/ui'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
 import {
   detectInlineTrigger,

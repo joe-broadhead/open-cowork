@@ -694,6 +694,11 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     projectNamespace: 'opencowork',
     defaultTheme: 'mercury',
     themes: [],
+    sidebar: {
+      top: {
+        mediaFit: 'bounded',
+      },
+    },
   },
   auth: {
     mode: 'none',

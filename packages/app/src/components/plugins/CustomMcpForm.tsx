@@ -3,7 +3,7 @@ import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig } from '@o
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import { TOOL_TRACE_RULES_CHANGED_EVENT } from '../../helpers/tool-trace-events'
-import { Button, Dialog } from '../ui'
+import { Button, Dialog } from '@open-cowork/ui'
 import { LinkedSkillsCard, McpPreviewCard, ToolApprovalsCard } from './CustomMcpFormCards'
 import {
   buildCustomMcpDraft,

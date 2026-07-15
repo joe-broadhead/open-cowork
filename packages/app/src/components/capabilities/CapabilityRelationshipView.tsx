@@ -4,7 +4,7 @@ import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import type { CapabilityRelationshipRow } from './capabilities-page-support'
 import { EmptyGrid } from './capabilities-page-components'
-import { Badge, Button, Card, type BadgeTone } from '../ui'
+import { Badge, Button, Card, type BadgeTone } from '@open-cowork/ui'
 
 type Props = {
   rows: CapabilityRelationshipRow[]

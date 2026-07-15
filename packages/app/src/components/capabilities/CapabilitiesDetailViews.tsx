@@ -1,28 +1,12 @@
-import type {
-  CapabilitySkill,
-  CapabilitySkillBundle,
-  CapabilityTool,
-  CustomMcpConfig,
-  CustomSkillConfig,
-  RuntimeContextOptions,
-} from '@open-cowork/shared'
+import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomMcpConfig, CustomSkillConfig, RuntimeContextOptions, } from '@open-cowork/shared'
 import { Markdown } from '../chat/Markdown'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import {
-  type CapabilityLinkedTool,
-  prettyKind,
-  prettySkillKind,
-  prettySkillSource,
-  stripFrontmatter,
-} from './capabilities-page-support.ts'
+  type CapabilityLinkedTool, prettyKind, prettySkillKind, prettySkillSource, stripFrontmatter, } from './capabilities-page-support.ts'
 import {
-  SkillBundleFileEntry,
-  StatBox,
-  ToolCredentialsCard,
-  ToolIntegrationToggleCard,
-} from './capabilities-page-components.tsx'
-import { Badge, Button, Card } from '../ui'
+  SkillBundleFileEntry, StatBox, ToolCredentialsCard, ToolIntegrationToggleCard, } from './capabilities-page-components.tsx'
+import { Badge, Button, Card } from '@open-cowork/ui'
 
 type AvailableToolMethod = { id: string; description: string }
 

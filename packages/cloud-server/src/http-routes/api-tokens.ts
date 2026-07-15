@@ -5,7 +5,7 @@ export async function handleApiTokensApiRoute(input: CloudApiRouteInput): Promis
 
   if (!itemId && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      tokens: await options.service.listApiTokens(context.principal, {
+      tokens: await options.service.domains.apiTokens.listApiTokens(context.principal, {
         limit: tools.parseLimit(context.url),
       }),
     }, options.corsOrigin)
@@ -25,7 +25,7 @@ export async function handleApiTokensApiRoute(input: CloudApiRouteInput): Promis
       tools.writeError(res, 400, 'Channel binding grants must be an array of strings.', options.corsOrigin)
       return true
     }
-    const issued = await options.service.issueApiToken(context.principal, {
+    const issued = await options.service.domains.apiTokens.issueApiToken(context.principal, {
       name,
       scopes,
       expiresAt: tools.readOptionalDate(body.expiresAt),
@@ -42,13 +42,13 @@ export async function handleApiTokensApiRoute(input: CloudApiRouteInput): Promis
       tools.writeError(res, 400, 'Channel binding id is required.', options.corsOrigin)
       return true
     }
-    const result = await options.service.grantApiTokenChannelBinding(context.principal, itemId, { channelBindingId })
+    const result = await options.service.domains.apiTokens.grantApiTokenChannelBinding(context.principal, itemId, { channelBindingId })
     tools.writeJson(res, 200, result, options.corsOrigin)
     return true
   }
 
   if (itemId && !action && req.method === 'DELETE') {
-    const token = await options.service.revokeApiToken(context.principal, itemId)
+    const token = await options.service.domains.apiTokens.revokeApiToken(context.principal, itemId)
     if (!token) {
       tools.writeError(res, 404, 'API token was not found.', options.corsOrigin)
       return true

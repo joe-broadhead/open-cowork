@@ -110,7 +110,7 @@ export class CloudScheduler {
       })
     }
     while (claimed < this.maxClaimsPerLoop) {
-      const started = await this.service.claimAndStartDueWorkflow(now, this.schedulerId)
+      const started = await this.service.domains.workflows.claimAndStartDueWorkflow(now, this.schedulerId)
       if (!started) break
       claimed += 1
       activeSessionIds.push(started.sessionId)
@@ -145,7 +145,7 @@ export class CloudScheduler {
   // of DUE events (respecting per-event backoff) across all orgs, apply idempotently, and
   // complete/retry. A no-op with no due events, so it is safe to run every tick.
   private async maybeDrainScimSyncQueue() {
-    const result = await this.service.drainScimSyncQueue({ orgId: null, limit: this.maxClaimsPerLoop })
+    const result = await this.service.domains.scimReconciler.drain({ orgId: null, limit: this.maxClaimsPerLoop })
     if (result.processed > 0) {
       await recordCloudSchedulerMetric(this.observability, {
         name: 'open_cowork_cloud_scheduler_scim_sync_processed_total',

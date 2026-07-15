@@ -1,7 +1,7 @@
 import type { AppMetadata } from '@open-cowork/shared'
 import { dismissPreview } from '../../app-helpers'
 import { t } from '../../helpers/i18n'
-import { Button } from '../ui'
+import { Button } from '@open-cowork/ui'
 import { RuntimeOfflineBanner } from './RuntimeOfflineBanner'
 
 type ResourceNavigationNotice = {

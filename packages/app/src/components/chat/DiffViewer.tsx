@@ -3,7 +3,7 @@ import type { SessionFileDiff } from '@open-cowork/shared'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
-import { DiffView } from '../ui'
+import { DiffView } from '@open-cowork/ui'
 import { DiffFileRow, ViewModeToggle, type ViewMode } from './DiffViewerRows'
 
 interface Props {

@@ -23,6 +23,11 @@ The renderer is organized as a stack. Each layer may import from the layers
 | **Infra** | `packages/app/src/lib`, `stores/`, `hooks/`, `browser/cowork-api.ts` | Cross-cutting runtime concerns: state stores, the cloud/desktop API bridge, transport. |
 | **Framework-agnostic core** | `packages/app/src/helpers/*`, `app-types.ts`, and `@open-cowork/shared` | Pure functions, types, formatting, and policy helpers with **no React and no upward imports**. |
 
+Renderer components import shared primitives directly from `@open-cowork/ui`.
+The renderer must not recreate a private `components/ui` barrel over the design
+system; app-owned wrappers such as `components/ui/Toaster.tsx` stay as explicit
+component imports.
+
 ### The "core imports nothing upward" rule
 
 The framework-agnostic core (`helpers/`, `app-types.ts`, and `@open-cowork/shared`)

@@ -1,11 +1,8 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type {
-  UpdateInstallCapability,
-  UpdateInstallEvent,
-  UpdateInstallStatus,
-} from '@open-cowork/shared'
+  UpdateInstallCapability, UpdateInstallEvent, UpdateInstallStatus, } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card } from '../ui'
+import { Badge, Button, Card } from '@open-cowork/ui'
 
 type ManualUpdateStatus =
   | { kind: 'idle' }

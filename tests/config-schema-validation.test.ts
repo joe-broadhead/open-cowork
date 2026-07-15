@@ -116,7 +116,7 @@ test('branding sidebar and home overrides validate', () => {
       variant: 'icon-text',
       icon: 'AC',
       mediaSize: 36,
-      mediaFit: 'vertical',
+      mediaFit: 'bounded',
       mediaAlign: 'center',
       title: 'Acme AI',
       subtitle: 'Private workspace',

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CustomAgentConfig, ProviderDescriptor, ProviderModelDescriptor } from '@open-cowork/shared'
 
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, Input, SegmentedControl, Select } from '../ui'
+import { Badge, Button, Card, Input, SegmentedControl, Select } from '@open-cowork/ui'
 
 export type WorkbenchTab = 'instructions' | 'capabilities' | 'inference' | 'preview'
 

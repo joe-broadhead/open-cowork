@@ -1,18 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  SETUP_INTENTS,
-  type ProviderDescriptor,
-  type RuntimeLoadingPhase,
-  type RuntimeLoadingStatus,
-  type RuntimeStatus,
-  type SetupIntentId,
-} from '@open-cowork/shared'
+  SETUP_INTENTS, type ProviderDescriptor, type RuntimeLoadingPhase, type RuntimeLoadingStatus, type RuntimeStatus, type SetupIntentId, } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { getDocsBaseUrl } from '../helpers/brand'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
-import { Badge, Button } from './ui'
+import { Badge, Button } from '@open-cowork/ui'
 import { BrandMark } from './BrandMark'
 import { ConfirmDialog } from './ConfirmDialog'
 

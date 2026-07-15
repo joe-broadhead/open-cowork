@@ -24,9 +24,8 @@ nearly every non-trivial capability in the desktop app.</p>
 ## What ships in the box
 
 Open Cowork ships seven bundled MCP servers (`agents`, `charts`, `clock`,
-`knowledge`, `semantic-ui`, `skills`, `workflows`) plus three external-CLI
-MCPs configured out of the box (`openwiki` — see [OpenWiki](openwiki.md) —
-`time-keep`, and `opencode-gateway`), and eleven bundled skills. The cards
+`knowledge`, `semantic-ui`, `skills`, `workflows`) plus one external-CLI
+MCP configured out of the box (`time-keep`), and seven bundled skills. The cards
 below cover the most useful examples.
 When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
 uses `mcp__<server>__<tool>` form, for example
@@ -67,29 +66,6 @@ short tool name such as `bar_chart`.
     auto-allowed; `timer_set`/`timer_delete` ask for approval. The tool
     reports as not installed until the `time-keep` binary is on PATH —
     the built-in `clock` MCP stays the zero-install fallback.
-
--   :material-route: **`opencode-gateway` MCP** <span class="status-badge preview">preview</span>
-
-    ---
-
-    Connects to the local
-    [joe-broadhead/opencode-gateway](https://github.com/joe-broadhead/opencode-gateway)
-    daemon for durable Initiatives, Issues, runs, teams, and human gates. Install
-    that exact project from source; the same name on the public npm registry is
-    a different project and is not a compatible substitute. Run Gateway's
-    `setup` and `install`, then provision a strong operator-scoped token in an
-    owner-only file. Set `OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE` to that
-    absolute path in the Gateway daemon environment and enter the same path in
-    Tools & Skills. This explicit opt-in keeps Gateway's hardened
-    capability-scoped loopback enabled; Open Cowork passes only the file path to
-    the trusted MCP process, not the token value. Gateway currently
-    auto-provisions only an admin token file, which must not be reused here.
-    Start the daemon and verify with `opencode-gateway doctor`.
-
-    Open Cowork launches `opencode-gateway mcp --tools operate`: reads are
-    auto-allowed and operate mutations ask, while admin tools remain absent. In
-    particular, permission approval is admin-only; the operate surface can
-    reject a pending OpenCode permission but cannot grant shell/edit authority.
 
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 

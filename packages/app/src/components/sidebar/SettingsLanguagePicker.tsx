@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { getBuiltInLocales, getLocale, setLocale, t } from '../../helpers/i18n'
 import { BUILT_IN_TRANSLATION_COVERAGE } from '../../helpers/i18n-catalogs/coverage-status'
-import { Card, Select } from '../ui'
+import { Card, Select } from '@open-cowork/ui'
 import { fieldLabelCls } from './settings-panel-styles'
 
 // Honest partial-translation signal: every built-in non-English catalog shares

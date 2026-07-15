@@ -1049,7 +1049,7 @@
           "minimum": 16,
           "maximum": 96
         },
-        "mediaFit": { "type": "string", "enum": ["vertical", "horizontal"] },
+        "mediaFit": { "type": "string", "enum": ["bounded", "vertical", "horizontal"] },
         "mediaAlign": { "type": "string", "enum": ["start", "center", "end"] },
         "title": { "type": "string", "maxLength": 48 },
         "subtitle": { "type": "string", "maxLength": 96 },

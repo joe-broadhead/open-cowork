@@ -10,7 +10,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
 
   if (!collection && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      threads: await options.service.listThreadMetadata(context.principal, {
+      threads: await options.service.domains.threads.listThreadMetadata(context.principal, {
         tagIds: tools.parseTagIds(context.url),
         limit: tools.parseLimit(context.url),
       }),
@@ -20,7 +20,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
 
   if (collection === 'tags') {
     if (!itemId && req.method === 'GET') {
-      tools.writeJson(res, 200, { tags: await options.service.listThreadTags(context.principal) }, options.corsOrigin)
+      tools.writeJson(res, 200, { tags: await options.service.domains.threads.listThreadTags(context.principal) }, options.corsOrigin)
       return true
     }
     if (!itemId && req.method === 'POST') {
@@ -30,7 +30,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
         tools.writeError(res, 400, 'Tag name is required.', options.corsOrigin)
         return true
       }
-      const tag = await options.service.createThreadTag(context.principal, {
+      const tag = await options.service.domains.threads.createThreadTag(context.principal, {
         name,
         color: tools.readString(body.color),
       })
@@ -39,7 +39,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
     }
     if (itemId && !itemAction && req.method === 'PATCH') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const tag = await options.service.updateThreadTag(context.principal, itemId, {
+      const tag = await options.service.domains.threads.updateThreadTag(context.principal, itemId, {
         name: body.name === undefined ? undefined : tools.readString(body.name) || '',
         color: body.color === undefined ? undefined : tools.readString(body.color),
       })
@@ -52,7 +52,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
     }
     if (itemId && !itemAction && req.method === 'DELETE') {
       tools.writeJson(res, 200, {
-        deleted: await options.service.deleteThreadTag(context.principal, itemId),
+        deleted: await options.service.domains.threads.deleteThreadTag(context.principal, itemId),
       }, options.corsOrigin)
       return true
     }
@@ -64,9 +64,9 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
         return true
       }
       if (itemAction === 'apply') {
-        await options.service.applyThreadTag(context.principal, itemId, sessionIds)
+        await options.service.domains.threads.applyThreadTag(context.principal, itemId, sessionIds)
       } else {
-        await options.service.removeThreadTag(context.principal, itemId, sessionIds)
+        await options.service.domains.threads.removeThreadTag(context.principal, itemId, sessionIds)
       }
       tools.writeJson(res, 200, { ok: true }, options.corsOrigin)
       return true
@@ -76,7 +76,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
   if (collection === 'smart-filters') {
     if (!itemId && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        filters: await options.service.listThreadSmartFilters(context.principal),
+        filters: await options.service.domains.threads.listThreadSmartFilters(context.principal),
       }, options.corsOrigin)
       return true
     }
@@ -88,13 +88,13 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
         tools.writeError(res, 400, 'Smart filter name and query are required.', options.corsOrigin)
         return true
       }
-      const filter = await options.service.createThreadSmartFilter(context.principal, { name, query })
+      const filter = await options.service.domains.threads.createThreadSmartFilter(context.principal, { name, query })
       tools.writeJson(res, 201, { filter }, options.corsOrigin)
       return true
     }
     if (itemId && !itemAction && req.method === 'PATCH') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const filter = await options.service.updateThreadSmartFilter(context.principal, itemId, {
+      const filter = await options.service.domains.threads.updateThreadSmartFilter(context.principal, itemId, {
         name: body.name === undefined ? undefined : tools.readString(body.name) || '',
         query: body.query === undefined ? undefined : tools.readRecord(body.query) || {},
       })
@@ -107,7 +107,7 @@ export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<
     }
     if (itemId && !itemAction && req.method === 'DELETE') {
       tools.writeJson(res, 200, {
-        deleted: await options.service.deleteThreadSmartFilter(context.principal, itemId),
+        deleted: await options.service.domains.threads.deleteThreadSmartFilter(context.principal, itemId),
       }, options.corsOrigin)
       return true
     }

@@ -4,7 +4,7 @@ export async function handleBillingApiRoute(input: CloudApiRouteInput): Promise<
   const { req, res, options, context, itemId, action, tools } = input
 
   if (itemId === 'subscription' && !action && req.method === 'GET') {
-    tools.writeJson(res, 200, await options.service.getBillingSubscription(context.principal), options.corsOrigin)
+    tools.writeJson(res, 200, await options.service.domains.billing.getBillingSubscription(context.principal), options.corsOrigin)
     return true
   }
 
@@ -17,7 +17,7 @@ export async function handleBillingApiRoute(input: CloudApiRouteInput): Promise<
 
   if (itemId === 'checkout' && !action && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const checkout = await options.service.createBillingCheckout(context.principal, {
+    const checkout = await options.service.domains.billing.createBillingCheckout(context.principal, {
       planKey: tools.readString(body.planKey),
       successUrl: tools.readString(body.successUrl),
       cancelUrl: tools.readString(body.cancelUrl),
@@ -28,7 +28,7 @@ export async function handleBillingApiRoute(input: CloudApiRouteInput): Promise<
 
   if (itemId === 'portal' && !action && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const portal = await options.service.createBillingPortal(context.principal, {
+    const portal = await options.service.domains.billing.createBillingPortal(context.principal, {
       returnUrl: tools.readString(body.returnUrl),
     })
     tools.writeJson(res, 200, portal, options.corsOrigin)

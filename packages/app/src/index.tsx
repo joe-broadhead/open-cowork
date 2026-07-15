@@ -32,10 +32,10 @@ function renderStartupError(error: unknown) {
   body.replaceChildren()
 
   const shell = document.createElement('div')
-  shell.style.cssText = "height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;background:var(--color-base, #0c0d0f);color:var(--color-text, #eceef1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;padding:24px;"
+  shell.style.cssText = "height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;background:var(--color-base);color:var(--color-text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;padding:24px;"
 
   const panel = document.createElement('div')
-  panel.style.cssText = 'max-width:720px;width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px 28px;box-shadow:0 10px 28px rgba(0,0,0,0.18);'
+  panel.style.cssText = 'max-width:720px;width:100%;background:color-mix(in srgb, var(--color-surface) 74%, transparent);border:1px solid var(--color-border-subtle);border-radius:16px;padding:24px 28px;box-shadow:0 10px 28px color-mix(in srgb, var(--color-base) 55%, transparent);'
 
   const eyebrow = document.createElement('div')
   eyebrow.textContent = 'Startup Error'

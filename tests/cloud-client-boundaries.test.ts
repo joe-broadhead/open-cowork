@@ -35,6 +35,8 @@ test('cloud client package boundary and desktop transport compatibility re-expor
   const documentedExports = [
     '.',
     './adapter',
+    './domains/admin',
+    './domains/admin-governance',
     './domains/artifacts',
     './domains/billing',
     './domains/byok',
@@ -51,6 +53,20 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     './package.json',
   ].sort()
   assert.deepEqual(Object.keys(packageJson.exports || {}).sort(), documentedExports)
+  const publicDomainExports = new Set(documentedExports.filter((entry) => entry.startsWith('./domains/')))
+  const domainImportPattern = /@open-cowork\/cloud-client\/domains\/([a-z0-9-]+)/g
+  for (const scanRoot of ['apps', 'packages', 'mcps', 'scripts', 'tests']) {
+    for (const filePath of sourceFiles(join(root, scanRoot))) {
+      if (filePath.includes('/packages/cloud-client/')) continue
+      const source = readFileSync(filePath, 'utf8')
+      for (const match of source.matchAll(domainImportPattern)) {
+        assert.ok(
+          publicDomainExports.has(`./domains/${match[1]}`),
+          `${relative(root, filePath)} imports undeclared cloud-client domain subpath ${match[0]}`,
+        )
+      }
+    }
+  }
   assert.equal(sharedPackageJson.name, '@open-cowork/shared')
   assert.equal(sharedPackageJson.private, true)
   assert.equal(sharedPackageJson.publishConfig, undefined)
@@ -66,7 +82,9 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     assert.equal(dependencyPackage.private, true, `${dependencyName} must remain a private workspace package until standalone SDK publication is explicit`)
   }
   assert.doesNotMatch(clientSource, /apps\/desktop|control-plane-store|session-service|@opencode-ai\/sdk/)
-  assert.equal(desktopTransport.trim(), "export * from '@open-cowork/cloud-client'")
+  assert.match(desktopTransport, /createHttpSseCloudTransportAdapter/)
+  assert.match(desktopTransport, /@open-cowork\/cloud-client\/domains\/transport/)
+  assert.doesNotMatch(desktopTransport, /export \* from '@open-cowork\/cloud-client'/)
   for (const document of [readme, docs]) {
     assert.match(document, /supported typed .*client|workspace\/source\s+package/i)
     assert.match(document, /not an independently versioned public npm SDK|standalone SDK publishing/i)
@@ -133,6 +151,8 @@ test('cloud client adapter delegates concrete operations to domain clients', () 
   const adapter = readFileSync(join(root, 'packages/cloud-client/src/adapter.ts'), 'utf8')
   const contracts = readFileSync(join(root, 'packages/cloud-client/src/contracts.ts'), 'utf8')
   const expectedFactories: Record<string, string> = {
+    admin: 'createCloudAdminClient',
+    'admin-governance': 'createCloudAdminGovernanceClient',
     artifacts: 'createCloudArtifactsClient',
     billing: 'createCloudBillingClient',
     byok: 'createCloudByokClient',
@@ -174,6 +194,10 @@ test('cloud client adapter delegates concrete operations to domain clients', () 
   assert.match(adapter, /export type \* from '\.\/contracts\.js'/)
   assert.doesNotMatch(adapter, /export type CloudClientSessionStatus/)
   assert.match(contracts, /export type CloudTransportAdapter = \{/)
+
+  const rootIndex = readFileSync(join(root, 'packages/cloud-client/src/index.ts'), 'utf8')
+  assert.match(rootIndex, /createHttpSseCloudTransportAdapter/)
+  assert.doesNotMatch(rootIndex, /export type \* from '\.\/domains\//)
 })
 
 test('cloud session service delegates channel behavior to the extracted domain service', () => {
@@ -191,8 +215,9 @@ test('cloud session service delegates channel behavior to the extracted domain s
   assert.match(channelInteractionActions, /assertRemoteInteractionAllowed\(principal/)
   assert.match(sessionService, /private readonly channelDomain: CloudChannelDomainService/)
   assert.match(sessionService, /new CloudChannelDomainService\(/)
-  assert.match(sessionService, /return this\.channelDomain\.bindChannelSession\(principal, input\)/)
-  assert.match(sessionService, /return this\.channelDomain\.resolveChannelInteraction\(principal, input\)/)
+  assert.match(sessionService, /channels: this\.channelDomain/)
+  assert.doesNotMatch(sessionService, /return this\.channelDomain\.bindChannelSession\(principal, input\)/)
+  assert.doesNotMatch(sessionService, /return this\.channelDomain\.resolveChannelInteraction\(principal, input\)/)
   assert.doesNotMatch(sessionService, /function channelRoleCanPrompt/)
   assert.doesNotMatch(sessionService, /function principalCanManageChannels/)
   assert.doesNotMatch(sessionService, /private async requireChannelActor/)
