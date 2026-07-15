@@ -341,9 +341,9 @@ dynamic list is overlaid beneath them, deduplicated by id.
       "openrouter": {
         "name": "OpenRouter",
         "credentials": [ ... ],
-        "defaultModel": "qwen/qwen3-coder:free",
+        "defaultModel": "qwen/qwen3-coder-flash",
         "models": [
-          { "id": "qwen/qwen3-coder:free", "name": "Qwen3 Coder (free)" },
+          { "id": "qwen/qwen3-coder-flash", "name": "Qwen3 Coder Flash" },
           { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4" }
         ],
         "dynamicCatalog": {

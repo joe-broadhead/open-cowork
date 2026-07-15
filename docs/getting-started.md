@@ -114,7 +114,7 @@ OpenCode-native provider login.
 
 OpenRouter routes requests to many model backends (Qwen, Anthropic,
 OpenAI, others) through a single credential. The upstream default model is the
-free `qwen/qwen3-coder:free` OpenRouter model. To use the default
+low-cost `qwen/qwen3-coder-flash` OpenRouter model. To use the default
 path you need an OpenRouter API key:
 
 1. Sign up at [openrouter.ai](https://openrouter.ai/).

@@ -42,7 +42,7 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()
   assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai,github-copilot')
-  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'qwen/qwen3-coder:free')
+  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'qwen/qwen3-coder-flash')
   const copilot = providers.find((provider) => provider.id === 'github-copilot')
   assert.equal(copilot?.credentials.length, 0)
   assert.equal(copilot?.models.length, 0)

@@ -34,7 +34,7 @@ test('custom agent store saves, updates, lists, and removes machine agents', () 
     color: 'success',
     avatar: null,
     deniedToolPatterns: ['bash'],
-    model: 'openrouter/qwen/qwen3-coder:free',
+    model: 'openrouter/qwen/qwen3-coder-flash',
     temperature: 0.2,
     steps: 20,
   }, { websearch: 'allow', bash: 'deny' }), true)
@@ -46,7 +46,7 @@ test('custom agent store saves, updates, lists, and removes machine agents', () 
   assert.deepEqual(saved?.skillNames, ['analyst'])
   assert.deepEqual(saved?.toolIds, ['websearch'])
   assert.deepEqual(saved?.deniedToolPatterns, ['bash'])
-  assert.equal(saved?.model, 'openrouter/qwen/qwen3-coder:free')
+  assert.equal(saved?.model, 'openrouter/qwen/qwen3-coder-flash')
 
   assert.equal(saveCustomAgent({
     scope: 'machine',
