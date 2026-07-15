@@ -31,8 +31,12 @@ operator docs:
 - **Standalone Gateway** means `apps/standalone-gateway`: it owns a private
   OpenCode runtime and Gateway Postgres for Gateway-only deployments.
 
-Do not use `OpenCode Gateway` for new Open Cowork docs; OpenCode is the
-runtime and Open Cowork owns the Gateway product surfaces.
+Do not use `OpenCode Gateway` for Open Cowork product surfaces; OpenCode is
+the runtime and Open Cowork owns the Gateway product modes above. If a doc is
+specifically about the separate external
+[`opencode-gateway`](https://github.com/joe-broadhead/opencode-gateway)
+project, name it explicitly as **OpenCode Gateway** and mark it as an external
+integration rather than an Open Cowork Gateway mode.
 
 ## Package and Image Names
 
