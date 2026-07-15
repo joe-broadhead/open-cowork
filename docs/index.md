@@ -16,8 +16,8 @@ hide:
 <div class="cowork-stats" markdown>
 
 <div class="stat" markdown>
-  <div class="stat-value">7 MCPs · 11 skills</div>
-  <div class="stat-label">Bundled capabilities</div>
+  <div class="stat-value">8 MCPs · 7 skills</div>
+  <div class="stat-label">Configured capabilities</div>
 </div>
 
 <div class="stat" markdown>
