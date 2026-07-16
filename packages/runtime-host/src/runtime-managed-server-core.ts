@@ -134,13 +134,13 @@ export function seedManagedProviderPackages(env: NodeJS.ProcessEnv, configDir: s
   if (seeded.length === 0) return
 
   const packageJsonPath = join(configDir, 'package.json')
+  // Prefer try-read over existsSync+read (avoids TOCTOU / CodeQL js/file-system-race).
+  // Missing or unreadable package.json is treated as an empty dependency map.
   let packageJson: { dependencies?: Record<string, string> } = { dependencies: {} }
-  if (existsSync(packageJsonPath)) {
-    try {
-      packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as typeof packageJson
-    } catch {
-      packageJson = { dependencies: {} }
-    }
+  try {
+    packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as typeof packageJson
+  } catch {
+    packageJson = { dependencies: {} }
   }
   const dependencies = { ...(packageJson.dependencies || {}) }
   for (const packageName of seeded) {
