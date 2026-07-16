@@ -2,8 +2,10 @@ import type { OpencodeClient as V2OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
 import type { ManagedOpencodeServerAuth } from './runtime-managed-server.js'
 
-// LRU cap on directory-scoped request clients. Native `/api/event` uses one
-// server-wide base-client subscription, so scoped clients do not own SSE state.
+// LRU cap on directory-scoped request clients. Desktop keeps one SSE
+// subscription per live directory client (see apps/desktop event subscription
+// lifecycle): create starts the stream, LRU eviction stops it. Scoped clients
+// own request headers (`x-opencode-directory`) and their event streams.
 export const MAX_DIRECTORY_CLIENTS = 64
 
 type DirectoryClientHandler = (directory: string, client: V2OpencodeClient) => void

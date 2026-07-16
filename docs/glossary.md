@@ -12,14 +12,18 @@ concept's first definition is unclear elsewhere, it lives here.
 
 OpenCode
 :   The upstream open-source AI coding agent runtime. Open Cowork embeds it
-    via `@opencode-ai/sdk` and ships the OpenCode CLI binary alongside the
-    Electron app. All session execution, agents, approvals, and tool
-    semantics belong to OpenCode.
+    via `@opencode-ai/sdk/v2` (native V2 client) and ships the OpenCode CLI
+    binary alongside Desktop, Cloud workers, and gateway appliances. All
+    session execution, agents, approvals, and tool semantics belong to
+    OpenCode. A small classic-client allowlist remains only where V2 routes
+    are still unavailable (see `docs/opencode-sdk-v2-boundary.md`).
 
 Open Cowork
-:   The desktop product layer on top of OpenCode. Owns the UI, configuration
-    schema, workflow control plane, packaging, branding, and all
-    main-process safety policies. Does **not** own execution.
+:   The multi-surface product layer on top of OpenCode: **Desktop** (local
+    Electron), **Cloud** (web + control plane + workers), and **Gateway**
+    (channel adapters and/or standalone team appliances). Owns UI,
+    configuration schema, workflow control plane, packaging, branding,
+    workspaces, and safety policies. Does **not** own execution.
 
 Cowork
 :   Used as a verb in the UI ("What shall we cowork on today?"). Refers to

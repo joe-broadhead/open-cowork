@@ -16,12 +16,11 @@ import {
   UI_PRIMITIVES_ENABLED,
   UI_PRIMITIVES_HASH,
   browserUrlRoutingEnabled,
-  canUseViewTransition,
   describeError,
   errorStack,
   initialAppView,
   previewDismissed,
-  type ViewTransitionDocument,
+  runViewTransition,
 } from './app-helpers'
 import { PaletteFallback, RouteFallback } from './components/layout/RouteFallback'
 import { AppRoutes } from './components/layout/AppRoutes'
@@ -135,14 +134,9 @@ export function App() {
     // behind the sidebar already hiding it). Non-gated views are never in `features`, so
     // isDesktopFeatureEnabled returns true for them.
     if (!isDesktopFeatureEnabled(config?.features, nextView as DesktopFeatureKey)) return
-    const apply = () => setView(nextView)
-    if (canUseViewTransition()) {
-      ;(document as ViewTransitionDocument).startViewTransition?.(() => {
-        flushSync(apply)
-      })
-      return
-    }
-    apply()
+    runViewTransition(() => {
+      flushSync(() => setView(nextView))
+    })
   }, [config?.features])
 
   // SPA navigation does not trigger the browser's native document-focus reset.

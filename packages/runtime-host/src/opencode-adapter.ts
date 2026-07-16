@@ -318,7 +318,10 @@ function normalizeV2ToolPart(value: unknown): NormalizedMessagePart | null {
     id: readRecordString(record, ['id']),
     text: null,
     tool: readRecordString(record, ['name']),
-    callId: readRecordString(record, ['id']),
+    // Prefer explicit call ids from live/classic shapes; fall back to part id.
+    callId: readRecordString(record, ['callID', 'callId'])
+      || readRecordString(state, ['callID', 'callId'])
+      || readRecordString(record, ['id']),
     title: readRecordString(record, ['name']),
     name: readRecordString(record, ['name']),
     agent: null,

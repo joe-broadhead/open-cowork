@@ -1,6 +1,9 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const virtualStoreDir = join(repoRoot, 'node_modules', '.pnpm')
@@ -138,6 +141,181 @@ export function writeUpdateInstallCapabilityResource(context, resourcesDir, env 
   return true
 }
 
+export const runtimeComponentManifestResourceName = 'runtime-components.manifest.json'
+
+function platformPackageName(electronPlatformName) {
+  if (electronPlatformName === 'win32') return 'windows'
+  return electronPlatformName
+}
+
+function opencodeBinaryName(electronPlatformName) {
+  return electronPlatformName === 'win32' ? 'opencode.exe' : 'opencode'
+}
+
+/**
+ * Resolve the packaged OpenCode CLI binary under app.asar.unpacked after native
+ * packages have been copied. Prefers the arch-native package, then the x64
+ * baseline variant used on some Intel builds.
+ */
+export function resolvePackagedOpencodeCliPath(resourcesDir, electronPlatformName, archName) {
+  const platform = platformPackageName(electronPlatformName)
+  const binary = opencodeBinaryName(electronPlatformName)
+  const moduleNames = [
+    archName === 'x64' ? `opencode-${platform}-${archName}-baseline` : null,
+    `opencode-${platform}-${archName}`,
+  ].filter(Boolean)
+
+  for (const moduleName of moduleNames) {
+    const candidate = join(resourcesDir, 'app.asar.unpacked', 'node_modules', moduleName, 'bin', binary)
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/**
+ * Build the component path map for the trusted runtime-components.manifest.json
+ * that packaged apps verify at launch (see docs/verifying-releases.md).
+ *
+ * The OpenCode SDK package.json is hashed from the packaged app.asar (not the
+ * workspace node_modules copy). electron-builder rewrites package metadata when
+ * packing, so the on-disk install and the asar entry can differ.
+ */
+export function resolvePackagedRuntimeComponentPaths(resourcesDir, options = {}) {
+  const electronPlatformName = options.electronPlatformName || process.platform
+  const archName = getTargetArchName(options.arch) || process.arch
+  const opencodeCli = options.componentPaths?.['opencode-cli']
+    || resolvePackagedOpencodeCliPath(resourcesDir, electronPlatformName, archName)
+  const opencodeSdk = options.componentPaths?.['opencode-sdk']
+    || options.sdkPackageJsonPath
+    || extractPackagedOpencodeSdkPackageJson(resourcesDir, options)
+  const agentToolMcp = options.componentPaths?.['agent-tool-mcp']
+    || join(resourcesDir, 'mcps', 'agents', 'dist', 'index.js')
+  const workflowMcp = options.componentPaths?.['workflow-mcp']
+    || join(resourcesDir, 'mcps', 'workflows', 'dist', 'index.js')
+  const semanticUiMcp = options.componentPaths?.['semantic-ui-mcp']
+    || join(resourcesDir, 'mcps', 'semantic-ui', 'dist', 'index.js')
+
+  return {
+    'opencode-cli': opencodeCli,
+    'opencode-sdk': opencodeSdk,
+    'agent-tool-mcp': agentToolMcp,
+    'workflow-mcp': workflowMcp,
+    'semantic-ui-mcp': semanticUiMcp,
+  }
+}
+
+function readPackageVersionFromFile(packageJsonPath) {
+  try {
+    const data = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+    return typeof data.version === 'string' && data.version.length > 0 ? data.version : null
+  } catch {
+    return null
+  }
+}
+
+function readCliVersionFromBinary(binaryPath) {
+  if (!binaryPath || !existsSync(binaryPath)) return null
+  try {
+    const text = execFileSync(binaryPath, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+    })
+    return text
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Extract `@opencode-ai/sdk/package.json` from the packaged app.asar so the
+ * trusted manifest pins the same bytes the runtime will re-hash at launch.
+ */
+export function extractPackagedOpencodeSdkPackageJson(resourcesDir, options = {}) {
+  if (options.sdkPackageJsonPath && existsSync(options.sdkPackageJsonPath)) {
+    return options.sdkPackageJsonPath
+  }
+
+  const asarPath = options.asarPath || join(resourcesDir, 'app.asar')
+  if (!existsSync(asarPath)) {
+    // Unpackaged test fixtures / unit tests may only supply a plain SDK path.
+    const fallback = join(repoRoot, 'apps', 'desktop', 'node_modules', '@opencode-ai', 'sdk', 'package.json')
+    return existsSync(fallback) ? fallback : null
+  }
+
+  const require = createRequire(import.meta.url)
+  let asar
+  try {
+    asar = require('@electron/asar')
+  } catch {
+    asar = require(join(repoRoot, 'node_modules', '.pnpm', 'node_modules', '@electron', 'asar'))
+  }
+
+  const entry = 'node_modules/@opencode-ai/sdk/package.json'
+  let contents
+  try {
+    contents = asar.extractFile(asarPath, entry)
+  } catch (error) {
+    throw new Error(
+      `Cannot extract ${entry} from ${asarPath} for runtime component hashing: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  const extractDir = options.sdkExtractDir || mkdtempSync(join(tmpdir(), 'open-cowork-sdk-pkg-'))
+  mkdirSync(extractDir, { recursive: true })
+  const extractedPath = join(extractDir, 'package.json')
+  writeFileSync(extractedPath, contents)
+  return extractedPath
+}
+
+/**
+ * Hash the packaged runtime components and write the trusted integrity
+ * manifest into Resources. Packaged launches fail closed without this file.
+ */
+export async function writePackagedRuntimeComponentManifest(resourcesDir, options = {}) {
+  const componentPaths = resolvePackagedRuntimeComponentPaths(resourcesDir, options)
+  for (const [id, path] of Object.entries(componentPaths)) {
+    if (!path || !existsSync(path)) {
+      throw new Error(
+        `Cannot write runtime component manifest: missing ${id} at ${path || '(unresolved)'}. Ensure extraResources include managed MCPs and after-pack has copied the OpenCode native binary.`,
+      )
+    }
+  }
+
+  const cliVersion = options.componentVersions?.['opencode-cli']
+    || readCliVersionFromBinary(componentPaths['opencode-cli'])
+    || readPackageVersionFromFile(join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'opencode-ai', 'package.json'))
+  const sdkVersion = options.componentVersions?.['opencode-sdk']
+    || readPackageVersionFromFile(componentPaths['opencode-sdk'])
+  const componentVersions = {
+    'opencode-cli': cliVersion,
+    'opencode-sdk': sdkVersion,
+    'agent-tool-mcp': options.componentVersions?.['agent-tool-mcp'] || readPackageVersionFromFile(join(resourcesDir, 'mcps', 'agents', 'package.json')),
+    'workflow-mcp': options.componentVersions?.['workflow-mcp'] || readPackageVersionFromFile(join(resourcesDir, 'mcps', 'workflows', 'package.json')),
+    'semantic-ui-mcp': options.componentVersions?.['semantic-ui-mcp'] || readPackageVersionFromFile(join(resourcesDir, 'mcps', 'semantic-ui', 'package.json')),
+  }
+
+  const writeManifest = options.writeRuntimeComponentManifest
+    || (await import('../packages/runtime-host/dist/runtime-component-manifest.js')).writeRuntimeComponentManifest
+  const manifestPath = join(resourcesDir, runtimeComponentManifestResourceName)
+  const manifest = await writeManifest(manifestPath, {
+    componentPaths,
+    componentVersions,
+    // Force version + hash from the packaged binary, not whatever `opencode` is on PATH.
+    bundledOpencodeEnv: {
+      opencodeBinPath: componentPaths['opencode-cli'],
+    },
+    isPackaged: true,
+    resourcesPath: resourcesDir,
+  })
+  process.stdout.write(`[desktop-after-pack] wrote ${runtimeComponentManifestResourceName} (${manifest.components.length} components)\n`)
+  return manifestPath
+}
+
 export function createDesktopAfterPack(options = {}) {
   return async function afterPack(context) {
     const targetArch = getTargetArchName(context.arch)
@@ -169,6 +347,12 @@ export function createDesktopAfterPack(options = {}) {
     }
 
     process.stdout.write(`[desktop-after-pack] bundled OpenCode native packages: ${packages.map((entry) => basename(entry.name)).join(', ')}\n`)
+
+    await writePackagedRuntimeComponentManifest(resourcesDir, {
+      ...options,
+      electronPlatformName: context.electronPlatformName,
+      arch: targetArch,
+    })
   }
 }
 

@@ -143,7 +143,7 @@ git diff --check
 
 Use extra targeted checks when relevant:
 - `pnpm perf:check` for renderer/runtime performance-sensitive changes
-- `pnpm audit --prod --audit-level high` for dependency/security work
+- `pnpm audit:prod` / `pnpm audit:full` for dependency/security work
 - `pnpm --dir apps/desktop dist:ci` for packaging / release-path changes
 
 ## Branch and repo conventions

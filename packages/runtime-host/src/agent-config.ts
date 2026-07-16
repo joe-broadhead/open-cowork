@@ -30,6 +30,8 @@ import {
   hasNativeFileWriteToolPattern,
   hasNativeWebToolPattern,
 } from './agent-tool-access.js'
+import { findPermissionInheritanceIssues } from './permission-inheritance.js'
+import { log } from '@open-cowork/shared/node'
 
 export type AgentPermissionDescriptor = {
   allToolPatterns: string[]
@@ -572,6 +574,30 @@ export function buildOpenCoworkAgentConfig(options: {
       }),
     }
     agents[agent.name] = applyInferenceOverrides(base, agent)
+  }
+
+  // Soft enforcement: log delegated permission regressions without failing boot.
+  // Throwing would brick config composition for a single misconfigured agent.
+  const inheritanceAgents = Object.fromEntries(
+    Object.entries(agents).map(([name, agent]) => [
+      name,
+      {
+        mode: agent.mode,
+        permission: agent.permission && typeof agent.permission === 'object' && !Array.isArray(agent.permission)
+          ? agent.permission as Record<string, unknown>
+          : undefined,
+      },
+    ]),
+  )
+  const inheritanceIssues = findPermissionInheritanceIssues(inheritanceAgents)
+  if (inheritanceIssues.length > 0) {
+    log(
+      'agent',
+      `Delegated permission inheritance issues (${inheritanceIssues.length}): ${inheritanceIssues
+        .slice(0, 5)
+        .map((issue) => `${issue.parentAgent}->${issue.childAgent}:${issue.key}`)
+        .join(', ')}${inheritanceIssues.length > 5 ? '…' : ''}`,
+    )
   }
 
   return agents

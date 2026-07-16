@@ -61,14 +61,28 @@ export function combineNativeProviderCatalog(
     providerModels.set(model.id, projectNativeModel(model))
     modelsByProvider.set(model.providerID, providerModels)
   }
-  return providers.map((provider) => ({
-    id: provider.id,
-    name: provider.name,
-    models: Object.fromEntries(modelsByProvider.get(provider.id) || []),
-    // `/api/provider` returns only Catalog.provider.available(), so presence
-    // in this response is the native V2 connected/available signal.
-    connected: true,
-  }))
+  return providers.map((provider) => {
+    const models = Object.fromEntries(modelsByProvider.get(provider.id) || [])
+    // Presence in Catalog.provider.available() means OpenCode considers the
+    // provider usable for the current auth/config. Prefer an explicit
+    // connected/status signal when the SDK exposes one; otherwise treat
+    // "listed + has models OR is a free/public catalog" as available, not as
+    // proof that a paid credential is valid.
+    const raw = provider as ProviderV2Info & { connected?: unknown; status?: unknown }
+    const explicitConnected = typeof raw.connected === 'boolean'
+      ? raw.connected
+      : raw.status === 'connected' || raw.status === 'ready'
+        ? true
+        : raw.status === 'disconnected' || raw.status === 'error'
+          ? false
+          : null
+    return {
+      id: provider.id,
+      name: provider.name,
+      models,
+      connected: explicitConnected ?? Object.keys(models).length > 0,
+    }
+  })
 }
 
 export async function listNativeProviders(client: OpencodeClient): Promise<ProviderLike[]> {

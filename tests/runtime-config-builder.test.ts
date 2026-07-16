@@ -982,7 +982,10 @@ test('buildRuntimeConfig passes the Cowork skill catalog through SDK-native skil
   }
 })
 
-test('buildRuntimeConfig provisions selected built-in providers with stored credentials', () => {
+test('buildRuntimeConfig composes openrouter with openai-compatible npm for V2 serve', () => {
+  // V2 `serve` cannot load models.dev's default `@openrouter/ai-sdk-provider`
+  // (UnsupportedApiError). Cowork must force the bundled openai-compatible
+  // package and inject apiKey/baseURL while leaving the models catalog unpinned.
   const originalSettings = loadSettings()
 
   saveSettings({
@@ -1000,10 +1003,16 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
 
     assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
     assert.equal(runtimeConfig.small_model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.equal(runtimeConfig.provider.openrouter.name, 'OpenRouter')
-    assert.equal(runtimeConfig.provider.openrouter.options.apiKey, 'sk-or-test')
-    assert.equal(runtimeConfig.provider.openrouter.models['qwen/qwen3-coder-flash'].name, 'Qwen3 Coder Flash via OpenRouter')
-    assert.equal(runtimeConfig.provider.openrouter.models['anthropic/claude-sonnet-4'].name, 'Claude Sonnet 4 via OpenRouter')
+    assert.deepEqual(runtimeConfig.provider?.openrouter, {
+      name: 'OpenRouter',
+      npm: '@ai-sdk/openai-compatible',
+      options: {
+        baseURL: 'https://openrouter.ai/api/v1',
+        apiKey: 'sk-or-test',
+      },
+    })
+    assert.equal(runtimeConfig.provider?.openrouter?.models, undefined)
+    assert.ok(runtimeConfig.enabled_providers?.includes('openrouter'))
   } finally {
     saveSettings(originalSettings)
   }

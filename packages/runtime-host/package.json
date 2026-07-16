@@ -30,6 +30,10 @@
       "types": "./dist/agent-config.d.ts",
       "import": "./dist/agent-config.js"
     },
+    "./permission-inheritance": {
+      "types": "./dist/permission-inheritance.d.ts",
+      "import": "./dist/permission-inheritance.js"
+    },
     "./agent-prompts": {
       "types": "./dist/agent-prompts.d.ts",
       "import": "./dist/agent-prompts.js"

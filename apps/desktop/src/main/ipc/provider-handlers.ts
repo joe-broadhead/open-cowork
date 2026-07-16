@@ -1,7 +1,8 @@
 import { getEffectiveSettings, getProviderCredentialValue } from '@open-cowork/runtime-host/settings'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
-import { getClient } from '@open-cowork/runtime-host/runtime'
+import { getClient, writeRuntimeProviderApiAuth } from '@open-cowork/runtime-host/runtime'
 import { listNativeProviders, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
+import { isModelsDevAuthJsonBuiltin } from '@open-cowork/runtime-host/runtime-config-builder'
 import { connectNativeProviderApiKey, refreshProviderCatalog, modelInfoKeys } from '@open-cowork/runtime-host'
 import { unwrapNativeData } from '@open-cowork/runtime-host'
 import type { IntegrationInfo, IntegrationMethod, OpencodeClient, ProviderV2Info } from '@opencode-ai/sdk/v2'
@@ -96,7 +97,19 @@ async function syncApiCredentialForConnectionTest(providerId: string) {
   const key = getProviderCredentialValue(settings, providerId, credential.key)
   if (!key) return false
 
-  await connectNativeProviderApiKey(client, providerId, key)
+  // Match boot: OpenRouter uses auth.json (+ composed openai-compatible config),
+  // not V2 integration.connect.key (which fails with "Key method not found").
+  if (isModelsDevAuthJsonBuiltin(providerId)) {
+    writeRuntimeProviderApiAuth(providerId, key)
+    return true
+  }
+
+  try {
+    await connectNativeProviderApiKey(client, providerId, key)
+  } catch (err) {
+    writeRuntimeProviderApiAuth(providerId, key)
+    log('provider', `Connection-test auth.json fallback for ${providerId}: ${sdkErrorMessage(err)}`)
+  }
   return true
 }
 

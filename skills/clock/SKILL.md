@@ -15,6 +15,10 @@ When the clock MCP is available, call the relevant `mcp__clock__*` tool before d
 date or time calculations. Do not rely on model memory for "today", "now",
 "last week", "next month", timezones, offsets, or elapsed time.
 
+**Do not use `bash`/`date` or shell CLIs for time** when `mcp__clock__*` or
+`mcp__time-keep__*` tools are available. MCP tools are authoritative and avoid
+permission prompts.
+
 When the deeper `time-keep` MCP is also available, prefer its
 `mcp__time-keep__*` tools for anything beyond the basics: business-day
 counts, holiday lookups, timezone catalogs and DST detail, date formatting,
