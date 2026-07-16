@@ -180,16 +180,8 @@ function livePlaceholderMessageSuffix(role: 'user' | 'assistant') {
   return role === 'assistant' ? LIVE_ASSISTANT_MESSAGE_SUFFIX : LIVE_USER_MESSAGE_SUFFIX
 }
 
-function livePlaceholderSegmentSuffix(role: 'user' | 'assistant') {
-  return role === 'assistant' ? LIVE_ASSISTANT_SEGMENT_SUFFIX : LIVE_USER_SEGMENT_SUFFIX
-}
-
 export function isLivePlaceholderMessageId(messageId: string, role: 'user' | 'assistant') {
   return messageId.endsWith(livePlaceholderMessageSuffix(role))
-}
-
-function isLivePlaceholderSegmentId(segmentId: string, role: 'user' | 'assistant') {
-  return segmentId.endsWith(livePlaceholderSegmentSuffix(role))
 }
 
 // Retained for the assistant-specific latest-message-id lookup below.

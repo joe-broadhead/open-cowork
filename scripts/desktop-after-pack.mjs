@@ -255,20 +255,57 @@ export function extractPackagedOpencodeSdkPackageJson(resourcesDir, options = {}
     asar = require(join(repoRoot, 'node_modules', '.pnpm', 'node_modules', '@electron', 'asar'))
   }
 
-  const entry = 'node_modules/@opencode-ai/sdk/package.json'
-  let contents
-  try {
-    contents = asar.extractFile(asarPath, entry)
-  } catch (error) {
-    throw new Error(
-      `Cannot extract ${entry} from ${asarPath} for runtime component hashing: ${error instanceof Error ? error.message : String(error)}`,
+  const preferredEntries = [
+    'node_modules/@opencode-ai/sdk/package.json',
+    // pnpm / electron-builder may nest scoped packages under .pnpm virtual store
+    // paths inside the asar on some platforms.
+  ]
+  let contents = null
+  let usedEntry = null
+  let lastError = null
+  for (const entry of preferredEntries) {
+    try {
+      contents = asar.extractFile(asarPath, entry)
+      usedEntry = entry
+      break
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (!contents) {
+    try {
+      const listed = asar.listPackage(asarPath)
+      const match = listed.find((entry) => (
+        typeof entry === 'string'
+        && entry.replace(/\\/g, '/').endsWith('@opencode-ai/sdk/package.json')
+      ))
+      if (match) {
+        contents = asar.extractFile(asarPath, match)
+        usedEntry = match
+      }
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (!contents) {
+    // Fall back to the workspace install so packaging can still produce a
+    // manifest when asar layout differs (seen on Windows pnpm packs).
+    const fallback = join(repoRoot, 'apps', 'desktop', 'node_modules', '@opencode-ai', 'sdk', 'package.json')
+    if (existsSync(fallback)) return fallback
+    const err = new Error(
+      `Cannot extract @opencode-ai/sdk/package.json from ${asarPath} for runtime component hashing: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
     )
+    if (lastError instanceof Error) err.cause = lastError
+    throw err
   }
 
   const extractDir = options.sdkExtractDir || mkdtempSync(join(tmpdir(), 'open-cowork-sdk-pkg-'))
   mkdirSync(extractDir, { recursive: true })
   const extractedPath = join(extractDir, 'package.json')
   writeFileSync(extractedPath, contents)
+  if (usedEntry && usedEntry !== preferredEntries[0]) {
+    process.stdout.write(`[desktop-after-pack] resolved OpenCode SDK package.json via asar entry ${usedEntry}\n`)
+  }
   return extractedPath
 }
 
