@@ -258,15 +258,17 @@ export function assertCloudChannelGatewayProductMode(productMode: GatewayProduct
 
 export function assertStandaloneGatewayProductMode(productMode: GatewayProductMode) {
   if (productMode === 'standalone') return
+  // JOE-897: name the correct binary / env family in fail-closed messages.
   if (productMode === 'cloud_channel') {
     throw new Error(
-      'Gateway productMode=cloud_channel is the Cloud Channel Gateway app. '
-      + 'Standalone Gateway deployments must use productMode=standalone.',
+      'productMode=cloud_channel is owned by the Cloud Channel Gateway binary (apps/gateway, '
+      + 'OPEN_COWORK_GATEWAY_*). Standalone Gateway (apps/standalone-gateway, OPEN_COWORK_STANDALONE_GATEWAY_*) '
+      + 'only accepts productMode=standalone.',
     )
   }
   throw new Error(
-    'Gateway productMode=hybrid is reserved for a later Cloud-connected edge/standalone design. '
-    + 'Standalone Gateway deployments must use productMode=standalone.',
+    'productMode=hybrid is reserved for a future design. Standalone Gateway (apps/standalone-gateway, '
+    + 'OPEN_COWORK_STANDALONE_GATEWAY_*) only accepts productMode=standalone.',
   )
 }
 
