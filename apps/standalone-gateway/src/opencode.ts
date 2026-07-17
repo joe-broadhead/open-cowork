@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   sanitizeRuntimeEventRecord,
   sanitizeRuntimeEventValue,
+  translateOpencodeEventForStandalone,
 } from "@open-cowork/shared";
 
 import { assertPrivateOpenCodeEndpoint } from "./network-policy.js";
@@ -21,80 +22,38 @@ export interface StandaloneOpenCodeAdapter {
   health(): Promise<{ ok: boolean; detail: string }>;
 }
 
+/**
+ * JOE-838: Standalone fans out from the shared OpenCode event translator.
+ * Envelope parsing and SDK→product kind classification live in
+ * `@open-cowork/shared` (`translateOpencodeEventForStandalone`). This wrapper
+ * only applies Standalone payload sanitization / channel shaping.
+ */
 export function normalizeOpenCodeEvent(event: unknown): StandaloneRuntimeEvent[] {
-  const source = parseEvent(event);
-  const envelope = objectRecord(source);
-  const nested = objectRecord(envelope.data);
-  const properties = Object.keys(objectRecord(envelope.properties)).length > 0
-    ? objectRecord(envelope.properties)
-    : nested;
-  const type = stringField(envelope, "type") || stringField(nested, "type") || "";
-
-  if (type === "permission.v2.asked" || type === "permission.asked") {
-    return [{
-      type: "permission.requested",
-      entityId: stringField(properties, "id") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (type === "permission.v2.replied" || type === "permission.replied") {
-    return [{
-      type: "permission.resolved",
-      entityId: stringField(properties, "requestID") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (type === "question.v2.asked" || type === "question.asked") {
-    return [{
-      type: "question.asked",
-      entityId: stringField(properties, "id") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (
-    type === "question.v2.replied"
-    || type === "question.v2.rejected"
-    || type === "question.replied"
-    || type === "question.rejected"
-  ) {
-    return [{
-      type: "question.resolved",
-      entityId: stringField(properties, "requestID") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (type === "session.next.tool.called") {
-    return [{
-      type: "tool.started",
-      entityId: stringField(properties, "callID") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (type === "session.next.tool.success") {
-    return [{
-      type: "tool.completed",
-      entityId: stringField(properties, "callID") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (type === "session.next.tool.failed") {
-    return [{
-      type: "tool.failed",
-      entityId: stringField(properties, "callID") || stringField(envelope, "id"),
-      payload: publicPayload(properties),
-    }];
-  }
-  if (type === "session.next.text.ended") {
-    const text = stringField(properties, "text");
-    return text ? [{ type: "assistant.message", payload: { text } }] : [];
-  }
-  if (type === "session.next.step.failed" || type === "session.error") {
-    return [{ type: "session.error", payload: publicPayload(properties) }];
-  }
-
-  // Reasoning and streaming deltas are intentionally private. The durable text-ended
-  // event contains the complete assistant text and avoids duplicate channel replies.
-  return [];
+  const translated = translateOpencodeEventForStandalone(event);
+  return translated.map((entry) => {
+    if (entry.type === "assistant.message") {
+      const text = typeof entry.payload.text === "string"
+        ? entry.payload.text
+        : typeof entry.payload.delta === "string"
+          ? entry.payload.delta
+          : null;
+      return text
+        ? { type: "assistant.message" as const, payload: { text } }
+        : { type: "assistant.message" as const, payload: publicPayload(entry.payload) };
+    }
+    return {
+      type: entry.type,
+      entityId: entry.entityId,
+      payload: publicPayload(entry.payload),
+    };
+  }).filter((entry) => {
+    // Drop empty assistant.message when text was absent after shaping.
+    if (entry.type === "assistant.message") {
+      const text = entry.payload && typeof entry.payload.text === "string" ? entry.payload.text : "";
+      return text.length > 0;
+    }
+    return true;
+  });
 }
 
 export function createSdkOpenCodeAdapter(options: {

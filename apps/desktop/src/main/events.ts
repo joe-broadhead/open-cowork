@@ -4,7 +4,11 @@ import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { normalizeMcpStatusEntries, normalizeRuntimeEventEnvelope } from '@open-cowork/runtime-host'
 import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
-import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
+import {
+  classifyOpencodeSdkEvent,
+  isMcpAuthRequiredStatus,
+  OPENCODE_BENIGN_EVENT_TYPES,
+} from '@open-cowork/shared'
 import { log } from '@open-cowork/shared/node'
 import { dispatchRuntimeSessionEvent } from '@open-cowork/runtime-host/session-event-dispatcher'
 import {
@@ -35,31 +39,16 @@ export { markSessionPromptAdmitted } from './durable-session-events.ts'
 const UNKNOWN_EVENT_LOG_INTERVAL_MS = 60_000
 const unknownEventLastLoggedAt = new Map<string, number>()
 
-// Benign control-plane events from OpenCode 1.18.x that we intentionally do
-// not project into SessionView. Suppress log spam; still reconnect/retry on
-// real stream failures elsewhere.
-const KNOWN_BENIGN_EVENT_TYPES = new Set([
-  'server.connected',
-  'plugin.added',
-  'plugin.removed',
-  'catalog.updated',
-  'reference.updated',
-  'integration.updated',
-  'installation.updated',
-  'lsp.updated',
-  'file.edited',
-  'file.watcher.updated',
-  'vcs.branch.updated',
-  'project.updated',
-  'server.heartbeat',
-])
-
 function dispatchRuntimeEvent(win: BrowserWindow, event: RuntimeSessionEvent) {
   dispatchRuntimeSessionEvent(win, event)
 }
 
 function logUnknownRuntimeEvent(type: string, scopeLabel: string) {
-  if (KNOWN_BENIGN_EVENT_TYPES.has(type)) return
+  // JOE-838: Benign / private / known projectable types share the canonical
+  // classifier — only true unknowns spam the log.
+  if (OPENCODE_BENIGN_EVENT_TYPES.has(type)) return
+  const disposition = classifyOpencodeSdkEvent(type)
+  if (disposition.status !== 'unknown') return
   const now = Date.now()
   const lastLoggedAt = unknownEventLastLoggedAt.get(type) || 0
   if (now - lastLoggedAt < UNKNOWN_EVENT_LOG_INTERVAL_MS) return

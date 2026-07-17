@@ -27,7 +27,10 @@ losing required chat state.
 
 ```mermaid
 flowchart LR
-  OpenCode["OpenCode runtime events"] --> Adapter["Cloud runtime adapter"]
+  OpenCode["OpenCode runtime events"] --> Translator["Shared translator\n(opencode-event-translator)"]
+  Translator --> DesktopLive["Desktop live handlers"]
+  Translator --> Adapter["Cloud runtime adapter\npayload fan-out"]
+  Translator --> Standalone["Standalone channel events"]
   Adapter --> Events["CloudSessionEvent contract"]
   Events --> Store["Durable event log"]
   Store --> Reducer["Shared projection reducer"]
@@ -39,7 +42,9 @@ flowchart LR
 
 Rules:
 
-- Raw OpenCode SDK events stop at the runtime adapter.
+- Raw OpenCode SDK events stop at the **shared translator**
+  (`packages/shared/src/opencode-event-translator.ts`, JOE-838). Surfaces
+  receive a normalized envelope + product disposition and only then fan out.
 - Cloud workers append only canonical `CloudSessionEventType` values.
 - Projection reducers live in shared code and produce the `SessionView` shape
   Desktop already consumes.
@@ -47,6 +52,8 @@ Rules:
   contract.
 - `snapshot.required` and `channel.delivery` are control events, not projected
   session state.
+- Standalone Gateway maps the same classification table into its slimmer
+  channel vocabulary (`tool.started` / `tool.completed` / `session.error`).
 
 ## Projected Event Vocabulary
 
