@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BrandingSidebarConfig, DesktopFeatureFlags, DesktopFeatureKey } from '@open-cowork/shared'
 import { isDesktopFeatureEnabled } from '@open-cowork/shared'

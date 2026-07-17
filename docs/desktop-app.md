@@ -1,22 +1,30 @@
 # Desktop App Guide
 
-Open Cowork ships these default Studio surfaces (sidebar nav when feature flags
-are left at their defaults — omitted keys mean **enabled**):
+Open Cowork’s product thesis is a focused workbench:
+**Chat / Team / Tools / Projects / Playbooks** (plus Home and Settings).
 
-**Primary**
+Default sidebar nav when `features` is omitted or partial:
+
+**Primary (default on)**
 
 - `Home` — start a chat, attach context, choose a model, or @mention a coworker
 - `Projects` — searchable project-chat history, facets, tags, and saved filters
-- `Knowledge` — OpenWiki spaces, pages, proposals, and graph
-- `Approvals` — cross-session permission and question review queue
-
-**Manage**
-
 - `Team` — built-in and custom OpenCode agents presented as coworkers with curated tools and skills
 - `Playbooks` — workflow-backed repeatable tasks created from Workflow Designer setup chats, with manual, scheduled, and webhook runs
-- `Channels` — gateway channel connections, bindings, and delivery status
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
-- `Artifacts` — library of generated files, charts, reports, and deliverables
+
+**Secondary Studio surfaces (default off — progressive disclosure)**
+
+These remain in the product and in docs, but stay hidden from default nav until
+enabled with `features.<key>: true` in `open-cowork.config.json` (or an overlay):
+
+- `Knowledge` — OpenWiki spaces, pages, proposals, and graph (`features.knowledge`)
+- `Approvals` — cross-session permission and question review queue (`features.approvals`)
+- `Channels` — gateway channel connections, bindings, and delivery status (`features.channels`)
+- `Artifacts` — library of generated files, charts, reports, and deliverables (`features.artifacts`)
+
+In-thread chat approvals, questions, and session artifacts still work when the
+secondary nav surfaces are off — only the dedicated Studio pages are gated.
 
 **Always available**
 
@@ -24,9 +32,11 @@ are left at their defaults — omitted keys mean **enabled**):
 - `Settings` — appearance, models, permissions, storage, and playbook run behavior
 - `Admin` — cloud org administration when the signed-in principal has admin permissions (not shown for pure local Desktop)
 
-Downstream builders can hide a product area by setting its key false under
-`features` in config (`projects`, `knowledge`, `approvals`, `team`, `playbooks`,
-`channels`, `tools`, `artifacts`). See the shared `DesktopFeatureKey` contract.
+Feature keys: `projects`, `knowledge`, `approvals`, `team`, `playbooks`,
+`channels`, `tools`, `artifacts`. Primary keys default **on** when omitted;
+secondary keys default **off**. Set a key to `true`/`false` to override.
+See `isDesktopFeatureEnabled` / `DESKTOP_SECONDARY_FEATURE_KEYS` in
+`packages/shared/src/app-config.ts`.
 
 Desktop is one Open Cowork surface. Cloud, Gateway, Standalone Gateway, Mobile,
 and Teams naming and package boundaries are defined in
