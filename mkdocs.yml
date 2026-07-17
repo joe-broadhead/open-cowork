@@ -114,6 +114,7 @@ nav:
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
       - OpenWiki Knowledge Base: openwiki.md
+      - Knowledge store ownership: knowledge-store-ownership.md
       - OpenCode Gateway: opencode-gateway.md
       - Configuration: configuration.md
   - Build & Extend:

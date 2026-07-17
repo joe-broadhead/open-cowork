@@ -37,3 +37,7 @@ committed, and kept fresh outside the app.
   surface for product-managed knowledge.
 - Cloud Web, Desktop, Gateway, and Cloud API must not couple to a local
   OpenWiki checkout.
+
+## In-product knowledge stores
+
+For the dual SQLite vs Postgres ownership model of the built-in Knowledge area, see [Knowledge store ownership](knowledge-store-ownership.md).
