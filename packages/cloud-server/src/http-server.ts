@@ -19,7 +19,12 @@ import {
   routeAllowsOperationalToken,
   routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
-import { SSE_MAX_BUFFERED_BYTES, SSE_REPLAY_BATCH, SSE_TCP_KEEPALIVE_MS } from './http-routes/sse-limits.ts'
+import {
+  DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG,
+  SSE_MAX_BUFFERED_BYTES,
+  SSE_REPLAY_BATCH,
+  SSE_TCP_KEEPALIVE_MS,
+} from './http-routes/sse-limits.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleScimApiRoute } from './http-routes/scim.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
@@ -535,10 +540,10 @@ async function handleBillingWebhook(
 // Default per-org SSE connection cap when the resolver did not supply one. The
 // env var (OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG) is parsed once in the
 // central resolver and passed through CloudHttpServerOptions.maxSseConnectionsPerOrg.
-const DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG = 200
-
 function sseMaxConnectionsPerOrg(options: CloudHttpServerOptions): number {
   const value = options.maxSseConnectionsPerOrg
+  // Always enforce a positive cap (JOE-844). A missing/invalid option falls back to
+  // the documented default so multi-tenant pods cannot run uncapped by accident.
   return Number.isInteger(value) && (value as number) > 0 ? (value as number) : DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG
 }
 

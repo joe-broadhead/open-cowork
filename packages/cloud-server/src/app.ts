@@ -368,7 +368,11 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     // HTTP connection caps resolved/validated here (instead of read from process.env
     // inside the HTTP server) so they travel through CloudHttpServerOptions like every
     // other knob. Defaults preserve the previous in-server behaviour (200 / 10000).
-    maxSseConnectionsPerOrg: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG'), 200),
+    maxSseConnectionsPerOrg: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG'),
+      // Keep in sync with DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG (http-routes/sse-limits).
+      200,
+    ),
     maxConnections: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONNECTIONS'), 10_000),
     // SSE read-poll cadence (ms). The replay loop polls Postgres at this interval for the
     // life of each connection; operators trade delivery latency against control-plane query
