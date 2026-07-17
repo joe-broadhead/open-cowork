@@ -89,6 +89,84 @@ test('project directory grants allow main-owned session record directories', () 
   }
 })
 
+test('grant trust lookup uses inverted indexes without full session/workflow lists (JOE-896)', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-grant-index-'))
+  const sessionProject = join(userDataDir, 'session-project')
+  const workflowProject = join(userDataDir, 'workflow-project')
+  const otherProject = join(userDataDir, 'other-project')
+
+  try {
+    mkdirSync(sessionProject)
+    mkdirSync(workflowProject)
+    mkdirSync(otherProject)
+    process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+
+    const { clearConfigCaches } = await import('@open-cowork/runtime-host/config')
+    const {
+      clearSessionRegistryCache,
+      lookupSessionDirectoryTrust,
+      toSessionRecord,
+      upsertSessionRecord,
+    } = await import('@open-cowork/runtime-host/session-registry')
+    const {
+      clearWorkflowStoreCache,
+      createWorkflow,
+      lookupWorkflowDirectoryTrust,
+    } = await import('@open-cowork/runtime-host/workflow/workflow-store')
+
+    clearConfigCaches()
+    clearSessionRegistryCache()
+    clearWorkflowStoreCache()
+
+    const sessionReal = realpathSync.native(sessionProject)
+    const workflowReal = realpathSync.native(workflowProject)
+    const otherReal = realpathSync.native(otherProject)
+
+    upsertSessionRecord(toSessionRecord({
+      id: `session-grant-${Date.now()}`,
+      title: 'Grant trust session',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: sessionReal,
+    }))
+    createWorkflow({
+      title: 'Grant trust workflow',
+      instructions: 'Run a small trusted workflow.',
+      agentName: 'build',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: workflowReal,
+      draftSessionId: null,
+      triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+    })
+
+    assert.equal(lookupSessionDirectoryTrust(sessionReal), 'session-record')
+    assert.equal(lookupSessionDirectoryTrust(otherReal), null)
+    assert.equal(lookupWorkflowDirectoryTrust(workflowReal), 'workflow-record')
+    assert.equal(lookupWorkflowDirectoryTrust(otherReal), null)
+
+    // Mirrors apps/desktop/src/main/ipc-handlers projectDirectoryGrants trust callback.
+    const trustLookup = (directory: string) => (
+      lookupSessionDirectoryTrust(directory) || lookupWorkflowDirectoryTrust(directory)
+    )
+    const grants = new ProjectDirectoryGrantRegistry(trustLookup)
+    assert.equal(grants.resolve(sessionProject), sessionReal)
+    assert.equal(grants.resolve(workflowProject), workflowReal)
+    assert.throws(() => grants.resolve(otherProject), /native directory picker/)
+  } finally {
+    const { clearConfigCaches } = await import('@open-cowork/runtime-host/config')
+    const { clearSessionRegistryCache } = await import('@open-cowork/runtime-host/session-registry')
+    const { clearWorkflowStoreCache } = await import('@open-cowork/runtime-host/workflow/workflow-store')
+    clearSessionRegistryCache()
+    clearWorkflowStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
 test('trusted record directory matching does not rebind through a later symlink replacement', () => {
   const parent = mkdtempSync(join(tmpdir(), 'open-cowork-record-rebind-'))
   const original = join(parent, 'project')

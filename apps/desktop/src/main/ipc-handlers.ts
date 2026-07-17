@@ -1,7 +1,7 @@
-import { listWorkflows as listWorkflowState } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { lookupWorkflowDirectoryTrust } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
-import { getSessionRecord, listSessionRecords } from '@open-cowork/runtime-host/session-registry'
+import { getSessionRecord, lookupSessionDirectoryTrust } from '@open-cowork/runtime-host/session-registry'
 import { setSessionHistoryChildLineageSeedHandler, syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
 import { addRuntimeSessionEventObserver, dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { configureSemanticUiBridge } from '@open-cowork/runtime-host/semantic-ui-bridge'
@@ -45,7 +45,7 @@ import type { IpcHandlerContext } from './ipc/context.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
 import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
-import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
+import { ProjectDirectoryGrantRegistry } from './directory-grants.ts'
 import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
 import {
   buildCustomAgentPermission,
@@ -169,16 +169,12 @@ export function setupIpcHandlers(
   const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
   const approvedSkillImportDirectories = new Map<string, string>()
 
+  // JOE-843 / JOE-896: inverted indexes on session + workflow project directories.
+  // Never listSessionRecords()/listWorkflows() (full clone/sort + runs) on this hot path.
   const projectDirectoryGrants = new ProjectDirectoryGrantRegistry((directory) => {
-    const knownSession = listSessionRecords().find((record) => (
-      trustedRecordDirectoryMatches(directory, record.directory)
-      || trustedRecordDirectoryMatches(directory, record.opencodeDirectory)
-    ))
-    if (knownSession) return 'session-record'
-    const knownWorkflow = listWorkflowState().workflows.find((workflow) => (
-      trustedRecordDirectoryMatches(directory, workflow.projectDirectory)
-    ))
-    return knownWorkflow ? 'workflow-record' : null
+    const sessionTrust = lookupSessionDirectoryTrust(directory)
+    if (sessionTrust) return sessionTrust
+    return lookupWorkflowDirectoryTrust(directory)
   })
 
   function normalizeDirectory(directory?: string | null) {
