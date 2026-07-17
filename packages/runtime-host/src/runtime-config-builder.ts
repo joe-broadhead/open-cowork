@@ -583,7 +583,7 @@ function buildRuntimeConfigWithCustomMcpsResult(
       }
       // JOE-837: HTTP MCPs only register from the DNS-aware pre-resolve map.
       // Sync/static path is stdio-only; never call it for remote MCPs.
-      let entry: ResolvedRuntimeMcpEntry | null = null
+      let entry: ResolvedRuntimeMcpEntry | null
       if (resolvedCustomMcpEntries) {
         entry = resolvedCustomMcpEntries.get(customMcp.name) || null
       } else if (customMcp.type === 'http') {

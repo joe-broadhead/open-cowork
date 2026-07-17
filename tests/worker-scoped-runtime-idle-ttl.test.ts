@@ -26,7 +26,6 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
   const store = seededStore()
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-idle-ttl-test-key'))
   const closed: string[] = []
-  let now = 1_000_000
 
   const runtime = createWorkerScopedRuntimeAdapter({
     paths: createCloudPathProvider(root),

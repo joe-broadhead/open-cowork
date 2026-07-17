@@ -4,8 +4,6 @@ import { nextSessionScopedFallbackId } from '@open-cowork/runtime-host/runtime-f
 import {
   normalizeMessagePart,
   normalizeSessionInfo,
-  normalizeToolAttachments,
-  normalizeToolOutputPaths,
 } from '@open-cowork/runtime-host'
 import { asRecord, deriveToolStatus, readRecordValue, readString } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
