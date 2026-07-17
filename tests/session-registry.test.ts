@@ -1,9 +1,22 @@
-import { clearSessionRegistryCache, flushSessionRegistryWrites, getSessionRecord, listSessionRecords, removeSessionRecord, SESSION_REGISTRY_SCHEMA_VERSION, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import {
+  clearSessionRegistryCache,
+  flushSessionRegistryWrites,
+  getSessionDirectoryTrustIndexSize,
+  getSessionRecord,
+  getSessionRecordCount,
+  listSessionRecords,
+  lookupSessionDirectoryTrust,
+  removeSessionRecord,
+  SESSION_REGISTRY_SCHEMA_VERSION,
+  toSessionRecord,
+  updateSessionRecord,
+  upsertSessionRecord,
+} from '@open-cowork/runtime-host/session-registry'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { closeLogger } from '@open-cowork/shared/node'
 function uniqueUserDataDir(name: string) {
@@ -271,6 +284,94 @@ test('session registry quarantines the removed unversioned array format', () => 
     assert.deepEqual(listSessionRecords(), [])
     assert.equal(existsSync(registryPath), false)
     assert.equal(existsSync(`${registryPath}.corrupt`), true)
+  } finally {
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('session directory trust index is O(1) and tracks upsert/update/remove (JOE-843)', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('directory-trust')
+  const projectDir = join(userDataDir, 'project-a')
+  const movedDir = join(userDataDir, 'project-b')
+  const sessionId = `session-trust-${Date.now()}`
+
+  try {
+    mkdirSync(projectDir, { recursive: true })
+    mkdirSync(movedDir, { recursive: true })
+    resetRegistryTestState(userDataDir)
+
+    assert.equal(lookupSessionDirectoryTrust(projectDir), null)
+    assert.equal(getSessionRecordCount(), 0)
+
+    upsertSessionRecord(toSessionRecord({
+      id: sessionId,
+      title: 'Trust index',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: projectDir,
+    }))
+
+    assert.equal(lookupSessionDirectoryTrust(projectDir), 'session-record')
+    assert.equal(lookupSessionDirectoryTrust(resolve(projectDir)), 'session-record')
+    assert.equal(lookupSessionDirectoryTrust(movedDir), null)
+    assert.ok(getSessionDirectoryTrustIndexSize() >= 1)
+    assert.equal(getSessionRecordCount(), 1)
+
+    updateSessionRecord(sessionId, { opencodeDirectory: movedDir })
+    assert.equal(lookupSessionDirectoryTrust(projectDir), null)
+    assert.equal(lookupSessionDirectoryTrust(movedDir), 'session-record')
+
+    removeSessionRecord(sessionId)
+    assert.equal(lookupSessionDirectoryTrust(movedDir), null)
+    assert.equal(getSessionRecordCount(), 0)
+  } finally {
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('listSessionRecords can skip full sort for hot paths (JOE-843)', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('unsorted-list')
+
+  try {
+    resetRegistryTestState(userDataDir)
+    const older = toSessionRecord({
+      id: 'session-older',
+      title: 'Older',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      opencodeDirectory: userDataDir,
+    })
+    const newer = toSessionRecord({
+      id: 'session-newer',
+      title: 'Newer',
+      createdAt: '2026-02-01T00:00:00.000Z',
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      opencodeDirectory: userDataDir,
+    })
+    // Insert newer first so insertion order differs from updatedAt order.
+    upsertSessionRecord(newer)
+    upsertSessionRecord(older)
+
+    const sorted = listSessionRecords()
+    assert.deepEqual(sorted.map((record) => record.id), ['session-newer', 'session-older'])
+
+    const unsorted = listSessionRecords({ sort: false })
+    assert.equal(unsorted.length, 2)
+    assert.ok(unsorted.some((record) => record.id === 'session-older'))
+    assert.ok(unsorted.some((record) => record.id === 'session-newer'))
+    // Unsorted path still returns clones, not live registry rows.
+    unsorted[0]!.title = 'mutated'
+    assert.notEqual(getSessionRecord(unsorted[0]!.id)?.title, 'mutated')
   } finally {
     clearSessionRegistryCache()
     clearConfigCaches()

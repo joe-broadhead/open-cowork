@@ -93,6 +93,31 @@ regenerated from disk on demand via `session-history-loader.ts`.
 Consequence: memory usage stays flat even with thousands of
 persisted sessions, because only a dozen are live at any moment.
 
+## Session registry scale notes (large thread counts)
+
+The on-disk session index (`sessions.json`) remains the source of
+truth for every local thread. In memory:
+
+- Session rows live in a `Map` keyed by id (`getSessionRecord` is O(1)).
+- An inverted **directory trust index** maps `resolve(directory)` →
+  session ids so project-directory grant checks do not clone/sort the
+  full registry (see `lookupSessionDirectoryTrust`).
+- `listSessionRecords()` still clones every row and sorts by
+  `updatedAt` for UI/list consumers. Hot paths that only need existence
+  or an id probe must use `getSessionRecord`,
+  `lookupSessionDirectoryTrust`, or `listSessionRecords({ sort: false })`
+  instead of `listSessionRecords().find(...)`.
+
+| Thread count | Expected behaviour |
+| --- | --- |
+| ≤ ~500 | Full sorted list is cheap; sidebar virtualization keeps the DOM flat. |
+| ~1k–5k | Prefer unsorted / indexed probes on grant and background paths; UI list remains sorted but is virtualized. |
+| 10k+ | Boot still reads the JSON registry linearly (not yet SQLite-backed). Trust lookups stay O(1) via the inverted index. Prefer thread-index / smart-filter surfaces over scanning every row in product UI. |
+
+Warm session details stay capped at 12 regardless of registry size;
+registry growth is storage and boot-parse cost, not live memory for
+chat views.
+
 ## Live session events
 
 Chat subscribes to `session:patch` / `sessionUpdated` /
@@ -238,9 +263,11 @@ that leaves the warm set.
   already exists and backs the sandboxed render path; what is not yet
   optimized is defaulting large-dataset display to server-side
   rendering.
-- **Session registry indexing** — 10k sessions on disk read linearly
-  on every boot. Needs a lightweight index (SQLite or a sidecar
-  B-tree) before the app targets long-term heavy users.
+- **Session registry on-disk format** — 10k sessions on disk still
+  read linearly on every boot. Directory grant trust is now O(1) via
+  an in-memory inverted index, but the boot parse itself still wants a
+  lightweight on-disk index (SQLite or a sidecar B-tree) before the app
+  targets long-term heavy users.
 - **Per-org concurrency-counter write ceiling** — cloud concurrency
   quotas are kept in `cloud_concurrency_counters` as one row per
   `(org, counter_key)`, giving O(1) quota reads. The write side is a
