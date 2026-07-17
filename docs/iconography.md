@@ -22,12 +22,18 @@ that contains the icon.
 | Product meaning | Lucide wrapper name |
 | --- | --- |
 | Home | `home` |
-| Agents | `bot` |
-| People / collaborators | `users` |
-| Workflows | `workflow` |
-| Tools and skills | `blocks` |
-| Tools / actions | `wrench` |
+| Projects | `folder` |
+| Knowledge | `book-open` |
+| Approvals | `circle-help` |
+| Team (coworkers) | `users` |
+| Playbooks | `workflow` |
+| Channels | `activity` |
+| Tools & Skills | `blocks` |
+| Artifacts | `file` |
+| Admin | `shield-check` |
 | Health / readiness | `heart-pulse` or `activity` |
+| Tools / actions | `wrench` |
+| Coworker (portrait / detail) | `bot` |
 | Search | `search` |
 | Settings | `settings-2` |
 | Sidebar toggle | `panel-left` |
@@ -36,8 +42,7 @@ that contains the icon.
 | Stop | `square` |
 | Model / intelligence | `sparkles` |
 | Reasoning | `brain` |
-| Folder / project | `folder` |
-| Fork thread | `git-fork` |
+| Fork project chat | `git-fork` |
 | Confirm / selected | `check` |
 | Close / dismiss | `x` |
 | More options / select | `chevron-down` |

@@ -54,12 +54,12 @@ own branding, providers, skills, and workflows.
 
 <div class="grid cards" markdown>
 
--   :material-source-branch:{ .lg } **Project & sandbox threads**
+-   :material-source-branch:{ .lg } **Project & sandbox chats**
 
     ---
 
-    Real-filesystem project threads for code work. Private,
-    Cowork-managed sandbox threads for reports, drafts, and artifacts —
+    Real-filesystem project chats for code work. Private,
+    Cowork-managed sandbox chats for reports, drafts, and artifacts —
     no risk of polluting your repo.
 
     [:octicons-arrow-right-24: Desktop App Guide](desktop-app.md)
@@ -106,12 +106,12 @@ own branding, providers, skills, and workflows.
 
     [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
 
--   :material-account-multiple:{ .lg } **Sub-agent delegation**
+-   :material-account-multiple:{ .lg } **Team coworker delegation**
 
     ---
 
-    Use `@agent` in chat to invoke specialist sub-agents. Custom agents
-    compile down to native OpenCode agent definitions — no parallel
+    Use `@coworker` in chat to invoke specialist Team members. Custom
+    coworkers compile down to native OpenCode agent definitions — no parallel
     execution layer, no hidden indirection.
 
     [:octicons-arrow-right-24: Architecture](architecture.md)

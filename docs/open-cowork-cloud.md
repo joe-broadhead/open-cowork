@@ -222,11 +222,11 @@ Cloud Web cannot drift.
 
 The information architecture is split into two surfaces:
 
-- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, Knowledge, Channels, and Artifacts.
+- Workbench: Projects, Chat, Team, Tools & Skills, Playbooks, Knowledge, Channels, and Artifacts.
 - Admin: Org, Members, Profiles & Policy, BYOK, Connections, Billing, Gateway,
   Audit, Usage, and Diagnostics.
 
-The Threads and Chat panels are the first interactive workbench surfaces:
+The Projects and Chat panels are the first interactive workbench surfaces:
 
 - `GET /api/sessions` loads the user-scoped durable session list. It accepts
   `limit`, opaque `cursor`, `status`, `profileName`, and text query via `q` or
@@ -265,20 +265,20 @@ names, or object keys in long-lived state.
 
 The rest of the Workbench uses the same cloud API contract:
 
-- Agents are derived from the current profile's allowed agent list plus the
-  cloud-safe tool and skill catalog. Starting an agent creates a cloud thread
-  and pins that agent into the composer; execution still flows through the
-  cloud worker and OpenCode runtime.
+- Team (coworkers) is derived from the current profile's allowed agent list plus
+  the cloud-safe tool and skill catalog. Starting a coworker creates a cloud
+  project chat and pins that agent into the composer; execution still flows
+  through the cloud worker and OpenCode runtime.
 - Tools & Skills browse `/api/capabilities`, including source, scope, agent
   relationships, and policy notes. The browser renders cloud-safe metadata
   only; custom content that is synced but disabled by profile policy is shown as
   unavailable rather than exposed with local process details or secrets.
-- Workflows use `/api/workflows` for durable definitions and run history,
+- Playbooks use `/api/workflows` for durable definitions and run history,
   `POST /api/workflows/:id/run` for manual runs, and the pause/resume/archive
-  routes for lifecycle changes. Manual runs can open the generated run thread so
+  routes for lifecycle changes. Manual runs can open the generated run chat so
   users can inspect the same projection shown in Chat.
-- Artifacts includes a selected-thread browser plus selected-chat history from
-  the hydrated durable projection. Cross-thread artifact browsing remains
+- Artifacts includes a selected-chat browser plus selected-chat history from
+  the hydrated durable projection. Cross-chat artifact browsing remains
   deferred until Cloud exposes a durable artifact index API. Artifact bodies are
   still fetched only on explicit user action.
 
