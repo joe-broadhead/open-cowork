@@ -194,10 +194,12 @@ the MCP can be saved. Shell metacharacters, `..` segments, and
 redirection operators are all rejected.
 
 Package runners such as `npx`, `bunx`, and `uvx` remain explicit trust
-decisions. Adding an MCP that runs `npx some-package` is equivalent to
-trusting that package publisher and whatever version resolution selects.
-Prefer pinned package specs such as `some-package@1.2.3` for repeatable
-MCP configuration.
+decisions **and require a version-pinned package argument** (JOE-827).
+Floating names (`npx some-package`) and `@latest` / `@*` tags are rejected
+at save/validate time. Use `some-package@1.2.3`, scoped
+`@scope/name@1.2.3`, `uvx name==1.2.3`, or a local script path.
+Unpinned installs are equivalent to remote code execution under the MCP
+privilege boundary.
 
 ### MCP tool approvals
 

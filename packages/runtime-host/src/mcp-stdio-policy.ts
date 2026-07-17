@@ -19,6 +19,11 @@ const ALLOWED_BARE_COMMANDS = new Set([
   'java',
 ])
 
+// Package installers that can fetch remote code. Require a version/tag pin
+// (JOE-827) so floating latest installs are not the default trust model.
+const PACKAGE_RUNNERS = new Set(['npx', 'npm', 'pnpm', 'bunx', 'uvx', 'deno'])
+
+
 function hasPathSeparator(value: string) {
   return value.includes('/') || value.includes('\\')
 }
@@ -111,6 +116,57 @@ function basename(path: string) {
   return parts[parts.length - 1]!
 }
 
+function looksPinnedPackageSpec(spec: string) {
+  // Accept name@version, @scope/name@version, path/to.tgz, git+..., and
+  // explicit file: refs. Reject bare names and name@latest / name@* floaters.
+  const trimmed = spec.trim()
+  if (!trimmed || trimmed.startsWith('-')) return false
+  if (trimmed === 'latest' || trimmed === '*' || trimmed.endsWith('@latest') || trimmed.endsWith('@*')) return false
+  if (trimmed.includes('@') && !trimmed.startsWith('@')) {
+    const at = trimmed.lastIndexOf('@')
+    const version = trimmed.slice(at + 1)
+    return Boolean(version) && version !== 'latest' && version !== '*'
+  }
+  if (trimmed.startsWith('@')) {
+    // @scope/name@version — need a second @ for version
+    const rest = trimmed.slice(1)
+    const at = rest.lastIndexOf('@')
+    if (at <= 0) return false
+    const version = rest.slice(at + 1)
+    return Boolean(version) && version !== 'latest' && version !== '*'
+  }
+  if (trimmed.startsWith('file:') || trimmed.startsWith('git+') || trimmed.endsWith('.tgz') || trimmed.endsWith('.tar.gz')) {
+    return true
+  }
+  return false
+}
+
+function assertPackageRunnerPinned(name: string, command: string, args: string[]) {
+  const base = basename(command)
+  if (!PACKAGE_RUNNERS.has(base) && !PACKAGE_RUNNERS.has(command)) return
+
+  // Skip pure runtime flags until the package position. Common patterns:
+  // npx -y pkg@1.0.0 | npm exec --yes pkg@1 | bunx pkg@1 | uvx pkg==1.0
+  const packageArgs = args.filter((arg) => !arg.startsWith('-'))
+  if (packageArgs.length === 0) {
+    throw new Error(
+      `Local MCP "${name}" uses package runner "${command}" without a package argument. `
+      + `Provide a version-pinned package (e.g. package@1.2.3) or an absolute script path.`,
+    )
+  }
+  const spec = packageArgs[0]!
+  // uvx uses name==version or name@version
+  if ((base === 'uvx' || command === 'uvx') && spec.includes('==') && !spec.endsWith('==') && !spec.includes('==latest')) {
+    return
+  }
+  if (!looksPinnedPackageSpec(spec)) {
+    throw new Error(
+      `Local MCP "${name}" uses package runner "${command}" with unpinned package "${spec}". `
+      + `Pin a version (e.g. ${spec}@1.2.3) or use a local script path. Floating tags like @latest are not allowed.`,
+    )
+  }
+}
+
 export function validateCustomMcpStdioCommand(custom: Pick<CustomMcpConfig, 'name' | 'scope' | 'directory' | 'command' | 'args'>) {
   const command = custom.command?.trim() || ''
   if (!command) {
@@ -168,6 +224,7 @@ export function validateCustomMcpStdioCommand(custom: Pick<CustomMcpConfig, 'nam
         `Use a supported runtime like node, npx, python, uv, bun, or provide an absolute executable path.`,
       )
     }
+    assertPackageRunnerPinned(custom.name, command, args)
     return
   }
 
