@@ -141,7 +141,14 @@ const READ_ONLY_AMBIGUOUS_TOOL_NOUNS = new Set([
 function toolPatternLooksWriteCapable(pattern: string) {
   const lower = pattern.toLowerCase()
   if (hasNativeBashToolPattern([lower]) || hasNativeFileWriteToolPattern([lower])) return true
-  if (lower === '*' || /^mcp__[a-z0-9_-]+__\*$/.test(lower)) return true
+  // Namespace wildcards (Claude-style mcp__ns__* or OpenCode-style ns_*) are
+  // treated conservatively as write-capable unless the configured tool sets
+  // writeAccess: false.
+  if (
+    lower === '*'
+    || /^mcp__[a-z0-9_-]+__\*$/.test(lower)
+    || /^[a-z0-9][a-z0-9_-]*_\*$/.test(lower)
+  ) return true
   const tokens = lower.split(/[_:/.-]+/g).filter(Boolean)
   if (tokens.some((token) => WRITE_CAPABLE_TOOL_VERBS.has(token))) return true
   if (!tokens.some((token) => AMBIGUOUS_WRITE_TOOL_VERBS.has(token))) return false
@@ -151,6 +158,7 @@ function toolPatternLooksWriteCapable(pattern: string) {
 function isNamespaceWildcardToolPattern(pattern: string) {
   const lower = pattern.toLowerCase()
   return /^mcp__[a-z0-9_-]+__\*$/.test(lower)
+    || /^[a-z0-9][a-z0-9_-]*_\*$/.test(lower)
 }
 
 function configuredToolMatchesPattern(tool: ConfiguredTool, pattern: string) {

@@ -36,9 +36,9 @@ Use this skill when a user wants to create or update an OpenCode skill for Open 
    - `templates/*` for reusable output scaffolds
    - avoid extra files if the skill is simple enough to live in `SKILL.md`
 5. Use the `skills` MCP tools to save the bundle:
-   - `mcp__skills__get_skill_bundle` before editing an existing skill
-   - `mcp__skills__save_skill_bundle` to create or update the bundle
-   - `mcp__skills__list_skill_bundles` to inspect what already exists
+   - `skills_get_skill_bundle` before editing an existing skill
+   - `skills_save_skill_bundle` to create or update the bundle
+   - `skills_list_skill_bundles` to inspect what already exists
 6. Summarize what was created:
    - skill id
    - main purpose

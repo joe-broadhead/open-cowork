@@ -94,10 +94,12 @@ Capability
     permission surface for the tool and skill catalog.
 
 Tool
-:   An individual MCP-exposed function the model can call (e.g.
-    `mcp__charts__bar_chart`, `mcp__skills__save_skill_bundle`,
-    `mcp__skills__delete_skill_bundle`). Tools belong to MCPs;
-    capabilities aggregate them.
+:   An individual MCP-exposed function the model can call. OpenCode 1.18+
+    registers ids as `${server}_${tool}` (e.g. `charts_bar_chart`,
+    `skills_save_skill_bundle`, `time-keep_current_time`); Open Cowork
+    permission patterns also accept the Claude-style `mcp__server__tool`
+    form and dual-expand it. Tools belong to MCPs; capabilities aggregate
+    them.
 
 ## Playbooks & workflows
 

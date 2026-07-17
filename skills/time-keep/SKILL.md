@@ -8,35 +8,36 @@ description: Use the time-keep MCP for reliable time context - IANA timezone ops
 Open Cowork’s **only** agent time engine. Backed by the bundled
 [time-keep](https://github.com/joe-broadhead/time-keep) native MCP (stdio).
 
-**Always call the real tools** (function calling), for example
-`mcp__time-keep__current_time`. Prefer these over shell `date`, `bash`, or inventing
-times from model memory.
+**Always call the real tools** (function calling). OpenCode exposes them as
+`time-keep_<tool>` — for example `time-keep_current_time`. Prefer these over
+shell `date`, `bash`, or inventing times from model memory.
 
-If you do not see `mcp__time-keep__*` in your tool list, say so briefly and stop —
-do **not** invent CLI fallbacks or pretend to call MCP. The desktop app should list
-time-keep when the bundled MCP is connected (status bar MCP count).
+If you do not see `time-keep_*` tools (for example `time-keep_current_time`)
+in your tool list, say so briefly and stop — do **not** invent CLI fallbacks
+or pretend to call MCP. The desktop app should list time-keep when the
+bundled MCP is connected (status bar MCP count).
 
 ## Tool Map
 
-All tools are exposed as `mcp__time-keep__<tool>`:
+All tools are exposed as `time-keep_<tool>` (OpenCode MCP naming):
 
-| Need | Tool |
-|------|------|
-| Current time | `current_time` |
-| List timezones | `list_timezones` |
-| Timezone details + DST | `timezone_info` |
-| Convert between timezones | `convert_timezone` |
-| Calendar fields (weekday, ISO week, etc.) | `calendar_query` |
-| Date add/subtract | `date_arithmetic` |
-| Date difference | `date_diff` |
-| Parse/format dates | `date_format` |
-| Holiday check or list | `holidays` |
-| Business day counts | `business_days` |
-| Set a timer | `timer_set` |
-| Read a timer | `timer_get` |
-| List timers by tag | `timer_list` |
-| Delete a timer | `timer_delete` |
-| Check overdue timers | `timer_check` |
+| Need | Tool id |
+|------|---------|
+| Current time | `time-keep_current_time` |
+| List timezones | `time-keep_list_timezones` |
+| Timezone details + DST | `time-keep_timezone_info` |
+| Convert between timezones | `time-keep_convert_timezone` |
+| Calendar fields (weekday, ISO week, etc.) | `time-keep_calendar_query` |
+| Date add/subtract | `time-keep_date_arithmetic` |
+| Date difference | `time-keep_date_diff` |
+| Parse/format dates | `time-keep_date_format` |
+| Holiday check or list | `time-keep_holidays` |
+| Business day counts | `time-keep_business_days` |
+| Set a timer | `time-keep_timer_set` |
+| Read a timer | `time-keep_timer_get` |
+| List timers by tag | `time-keep_timer_list` |
+| Delete a timer | `time-keep_timer_delete` |
+| Check overdue timers | `time-keep_timer_check` |
 
 ## Guardrails
 

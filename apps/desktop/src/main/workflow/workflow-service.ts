@@ -119,9 +119,9 @@ function workflowDraftPrompt(sessionId: string) {
     '- whether a project directory is required',
     '- what output should be produced',
     '',
-    'When the workflow is clear, call mcp__workflows__preview_workflow and show the proposal to the user.',
+    'When the workflow is clear, call workflows_preview_workflow and show the proposal to the user.',
     `Set draftSessionId to "${sessionId}" on the preview draft so the saved workflow links back to this setup thread.`,
-    'Only after the user explicitly confirms, call mcp__workflows__create_workflow with the previewToken returned by the preview tool.',
+    'Only after the user explicitly confirms, call workflows_create_workflow with the previewToken returned by the preview tool.',
     'Do not reconstruct or change the draft in create_workflow.',
   ].join('\n')
 }

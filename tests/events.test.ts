@@ -166,7 +166,11 @@ test('getMcpStatus logs connected, auth-required, and failed MCP groups', async 
       { name: 'broken', connected: false, rawStatus: 'failed' },
     ])
     assert.ok(
-      lines.some((line) => line.includes('[mcp] Status: 1/3 connected needs-auth=[sheets] failed=[broken=failed]')),
+      lines.some((line) => (
+        line.includes('[mcp] Status: 1/3 connected')
+        && line.includes('needs-auth=[sheets]')
+        && line.includes('failed=[broken=failed]')
+      )),
       `expected grouped MCP status log, got ${JSON.stringify(lines)}`,
     )
   })

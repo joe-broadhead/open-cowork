@@ -224,7 +224,7 @@ function validatePermissionOverrideRules(draft: CustomAgentConfig): AgentDraftIs
       if (override.key === 'mcp' && !isMcpPermissionRulePattern(pattern)) {
         issues.push({
           code: `permission_rule_pattern_invalid_mcp_${index}`,
-          message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.',
+          message: 'MCP tools permission rule pattern must look like mcp__server__tool or server_tool (OpenCode form).',
         })
       }
     }

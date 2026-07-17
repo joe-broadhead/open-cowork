@@ -27,14 +27,14 @@ Create one durable workflow from a normal planning thread. The workflow should b
    - manual for user-started work
    - schedule for time-based recurrence
    - webhook for external event triggers
-4. Call `mcp__workflows__preview_workflow` before saving.
+4. Call `workflows_preview_workflow` before saving.
 5. Show the preview clearly and ask for explicit confirmation.
-6. Call `mcp__workflows__create_workflow` only after the user confirms the preview.
+6. Call `workflows_create_workflow` only after the user confirms the preview.
 
 ## Tool Guidance
 
-- `mcp__workflows__preview_workflow`: validate the proposed workflow and show what will be saved.
-- `mcp__workflows__create_workflow`: save the confirmed workflow. Use only after explicit user approval.
+- `workflows_preview_workflow`: validate the proposed workflow and show what will be saved.
+- `workflows_create_workflow`: save the confirmed workflow. Use only after explicit user approval.
 
 ## Guardrails
 
