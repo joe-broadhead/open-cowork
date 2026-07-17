@@ -22,7 +22,11 @@
       "types": "./dist/node/index.d.ts",
       "import": "./dist/node/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./ipc-security-errors": {
+      "types": "./dist/ipc-security-errors.d.ts",
+      "import": "./dist/ipc-security-errors.js"
+    }
   },
   "files": [
     "dist"
