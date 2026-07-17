@@ -529,6 +529,13 @@ export function App() {
     return () => window.removeEventListener('hashchange', listener)
   }, [navigateView, openExistingThread])
 
+  useEffect(() => {
+    const onOpenHealth = () => navigateView('health')
+    window.addEventListener('open-cowork:open-health-center', onOpenHealth)
+    return () => window.removeEventListener('open-cowork:open-health-center', onOpenHealth)
+  }, [navigateView])
+
+
   // Browser runtime: mirror view state into the URL hash. Plain assignment
   // creates history entries so browser Back/Forward walk the app's views (the
   // hashchange listener above applies them); the very first write replaces the
