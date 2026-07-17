@@ -21,6 +21,11 @@ import { log } from '@open-cowork/shared/node'
 
 const RECONNECT_INITIAL_MS = 250
 const RECONNECT_MAX_MS = 8_000
+// JOE-839: durable tails are long-lived SSE streams. Cap hubs (one per project
+// directory client) and sessions per hub so a long-running desktop cannot pin
+// unbounded OpenCode event streams.
+export const MAX_DURABLE_DIRECTORY_HUBS = 64
+export const MAX_DURABLE_SESSIONS_PER_DIRECTORY = 256
 
 export type DurableRawEventHandler = (raw: unknown) => void | Promise<void>
 
@@ -61,9 +66,27 @@ function waitForReconnect(signal: AbortSignal, delayMs: number) {
   })
 }
 
+function stopDurableSession(hub: DirectoryDurableHub, sessionId: string) {
+  const state = hub.sessions.get(sessionId)
+  if (!state) return
+  state.stopped = true
+  hub.sessions.delete(sessionId)
+}
+
 function ensureSessionState(hub: DirectoryDurableHub, sessionId: string): DurableSessionState {
   const existing = hub.sessions.get(sessionId)
-  if (existing) return existing
+  if (existing) {
+    // Touch as newest (approx LRU) so active streams survive eviction pressure.
+    hub.sessions.delete(sessionId)
+    hub.sessions.set(sessionId, existing)
+    return existing
+  }
+  while (hub.sessions.size >= MAX_DURABLE_SESSIONS_PER_DIRECTORY) {
+    const oldestId = hub.sessions.keys().next().value
+    if (typeof oldestId !== 'string') break
+    log('events', `Evicting durable session stream ${oldestId} under per-directory cap ${MAX_DURABLE_SESSIONS_PER_DIRECTORY}`)
+    stopDurableSession(hub, oldestId)
+  }
   const created: DurableSessionState = {
     sessionId,
     cursor: { lastSequence: -1 },
@@ -164,6 +187,15 @@ export function attachDirectoryDurableHub(options: {
       hub.sessions.clear()
       if (hubsByDirectory.get(key) === hub) hubsByDirectory.delete(key)
     },
+  }
+  // Evict the oldest directory hub before inserting so live project directories
+  // cannot accumulate unbounded global event subscriptions (JOE-839).
+  while (hubsByDirectory.size >= MAX_DURABLE_DIRECTORY_HUBS) {
+    const oldestKey = hubsByDirectory.keys().next().value
+    if (typeof oldestKey !== 'string') break
+    if (oldestKey === key) break
+    log('events', `Evicting durable directory hub under cap ${MAX_DURABLE_DIRECTORY_HUBS}: ${oldestKey}`)
+    hubsByDirectory.get(oldestKey)?.stop()
   }
   hubsByDirectory.set(key, hub)
   options.signal.addEventListener('abort', () => hub.stop(), { once: true })

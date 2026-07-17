@@ -274,6 +274,10 @@
       "types": "./dist/runtime-status.d.ts",
       "import": "./dist/runtime-status.js"
     },
+    "./bounded-map": {
+      "types": "./dist/bounded-map.d.ts",
+      "import": "./dist/bounded-map.js"
+    },
     "./runtime-tool-cache": {
       "types": "./dist/runtime-tool-cache.d.ts",
       "import": "./dist/runtime-tool-cache.js"
