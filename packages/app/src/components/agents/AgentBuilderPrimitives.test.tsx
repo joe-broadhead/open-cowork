@@ -81,12 +81,14 @@ describe('AgentBuilderPrimitives', () => {
     const onChange = vi.fn()
     render(<WorkbenchTabs tab="instructions" onChange={onChange} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Capabilities' }))
+    expect(screen.getByRole('radiogroup', { name: 'Agent builder sections' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Instructions' })).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Capabilities' }))
 
     expect(onChange).toHaveBeenCalledWith('capabilities')
-    expect(screen.getByRole('button', { name: 'Instructions' })).toHaveStyle({
-      color: 'var(--color-text)',
-    })
+    // Controlled component keeps the passed `tab` prop; parent owns selection state.
+    expect(screen.getByRole('radio', { name: 'Instructions' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('changes scope and prompts for project directories', () => {

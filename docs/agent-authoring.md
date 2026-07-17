@@ -29,10 +29,10 @@ the agent.
 1. Describe the role in normal language.
 2. The setup agent clarifies the routing description, required skills, required
    tools, write access, model preferences, and permission boundaries.
-3. The setup agent calls `mcp__agents__preview_agent` to show exactly what will
+3. The setup agent calls `agents_preview_agent` to show exactly what will
    be saved.
 4. The setup agent waits for explicit user confirmation.
-5. The setup agent calls `mcp__agents__save_agent`.
+5. The setup agent calls `agents_save_agent`.
 
 The `agents` MCP can only create, preview, read, update, or delete custom
 agents. Built-in agents are code-owned and read-only.

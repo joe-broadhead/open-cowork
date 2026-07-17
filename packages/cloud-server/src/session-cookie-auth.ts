@@ -120,8 +120,9 @@ function parseSignedSession(secret: string | Buffer, value: string): SignedSessi
 }
 
 export function createCloudSessionCookieManager(options: CloudSessionCookieOptions): CloudSessionCookieManager {
-  if (!options.secret || Buffer.byteLength(options.secret) < 16) {
-    throw new Error('Cloud session cookie secret must be at least 16 bytes.')
+  // JOE-828: align session cookie secret strength with envelope keys (≥32 bytes).
+  if (!options.secret || Buffer.byteLength(options.secret) < 32) {
+    throw new Error('Cloud session cookie secret must be at least 32 bytes.')
   }
   const sessionCookieName = options.sessionCookieName || DEFAULT_SESSION_COOKIE
   const csrfCookieName = options.csrfCookieName || DEFAULT_CSRF_COOKIE

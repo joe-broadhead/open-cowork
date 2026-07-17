@@ -56,3 +56,6 @@ pnpm-debug.log*
 credentials.json
 *.pem
 *.key
+
+# Vendored native time-keep binaries (fetched by scripts/fetch-time-keep-binaries.mjs)
+third_party/time-keep/platforms/

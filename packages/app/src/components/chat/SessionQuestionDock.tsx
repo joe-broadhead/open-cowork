@@ -3,7 +3,7 @@ import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { useEscape } from '../../hooks/useEscape'
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, Textarea } from '../ui'
+import { Badge, Button, Card, Textarea } from '@open-cowork/ui'
 
 type Props = {
   request: PendingQuestion

@@ -7,6 +7,26 @@ Full resolved configs must also declare `contractVersion: 1`, the current
 versioned downstream distribution contract. Partial overlays may omit it
 because they merge over the built-in default.
 
+## Product-mode schema surfaces (JOE-840)
+
+The packaged schema is a **thin compositor** over three product-mode fragments:
+
+| Surface | Fragment | Owns |
+| --- | --- | --- |
+| Desktop core | `schemas/config/desktop-core.schema.json` | Branding, auth, providers, agents, skills, MCPs, features, i18n, telemetry — no `cloud` / `gateway` trees |
+| Cloud | `schemas/config/cloud.schema.json` | `cloud` control plane + `cloudDesktop` |
+| Gateway | `schemas/config/gateway.schema.json` | `gateway` channel / standalone operator settings |
+
+Edit the fragments, then refresh the packaged root:
+
+```bash
+node scripts/compose-config-schema.mjs
+node scripts/compose-config-schema.mjs --check   # CI drift guard
+```
+
+Desktop-only distributors can treat `desktop-core` as the mental model and
+validation surface without carrying cloud theme/entitlement/gateway trees.
+
 ## Top-level sections
 
 The default upstream config is organized into:
@@ -27,6 +47,8 @@ The default upstream config is organized into:
 - `compaction`
 - `i18n`
 - `telemetry`
+- `cloud` / `cloudDesktop` (cloud surface)
+- `gateway` (gateway surface)
 
 ## Branding
 
@@ -107,8 +129,8 @@ renderer.
 
 `branding.sidebar.top.mediaSize` controls the logo/icon media size in pixels
 and defaults to `28`. Values must be between `16` and `96`. `mediaFit` accepts
-`vertical` or `horizontal`: leave it unset to preserve the legacy square
-bounding box, use `vertical` for square or tall marks whose height should define
+`bounded` (the explicit default square bounding box), `vertical`, or
+`horizontal`. Use `vertical` for square or tall marks whose height should define
 the sidebar presence, and use `horizontal` for wide wordmarks whose width should
 be fixed. `mediaAlign` accepts `start`, `center`, or `end` and controls
 icon/logo placement for icon-only or logo-only branding.
@@ -314,18 +336,24 @@ by OpenCode and lets OpenCode persist the credential inside the managed runtime
 home.
 
 For direct built-in providers, the model picker is runtime-backed: once the
-OpenCode runtime is running, Open Cowork overlays `client.provider.list()`
-models onto the static descriptor. That keeps OpenAI/Codex and downstream
-OpenCode-native provider model menus current without hardcoding every upstream
-model id in this repo.
+OpenCode runtime is running, Open Cowork overlays the **native V2** catalog
+(`client.v2.provider.list` + `client.v2.model.list`) onto the static
+descriptor. That keeps OpenAI/Codex and downstream OpenCode-native provider
+model menus current without hardcoding every upstream model id in this repo.
+
+**OpenRouter** is special-cased for managed V2 serve: Cowork composes
+`provider.openrouter` with `npm: @ai-sdk/openai-compatible`, the public
+OpenRouter base URL, and the API key from Settings (plus `auth.json` for
+classic CLI compatibility). Do not rely on models.dev's default
+`@openrouter/ai-sdk-provider` package inside packaged `opencode serve`.
 
 Downstream builds can reuse the same path for any OpenCode-native provider. Add
 the provider id to `providers.available`, add a descriptor with `"runtime":
 "builtin"`, and leave `models: []` if OpenCode should own the live model
-catalog. If OpenCode exposes provider auth for that id through
-`client.provider.auth()`, Open Cowork will show the returned OAuth methods and
-call OpenCode's `provider.oauth.authorize` / `provider.oauth.callback` APIs
-directly; the app does not implement provider-specific login logic.
+catalog. If OpenCode exposes provider auth for that id through V2 integration
+methods, Open Cowork will show the returned OAuth methods and call OpenCode's
+integration authorize/callback APIs directly; the app does not implement
+provider-specific login logic.
 
 ### Dynamic model catalogs
 
@@ -341,9 +369,9 @@ dynamic list is overlaid beneath them, deduplicated by id.
       "openrouter": {
         "name": "OpenRouter",
         "credentials": [ ... ],
-        "defaultModel": "deepseek/deepseek-v4-flash:free",
+        "defaultModel": "qwen/qwen3-coder-flash",
         "models": [
-          { "id": "deepseek/deepseek-v4-flash:free", "name": "DeepSeek V4 Flash (free)" },
+          { "id": "qwen/qwen3-coder-flash", "name": "Qwen3 Coder Flash" },
           { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4" }
         ],
         "dynamicCatalog": {
@@ -643,25 +671,19 @@ The upstream core ships these packaged-source MCPs:
 - `skills`
 - `workflows`
 
-It also ships three command-launched bundled MCPs (`type: local` with a
+It also ships one command-launched bundled MCP (`type: local` with a
 `command` launcher rather than a packaged `packageName`):
-- `openwiki` — OpenWiki knowledge base: fusion search, cited reads, claim
-  tracing, facts/takes, inbox and governance reads, graph queries, and
-  approval-gated inbox processing plus proposal-safe edit/fact/take/source
-  workflows (see [OpenWiki](openwiki.md))
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
   queries
-- `opencode-gateway` — durable work coordination: persistent
-  Initiatives/Issues, scheduler runs, teams, blueprints, project bindings,
-  environments, channel sends, and diagnostics. The bundled launcher uses the
-  Gateway operate tier: read-tier tools are auto-allowed, operate-tier tools
-  ask, and admin-tier tools are absent. OpenCode permission approval is
-  deliberately admin-tier; the operate surface exposes only safe rejection.
-  Gateway's hardened loopback rejects mutations without a capability token, so
-  this integration stays disabled until the user supplies the absolute path to
-  an owner-only operator-token file also configured in the Gateway daemon via
-  `OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE`. Do not use Gateway's
-  auto-provisioned admin token for this operate-tier client.
+
+OpenWiki and OpenCode Gateway are no longer shipped as default MCP entries.
+Current OpenWiki is an optional documentation CLI workflow (see
+[OpenWiki](openwiki.md)). OpenCode Gateway is an optional external durable-work
+coordinator with its own daemon, dashboard, OpenCode profile installer, and
+`gateway_*` MCP tools (see [OpenCode Gateway](opencode-gateway.md)). Add it as
+a user-managed or downstream MCP only when the local Gateway daemon and
+credential file are intentionally provisioned; do not bundle it as a default
+public app dependency.
 
 User-added MCPs are stored separately from the shipped config.
 
@@ -819,7 +841,7 @@ available from Build mode only, preserving Plan mode's read-only contract.
 
 Workflow setup has one reserved configured-agent contract:
 `workflow-designer`. When workflows are enabled, downstream builds should keep
-that agent id in `agents`; otherwise the Workflows page cannot open setup
+that agent id in `agents`; otherwise the Playbooks page cannot open setup
 threads. If a downstream build intentionally renames or removes it, update the
 workflow setup policy in code and config together.
 

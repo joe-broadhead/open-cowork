@@ -20,6 +20,7 @@
 // leave it unset / disabled to transmit nothing. Upstream ships disabled.
 
 import { getAppConfig } from './config-loader-core.js'
+import { getEffectiveSettings } from './settings.js'
 
 export const ADOPTION_TELEMETRY_SCHEMA = 'adoption/v1'
 const REMOTE_TIMEOUT_MS = 2000
@@ -277,7 +278,17 @@ function getRuntimeAdoptionConfig(): AdoptionTelemetryConfig {
   } catch {
     fromConfig = undefined
   }
-  return resolveAdoptionTelemetryConfig(fromConfig)
+  const resolved = resolveAdoptionTelemetryConfig(fromConfig)
+  // JOE-855: user privacy toggle gates transmission even when deploy config enables it.
+  try {
+    if (!getEffectiveSettings().privacyShareAnonymizedUsage) {
+      return { ...resolved, enabled: false }
+    }
+  } catch {
+    // If settings cannot load, fail closed (no adoption traffic).
+    return { ...resolved, enabled: false }
+  }
+  return resolved
 }
 
 // Process-wide singleton wired to the real app config + network transport.

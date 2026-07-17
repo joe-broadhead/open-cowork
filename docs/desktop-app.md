@@ -1,15 +1,42 @@
 # Desktop App Guide
 
-Open Cowork is being simplified around the surfaces that users already
-understand and that map cleanly onto OpenCode:
+Open Cowork’s product thesis is a focused workbench:
+**Chat / Team / Tools / Projects / Playbooks** (plus Home and Settings).
+
+Default sidebar nav when `features` is omitted or partial:
+
+**Primary (default on)**
 
 - `Home` — start a chat, attach context, choose a model, or @mention a coworker
-- `Chat` — the OpenCode session transcript, approvals, questions, files, and delegated coworker work
-- `Projects` — searchable project-chat history and saved work context
-- `Playbooks` — workflow-backed repeatable tasks created from Workflow Designer setup chats, with manual, scheduled, and webhook runs
+- `Projects` — searchable project-chat history, facets, tags, and saved filters
 - `Team` — built-in and custom OpenCode agents presented as coworkers with curated tools and skills
+- `Playbooks` — workflow-backed repeatable tasks created from Workflow Designer setup chats, with manual, scheduled, and webhook runs
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
-- `Settings` — appearance, models, permissions, storage, and workflow run behavior
+
+**Secondary Studio surfaces (default off — progressive disclosure)**
+
+These remain in the product and in docs, but stay hidden from default nav until
+enabled with `features.<key>: true` in `open-cowork.config.json` (or an overlay):
+
+- `Knowledge` — OpenWiki spaces, pages, proposals, and graph (`features.knowledge`)
+- `Approvals` — cross-session permission and question review queue (`features.approvals`)
+- `Channels` — gateway channel connections, bindings, and delivery status (`features.channels`)
+- `Artifacts` — library of generated files, charts, reports, and deliverables (`features.artifacts`)
+
+In-thread chat approvals, questions, and session artifacts still work when the
+secondary nav surfaces are off — only the dedicated Studio pages are gated.
+
+**Always available**
+
+- `Chat` — the OpenCode session transcript (entered from Home, Projects, or New chat), with in-thread approvals, questions, files, and delegated coworker work
+- `Settings` — appearance, models, permissions, storage, and playbook run behavior
+- `Admin` — cloud org administration when the signed-in principal has admin permissions (not shown for pure local Desktop)
+
+Feature keys: `projects`, `knowledge`, `approvals`, `team`, `playbooks`,
+`channels`, `tools`, `artifacts`. Primary keys default **on** when omitted;
+secondary keys default **off**. Set a key to `true`/`false` to override.
+See `isDesktopFeatureEnabled` / `DESKTOP_SECONDARY_FEATURE_KEYS` in
+`packages/shared/src/app-config.ts`.
 
 Desktop is one Open Cowork surface. Cloud, Gateway, Standalone Gateway, Mobile,
 and Teams naming and package boundaries are defined in
@@ -25,19 +52,27 @@ flowchart TD
     Home["Home<br/>composer · attachments · @coworker pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
     Projects["Projects<br/>search · facets · tags · saved context"]
+    Knowledge["Knowledge<br/>wiki spaces · proposals"]
+    Approvals["Approvals<br/>cross-session review queue"]
     Playbooks["Playbooks<br/>setup chats · triggers · runs"]
     Team["Team<br/>built-in + custom coworkers"]
+    Channels["Channels<br/>gateway connections"]
     ToolsSkills["Tools & Skills<br/>MCPs · skills · credentials"]
+    Artifacts["Artifacts<br/>files · charts · reports"]
     Settings["Settings<br/>models · permissions · storage"]
 
     Home -->|submit prompt| Chat
     Home -->|open recent work| Projects
     Projects -->|open project chat| Chat
+    Approvals -->|open session| Chat
+    Knowledge -->|linked sessions| Chat
     Chat -->|@coworker| Team
-    Chat -->|tool calls and artifacts| ToolsSkills
+    Chat -->|tool calls| ToolsSkills
+    Chat -->|outputs| Artifacts
     Playbooks -->|run chat| Chat
     Playbooks -->|uses coworkers| Team
     Playbooks -->|uses tools and skills| ToolsSkills
+    Channels -->|delivery sessions| Chat
     Settings -->|configure providers| Chat
     Settings -->|configure routing| Playbooks
 ```
@@ -142,6 +177,24 @@ is backed by OpenCode session/thread state and should optimize for fast recall:
 Projects can link to playbook runs, but it should stay focused on recall and
 reopening work.
 
+## Knowledge
+
+Knowledge is the OpenWiki surface for spaces, pages, proposal review, and the
+knowledge graph. It is a **secondary Studio surface (default off)** — enable
+with `features.knowledge: true` when you want durable notes next to Chat and
+Projects. Proposals remain review-gated; the surface does not invent a second
+execution runtime.
+
+See [OpenWiki Knowledge Base](openwiki.md) for the product contract.
+
+## Approvals
+
+Approvals is the cross-session review queue for pending permissions and
+questions. It is a **secondary Studio surface (default off)** — enable with
+`features.approvals: true` when users need a dedicated backlog page. OpenCode
+still owns the approval primitive; Chat continues to show in-thread gates
+whether or not this nav surface is enabled.
+
 ## Playbooks
 
 ![Playbooks page showing the Add playbook setup-chat entry point](assets/auto/workflows-overview.png)
@@ -180,6 +233,15 @@ Team surface should make it clear:
 Team UI can have a polished character feel, but the stats must stay grounded in
 real permissions, skills, tools, and runtime settings.
 
+## Channels
+
+Channels is the Studio surface for gateway channel connections (for example
+Telegram, Slack, email, or webhooks), bindings, and delivery status. It is a
+**secondary Studio surface (default off)** — enable with `features.channels:
+true` when multi-surface users need channel health next to Team and Playbooks.
+Session operation for Standalone Gateway remains authority-gated as described
+in [Product Contract](product-contract.md).
+
 ## Tools & Skills
 
 ![Tools & Skills page listing tools and skills with type, source, and tool counts](assets/auto/capabilities-tools.png)
@@ -194,6 +256,16 @@ Tools & Skills is the capability catalog. It should answer:
 
 Skills should be grouped and highlighted by the tools they use so users can
 understand the real authority behind a coworker or playbook.
+
+## Artifacts
+
+Artifacts is the library for generated files, charts, reports, and other
+deliverables produced by project chats and playbook runs. It is a **secondary
+Studio surface (default off)** — enable with `features.artifacts: true` when
+operators want a dedicated library page. In-session artifact cards still appear
+in Chat when the surface is off. The library should make it easy to reopen
+source chats, download or reveal files, and clean up storage without turning
+into a second file manager for the host OS.
 
 ## Settings
 

@@ -23,6 +23,11 @@ The renderer is organized as a stack. Each layer may import from the layers
 | **Infra** | `packages/app/src/lib`, `stores/`, `hooks/`, `browser/cowork-api.ts` | Cross-cutting runtime concerns: state stores, the cloud/desktop API bridge, transport. |
 | **Framework-agnostic core** | `packages/app/src/helpers/*`, `app-types.ts`, and `@open-cowork/shared` | Pure functions, types, formatting, and policy helpers with **no React and no upward imports**. |
 
+Renderer components import shared primitives directly from `@open-cowork/ui`.
+The renderer must not recreate a private `components/ui` barrel over the design
+system; app-owned wrappers such as `components/ui/Toaster.tsx` stay as explicit
+component imports.
+
 ### The "core imports nothing upward" rule
 
 The framework-agnostic core (`helpers/`, `app-types.ts`, and `@open-cowork/shared`)
@@ -63,9 +68,14 @@ backlogs — they may not grow past their pinned budget:
 
 | File | Budget | Decomposition backlog |
 | --- | --- | --- |
-| `browser/cowork-api.ts` | 1,446 | Split the browser cloud API facade by domain (sessions / threads / artifacts / workflows), mirroring the `cloud-client` domain barrels. |
 | `components/HomePage.tsx` | 630 | Extract the launchpad feed, quick-actions, and hero sections into feature components; HomeComposer and its shared interaction helpers already live under `components/home/`. |
-| `components/layout/Sidebar.tsx` | 960 | Extract the per-section nav groups into dedicated components. |
+
+JOE-884 decomposed the previous mega-files:
+
+- `browser/cowork-api.ts` → transport/SSE hub (`cowork-api-transport.ts`), channels
+  (`cowork-api-channels.ts`), plus prior admin/custom/transcript/support modules
+- `components/layout/Sidebar.tsx` → `SidebarBranding.tsx` + `WorkspaceSwitcher.tsx`
+- Desktop `event-message-handlers.ts` → native family in `event-message-native-handlers.ts`
 
 Budgets are ratchets: when a file shrinks, lower its budget; never raise a
 budget except to register a new, deliberately documented backlog. New code

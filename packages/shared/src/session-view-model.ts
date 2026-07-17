@@ -38,6 +38,7 @@ import {
   withTaskRun,
   withTaskTranscript,
 } from './session-view-task-runs.js'
+import { deriveSessionInteractionFlags } from './session-machine-reducers.js'
 import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.js'
 import { mergeStreamingStateFromExisting } from './session-view-streaming-state.js'
 
@@ -248,8 +249,13 @@ export function deriveVisibleSessionPatch(
 ): SessionView {
   const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById, state.messageReasoningById)
   const isBusy = currentSessionId ? busySessions.has(currentSessionId) : false
-  const isAwaitingPermission = currentSessionId ? awaitingPermissionSessions.has(currentSessionId) : false
-  const isAwaitingQuestion = state.pendingQuestions.length > 0
+  // Live machine tracks awaiting permission via a session set; questions live
+  // on the view state. Shared pure flags keep cloud mapping in lockstep (JOE-846).
+  const interaction = deriveSessionInteractionFlags({
+    isBusyOrGenerating: isBusy,
+    pendingApprovalCount: currentSessionId && awaitingPermissionSessions.has(currentSessionId) ? 1 : 0,
+    pendingQuestionCount: state.pendingQuestions.length,
+  })
   const taskRuns = ensureTaskRunTimingsForView(state.taskRuns, state.lastEventAt, timing)
   const executionPlan = deriveExecutionPlan(taskRuns, isBusy)
 
@@ -274,9 +280,9 @@ export function deriveVisibleSessionPatch(
     lastItemWasTool: state.lastItemWasTool,
     revision: state.revision,
     lastEventAt: state.lastEventAt,
-    isGenerating: isBusy && !isAwaitingPermission && !isAwaitingQuestion,
-    isAwaitingPermission,
-    isAwaitingQuestion,
+    isGenerating: interaction.isGenerating,
+    isAwaitingPermission: interaction.isAwaitingPermission,
+    isAwaitingQuestion: interaction.isAwaitingQuestion,
   }
 }
 
@@ -493,6 +499,7 @@ export function buildSessionStateFromItems(
     }
 
     if (item.type === 'message_reasoning') {
+      // Pure-style patch apply: helpers return replacement field bags; assign onto the local reducer state only.
       Object.assign(next, withMessageReasoning(next, {
         messageId: item.messageId || item.id,
         content: item.content || '',

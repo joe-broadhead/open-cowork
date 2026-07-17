@@ -6,7 +6,7 @@ import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from './ModalBackdrop'
 import { getModelContextLimit } from '../../helpers/model-info'
 import { McpStatusBadge } from '../chrome/McpStatusBadge'
-import { Badge, type BadgeTone } from '../ui'
+import { Badge, type BadgeTone } from '@open-cowork/ui'
 
 type MeterStyle = CSSProperties & {
   '--statusbar-meter-color': string

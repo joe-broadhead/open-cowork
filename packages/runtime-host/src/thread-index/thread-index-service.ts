@@ -135,6 +135,11 @@ function agentsFromRecordAndView(record: SessionRecord, view?: SessionView | nul
 function mcpNameForTool(toolName: string) {
   const trimmed = toolName.trim()
   if (!trimmed) return null
+  const claude = /^mcp__([a-z0-9][a-z0-9_-]*)__/i.exec(trimmed)
+  if (claude?.[1]) return claude[1]
+  // OpenCode 1.18+: `${server}_${tool}` — server is typically kebab-case (hyphens).
+  const openCode = /^([a-z0-9][a-z0-9-]*)_/i.exec(trimmed)
+  if (openCode?.[1]) return openCode[1]
   const dotIndex = trimmed.indexOf('.')
   if (dotIndex > 0) return trimmed.slice(0, dotIndex)
   const slashIndex = trimmed.indexOf('/')

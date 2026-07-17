@@ -1,0 +1,466 @@
+/* Domain: settings.css
+ * Ownership (JOE-851): Settings section rail/list and settings-adjacent control chrome.
+ * Entry: packages/app/src/styles/globals.css imports all domains.
+ */
+.settings-section-rail {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-inline-end: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-3);
+}
+
+.settings-section-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+}
+
+.settings-section-button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border: var(--border-width-1) solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  transition:
+    background var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.settings-section-button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.settings-section-button[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-text);
+}
+
+.settings-section-button > span:first-child {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: var(--lh-sm);
+}
+
+.settings-section-button > span:last-child {
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
+.settings-search-results {
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+}
+
+.settings-search-result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-block-end: var(--border-width-1) solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  padding: var(--space-2);
+  text-align: start;
+}
+
+.settings-search-result:last-child {
+  border-block-end: 0;
+}
+
+.settings-search-result:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.settings-search-result > span:last-child {
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
+.settings-wide-control {
+  width: 100%;
+}
+
+.settings-wide-control > .ui-segmented-control {
+  width: 100%;
+}
+
+.settings-runtime-source-control {
+  width: 260px;
+}
+
+.settings-permission-control {
+  width: 220px;
+}
+
+.settings-choice-card {
+  min-width: 0;
+}
+
+.settings-choice-card[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 72%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-elevated));
+  box-shadow: var(--ring-selected);
+}
+
+.settings-theme-card:hover:not(:disabled) {
+  transform: scale(1.01);
+}
+
+.settings-mini-badge {
+  min-height: auto;
+  border-radius: var(--radius-xs);
+  padding: 1px var(--space-2);
+  font-size: 9px;
+  line-height: 12px;
+  text-transform: uppercase;
+}
+
+.settings-model-list {
+  max-height: 420px;
+  overflow: auto;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.settings-model-list-option {
+  border: 0;
+  border-block-end: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-model-list > div:last-child .settings-model-list-option {
+  border-block-end: 0;
+}
+
+.settings-model-list-option[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.settings-action-card {
+  width: 100%;
+}
+
+.settings-action-card:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.settings-danger-card {
+  border-color: color-mix(in srgb, var(--color-red) 40%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-red) 6%, transparent);
+}
+
+.settings-content-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.settings-content-heading {
+  border-block-end: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-4) var(--space-5);
+}
+
+.settings-content-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+/* Canonical on/off toggle (the <Switch> primitive — `.ui-switch`, `--on`,
+   `__thumb`) is single-sourced in @open-cowork/ui controlsSurfaceCss(), injected
+   via studioSurfaceStyles() at renderer startup, so desktop and web match. */
+
+@media (max-width: 860px) {
+  .settings-dialog-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-section-rail {
+    border-block-end: var(--border-width-1) solid var(--color-border-subtle);
+    border-inline-end: 0;
+  }
+
+  .settings-section-list {
+    max-height: calc(var(--space-12) * 3);
+  }
+
+  .settings-runtime-source-control,
+  .settings-permission-control {
+    width: 100%;
+  }
+}
+
+.statusbar-root {
+  background: color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%);
+}
+
+.statusbar-badge {
+  min-height: calc(var(--space-4) + var(--space-1));
+  padding: 0 var(--space-2);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
+.statusbar-meter {
+  position: relative;
+  display: inline-flex;
+  width: calc(var(--space-12) + var(--space-2));
+  height: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-border) 75%, transparent);
+}
+
+.statusbar-meter__fill {
+  display: block;
+  height: 100%;
+  background: var(--statusbar-meter-color, var(--color-text-muted));
+}
+
+.statusbar-meter__fill--compacting {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--statusbar-meter-color, var(--color-accent)) 40%, transparent);
+}
+
+.new-thread-error {
+  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+  background: color-mix(in srgb, var(--color-red) 10%, transparent);
+  color: var(--color-red);
+}
+
+.new-thread-trigger {
+  justify-content: flex-start;
+  background: var(--accent-action-fill);
+  border-color: var(--accent-line);
+  color: var(--accent-action-foreground);
+  /* Accent glow so the primary action reads as the lit element on the page. */
+  box-shadow: var(--shadow-1), var(--specular), 0 10px 28px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.new-thread-trigger:hover:not(:disabled) {
+  background: var(--accent-action-fill);
+  box-shadow: var(--shadow-2), var(--specular-strong), 0 14px 34px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* Hero accent: the time-of-day word in the greeting carries the aurora gradient
+   (periwinkle -> violet -> cyan) — the app's one signature "wow" gradient moment. */
+.studio-greeting-accent {
+  background-image: linear-gradient(112deg, var(--accent), var(--accent-2) 48%, #5fd6ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.ui-card.new-thread-menu-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.ui-card.new-thread-menu-option:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.ui-card.new-thread-menu-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.new-thread-menu-separator {
+  border-top: var(--border-width-1) solid var(--color-border-subtle);
+}
+
+/* `.ui-segmented-option` (base, hover, selected) is single-sourced in @open-cowork/ui
+   controlsSurfaceCss(), injected via studioSurfaceStyles() at renderer startup. */
+
+/* EmptyState + Skeleton primitive styles (+ the shimmer keyframe and its reduced-motion
+   guard) are single-sourced in @open-cowork/ui primitivesSurfaceCss(), injected via
+   studioSurfaceStyles() at renderer startup, so desktop and web render them identically. */
+
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ui-disclosure-in {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ui-spin {
+  animation: ui-spin 820ms linear infinite;
+}
+
+/* Status dot vocabulary — the canonical health indicator (MCP connections, and
+   any binary up/down/health state). A 7px semantic dot with a soft ring. THE ONE
+   heartbeat: an all-up state breathes; the instant anything goes down it stops
+   and shows a static ring — a problem must not breathe. */
+.mcp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}
+.mcp-dot--up {
+  background: var(--color-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent);
+  animation: mcp-heartbeat 2s var(--ease-out) infinite;
+}
+.mcp-dot--up-static {
+  background: var(--color-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent);
+}
+.mcp-dot--degraded {
+  background: var(--color-amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-amber) 18%, transparent);
+}
+.mcp-dot--down {
+  background: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 18%, transparent);
+}
+@keyframes mcp-heartbeat {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-green) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-green) 0%, transparent); }
+}
+
+/* Inline status dot — the general semantic indicator (health/run/workspace state)
+   that replaces filled status pills and colour-coded status glyphs everywhere.
+   A 7px dot with a soft ring; "live" breathes (reusing the heartbeat), the rest
+   are static. Pair with a neutral text label. */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}
+.status-dot--live {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  animation: mcp-heartbeat 2s var(--ease-out) infinite;
+}
+.status-dot--ok { background: var(--color-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent); }
+.status-dot--warn { background: var(--color-amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-amber) 18%, transparent); }
+.status-dot--error { background: var(--color-red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 18%, transparent); }
+.status-dot--info { background: var(--color-info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-info) 16%, transparent); }
+.status-dot--idle { background: var(--color-text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--live {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  }
+}
+
+
+/* Tabular settle — a changing count does a 1px flight-board flip so motion always
+   means "a real value updated" (static labels never animate). */
+.mcp-count,
+.count-settle {
+  display: inline-block;
+  animation: mcp-settle var(--dur-2) var(--ease-out);
+}
+@keyframes mcp-settle {
+  from { transform: translateY(1px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* @media (prefers-reduced-motion) only zeroes transition durations elsewhere, not
+   @keyframes animations — so these hand-authored pulses need their own guard. */
+@media (prefers-reduced-motion: reduce) {
+  .mcp-dot--up {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-green) 16%, transparent);
+  }
+  .mcp-count,
+  .count-settle {
+    animation: none;
+  }
+}
+
+.ui-progress-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-accent) 56%, transparent),
+    var(--color-accent),
+    color-mix(in srgb, var(--color-accent) 56%, transparent)
+  ) !important;
+  background-size: 220% 100% !important;
+  animation: ui-progress-shimmer 1.25s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-spin {
+    animation: none;
+  }
+
+  .ui-progress-shimmer,
+  .ui-tooltip,
+  .ui-toast-indicator,
+  .ui-popover,
+  .ui-dialog,
+  .ui-dialog-backdrop,
+  .chat-markdown-content--streaming > :last-child,
+  .chat-markdown-content--streaming > :last-child::after,
+  .chat-tool-details,
+  .ui-polish-list-row,
+  .ui-polish-list-row[data-polish-stagger],
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  .ui-button--primary:hover:not(:disabled)::after {
+    animation: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ui-tooltip,
+  .ui-toast-card,
+  .ui-popover,
+  .ui-dialog,
+  .theme-popover,
+  .ui-workbench-layout__review,
+  .ui-action-cluster,
+  .desktop-chat-workbench .ui-workbench-layout__review > aside {
+    background: var(--color-elevated);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.theme-popover {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-3), var(--specular-strong);
+}

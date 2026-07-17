@@ -2,7 +2,7 @@ import type { RefObject } from 'react'
 import { t } from '../../helpers/i18n'
 import { primaryAgentModeLabel } from '../../helpers/primary-agent-mode'
 import type { PrimaryAgentMode } from '../../stores/session'
-import { Badge, Button, Icon, IconButton } from '../ui'
+import { Badge, Button, Icon, IconButton } from '@open-cowork/ui'
 
 type ChatInputToolbarProps = {
   fileInputRef: RefObject<HTMLInputElement | null>
@@ -102,8 +102,9 @@ export function ChatInputToolbar({
             variant="ghost"
             size="sm"
             rightIcon="chevron-down"
+            aria-label={modelLabel || t('chat.chooseModel', 'Choose model')}
           >
-            {modelLabel}
+            {modelLabel || t('chat.chooseModel', 'Choose model')}
           </Button>
         </div>
 

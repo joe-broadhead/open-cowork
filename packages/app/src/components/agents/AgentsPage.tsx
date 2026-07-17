@@ -1,20 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  AgentBundle,
-  AgentCatalog,
-  BuiltInAgentDetail,
-  CustomAgentConfig,
-  CustomAgentSummary,
-  PublicAppConfig,
-  RuntimeAgentDescriptor,
-} from '@open-cowork/shared'
+  AgentBundle, AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary, PublicAppConfig, RuntimeAgentDescriptor, } from '@open-cowork/shared'
 import { AgentBuilderPage } from './AgentBuilderPage'
 import {
-  BuiltInSelectionCard,
-  CustomSelectionCard,
-  RuntimeSelectionCard,
-} from './AgentSelectionCard'
-import { Button, Dialog, EmptyState, ErrorState, Input, SegmentedControl, Skeleton, StudioPageHeader, toast } from '../ui'
+  BuiltInSelectionCard, CustomSelectionCard, RuntimeSelectionCard, } from './AgentSelectionCard'
+import { Button, Dialog, EmptyState, ErrorState, Input, SegmentedControl, Skeleton, StudioPageHeader } from '@open-cowork/ui'
+import { toast } from '../ui/Toaster'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'

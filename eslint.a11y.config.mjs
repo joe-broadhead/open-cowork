@@ -1,13 +1,18 @@
 // Dedicated a11y lint config used by `pnpm lint:a11y`. Runs as a
-// hard CI gate alongside the main lint step — any new violation
+// hard CI gate alongside the main lint step — any new *error* violation
 // blocks the PR. The two rules most likely to need judgement
 // (click-events-have-key-events, label-has-associated-control) were
 // promoted from warn to error after the renderer reached zero
 // violations; keeping them at warn risked drift back into tolerated
-// noise. Remaining warnings are retained for rules where the
-// community still disagrees on best practice
-// (no-noninteractive-element-interactions, no-static-element-interactions,
-// anchor-* inside SPA routers).
+// noise.
+//
+// JOE-893 policy (accepted warns — do NOT promote without product review):
+// - jsx-a11y/no-noninteractive-element-interactions (warn)
+// - jsx-a11y/no-static-element-interactions (warn)
+// - jsx-a11y/alt-text, heading-has-content, no-redundant-roles, anchor-* (warn)
+// CI does not fail on warns today; `pnpm lint:a11y` remains the gate for errors.
+// Unexpected *new error* rules must stay at error. To hard-fail warns, add
+// --max-warnings 0 in a dedicated follow-up once the warn set is zero.
 
 import tsParser from '@typescript-eslint/parser'
 import jsxA11yPlugin from 'eslint-plugin-jsx-a11y'

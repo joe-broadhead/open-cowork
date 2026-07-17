@@ -3,7 +3,6 @@
 This directory contains MCP servers that ship with Open Cowork.
 
 - `charts/` renders chart artifacts and exposes chart-generation tools.
-- `clock/` resolves current time, timezone conversions, date ranges, durations, and calendar math.
 - `skills/` manages local OpenCode skill bundles.
 - `agents/` previews and manages custom OpenCode agents through the app bridge.
 - `workflows/` previews and creates Open Cowork workflows through the app bridge.
@@ -25,7 +24,6 @@ Run package-specific builds from each MCP workspace when editing one:
 
 ```bash
 pnpm --dir mcps/charts build
-pnpm --dir mcps/clock build
 pnpm --dir mcps/skills build
 pnpm --dir mcps/agents build
 pnpm --dir mcps/workflows build

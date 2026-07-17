@@ -13,20 +13,20 @@ minimumReleaseAgeExclude:
   # Explicit hardening bump to the current OpenCode runtime/SDK release. Keep
   # these exact-version exceptions narrow so the 3-day cooldown remains the
   # default for fresh dependency resolution.
-  - '@opencode-ai/sdk@1.17.20'
-  - 'opencode-ai@1.17.20'
-  - 'opencode-darwin-arm64@1.17.20'
-  - 'opencode-darwin-x64@1.17.20'
-  - 'opencode-darwin-x64-baseline@1.17.20'
-  - 'opencode-linux-arm64@1.17.20'
-  - 'opencode-linux-arm64-musl@1.17.20'
-  - 'opencode-linux-x64@1.17.20'
-  - 'opencode-linux-x64-baseline@1.17.20'
-  - 'opencode-linux-x64-baseline-musl@1.17.20'
-  - 'opencode-linux-x64-musl@1.17.20'
-  - 'opencode-windows-arm64@1.17.20'
-  - 'opencode-windows-x64@1.17.20'
-  - 'opencode-windows-x64-baseline@1.17.20'
+  - '@opencode-ai/sdk@1.18.1'
+  - 'opencode-ai@1.18.1'
+  - 'opencode-darwin-arm64@1.18.1'
+  - 'opencode-darwin-x64@1.18.1'
+  - 'opencode-darwin-x64-baseline@1.18.1'
+  - 'opencode-linux-arm64@1.18.1'
+  - 'opencode-linux-arm64-musl@1.18.1'
+  - 'opencode-linux-x64@1.18.1'
+  - 'opencode-linux-x64-baseline@1.18.1'
+  - 'opencode-linux-x64-baseline-musl@1.18.1'
+  - 'opencode-linux-x64-musl@1.18.1'
+  - 'opencode-windows-arm64@1.18.1'
+  - 'opencode-windows-x64@1.18.1'
+  - 'opencode-windows-x64-baseline@1.18.1'
 
 onlyBuiltDependencies:
   - electron

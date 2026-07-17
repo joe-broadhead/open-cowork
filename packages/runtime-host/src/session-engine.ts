@@ -39,6 +39,44 @@ type SessionEngineOptions = {
   sequence?: SessionViewSequence
 }
 
+/**
+ * Deep-freeze a SessionView graph so getSessionView can return the cached object
+ * without letting callers mutate engine-owned state (JOE-868).
+ *
+ * Prefer clone+freeze-once over structuredClone-per-read: the view hot path is
+ * measured at hundreds of reads per tick in engine.view.large, and IPC already
+ * copies at the transport boundary.
+ */
+function deepFreezeSessionView<T>(value: T, seen: WeakSet<object> = new WeakSet()): T {
+  if (value === null || typeof value !== 'object') return value
+  const objectValue = value as object
+  if (seen.has(objectValue)) return value
+  seen.add(objectValue)
+
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreezeSessionView(item, seen)
+  } else {
+    for (const key of Object.keys(objectValue)) {
+      deepFreezeSessionView((objectValue as Record<string, unknown>)[key], seen)
+    }
+  }
+  return Object.freeze(value)
+}
+
+/**
+ * Produce a sealed boundary view from a freshly derived patch.
+ * Must clone first: deriveVisibleSessionPatch reuses arrays/objects from live
+ * session state, so freezing the derived object in place would freeze engine state.
+ */
+function sealSessionViewForRead(view: SessionView): SessionView {
+  try {
+    return deepFreezeSessionView(structuredClone(view))
+  } catch {
+    // SessionView is JSON-safe in practice; fall back to a shallow shell.
+    return deepFreezeSessionView({ ...view })
+  }
+}
+
 function upsertById<T extends { id: string }>(
   items: T[],
   item: T,
@@ -199,16 +237,21 @@ export class SessionEngine {
       && cached.busy === busy
       && cached.awaitingPermission === awaitingPermission
     ) {
+      // JOE-868: return the sealed (deep-frozen) boundary view. Identity is stable
+      // across cache hits for renderer memoization; freeze prevents mutation of
+      // the engine-owned graph without per-read structuredClone cost.
       return cached.view
     }
 
-    const view = deriveVisibleSessionPatch(
+    const derived = deriveVisibleSessionPatch(
       state,
       sessionId,
       this.busySessions,
       this.awaitingPermissionSessions,
       this.sessionViewTiming(),
     )
+    // Seal once when caching so cache hits stay O(1) and still mutation-safe.
+    const view = sealSessionViewForRead(derived)
     this.viewCacheById.set(sessionId, {
       revision: state.revision,
       lastEventAt: state.lastEventAt,
@@ -646,4 +689,10 @@ export class SessionEngine {
   }
 }
 
-export const sessionEngine = new SessionEngine()
+/** Factory for isolated engines (multi-tenant tests). Desktop uses {@link sessionEngine}. */
+export function createSessionEngine(): SessionEngine {
+  return new SessionEngine()
+}
+
+/** Process singleton for the desktop main process. Prefer {@link createSessionEngine} in tests. */
+export const sessionEngine = createSessionEngine()

@@ -334,3 +334,14 @@ test('assertBoundedVegaSpecCardinality ignores transform entries without a type'
     data: [{ name: 'source_0', values: [{ a: 1 }], transform: [{ as: 'b', calculate: 'datum.a' }] }],
   }))
 })
+
+
+test('chart-spec-safety bounds kde2d grid generators (JOE-829)', () => {
+  assert.throws(() => assertBoundedVegaSpecCardinality({
+    data: [{
+      name: 'table',
+      values: [{ x: 1, y: 2 }],
+      transform: [{ type: 'kde2d', size: [10000, 10000] }],
+    }],
+  }), /grid|cells|kde2d|max/i)
+})

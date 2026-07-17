@@ -4,7 +4,7 @@ import { PluginIcon } from '../plugins/PluginIcon'
 import { McpRestrictionPanel } from './McpRestrictionPanel'
 import { resolveMissingSkillTools } from './agent-builder-utils'
 import { t } from '../../helpers/i18n'
-import { Button, Input } from '../ui'
+import { Button, EmptyState, Input } from '@open-cowork/ui'
 
 type Props = {
   catalog: AgentCatalog
@@ -160,9 +160,17 @@ export function AgentCapabilitiesTab({
             detail={`${selectedSkillNames.length} selected`}
           />
           {catalog.skills.length === 0 ? (
-            <EmptyState text={t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Tools & Skills page.')} />
+            <EmptyState
+              icon="blocks"
+              title={t('skillLibrary.emptyTitle', 'No skills yet')}
+              body={t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Tools & Skills page.')}
+            />
           ) : skillGroups.length === 0 ? (
-            <EmptyState text="No skills matched your search." />
+            <EmptyState
+              icon="search"
+              title={t('skillLibrary.noMatchTitle', 'No matching skills')}
+              body={t('skillLibrary.noMatch', 'No skills matched your search.')}
+            />
           ) : (
             <div className="flex flex-col gap-3">
               {skillGroups.map((group) => (
@@ -188,9 +196,17 @@ export function AgentCapabilitiesTab({
             detail={`${selectedToolIds.length} selected`}
           />
           {catalog.tools.length === 0 ? (
-            <EmptyState text={t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Tools & Skills page.')} />
+            <EmptyState
+              icon="wrench"
+              title={t('toolLibrary.emptyTitle', 'No tools yet')}
+              body={t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Tools & Skills page.')}
+            />
           ) : filteredTools.length === 0 ? (
-            <EmptyState text="No tools matched your search." />
+            <EmptyState
+              icon="search"
+              title={t('toolLibrary.noMatchTitle', 'No matching tools')}
+              body={t('toolLibrary.noMatch', 'No tools matched your search.')}
+            />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-2.5">
               {filteredTools.map((tool) => (
@@ -490,14 +506,6 @@ function SectionHeader({ title, detail }: { title: string; detail: string }) {
     <div className="flex items-center justify-between mb-2">
       <h3 className="text-xs font-semibold text-text">{title}</h3>
       <span className="text-2xs text-text-muted">{detail}</span>
-    </div>
-  )
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="text-xs text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
-      {text}
     </div>
   )
 }

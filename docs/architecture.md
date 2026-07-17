@@ -113,7 +113,7 @@ Open Cowork exposes Desktop, Cloud Web, and Gateway surfaces through explicit
 workspace authorities:
 
 - **Desktop Local workspace** uses the local Electron main process and local
-  OpenCode runtime. Threads, local project paths, local stdio MCPs, machine
+  OpenCode runtime. Project chats, local project paths, local stdio MCPs, machine
   runtime config, local settings, and local artifacts remain on that device.
 - **Cloud workspace** uses Open Cowork Cloud as the control plane. Desktop and
   web clients sync because both read and write the same tenant-scoped cloud
@@ -176,44 +176,38 @@ workflows, channels, BYOK, billing, settings, and thread index code can be
 tested independently. Postgres row mappers live under `postgres-domains/`
 so SQL result shapes are owned beside their domain instead of being embedded
 in the compatibility store facade. HTTP routes live under `http-routes/`, and the
-`@open-cowork/cloud-client` package exposes both the backward-compatible
-top-level barrel and domain barrels under `src/domains/`.
+`@open-cowork/cloud-client` package exposes a deliberately tiny top-level
+adapter/error entry plus typed domain barrels under `src/domains/`.
 
-Cloud source files should stay below 2,000 lines. A handful of former facades
+Cloud source files should stay below 2,000 lines. The former facades below now
 carry explicit line budgets that are ratcheted to just above their current size
-so a decomposed file cannot silently re-grow. Most now sit under the 2,000-line
-limit; only `postgres-control-plane-store.ts` and the compatibility
-`session-service.ts` facade still exceed it today. These budgets are
-implementation backlogs, not target architecture:
+so a decomposed file cannot silently re-grow. These budgets are implementation
+backlogs, not target architecture:
 
-- `postgres-control-plane-store.ts` (budget 2,820 lines): the only file still
-  above the 2,000-line limit. Compatibility implementation for the full
+- `postgres-control-plane-store.ts` (budget 2,000 lines): decomposed below the
+  2,000-line limit and ratcheted. Compatibility implementation for the full
   Postgres-backed store plus webhook security store and managed work claim
-  fencing (now including the enterprise SSO + SCIM sync-queue delegation).
-  Domain row mappers belong in `postgres-domains/` / `postgres-store-domains/`.
-- `in-memory-control-plane-store.ts` (budget 1,750 lines): decomposed below the
+  fencing. Domain row mappers belong in `postgres-domains/` /
+  `postgres-store-domains/`.
+- `in-memory-control-plane-store.ts` (budget 1,620 lines): decomposed below the
   2,000-line limit and ratcheted. Compatibility implementation for the full
   domain store contract, including managed work claim fencing until the store
   contract is split further.
-- `http-server.ts` (budget 1,800 lines): decomposed below the 2,000-line limit
+- `http-server.ts` (budget 1,930 lines): decomposed below the 2,000-line limit
   and ratcheted. Compatibility Cloud HTTP/SSE entry point that wires shared
   route modules, HTML/CSP serving, pre-auth health, and streaming lifecycles
   while route handlers continue moving into `http-routes/`.
-- `session-service.ts` (budget 2,030 lines, ratcheted down from 2,720): a thin
-  orchestration **facade** whose real logic already lives in ~30 cohesive
-  sub-services it composes — `services/byok-service.ts`, `member-service.ts`,
-  `role-service.ts`, `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,
+- `session-service.ts` (budget 1,205 lines): a thin orchestration **facade**
+  whose real logic lives in cohesive sub-services it composes —
+  `services/byok-service.ts`, `member-service.ts`, `role-service.ts`,
+  `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,
   `channel-domain-service.ts`, `usage-governance-service.ts`,
   `entitlement-service.ts`, and more, plus `session-execution-operations.ts`,
-  `session-coordination-dispatch.ts`, and the projection service. About 156 of
-  its ~168 methods are one-line delegators; only a handful carry orchestration
-  logic. The remaining architectural drag is the **flat 168-method surface**
-  every route funnels through. The tightened budget freezes that surface — new
-  capabilities must be added to a sub-service, not as a new facade delegator —
-  and the staged next step (a large, route-by-route change) is to have HTTP
-  routes depend on the narrow sub-services directly, the way the store already
-  exposes `ProjectionControlPlaneStore` / `SessionControlPlaneStore` slices,
-  retiring the facade delegators domain by domain (#914).
+  `session-coordination-dispatch.ts`, and the projection service. Route-facing
+  CRUD/list operations now go through the explicit `service.domains.*` handle
+  instead of re-growing direct facade forwards. New capabilities must be added
+  to the owning sub-service/domain handle, not as another `CloudSessionService`
+  one-line delegator.
 
 New cloud domains should not be added to those exception files. Add a domain
 contract, service, route module, or client domain module first, then wire the
@@ -287,7 +281,7 @@ The Electron main process:
 - bridges IPC
 - manages window lifecycle
 - owns local storage, session registry access, and rebuildable sidecar
-  projections such as the Threads index
+  projections such as the Projects (thread-index) sidecar
 - enforces desktop-side policy and safety boundaries
 
 Code:
@@ -302,7 +296,7 @@ Code:
   `packages/runtime-host/src/mcp-stdio-policy.ts`,
   `packages/runtime-host/src/shell-env.ts` — policy and safety boundaries.
 - `packages/runtime-host/src/thread-index/thread-index-store.ts` and
-  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local Threads
+  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local Projects
   search/tag projection over the session registry and session history.
 
 ### 4. Event projection layer
@@ -318,14 +312,22 @@ This layer is responsible for:
 - notifications
 
 Code:
-- `apps/desktop/src/main/events.ts` — SSE subscription to the OpenCode
-  runtime.
+- `packages/shared/src/opencode-event-translator.ts` — **canonical** SDK
+  envelope normalize + product-kind classification (JOE-838). Desktop, Cloud,
+  and Standalone Gateway fan out only after this step.
+- `apps/desktop/src/main/events.ts` — control-plane SSE (`v2.event.subscribe`)
+  plus shared projection into the SessionEngine pipeline.
+- `apps/desktop/src/main/durable-session-events.ts` — per-session durable tails
+  (`v2.session.events`) started from prompt `admittedSeq`, with global-stream
+  transcript suppress for tracked sessions.
+- `packages/runtime-host/src/opencode-durable-session-events.ts` — shared cursor
+  and suppress helpers used by Desktop (and aligned with cloud/standalone).
 - `apps/desktop/src/main/event-subscriptions.ts` — subscription manager with
   retry and directory-scoped clients.
 - `apps/desktop/src/main/event-runtime-handlers.ts`,
   `apps/desktop/src/main/event-message-handlers.ts`,
   `apps/desktop/src/main/event-task-state.ts` — normalizers for each event
-  class.
+  class (including classic vs `session.next` family ownership).
 - `packages/runtime-host/src/session-engine.ts` — the state machine that applies
   normalized events and derives the view model.
 - `packages/runtime-host/src/session-history-loader.ts`,
@@ -343,9 +345,9 @@ The renderer owns:
 - navigation
 - chat UX
 - the welcoming Home composer
-- the Threads workspace for indexed history search, tags, saved filters, and
+- the Projects workspace for indexed history search, tags, saved filters, and
   suggestions
-- tools, skills, and agents UI
+- Team (coworkers), Tools & Skills, and secondary Studio surfaces
 - settings
 - artifact presentation
 
@@ -555,3 +557,5 @@ Upstream promise: every `v*` tag on this repo corresponds to
 a tested SDK pair. Forks that track our tags inherit that
 guarantee; forks that live off `master` own their own bisect if
 a drift lands between tags.
+
+See also [Cloud dual control-plane tax](cloud-dual-control-plane.md).

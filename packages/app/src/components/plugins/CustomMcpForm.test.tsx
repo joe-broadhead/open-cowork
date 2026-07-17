@@ -37,7 +37,7 @@ describe('CustomMcpForm', () => {
 
     render(<CustomMcpForm onSave={onSave} onCancel={onCancel} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'HTTP / SSE (remote)' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'HTTP / SSE (remote)' }))
     const checkbox = await screen.findByLabelText(/Allow private network/)
     fireEvent.click(checkbox)
 
@@ -69,7 +69,7 @@ describe('CustomMcpForm', () => {
 
     render(<CustomMcpForm onSave={vi.fn()} onCancel={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'HTTP / SSE (remote)' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'HTTP / SSE (remote)' }))
     fireEvent.change(screen.getByPlaceholderText('e.g. github, jira, slack'), {
       target: { value: 'jira' },
     })
@@ -82,7 +82,7 @@ describe('CustomMcpForm', () => {
     fireEvent.change(screen.getByPlaceholderText('Bearer ...'), {
       target: { value: 'Bearer test-token' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /Trusted, auto-approve/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /Trusted, auto-approve/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Add MCP' }))
 
     await waitFor(() => {

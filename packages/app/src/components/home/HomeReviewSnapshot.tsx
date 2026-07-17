@@ -1,5 +1,5 @@
 import { t } from '../../helpers/i18n'
-import { ReviewPanel, TaskLane } from '../ui'
+import { ReviewPanel, TaskLane } from '@open-cowork/ui'
 
 interface Props {
   pendingApprovals: number

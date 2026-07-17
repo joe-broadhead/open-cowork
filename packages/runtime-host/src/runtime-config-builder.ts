@@ -175,6 +175,16 @@ export function buildConfiguredDescriptorProviderRuntimeConfig(
     ...resolveEnvPlaceholders(descriptor.options || {}),
     ...credentialEntries,
   }
+  // Featured `models[]` entries are UI defaults. When a dynamic catalog is
+  // configured (OpenRouter), do not pin *only* those featured models — that
+  // made OpenCode reject every other catalog id with ModelUnavailableError.
+  // Instead publish featured models plus the currently selected model id so
+  // dynamic picks that are not yet in models.dev still resolve.
+  const hasDynamicCatalog = Boolean(
+    descriptor.dynamicCatalog
+    && typeof descriptor.dynamicCatalog === 'object'
+    && typeof (descriptor.dynamicCatalog as { url?: unknown }).url === 'string',
+  )
   const models = buildDescriptorModelRuntimeConfig(descriptor.models)
   const hasOptions = Object.keys(options).length > 0
 
@@ -186,7 +196,7 @@ export function buildConfiguredDescriptorProviderRuntimeConfig(
   // including GitHub Copilot in the pinned runtime, only appear after a
   // minimal provider config entry exists; those descriptors opt into
   // runtimeActivation: "config".
-  if (!hasOptions && !models) {
+  if (!hasOptions && !models && !hasDynamicCatalog) {
     return descriptor.runtimeActivation === 'config'
       ? { name: descriptor.name }
       : null
@@ -196,6 +206,32 @@ export function buildConfiguredDescriptorProviderRuntimeConfig(
     name: descriptor.name,
     ...(hasOptions ? { options } : {}),
     ...(models ? { models } : {}),
+  }
+}
+
+/**
+ * Ensure a selected dynamic-catalog model id is present in the composed
+ * provider models map so OpenCode can resolve it even when models.dev is stale.
+ */
+export function mergeSelectedModelIntoProviderConfig(
+  config: ProviderConfig | null,
+  providerId: string,
+  selectedModelId: string | null | undefined,
+): ProviderConfig | null {
+  if (!config) return null
+  const modelId = stripProviderPrefix(providerId, selectedModelId)
+  if (!modelId) return config
+  const existing = config.models || {}
+  if (existing[modelId]) return config
+  return {
+    ...config,
+    models: {
+      ...existing,
+      [modelId]: {
+        id: modelId,
+        name: modelId,
+      },
+    },
   }
 }
 
@@ -259,12 +295,50 @@ export function buildProviderRuntimeConfig(
   return result.config
 }
 
+/**
+ * models.dev builtins that also write credentials into managed auth.json for
+ * classic CLI/`opencode run` compatibility. V2 `serve` still needs an explicit
+ * composed provider block (see `buildOpenRouterProviderRuntimeConfig`).
+ */
+export function isModelsDevAuthJsonBuiltin(providerId: string) {
+  return providerId === 'openrouter'
+}
+
+/**
+ * OpenCode V2 session runner cannot load models.dev's default
+ * `@openrouter/ai-sdk-provider` package in managed `serve` (UnsupportedApiError),
+ * even though `opencode run` with the same auth works. Force the bundled
+ * openai-compatible AI SDK package and pass the API key + base URL so V2 can
+ * resolve catalog models such as `deepseek/deepseek-v4-flash`.
+ *
+ * Do not pin a `models` map here — leave the models.dev/dynamic catalog intact.
+ */
+export function buildOpenRouterProviderRuntimeConfig(
+  settings: CoworkSettings,
+): ProviderConfig | null {
+  const apiKey = getProviderCredentialValue(settings, 'openrouter', 'apiKey')
+  if (!apiKey) return null
+  return {
+    name: 'OpenRouter',
+    npm: '@ai-sdk/openai-compatible',
+    options: {
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+    },
+  }
+}
+
 function buildBuiltinProviderRuntimeConfig(
   providerId: string,
   settings: CoworkSettings,
 ) {
   const descriptor = getAppConfig().providers.descriptors?.[providerId]
   if (!descriptor) return null
+
+  if (providerId === 'openrouter') {
+    return buildOpenRouterProviderRuntimeConfig(settings)
+  }
+
   const credentialValues = Object.fromEntries(
     descriptor.credentials.flatMap((credential) => {
       const value = getProviderCredentialValue(settings, providerId, credential.key)
@@ -507,9 +581,20 @@ function buildRuntimeConfigWithCustomMcpsResult(
         })
         continue
       }
-      const entry = resolvedCustomMcpEntries
-        ? resolvedCustomMcpEntries.get(customMcp.name) || null
-        : resolveCustomMcpRuntimeEntry(customMcp)
+      // JOE-837: HTTP MCPs only register from the DNS-aware pre-resolve map.
+      // Sync/static path is stdio-only; never call it for remote MCPs.
+      let entry: ResolvedRuntimeMcpEntry | null
+      if (resolvedCustomMcpEntries) {
+        entry = resolvedCustomMcpEntries.get(customMcp.name) || null
+      } else if (customMcp.type === 'http') {
+        diagnostics.push({
+          scope: 'mcp',
+          message: `Skipping HTTP MCP ${customMcp.name}: requires DNS-aware runtime resolve (JOE-837). Use buildRuntimeConfigForRuntime.`,
+        })
+        continue
+      } else {
+        entry = resolveCustomMcpRuntimeEntry(customMcp)
+      }
       if (!entry) continue
       mcpConfig[customMcp.name] = entry
     }
@@ -565,13 +650,28 @@ function buildRuntimeConfigWithCustomMcpsResult(
     ...approvalCustomMcpPatterns,
   ]))
   const isMcpPattern = (pattern: string) => isKnownMcpToolPattern(pattern, mcpToolPatterns)
-  const allowedPatterns = rawAllowedPatterns.filter((pattern) => !isMcpPattern(pattern) || mcpPolicy === 'allow')
+  // First-party tools marked defaultAccess stay auto-allowed for their allowPatterns even
+  // when the user keeps the global MCP policy at "ask" (JOE-831). Mutation tools still use
+  // askPatterns (e.g. time-keep timer_set). This matches the old clock MCP UX.
+  const defaultAccessMcpAllow = new Set(
+    configuredTools
+      .filter((tool) => tool.defaultAccess === true)
+      .flatMap((tool) => getConfiguredToolAllowPatterns(tool))
+      .filter(isMcpPattern),
+  )
+  const allowedPatterns = Array.from(new Set([
+    ...rawAllowedPatterns.filter((pattern) => !isMcpPattern(pattern) || mcpPolicy === 'allow'),
+    ...(mcpPolicy === 'ask' || mcpPolicy === 'allow' ? Array.from(defaultAccessMcpAllow) : []),
+  ]))
   const askPatterns = Array.from(new Set([
     ...rawAskPatterns.filter((pattern) => !isMcpPattern(pattern)),
     ...(mcpPolicy === 'allow'
       ? rawAskPatterns.filter(isMcpPattern)
       : mcpPolicy === 'ask'
-        ? [...rawAllowedPatterns, ...rawAskPatterns].filter(isMcpPattern)
+        ? [
+          ...rawAllowedPatterns.filter((pattern) => isMcpPattern(pattern) && !defaultAccessMcpAllow.has(pattern)),
+          ...rawAskPatterns.filter(isMcpPattern),
+        ]
         : []),
   ]))
   const allToolPatterns = Array.from(new Set([

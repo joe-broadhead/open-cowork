@@ -9,17 +9,17 @@ export async function handleByokApiRoute(input: CloudApiRouteInput): Promise<boo
   }
 
   if (!providerId && !action && req.method === 'GET') {
-    tools.writeJson(res, 200, { secrets: await options.service.listByokSecrets(context.principal) }, options.corsOrigin)
+    tools.writeJson(res, 200, { secrets: await options.service.domains.byok.listSecrets(context.principal) }, options.corsOrigin)
     return true
   }
 
   if (providerId && !action && req.method === 'GET') {
-    tools.writeJson(res, 200, { secret: await options.service.getByokSecret(context.principal, providerId) }, options.corsOrigin)
+    tools.writeJson(res, 200, { secret: await options.service.domains.byok.getSecret(context.principal, providerId) }, options.corsOrigin)
     return true
   }
 
   if (providerId && action === 'validate' && req.method === 'POST') {
-    const secret = await options.service.validateByokSecret(context.principal, providerId)
+    const secret = await options.service.domains.byok.validateSecret(context.principal, providerId)
     tools.writeJson(res, 200, {
       secret,
       validated: secret?.status === 'active' && Boolean(secret.lastValidatedAt),
@@ -34,7 +34,7 @@ export async function handleByokApiRoute(input: CloudApiRouteInput): Promise<boo
       tools.writeError(res, 400, 'BYOK validation override requires a reason.', options.corsOrigin)
       return true
     }
-    const secret = await options.service.overrideByokSecretValidation(context.principal, providerId, reason)
+    const secret = await options.service.domains.byok.overrideValidation(context.principal, providerId, reason)
     tools.writeJson(res, 200, { secret, overridden: Boolean(secret) }, options.corsOrigin)
     return true
   }
@@ -50,7 +50,7 @@ export async function handleByokApiRoute(input: CloudApiRouteInput): Promise<boo
       tools.writeError(res, 400, 'BYOK credential requires exactly one of plaintext/apiKey/key/secret or kmsRef.', options.corsOrigin)
       return true
     }
-    const secret = await options.service.setByokSecret(context.principal, {
+    const secret = await options.service.domains.byok.setSecret(context.principal, {
       providerId,
       plaintext: plaintext || null,
       kmsRef: kmsRef || null,
@@ -60,7 +60,7 @@ export async function handleByokApiRoute(input: CloudApiRouteInput): Promise<boo
   }
 
   if (providerId && !action && req.method === 'DELETE') {
-    const secret = await options.service.disableByokSecret(context.principal, providerId)
+    const secret = await options.service.domains.byok.disableSecret(context.principal, providerId)
     tools.writeJson(res, 200, { secret, disabled: Boolean(secret) }, options.corsOrigin)
     return true
   }

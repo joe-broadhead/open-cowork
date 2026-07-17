@@ -16,6 +16,11 @@ export { CLOUD_SESSION_SSE_MAX_BUFFERED_BYTES as SSE_MAX_BUFFERED_BYTES } from '
 // when a full batch is returned), so delivery stays complete.
 export const SSE_REPLAY_BATCH = 1_000
 
+// Default concurrent browser/desktop SSE streams per org (JOE-844). Enforced by
+// CloudSseStreamRegistry on every session/workspace/channel-delivery SSE route.
+// Operators override via OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG.
+export const DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG = 200
+
 // TCP keep-alive probe interval applied to every SSE socket so the kernel detects a
 // half-open peer (gone without FIN/RST) instead of the gap only surfacing once the OS
 // send buffer fills. Independent of the app-level ': keep-alive' comments, which a dead

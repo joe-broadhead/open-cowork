@@ -1,18 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  SETUP_INTENTS,
-  type ProviderDescriptor,
-  type RuntimeLoadingPhase,
-  type RuntimeLoadingStatus,
-  type RuntimeStatus,
-  type SetupIntentId,
-} from '@open-cowork/shared'
+  SETUP_INTENTS, type ProviderDescriptor, type RuntimeLoadingPhase, type RuntimeLoadingStatus, type RuntimeStatus, type SetupIntentId, } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { getDocsBaseUrl } from '../helpers/brand'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
-import { Badge, Button } from './ui'
+import { Badge, Button, Input, Switch } from '@open-cowork/ui'
 import { BrandMark } from './BrandMark'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -275,10 +269,11 @@ export function SetupScreen({
   const connectionIsCurrent = connectionTest.status === 'success'
     && connectionTest.signature === currentConnectionSignature
   const connectionNeedsRetest = connectionTest.status === 'success' && !connectionIsCurrent
-  const setupProgress = connectionIsCurrent ? 3 : modelId.trim() ? 2 : providerId ? 1 : 0
+  // Minimal path progress: provider → model → ready for chat (connection test optional).
+  const setupProgress = canContinue ? 3 : modelId.trim() ? 2 : providerId ? 1 : 0
   const progressPercent = connectionTest.status === 'testing'
     ? phaseProgress[runtimeProgress?.phase || 'starting']
-    : connectionIsCurrent
+    : canContinue
       ? 100
       : Math.max(12, setupProgress * 28)
   const visibleRuntimeProgress = connectionTest.status === 'testing' || connectionIsCurrent
@@ -408,12 +403,30 @@ export function SetupScreen({
     }
   }
 
-  const handleContinue = () => {
-    if (!connectionIsCurrent) {
-      setError(t('setup.connectionRequired', 'Test this provider and model before continuing.'))
+  const handleContinue = async () => {
+    // Minimal path: provider → model (+ required credentials) → chat.
+    // Connection test remains available but does not block first success.
+    if (!canContinue) {
+      setError(t('setup.connectionMissingFields', 'Choose a provider, enter the required key, and choose a model before continuing.'))
       return
     }
-    onComplete()
+    setSaving(true)
+    setError(null)
+    try {
+      const saved = await saveSetupSelection()
+      if (!saved) return
+      // Best-effort runtime start so the first chat can open quickly.
+      try {
+        await window.coworkApi.runtime.restart()
+      } catch {
+        // Soft-fail: settings are saved; runtime can recover on first prompt.
+      }
+      onComplete()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -434,9 +447,9 @@ export function SetupScreen({
         <section aria-label={t('setup.progress', 'Setup progress')} className="rounded-2xl border border-border-subtle bg-elevated p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             {[
-              { label: t('setup.stepConnect', 'Connect a model'), done: setupProgress >= 1 },
+              { label: t('setup.stepConnect', 'Connect a provider'), done: setupProgress >= 1 },
               { label: t('setup.stepChoose', 'Choose model'), done: setupProgress >= 2 },
-              { label: t('setup.stepDone', 'Done'), done: setupProgress >= 3 },
+              { label: t('setup.stepDone', 'Start chatting'), done: setupProgress >= 3 },
             ].map((step, index) => (
               <div key={step.label} className="flex items-center gap-2 text-sm text-text-secondary">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${step.done ? 'border-accent bg-accent text-accent-foreground' : 'border-border-subtle text-text-muted'}`}>
@@ -541,7 +554,7 @@ export function SetupScreen({
                   return (
                     <label key={credential.key} className="flex flex-col gap-1.5">
                       <span className="text-sm font-medium text-text-secondary">{credential.label}</span>
-                      <input
+                      <Input
                         type={credentialIsSecret ? 'password' : 'text'}
                         value={selectedCredentials[credential.key] || ''}
                         onFocus={() => {
@@ -551,7 +564,6 @@ export function SetupScreen({
                         }}
                         onChange={(event) => updateCredential(credential.key, event.target.value)}
                         placeholder={credential.placeholder}
-                        className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-text-muted focus:border-accent/40"
                       />
                       <span className="text-xs text-text-muted">{credential.description}</span>
                     </label>
@@ -600,12 +612,11 @@ export function SetupScreen({
             ) : (
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-text-secondary">{t('setup.modelIdLabel', 'Model ID')}</span>
-                <input
+                <Input
                   type="text"
                   value={modelId}
                   onChange={(event) => setModelId(event.target.value)}
                   placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
-                  className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-text-muted focus:border-accent/40"
                 />
                 <span className="text-xs text-text-muted">
                   {t('setup.liveModelsHint', 'This provider fills its model list after sign-in.')}
@@ -616,8 +627,9 @@ export function SetupScreen({
         ) : null}
 
         <section className="rounded-2xl border border-border-subtle bg-elevated p-4">
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setAdvancedOpen((current) => !current)}
             className="flex w-full items-center justify-between gap-3 text-start"
             aria-expanded={advancedOpen}
@@ -631,7 +643,7 @@ export function SetupScreen({
               </span>
             </span>
             <span className="text-sm text-accent">{advancedOpen ? t('common.hide', 'Hide') : t('common.show', 'Show')}</span>
-          </button>
+          </Button>
 
           {advancedOpen ? (
             <div className="mt-4 flex flex-col gap-4">
@@ -671,15 +683,8 @@ export function SetupScreen({
                 </div>
               ) : null}
 
-              <div className="flex items-start gap-3 rounded-xl border border-border-subtle bg-base px-3.5 py-3">
-                <input
-                  id="setup-runtime-tooling-bridge"
-                  type="checkbox"
-                  checked={runtimeToolingBridgeEnabled}
-                  onChange={(event) => setRuntimeToolingBridgeEnabled(event.target.checked)}
-                  className="mt-0.5"
-                />
-                <label htmlFor="setup-runtime-tooling-bridge" className="flex min-w-0 cursor-pointer flex-col gap-1">
+              <div className="flex items-start justify-between gap-3 rounded-xl border border-border-subtle bg-base px-3.5 py-3">
+                <div className="flex min-w-0 flex-col gap-1">
                   <span id="setup-runtime-tooling-bridge-title" className="text-sm font-semibold text-text">
                     {t('setup.toolingBridgeTitle', 'Reuse developer tools from this Mac')}
                   </span>
@@ -689,7 +694,12 @@ export function SetupScreen({
                       'Allow coworkers to see standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for stricter isolation; you can change it later in Settings.',
                     )}
                   </span>
-                </label>
+                </div>
+                <Switch
+                  checked={runtimeToolingBridgeEnabled}
+                  onCheckedChange={(checked) => setRuntimeToolingBridgeEnabled(checked)}
+                  aria-labelledby="setup-runtime-tooling-bridge-title"
+                />
               </div>
             </div>
           ) : null}
@@ -697,7 +707,7 @@ export function SetupScreen({
 
         {connectionNeedsRetest ? (
           <div role="status" className="rounded-xl border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-amber">
-            {t('setup.connectionStale', 'The provider or model changed. Test the connection again before continuing.')}
+            {t('setup.connectionStale', 'The provider or model changed. Optionally re-test the connection, or continue to chat.')}
           </div>
         ) : null}
         {error ? (
@@ -725,9 +735,10 @@ export function SetupScreen({
           <Button
             variant="primary"
             fullWidth
-            onClick={handleContinue}
-            disabled={!connectionIsCurrent || saving}
-            disabledReason={!connectionIsCurrent ? t('setup.continueDisabled', 'Test this provider and model first.') : null}
+            onClick={() => void handleContinue()}
+            loading={saving && connectionTest.status !== 'testing'}
+            disabled={!canContinue || saving}
+            disabledReason={!canContinue ? t('setup.continueDisabled', 'Choose a provider, enter required credentials, and choose a model first.') : null}
           >
             {t('setup.continue', 'Get Started')}
           </Button>

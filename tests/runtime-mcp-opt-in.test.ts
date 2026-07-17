@@ -1,4 +1,10 @@
-import { evaluateBuiltInMcp, resolveBundledMcpNodeCommand, resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
+import {
+  evaluateBuiltInMcp,
+  pinHttpMcpRemoteEntry,
+  resolveBundledMcpNodeCommand,
+  resolveCustomMcpRuntimeEntry,
+  resolveCustomMcpRuntimeEntryForRuntime,
+} from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
@@ -108,13 +114,13 @@ test('evaluateBuiltInMcp — local MCP with required credentials present is read
 
 test('evaluateBuiltInMcp — external-command MCP whose binary is missing is skipped, not spawned', () => {
   withConfigDir(baseConfig({}), () => {
-    // Mirrors the bundled openwiki entry: an external CLI the user may not
-    // have installed. A missing binary must skip cleanly (install CTA), not
-    // reach the runtime and produce a confusing SDK spawn failure.
+    // External CLI MCPs the user may not have installed must skip cleanly
+    // (install CTA), not reach the runtime and produce a confusing SDK spawn
+    // failure.
     const mcp: BundleMcp = {
-      name: 'openwiki',
+      name: 'external-search',
       type: 'local',
-      description: 'OpenWiki knowledge base',
+      description: 'External search MCP',
       authMode: 'none',
       command: ['definitely-not-an-installed-binary-open-cowork-test', 'mcp', '--stdio'],
     }
@@ -125,25 +131,25 @@ test('evaluateBuiltInMcp — external-command MCP whose binary is missing is ski
 
 test('evaluateBuiltInMcp — external-command MCP resolves when the binary exists on PATH', () => {
   withConfigDir(baseConfig({}), () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'open-cowork-openwiki-bin-'))
-    const binary = join(binDir, 'openwiki')
+    const binDir = mkdtempSync(join(tmpdir(), 'open-cowork-external-search-bin-'))
+    const binary = join(binDir, 'external-search')
     writeFileSync(binary, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
     const previousPath = process.env.PATH
     process.env.PATH = `${binDir}:${previousPath || ''}`
     try {
       const mcp: BundleMcp = {
-        name: 'openwiki',
+        name: 'external-search',
         type: 'local',
-        description: 'OpenWiki knowledge base',
+        description: 'External search MCP',
         authMode: 'none',
-        command: ['openwiki', 'mcp', '--stdio', '--tools', 'proposal'],
+        command: ['external-search', 'server', '--stdio'],
       }
       const result = evaluateBuiltInMcp(mcp, { ...BASE_SETTINGS })
       assert.equal(result.status, 'ready')
       if (result.status !== 'ready') return
       assert.equal(result.entry.type, 'local')
       if (result.entry.type !== 'local') return
-      assert.deepEqual(result.entry.command, ['openwiki', 'mcp', '--stdio', '--tools', 'proposal'])
+      assert.deepEqual(result.entry.command, ['external-search', 'server', '--stdio'])
     } finally {
       process.env.PATH = previousPath
       rmSync(binDir, { recursive: true, force: true })
@@ -169,6 +175,18 @@ test('resolveBundledMcpNodeCommand uses Electron as Node in packaged builds', ()
   })
 })
 
+test('JOE-837: static resolveCustomMcpRuntimeEntry throws for HTTP MCPs (fail closed)', () => {
+  assert.throws(
+    () => resolveCustomMcpRuntimeEntry({
+      scope: 'machine',
+      name: 'remote-http',
+      type: 'http',
+      url: 'https://mcp.example.com/api',
+    }),
+    /DNS-aware runtime path|JOE-837|stdio-only/,
+  )
+})
+
 test('resolveCustomMcpRuntimeEntryForRuntime rejects public hostnames that resolve private', async () => {
   const entry = await resolveCustomMcpRuntimeEntryForRuntime({
     scope: 'machine',
@@ -180,6 +198,42 @@ test('resolveCustomMcpRuntimeEntryForRuntime rejects public hostnames that resol
   })
 
   assert.equal(entry, null)
+})
+
+test('resolveCustomMcpRuntimeEntryForRuntime pins cleartext HTTP MCP to resolved address (JOE-826)', async () => {
+  const pinned = pinHttpMcpRemoteEntry({
+    url: new URL('http://mcp.example.com:8080/api'),
+    resolvedAddresses: ['203.0.113.10'],
+    headers: { Authorization: 'Bearer t', Host: 'evil.example' },
+  })
+  assert.equal(pinned.url, 'http://203.0.113.10:8080/api')
+  assert.equal(pinned.headers?.Host, 'mcp.example.com:8080')
+  assert.equal(pinned.headers?.Authorization, 'Bearer t')
+
+  // HTTPS is not IP-pinned (SNI/cert require the original hostname).
+  const httpsPinned = pinHttpMcpRemoteEntry({
+    url: new URL('https://mcp.example.com/api'),
+    resolvedAddresses: ['203.0.113.10'],
+  })
+  assert.equal(httpsPinned.url, 'https://mcp.example.com/api')
+
+  const entry = await resolveCustomMcpRuntimeEntryForRuntime({
+    scope: 'machine',
+    name: 'http-pin',
+    type: 'http',
+    url: 'http://mcp.example.com/tools',
+    headers: { 'x-api-key': 'k' },
+  }, {
+    // Public unicast address that passes the non-routable/special-use blocks.
+    resolveHostname: async () => [{ address: '8.8.8.8', family: 4 }],
+  })
+  assert.ok(entry)
+  assert.equal(entry?.type, 'remote')
+  if (entry?.type === 'remote') {
+    assert.equal(entry.url, 'http://8.8.8.8/tools')
+    assert.equal(entry.headers?.Host, 'mcp.example.com')
+    assert.equal(entry.headers?.['x-api-key'], 'k')
+  }
 })
 
 test('evaluateBuiltInMcp — local MCP missing required credentials is skipped as not-configured', () => {
@@ -204,24 +258,24 @@ test('evaluateBuiltInMcp — local MCP missing required credentials is skipped a
   })
 })
 
-test('evaluateBuiltInMcp — Gateway operate tier fails closed until an operator token file is configured', () => {
+test('evaluateBuiltInMcp — API-token MCPs fail closed until a required token file is configured', () => {
   withConfigDir(baseConfig({}), () => {
     const mcp: BundleMcp = {
-      name: 'opencode-gateway',
+      name: 'operator-mcp',
       type: 'local',
-      description: 'Gateway operate tier',
+      description: 'Operator-scoped local MCP',
       authMode: 'api_token',
-      command: ['node', '/tmp/opencode-gateway.js', 'mcp', '--tools', 'operate'],
+      command: ['node', '/tmp/operator-mcp.js'],
       credentials: [
         {
           key: 'operatorTokenFile',
-          label: 'Gateway operator token file',
+          label: 'Operator token file',
           description: 'Owner-only operator token file.',
           required: true,
         },
       ],
       envSettings: [
-        { env: 'OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE', key: 'operatorTokenFile' },
+        { env: 'OPERATOR_MCP_TOKEN_FILE', key: 'operatorTokenFile' },
       ],
     }
 
@@ -233,8 +287,8 @@ test('evaluateBuiltInMcp — Gateway operate tier fails closed until an operator
     const result = evaluateBuiltInMcp(mcp, {
       ...BASE_SETTINGS,
       integrationCredentials: {
-        'opencode-gateway': {
-          operatorTokenFile: '/secure/opencode-gateway/operator-token',
+        'operator-mcp': {
+          operatorTokenFile: '/secure/operator-mcp/operator-token',
         },
       },
     })
@@ -243,9 +297,9 @@ test('evaluateBuiltInMcp — Gateway operate tier fails closed until an operator
     assert.equal(result.entry.type, 'local')
     if (result.entry.type !== 'local') return
     assert.deepEqual(result.entry.environment, {
-      OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE: '/secure/opencode-gateway/operator-token',
+      OPERATOR_MCP_TOKEN_FILE: '/secure/operator-mcp/operator-token',
     })
-    assert.equal('OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE' in (result.entry.environment || {}), false)
+    assert.equal('OPERATOR_MCP_ADMIN_TOKEN_FILE' in (result.entry.environment || {}), false)
   })
 })
 

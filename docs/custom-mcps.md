@@ -32,8 +32,9 @@ you control the server or have reviewed the service and its tool surface.
 2. Select **Add MCP**.
 3. Choose **Local stdio MCP** or **Remote HTTP / SSE MCP**.
 4. Enter a stable MCP id. Use lowercase words with hyphens or
-   underscores. This id becomes the runtime namespace, such as
-   `mcp__warehouse__*`.
+   underscores. This id becomes the runtime namespace. OpenCode tool ids look
+   like `warehouse_<tool>`; permission patterns accept both that form and
+   Claude-style `mcp__warehouse__*`.
 5. Add a clear label and description so users understand what the MCP can
    access.
 6. Optionally set chat trace labels, such as `ticket action` /

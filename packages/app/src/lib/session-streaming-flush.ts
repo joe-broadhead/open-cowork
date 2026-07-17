@@ -1,4 +1,4 @@
-import type { SessionViewState } from '@open-cowork/shared'
+import { scopeMessageSegmentId, type SessionViewState } from '@open-cowork/shared'
 import type { SessionPatch } from '@open-cowork/shared'
 type SessionStreamingFlushSnapshot = {
   currentSessionId: string | null
@@ -25,8 +25,13 @@ export function shouldCommitStreamingTextImmediately(
 
   const message = sessionState.messageById[part.messageId]
   if (!message) return true
+  // Message part maps are keyed by message-scoped segment ids (OpenCode V2 reuses
+  // bare part ids like text-0 across turns). Look up with the same scope used by
+  // withMessageText / withMessageReasoning so appends buffer instead of
+  // immediately re-merging into an existing segment.
+  const scopedSegmentId = scopeMessageSegmentId(part.messageId, part.segmentId)
   const segment = part.type === 'message_reasoning'
-    ? sessionState.messageReasoningById[part.segmentId]
-    : sessionState.messagePartsById[part.segmentId]
+    ? sessionState.messageReasoningById[scopedSegmentId]
+    : sessionState.messagePartsById[scopedSegmentId]
   return !segment || segment.content.length === 0
 }

@@ -103,8 +103,15 @@ concept per commit makes review much faster. Use a
 
 ## Where to look when orienting
 
+Desktop-only work can follow the short
+[Desktop contributor path](index.md#desktop-contributor-path) on the docs home
+page. Operate/deploy pages are a separate map for multi-authority production
+([Operate docs map](index.md#operate-docs-map)); skip them unless you change
+Cloud, Gateway, or release packaging.
+
 - [Architecture overview](architecture.md) — the ownership split
   between OpenCode and Cowork, the main-process layers.
+- [Desktop App Guide](desktop-app.md) — default Studio surfaces and product language.
 - [Configuration](configuration.md) — how `open-cowork.config.json`
   shapes everything user-visible, including downstream overlays.
 - [Downstream customization](downstream.md) — how a company forks

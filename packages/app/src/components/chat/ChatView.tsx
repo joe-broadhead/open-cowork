@@ -1,11 +1,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
-  buildTaskRunAgentBySourceSession,
-  resolveConversationTaskContext,
-  type CoordinationBoardPayload,
-  type PendingQuestion,
-} from '@open-cowork/shared'
+  buildTaskRunAgentBySourceSession, resolveConversationTaskContext, type CoordinationBoardPayload, type PendingQuestion, } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../../app-types'
 import { useSessionStore, type Message, type PendingApproval, type TaskRun } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
@@ -19,11 +15,10 @@ import { SessionQuestionDock } from './SessionQuestionDock'
 import { buildChatTimeline, messageSignature, type TimelineItem } from './chat-view-timeline'
 import { useChatAgentVisuals } from './useChatAgentVisuals'
 import {
-  isAgentRunFiltersEnabled,
-} from './agent-run-filter-model'
+  isAgentRunFiltersEnabled, } from './agent-run-filter-model'
 import { ChatThreadHeader } from './ChatThreadHeader'
 import { ChatTimelineItem } from './ChatTimelineItem'
-import { Button, WorkbenchLayout } from '../ui'
+import { Button, WorkbenchLayout } from '@open-cowork/ui'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -64,7 +59,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const [focusedTaskContextIds, setFocusedTaskContextIds] = useState<string[]>([])
   const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [autoFollowPaused, setAutoFollowPaused] = useState(false)
   const [transcriptAnnouncement, setTranscriptAnnouncement] = useState('')
   const announcedAssistantRef = useRef<{ sessionId: string | null; messageId: string | null }>({ sessionId: null, messageId: null })

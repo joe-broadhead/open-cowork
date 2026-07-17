@@ -802,7 +802,7 @@ export function ReviewPanel({
   )
 }
 
-export type ApprovalCardProps = ComponentPropsWithoutRef<'article'> & {
+export type StudioApprovalCardProps = ComponentPropsWithoutRef<'article'> & {
   title: string
   requester?: string
   body?: string
@@ -810,7 +810,7 @@ export type ApprovalCardProps = ComponentPropsWithoutRef<'article'> & {
   actions?: StudioAction[]
 }
 
-export function ApprovalCard({
+export function StudioApprovalCard({
   title,
   requester,
   body,
@@ -819,7 +819,7 @@ export function ApprovalCard({
   className,
   children,
   ...props
-}: ApprovalCardProps) {
+}: StudioApprovalCardProps) {
   return (
     <article {...props} className={cn('studio-decision-card', danger && 'studio-decision-card--danger', className)}>
       <div className="studio-decision-card__icon" aria-hidden="true">
@@ -903,9 +903,9 @@ export type StudioObjectCardProps = ComponentPropsWithoutRef<'article'> & {
   actions?: StudioAction[]
 }
 
-export type ArtifactCardProps = StudioObjectCardProps
+export type StudioArtifactCardProps = StudioObjectCardProps
 
-export function ArtifactCard(props: StudioObjectCardProps) {
+export function StudioArtifactCard(props: StudioObjectCardProps) {
   return <StudioObjectCard {...props} defaultIcon="file" className={cn('studio-object-card--artifact', props.className)} />
 }
 

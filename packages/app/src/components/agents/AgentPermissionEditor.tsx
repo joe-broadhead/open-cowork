@@ -1,11 +1,7 @@
 import { useMemo } from 'react'
 import type {
-  CustomAgentPermissionAction,
-  CustomAgentPermissionKey,
-  CustomAgentPermissionOverride,
-  CustomAgentPermissionRule,
-} from '@open-cowork/shared'
-import { Badge, Button, Card, Input, SegmentedControl, Select } from '../ui'
+  CustomAgentPermissionAction, CustomAgentPermissionKey, CustomAgentPermissionOverride, CustomAgentPermissionRule, } from '@open-cowork/shared'
+import { Badge, Button, Card, Input, SegmentedControl, Select } from '@open-cowork/ui'
 
 type Props = {
   value?: CustomAgentPermissionOverride[] | null

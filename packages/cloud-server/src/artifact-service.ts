@@ -391,7 +391,7 @@ export class CloudArtifactService {
     const createdAt = new Date().toISOString()
     const meta = resolveArtifactMetadataFields(input, createdAt)
     const body = decodeBase64(input.dataBase64)
-    await this.sessionService.assertArtifactUploadAllowed(principal, body.byteLength)
+    await this.sessionService.domains.usage.assertArtifactUploadAllowed(principal, body.byteLength)
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
       sessionId,
@@ -445,7 +445,7 @@ export class CloudArtifactService {
     // SEC-1: the minted PUT URL writes bytes STRAIGHT to the object store, bypassing the
     // pod. Reserve quota before returning it; finalize settles only the delta between this
     // expected-size reservation and the authoritative stored size.
-    await this.sessionService.reserveArtifactUploadQuota(principal, {
+    await this.sessionService.domains.usage.reserveArtifactUploadQuota(principal, {
       sessionId,
       artifactId,
       objectKey: key,
@@ -481,14 +481,14 @@ export class CloudArtifactService {
     if (existing) return existing
     const head = await this.objectStore.headObject(key)
     if (!head) throw new CloudServiceError(409, 'Cloud artifact upload was not found in object storage.')
-    const reservation = await this.sessionService.getArtifactUploadReservation(principal, { sessionId, artifactId })
+    const reservation = await this.sessionService.domains.usage.getArtifactUploadReservation(principal, { sessionId, artifactId })
     if (!reservation) {
       await this.objectStore.deleteObject(key)
       throw new CloudServiceError(409, 'Cloud artifact upload reservation was not found.')
     }
     if (reservation.status === 'expired' || Date.parse(reservation.expiresAt) <= Date.now()) {
       await this.objectStore.deleteObject(key)
-      await this.sessionService.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'expired' })
+      await this.sessionService.domains.usage.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'expired' })
       throw new CloudServiceError(409, 'Cloud artifact upload reservation expired.')
     }
     if (reservation.status === 'failed') {
@@ -497,15 +497,15 @@ export class CloudArtifactService {
     }
     if (head.size > MAX_ARTIFACT_BYTES) {
       await this.objectStore.deleteObject(key)
-      await this.sessionService.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
+      await this.sessionService.domains.usage.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
       throw new CloudServiceError(413, 'Artifact is too large.')
     }
     try {
-      await this.sessionService.settleArtifactUploadQuotaReservation(principal, { sessionId, artifactId, actualBytes: head.size })
+      await this.sessionService.domains.usage.settleArtifactUploadQuotaReservation(principal, { sessionId, artifactId, actualBytes: head.size })
     } catch (error) {
       if (error instanceof CloudServiceError) {
         await this.objectStore.deleteObject(key)
-        await this.sessionService.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
+        await this.sessionService.domains.usage.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
       }
       throw error
     }
@@ -557,13 +557,13 @@ export class CloudArtifactService {
       statusUpdatedBy: fields.statusUpdatedBy,
       statusUpdatedAt: fields.statusUpdatedAt,
     }
-    await this.sessionService.appendProductEvent(principal, sessionId, {
+    await this.sessionService.domains.usage.appendProductEvent(principal, sessionId, {
       eventId: `${sessionId}:artifact.created:${fields.artifactId}`,
       type: 'artifact.created',
       payload: record,
     })
     await this.sessionService.upsertCloudArtifactIndex(principal, record)
-    await this.sessionService.recordArtifactUploaded(principal, sessionId, fields.artifactId, fields.size)
+    await this.sessionService.domains.usage.recordArtifactUploaded(principal, sessionId, fields.artifactId, fields.size)
     this.sessionService.auditPrincipalAction(principal, {
       eventType: 'artifact.uploaded',
       targetType: 'artifact',
@@ -689,7 +689,7 @@ export class CloudArtifactService {
       statusUpdatedAt: now,
       updatedAt: now,
     }
-    await this.sessionService.appendProductEvent(principal, sessionId, {
+    await this.sessionService.domains.usage.appendProductEvent(principal, sessionId, {
       type: 'artifact.updated',
       payload: { ...publicArtifactRecord(next) },
     })
@@ -702,7 +702,7 @@ export class CloudArtifactService {
     if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const object = await this.objectStore.getObject(artifact.key)
     if (!object) throw new CloudServiceError(404, 'Cloud artifact object was not found.')
-    await this.sessionService.recordArtifactDownloaded(principal, sessionId, artifactId, object.body.byteLength)
+    await this.sessionService.domains.usage.recordArtifactDownloaded(principal, sessionId, artifactId, object.body.byteLength)
     this.sessionService.auditPrincipalAction(principal, {
       eventType: 'artifact.downloaded',
       targetType: 'artifact',
@@ -733,7 +733,7 @@ export class CloudArtifactService {
     if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const presigned = await this.objectStore.presignGet(artifact.key, options)
     if (!presigned) return null
-    await this.sessionService.recordArtifactDownloaded(principal, sessionId, artifactId, artifact.size)
+    await this.sessionService.domains.usage.recordArtifactDownloaded(principal, sessionId, artifactId, artifact.size)
     this.sessionService.auditPrincipalAction(principal, {
       eventType: 'artifact.downloaded',
       targetType: 'artifact',

@@ -12,14 +12,18 @@ concept's first definition is unclear elsewhere, it lives here.
 
 OpenCode
 :   The upstream open-source AI coding agent runtime. Open Cowork embeds it
-    via `@opencode-ai/sdk` and ships the OpenCode CLI binary alongside the
-    Electron app. All session execution, agents, approvals, and tool
-    semantics belong to OpenCode.
+    via `@opencode-ai/sdk/v2` (native V2 client) and ships the OpenCode CLI
+    binary alongside Desktop, Cloud workers, and gateway appliances. All
+    session execution, agents, approvals, and tool semantics belong to
+    OpenCode. A small classic-client allowlist remains only where V2 routes
+    are still unavailable (see `docs/opencode-sdk-v2-boundary.md`).
 
 Open Cowork
-:   The desktop product layer on top of OpenCode. Owns the UI, configuration
-    schema, workflow control plane, packaging, branding, and all
-    main-process safety policies. Does **not** own execution.
+:   The multi-surface product layer on top of OpenCode: **Desktop** (local
+    Electron), **Cloud** (web + control plane + workers), and **Gateway**
+    (channel adapters and/or standalone team appliances). Owns UI,
+    configuration schema, workflow control plane, packaging, branding,
+    workspaces, and safety policies. Does **not** own execution.
 
 Cowork
 :   Used as a verb in the UI ("What shall we cowork on today?"). Refers to
@@ -31,38 +35,44 @@ Composition
     and permissions, then handing the resulting config to OpenCode at
     startup. Composition is config-driven and downstream-overridable.
 
-## Sessions, threads & artifacts
+## Sessions, project chats & artifacts
 
 Session
 :   An OpenCode-owned conversation between the user and one or more agents.
     Sessions stream events (tool calls, text deltas, approvals) that the
     desktop app projects into a renderer-safe view model.
 
-Thread
-:   The user-facing container around a session. The sidebar lists threads,
-    not raw sessions. Threads come in two flavors:
+Project chat (thread)
+:   The user-facing container around a session. The sidebar and **Projects**
+    page list project chats, not raw OpenCode sessions. Internally the code
+    and IPC still say *thread* (`threads:search`, `thread-index.sqlite`).
+    Project chats come in two flavors:
 
-Project thread
-:   A thread bound to a real directory on the user's filesystem. The agent
-    has read/write access to that project. Use for code work and repo edits.
+Project-bound chat
+:   A project chat bound to a real directory on the user's filesystem. The
+    agent has read/write access to that project. Use for code work and repo
+    edits.
 
-Sandbox thread
-:   A thread bound to a private, Cowork-managed workspace. Outputs are
+Sandbox chat
+:   A project chat bound to a private, Cowork-managed workspace. Outputs are
     presented as artifacts. Use for reports, drafts, charts, and
     experimentation that should not pollute a real project.
 
 Artifact
-:   A first-class output of a sandbox thread (or any sandboxed work). Has
+:   A first-class output of a sandbox chat (or any sandboxed work). Has
     save-as, reveal-in-finder, and storage-cleanup affordances. Lives
-    outside the chat transcript.
+    outside the chat transcript. The **Artifacts** Studio surface is the
+    library for browsing them.
 
-## Agents, skills & tools
+## Team, skills & tools
 
-Agent
-:   An OpenCode role definition: instructions + permissions + tool/skill
-    bindings. Built-in (`plan`, `build`, etc.) or custom. Custom agents
-    compile into native OpenCode agent configs — there is no parallel
-    execution path.
+Coworker (agent)
+:   An OpenCode role definition presented in the product as a **coworker** on
+    the **Team** page: instructions + permissions + tool/skill bindings.
+    Built-in (`plan`, `build`, etc.) or custom. Custom coworkers compile into
+    native OpenCode agent configs — there is no parallel execution path.
+    Prefer **Team** / **coworker** in user-facing copy; **agent** remains the
+    OpenCode and code-level term.
 
 Skill bundle
 :   A reusable instruction package built around a `SKILL.md` entry point,
@@ -84,10 +94,12 @@ Capability
     permission surface for the tool and skill catalog.
 
 Tool
-:   An individual MCP-exposed function the model can call (e.g.
-    `mcp__charts__bar_chart`, `mcp__skills__save_skill_bundle`,
-    `mcp__skills__delete_skill_bundle`). Tools belong to MCPs;
-    capabilities aggregate them.
+:   An individual MCP-exposed function the model can call. OpenCode 1.18+
+    registers ids as `${server}_${tool}` (e.g. `charts_bar_chart`,
+    `skills_save_skill_bundle`, `time-keep_current_time`); Open Cowork
+    permission patterns also accept the Claude-style `mcp__server__tool`
+    form and dual-expand it. Tools belong to MCPs; capabilities aggregate
+    them.
 
 ## Playbooks & workflows
 
@@ -137,16 +149,62 @@ Allowed env placeholder
 
 ## UI surfaces
 
+Default Studio navigation (user-facing names):
+
+| Nav label | Purpose |
+| --- | --- |
+| **Home** | Landing composer and recent work |
+| **Projects** | Indexed project-chat history, tags, filters |
+| **Knowledge** | OpenWiki spaces, pages, and proposals |
+| **Approvals** | Cross-session review queue for permissions and questions |
+| **Team** | Built-in and custom coworkers |
+| **Playbooks** | Saved repeatable tasks (workflow definitions) |
+| **Channels** | Gateway channel connections and deliveries |
+| **Tools & Skills** | MCP tools, skills, and capability catalog |
+| **Artifacts** | Generated files, charts, and deliverables library |
+| **Settings** | Appearance, models, permissions, storage |
+
 Home
-:   The welcoming landing surface — single composer, recent threads,
-    @-agent suggestion pills. Submitting a prompt creates a new session
+:   The welcoming landing surface — single composer, recent project chats,
+    @-coworker suggestion pills. Submitting a prompt creates a new session
     and routes to Chat in one motion.
+
+Projects
+:   The full-history workspace for search, facets, tags, and saved filters
+    over project chats. See [Projects](projects.md).
+
+Team
+:   The coworker catalog (built-in + custom OpenCode agents). See
+    [Team](agent-authoring.md).
+
+Playbooks
+:   The product surface for saved repeatable tasks. See
+    [Playbooks and workflows](workflows.md).
 
 Tools & Skills
 :   The catalog page for tools, skills, and MCPs (built-in + custom).
     The visibility/permission surface.
 
-Approval
-:   A review gate that pauses an agent before a sensitive operation.
+Knowledge
+:   OpenWiki knowledge spaces and proposal review. See
+    [OpenWiki Knowledge Base](openwiki.md).
+
+Approvals
+:   Studio queue for pending permissions and questions across sessions.
+    OpenCode still owns the approval primitive; Chat also surfaces in-thread
+    gates.
+
+Channels
+:   Gateway channel setup, bindings, and delivery status.
+
+Artifacts
+:   Library of generated outputs across chats (charts, files, reports).
+
+Chat
+:   The live OpenCode session transcript (streamed events, in-thread
+    approvals, coworker tasks, artifacts).
+
+Approval (in-chat)
+:   A review gate that pauses a coworker before a sensitive operation.
     OpenCode owns the approval primitive; Open Cowork surfaces it in
-    chat.
+    Chat and on the Approvals page.

@@ -45,7 +45,7 @@
     "typecheck:standalone-gateway": "pnpm --filter @open-cowork/standalone-gateway typecheck",
     "typecheck:mcps": "pnpm --filter=./mcps/* typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
-    "lint": "eslint . --max-warnings 0 && pnpm design-tokens:check && node scripts/lint.mjs && node scripts/check-design-token-usage.mjs && node scripts/check-import-cycles.mjs && node scripts/build-docs-mermaid-vendor.mjs --check && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs",
+    "lint": "eslint . --max-warnings 0 && pnpm design-tokens:check && node scripts/lint.mjs && node scripts/check-design-token-usage.mjs && node scripts/check-import-cycles.mjs && node scripts/build-docs-mermaid-vendor.mjs --check && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs && pnpm lint:dead-code",
     "lint:dead-code": "knip --production --files --exports",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'packages/app/src/**/*.tsx' 'packages/ui/src/**/*.tsx'",
     "audit:prod": "node scripts/pnpm-audit.mjs --prod --audit-level moderate",
@@ -109,7 +109,8 @@
     "perf:bench": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts",
     "perf:baseline": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts --write",
     "perf:check": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts --check",
-    "clean": "pnpm -r exec rm -rf dist"
+    "clean": "pnpm -r exec rm -rf dist",
+    "binaries:time-keep": "node scripts/fetch-time-keep-binaries.mjs"
   },
   "engines": {
     "node": ">=22.13",
@@ -141,6 +142,7 @@
     "eslint-plugin-security": "^4.0.1",
     "globals": "^17.7.0",
     "knip": "^6.24.0",
+    "semver": "^7.8.5",
     "zod": "^4.4.3"
   }
 }

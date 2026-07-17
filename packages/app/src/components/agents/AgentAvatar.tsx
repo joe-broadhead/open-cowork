@@ -58,7 +58,7 @@ export function AgentAvatar({ name, color = 'accent', size = 'md', className = '
           style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-base) 55%, transparent)' }}
         />
       ) : (
-        <span className="font-[640] tracking-[-0.01em]" style={{ textShadow: '0 1px 1px rgba(12,13,15,0.45)' }}>
+        <span className="font-[640] tracking-[-0.01em]" style={{ textShadow: '0 1px 1px color-mix(in srgb, var(--color-base) 45%, transparent)' }}>
           {agentInitials(name)}
         </span>
       )}

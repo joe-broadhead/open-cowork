@@ -10,6 +10,8 @@ import { normalizeStoredSessionRecord, type StoredSessionRecord } from './sessio
 
 export const SESSION_REGISTRY_SCHEMA_VERSION = 1
 
+export type SessionDirectoryTrustSource = 'session-record'
+
 export interface SessionRecord {
   id: string
   title?: string
@@ -32,7 +34,18 @@ export interface SessionRecord {
   managedByCowork: true
 }
 
+export type ListSessionRecordsOptions = {
+  // UI list paths need newest-first ordering. Hot paths (grant trust, id probes,
+  // bulk scans that re-sort themselves) must pass sort:false so they never pay
+  // the O(n log n) clone+sort over the full registry.
+  sort?: boolean
+}
+
 let registryCache: Map<string, SessionRecord> | null = null
+// Inverted index: resolve(directory) → session ids that claim it via
+// `directory` or `opencodeDirectory`. Grant-trust and other directory probes
+// use this instead of cloning/sorting the full registry (JOE-843 / JOE-896).
+let directoryTrustIndex: Map<string, Set<string>> | null = null
 let saveTimer: NodeJS.Timeout | null = null
 let registryWriteInProgress = false
 let registryWriteRequestedDuringWrite = false
@@ -83,6 +96,60 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
   }
 }
 
+function directoryIndexKeysForRecord(record: SessionRecord): string[] {
+  const keys: string[] = []
+  if (record.directory) keys.push(resolve(record.directory))
+  if (record.opencodeDirectory) {
+    const opencodeKey = resolve(record.opencodeDirectory)
+    if (!keys.includes(opencodeKey)) keys.push(opencodeKey)
+  }
+  return keys
+}
+
+function ensureDirectoryTrustIndex(map: Map<string, SessionRecord>): Map<string, Set<string>> {
+  if (directoryTrustIndex) return directoryTrustIndex
+  const next = new Map<string, Set<string>>()
+  for (const record of map.values()) {
+    for (const key of directoryIndexKeysForRecord(record)) {
+      let holders = next.get(key)
+      if (!holders) {
+        holders = new Set()
+        next.set(key, holders)
+      }
+      holders.add(record.id)
+    }
+  }
+  directoryTrustIndex = next
+  return next
+}
+
+function unindexSessionDirectories(record: SessionRecord) {
+  if (!directoryTrustIndex) return
+  for (const key of directoryIndexKeysForRecord(record)) {
+    const holders = directoryTrustIndex.get(key)
+    if (!holders) continue
+    holders.delete(record.id)
+    if (holders.size === 0) directoryTrustIndex.delete(key)
+  }
+}
+
+function indexSessionDirectories(record: SessionRecord) {
+  const index = ensureDirectoryTrustIndex(loadRegistryMap())
+  for (const key of directoryIndexKeysForRecord(record)) {
+    let holders = index.get(key)
+    if (!holders) {
+      holders = new Set()
+      index.set(key, holders)
+    }
+    holders.add(record.id)
+  }
+}
+
+function replaceSessionInIndexes(previous: SessionRecord | null | undefined, next: SessionRecord) {
+  if (previous) unindexSessionDirectories(previous)
+  indexSessionDirectories(next)
+}
+
 function loadRegistryMap() {
   if (registryCache) return registryCache
 
@@ -90,6 +157,7 @@ function loadRegistryMap() {
   const path = getRegistryPath()
   if (!existsSync(path)) {
     registryCache = next
+    directoryTrustIndex = new Map()
     return next
   }
 
@@ -122,6 +190,8 @@ function loadRegistryMap() {
   }
 
   registryCache = next
+  directoryTrustIndex = null
+  ensureDirectoryTrustIndex(next)
   return next
 }
 
@@ -169,12 +239,41 @@ function scheduleRegistrySave() {
   }, SAVE_DEBOUNCE_MS)
 }
 
-export function listSessionRecords() {
-  return Array.from(loadRegistryMap().values())
-    .map(cloneSessionRecord)
-    .sort((a, b) => {
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    })
+export function listSessionRecords(options: ListSessionRecordsOptions = {}) {
+  const records = Array.from(loadRegistryMap().values()).map(cloneSessionRecord)
+  if (options.sort === false) return records
+  return records.sort((a, b) => {
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  })
+}
+
+export function getSessionRecordCount() {
+  return loadRegistryMap().size
+}
+
+/**
+ * O(1) directory trust probe for project-directory grants.
+ * `directory` must already be the realpath-normalized form used by the grant
+ * registry; keys are resolve()'d the same way as stored session directories.
+ */
+export function lookupSessionDirectoryTrust(directory: string): SessionDirectoryTrustSource | null {
+  if (!directory) return null
+  const map = loadRegistryMap()
+  const index = ensureDirectoryTrustIndex(map)
+  const holders = index.get(resolve(directory))
+  if (!holders || holders.size === 0) return null
+  // Drop stale ids if a concurrent mutation left dangling index entries.
+  for (const sessionId of holders) {
+    if (map.has(sessionId)) return 'session-record'
+    holders.delete(sessionId)
+  }
+  if (holders.size === 0) index.delete(resolve(directory))
+  return null
+}
+
+/** Test/diagnostic helper: number of unique resolve()'d directory keys indexed. */
+export function getSessionDirectoryTrustIndexSize() {
+  return ensureDirectoryTrustIndex(loadRegistryMap()).size
 }
 
 export function getSessionRecord(id: string) {
@@ -184,10 +283,12 @@ export function getSessionRecord(id: string) {
 
 export function upsertSessionRecord(record: SessionRecord) {
   const map = loadRegistryMap()
-  const isNewRecord = !map.has(record.id)
+  const previous = map.get(record.id) || null
+  const isNewRecord = !previous
   const next = normalizeStoredSessionRecord(record, normalizeOpencodeDirectory, toDisplayDirectory)
   if (!next) return null
   map.set(record.id, next)
+  replaceSessionInIndexes(previous, next)
   if (isNewRecord) {
     writeRegistryMap(map)
   } else {
@@ -211,6 +312,7 @@ export function updateSessionRecord(id: string, patch: Partial<Omit<SessionRecor
   const normalized = normalizeStoredSessionRecord(next, normalizeOpencodeDirectory, toDisplayDirectory)
   if (!normalized) return null
   map.set(id, normalized)
+  replaceSessionInIndexes(existing, normalized)
   scheduleRegistrySave()
   return cloneSessionRecord(normalized)
 }
@@ -221,7 +323,10 @@ export function touchSessionRecord(id: string, updatedAt = new Date().toISOStrin
 
 export function removeSessionRecord(id: string) {
   const map = loadRegistryMap()
-  if (!map.delete(id)) return
+  const existing = map.get(id)
+  if (!existing) return
+  unindexSessionDirectories(existing)
+  map.delete(id)
   writeRegistryMap(map)
 }
 
@@ -307,4 +412,5 @@ export function clearSessionRegistryCache() {
   registryWriteRequestedDuringWrite = false
   registryWriteInProgress = false
   registryCache = null
+  directoryTrustIndex = null
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 import { MarkdownContent } from '../chat/MarkdownContent'
-import { Textarea } from '../ui'
+import { Textarea } from '@open-cowork/ui'
 
 type Props = {
   value: string

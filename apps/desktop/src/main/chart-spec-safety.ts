@@ -235,6 +235,11 @@ function estimateDataPipeline(
       case 'quantile':
         rows = Math.max(rows, amplifyPerGroup(boundedGeneratorRowCount(type, transform), transform, rows))
         break
+      case 'kde2d':
+        // JOE-829: 2D KDE is grid-cost heavy (size[0]*size[1] cells) even when
+        // the emitted row count is small — bound like contour/heatmap grids.
+        assertBoundedGridSize(type, transform)
+        break
       case 'impute': {
         // impute materializes a full (key x groupby) grid, filling every
         // missing combination. Output rows = distinct(key) * distinct(groupby);

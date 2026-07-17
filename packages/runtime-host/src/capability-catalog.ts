@@ -25,11 +25,15 @@ function humanize(value: string) {
 }
 
 function namespaceFromPattern(pattern: string) {
-  if (!pattern.startsWith('mcp__')) return null
-  const end = pattern.indexOf('__', 'mcp__'.length)
-  if (end <= 'mcp__'.length) return null
-  const namespace = pattern.slice('mcp__'.length, end)
-  return /^[a-zA-Z0-9-]+$/.test(namespace) ? namespace : null
+  if (pattern.startsWith('mcp__')) {
+    const end = pattern.indexOf('__', 'mcp__'.length)
+    if (end <= 'mcp__'.length) return null
+    const namespace = pattern.slice('mcp__'.length, end)
+    return /^[a-zA-Z0-9_-]+$/.test(namespace) ? namespace : null
+  }
+  // OpenCode 1.18+ form: server_tool / server_*
+  const openCode = /^([a-zA-Z0-9][a-zA-Z0-9-]*)_/.exec(pattern)
+  return openCode?.[1] || null
 }
 
 function hasRequiredIntegrationCredentials(

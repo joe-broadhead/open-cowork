@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { AdminMember, ControlPlaneRole } from '@open-cowork/shared'
-import { Badge, Button, Dialog, Input, Select, toast } from '../ui'
+import { Badge, Button, Dialog, Input, Select } from '@open-cowork/ui'
+import { toast } from '../ui/Toaster'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { t } from '../../helpers/i18n'
 import { AdminSectionHeader, AdminStateBlock, AdminTable } from './AdminPrimitives'

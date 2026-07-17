@@ -23,14 +23,13 @@ const lineThreshold = 2_000
 // silently re-grow (previously they sat 600-2,000+ lines above actuals). Lower these
 // (never raise) whenever a file shrinks further.
 const documentedLargeFileBudgets = new Map([
-  ['packages/cloud-server/src/http-server.ts', 1_930],
-  ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_750],
-  // session-service is a thin facade: ~156 of its ~168 methods are one-line delegators to the
-  // ~30 cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). The real
-  // decomposition already lives at the service layer; this budget is ratcheted to just above the
-  // current size so the facade can't grow — new capabilities must go into a sub-service (and,
-  // over time, routes should depend on those sub-services directly). See docs/architecture.md (#914).
-  ['packages/cloud-server/src/session-service.ts', 2_030],
+  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_000],
+  ['packages/cloud-server/src/http-server.ts', 1_935],
+  ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_620],
+  // session-service is now an orchestration facade plus an explicit domains handle over the
+  // cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). Route-facing
+  // CRUD/list operations must use service.domains.* instead of re-growing facade forwards.
+  ['packages/cloud-server/src/session-service.ts', 1_205],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
@@ -92,7 +91,6 @@ test('cloud core has enforceable domain module boundaries', () => {
     'quota-service.ts',
     'channel-service.ts',
     'workflow-service.ts',
-    'projection-service.ts',
     'managed-worker-service.ts',
     'session-command-service.ts',
     'usage-governance-service.ts',
@@ -100,12 +98,20 @@ test('cloud core has enforceable domain module boundaries', () => {
   for (const file of expectedServices) {
     assert.equal(existsSync(join(cloudRoot, 'services', file)), true, `${file} domain service is missing`)
   }
+
+  // JOE-880: pure re-export shell services/projection-service.ts removed; barrel still exposes CloudProjectionService.
+  const servicesIndex = readFileSync(join(cloudRoot, 'services', 'index.ts'), 'utf8')
+  assert.match(servicesIndex, /CloudSessionProjectionService as CloudProjectionService/)
+  assert.match(servicesIndex, /session-projection-service/)
+  assert.equal(existsSync(join(cloudRoot, 'services', 'projection-service.ts')), false)
+
 })
 
 test('cloud client exposes a thin public barrel and domain barrels', () => {
   const indexSource = readFileSync(join(cloudClientRoot, 'index.ts'), 'utf8')
   assert.doesNotMatch(indexSource, /function createHttpSseCloudTransportAdapter/)
-  assert.match(indexSource, /export \* from '\.\/adapter\.js'/)
+  assert.match(indexSource, /export \{ createHttpSseCloudTransportAdapter \} from '\.\/adapter\.js'/)
+  assert.doesNotMatch(indexSource, /export type \* from '\.\/domains\//)
 
   const expectedClientDomains = [
     'artifacts.ts',
@@ -127,6 +133,20 @@ test('cloud client exposes a thin public barrel and domain barrels', () => {
 })
 
 test('large cloud source files are documented exceptions', () => {
+  for (const [relativePath, budget] of documentedLargeFileBudgets) {
+    const file = join(root, relativePath)
+    const lineCount = readFileSync(file, 'utf8').split('\n').length
+    assert.ok(
+      lineCount <= budget,
+      `${relativePath} has ${lineCount} lines and exceeds its modularity budget of ${budget}`,
+    )
+    assert.match(
+      architectureDoc,
+      new RegExp(relativePath.split('/').at(-1)!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `${relativePath} has a modularity budget but is not documented in docs/architecture.md`,
+    )
+  }
+
   const sourceRoots = [cloudRoot, cloudClientRoot]
   for (const sourceRoot of sourceRoots) {
     for (const file of sourceFiles(sourceRoot)) {

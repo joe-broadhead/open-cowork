@@ -5,7 +5,7 @@ import {
   type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
-import { lstatSync, mkdirSync, rmSync } from 'node:fs'
+import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   getAppConfig,
@@ -34,7 +34,7 @@ import {
   readBundledOpencodeCliVersion,
 } from './runtime-opencode-cli.js'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.js'
-import { buildRuntimeConfigForRuntime } from './runtime-config-builder.js'
+import { buildRuntimeConfigForRuntime, isModelsDevAuthJsonBuiltin } from './runtime-config-builder.js'
 import { preflightConfiguredCapabilityBundlesForRuntime } from './capability-bundle-runtime-preflight.js'
 import { recordCurrentRuntimeComponentVerification } from './runtime-component-manifest.js'
 import { copySkillsAndAgents } from './runtime-content.js'
@@ -179,7 +179,58 @@ export function ensureIsolatedProviderAuthStore() {
   }
 }
 
-async function syncProviderApiAuth(c: V2OpencodeClient) {
+/**
+ * Write a provider API key into the managed OpenCode auth.json using the same
+ * shape native OpenCode uses (`{ type: "api", key }`). This must run *before*
+ * the managed server boots so OpenCode loads credentials on startup.
+ */
+export function writeRuntimeProviderApiAuth(providerID: string, key: string) {
+  ensureIsolatedProviderAuthStore()
+  const runtimeAuthPath = getRuntimeOpencodeAuthPath()
+  let existing: Record<string, unknown> = {}
+  try {
+    const raw = JSON.parse(readFileSync(runtimeAuthPath, 'utf8')) as unknown
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      existing = raw as Record<string, unknown>
+    }
+  } catch {
+    existing = {}
+  }
+  existing[providerID] = { type: 'api', key }
+  writeFileSync(runtimeAuthPath, `${JSON.stringify(existing, null, 2)}\n`, { mode: 0o600 })
+}
+
+/**
+ * Materialize Cowork-stored API keys into the managed OpenCode auth store
+ * before the server starts. Keeps classic CLI/`opencode run` and auth-json
+ * consumers working. OpenRouter chat in V2 serve additionally uses a composed
+ * `@ai-sdk/openai-compatible` provider block (see runtime-config-builder).
+ */
+export function syncRuntimeProviderAuthFromSettings() {
+  const settings = getEffectiveSettings()
+  const descriptors = getAppConfig().providers.descriptors || {}
+  for (const [providerID, descriptor] of Object.entries(descriptors)) {
+    if (descriptor.runtime !== 'builtin') continue
+    const apiKeyCredential = descriptor.credentials.find((credential) => (
+      credential.runtimeKey === 'apiKey' || credential.key === 'apiKey'
+    ))
+    if (!apiKeyCredential) continue
+    const key = getProviderCredentialValue(settings, providerID, apiKeyCredential.key)
+    if (!key) continue
+    writeRuntimeProviderApiAuth(providerID, key)
+    log('provider', `Wrote managed OpenCode auth for ${providerID}`)
+  }
+}
+
+/**
+ * Sync stored API keys into the live runtime. OpenRouter uses composed config +
+ * auth.json (not V2 integration.connect.key) so connection tests and boot share
+ * the same materialization path.
+ */
+export async function syncProviderApiAuthForRuntime(
+  c: V2OpencodeClient,
+  options: { forConnectionTest?: boolean } = {},
+) {
   const settings = getEffectiveSettings()
   const descriptors = getAppConfig().providers.descriptors || {}
   await Promise.all(Object.entries(descriptors).map(async ([providerID, descriptor]) => {
@@ -190,13 +241,29 @@ async function syncProviderApiAuth(c: V2OpencodeClient) {
     if (!apiKeyCredential) return
     const key = getProviderCredentialValue(settings, providerID, apiKeyCredential.key)
     if (!key) return
+
+    // OpenRouter: auth.json + composed openai-compatible config is the only path
+    // that works with managed V2 serve. Do not call V2 integration.connect.key.
+    if (isModelsDevAuthJsonBuiltin(providerID)) {
+      writeRuntimeProviderApiAuth(providerID, key)
+      if (options.forConnectionTest) {
+        log('provider', `Synced OpenRouter auth.json for connection test`)
+      }
+      return
+    }
+
     try {
       await connectNativeProviderApiKey(c, providerID, key)
       log('provider', `Synced OpenCode API auth for ${providerID}`)
     } catch (err) {
-      log('provider', `Could not sync OpenCode API auth for ${providerID}: ${sdkErrorMessage(err)}`)
+      writeRuntimeProviderApiAuth(providerID, key)
+      log('provider', `Wrote OpenCode auth.json for ${providerID} after V2 sync failed: ${sdkErrorMessage(err)}`)
     }
   }))
+}
+
+async function syncProviderApiAuth(c: V2OpencodeClient) {
+  await syncProviderApiAuthForRuntime(c)
 }
 
 // Scope the spawned `opencode` binary to our runtime-home so it cannot
@@ -328,6 +395,11 @@ async function logRuntimeVersions(
 async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
   ensureSandboxDirs()
   ensureIsolatedProviderAuthStore()
+  // Write provider API keys into managed auth.json *before* OpenCode boots so
+  // models.dev builtins (openrouter, etc.) see credentials on first load.
+  if (!plan.useMachineOpenCodeConfig) {
+    syncRuntimeProviderAuthFromSettings()
+  }
   await prepareShellEnvironment()
   syncRuntimeHomeToolingBridge({
     enabled: !plan.useMachineOpenCodeConfig && plan.settings.runtimeToolingBridgeEnabled,
@@ -427,6 +499,12 @@ async function registerStartedRuntime(
   }
   runtimeState.clearDirectoryClients()
   setRuntimeModelInfoFetch(result.client)
+  // Re-fetch after providers finish connecting (dynamic catalogs / auth). Early
+  // listNativeProviders often only sees free `opencode` models with zero cost.
+  setTimeout(() => {
+    const client = runtimeState.getClient()
+    if (client) setRuntimeModelInfoFetch(client)
+  }, 5_000)
 }
 
 async function cleanupFailedRuntimeStart() {

@@ -307,7 +307,7 @@ MCP packages are resolved from:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
 2. `<resourcesPath>/mcps/<name>/dist/index.js` — MCPs shipped with the packaged
-   app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/skills`, `mcps/workflows`).
+   app (`mcps/agents`, `mcps/charts`, `mcps/skills`, `mcps/workflows`).
 
 As with skills, the MCP must be declared in the active config (`mcps` section)
 before the runtime spawns it.
@@ -473,9 +473,9 @@ remote URLs, and unsupported extensions.
 
 Sidebar top branding can also tune the rendered media with
 `branding.sidebar.top.mediaSize` (`16`-`96` pixels, default `28`),
-`mediaFit` (`vertical` or `horizontal`; unset keeps the legacy square bounding
-box), and `mediaAlign` (`start`, `center`, or `end` for icon-only or logo-only
-placement).
+`mediaFit` (`bounded`, `vertical`, or `horizontal`; `bounded` is the explicit
+default square bounding box), and `mediaAlign` (`start`, `center`, or `end` for
+icon-only or logo-only placement).
 
 The repo name, bundle identifier, and project namespace are separate
 concerns. Upstream now uses the public repo name `open-cowork`, but
@@ -514,7 +514,13 @@ Two things happen when this is set:
    inline English default when no translation exists. Partial
    catalogs are fine; untranslated keys stay in English.
 
-### Launch posture: English-first, honestly partial elsewhere
+### Launch posture: English-first, non-English is experimental
+
+**Maturity (JOE-860):** Localization outside English is **experimental /
+partial**, not a marketed multilingual product. Do not advertise Open Cowork
+as fully localized in non-English languages until coverage is raised for
+priority locales. The language picker and Settings copy surface the honest
+partial-coverage figure; English fallbacks are intentional.
 
 The public build is **English-first**. The built-in non-English
 catalogs (ar, de, es, fr, hi, it, ja, ko, pt, ru, zh) currently

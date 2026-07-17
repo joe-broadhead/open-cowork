@@ -10,7 +10,7 @@ import { VegaChart } from './VegaChart'
 import { attachmentFromArtifact, dispatchComposerCompose } from './composer-events'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
 import { AGENT_LABELS, SUB_AGENT_IDS, buildCustomMcpToolTraceRules, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
-import { Badge, Button, Card, Icon, type BadgeTone } from '../ui'
+import { Badge, Button, Card, Icon, type BadgeTone } from '@open-cowork/ui'
 
 // Cache parsed chart output by ToolCall identity. `tryParseChartOutput`
 // returns a fresh object (and a freshly-parsed spec) on every call —
@@ -132,7 +132,7 @@ interface Props {
   compact?: boolean
 }
 
-function ArtifactCard({
+function ToolArtifactCard({
   artifact,
   attaching,
   exporting,
@@ -191,13 +191,15 @@ function ArtifactCard({
 }
 
 
-export function ToolTrace({ tools, compact = false }: Props) {
+export function ToolTrace({ tools, compact = false, defaultExpanded = false }: Props) {
+  // JOE-886: detailed tool rows start collapsed unless the surface opts in.
+
   const activeAgent = useSessionStore((s) => s.currentView.activeAgent)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const sessions = useSessionStore((s) => s.sessions)
   const allDone = tools.every((tool) => tool.status === 'complete' || tool.status === 'error')
-  const [expanded, setExpanded] = useState(!allDone)
+  const [expanded, setExpanded] = useState(defaultExpanded || !allDone)
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
   const [exportingArtifactId, setExportingArtifactId] = useState<string | null>(null)
   const [attachingArtifactId, setAttachingArtifactId] = useState<string | null>(null)
@@ -284,7 +286,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
       {/* Charts always visible regardless of expand state */}
       {currentSessionId && artifacts.map((artifact) => (
-        <ArtifactCard
+        <ToolArtifactCard
           key={`artifact-${artifact.id}`}
           artifact={artifact}
           attaching={attachingArtifactId === artifact.id}

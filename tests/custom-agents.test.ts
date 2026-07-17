@@ -370,11 +370,12 @@ test('runtime custom agents carry deniedToolPatterns through to the SDK payload'
   })
 
   assert.equal(runtimeAgents.length, 1)
-  // Entries should be de-duped, trimmed, and expanded to both known
-  // OpenCode MCP permission spellings so the SDK gets a clean list.
-  assert.deepEqual(runtimeAgents[0]?.deniedPatterns, ['mcp__github__delete_repo'])
+  // Entries should be de-duped, trimmed, and dual-expanded to Claude-style and
+  // OpenCode server_tool spellings so the SDK permission map matches real tool ids.
+  assert.deepEqual(runtimeAgents[0]?.deniedPatterns, ['mcp__github__delete_repo', 'github_delete_repo'])
   // The parent MCP's allow stays intact — only the specific method is denied.
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__repos_*'), true)
+  assert.equal(runtimeAgents[0]?.allowPatterns.includes('github_repos_*'), true)
 })
 
 test('custom agent permission overrides emit collapsed OpenCode permission keys', () => {
@@ -390,6 +391,8 @@ test('custom agent permission overrides emit collapsed OpenCode permission keys'
     saveSettings({
       bashPermission: 'allow',
       fileWritePermission: 'allow',
+      externalDirectoryPermission: 'allow',
+      mcpPermission: 'allow',
     })
     const catalog = buildCustomAgentCatalog({
       builtinTools: builtinTools as any,
@@ -726,7 +729,7 @@ test('custom agent validation rejects invalid MCP permission rule patterns', () 
 
   assert.equal(issues.some((issue) => issue.code === 'permission_rule_pattern_invalid_mcp_0_0'), true)
   assert.equal(
-    issues.some((issue) => issue.message === 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.'),
+    issues.some((issue) => issue.message === 'MCP tools permission rule pattern must look like mcp__server__tool or server_tool (OpenCode form).'),
     true,
   )
 })
@@ -804,7 +807,7 @@ test('custom MCP tools default to ask-only access', () => {
 
   const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')
   assert.deepEqual(warehouse?.allowPatterns, [])
-  assert.deepEqual(warehouse?.askPatterns, ['mcp__warehouse__*'])
+  assert.deepEqual(warehouse?.askPatterns, ['mcp__warehouse__*', 'warehouse_*'])
 })
 
 test('trusted custom MCP tools become allow access', () => {
@@ -824,7 +827,7 @@ test('trusted custom MCP tools become allow access', () => {
   })
 
   const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')
-  assert.deepEqual(warehouse?.allowPatterns, ['mcp__warehouse__*'])
+  assert.deepEqual(warehouse?.allowPatterns, ['mcp__warehouse__*', 'warehouse_*'])
   assert.deepEqual(warehouse?.askPatterns, [])
 })
 
@@ -857,6 +860,6 @@ test('runtime custom agents inherit trusted custom MCP allow patterns', () => {
   })
 
   assert.equal(runtimeAgents.length, 1)
-  assert.deepEqual(runtimeAgents[0]?.allowPatterns, ['mcp__nova__*'])
+  assert.deepEqual(runtimeAgents[0]?.allowPatterns, ['mcp__nova__*', 'nova_*'])
   assert.deepEqual(runtimeAgents[0]?.askPatterns, [])
 })

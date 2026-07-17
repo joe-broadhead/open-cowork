@@ -42,7 +42,7 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
-const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
+const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests!'
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
@@ -1281,7 +1281,7 @@ test('cloud coordination stale watches remain visible and removable after channe
       }),
     }))
     const projectId = String(asRecord(project).id)
-    const staleWatch = await fixture.service.createCloudCoordinationWatch(ownerPrincipal, {
+    const staleWatch = await fixture.service.domains.coordination.createCloudCoordinationWatch(ownerPrincipal, {
       workspaceId: 'cloud:tenant-1',
       target: { kind: 'project', id: projectId },
       events: ['task.moved'],
@@ -1468,11 +1468,11 @@ test('cloud HTTP watch creation validates channel authority before persisting su
   })
   const baseUrl = await fixture.server.listen()
   try {
-    await fixture.service.createHeadlessAgent(ownerPrincipal, {
+    await fixture.service.domains.channels.createHeadlessAgent(ownerPrincipal, {
       agentId: 'agent-1',
       name: 'Watch delivery agent',
     })
-    await fixture.service.createChannelBinding(ownerPrincipal, {
+    await fixture.service.domains.channels.createChannelBinding(ownerPrincipal, {
       bindingId: 'binding-1',
       agentId: 'agent-1',
       provider: 'telegram',
@@ -1674,11 +1674,11 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
       scopes: ['gateway'],
     })
     gatewayTokenId = issued.token.tokenId
-    await fixture.service.createHeadlessAgent(ownerPrincipal, {
+    await fixture.service.domains.channels.createHeadlessAgent(ownerPrincipal, {
       agentId: 'agent-watch-recipient',
       name: 'Watch recipient agent',
     })
-    await fixture.service.createChannelBinding(ownerPrincipal, {
+    await fixture.service.domains.channels.createChannelBinding(ownerPrincipal, {
       bindingId: 'binding-watch-recipient',
       agentId: 'agent-watch-recipient',
       provider: 'telegram',
@@ -1761,7 +1761,7 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
     assert.equal(asRecord(gatewayNoRoleRecipientWatch.recipient).role, 'viewer')
     assert.equal(asRecord(gatewayNoRoleRecipientWatch.recipient).identityId, 'identity-watch-recipient')
 
-    const ownerLegacyWatch = await fixture.service.createCloudCoordinationWatch(ownerPrincipal, {
+    const ownerLegacyWatch = await fixture.service.domains.coordination.createCloudCoordinationWatch(ownerPrincipal, {
       workspaceId: 'cloud:tenant-1',
       target: { kind: 'session', id: gatewaySessionId },
       events: ['needs_input'],
@@ -4593,7 +4593,7 @@ test('cloud HTTP worker status endpoints require operator privileges', async () 
     }
     assert.equal((await fixture.service.listWorkerHeartbeats(workerPrincipal)).length, 0)
     await assert.rejects(
-      () => fixture.service.getDiagnosticsBundle(workerPrincipal),
+      () => fixture.service.domains.diagnostics.getDiagnosticsBundle(workerPrincipal),
       /Cloud diagnostics require operator/,
     )
   } finally {
@@ -8058,7 +8058,7 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
     startedAt: new Date('2030-01-01T09:00:00.002Z'),
   })
 
-  const started = await fixture.service.claimAndStartDueWorkflow(
+  const started = await fixture.service.domains.workflows.claimAndStartDueWorkflow(
     new Date('2030-01-01T09:00:00.003Z'),
     'scheduler-recovery',
   )
@@ -8074,7 +8074,7 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
     ? fixture.runtime.prompts[0].parts[0].text
     : null, 'Recover the missing command.')
 
-  const detail = await fixture.service.getWorkflow({
+  const detail = await fixture.service.domains.workflows.getWorkflow({
     tenantId: 'tenant-1',
     tenantName: 'Tenant 1',
     orgId: 'tenant-1',
@@ -8087,7 +8087,7 @@ test('cloud workflow recovery enqueues missing commands on attached runs without
   assert.equal(detail?.latestRunStatus, 'completed')
   assert.equal(detail?.latestRunSessionId, 'workflow-stranded-session')
 
-  const second = await fixture.service.claimAndStartDueWorkflow(
+  const second = await fixture.service.domains.workflows.claimAndStartDueWorkflow(
     new Date('2030-01-01T09:00:00.004Z'),
     'scheduler-recovery',
   )
@@ -8129,7 +8129,7 @@ test('cloud workflow recovery reuses planned sessions across pre-attach crash wi
   })
   assert.match(noSessionRun.sessionId || '', /^workflow_session_/)
   fixture.store.reapExpiredWorkflowClaims({ now: new Date('2030-01-01T10:00:31.000Z') })
-  const recoveredNoSession = await fixture.service.claimAndStartDueWorkflow(
+  const recoveredNoSession = await fixture.service.domains.workflows.claimAndStartDueWorkflow(
     new Date('2030-01-01T10:00:32.000Z'),
     'scheduler-recovery',
   )
@@ -8160,7 +8160,7 @@ test('cloud workflow recovery reuses planned sessions across pre-attach crash wi
     createdAt: new Date('2030-01-01T11:00:01.000Z'),
   })
   fixture.store.reapExpiredWorkflowClaims({ now: new Date('2030-01-01T11:00:31.000Z') })
-  const recoveredPreAttach = await fixture.service.claimAndStartDueWorkflow(
+  const recoveredPreAttach = await fixture.service.domains.workflows.claimAndStartDueWorkflow(
     new Date('2030-01-01T11:00:32.000Z'),
     'scheduler-recovery',
   )

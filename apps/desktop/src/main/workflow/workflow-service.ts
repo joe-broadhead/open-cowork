@@ -27,6 +27,7 @@ import type {
 } from '@open-cowork/shared'
 import { getConfiguredAgentsFromConfig } from '@open-cowork/runtime-host/config'
 import { trackParentSession } from '../event-task-state.ts'
+import { markSessionPromptAdmitted } from '../durable-session-events.ts'
 import { log } from '@open-cowork/shared/node'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
@@ -118,9 +119,9 @@ function workflowDraftPrompt(sessionId: string) {
     '- whether a project directory is required',
     '- what output should be produced',
     '',
-    'When the workflow is clear, call mcp__workflows__preview_workflow and show the proposal to the user.',
+    'When the workflow is clear, call workflows_preview_workflow and show the proposal to the user.',
     `Set draftSessionId to "${sessionId}" on the preview draft so the saved workflow links back to this setup thread.`,
-    'Only after the user explicitly confirms, call mcp__workflows__create_workflow with the previewToken returned by the preview tool.',
+    'Only after the user explicitly confirms, call workflows_create_workflow with the previewToken returned by the preview tool.',
     'Do not reconstruct or change the draft in create_workflow.',
   ].join('\n')
 }
@@ -201,10 +202,16 @@ async function createWorkflowThread(input: {
   trackParentSession(session.id)
   input.onSessionCreated?.(session.id)
   const prompt = typeof input.prompt === 'function' ? input.prompt(session.id) : input.prompt
-  await promptNativeSession(client, {
+  const admitted = await promptNativeSession(client, {
     sessionID: session.id,
     parts: [{ type: 'text', text: prompt }],
     agent: input.agent,
+  })
+  markSessionPromptAdmitted({
+    directory: opencodeDirectory,
+    sessionId: session.id,
+    admittedSeq: admitted.admittedSeq,
+    admissionId: admitted.id,
   })
   if (input.kind === 'workflow_run') {
     startSessionStatusReconciliation(session.id, {

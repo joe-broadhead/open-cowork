@@ -23,7 +23,7 @@ import { getAppDataDir } from './config-loader-core.js'
 import { listCoordinationTasks } from './coordination/coordination-service.js'
 import { initializeLocalSqliteSchema } from './local-sqlite-schema.js'
 import { sessionEngine } from './session-engine.js'
-import { listSessionRecords, type SessionRecord } from './session-registry.js'
+import { getSessionRecord, type SessionRecord } from './session-registry.js'
 import { setSessionHistoryViewIndexHandler, syncSessionView } from './session-history-loader.js'
 
 const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 1
@@ -715,7 +715,7 @@ export function indexLocalSessionArtifactsFromView(input: {
 
 export async function rebuildLocalArtifactIndexForSession(sessionId: string, workspaceIdInput?: string | null): Promise<ArtifactIndexEntry[]> {
   const workspace = workspaceId(workspaceIdInput)
-  const record = listSessionRecords().find((candidate) => candidate.id === sessionId)
+  const record = getSessionRecord(sessionId)
   if (!record) return []
   const tasks = listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
   return artifactsForRecord(record, workspace, tasks)
@@ -841,7 +841,7 @@ export async function updateLocalArtifactStatus(request: ArtifactStatusUpdateReq
 }
 
 setSessionHistoryViewIndexHandler(({ sessionId, view }) => {
-  const record = listSessionRecords().find((candidate) => candidate.id === sessionId)
+  const record = getSessionRecord(sessionId)
   indexLocalSessionArtifactsFromView({
     workspaceId: LOCAL_WORKSPACE_ID,
     sessionId,

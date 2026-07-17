@@ -26,10 +26,15 @@ function tsxSources(dir: string): string[] {
   return out
 }
 
-const globalsCss = readFileSync(
-  fileURLToPath(new URL('../packages/app/src/styles/globals.css', import.meta.url)),
-  'utf8',
-)
+const stylesRoot = fileURLToPath(new URL('../packages/app/src/styles/', import.meta.url))
+const globalsCss = [
+  'globals.css',
+  'domains/base.css',
+  'domains/studio.css',
+  'domains/chat.css',
+  'domains/shell.css',
+  'domains/settings.css',
+].map((name) => readFileSync(`${stylesRoot}${name}`, 'utf8')).join('\n')
 const coOccur = collectCoOccurringClasses(
   tsxSources(fileURLToPath(new URL('../packages/ui/src', import.meta.url))),
 )

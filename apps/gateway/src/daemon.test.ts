@@ -1555,7 +1555,9 @@ test('gateway webhooks apply a source rate limit before provider dispatch', asyn
       body: '{}',
     })
     assert.equal(blocked.status, 429)
-    assert.equal(blocked.headers.get('retry-after'), '60')
+    const retryAfterSeconds = Number(blocked.headers.get('retry-after'))
+    assert.equal(Number.isInteger(retryAfterSeconds), true)
+    assert.equal(retryAfterSeconds > 0 && retryAfterSeconds <= 60, true)
     assert.equal((await readJson(blocked)).error, 'Too many Gateway webhook requests. Try again later.')
   } finally {
     await http.close()

@@ -94,7 +94,7 @@ test('getRuntimeInputDiagnostics reports effective provider inputs and override 
     )), true)
     assert.equal(diagnostics.capabilities?.some((capability) => (
       capability.kind === 'skill'
-      && capability.id === 'clock'
+      && capability.id === 'time-keep'
       && capability.status === 'active'
     )), true)
     assert.equal(
@@ -142,7 +142,12 @@ test('getRuntimeInputDiagnostics reports built-in provider credential overrides 
     assert.equal(diagnostics.providerName, 'OpenRouter')
     assert.equal(diagnostics.providerPackage, null)
     assert.deepEqual(diagnostics.credentialOverrideKeys, ['apiKey'])
-    assert.deepEqual(diagnostics.providerOptions, {})
+    // OpenRouter is composed as openai-compatible with a public baseURL (not the
+    // models.dev OpenRouter package). Diagnostics surface that option so the UI
+    // matches what runtime will hand to OpenCode — still without secrets.
+    assert.deepEqual(diagnostics.providerOptions, {
+      baseURL: 'https://openrouter.ai/api/v1',
+    })
     assert.deepEqual(diagnostics.capabilities?.find((capability) => capability.kind === 'provider')?.evidence?.credentialOverrideKeys, ['apiKey'])
     assert.equal(diagnostics.conflicts?.some((conflict) => (
       conflict.kind === 'model'
@@ -166,27 +171,27 @@ test('getRuntimeInputDiagnostics reports auth-pending and override conflicts wit
   writeFileSync(configPath, `{
   "skills": [
     {
-      "name": "Clock",
-      "description": "Clock skill",
+      "name": "Time Keep",
+      "description": "Time keep skill",
       "badge": "Skill",
-      "sourceName": "clock",
-      "toolIds": ["clock"]
+      "sourceName": "time-keep",
+      "toolIds": ["time-keep"]
     }
   ],
   "mcps": [
     {
-      "name": "clock",
+      "name": "time-keep",
       "type": "local",
-      "description": "Clock MCP",
+      "description": "Time keep MCP",
       "authMode": "none",
-      "packageName": "clock"
+      "command": ["time-keep", "server", "start", "--transport", "stdio"]
     },
     {
       "name": "oauth-example",
       "type": "local",
       "description": "OAuth MCP",
       "authMode": "oauth",
-      "packageName": "clock"
+      "command": ["true"]
     }
   ]
 }`)
@@ -197,16 +202,16 @@ test('getRuntimeInputDiagnostics reports auth-pending and override conflicts wit
     saveCustomSkill({
       scope: 'machine',
       directory: null,
-      name: 'clock',
+      name: 'time-keep',
       content: `---
-description: Custom clock override
+description: Custom time-keep override
 ---
 Custom override.
 `,
     })
     saveCustomMcp({
       scope: 'machine',
-      name: 'clock',
+      name: 'time-keep',
       type: 'stdio',
       command: 'node',
       args: ['server.js'],
@@ -221,13 +226,13 @@ Custom override.
     assert.equal(googleMcp?.status, 'auth-pending')
     assert.equal(diagnostics.conflicts?.some((conflict) => (
       conflict.kind === 'skill'
-      && conflict.id === 'clock'
+      && conflict.id === 'time-keep'
       && conflict.winnerSource === 'custom:machine'
       && conflict.loserSources.includes('builtin:open-cowork')
     )), true)
     assert.equal(diagnostics.conflicts?.some((conflict) => (
       conflict.kind === 'mcp'
-      && conflict.id === 'clock'
+      && conflict.id === 'time-keep'
       && conflict.reasonCode === 'mcp.custom-overrides-builtin'
     )), true)
     assert.equal(diagnostics.conflicts?.every((conflict) => conflict.redacted), true)
@@ -253,7 +258,7 @@ test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking c
   try {
     saveSettings({
       integrationEnabled: {
-        clock: false,
+        'time-keep': false,
       },
     })
     saveCustomMcp({
@@ -265,11 +270,11 @@ test('getRuntimeInputDiagnostics reports MCP policy provenance without leaking c
     })
 
     const diagnostics = getRuntimeInputDiagnostics()
-    const clock = diagnostics.capabilities?.find((capability) => capability.kind === 'mcp' && capability.id === 'clock')
+    const timeKeep = diagnostics.capabilities?.find((capability) => capability.kind === 'mcp' && capability.id === 'time-keep')
     const unsafe = diagnostics.capabilities?.find((capability) => capability.kind === 'mcp' && capability.id === 'unsafe-local')
 
-    assert.equal(clock?.status, 'disabled')
-    assert.equal(clock?.reasonCode, 'mcp.disabled-by-user')
+    assert.equal(timeKeep?.status, 'disabled')
+    assert.equal(timeKeep?.reasonCode, 'mcp.disabled-by-user')
     assert.equal(unsafe?.status, 'blocked')
     assert.equal(unsafe?.reasonCode, 'mcp.stdio-policy-blocked')
     assert.doesNotMatch(JSON.stringify(diagnostics), /secret-token-value/)

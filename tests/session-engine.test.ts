@@ -1108,8 +1108,16 @@ test('session engine memoizes getSessionView until the state changes', () => {
   const first = engine.getSessionView(sessionId)
   const second = engine.getSessionView(sessionId)
   // Identity equality is the contract — renderer relies on it to avoid
-  // reconciling a stable session view on every idle tick.
+  // reconciling a stable session view on every idle tick. JOE-868 deep-freezes
+  // the cached graph so callers still cannot mutate engine-owned state.
   assert.strictEqual(first, second, 'unchanged state must return the cached view')
+  assert.ok(Object.isFrozen(first))
+  if (first.messages[0]) {
+    assert.throws(() => {
+      first.messages[0]!.content = 'MUTATED'
+    }, TypeError)
+  }
+  assert.equal(engine.getSessionView(sessionId).messages[0]?.content, 'Hello')
 
   engine.applyStreamEvent({
     type: 'text',

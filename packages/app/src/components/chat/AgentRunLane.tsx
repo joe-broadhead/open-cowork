@@ -6,16 +6,11 @@ import { agentTone } from '../agents/agent-builder-utils'
 import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import {
-  computeLaneProgress,
-  formatAgentName,
-  formatCost,
-  formatTokensCompact,
-  sumTokens,
-} from './agent-run-utils'
+  computeLaneProgress, formatAgentName, formatCost, formatTokensCompact, sumTokens, } from './agent-run-utils'
 import type { TaskRunMetrics } from './agent-run-filter-model'
 import { latestTranscriptLine } from './task-timeline-utils'
 import { statusLabel } from '../../helpers/status-label'
-import { Badge } from '../ui'
+import { Badge } from '@open-cowork/ui'
 
 // A single horizontal swim lane showing one delegated sub-agent task.
 // Kept compact so multiple lanes stack cleanly in a parallel-dispatch

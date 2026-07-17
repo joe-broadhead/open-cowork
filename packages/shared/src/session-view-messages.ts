@@ -12,6 +12,28 @@ const LIVE_ASSISTANT_MESSAGE_SUFFIX = ':assistant:live'
 const LIVE_ASSISTANT_SEGMENT_SUFFIX = ':segment:live'
 const LIVE_USER_MESSAGE_SUFFIX = ':user:live'
 const LIVE_USER_SEGMENT_SUFFIX = ':user:segment:live'
+// OpenCode V2 reuses part ids like `text-0` across different messages. Part
+// storage is a flat map, so unscoped part ids collide and every bubble ends up
+// showing the last reply. Scope every segment key by its owning message id.
+const SEGMENT_SCOPE_SEPARATOR = '::'
+
+/**
+ * Namespace a provider part/segment id under its message so concurrent
+ * assistant turns cannot clobber each other's text in messagePartsById.
+ */
+export function scopeMessageSegmentId(messageId: string, segmentId: string): string {
+  if (!messageId || !segmentId) return segmentId
+  const prefix = `${messageId}${SEGMENT_SCOPE_SEPARATOR}`
+  if (segmentId.startsWith(prefix)) return segmentId
+  return `${prefix}${segmentId}`
+}
+
+export function unscopeMessageSegmentId(messageId: string, segmentId: string): string {
+  if (!messageId || !segmentId) return segmentId
+  const prefix = `${messageId}${SEGMENT_SCOPE_SEPARATOR}`
+  if (segmentId.startsWith(prefix)) return segmentId.slice(prefix.length)
+  return segmentId
+}
 
 export interface MessageEntity {
   id: string
@@ -64,12 +86,84 @@ function latestSplitSegmentId(
   return latest?.id ?? null
 }
 
+function isStreamingResidualSegmentId(segmentId: string) {
+  return segmentId.endsWith(LIVE_ASSISTANT_SEGMENT_SUFFIX)
+    || segmentId.endsWith(LIVE_USER_SEGMENT_SUFFIX)
+    || segmentId.includes(':segment:live')
+    || segmentId.includes(':user:segment:live')
+    || /:after:\d+$/.test(segmentId)
+}
+
+/**
+ * When an authoritative replace lands (history snapshot or part.updated with the
+ * full text), drop stream residuals that would otherwise join into a duplicated
+ * bubble. Intentional multi-part messages (distinct part ids with different
+ * content) are preserved: we only remove a sibling when its content is already
+ * covered by the replacement text.
+ */
+function collapseSegmentsSupersededByReplace(
+  messagePartsById: Record<string, MessagePartEntity>,
+  segmentIds: string[],
+  targetSegmentId: string,
+  replacement: string,
+  messageId: string,
+) {
+  if (!replacement) return segmentIds
+
+  const keepRelated = (segmentId: string) => (
+    segmentId === targetSegmentId
+    || segmentId.startsWith(splitSegmentPrefix(targetSegmentId))
+  )
+
+  const nextIds: string[] = []
+  for (const segmentId of segmentIds) {
+    if (keepRelated(segmentId)) {
+      nextIds.push(segmentId)
+      continue
+    }
+    const segment = messagePartsById[segmentId]
+    if (!segment) continue
+    if (!segment.content) {
+      delete messagePartsById[segmentId]
+      continue
+    }
+
+    const coveredByReplacement = replacement === segment.content
+      || replacement.startsWith(segment.content)
+      || (
+        segment.content.length >= 16
+        && replacement.includes(segment.content)
+      )
+    // Stream deltas often land with segmentId === messageId when partId is
+    // missing, then history/replace uses the real part id. That leaves two
+    // segments with the same (or nested) answer text.
+    const unscoped = unscopeMessageSegmentId(messageId, segmentId)
+    const isMessageIdFallbackSegment = unscoped === messageId || segmentId === messageId
+    const isResidual = isStreamingResidualSegmentId(unscoped)
+      || isStreamingResidualSegmentId(segmentId)
+      || isMessageIdFallbackSegment
+
+    if (coveredByReplacement && (isResidual || replacement === segment.content)) {
+      delete messagePartsById[segmentId]
+      continue
+    }
+
+    nextIds.push(segmentId)
+  }
+
+  if (!nextIds.includes(targetSegmentId) && messagePartsById[targetSegmentId]) {
+    nextIds.push(targetSegmentId)
+  }
+  return nextIds
+}
+
 export function hasMessageTextSegment(
   state: MessageStateShape,
   messageId: string,
   segmentId: string,
 ) {
-  return Boolean(state.messageById[messageId]?.segmentIds.includes(segmentId) && state.messagePartsById[segmentId])
+  const scoped = scopeMessageSegmentId(messageId, segmentId)
+  return Boolean(state.messageById[messageId]?.segmentIds.includes(scoped) && state.messagePartsById[scoped])
 }
 
 export function hasSplitMessageTextSegment(
@@ -78,23 +172,16 @@ export function hasSplitMessageTextSegment(
   segmentId: string,
 ) {
   const message = state.messageById[messageId]
-  return Boolean(message && latestSplitSegmentId(state.messagePartsById, message.segmentIds, segmentId))
+  const scoped = scopeMessageSegmentId(messageId, segmentId)
+  return Boolean(message && latestSplitSegmentId(state.messagePartsById, message.segmentIds, scoped))
 }
 
 function livePlaceholderMessageSuffix(role: 'user' | 'assistant') {
   return role === 'assistant' ? LIVE_ASSISTANT_MESSAGE_SUFFIX : LIVE_USER_MESSAGE_SUFFIX
 }
 
-function livePlaceholderSegmentSuffix(role: 'user' | 'assistant') {
-  return role === 'assistant' ? LIVE_ASSISTANT_SEGMENT_SUFFIX : LIVE_USER_SEGMENT_SUFFIX
-}
-
 export function isLivePlaceholderMessageId(messageId: string, role: 'user' | 'assistant') {
   return messageId.endsWith(livePlaceholderMessageSuffix(role))
-}
-
-function isLivePlaceholderSegmentId(segmentId: string, role: 'user' | 'assistant') {
-  return segmentId.endsWith(livePlaceholderSegmentSuffix(role))
 }
 
 // Retained for the assistant-specific latest-message-id lookup below.
@@ -167,26 +254,36 @@ function moveLivePlaceholderStateToMessage(
   const messageById = { ...state.messageById }
   const messagePartsById = { ...state.messagePartsById }
   const messageReasoningById = { ...state.messageReasoningById }
-  const liveSegmentIds = liveMessage.segmentIds.slice()
+  let liveSegmentIds = liveMessage.segmentIds.slice()
   const liveReasoningIds = liveMessage.reasoningIds.slice()
 
-  const onlyLiveSegmentId = liveSegmentIds.length === 1 ? liveSegmentIds[0] : undefined
-  if (onlyLiveSegmentId && isLivePlaceholderSegmentId(onlyLiveSegmentId, input.role) && onlyLiveSegmentId !== input.segmentId) {
-    const liveSegment = messagePartsById[onlyLiveSegmentId]
-    if (liveSegment) {
+  // Collapse multi-segment live stream text into the authoritative segment id
+  // so tool-interrupted stream splits do not survive as a second bubble after
+  // the real message id lands.
+  if (liveSegmentIds.length > 0) {
+    const liveSegments = liveSegmentIds
+      .map((segmentId) => messagePartsById[segmentId])
+      .filter((segment): segment is MessagePartEntity => Boolean(segment))
+      .sort((left, right) => left.order - right.order)
+    if (liveSegments.length > 0) {
+      const joined = liveSegments.map((segment) => segment.content).join('')
+      const earliestOrder = liveSegments[0]!.order
       const targetSegment = messagePartsById[input.segmentId]
       messagePartsById[input.segmentId] = targetSegment
         ? {
             ...targetSegment,
-            order: Math.min(targetSegment.order, liveSegment.order),
-            content: preferNewerStreamingText(targetSegment.content, liveSegment.content),
+            order: Math.min(targetSegment.order, earliestOrder),
+            content: preferNewerStreamingText(targetSegment.content, joined),
           }
         : {
-            ...liveSegment,
             id: input.segmentId,
+            content: joined,
+            order: earliestOrder,
           }
-      delete messagePartsById[onlyLiveSegmentId]
-      liveSegmentIds[0] = input.segmentId
+      for (const segmentId of liveSegmentIds) {
+        if (segmentId !== input.segmentId) delete messagePartsById[segmentId]
+      }
+      liveSegmentIds = [input.segmentId]
     }
   }
 
@@ -352,6 +449,18 @@ export function importMessage(
   const messageIds = state.messageIds.includes(message.id)
     ? state.messageIds.slice()
     : [...state.messageIds, message.id]
+  const sourceSegments = message.segments && message.segments.length > 0
+    ? message.segments.map((segment) => ({
+        ...segment,
+        id: scopeMessageSegmentId(message.id, segment.id),
+      }))
+    : (message.content
+      ? [{ id: scopeMessageSegmentId(message.id, 'initial'), content: message.content, order: message.order }]
+      : [])
+  const sourceReasoning = (message.reasoning || []).map((segment) => ({
+    ...segment,
+    id: scopeMessageSegmentId(message.id, segment.id),
+  }))
   const messageById = {
     ...state.messageById,
     [message.id]: {
@@ -361,21 +470,13 @@ export function importMessage(
       timestamp: message.timestamp || null,
       providerId: message.providerId || null,
       modelId: message.modelId || null,
-      segmentIds: (message.segments && message.segments.length > 0)
-        ? message.segments.map((segment) => segment.id)
-        : (message.content ? [`${message.id}:initial`] : []),
-      reasoningIds: (message.reasoning || []).map((segment) => segment.id),
+      segmentIds: sourceSegments.map((segment) => segment.id),
+      reasoningIds: sourceReasoning.map((segment) => segment.id),
       order: message.order,
     },
   }
   const messagePartsById = { ...state.messagePartsById }
   const messageReasoningById = { ...state.messageReasoningById }
-  const sourceSegments = message.segments && message.segments.length > 0
-    ? message.segments
-    : (message.content
-      ? [{ id: `${message.id}:initial`, content: message.content, order: message.order }]
-      : [])
-  const sourceReasoning = message.reasoning || []
 
   for (const segment of sourceSegments) {
     messagePartsById[segment.id] = {
@@ -419,9 +520,12 @@ export function withMessageText(
   timing?: SessionViewTiming,
 ) {
   const resolvedMessageId = resolveIncomingLiveMessageId(state, input)
+  // Scope before absorb so live collapse and later storage share one key space.
+  const scopedSegmentId = scopeMessageSegmentId(resolvedMessageId, input.segmentId)
   const normalizedInput = {
     ...input,
     messageId: resolvedMessageId,
+    segmentId: scopedSegmentId,
   }
   const reconciledState = moveLivePlaceholderStateToMessage(state, normalizedInput)
 
@@ -517,6 +621,19 @@ export function withMessageText(
     }
   }
 
+  let nextSegmentIds = segmentIds
+  if (normalizedInput.replace && normalizedInput.content) {
+    // Authoritative full-text replace must not leave stream residuals that
+    // render as a second copy of the same answer in the transcript.
+    nextSegmentIds = collapseSegmentsSupersededByReplace(
+      messagePartsById,
+      segmentIds,
+      targetSegmentId,
+      normalizedInput.content,
+      normalizedInput.messageId,
+    )
+  }
+
   messageById[normalizedInput.messageId] = {
     ...existingMessage,
     role: normalizedInput.role,
@@ -524,7 +641,7 @@ export function withMessageText(
     timestamp: normalizedInput.timestamp ?? existingMessage.timestamp ?? null,
     providerId: normalizedInput.providerId ?? existingMessage.providerId ?? null,
     modelId: normalizedInput.modelId ?? existingMessage.modelId ?? null,
-    segmentIds,
+    segmentIds: nextSegmentIds,
   }
 
   return {
@@ -553,6 +670,7 @@ export function withMessageReasoning(
   const normalizedInput = {
     ...input,
     messageId: resolvedMessageId,
+    segmentId: scopeMessageSegmentId(resolvedMessageId, input.segmentId),
   }
   const messageIds = state.messageIds.slice()
   const messageById = { ...state.messageById }

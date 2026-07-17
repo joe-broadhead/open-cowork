@@ -42,9 +42,7 @@
         "src/**/*.{ts,tsx}",
         "tests/**/*.{ts,tsx}"
       ],
-      "ignore": [
-        "src/main/permission-inheritance.ts"
-      ],
+      "ignore": [],
       "ignoreBinaries": [
         "electron"
       ],
@@ -238,14 +236,6 @@
       ]
     },
     "mcps/agents": {
-      "entry": [
-        "src/index.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ]
-    },
-    "mcps/clock": {
       "entry": [
         "src/index.ts"
       ],

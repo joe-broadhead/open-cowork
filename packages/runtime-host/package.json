@@ -30,6 +30,10 @@
       "types": "./dist/agent-config.d.ts",
       "import": "./dist/agent-config.js"
     },
+    "./permission-inheritance": {
+      "types": "./dist/permission-inheritance.d.ts",
+      "import": "./dist/permission-inheritance.js"
+    },
     "./agent-prompts": {
       "types": "./dist/agent-prompts.d.ts",
       "import": "./dist/agent-prompts.js"
@@ -270,6 +274,10 @@
       "types": "./dist/runtime-status.d.ts",
       "import": "./dist/runtime-status.js"
     },
+    "./bounded-map": {
+      "types": "./dist/bounded-map.d.ts",
+      "import": "./dist/bounded-map.js"
+    },
     "./runtime-tool-cache": {
       "types": "./dist/runtime-tool-cache.d.ts",
       "import": "./dist/runtime-tool-cache.js"
@@ -313,6 +321,10 @@
     "./session-engine-helpers": {
       "types": "./dist/session-engine-helpers.d.ts",
       "import": "./dist/session-engine-helpers.js"
+    },
+    "./question-normalization": {
+      "types": "./dist/question-normalization.d.ts",
+      "import": "./dist/question-normalization.js"
     },
     "./session-event-dispatcher": {
       "types": "./dist/session-event-dispatcher.d.ts",
@@ -406,7 +418,11 @@
       "types": "./dist/workflow/workflow-tool-bridge.d.ts",
       "import": "./dist/workflow/workflow-tool-bridge.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./settings-migrations": {
+      "types": "./dist/settings-migrations.d.ts",
+      "import": "./dist/settings-migrations.js"
+    }
   },
   "files": [
     "dist"
@@ -418,10 +434,10 @@
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*",
-    "@opencode-ai/sdk": "1.17.20",
+    "@opencode-ai/sdk": "1.18.1",
     "ajv": "^8.20.0",
     "google-auth-library": "^10.9.0",
-    "opencode-ai": "1.17.20"
+    "opencode-ai": "1.18.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
