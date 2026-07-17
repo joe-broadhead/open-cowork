@@ -29,12 +29,13 @@ export function migrateSettingsDocument(
     return { ok: false, reason: 'corrupt', detail: 'Settings document is not an object.' }
   }
   const doc = { ...(raw as Record<string, unknown>) }
-  let version = typeof doc.schemaVersion === 'number' && Number.isFinite(doc.schemaVersion)
+  const parsedVersion = typeof doc.schemaVersion === 'number' && Number.isFinite(doc.schemaVersion)
     ? Math.trunc(doc.schemaVersion)
     : null
-  if (version === null) {
+  if (parsedVersion === null) {
     return { ok: false, reason: 'corrupt', detail: 'Missing schemaVersion.' }
   }
+  let version: number = parsedVersion
   if (version > targetVersion) {
     return {
       ok: false,
@@ -44,7 +45,7 @@ export function migrateSettingsDocument(
   }
   const migratedFrom = version === targetVersion ? null : version
   while (version < targetVersion) {
-    const nextVersion = version + 1
+    const nextVersion: number = version + 1
     const migrate = SETTINGS_MIGRATIONS[nextVersion]
     if (!migrate) {
       return {
