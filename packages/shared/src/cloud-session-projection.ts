@@ -25,6 +25,10 @@ import {
   sanitizeRuntimeEventRecord,
   sanitizeRuntimeEventValue,
 } from './runtime-event-sanitizer.js'
+import {
+  deriveSessionInteractionFlags,
+  resolveAssistantMessageContent,
+} from './session-machine-reducers.js'
 export {
   CLOUD_PROJECTED_SESSION_EVENT_TYPES,
   CLOUD_AUTOMATION_EVENT_STREAM_VERSION,
@@ -835,16 +839,15 @@ export function reduceCloudSessionProjectionEvent(
       })
     case 'assistant.message': {
       const messageId = readString(payload.messageId, `${session.sessionId}:${event.sequence}:assistant`)
-      // `mode: 'append'` carries an incremental streaming delta (projected from
-      // the SDK `message.part.delta` event). Concatenate it onto the existing
-      // message so cloud SSE streams token-granular; full `message.part.updated`
-      // snapshots still arrive as the default replace mode and resync content.
-      // The delta string is read verbatim (not via `readString`) so that
-      // whitespace-only chunks between words are not dropped.
+      // JOE-846: append/replace content resolution is shared pure policy so
+      // live/cloud streaming semantics cannot drift independently.
       const isAppend = payload.mode === 'append'
       const existing = isAppend ? current.messages.find((message) => message.id === messageId) : undefined
-      const deltaText = typeof payload.content === 'string' ? payload.content : ''
-      const content = existing ? existing.content + deltaText : (isAppend ? deltaText : readString(payload.content))
+      const content = resolveAssistantMessageContent({
+        mode: typeof payload.mode === 'string' ? payload.mode : undefined,
+        existingContent: existing?.content,
+        content: payload.content,
+      })
       return addMessage({
         ...current,
         status: current.status,
@@ -1236,8 +1239,11 @@ export function cloudSessionViewToSessionView<Session extends CloudProjectionSes
     lastInputTokens: projection.lastInputTokens,
     revision: view.projection?.sequence || 0,
     lastEventAt: view.projection?.sequence || 0,
-    isGenerating: projection.isGenerating && projection.pendingApprovals.length === 0 && projection.pendingQuestions.length === 0,
-    isAwaitingPermission: projection.pendingApprovals.length > 0,
-    isAwaitingQuestion: projection.pendingQuestions.length > 0,
+    // JOE-846: shared interaction-flag policy with live SessionView.
+    ...deriveSessionInteractionFlags({
+      isBusyOrGenerating: projection.isGenerating,
+      pendingApprovalCount: projection.pendingApprovals.length,
+      pendingQuestionCount: projection.pendingQuestions.length,
+    }),
   })
 }
