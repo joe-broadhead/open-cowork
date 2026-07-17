@@ -1,7 +1,7 @@
 # Knowledge store ownership
 
-Open Cowork keeps a **single** `KnowledgeStore` contract
-([`packages/shared/src/knowledge-store-contract.ts`](../packages/shared/src/knowledge-store-contract.ts))
+Open Cowork keeps a **single** `KnowledgeStore` contract in the monorepo
+(`packages/shared/src/knowledge-store-contract.ts`; not linked as a docs path)
 with two production backends. The dual implementation is intentional: desktop
 and cloud have different durability and multi-tenant requirements. Feature
 logic must land on the shared contract (or shared helpers) so behavior does not

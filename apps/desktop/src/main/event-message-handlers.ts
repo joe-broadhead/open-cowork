@@ -978,4 +978,3 @@ export function handleMessagePartUpdatedEvent(
     || handleUpdatedCompactionPart(ctx)
     || handleUpdatedToolPart(ctx)
 }
-

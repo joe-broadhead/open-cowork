@@ -509,5 +509,3 @@ function SectionHeader({ title, detail }: { title: string; detail: string }) {
     </div>
   )
 }
-
-

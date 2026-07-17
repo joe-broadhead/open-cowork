@@ -180,18 +180,20 @@ reopening work.
 ## Knowledge
 
 Knowledge is the OpenWiki surface for spaces, pages, proposal review, and the
-knowledge graph. It is default-on in the standard Desktop and Cloud Web builds
-so users can capture durable notes without leaving Studio. Proposals remain
-review-gated; the surface does not invent a second execution runtime.
+knowledge graph. It is a **secondary Studio surface (default off)** — enable
+with `features.knowledge: true` when you want durable notes next to Chat and
+Projects. Proposals remain review-gated; the surface does not invent a second
+execution runtime.
 
 See [OpenWiki Knowledge Base](openwiki.md) for the product contract.
 
 ## Approvals
 
 Approvals is the cross-session review queue for pending permissions and
-questions. OpenCode still owns the approval primitive; Chat continues to show
-in-thread gates, while this page helps users clear backlog across many project
-chats without hunting through the transcript.
+questions. It is a **secondary Studio surface (default off)** — enable with
+`features.approvals: true` when users need a dedicated backlog page. OpenCode
+still owns the approval primitive; Chat continues to show in-thread gates
+whether or not this nav surface is enabled.
 
 ## Playbooks
 
@@ -234,10 +236,11 @@ real permissions, skills, tools, and runtime settings.
 ## Channels
 
 Channels is the Studio surface for gateway channel connections (for example
-Telegram, Slack, email, or webhooks), bindings, and delivery status. It is
-default-on so multi-surface users can see channel health next to Team and
-Playbooks. Session operation for Standalone Gateway remains authority-gated as
-described in [Product Contract](product-contract.md).
+Telegram, Slack, email, or webhooks), bindings, and delivery status. It is a
+**secondary Studio surface (default off)** — enable with `features.channels:
+true` when multi-surface users need channel health next to Team and Playbooks.
+Session operation for Standalone Gateway remains authority-gated as described
+in [Product Contract](product-contract.md).
 
 ## Tools & Skills
 
@@ -257,9 +260,12 @@ understand the real authority behind a coworker or playbook.
 ## Artifacts
 
 Artifacts is the library for generated files, charts, reports, and other
-deliverables produced by project chats and playbook runs. It should make it
-easy to reopen source chats, download or reveal files, and clean up storage
-without turning into a second file manager for the host OS.
+deliverables produced by project chats and playbook runs. It is a **secondary
+Studio surface (default off)** — enable with `features.artifacts: true` when
+operators want a dedicated library page. In-session artifact cards still appear
+in Chat when the surface is off. The library should make it easy to reopen
+source chats, download or reveal files, and clean up storage without turning
+into a second file manager for the host OS.
 
 ## Settings
 

@@ -636,4 +636,3 @@ body {
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-elevated));
   box-shadow: var(--specular);
 }
-
