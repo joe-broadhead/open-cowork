@@ -24,6 +24,10 @@ When the deeper `time-keep` MCP is also available, prefer its
 counts, holiday lookups, timezone catalogs and DST detail, date formatting,
 and timers. The built-in clock stays the zero-install fallback.
 
+If the user asked for time-keep but `mcp__time-keep__*` tools are missing,
+**use `mcp__clock__*` immediately** for current time, ranges, conversions,
+and durations. Do not fall back to shell unless clock tools are also absent.
+
 ## Tool Choice
 
 - `mcp__clock__current_time`: get the authoritative current time for a timezone.

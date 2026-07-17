@@ -10,12 +10,27 @@ the time-keep MCP is available, prefer it over the built-in clock tools for
 business days, holidays, timezone catalogs, date formatting, and timers — it
 is the deeper time engine; the built-in clock covers only the basics.
 
-**Prefer `mcp__time-keep__*` tools over shell `time-keep` / `bash`.** Only fall
-back to the CLI when MCP tools are unavailable (see references/cli.md).
+## Availability (read this first)
+
+Use tools in this order. **Do not claim MCP is unavailable and jump to shell
+unless every step below is exhausted.**
+
+1. **`mcp__time-keep__*`** — preferred when the external `time-keep` CLI MCP
+   is connected (binary on PATH, product config MCP entry enabled).
+2. **`mcp__clock__*`** — always prefer this built-in zero-install MCP when
+   time-keep tools are missing. Covers current time, timezone conversion,
+   date math, ranges, and durations.
+3. **CLI `time-keep`** — only if neither MCP family appears in your tool list
+   (see [references/cli.md](references/cli.md)). Never invent a “CLI fallback”
+   when `mcp__clock__*` tools are already available.
+
+If the user asked for “time-keep” but only clock tools are present, use
+`mcp__clock__*` for basic needs and say briefly that the deeper time-keep MCP
+is not connected (CLI not on the app’s PATH or not installed).
 
 ## Tool Map
 
-All MCP tools are exposed as `mcp__time-keep__<tool>`:
+All time-keep MCP tools are exposed as `mcp__time-keep__<tool>`:
 
 | Need | Tool |
 |------|------|
@@ -35,6 +50,16 @@ All MCP tools are exposed as `mcp__time-keep__<tool>`:
 | Delete a timer | `timer_delete` |
 | Check overdue timers | `timer_check` |
 
+Built-in clock equivalents (when time-keep is offline):
+
+| Need | Clock tool |
+|------|------------|
+| Current time | `mcp__clock__current_time` |
+| Convert timezones | `mcp__clock__convert_time` |
+| Date add/subtract | `mcp__clock__date_math` |
+| Relative ranges | `mcp__clock__date_range` |
+| Duration between | `mcp__clock__duration_between` |
+
 ## Guardrails
 
 - Default timezone is **UTC** — always be explicit.
@@ -45,6 +70,8 @@ All MCP tools are exposed as `mcp__time-keep__<tool>`:
 - Do not hide DST ambiguity — report ambiguous local datetimes as invalid.
 - MCP tool failures surface as `isError: true` — inspect the JSON error
   before retrying.
+- Do not invent holidays or business-day results when only clock is available;
+  say those need the time-keep MCP.
 
 ## Output Standard
 
@@ -58,7 +85,7 @@ holiday data was used, and any error details.
   `business_days`. See [references/calendar.md](references/calendar.md).
 - **Timers**: `timer_set`, `timer_get`, `timer_list`, `timer_check`,
   `timer_delete`. See [references/timers.md](references/timers.md).
-- **CLI transport**: when MCP is unavailable, use the `time-keep` binary
-  directly. See [references/cli.md](references/cli.md).
+- **CLI transport**: last resort only when neither MCP family is available.
+  See [references/cli.md](references/cli.md).
 - **Output contracts**: JSON (default), table, CSV, and error envelopes.
   See [references/output-contracts.md](references/output-contracts.md).
