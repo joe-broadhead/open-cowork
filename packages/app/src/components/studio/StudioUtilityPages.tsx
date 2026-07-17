@@ -90,7 +90,7 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
       <StudioPageHeader
         eyebrow={t('studio.approvals.eyebrow', 'Review')}
         title={t('studio.approvals.title', 'Approvals')}
-        description={t('studio.approvals.description', 'OpenCode permission requests and questions stay runtime-owned; this page gives you one place to answer waiting inputs across chats and channels.')}
+        description={t('studio.approvals.description', 'Backlog across threads. Urgent asks also appear inline in the chat that is waiting — resolve either place; both clear the same request.')}
         actions={[{
           id: 'open-chat',
           children: currentSessionId ? t('studio.approvals.openChat', 'Open chat') : t('studio.approvals.startChat', 'Start from Home'),
