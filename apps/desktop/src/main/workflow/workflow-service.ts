@@ -27,6 +27,7 @@ import type {
 } from '@open-cowork/shared'
 import { getConfiguredAgentsFromConfig } from '@open-cowork/runtime-host/config'
 import { trackParentSession } from '../event-task-state.ts'
+import { markSessionPromptAdmitted } from '../durable-session-events.ts'
 import { log } from '@open-cowork/shared/node'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
@@ -201,10 +202,16 @@ async function createWorkflowThread(input: {
   trackParentSession(session.id)
   input.onSessionCreated?.(session.id)
   const prompt = typeof input.prompt === 'function' ? input.prompt(session.id) : input.prompt
-  await promptNativeSession(client, {
+  const admitted = await promptNativeSession(client, {
     sessionID: session.id,
     parts: [{ type: 'text', text: prompt }],
     agent: input.agent,
+  })
+  markSessionPromptAdmitted({
+    directory: opencodeDirectory,
+    sessionId: session.id,
+    admittedSeq: admitted.admittedSeq,
+    admissionId: admitted.id,
   })
   if (input.kind === 'workflow_run') {
     startSessionStatusReconciliation(session.id, {

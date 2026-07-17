@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
 import { getProviderDescriptor } from '@open-cowork/runtime-host/config'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
+import { markSessionPromptAdmitted } from '../durable-session-events.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { log } from '@open-cowork/shared/node'
 import {
@@ -561,13 +562,23 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       })
       if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
 
-      await promptNativeSession(client, {
+      const admitted = await promptNativeSession(client, {
         sessionID: sessionId,
         parts,
         model: promptModel
           ? { ...promptModel, variant: promptVariant || undefined }
           : null,
         agent: requestedAgent,
+      })
+      // V2 prompt is admission-only. Attach the session to the durable
+      // v2.session.events tail from admittedSeq so transcript is not lost
+      // between the HTTP response and the global SSE stream.
+      markSessionPromptAdmitted({
+        // Match event-subscription keys (runtime home path, not null).
+        directory: record?.opencodeDirectory || getRuntimeHomeDir(),
+        sessionId,
+        admittedSeq: admitted.admittedSeq,
+        admissionId: admitted.id,
       })
 
       startSessionStatusReconciliation(sessionId, {

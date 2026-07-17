@@ -2,7 +2,7 @@ import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/th
 import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 import { getSessionRecord, listSessionRecords, toRendererSession, toSessionRecord, touchSessionRecord, updateSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
-import { getClientForDirectory } from '@open-cowork/runtime-host/runtime'
+import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
 import {
   createNativeSession,
@@ -19,6 +19,7 @@ import { shortSessionId } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '@open-cowork/shared'
 import { trackParentSession } from '../event-task-state.ts'
+import { markSessionPromptAdmitted } from '../durable-session-events.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { log } from '@open-cowork/shared/node'
 import type { IpcHandlerContext } from '../ipc/context.ts'
@@ -191,11 +192,17 @@ export function createDesktopPairingLocalExecutor(context: IpcHandlerContext): D
       if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
       trackParentSession(input.sessionId)
       touchSessionRecord(input.sessionId)
-      await promptNativeSession(client, {
+      const admitted = await promptNativeSession(client, {
         sessionID: input.sessionId,
         parts: promptParts(text, attachments),
         model: model ? { ...model, variant: options.variant || undefined } : null,
         agent,
+      })
+      markSessionPromptAdmitted({
+        directory: record?.opencodeDirectory || getRuntimeHomeDir(),
+        sessionId: input.sessionId,
+        admittedSeq: admitted.admittedSeq,
+        admissionId: admitted.id,
       })
       startSessionStatusReconciliation(input.sessionId, {
         getMainWindow: context.getMainWindow,
