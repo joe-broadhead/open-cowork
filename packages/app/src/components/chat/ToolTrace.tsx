@@ -191,13 +191,15 @@ function ToolArtifactCard({
 }
 
 
-export function ToolTrace({ tools, compact = false }: Props) {
+export function ToolTrace({ tools, compact = false, defaultExpanded = false }: Props) {
+  // JOE-886: detailed tool rows start collapsed unless the surface opts in.
+
   const activeAgent = useSessionStore((s) => s.currentView.activeAgent)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const sessions = useSessionStore((s) => s.sessions)
   const allDone = tools.every((tool) => tool.status === 'complete' || tool.status === 'error')
-  const [expanded, setExpanded] = useState(!allDone)
+  const [expanded, setExpanded] = useState(defaultExpanded || !allDone)
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
   const [exportingArtifactId, setExportingArtifactId] = useState<string | null>(null)
   const [attachingArtifactId, setAttachingArtifactId] = useState<string | null>(null)
