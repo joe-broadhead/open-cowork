@@ -112,11 +112,16 @@ test('desktop-after-pack copies native OpenCode packages into app.asar.unpacked'
     makeManagedMcp(resourcesDir, 'workflows')
     makeManagedMcp(resourcesDir, 'semantic-ui')
     const sdkPackageJsonPath = makeSdkPackageJson(root)
+    // after-pack bundles the vendored time-keep native binary; stub the source
+    // so the unit test does not require `pnpm binaries:time-keep` on CI hosts.
+    const timeKeepSource = join(root, 'time-keep-stub')
+    writeFileSync(timeKeepSource, 'time-keep-binary')
 
     const afterPack = createDesktopAfterPack({
       expectedVersion: '1.2.3',
       virtualStoreDir: store,
       sdkPackageJsonPath,
+      sourcePath: timeKeepSource,
     })
     await afterPack({ appOutDir, arch: 'x64', electronPlatformName: 'linux' })
 
@@ -124,6 +129,8 @@ test('desktop-after-pack copies native OpenCode packages into app.asar.unpacked'
     assert.equal(existsSync(join(copiedPackage, 'bin', 'opencode')), true)
     assert.equal(readFileSync(join(copiedPackage, 'bin', 'opencode'), 'utf8'), 'binary')
     assert.equal(JSON.parse(readFileSync(join(copiedPackage, 'package.json'), 'utf8')).version, '1.2.3')
+    assert.equal(existsSync(join(resourcesDir, 'bin', 'time-keep')), true)
+    assert.equal(readFileSync(join(resourcesDir, 'bin', 'time-keep'), 'utf8'), 'time-keep-binary')
 
     const manifestPath = join(resourcesDir, runtimeComponentManifestResourceName)
     assert.equal(existsSync(manifestPath), true)
