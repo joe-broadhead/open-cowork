@@ -414,7 +414,11 @@
       "types": "./dist/workflow/workflow-tool-bridge.d.ts",
       "import": "./dist/workflow/workflow-tool-bridge.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./settings-migrations": {
+      "types": "./dist/settings-migrations.d.ts",
+      "import": "./dist/settings-migrations.js"
+    }
   },
   "files": [
     "dist"
