@@ -1224,3 +1224,5 @@ browser is not the only protection.
   mode is loopback/local-only. `header` mode is only for a reverse proxy that
   strips caller-supplied identity headers and injects trusted
   `x-open-cowork-*` headers.
+
+See also [Worker-scoped runtime adapter](worker-scoped-runtime-adapter.md).
