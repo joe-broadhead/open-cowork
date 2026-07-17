@@ -72,7 +72,7 @@ own branding, providers, skills, and workflows.
     facets, user tags, saved filters, and suggestion-only categorization.
     The compact sidebar list stays focused on quick switching.
 
-    [:octicons-arrow-right-24: Projects](threads.md)
+    [:octicons-arrow-right-24: Projects](projects.md)
 
 -   :material-clock-outline:{ .lg } **Review-first playbooks**
 

@@ -169,7 +169,7 @@ Home
 
 Projects
 :   The full-history workspace for search, facets, tags, and saved filters
-    over project chats. See [Projects](threads.md).
+    over project chats. See [Projects](projects.md).
 
 Team
 :   The coworker catalog (built-in + custom OpenCode agents). See
