@@ -312,6 +312,9 @@ This layer is responsible for:
 - notifications
 
 Code:
+- `packages/shared/src/opencode-event-translator.ts` — **canonical** SDK
+  envelope normalize + product-kind classification (JOE-838). Desktop, Cloud,
+  and Standalone Gateway fan out only after this step.
 - `apps/desktop/src/main/events.ts` — control-plane SSE (`v2.event.subscribe`)
   plus shared projection into the SessionEngine pipeline.
 - `apps/desktop/src/main/durable-session-events.ts` — per-session durable tails

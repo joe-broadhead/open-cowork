@@ -3,6 +3,7 @@ import {
   asRecord,
   CLOUD_TOOL_ATTACHMENT_MAX_DATA_URL_BYTES,
   CLOUD_TOOL_ATTACHMENT_MAX_FILENAME_BYTES,
+  normalizeOpencodeEventEnvelope,
   readBoolean,
   readRecordNumber,
   readRecordString,
@@ -557,30 +558,15 @@ export function normalizeMessagePart(value: unknown): NormalizedMessagePart | nu
   }
 }
 
+/**
+ * JOE-838: Envelope normalization is owned by `@open-cowork/shared`
+ * (`normalizeOpencodeEventEnvelope`). Runtime-host re-exports the same
+ * behavior so existing desktop/cloud import paths stay stable.
+ */
 export function normalizeRuntimeEventEnvelope(value: SdkRuntimeEventEnvelope): NormalizedRuntimeEventEnvelope | null
 export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntimeEventEnvelope | null
 export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntimeEventEnvelope | null {
-  const envelope = asRecord(value)
-  const payload = asRecord(envelope.payload)
-  const source = readRecordString(payload, ['type']) ? payload : envelope
-  const nested = asRecord(source.data)
-  const sourceType = readRecordString(source, ['type'])
-  const rawType = sourceType === 'sync'
-    ? readRecordString(source, ['name']) || readRecordString(nested, ['type'])
-    : sourceType || readRecordString(nested, ['type'])
-  const type = rawType?.replace(/\.\d+$/, '') || null
-  if (!type) return null
-  const sourceProperties = asRecord(source.properties)
-  const nestedProperties = asRecord(nested.properties)
-  const properties = hasEnumerableOwnProperty(sourceProperties)
-    ? sourceProperties
-    : hasEnumerableOwnProperty(nestedProperties)
-      ? nestedProperties
-      : nested
-  return {
-    type,
-    properties,
-  }
+  return normalizeOpencodeEventEnvelope(value)
 }
 
 export function normalizeSessionStatuses(value: Record<string, SdkSessionStatus>): Record<string, NormalizedSessionStatus>

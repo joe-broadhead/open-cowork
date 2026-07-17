@@ -129,15 +129,32 @@ and switches the call site to `client.v2.*`.
 
 ## Shared Event Contract
 
-The OpenCode SDK event stream is normalized once at the runtime boundary:
+The OpenCode SDK event stream is normalized **once** by the canonical translator
+in `@open-cowork/shared` (`packages/shared/src/opencode-event-translator.ts`).
+Desktop, Cloud, and Standalone Gateway fan out **after** translation only:
 
 ```text
 OpenCode SDK event
-  -> opencode-runtime-adapter.ts
-  -> CloudRuntimeEvent / CloudSessionEventType
-  -> shared cloud projection reducer
+  -> normalizeOpencodeEventEnvelope + classifyOpencodeSdkEvent  (shared)
+  -> surface fan-out:
+       Desktop live  -> SessionEngine handlers (IPC / view model)
+       Cloud         -> opencode-runtime-adapter payload shapes
+                        -> CloudRuntimeEvent / CloudSessionEventType
+                        -> shared cloud projection reducer
+       Standalone    -> translateOpencodeEventForStandalone
+                        -> channel-safe StandaloneRuntimeEvent
   -> desktop/web/gateway rendering
 ```
+
+Rules (JOE-838):
+
+- Do not re-parse raw SDK envelopes in surface code. Use
+  `normalizeOpencodeEventEnvelope` / `normalizeRuntimeEventEnvelope`.
+- Product kind decisions (permission.requested, tool.call, …) live in
+  `classifyOpencodeSdkEvent`. Surfaces must not invent parallel type maps.
+- Shared fixtures: `tests/fixtures/opencode-sdk-v2-events.json` plus
+  `tests/opencode-event-translator.test.ts` and
+  `tests/opencode-sdk-event-projection.test.ts`.
 
 Cloud Channel Gateway rendering consumes `@open-cowork/cloud-client` session
 events. It should never receive SDK client objects, SDK event envelopes, or

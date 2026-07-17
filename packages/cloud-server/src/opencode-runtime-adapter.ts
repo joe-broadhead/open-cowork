@@ -23,6 +23,7 @@ import {
   sanitizeRuntimeEventRecord,
   sanitizeRuntimeEventValue,
   sanitizeCloudToolOutput,
+  translateOpencodeEvent,
 } from '@open-cowork/shared'
 import {
   createOpencodeClient,
@@ -513,8 +514,10 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
 }
 
 export function translateOpencodeRuntimeEventWithDiagnostics(raw: unknown): OpencodeRuntimeEventTranslation {
-  const event = normalizeRuntimeEventEnvelope(raw)
-  if (!event) {
+  // JOE-838: Canonical envelope + disposition come from shared translator.
+  // Cloud only fans out into CloudRuntimeEvent payload shapes after that.
+  const translation = translateOpencodeEvent(raw)
+  if (!translation.envelope || translation.disposition.status === 'invalid') {
     return {
       events: [],
       dropped: {
@@ -523,7 +526,30 @@ export function translateOpencodeRuntimeEventWithDiagnostics(raw: unknown): Open
       },
     }
   }
+  const event = translation.envelope
+  const disposition = translation.disposition
+  if (disposition.status === 'benign' || disposition.status === 'private') {
+    return {
+      events: [],
+      dropped: {
+        sdkEventType: event.type,
+        reason: 'no-projected-events',
+      },
+    }
+  }
   const properties = event.properties || {}
+  // Classification is authoritative for "is this a known SDK family?" —
+  // unknown dispositions fail closed as dropped unknown types. live-only and
+  // project dispositions still run through Cloud payload fan-out.
+  if (disposition.status === 'unknown') {
+    return {
+      events: [],
+      dropped: {
+        sdkEventType: event.type,
+        reason: 'unknown-event-type',
+      },
+    }
+  }
   const translated = knownOpencodeRuntimeEvents(event.type, properties)
   if (!translated) {
     return {
