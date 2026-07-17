@@ -38,7 +38,7 @@ test('project directory grants authorize native-picker selections by real path',
   }
 })
 
-test('project directory grants reject files and tolerate missing paths without stat races', () => {
+test('project directory grants reject files and missing paths (JOE-834)', () => {
   const parent = mkdtempSync(join(tmpdir(), 'open-cowork-grant-race-'))
   const filePath = join(parent, 'not-a-directory')
   const missingPath = join(parent, 'deleted-project')
@@ -47,7 +47,29 @@ test('project directory grants reject files and tolerate missing paths without s
     const grants = new ProjectDirectoryGrantRegistry()
 
     assert.throws(() => grants.grant(filePath), /must be a directory/)
-    assert.equal(grants.grant(missingPath), resolve(missingPath))
+    assert.throws(() => grants.grant(missingPath), /must exist before it can be granted/)
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
+  }
+})
+
+test('project directory grants re-realpath on every use so symlink swaps fail closed (JOE-834)', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'open-cowork-grant-repath-'))
+  const original = join(parent, 'project')
+  const replacement = join(parent, 'replacement')
+  const linkPath = join(parent, 'project-link')
+  try {
+    mkdirSync(original)
+    mkdirSync(replacement)
+    symlinkSync(original, linkPath)
+    const grants = new ProjectDirectoryGrantRegistry()
+    const granted = grants.grant(linkPath)
+    assert.equal(granted, realpathSync.native(original))
+
+    // Replace the granted path with a symlink to a different tree after grant.
+    rmSync(linkPath, { force: true })
+    symlinkSync(replacement, linkPath)
+    assert.throws(() => grants.resolve(linkPath), /native directory picker|must be selected/)
   } finally {
     rmSync(parent, { recursive: true, force: true })
   }
