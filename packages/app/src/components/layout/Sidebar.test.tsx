@@ -43,7 +43,7 @@ describe('Sidebar', () => {
     expect(container.querySelector('[data-nav-view="team"]')).not.toBeNull()
   })
 
-  it('renders every nav item when no feature flags are supplied', () => {
+  it('shows primary nav by default and hides secondary Studio surfaces when flags are omitted', () => {
     const { container } = render(
       <Sidebar
         currentView="home"
@@ -51,7 +51,25 @@ describe('Sidebar', () => {
       />,
     )
 
-    for (const view of ['projects', 'knowledge', 'approvals', 'team', 'playbooks', 'channels', 'tools', 'artifacts']) {
+    for (const view of ['projects', 'team', 'playbooks', 'tools']) {
+      expect(container.querySelector(`[data-nav-view="${view}"]`)).not.toBeNull()
+    }
+    // Progressive disclosure (JOE-849): secondary surfaces default off.
+    for (const view of ['knowledge', 'approvals', 'channels', 'artifacts']) {
+      expect(container.querySelector(`[data-nav-view="${view}"]`)).toBeNull()
+    }
+  })
+
+  it('shows secondary Studio surfaces when explicitly enabled', () => {
+    const { container } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        features={{ knowledge: true, approvals: true, channels: true, artifacts: true }}
+      />,
+    )
+
+    for (const view of ['knowledge', 'approvals', 'channels', 'artifacts']) {
       expect(container.querySelector(`[data-nav-view="${view}"]`)).not.toBeNull()
     }
   })
@@ -153,6 +171,8 @@ describe('Sidebar', () => {
       <Sidebar
         currentView="home"
         onViewChange={vi.fn()}
+        // Enable secondary surfaces so layout still covers full Manage density.
+        features={{ approvals: true, channels: true, artifacts: true, knowledge: true }}
       />,
     )
 
@@ -285,6 +305,7 @@ describe('Sidebar', () => {
       <Sidebar
         currentView="home"
         onViewChange={vi.fn()}
+        features={{ approvals: true }}
       />,
     )
 
