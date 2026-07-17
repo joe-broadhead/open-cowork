@@ -893,6 +893,24 @@ export function assertCloudProductionDeploymentSafe(input: {
   if (input.auth.mode === 'header' && input.auth.headerAllowUnsigned) {
     throw new Error('Public production trusted-header deployments require signed identity headers.')
   }
+
+  // JOE-835 / JOE-841: durable event tables grow without bound when retention
+  // windows stay null. Public production must set explicit prune windows for the
+  // high-volume session/workspace event logs (audit/usage remain operator-opt-in).
+  const sessionEventRetentionMs = parsePositiveInt(envValue(input.env, 'OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS'), 0)
+  const workspaceEventRetentionMs = parsePositiveInt(envValue(input.env, 'OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS'), 0)
+  if (!sessionEventRetentionMs) {
+    throw new Error(
+      'Public production cloud deployments require OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS '
+      + '(milliseconds) so cloud_session_events cannot grow without bound.',
+    )
+  }
+  if (!workspaceEventRetentionMs) {
+    throw new Error(
+      'Public production cloud deployments require OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS '
+      + '(milliseconds) so cloud_workspace_events cannot grow without bound.',
+    )
+  }
 }
 
 function assertCloudProductionCoreAdaptersSafe(input: {
