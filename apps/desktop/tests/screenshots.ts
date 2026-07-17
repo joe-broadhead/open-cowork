@@ -96,16 +96,18 @@ async function gotoWorkflows(page: Page) {
 }
 
 async function captureSettingsTabs(page: Page, outputDir: string) {
-  // Open the Settings panel from the sidebar — this expands the sidebar
-  // to ~640px and replaces ThreadList with the SettingsPanel component.
+  // Open Settings as a modal Dialog from the sidebar.
   await page.getByRole('button', { name: 'Settings', exact: true }).last().click()
-  await page.waitForSelector('text=Appearance', { timeout: 10_000 })
+  const dialog = page.locator('[role="dialog"]').first()
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.getByRole('button', { name: /^Appearance\b/ }).first().waitFor({ timeout: 10_000 })
 
   // Each settings tab button renders the label + a description on the
   // next line, so the accessible name is "Appearance Theme, color
   // scheme, and fonts". Match the leading label rather than exact-name.
   // Studio copy renamed "Models" → "Model" and "Workflows" → "Playbooks";
   // the historical asset IDs stay stable so docs references don't break.
+  // Scope to the dialog so "Playbooks" does not match the sidebar nav item.
   const tabs: Array<{ pattern: RegExp; id: string }> = [
     { pattern: /^Appearance\b/, id: 'settings-appearance' },
     { pattern: /^Model\b/, id: 'settings-models' },
@@ -115,17 +117,16 @@ async function captureSettingsTabs(page: Page, outputDir: string) {
   ]
 
   for (const tab of tabs) {
-    await page.getByRole('button', { name: tab.pattern }).first().click()
+    await dialog.getByRole('button', { name: tab.pattern }).first().click()
     await page.waitForTimeout(200)
     await shoot(page, outputDir, tab.id)
   }
 
-  // Settings now renders as a modal Dialog; close it via the Dialog's
-  // "Close dialog" icon button (Escape as a fallback) so the modal does
-  // not intercept pointer events for every capture that follows.
-  await page.getByRole('button', { name: 'Close dialog', exact: true }).first().click().catch(() => undefined)
+  // Close via the Dialog's "Close dialog" icon button (Escape as a fallback)
+  // so the modal does not intercept pointer events for every capture that follows.
+  await dialog.getByRole('button', { name: 'Close dialog', exact: true }).first().click().catch(() => undefined)
   await page.keyboard.press('Escape').catch(() => undefined)
-  await page.locator('[role="dialog"]').first().waitFor({ state: 'detached', timeout: 5_000 }).catch(() => undefined)
+  await dialog.waitFor({ state: 'detached', timeout: 5_000 }).catch(() => undefined)
   await page.waitForTimeout(200)
 }
 
@@ -210,9 +211,10 @@ async function captureAgentsViews(page: Page, outputDir: string) {
   const cards = page.locator('main button.text-start.p-4')
   if (await cards.count()) {
     await cards.first().click()
-    // Built-in coworkers render the workbench read-only; wait on the
-    // "Model & behavior" tab, which never appears on the Coworkers grid.
-    await page.locator('main').getByRole('button', { name: 'Model & behavior', exact: true }).waitFor({ timeout: 10_000 })
+    // Built-in coworkers render WorkbenchTabs as a SegmentedControl
+    // (role=radio options), not buttons. "Model & behavior" never appears
+    // on the Coworkers grid.
+    await page.locator('main').getByRole('radio', { name: 'Model & behavior', exact: true }).waitFor({ timeout: 10_000 })
     await shoot(page, outputDir, 'agents-builder-detail')
     // Exit via the chevron-left "Team" back link
     await page.locator('main').getByRole('button', { name: 'Team', exact: true }).first().click().catch(() => undefined)

@@ -184,3 +184,12 @@ extra:
 # `mkdocs build --strict`'s "not in nav" info message.
 not_in_nav: |
   /assets/README.md
+  /a11y-lint-policy.md
+  /approvals-mental-model.md
+  /ci-test-rebalance.md
+  /config-contract-version.md
+  /coverage-floors.md
+  /desktop-composition-shell.md
+  /empty-error-density.md
+  /opencode-classic-sdk-burndown.md
+  /settings-migration.md

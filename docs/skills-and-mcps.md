@@ -23,10 +23,10 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Open Cowork ships seven bundled MCP servers (`agents`, `charts`, `clock`,
-`knowledge`, `semantic-ui`, `skills`, `workflows`) plus one external-CLI
-MCP configured out of the box (`time-keep`), and seven bundled skills. The cards
-below cover the most useful examples.
+Open Cowork ships seven MCPs out of the box: six packaged-source servers
+(`agents`, `charts`, `knowledge`, `semantic-ui`, `skills`, `workflows`) plus
+one command-launched bundled binary (`time-keep`), and six bundled skills.
+The cards below cover the most useful examples.
 When an agent calls a bundled MCP tool through OpenCode 1.18+, the runtime tool
 id uses OpenCode’s `${server}_${tool}` form, for example `charts_bar_chart` or
 `time-keep_current_time`. Open Cowork permission patterns still accept the
@@ -136,11 +136,11 @@ may still refer to the short tool name such as `bar_chart`.
     question and prepare chart-ready data. Source:
     `skills/chart-creator/SKILL.md`.
 
--   :material-clock-check-outline: **`clock` skill** <span class="status-badge stable">stable</span>
+-   :material-clock-check-outline: **`time-keep` skill** <span class="status-badge stable">stable</span>
 
     ---
 
-    Teaches agents to call the `clock` MCP before answering with current
+    Teaches agents to call the `time-keep` MCP before answering with current
     dates, relative ranges, timezone conversions, durations, or calendar
     math. Source: `skills/time-keep/SKILL.md`.
 
@@ -419,8 +419,8 @@ in place.
 The bundled `agent-creator` + `agents` MCP pair lets an approved setup thread
 create custom agents through the same validation path as the UI. The bundled
 `chart-creator` + `charts` MCP pair is the canonical "skill
-that teaches the model how to use a paired MCP" pattern. The `clock` skill +
-`clock` MCP pair uses the same pattern for calendar reasoning. The
+that teaches the model how to use a paired MCP" pattern. The `time-keep` skill +
+`time-keep` MCP pair uses the same pattern for calendar reasoning. The
 `workflow-creator` + `workflows` MCP pair applies it to workflow setup: the
 skill teaches the conversational checklist, while the MCP previews, validates,
 and saves only from a confirmed preview token. The `autoresearch` skill extends the pattern by

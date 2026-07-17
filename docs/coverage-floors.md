@@ -5,7 +5,7 @@ Authoritative ratchets live in `scripts/coverage-summary.mjs`.
 | Suite | Goal | Notes |
 | --- | --- | --- |
 | Workspace Node | ≥60% lines long-term; current combined floor is a smoke floor | Dominated by gateway/MCP dist; raise only after measured gains |
-| MCP Handlers | Raise via **in-process** pure helper tests (e.g. clock `time-math`) plus contract spawns | Dist-only LCOV is a boot smoke signal — see KNOWN LIMITATION in coverage-summary |
+| MCP Handlers | Raise via **in-process** pure helper tests (e.g. charts pure helpers) plus contract spawns | Dist-only LCOV is a boot smoke signal — see KNOWN LIMITATION in coverage-summary |
 | Cloud client | Function coverage on domain clients via mocked `request` | Prefer sessions/channels/threads first |
 
 ## Adding coverage safely
@@ -23,7 +23,7 @@ Target modules for the next ratchet toward ≥60% lines:
 - Desktop main-adjacent node suites already under `tests/` (directory grants,
   durable session events, IPC registration)
 - Gateway + standalone-gateway package tests (already high)
-- MCP in-process pure helpers (see JOE-871 clock time-math)
+- MCP in-process pure helpers (e.g. charts chart-utils / sankey helpers)
 
 Run `pnpm test:coverage:node` / workspace coverage and only then raise
 `WORKSPACE_NODE_COVERAGE_INPUT.thresholds` in `scripts/coverage-summary.mjs`.
