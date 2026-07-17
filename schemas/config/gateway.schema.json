@@ -1,0 +1,542 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cowork.local/schemas/config/gateway.schema.json",
+  "title": "Open Cowork Gateway Config Surface",
+  "description": "Gateway channel / standalone operator surface. Depends on shared cloud name/branding defs when composed.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "gateway": {
+      "$ref": "#/$defs/gatewayConfig"
+    }
+  },
+  "$defs": {
+    "cloudPublicBranding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "productName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "shortName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "logoUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "faviconUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "ogImageUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "supportUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingSupportUrl"
+        },
+        "privacyUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "securityUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "legalUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "theme": {
+          "$ref": "#/$defs/cloudPublicBrandingTheme"
+        },
+        "dashboard": {
+          "$ref": "#/$defs/cloudPublicDashboardCopy"
+        },
+        "managedOrgConnectionLabels": {
+          "$ref": "#/$defs/cloudManagedOrgConnectionLabels"
+        }
+      }
+    },
+    "cloudName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "httpsOrLocalhostUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^(https://|http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?/).+"
+    },
+    "cloudPublicBrandingUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https://.+"
+    },
+    "cloudPublicBrandingSupportUrl": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^mailto:[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+        }
+      ]
+    },
+    "cloudPublicBrandingTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surface": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "mutedSurface": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "border": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "text": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "mutedText": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accent": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accent2": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentSoft": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "accentLine": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "accentStrong": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "focus": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "warn": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "danger": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "ok": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surfaceHover": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surfaceActive": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "borderSubtle": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "borderStrong": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "elevated": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "textSecondary": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentHover": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentForeground": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "green": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "amber": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "red": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "info": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "shadowCard": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "shadowElevated": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "bgImage": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        }
+      }
+    },
+    "cloudPublicBrandingCssToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[#A-Za-z0-9(),.%\\s-]+$"
+    },
+    "cloudPublicBrandingColorToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})|rgba?\\([#A-Za-z0-9(),.%\\s-]+\\)|hsla?\\([#A-Za-z0-9(),.%\\s-]+\\)|[A-Za-z]+)$"
+    },
+    "cloudPublicDashboardCopy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "subtitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "signInTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "signInBody": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "byokDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "connectionsDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "gatewayDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "billingDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "usageDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    },
+    "cloudManagedOrgConnectionLabels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "desktopToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "gatewayToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "apiToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "cloudUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "gatewayConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branding": {
+          "$ref": "#/$defs/cloudPublicBranding"
+        },
+        "server": {
+          "$ref": "#/$defs/gatewayServerConfig"
+        },
+        "productMode": {
+          "type": "string",
+          "enum": [
+            "cloud_channel",
+            "standalone",
+            "hybrid"
+          ],
+          "description": "Gateway product mode. `cloud_channel` (the apps/gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "self-host",
+            "managed"
+          ]
+        },
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "level": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error",
+                "silent"
+              ]
+            }
+          }
+        },
+        "metrics": {
+          "$ref": "#/$defs/gatewayBooleanToggle"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/gatewayBooleanToggle"
+        },
+        "timeouts": {
+          "$ref": "#/$defs/gatewayTimeouts"
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gatewayProviderConfig"
+          }
+        }
+      }
+    },
+    "gatewayServerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "publicBaseUrl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/httpsOrLocalhostUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adminToken": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowLoopbackOperatorBypass": {
+          "type": "boolean"
+        },
+        "maxRequestBodyBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 67108864
+        },
+        "trustProxyHeaders": {
+          "type": "boolean"
+        },
+        "trustedProxyCidrs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gatewayTimeouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "webhookDeliveryMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        },
+        "smtpMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        },
+        "shutdownDrainMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        }
+      }
+    },
+    "gatewayBooleanToggle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "gatewayProviderConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "fake",
+            "telegram",
+            "slack",
+            "email",
+            "webhook",
+            "discord",
+            "whatsapp",
+            "signal",
+            "cli"
+          ],
+          "description": "Channel provider kind. `telegram`/`slack`/`email`/`webhook` are turnkey (native ingress); `discord`/`whatsapp`/`signal` are bridge-only and require an external relay configured via `settings.deliveryUrl` + `credentials.sharedSecret`."
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "channelBindingId": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "externalWorkspaceId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "defaultAgent": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "kind",
+        "channelBindingId"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "discord",
+                  "whatsapp",
+                  "signal"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "properties": {
+                  "sharedSecret": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "sharedSecret"
+                ]
+              },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "deliveryUrl": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "deliveryUrl"
+                ]
+              }
+            },
+            "required": [
+              "credentials",
+              "settings"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
