@@ -46,7 +46,7 @@ const allowedSdkImportPaths = new Set([
   'apps/desktop/src/main/events.ts',
   'apps/desktop/src/main/ipc/context.ts',
   'apps/desktop/src/main/ipc/provider-handlers.ts',
-  'apps/desktop/src/main/question-normalization.ts',
+  // question-normalization moved to runtime-host (JOE-842) — no SDK import
   'apps/desktop/src/main/runtime-mcp-status-polling.ts',
   'apps/standalone-gateway/src/opencode.ts',
   'packages/runtime-host/src/agent-config.ts',
