@@ -9,7 +9,7 @@ import { getMachineSkillsDir } from './runtime-paths.js'
 import { getAdcPathIfAvailable, getCachedAccessToken } from './auth.js'
 import { log } from '@open-cowork/shared/node'
 import { getAgentToolBridgeEnvironment } from './agent-tool-bridge.js'
-import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.js'
+import { evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.js'
 import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridge.js'
 import { getKnowledgeToolBridgeEnvironment } from './knowledge/knowledge-tool-bridge.js'
 import { getSemanticUiBridgeEnvironment } from './semantic-ui-bridge.js'
@@ -302,7 +302,21 @@ export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkS
   return resolution.status === 'ready' ? resolution.entry : null
 }
 
+/**
+ * Static (sync) custom MCP resolve — **stdio / local only**.
+ *
+ * JOE-837: HTTP MCPs must use `resolveCustomMcpRuntimeEntryForRuntime` so DNS
+ * policy + cleartext pin (JOE-826) cannot be skipped by a wrong-path call.
+ * Calling this with `type: 'http'` throws fail-closed.
+ */
 export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedRuntimeMcpEntry | null {
+  if (custom.type === 'http') {
+    throw new Error(
+      `HTTP MCP ${custom.name || '(unnamed)'} requires resolveCustomMcpRuntimeEntryForRuntime `
+      + '(DNS-aware runtime path). The static resolve path is stdio-only (JOE-837).',
+    )
+  }
+
   if (custom.type === 'stdio' && custom.command) {
     const env: Record<string, string> = { ...(custom.env || {}) }
     Object.assign(env, googleAuthEnv(custom.name, custom.googleAuth))
@@ -317,27 +331,6 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
       command: [resolvedCommand, ...(custom.args || [])],
     }
     if (Object.keys(env).length > 0) entry.environment = env
-    return entry
-  }
-
-  if (custom.type === 'http' && custom.url) {
-    // Defense-in-depth: the URL policy also runs at save/test time, but
-    // a tampered config file on disk (corruption, manual edit,
-    // out-of-band write) would otherwise bypass the guard. Re-evaluate
-    // here so the runtime NEVER spawns an HTTP MCP that fails the
-    // policy, regardless of what's persisted.
-    const verdict = evaluateHttpMcpUrl(custom.url, { allowPrivateNetwork: custom.allowPrivateNetwork })
-    if (!verdict.ok) {
-      log('mcp', `Rejecting HTTP MCP ${custom.name}: ${verdict.reason}`)
-      return null
-    }
-    const entry: ResolvedRuntimeMcpEntry = {
-      type: 'remote',
-      url: custom.url,
-    }
-    if (custom.headers && Object.keys(custom.headers).length > 0) {
-      entry.headers = custom.headers
-    }
     return entry
   }
 

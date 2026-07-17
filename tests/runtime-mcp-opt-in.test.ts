@@ -1,4 +1,10 @@
-import { evaluateBuiltInMcp, pinHttpMcpRemoteEntry, resolveBundledMcpNodeCommand, resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
+import {
+  evaluateBuiltInMcp,
+  pinHttpMcpRemoteEntry,
+  resolveBundledMcpNodeCommand,
+  resolveCustomMcpRuntimeEntry,
+  resolveCustomMcpRuntimeEntryForRuntime,
+} from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
@@ -167,6 +173,18 @@ test('resolveBundledMcpNodeCommand uses Electron as Node in packaged builds', ()
     command: ['/Applications/Open Cowork.app/Contents/MacOS/Open Cowork', '/tmp/charts.js'],
     environment: { ELECTRON_RUN_AS_NODE: '1' },
   })
+})
+
+test('JOE-837: static resolveCustomMcpRuntimeEntry throws for HTTP MCPs (fail closed)', () => {
+  assert.throws(
+    () => resolveCustomMcpRuntimeEntry({
+      scope: 'machine',
+      name: 'remote-http',
+      type: 'http',
+      url: 'https://mcp.example.com/api',
+    }),
+    /DNS-aware runtime path|JOE-837|stdio-only/,
+  )
 })
 
 test('resolveCustomMcpRuntimeEntryForRuntime rejects public hostnames that resolve private', async () => {
