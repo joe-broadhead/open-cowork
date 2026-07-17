@@ -797,8 +797,23 @@ Set these environment variables in every role:
 Data-retention variables (scheduler/all-in-one roles). The scheduler runs a bounded, batched
 retention sweep no more than once per `OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS`. Every window is in
 milliseconds and deletes rows older than the window, oldest-first; a window of `0`/unset disables
-that prune (the scheduler does nothing destructive until you opt in). The event-log windows are
-compliance/replay-sensitive — they default **off**:
+that prune (the scheduler does nothing destructive until you opt in).
+
+**Public production (JOE-841 / JOE-835):** `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production`
+**fails closed** unless both `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` and
+`OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` are set to positive values. Local and
+self-host tiers may leave event retention off, but unbounded `cloud_session_events` /
+`cloud_workspace_events` growth will hurt SSE replay latency, backup size, and cost — set
+windows as soon as a tenant is non-demo.
+
+Recommended production starting points (adjust to compliance policy):
+
+| Table | Recommended window | Notes |
+| --- | --- | --- |
+| Session events | `1209600000` (14 days) | Durable session projection still covers the trimmed window for UI state. |
+| Workspace events | `1209600000` (14 days) | Keep aligned with session events (written 1:1). |
+| Audit events | policy-driven | Leave off until legal/compliance approves prune. |
+| Usage events | after export | Leave off until billing aggregation/export is complete. |
 
 | Variable | Meaning |
 | --- | --- |
@@ -807,10 +822,10 @@ compliance/replay-sensitive — they default **off**:
 | `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS` | Prune terminal (`sent`/`dead`) channel deliveries older than this. Off by default. |
 | `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_INTERACTION_MS` | Prune expired one-shot channel-interaction tokens older than this. Off by default. |
 | `OPEN_COWORK_CLOUD_RETENTION_STALE_THROTTLE_MS` | Prune stale rate-limit windows + expired auth-backoff rows. Pure bookkeeping that grows one row per client IP, so this defaults **on** at one hour; `0` disables. |
-| `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default; the durable session projection still covers the trimmed window. |
+| `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default for local/self-host; **required** for `public_production`. Durable session projection still covers the trimmed window. |
 | `OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS` | Prune `cloud_audit_events` older than this. Off by default — enable only if your compliance/retention policy permits deleting the audit trail. |
 | `OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS` | Prune `cloud_usage_events` older than this. Off by default — enable only after the usage data has been exported/aggregated for billing. |
-| `OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` | Prune `cloud_workspace_events` older than this. Written 1:1 with `cloud_session_events`, so set this alongside `RETENTION_SESSION_EVENT_MS` to bound the workspace-event log's growth; the durable projection still covers the trimmed window. Off by default. |
+| `OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` | Prune `cloud_workspace_events` older than this. Written 1:1 with `cloud_session_events`; **required** for `public_production`. Durable projection still covers the trimmed window. |
 | `OPEN_COWORK_CLOUD_CONCURRENCY_RECONCILE_MS` | Optional interval for the scheduler to recompute the concurrency gauges (`cloud_concurrency_counters`) from their source tables. Off by default — the gauges are drift-free for normal activity; enable as a belt-and-suspenders correction (e.g. one hour). |
 
 Managed billing variables:
