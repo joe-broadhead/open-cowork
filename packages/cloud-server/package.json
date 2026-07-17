@@ -35,6 +35,7 @@
     "./stub-billing-adapter": "./src/stub-billing-adapter.ts",
     "./sse-replay": "./src/sse-replay.ts",
     "./sse-pg-notify": "./src/sse-pg-notify.ts",
+    "./http-routes/sse-limits": "./src/http-routes/sse-limits.ts",
     "./session-event-bus": "./src/session-event-bus.ts",
     "./services/usage-governance-service": "./src/services/usage-governance-service.ts",
     "./services/entitlement-service": "./src/services/entitlement-service.ts",

@@ -1044,11 +1044,31 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS` | Idle eviction window for cached worker runtimes (default `1800000`, 30 minutes). |
 | `OPEN_COWORK_CLOUD_PG_LOCK_TIMEOUT_MS` | Postgres `lock_timeout` per connection (default `0`, disabled). Set a non-zero value to bound how long a statement waits on a row/table lock before failing fast. |
 | `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` | Maximum simultaneous TCP connections accepted by the cloud HTTP server (default `10000`). A connection-exhaustion guard above the Node default of unbounded. |
-| `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams per org (default `200`). Excess subscriptions for one org are rejected so a single tenant cannot exhaust stream slots. |
+| `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams **per org per web pod** (default `200`). Enforced by the SSE stream registry on every session, workspace, and channel-delivery stream; excess subscriptions for one org receive an SSE error and are dropped so a single tenant cannot exhaust stream slots. Size this to concurrent interactive users × open tabs, not historical sessions. |
 | `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS` | SSE read-poll cadence in milliseconds (default `1000`). Each open stream polls the control plane at this interval for new events; lower it to cut delivery latency at the cost of more control-plane queries, raise it to shed query load at the cost of latency. |
-| `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Opt-in Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). When `true`, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and web pods open one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop above always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) for byte-for-byte unchanged poll-only delivery. |
+| `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). **Production multi-web-pod topologies should set this to `true`.** When enabled, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and each web pod opens one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) only for single-process demos that want byte-for-byte poll-only delivery. |
 | `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS` | Backstop read-poll cadence (default `15000`, 15 seconds) applied **only** to NOTIFY-addressable SSE topics when `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` is enabled. With the accelerator on, `LISTEN`/`NOTIFY` drives low-latency delivery, so the per-topic poll relaxes to this longer backstop cadence (bounded by `max(OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS, this)`), cutting steady-state control-plane queries. Has no effect when the accelerator is off — poll cadence stays at `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS`. |
 | `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
+
+### Multi-pod SSE load guidance
+
+Split-role production Cloud keeps durable events in Postgres. Every open SSE
+stream still needs a delivery path from the worker that wrote the event to the
+web pod holding the browser connection:
+
+| Topology | Recommended SSE settings | Why |
+| --- | --- | --- |
+| Single `all-in-one` demo | defaults (`SSE_PG_NOTIFY` off, poll 1s) | One process; poll loop is enough. |
+| Single web pod + separate workers | `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` | Workers and web do not share memory; NOTIFY cuts end-to-end latency without depending on pod-local buses. |
+| Multiple web pods behind a load balancer | **`OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` (required for scale)** | Cross-pod wake; poll-only multiplies control-plane reads by `streams × pods × (1000 / pollMs)`. |
+| Large interactive orgs | raise `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` only with evidence; keep `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` above `web_replicas × max_per_org × orgs_per_pod` | Caps are per pod; global capacity is `replicas × per-org cap` under sticky routing assumptions. |
+
+Load-planning rule of thumb for multi-pod web:
+
+1. Enable `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` on **web and worker** roles (worker emits NOTIFY; web LISTENs).
+2. Keep `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS` at `1000` (or higher) and rely on NOTIFY for low latency; tune `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS` (default 15s) as the safety net.
+3. Size `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` to concurrent tabs per org (default 200). Rejected streams reconnect transparently after a slot frees.
+4. Include SSE in launch load gates (`OPEN_COWORK_LOAD_INCLUDE_SSE=true`) so reconnect storms and per-org caps appear in evidence before production traffic.
 
 `OPEN_COWORK_CLOUD_PUBLIC_URL` doubles as the HSTS switch: the server only emits
 `Strict-Transport-Security` when `OPEN_COWORK_CLOUD_PUBLIC_URL` is an HTTPS,
