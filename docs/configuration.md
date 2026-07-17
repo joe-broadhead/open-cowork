@@ -665,7 +665,6 @@ Each skill entry can map to:
 The upstream core ships these packaged-source MCPs:
 - `agents`
 - `charts`
-- `clock`
 - `knowledge`
 - `semantic-ui`
 - `skills`
@@ -674,7 +673,8 @@ The upstream core ships these packaged-source MCPs:
 It also ships one command-launched bundled MCP (`type: local` with a
 `command` launcher rather than a packaged `packageName`):
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
-  queries
+  queries, date arithmetic, business days, offline holidays (2000–2030), and
+  SQLite timers (bundled native binary; pin in `third_party/time-keep/VERSION`)
 
 OpenWiki and OpenCode Gateway are no longer shipped as default MCP entries.
 Current OpenWiki is an optional documentation CLI workflow (see

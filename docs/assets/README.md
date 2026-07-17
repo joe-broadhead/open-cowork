@@ -49,7 +49,7 @@ Team / Playbooks / Tools & Skills — regenerate rather than hand-editing PNGs.
 | **Major UI language change** (nav labels, page titles, empty-state copy) | Run `pnpm screenshots` and commit the refreshed PNGs in the same PR as the product change, or immediately after |
 | **Studio surface add/remove/default-on change** | Extend or prune harness captures in `apps/desktop/tests/screenshots.ts`, then regenerate; drop PNGs that no page embeds and no release note needs |
 | **Design-token / chrome refresh** | Regenerate the full auto set so docs do not ship mixed visual eras |
-| **Release cut that advertises UI** | Confirm screenshots still match default nav (Home, Projects, Knowledge, Approvals, Team, Playbooks, Channels, Tools & Skills, Artifacts, Settings) before tagging |
+| **Release cut that advertises UI** | Confirm screenshots still match default primary nav (Home, Projects, Team, Playbooks, Tools & Skills, Settings). Secondary surfaces (Knowledge, Approvals, Channels, Artifacts) stay off unless `features.*` enables them — only capture those when docs advertise them |
 | **Routine maintenance** | At least once per minor release series that touches renderer chrome; otherwise leave untouched |
 
 Do **not** leave stale product language visible in docs screenshots after a
