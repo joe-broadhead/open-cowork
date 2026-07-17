@@ -112,6 +112,12 @@ export function SettingsPairingPanel() {
         <div className="mt-1 text-2xs leading-relaxed text-text-muted">
           {t('settings.pairing.description', 'Pairings let an approved gateway claim local desktop commands over a Desktop-initiated connection. Local paths, MCP details, and artifact bodies stay redacted by default.')}
         </div>
+        <div className="mt-2 text-2xs leading-relaxed text-amber-700 dark:text-amber-300">
+          {t(
+            'settings.pairing.remoteAllowedRisk',
+            'Security: keep remote approvals/questions on local confirmation. remote_allowed elevates a compromised broker or stolen pairing token to root-equivalent local agent control. Rotate the token immediately after any elevation, and revoke pairings you no longer trust.',
+          )}
+        </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1.4fr_auto]">
           <Input
             size="sm"
