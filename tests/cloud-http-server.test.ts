@@ -42,7 +42,7 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
-const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
+const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests!'
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []

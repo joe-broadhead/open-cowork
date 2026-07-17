@@ -754,7 +754,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS` / `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF` | Comma-separated retired envelope keys (raw values or secret-manager refs) kept in the decrypt keyring for rotation. New writes always use the current key and stamp its key id; already-stored ciphertexts decrypt with the matching retired key. Re-encrypt and drop the old key once migration completes. |
-| `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies; falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos. |
+| `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies (minimum **32 bytes**, same floor as envelope secret keys). Falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos only — public production requires a distinct cookie secret. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |

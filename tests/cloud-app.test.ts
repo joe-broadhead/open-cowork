@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { createCloudSessionCookieManager } from '@open-cowork/cloud-server/session-cookie-auth'
 import type { SecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import {
   assertCloudProductionDeploymentSafe,
@@ -49,7 +50,7 @@ import type {
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
 import { sessionCheckpointLatestKey } from '@open-cowork/cloud-server/workspace-checkpoint-store'
-const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
+const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests!'
 const STRONG_CLOUD_SECRET = 'Pp4J9_kV2rTq8YzLmN6bHwC3sDxF7uAaG1eOiR5v'
 const STRONG_CLOUD_COOKIE_SECRET = 'Vs7Qm2_ZxHa93LpNuR4TwE8cYbK6jFoDiG1rS5el'
 
@@ -1027,6 +1028,15 @@ test('public production deployment guard enforces strong secrets and web auth po
     checkpointsEnabled: false,
     autoProcessCommands: false,
     publicUrl: 'https://cloud.example.test',
+  }))
+})
+
+test('cloud session cookie secret requires at least 32 bytes (JOE-828)', () => {
+  assert.throws(() => createCloudSessionCookieManager({
+    secret: 'x'.repeat(31),
+  }), /at least 32 bytes/)
+  assert.doesNotThrow(() => createCloudSessionCookieManager({
+    secret: 'x'.repeat(32),
   }))
 })
 
