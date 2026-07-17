@@ -20,9 +20,15 @@ import {
   handleNativeTextEndedEvent,
   handleNativeToolEvent,
   sweepSessionScopedMessageState,
+  type SessionScopedMessageState,
 } from './event-message-handlers.ts'
 import { handleRuntimeSideEffectEvent } from './event-runtime-handlers.ts'
+import {
+  attachDirectoryDurableHub,
+  shouldSuppressGlobalRuntimeEvent,
+} from './durable-session-events.ts'
 export { removeParentSession } from './event-runtime-handlers.ts'
+export { markSessionPromptAdmitted } from './durable-session-events.ts'
 
 const UNKNOWN_EVENT_LOG_INTERVAL_MS = 60_000
 const unknownEventLastLoggedAt = new Map<string, number>()
@@ -59,6 +65,125 @@ function logUnknownRuntimeEvent(type: string, scopeLabel: string) {
   log('events', `Unknown OpenCode event type${scopeLabel}: ${type}`)
 }
 
+function processOpenCodeRuntimeEvent(options: {
+  win: BrowserWindow
+  raw: unknown
+  messageState: SessionScopedMessageState
+  cachedModelId: string
+  getMainWindow: () => BrowserWindow | null
+  scopeLabel: string
+  directory: string | null | undefined
+  /** When true, skip durable-ownership suppress (event already on durable tail). */
+  fromDurableStream?: boolean
+}) {
+  const data = normalizeRuntimeEventEnvelope(options.raw)
+  if (!data) return
+
+  if (
+    !options.fromDurableStream
+    && shouldSuppressGlobalRuntimeEvent(options.directory, data.type, data.properties)
+  ) {
+    return
+  }
+
+  try {
+    switch (data.type) {
+      case 'message.updated': {
+        handleMessageUpdatedEvent(options.win, dispatchRuntimeEvent, data.properties, options.messageState)
+        break
+      }
+
+      case 'message.part.delta': {
+        handleMessagePartDeltaEvent(options.win, dispatchRuntimeEvent, data.properties, options.messageState)
+        break
+      }
+
+      case 'message.part.updated': {
+        handleMessagePartUpdatedEvent(
+          options.win,
+          dispatchRuntimeEvent,
+          data.properties,
+          options.messageState,
+          options.cachedModelId,
+        )
+        break
+      }
+
+      case 'session.next.text.delta':
+      case 'session.next.reasoning.delta': {
+        handleNativeTextDeltaEvent(
+          options.win,
+          dispatchRuntimeEvent,
+          data.properties,
+          options.messageState,
+          data.type === 'session.next.text.delta' ? 'text' : 'reasoning',
+        )
+        break
+      }
+
+      case 'session.next.text.ended':
+      case 'session.next.reasoning.ended': {
+        handleNativeTextEndedEvent(
+          options.win,
+          dispatchRuntimeEvent,
+          data.properties,
+          options.messageState,
+          options.cachedModelId,
+          data.type === 'session.next.text.ended' ? 'text' : 'reasoning',
+        )
+        break
+      }
+
+      case 'session.next.tool.called':
+      case 'session.next.tool.progress':
+      case 'session.next.tool.success':
+      case 'session.next.tool.failed': {
+        handleNativeToolEvent(
+          options.win,
+          dispatchRuntimeEvent,
+          data.type,
+          data.properties,
+          options.messageState,
+          options.cachedModelId,
+        )
+        break
+      }
+
+      case 'session.next.step.ended': {
+        handleNativeStepEndedEvent(
+          options.win,
+          dispatchRuntimeEvent,
+          data.properties,
+          options.messageState,
+          options.cachedModelId,
+        )
+        handleRuntimeSideEffectEvent({
+          win: options.win,
+          type: data.type,
+          properties: data.properties,
+          dispatchRuntimeEvent,
+          getMainWindow: options.getMainWindow,
+        })
+        break
+      }
+
+      default:
+        if (!handleRuntimeSideEffectEvent({
+          win: options.win,
+          type: data.type,
+          properties: data.properties,
+          dispatchRuntimeEvent,
+          getMainWindow: options.getMainWindow,
+        })) {
+          logUnknownRuntimeEvent(data.type, options.scopeLabel)
+        }
+        break
+    }
+  } catch (err) {
+    log('error', `Failed to process SSE event ${data.type}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 export async function subscribeToEvents(
   client: OpencodeClient,
   getMainWindow: () => BrowserWindow | null,
@@ -67,6 +192,11 @@ export async function subscribeToEvents(
 ) {
   const scopeLabel = directory ? ` [${directory}]` : ''
   log('events', `Subscribing to SSE event stream${scopeLabel}`)
+  // Durable hub needs an abort signal to tear down per-session tails when the
+  // directory subscription ends. Prefer the caller signal; otherwise create a
+  // local controller aborted only in finally after the global stream exits.
+  const localController = signal ? null : new AbortController()
+  const durableSignal = signal || localController!.signal
   const result = await client.v2.event.subscribe(signal ? { signal } : undefined)
   const stream = result.stream
   log('events', `SSE stream connected${scopeLabel}`)
@@ -77,6 +207,28 @@ export async function subscribeToEvents(
     sweepStaleTaskState()
     sweepSessionScopedMessageState(messageState)
   }, 5 * 60 * 1000)
+
+  // Durable per-session tails share this message-state + handler pipeline so
+  // classic/native projection and task binding stay consistent across streams.
+  attachDirectoryDurableHub({
+    client,
+    directory: directory ?? null,
+    signal: durableSignal,
+    onEvent: async (raw) => {
+      const win = getMainWindow()
+      if (!win) return
+      processOpenCodeRuntimeEvent({
+        win,
+        raw,
+        messageState,
+        cachedModelId,
+        getMainWindow,
+        scopeLabel,
+        directory,
+        fromDurableStream: true,
+      })
+    },
+  })
 
   // One-shot trace: log the first event per subscription so a silent stream
   // is obvious in the log (as opposed to a stream that just isn't being
@@ -96,108 +248,19 @@ export async function subscribeToEvents(
       const win = getMainWindow()
       if (!win) continue
 
-      const data = normalizeRuntimeEventEnvelope(event)
-      if (!data) continue
-
-      try {
-        switch (data.type) {
-          case 'message.updated': {
-            handleMessageUpdatedEvent(win, dispatchRuntimeEvent, data.properties, messageState)
-            break
-          }
-
-          case 'message.part.delta': {
-            handleMessagePartDeltaEvent(win, dispatchRuntimeEvent, data.properties, messageState)
-            break
-          }
-
-          case 'message.part.updated': {
-            handleMessagePartUpdatedEvent(
-              win,
-              dispatchRuntimeEvent,
-              data.properties,
-              messageState,
-              cachedModelId,
-            )
-            break
-          }
-
-          case 'session.next.text.delta':
-          case 'session.next.reasoning.delta': {
-            handleNativeTextDeltaEvent(
-              win,
-              dispatchRuntimeEvent,
-              data.properties,
-              messageState,
-              data.type === 'session.next.text.delta' ? 'text' : 'reasoning',
-            )
-            break
-          }
-
-          case 'session.next.text.ended':
-          case 'session.next.reasoning.ended': {
-            handleNativeTextEndedEvent(
-              win,
-              dispatchRuntimeEvent,
-              data.properties,
-              messageState,
-              cachedModelId,
-              data.type === 'session.next.text.ended' ? 'text' : 'reasoning',
-            )
-            break
-          }
-
-          case 'session.next.tool.called':
-          case 'session.next.tool.progress':
-          case 'session.next.tool.success':
-          case 'session.next.tool.failed': {
-            handleNativeToolEvent(
-              win,
-              dispatchRuntimeEvent,
-              data.type,
-              data.properties,
-              messageState,
-              cachedModelId,
-            )
-            break
-          }
-
-          case 'session.next.step.ended': {
-            handleNativeStepEndedEvent(
-              win,
-              dispatchRuntimeEvent,
-              data.properties,
-              messageState,
-              cachedModelId,
-            )
-            handleRuntimeSideEffectEvent({
-              win,
-              type: data.type,
-              properties: data.properties,
-              dispatchRuntimeEvent,
-              getMainWindow,
-            })
-            break
-          }
-
-          default:
-            if (!handleRuntimeSideEffectEvent({
-              win,
-              type: data.type,
-              properties: data.properties,
-              dispatchRuntimeEvent,
-              getMainWindow,
-            })) {
-              logUnknownRuntimeEvent(data.type, scopeLabel)
-            }
-            break
-        }
-      } catch (err) {
-        log('error', `Failed to process SSE event ${data.type}: ${err instanceof Error ? err.message : String(err)}`)
-      }
+      processOpenCodeRuntimeEvent({
+        win,
+        raw: event,
+        messageState,
+        cachedModelId,
+        getMainWindow,
+        scopeLabel,
+        directory,
+      })
     }
   } finally {
     clearInterval(sweepInterval)
+    localController?.abort()
   }
 
   if (signal?.aborted) {

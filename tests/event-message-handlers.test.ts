@@ -4,6 +4,7 @@ import type { BrowserWindow } from 'electron'
 import {
   createSessionScopedMessageState,
   handleMessagePartDeltaEvent,
+  handleMessagePartUpdatedEvent,
   handleMessageUpdatedEvent,
   handleNativeStepEndedEvent,
   handleNativeTextDeltaEvent,
@@ -439,4 +440,65 @@ test('native v2 tool terminal events retain called metadata and step events proj
   assert.equal(cost?.data?.cost, 0.125)
   assert.deepEqual(cost?.data?.tokens, { input: 5, output: 7, reasoning: 1, cache: { read: 2, write: 3 } })
   assert.equal(messageState.nativeToolPartsByKey.size, 0)
+})
+
+test('classic message.part events are suppressed once session.next owns the message', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+  trackParentSession('dual-family-session')
+
+  handleNativeTextDeltaEvent(win, collector.dispatch, {
+    sessionID: 'dual-family-session',
+    assistantMessageID: 'assistant-dual',
+    textID: 'text-1',
+    delta: 'Native ',
+  }, messageState, 'text')
+
+  // Classic family for the same message must not double-append after native owns it.
+  handleMessagePartDeltaEvent(win, collector.dispatch, {
+    sessionID: 'dual-family-session',
+    messageID: 'assistant-dual',
+    partID: 'text-1',
+    type: 'text',
+    delta: 'Classic-dup',
+  }, messageState)
+
+  handleNativeToolEvent(win, collector.dispatch, 'session.next.tool.called', {
+    sessionID: 'dual-family-session',
+    assistantMessageID: 'assistant-dual',
+    callID: 'call-dual',
+    tool: 'bash',
+    input: { command: 'echo hi' },
+  }, messageState, 'openai/gpt-5')
+
+  // Classic tool part with the same call id must not re-project.
+  handleMessagePartUpdatedEvent(win, collector.dispatch, {
+    sessionID: 'dual-family-session',
+    messageID: 'assistant-dual',
+    part: {
+      type: 'tool',
+      id: 'call-dual',
+      callID: 'call-dual',
+      sessionID: 'dual-family-session',
+      messageID: 'assistant-dual',
+      tool: 'bash',
+      state: {
+        status: 'completed',
+        input: { command: 'echo hi' },
+        output: 'should-not-appear',
+      },
+    },
+  }, messageState, 'openai/gpt-5')
+
+  const textEvents = collector.events.filter((event) => {
+    const data = (event as { data?: { type?: string; content?: string } }).data
+    return data?.type === 'text'
+  }) as Array<{ data: { content?: string } }>
+  assert.equal(textEvents.length, 1)
+  assert.equal(textEvents[0]?.data.content, 'Native ')
+
+  const toolEvents = collector.events.filter((event) => (event as { type?: string }).type === 'tool_call')
+  // Only the native tool.called projection — not a second classic completion.
+  assert.equal(toolEvents.length, 1)
 })

@@ -312,14 +312,19 @@ This layer is responsible for:
 - notifications
 
 Code:
-- `apps/desktop/src/main/events.ts` — SSE subscription to the OpenCode
-  runtime.
+- `apps/desktop/src/main/events.ts` — control-plane SSE (`v2.event.subscribe`)
+  plus shared projection into the SessionEngine pipeline.
+- `apps/desktop/src/main/durable-session-events.ts` — per-session durable tails
+  (`v2.session.events`) started from prompt `admittedSeq`, with global-stream
+  transcript suppress for tracked sessions.
+- `packages/runtime-host/src/opencode-durable-session-events.ts` — shared cursor
+  and suppress helpers used by Desktop (and aligned with cloud/standalone).
 - `apps/desktop/src/main/event-subscriptions.ts` — subscription manager with
   retry and directory-scoped clients.
 - `apps/desktop/src/main/event-runtime-handlers.ts`,
   `apps/desktop/src/main/event-message-handlers.ts`,
   `apps/desktop/src/main/event-task-state.ts` — normalizers for each event
-  class.
+  class (including classic vs `session.next` family ownership).
 - `packages/runtime-host/src/session-engine.ts` — the state machine that applies
   normalized events and derives the view model.
 - `packages/runtime-host/src/session-history-loader.ts`,

@@ -62,6 +62,7 @@ still touch SDK event/types at the desktop edge.
 - `packages/cloud-server/src/opencode-runtime-adapter.ts`
 - `packages/cloud-server/src/runtime-adapter.ts`
 - `packages/cloud-server/src/worker-scoped-runtime-adapter.ts`
+- `apps/desktop/src/main/durable-session-events.ts`
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
@@ -111,6 +112,21 @@ remaining call by file, method, and count so this list cannot expand silently:
 Remove an allowlist entry as soon as the pinned SDK exposes a working native V2
 equivalent. Do not emulate these OpenCode-owned behaviors in Open Cowork.
 
+**Status on OpenCode 1.18.1 (verified):** no allowlist row is burnable yet.
+
+| Gap | Why it stays classic |
+|-----|----------------------|
+| `session.summarize` | Generated `v2.session.compact` exists but server returns `OperationUnavailable`. |
+| `session.command` / `delete` / `diff` / `fork` / `share` / `todo` / `unshare` / `update` | No working native V2 routes on the pin. |
+| MCP `auth.*` / `connect` / `disconnect` / `status` | No V2 MCP group. |
+| `file.read` | Generated `v2.fs.read` does not expose the wildcard path for `/api/fs/read/*`. |
+| `file.status`, `find.symbols`, `find.text` | No working V2 equivalents (`v2.fs.list` / `v2.fs.find` already cover list/find-files). |
+| `tool.list` | V2 catalogs agents/commands/skills/providers/models, not the effective tool set. |
+
+Burn-down is gated on an OpenCode SDK/runtime bump that proves each method,
+then removes the exact allowlist entry in `tests/opencode-sdk-boundary.test.ts`
+and switches the call site to `client.v2.*`.
+
 ## Shared Event Contract
 
 The OpenCode SDK event stream is normalized once at the runtime boundary:
@@ -149,6 +165,36 @@ adapter consumes `v2.session.events` from the returned `admittedSeq` rather
 than relying on the lossy global event tail. This preserves fast completions
 and crash retries without re-executing tool side effects. A bounded execution
 deadline interrupts the native session if no terminal event arrives.
+
+Desktop local runtime uses the same durable admission contract:
+
+- `v2.event.subscribe` remains the process-level control plane (permissions,
+  questions, untracked sessions, heartbeats).
+- After each local `v2.session.prompt` admission, Desktop tracks that session
+  on `v2.session.events` from `admittedSeq` and advances an `after` cursor from
+  observed `durable.seq` values.
+- While a session is durable-tracked, global-stream transcript
+  (`session.next.*`, classic `message.*`) and idle terminals for that session
+  are suppressed so two SSE tails cannot double-project.
+- Shared helpers live in
+  `packages/runtime-host/src/opencode-durable-session-events.ts`; the Desktop
+  hub is `apps/desktop/src/main/durable-session-events.ts`.
+
+### Classic vs `session.next` family ownership
+
+OpenCode may emit both classic `message.part.*` and native `session.next.*` for
+the same turn. Open Cowork receive-side ownership is:
+
+1. Prefer `session.next.*` for live transcript once a message (or tool
+   `callID`) has been observed on the native family.
+2. Classic `message.part.delta` / `message.part.updated` for that message or
+   call id is suppressed thereafter.
+3. Classic handlers remain for history-shaped events and turns that never emit
+   native events.
+
+Idle multi-signal dedupe (`session.status` idle, `session.idle`, non-tool
+`session.next.step.ended`) is unchanged and lives in
+`event-runtime-handlers.ts`.
 
 ## SDK v2 Upgrade Checklist
 

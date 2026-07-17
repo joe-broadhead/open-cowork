@@ -49,6 +49,19 @@ export type SessionScopedMessageState = {
   messageRolesBySession: Map<string, Map<string, 'user' | 'assistant'>>
   pendingTextEventsBySession: Map<string, Map<string, PendingTextEvent[]>>
   nativeToolPartsByKey: Map<string, Record<string, unknown>>
+  /**
+   * Messages that have received at least one `session.next.*` transcript event.
+   * Once native owns a message, classic `message.part.*` for the same message
+   * is suppressed so dual-family emission cannot double-project text/tools.
+   * Keyed as `sessionScope\0messageId`.
+   */
+  nativeOwnedMessages: Set<string>
+  /**
+   * Tool call ids observed on the native family. Classic tool parts that share
+   * the same callID are suppressed after native ownership.
+   * Keyed as `sessionId\0callId`.
+   */
+  nativeOwnedToolCalls: Set<string>
   totalPendingTextEvents: number
   totalMessageRoles: number
 }
@@ -58,9 +71,49 @@ export function createSessionScopedMessageState(): SessionScopedMessageState {
     messageRolesBySession: new Map(),
     pendingTextEventsBySession: new Map(),
     nativeToolPartsByKey: new Map(),
+    nativeOwnedMessages: new Set(),
+    nativeOwnedToolCalls: new Set(),
     totalPendingTextEvents: 0,
     totalMessageRoles: 0,
   }
+}
+
+function nativeMessageOwnershipKey(sessionId: string | null | undefined, messageId: string) {
+  return `${messageSessionScope(sessionId, messageId)}\0${messageId}`
+}
+
+function markNativeMessageOwned(
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
+  messageId: string,
+) {
+  state.nativeOwnedMessages.add(nativeMessageOwnershipKey(sessionId, messageId))
+}
+
+function isNativeMessageOwned(
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
+  messageId: string | null | undefined,
+) {
+  if (!messageId) return false
+  return state.nativeOwnedMessages.has(nativeMessageOwnershipKey(sessionId, messageId))
+}
+
+function markNativeToolOwned(
+  state: SessionScopedMessageState,
+  sessionId: string,
+  callId: string,
+) {
+  state.nativeOwnedToolCalls.add(nativeToolKey(sessionId, callId))
+}
+
+function isNativeToolOwned(
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
+  callId: string | null | undefined,
+) {
+  if (!sessionId || !callId) return false
+  return state.nativeOwnedToolCalls.has(nativeToolKey(sessionId, callId))
 }
 
 function messageSessionScope(sessionId: string | null | undefined, messageId: string) {
@@ -351,6 +404,7 @@ export function handleMessagePartDeltaEvent(
   dispatchRuntimeEvent: DispatchRuntimeEvent,
   properties: Record<string, unknown> | null | undefined,
   messageState: SessionScopedMessageState,
+  options?: { fromNativeFamily?: boolean },
 ) {
   const rawPart = asRecord(readRecordValue(properties, 'part'))
   const messageId = readString(readRecordValue(properties, 'messageID'))
@@ -375,6 +429,12 @@ export function handleMessagePartDeltaEvent(
     ? consumePendingPromptEcho(sessionId, rawDelta)
     : rawDelta
   if (!delta || !sessionId) return
+
+  // Cross-family contract: once session.next owns a message, classic
+  // message.part.delta is secondary and must not double-append.
+  if (!options?.fromNativeFamily && messageId && isNativeMessageOwned(messageState, actualSessionId, messageId)) {
+    return
+  }
 
   const taskRunId = actualSessionId && actualSessionId !== sessionId
     ? (getTaskRunIdForChild(actualSessionId)
@@ -887,9 +947,25 @@ export function handleMessagePartUpdatedEvent(
   properties: Record<string, unknown> | null | undefined,
   messageState: SessionScopedMessageState,
   cachedModelId: string,
+  options?: { fromNativeFamily?: boolean },
 ) {
   const ctx = resolveUpdatedPartContext(win, dispatchRuntimeEvent, properties, messageState, cachedModelId)
   if (!ctx || ignoreUpdatedPart(ctx.part)) return
+
+  // Prefer session.next for live transcript when present. Classic parts for a
+  // native-owned message (or tool call id) are dropped to avoid dual projection.
+  if (!options?.fromNativeFamily) {
+    if (ctx.messageId && isNativeMessageOwned(messageState, ctx.actualSessionId, ctx.messageId)) {
+      return
+    }
+    const callId = readString(readRecordValue(ctx.part, 'callID'))
+      || readString(readRecordValue(ctx.part, 'callId'))
+      || (ctx.part.type === 'tool' ? ctx.partId : null)
+    if (callId && isNativeToolOwned(messageState, ctx.actualSessionId, callId)) {
+      return
+    }
+  }
+
   handleUpdatedTextPart(ctx)
     || handleUpdatedReasoningPart(ctx)
     || handleUpdatedStepFinishPart(ctx)
@@ -918,13 +994,14 @@ export function handleNativeTextDeltaEvent(
   const delta = readString(readRecordValue(properties, 'delta'))
   if (!sessionID || !messageID || !delta) return
   setMessageRole(messageState, sessionID, messageID, 'assistant')
+  markNativeMessageOwned(messageState, sessionID, messageID)
   handleMessagePartDeltaEvent(win, dispatchRuntimeEvent, {
     sessionID,
     messageID,
     partID,
     type: kind,
     delta,
-  }, messageState)
+  }, messageState, { fromNativeFamily: true })
 }
 
 export function handleNativeTextEndedEvent(
@@ -940,6 +1017,7 @@ export function handleNativeTextEndedEvent(
   const content = readString(readRecordValue(properties, 'text'))
   if (!sessionID || !messageID || !content) return
   setMessageRole(messageState, sessionID, messageID, 'assistant')
+  markNativeMessageOwned(messageState, sessionID, messageID)
   handleMessagePartUpdatedEvent(win, dispatchRuntimeEvent, {
     sessionID,
     messageID,
@@ -950,7 +1028,7 @@ export function handleNativeTextEndedEvent(
       messageID,
       text: content,
     },
-  }, messageState, cachedModelId)
+  }, messageState, cachedModelId, { fromNativeFamily: true })
 }
 
 function nativeToolKey(sessionID: string, callID: string) {
@@ -968,6 +1046,8 @@ export function handleNativeToolEvent(
   const { sessionID, messageID } = nativeMessageEventFields(properties)
   const callID = readString(readRecordValue(properties, 'callID'))
   if (!sessionID || !messageID || !callID) return
+  markNativeMessageOwned(messageState, sessionID, messageID)
+  markNativeToolOwned(messageState, sessionID, callID)
   const key = nativeToolKey(sessionID, callID)
   const previous = messageState.nativeToolPartsByKey.get(key) || {}
   const previousState = asRecord(readRecordValue(previous, 'state'))
@@ -1032,7 +1112,7 @@ export function handleNativeToolEvent(
     sessionID,
     messageID,
     part: next,
-  }, messageState, cachedModelId)
+  }, messageState, cachedModelId, { fromNativeFamily: true })
 }
 
 export function handleNativeStepEndedEvent(
@@ -1045,6 +1125,7 @@ export function handleNativeStepEndedEvent(
   const { sessionID, messageID } = nativeMessageEventFields(properties)
   if (!sessionID || !messageID) return
   setMessageRole(messageState, sessionID, messageID, 'assistant')
+  markNativeMessageOwned(messageState, sessionID, messageID)
   handleMessagePartUpdatedEvent(win, dispatchRuntimeEvent, {
     sessionID,
     messageID,
@@ -1057,5 +1138,5 @@ export function handleNativeStepEndedEvent(
       tokens: readRecordValue(properties, 'tokens'),
       reason: readRecordValue(properties, 'finish'),
     },
-  }, messageState, cachedModelId)
+  }, messageState, cachedModelId, { fromNativeFamily: true })
 }

@@ -30,6 +30,8 @@ planned before broad distribution.
   `permission.v2.asked` request id.
 - Skill catalog boot noise when `v2.skill.list` is empty early (skills.paths
   remains authoritative).
+- Live transcript dual-family races: once `session.next.*` owns a message or
+  tool call id, classic `message.part.*` for that identity is suppressed.
 
 ### Changed
 
@@ -38,6 +40,10 @@ planned before broad distribution.
 - Wired delegated permission-inheritance checks into agent composition (log
   soft warnings instead of silent policy theater).
 - Prefer MCP clock/time-keep tools over shell CLIs in skill docs.
+- Desktop local chat attaches each prompt admission to a durable
+  `v2.session.events` tail from `admittedSeq` (global SSE stays control-plane
+  and suppresses tracked-session transcript). Classic SDK allowlist remains
+  for OpenCode 1.18.1 gaps (`session.summarize`, MCP, explorer, `tool.list`).
 
 ### Added
 
