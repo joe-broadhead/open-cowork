@@ -102,8 +102,9 @@ export function ChatInputToolbar({
             variant="ghost"
             size="sm"
             rightIcon="chevron-down"
+            aria-label={modelLabel || t('chat.chooseModel', 'Choose model')}
           >
-            {modelLabel}
+            {modelLabel || t('chat.chooseModel', 'Choose model')}
           </Button>
         </div>
 
