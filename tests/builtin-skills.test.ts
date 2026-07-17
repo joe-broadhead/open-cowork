@@ -27,7 +27,6 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
     'agent-creator',
     'autoresearch',
     'chart-creator',
-    'clock',
     'skill-creator',
     'time-keep',
     'workflow-creator',

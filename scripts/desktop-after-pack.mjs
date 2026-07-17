@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -353,6 +353,49 @@ export async function writePackagedRuntimeComponentManifest(resourcesDir, option
   return manifestPath
 }
 
+/**
+ * Map electron-builder platform/arch → third_party/time-keep/platforms key.
+ * Source binaries: https://github.com/joe-broadhead/time-keep releases.
+ */
+export function timeKeepPlatformKey(electronPlatformName, archName) {
+  if (electronPlatformName === 'darwin') {
+    return archName === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
+  }
+  if (electronPlatformName === 'linux') {
+    return 'linux-x64'
+  }
+  if (electronPlatformName === 'win32') {
+    return 'win32-x64'
+  }
+  return null
+}
+
+export function copyBundledTimeKeepBinary(resourcesDir, electronPlatformName, archName, options = {}) {
+  const key = timeKeepPlatformKey(electronPlatformName, archName)
+  if (!key) {
+    throw new Error(`Cannot map ${electronPlatformName}/${archName} to a time-keep platform asset`)
+  }
+  const binaryName = key.startsWith('win32') ? 'time-keep.exe' : 'time-keep'
+  const source = options.sourcePath
+    || join(repoRoot, 'third_party', 'time-keep', 'platforms', key, binaryName)
+  if (!existsSync(source)) {
+    throw new Error(
+      `Bundled time-keep binary missing at ${source}. Run \`pnpm binaries:time-keep\` before packaging.`,
+    )
+  }
+  const destDir = join(resourcesDir, 'bin')
+  mkdirSync(destDir, { recursive: true })
+  const dest = join(destDir, binaryName)
+  cpSync(source, dest, { force: true })
+  try {
+    chmodSync(dest, 0o755)
+  } catch {
+    // best-effort when the host cannot chmod (rare)
+  }
+  process.stdout.write(`[desktop-after-pack] bundled time-keep MCP binary: ${dest}\n`)
+  return dest
+}
+
 export function createDesktopAfterPack(options = {}) {
   return async function afterPack(context) {
     const targetArch = getTargetArchName(context.arch)
@@ -369,6 +412,7 @@ export function createDesktopAfterPack(options = {}) {
 
     const resourcesDir = getResourcesDir(context)
     writeUpdateInstallCapabilityResource(context, resourcesDir)
+    copyBundledTimeKeepBinary(resourcesDir, context.electronPlatformName, targetArch, options)
 
     const targetModulesDir = join(resourcesDir, 'app.asar.unpacked', 'node_modules')
     mkdirSync(targetModulesDir, { recursive: true })

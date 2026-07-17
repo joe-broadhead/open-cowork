@@ -36,6 +36,51 @@ export function resolveBundledMcpScriptPath(name: string) {
   return mcpPath(name)
 }
 
+/**
+ * Resolve a native CLI binary shipped with Open Cowork (e.g. time-keep).
+ *
+ * Packaged: `Resources/bin/<name>`
+ * Dev/test: `third_party/<name>/platforms/<platform-arch>/<name>`
+ *
+ * Returns null when only PATH lookup remains.
+ */
+export function resolveBundledNativeBinary(name: string): string | null {
+  const bare = name.replace(/\.exe$/i, '')
+  const exe = process.platform === 'win32' ? `${bare}.exe` : bare
+  const platformKey = `${process.platform}-${process.arch}`
+
+  if (getAppPathHost()?.isPackaged) {
+    const resources = (process as { resourcesPath?: string }).resourcesPath
+    if (resources) {
+      const packaged = join(resources, 'bin', exe)
+      if (existsSync(packaged)) return packaged
+    }
+  }
+
+  // Dev + unit tests: prefer monorepo-relative paths. resourcePath() assumes an
+  // Electron appPath under apps/desktop (../../ = repo root); plain node tests
+  // often run with cwd at the repo root, so also check process.cwd() directly.
+  const candidates = [
+    join(process.cwd(), 'third_party', bare, 'platforms', platformKey, exe),
+    join(process.cwd(), 'bin', exe),
+    resourcePath('bin', exe),
+    resourcePath('third_party', bare, 'platforms', platformKey, exe),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/** Rewrite bare command[0] to a bundled absolute path when available. */
+export function resolveLocalMcpCommand(command: string[]): string[] {
+  const head = command[0]?.trim()
+  if (!head) return command
+  if (head.includes('/') || head.includes('\\')) return command
+  const bundled = resolveBundledNativeBinary(head)
+  return bundled ? [bundled, ...command.slice(1)] : command
+}
+
 export function resolveBundledMcpNodeCommand(scriptPath: string, options: {
   isPackaged?: boolean
   executablePath?: string
@@ -142,6 +187,9 @@ function externalCommandResolves(command: string[] | undefined): boolean {
   if (executable.includes('/') || executable.includes('\\')) {
     return existsSync(isAbsolute(executable) ? executable : resolve(executable))
   }
+  // Prefer binaries we ship (e.g. Resources/bin/time-keep) before PATH — GUI
+  // launches often miss login-shell PATH where user installs live.
+  if (resolveBundledNativeBinary(executable)) return true
   // Bare name: resolvable iff present in some PATH entry. `node` is always
   // present in dev, and packaged builds use packageName entries instead. Use the
   // platform PATH delimiter (';' on Windows, ':' elsewhere) and, on Windows,
@@ -239,7 +287,7 @@ function googleAuthEnv(mcpName: string, googleAuth: boolean | undefined): Record
 function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
   if (builtin.type === 'local') {
     const nodeCommand = builtin.command
-      ? { command: builtin.command, environment: {} }
+      ? { command: resolveLocalMcpCommand(builtin.command), environment: {} }
       : resolveBundledMcpNodeCommand(mcpPath(builtin.packageName || builtin.name))
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',

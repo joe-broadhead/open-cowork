@@ -134,8 +134,8 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     const askMcpConfig = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
     assert.equal(askMcpConfig.permission['mcp__analytics__*'], 'ask')
     assert.equal(askMcpConfig.permission['mcp__warehouse__*'], 'ask')
-    assert.equal(askMcpConfig.permission['mcp__clock__*'], 'ask')
-    assert.equal(askMcpConfig.agent.build.permission['mcp__clock__*'], 'ask')
+    assert.equal(askMcpConfig.permission['mcp__time-keep__*'], 'ask')
+    assert.equal(askMcpConfig.agent.build.permission['mcp__time-keep__*'], 'ask')
     assert.equal(askMcpConfig.agent.build.permission['mcp__analytics__*'], 'ask')
 
     saveSettings({ mcpPermission: 'deny' })

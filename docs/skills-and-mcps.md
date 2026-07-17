@@ -44,15 +44,6 @@ short tool name such as `bar_chart`.
     `mcp__charts__sankey`, `mcp__charts__mermaid`, and
     `mcp__charts__custom_spec`. Source: `mcps/charts/src/index.ts`.
 
--   :material-clock-outline: **`clock` MCP** <span class="status-badge stable">stable</span>
-
-    ---
-
-    Resolves current time, timezone conversions, date ranges, durations,
-    and calendar math without network or filesystem access. Runtime ids
-    include `mcp__clock__current_time`, `mcp__clock__convert_time`,
-    `mcp__clock__date_math`, `mcp__clock__date_range`, and
-    `mcp__clock__duration_between`. Source: `mcps/clock/src/index.ts`.
 
 -   :material-timer-outline: **`time-keep` MCP** <span class="status-badge preview">preview</span>
 
@@ -64,8 +55,8 @@ short tool name such as `bar_chart`.
     and formatting, business-day counts, offline holiday lookups
     (2000–2030), and local SQLite timers. Read and lookup tools are
     auto-allowed; `timer_set`/`timer_delete` ask for approval. The tool
-    reports as not installed until the `time-keep` binary is on PATH —
-    the built-in `clock` MCP stays the zero-install fallback.
+    is bundled into desktop builds as `Resources/bin/time-keep` (pin: `third_party/time-keep/VERSION`).
+    Fetch with `pnpm binaries:time-keep`.
 
 -   :material-source-branch-sync: **OpenCode Gateway MCP** <span class="status-badge external">external</span>
 
@@ -146,7 +137,7 @@ short tool name such as `bar_chart`.
 
     Teaches agents to call the `clock` MCP before answering with current
     dates, relative ranges, timezone conversions, durations, or calendar
-    math. Source: `skills/clock/SKILL.md`.
+    math. Source: `skills/time-keep/SKILL.md`.
 
 -   :material-flask: **`autoresearch` skill** <span class="status-badge stable">stable</span>
 
@@ -274,7 +265,7 @@ stdio MCPs) or holds an HTTP client (for HTTP MCPs).
 Bundled MCPs are looked up at:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
-2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/knowledge`, `mcps/semantic-ui`, `mcps/skills`, `mcps/workflows`)
+2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, the bundled time-keep binary, `mcps/knowledge`, `mcps/semantic-ui`, `mcps/skills`, `mcps/workflows`)
 
 User-added MCPs live under `mcps.user.*` in `settings.enc` and are added
 through Tools & Skills. They are validated by:

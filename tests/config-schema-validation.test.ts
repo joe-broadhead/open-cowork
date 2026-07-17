@@ -77,7 +77,7 @@ test('agent starter template schema accepts primary and subagent modes', () => {
       color: 'azure',
       mode: 'primary',
       instructions: 'Own the main conversation.',
-      toolIds: ['clock'],
+      toolIds: ['time-keep'],
       skillNames: [],
     },
     {

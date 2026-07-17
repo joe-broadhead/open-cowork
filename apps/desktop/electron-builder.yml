@@ -61,11 +61,6 @@ extraResources:
     filter:
       - "dist/**/*"
       - "package.json"
-  - from: ../../mcps/clock
-    to: mcps/clock
-    filter:
-      - "dist/**/*"
-      - "package.json"
   - from: ../../mcps/agents
     to: mcps/agents
     filter:

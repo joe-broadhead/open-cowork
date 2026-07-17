@@ -307,7 +307,7 @@ MCP packages are resolved from:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
 2. `<resourcesPath>/mcps/<name>/dist/index.js` — MCPs shipped with the packaged
-   app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/skills`, `mcps/workflows`).
+   app (`mcps/agents`, `mcps/charts`, `mcps/skills`, `mcps/workflows`).
 
 As with skills, the MCP must be declared in the active config (`mcps` section)
 before the runtime spawns it.

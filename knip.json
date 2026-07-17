@@ -243,14 +243,6 @@
         "src/**/*.ts"
       ]
     },
-    "mcps/clock": {
-      "entry": [
-        "src/index.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ]
-    },
     "mcps/skills": {
       "entry": [
         "src/index.ts"
