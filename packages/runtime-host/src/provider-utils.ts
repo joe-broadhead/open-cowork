@@ -61,14 +61,27 @@ export function combineNativeProviderCatalog(
     providerModels.set(model.id, projectNativeModel(model))
     modelsByProvider.set(model.providerID, providerModels)
   }
-  return providers.map((provider) => ({
-    id: provider.id,
-    name: provider.name,
-    models: Object.fromEntries(modelsByProvider.get(provider.id) || []),
-    // `/api/provider` returns only Catalog.provider.available(), so presence
-    // in this response is the native V2 connected/available signal.
-    connected: true,
-  }))
+  return providers.map((provider) => {
+    const providerModels = Object.fromEntries(modelsByProvider.get(provider.id) || [])
+    // `/api/provider` is Catalog.provider.available(): presence means OpenCode
+    // considers the provider usable for the current auth/config. Prefer an
+    // explicit connected/status signal when the SDK exposes one.
+    const raw = provider as ProviderV2Info & { connected?: unknown; status?: unknown }
+    const explicitConnected = typeof raw.connected === 'boolean'
+      ? raw.connected
+      : raw.status === 'connected' || raw.status === 'ready'
+        ? true
+        : raw.status === 'disconnected' || raw.status === 'error'
+          ? false
+          : null
+    return {
+      id: provider.id,
+      name: provider.name,
+      models: providerModels,
+      // Listed-in-available without status still means connected for V2.
+      connected: explicitConnected ?? true,
+    }
+  })
 }
 
 export async function listNativeProviders(client: OpencodeClient): Promise<ProviderLike[]> {

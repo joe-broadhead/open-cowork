@@ -17,6 +17,29 @@ Public shared types:
 - `CloudSessionEventType`
 - `CloudProjectedSessionEventType`
 
+## Session state machine ownership (JOE-846)
+
+Three machines exist for reopen parity and multi-device sync. They share pure
+helpers in `packages/shared/src/session-machine-reducers.ts` but keep separate
+inputs:
+
+| Machine | Code | Owns | Inputs |
+| --- | --- | --- | --- |
+| **Live** | `packages/runtime-host/src/session-engine.ts` | Streaming deltas, busy/awaiting flags, live tool/task upserts | `RuntimeSessionEvent` |
+| **History** | `packages/runtime-host/src/session-history-projector.ts` | Reload/hydration from OpenCode history API | Session messages/parts |
+| **Cloud** | `packages/shared/src/cloud-session-projection.ts` | Durable product-event projection for web/gateway/paired desktop | `CloudSessionEventRecord` |
+
+Shared pure policy (do not fork per machine):
+
+- `deriveSessionInteractionFlags` — generating vs awaiting permission/question
+- `resolveAssistantMessageContent` — append vs replace assistant text
+- `deriveToolStatus` — tool running/complete/error
+- `upsertProjectionById` — id-keyed list upserts
+
+Convergence plan: keep three machines until reopen + multi-device sync stay
+proven; grow shared reducers, not parallel type maps. Parity coverage lives in
+`tests/session-machine-parity.test.ts`.
+
 Changing the meaning of an existing event or projection field requires a
 version bump, a migration or compatibility path for stored projections, and
 tests proving older snapshots still hydrate safely. Adding a new event type is
@@ -27,7 +50,10 @@ losing required chat state.
 
 ```mermaid
 flowchart LR
-  OpenCode["OpenCode runtime events"] --> Adapter["Cloud runtime adapter"]
+  OpenCode["OpenCode runtime events"] --> Translator["Shared translator\n(opencode-event-translator)"]
+  Translator --> DesktopLive["Desktop live handlers"]
+  Translator --> Adapter["Cloud runtime adapter\npayload fan-out"]
+  Translator --> Standalone["Standalone channel events"]
   Adapter --> Events["CloudSessionEvent contract"]
   Events --> Store["Durable event log"]
   Store --> Reducer["Shared projection reducer"]
@@ -39,7 +65,9 @@ flowchart LR
 
 Rules:
 
-- Raw OpenCode SDK events stop at the runtime adapter.
+- Raw OpenCode SDK events stop at the **shared translator**
+  (`packages/shared/src/opencode-event-translator.ts`, JOE-838). Surfaces
+  receive a normalized envelope + product disposition and only then fan out.
 - Cloud workers append only canonical `CloudSessionEventType` values.
 - Projection reducers live in shared code and produce the `SessionView` shape
   Desktop already consumes.
@@ -47,6 +75,8 @@ Rules:
   contract.
 - `snapshot.required` and `channel.delivery` are control events, not projected
   session state.
+- Standalone Gateway maps the same classification table into its slimmer
+  channel vocabulary (`tool.started` / `tool.completed` / `session.error`).
 
 ## Projected Event Vocabulary
 
@@ -93,3 +123,12 @@ When adding an event:
 This contract is the compatibility boundary between synced product surfaces.
 It should grow through typed events and tests, not through surface-specific
 parsing of runtime internals.
+
+## SessionEngine injection (JOE-872)
+
+Desktop production code continues to use the process singleton
+`sessionEngine` from `@open-cowork/runtime-host/session-engine`.
+
+Multi-tenant and unit tests should call `createSessionEngine()` for an
+isolated engine instance so session state, view caches, and busy maps do
+not leak across cases.

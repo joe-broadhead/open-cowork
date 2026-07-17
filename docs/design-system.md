@@ -49,9 +49,26 @@ lower tier re-skins everything above it without editing the higher tiers.
    in structure and brand-variable in color. Consumers read these variables; they
    never read primitives directly.
 3. **Component** — `packages/ui/src` React components and their CSS-in-TS
-   (`surface-styles.ts`), plus the renderer classes in
-   `packages/app/src/styles/globals.css`. Component code consumes semantic tokens
-   only.
+   (`surface-styles.ts` barrel + `packages/ui/src/styles/*-surface.ts` domains),
+   plus the renderer classes in `packages/app/src/styles/globals.css` (entry)
+   and `packages/app/src/styles/domains/{base,shell,studio,chat,settings}.css`.
+   Component code consumes semantic tokens only.
+
+### Style module ownership (JOE-851)
+
+| Module | Owns |
+| --- | --- |
+| `packages/ui/src/styles/controls-surface.ts` | Input/select/menu/segmented/button control chrome |
+| `packages/ui/src/styles/primitives-surface.ts` | Empty/skeleton/card primitives |
+| `packages/ui/src/styles/*-surface.ts` (artifacts, approvals, wiki, channels, projects, knowledge) | Named Studio product surfaces |
+| `packages/ui/src/styles/shared-keyframes.ts` | Cross-app keyframes |
+| `packages/ui/src/surface-styles.ts` | Aggregate `studioSurfaceStyles()` barrel |
+| `packages/app/src/styles/domains/base.css` | Fonts, `@theme`, type roles, focus/scroll/drag |
+| `packages/app/src/styles/domains/shell.css` | Title bar, sidebar active nav, app chrome |
+| `packages/app/src/styles/domains/studio.css` | App-local Studio shell/card language |
+| `packages/app/src/styles/domains/chat.css` | Chat approval, thinking, workbench, markdown |
+| `packages/app/src/styles/domains/settings.css` | Settings section rail/list |
+| `packages/app/src/styles/globals.css` | Single renderer entry (`@import` domains) |
 
 **Semantic-tokens-only guard.** `scripts/check-design-token-usage.mjs` (run by
 `pnpm lint`) fails if Tier-3 component code in `packages/ui/src` hardcodes a raw
@@ -67,9 +84,9 @@ a pure token override with no component edits.
 ## Primitives
 
 Shared React primitives live in `packages/ui` and are exported as the private
-workspace package `@open-cowork/ui`. Desktop keeps compatibility re-export
-shims in `packages/app/src/components/ui/`, but new primitive work
-should happen in the package:
+workspace package `@open-cowork/ui`. Desktop no longer keeps a private UI
+barrel; app-local UI files are explicit wrappers/tests only, and new primitive
+work should happen in the package:
 
 - `Button` and `IconButton` for actions. `IconButton` requires a `label` prop; `pnpm lint` fails if a usage omits it.
 - `Input`, `Select`, and `SegmentedControl` for form controls.
@@ -78,25 +95,44 @@ should happen in the package:
 - `WorkbenchLayout`, `ActionCluster`, and `DiffView` for the shared
   workflow IA: threads/context, active conversation, top-right actions, and
   review-first artifacts/diffs.
-- `StudioShell`, `StudioPageHeader`, `CoworkerAvatar`, `CoworkerCard`,
-  `ComposerShell`, `TaskLane`, `ReviewPanel`, `ApprovalCard`, `ArtifactCard`,
-  `ProjectCard`, and `ChannelStatusCard` for the new Studio product language.
-  These are presentational primitives only; OpenCode still owns execution,
-  sessions, child sessions, approvals, questions, and tool semantics.
-- Phase-2 Studio surfaces should also use the production-specific primitives in
-  the same package before creating app-local markup: `ConversationLaneCard`,
-  `KanbanBoard`, `KanbanTaskCard`, drawer-capable `Dialog`, `RunTimeline`,
-  `PermissionEditorRow`, `DeliverableCard`, progress-enabled `ProjectCard`,
-  `ChannelRow`, `PersonRow`, `WizardSteps`, `WizardStepPane`, `TraitSlider`,
-  `WorkingStyleBars`, `WikiSpaceRail`, and `WikiPage`. The renderer renders all
-  of these in `#/ui-primitives` from the same `@open-cowork/ui` primitives on
-  both Desktop and Cloud Web.
+- Studio product language primitives (see **Studio adoption map** below). These
+  are presentational only; OpenCode still owns execution, sessions, child
+  sessions, approvals, questions, and tool semantics.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
+
+## Studio adoption map
+
+Decision (**JOE-854**): **adopt for high-traffic production surfaces; demote
+gallery-only primitives** so the dual-stack is intentional rather than half-
+finished. Production Team/chat/domain components may wrap Studio shells; they
+must not reimplement a second visual system.
+
+| Primitive / surface | Status | Production owner |
+| --- | --- | --- |
+| `ApprovalCard` (`@open-cowork/ui`) | **Adopted — shared base** | Presentational shell used by Approvals queue (`ApprovalsQueueSurface`) and by chat `packages/app/.../chat/ApprovalCard.tsx` (product logic + IPC). No second card chrome. |
+| `ApprovalsQueueSurface` / `ArtifactsLibrarySurface` / `ChannelsGatewaySurface` / `ProjectsKanbanSurface` | **Adopted** | Studio utility pages in `packages/app/src/components/studio/` and Projects board. |
+| `ReviewPanel`, `TaskLane`, `DiffView` | **Adopted** | Session inspector, Home review snapshot, chat diff controller. |
+| `StudioPageHeader` | **Adopted** | Studio utility pages. |
+| `AgentCapabilityProfileView` | **Adopted** | Agent builder / Team capability profile. |
+| `CoworkerCard`, `CoworkerAvatar` | **Adopted for list/preview** | Team/list browse cards and gallery. **Agent builder** keeps app-local `AgentCard` (identity form + capability profile) — domain form, not a second card language. |
+| `StudioShell`, `ComposerShell` | **Demoted (gallery / future shell)** | Catalog at `#/ui-primitives` and future shell work. Production chrome remains app `Sidebar` + workbench layout until a full shell migration. |
+| `PermissionEditorRow` | **Demoted (gallery)** | Gallery + future Agent permissions polish. Production `AgentPermissionEditor` owns the form model today. |
+| `StudioArtifactCard` / `DeliverableCard` / `Kanban*` / `ConversationLaneCard` / `RunTimeline` / wizard + wiki primitives | **Adopted where surfaces exist; otherwise gallery** | Prefer these before new app-local cards when wiring a surface. |
+
+When adding a new Studio-looking control, extend `@open-cowork/ui` first, then
+compose product state in `packages/app`. Do not ship a parallel ApprovalCard,
+Diff chrome, or empty-state without a documented exception in this map.
 
 `packages/ui/src/index.ts` is the single import surface for the package: every
 primitive, surface, hook, and helper is re-exported there, so consumers import
 from `@open-cowork/ui` and never reach into deep paths. `PrimitiveGallery`
+marks each section with `data-gallery-maturity` of **production** (adopted in the
+shipping shell) or **experimental** (Studio/design fiction — not product chrome
+until an adopt decision). Contributors must not treat experimental gallery demos
+as shipped UX.
+
+`PrimitiveGallery`
 renders the catalog live at `#/ui-primitives` on both Desktop and Cloud Web.
 
 ## Component Catalog
@@ -122,6 +158,16 @@ global `*:focus-visible` accent outline plus its own state styling.
 | `Icon` / `Kbd` | glyph + hint | `--icon-size-*`, `--text-2xs`, `--color-text-secondary` |
 | `WorkbenchLayout` / `ActionCluster` / `DiffView` | workflow IA | `--studio-*`, `--color-border-subtle`, `--z-sticky` |
 | Studio cards/rows/lanes (`CoworkerCard`, `TaskLane`, `KanbanBoard`, `ReviewPanel`, …) | Studio product language | `--coworker-*`, `--lane-*`, `--review-*`, `--density-*` |
+
+### Diff ownership (JOE-847)
+
+| Layer | Module | Role |
+| --- | --- | --- |
+| Presentational shell | `@open-cowork/ui` `DiffView` | Shared review chrome (`data-diff-view`), header, file list hooks, empty state. Used by SessionInspector and every DiffViewer path. |
+| Session controller | `packages/app/.../chat/DiffViewer` | Loads `session.diff`, view-mode toggle, expand/collapse rows (`DiffViewerRows`). Always wraps content in `DiffView` (modal + embedded). |
+| Row/patch rendering | `DiffViewerRows` / `DiffViewerRowBlocks` | Unified/split hunk UI for a single file. |
+
+Do not introduce a second top-level diff chrome. New review UIs compose `DiffView` and optionally the DiffViewer controller.
 
 ## Agent Builder
 

@@ -17,6 +17,10 @@ export function Toaster() {
     <SharedToaster
       errors={globalErrors}
       onDismissError={dismissGlobalError}
+      onOpenHealthCenter={() => {
+        // JOE-879: runtime/onboarding failures funnel to Health Center recovery.
+        window.dispatchEvent(new Event('open-cowork:open-health-center'))
+      }}
     />
   )
 }

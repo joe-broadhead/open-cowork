@@ -1,0 +1,1521 @@
+/* Domain: studio.css
+ * Ownership (JOE-851): Studio shell cards, nav sections, density utilities (app-local studio language).
+ * Entry: packages/app/src/styles/globals.css imports all domains.
+ */
+/* Base interaction-control rules (the shared base group, sizes, focus/active/disabled,
+   icon button, secondary/ghost/danger, input/textarea/select/menu/popover/segmented, and
+   the primary sheen ::after) are single-sourced in @open-cowork/ui controlsSurfaceCss(),
+   injected via studioSurfaceStyles() at renderer startup, so desktop and web render them
+   identically — including `.ui-button--primary` (the canonical Studio accent-action
+   gradient fill via the shared `--accent-action-*` tokens), now adopted by Cloud Web too. */
+
+/* The Dialog surface (`.ui-dialog` + backdrop/drawer variants + `__header`,
+   `__title`, `__body`, `__footer`) is single-sourced in @open-cowork/ui
+   primitivesSurfaceCss(), injected via studioSurfaceStyles() at renderer startup,
+   so desktop and web render it identically. */
+
+.ui-card {
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  /* Precise operator console: a flat, solid surface step. Depth comes from a
+     hairline border + one tight hue-matched shadow and a faint specular top
+     edge — no glass, no backdrop blur, no decorative drop bloom. */
+  background: var(--color-elevated);
+  box-shadow: var(--shadow-1);
+  color: var(--color-text);
+}
+
+.ui-card--specular {
+  box-shadow: var(--shadow-1), var(--specular);
+}
+
+/* .ui-card--sm/md/lg padding is single-sourced in @open-cowork/ui
+   primitivesSurfaceCss() (injected after globals.css at renderer startup) on the
+   --space grid (12 / 16 / 20), so the desktop and web Cards share one spacing
+   scale and a studio object card matches a default Card at md (16px). */
+
+.ui-card--variant-flat {
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.ui-card--variant-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.ui-card__tile {
+  display: inline-flex;
+  width: var(--control-h-lg);
+  height: var(--control-h-lg);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 var(--border-width-1) var(--accent-line);
+}
+
+.ui-card--interactive {
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  font: inherit;
+  text-align: start;
+  transition:
+    background var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+
+.ui-card--interactive.ui-card--variant-tile {
+  display: grid;
+}
+
+.ui-card--interactive:hover,
+.ui-card--hover-lift:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(calc(-1 * var(--border-width-1)));
+  box-shadow: var(--shadow-3), var(--specular-strong);
+}
+
+.ui-card.chat-tool-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--gap) * 0.5);
+}
+
+.studio-shell {
+  display: grid;
+  min-height: min(720px, calc(100vh - var(--space-12)));
+  overflow: hidden;
+  grid-template-columns: minmax(220px, var(--studio-shell-sidebar-w)) minmax(0, 1fr);
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-base) 88%, var(--color-elevated) 12%);
+  box-shadow: var(--shadow-3), var(--specular);
+}
+
+.studio-shell__sidebar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-5);
+  border-inline-end: var(--border-width-1) solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-elevated) 72%, var(--color-base) 28%);
+  padding: var(--space-4);
+}
+
+.studio-shell__brand,
+.studio-coworker-card__header,
+.studio-object-card,
+.studio-object-card__title-row,
+.studio-decision-card,
+.studio-actions {
+  display: flex;
+  align-items: center;
+}
+
+.studio-shell__brand {
+  gap: var(--space-3);
+}
+
+.studio-shell__mark,
+.studio-object-card__icon,
+.studio-decision-card__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--studio-tone, var(--color-accent)) 18%, var(--color-elevated) 82%);
+  color: var(--studio-tone, var(--color-accent));
+  box-shadow: inset 0 0 0 var(--border-width-1) color-mix(in srgb, currentColor 34%, transparent);
+}
+
+.studio-shell__mark {
+  width: var(--control-h-lg);
+  height: var(--control-h-lg);
+  background: var(--accent-action-fill);
+  color: var(--accent-action-foreground);
+  font-weight: 600;
+  box-shadow: var(--specular);
+}
+
+.studio-shell__brand-name,
+.studio-page-header h1,
+.studio-coworker-card h3,
+.studio-task-lane h3,
+.studio-review-panel h2,
+.studio-decision-card h3,
+.studio-object-card h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-display);
+}
+
+.studio-shell__brand-name,
+.studio-coworker-card h3,
+.studio-decision-card h3,
+.studio-object-card h3 {
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: 700;
+}
+
+.studio-shell__brand-subtitle,
+.studio-page-header p,
+.studio-coworker-card p,
+.studio-task-lane p,
+.studio-review-panel p,
+.studio-decision-card p,
+.studio-object-card p,
+.studio-empty-line {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.studio-nav,
+.studio-nav__section,
+.studio-nav__items,
+.studio-shell__workspace,
+.studio-shell__main,
+.studio-page-header__copy,
+.studio-coworker-card,
+.studio-composer,
+.studio-task-lane,
+.studio-task-lane__items,
+.studio-task-lane__item,
+.studio-review-panel,
+.studio-review-panel__body,
+.studio-decision-card__copy,
+.studio-object-card__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.studio-nav {
+  gap: var(--space-5);
+}
+
+.studio-nav__section,
+.studio-nav__items,
+.studio-coworker-card,
+.studio-task-lane__items,
+.studio-review-panel,
+.studio-object-card__copy {
+  gap: var(--space-2);
+}
+
+.studio-nav__section-label {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: var(--lh-2xs);
+  text-transform: uppercase;
+}
+
+.studio-nav__item {
+  display: flex;
+  min-height: var(--control-h-md);
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  border: var(--border-width-1) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  padding: 0 var(--space-3);
+  text-decoration: none;
+}
+
+.studio-nav__item:hover,
+.studio-nav__item[data-active="true"] {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.studio-nav__item[data-active="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 42%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.studio-nav__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-nav__badge {
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.studio-shell__workspace {
+  min-height: 0;
+}
+
+.studio-shell__topbar {
+  border-block-end: var(--border-width-1) solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-elevated) 62%, transparent);
+  padding: var(--space-5);
+}
+
+.studio-shell__main {
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-5);
+}
+
+.studio-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.studio-page-header__copy {
+  gap: var(--space-2);
+}
+
+.studio-page-header h1 {
+  font-size: var(--text-2xl);
+  line-height: var(--lh-2xl);
+}
+
+.studio-actions {
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.studio-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.studio-coworker-card,
+.studio-composer,
+.studio-task-lane,
+.studio-review-panel,
+.studio-decision-card {
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+  box-shadow: var(--shadow-2), var(--specular);
+  padding: var(--space-4);
+}
+/* Content cards use the larger 20px card radius (prototype --r4); the composer is
+   the most-rounded surface at 28px (--r5). Lanes/panels keep the 14px radius. */
+.studio-coworker-card,
+.studio-decision-card {
+  border-radius: var(--radius-2xl);
+}
+.studio-composer {
+  border-radius: var(--radius-3xl);
+}
+
+.studio-coworker-card {
+  border-color: color-mix(in srgb, var(--studio-tone, var(--color-border)) 32%, var(--color-border) 68%);
+}
+
+.studio-coworker-card__header,
+.studio-object-card,
+.studio-object-card__title-row,
+.studio-decision-card {
+  gap: var(--space-3);
+}
+
+.studio-coworker-card__identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.studio-coworker-avatar--sm {
+  width: var(--control-h-md);
+  height: var(--control-h-md);
+  font-size: var(--text-xs);
+}
+
+.studio-coworker-avatar--md {
+  width: var(--control-h-lg);
+  height: var(--control-h-lg);
+  font-size: var(--text-sm);
+}
+
+.studio-coworker-avatar--lg {
+  width: var(--control-h-xl);
+  height: var(--control-h-xl);
+  font-size: var(--text-md);
+}
+
+.studio-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.studio-composer {
+  gap: var(--space-3);
+}
+
+.studio-composer__label {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.studio-composer textarea {
+  min-height: var(--studio-composer-min-h);
+  resize: vertical;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-base) 72%, var(--color-elevated) 28%);
+  color: var(--color-text);
+  padding: var(--space-3);
+}
+
+.studio-composer textarea:focus-visible,
+.studio-nav__item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
+.studio-composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.studio-composer__toolbar,
+.studio-object-card__meta,
+.studio-decision-card__meta,
+.studio-task-lane__meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.studio-task-lane {
+  border-color: color-mix(in srgb, var(--studio-lane-tone) 32%, var(--color-border) 68%);
+}
+
+.studio-task-lane__header,
+.studio-review-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.studio-task-lane__count {
+  display: inline-flex;
+  min-width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--studio-lane-tone) 10%, transparent);
+  color: var(--studio-lane-tone);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.studio-task-lane__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-task-lane__item {
+  gap: var(--space-2);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-3);
+}
+
+.studio-task-lane__item h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.studio-review-panel__body {
+  gap: var(--space-3);
+}
+
+.studio-decision-card--danger {
+  border-color: color-mix(in srgb, var(--color-red) 38%, var(--color-border) 62%);
+}
+
+.nav-alert-count:empty {
+  display: none;
+}
+
+.nav-alert-count {
+  margin-inline-start: auto;
+  min-width: 1.375rem;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-accent) 32%, transparent);
+  color: var(--accent-text);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: 1.375rem;
+  text-align: center;
+}
+
+.studio-object-card__copy {
+  flex: 1;
+}
+
+.studio-shell--collapsed {
+  grid-template-columns: var(--studio-shell-rail-w) minmax(0, 1fr);
+}
+
+.studio-shell--collapsed .studio-shell__sidebar {
+  align-items: center;
+  padding-inline: var(--space-3);
+}
+
+.studio-shell--collapsed .studio-shell__brand-copy,
+.studio-shell--collapsed .studio-nav__section-label,
+.studio-shell--collapsed .studio-nav__label,
+.studio-shell--collapsed .studio-nav__badge,
+.studio-shell--collapsed .studio-shell__presence-footer > :not(.studio-coworker-avatar) {
+  display: none;
+}
+
+/* Shared flex-center utility: surfaces opt in via the `studio-u-flex-center`
+   class in markup instead of being grouped into this rule by surface selector,
+   so per-surface stylesheets (Channels/Projects) can be single-sourced without
+   the cascade reorder that splitting a cross-surface group would cause. */
+.studio-u-flex-center,
+.studio-shell__presence-footer,
+.studio-composer__context,
+.studio-person-row,
+.studio-deliverable-card__head,
+.studio-deliverable-card__captured,
+.studio-status-live,
+.studio-status-done,
+.studio-status-waiting,
+.studio-run-pill,
+.studio-unassigned,
+.studio-handoff-chip,
+.studio-trait-slider__label,
+.studio-trait-slider__ends {
+  display: flex;
+  align-items: center;
+}
+
+.studio-shell__presence-footer {
+  gap: var(--space-3);
+  margin-top: auto;
+  border-top: var(--border-width-1) solid var(--color-border-subtle);
+  padding-top: var(--space-3);
+}
+
+.studio-coworker-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* Identity tile — matches AgentAvatar: an opaque, graphite-darkened same-hue
+     chip with ink initials and a crafted top specular, not a pastel wash. */
+  color: var(--color-text);
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--studio-tone, var(--color-accent)) 90%, var(--color-base)) 0%,
+    color-mix(in srgb, var(--studio-tone, var(--color-accent)) 62%, var(--color-base)) 100%);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--studio-tone, var(--color-accent)) 45%, transparent);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  text-shadow: 0 1px 1px rgba(12, 13, 15, 0.45);
+}
+
+.studio-coworker-avatar--round {
+  border-radius: var(--radius-full);
+}
+
+.studio-coworker-avatar--squircle {
+  border-radius: var(--radius-lg);
+}
+
+.studio-presence-dot {
+  position: absolute;
+  inset-inline-end: calc(-1 * var(--space-1));
+  inset-block-end: calc(-1 * var(--space-1));
+  width: var(--space-3);
+  height: var(--space-3);
+  border: 2px solid var(--color-elevated);
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+
+.studio-presence-dot--working { background: var(--color-accent); }
+.studio-presence-dot--available { background: var(--color-green); }
+.studio-presence-dot--offline { background: var(--color-text-muted); }
+
+.studio-presence-dot--pulse,
+.studio-status-live span,
+.studio-run-pill--live span {
+  animation: ui-status-pulse 1.7s var(--ease-spring) infinite;
+}
+
+.studio-composer__context {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.studio-conversation-lane-card,
+.studio-deliverable-card,
+.studio-permission-row,
+.studio-run-timeline,
+.studio-mini-panel,
+.studio-wiki-demo {
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+  box-shadow: var(--shadow-2), var(--specular);
+}
+
+.studio-conversation-lane-card {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--studio-lane-tone) 32%, var(--color-border) 68%);
+}
+
+.studio-conversation-lane-card--live {
+  box-shadow: 0 0 0 var(--border-width-1) color-mix(in srgb, var(--studio-lane-tone) 24%, transparent), var(--shadow-2), var(--specular);
+}
+
+.studio-conversation-lane-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.studio-conversation-lane-card__head::-webkit-details-marker {
+  display: none;
+}
+
+.studio-conversation-lane-card__head:hover {
+  background: var(--color-surface-hover);
+}
+
+.studio-u-fill-min,
+.studio-conversation-lane-card__copy,
+.studio-person-row__copy,
+.studio-permission-row__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.studio-conversation-lane-card__name,
+.studio-conversation-lane-card__role,
+.studio-conversation-lane-card__task,
+.studio-person-row h3,
+.studio-deliverable-card h3,
+.studio-permission-row h3,
+.studio-wizard-step-pane h3 {
+  display: block;
+  margin: 0;
+}
+
+.studio-conversation-lane-card__name,
+.studio-person-row h3,
+.studio-deliverable-card h3,
+.studio-permission-row h3 {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: var(--lh-sm);
+}
+
+.studio-conversation-lane-card__role,
+.studio-conversation-lane-card__task,
+.studio-person-row__copy div,
+.studio-permission-row p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+/* Card typography utilities: Channels/Projects card title + supporting text opt
+   in via these classes in shared markup rather than via cross-surface descendant
+   groups, so those surfaces' CSS can be single-sourced without a cascade reorder.
+   Nothing else targets those inner elements, so the class (0,1,0) is equivalent
+   to the former descendant (0,1,1) match. */
+.studio-u-card-title {
+  display: block;
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: var(--lh-sm);
+}
+
+.studio-u-card-text {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.studio-conversation-lane-card__task {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-conversation-lane-card__meta {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-conversation-lane-card[open] .studio-conversation-lane-card__meta > svg {
+  transform: rotate(90deg);
+}
+
+.studio-conversation-lane-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+
+.studio-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-activity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.studio-u-icon-chip,
+.studio-activity-row__icon,
+.studio-permission-row__icon,
+.studio-deliverable-card__icon {
+  display: inline-flex;
+  flex: none;
+  width: var(--control-h-md);
+  height: var(--control-h-md);
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--accent-text);
+}
+
+.studio-activity-row__copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: var(--space-1);
+}
+
+.studio-activity-row__copy strong {
+  color: var(--color-text);
+}
+
+.studio-activity-row time {
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+}
+
+.studio-activity-row--done .studio-activity-row__icon {
+  color: var(--color-green);
+}
+
+.studio-status-live,
+.studio-status-done,
+.studio-status-waiting,
+.studio-run-pill {
+  gap: var(--space-1);
+  font-weight: 600;
+}
+
+.studio-status-live {
+  color: var(--studio-lane-tone, var(--color-accent));
+}
+
+.studio-status-live span,
+.studio-run-pill span {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+.studio-status-done { color: var(--color-green); }
+.studio-status-waiting { color: var(--color-text-muted); }
+
+.studio-handoff-chip {
+  align-self: flex-start;
+  gap: var(--space-2);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--studio-lane-tone) 20%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--studio-lane-tone) 8%, transparent);
+  color: var(--color-text-secondary);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+}.studio-unassigned {
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.studio-run-pill {
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+}
+
+.studio-run-timeline {
+  padding: var(--space-4);
+}
+
+.studio-run-timeline__state {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.studio-run-timeline__steps {
+  display: flex;
+  align-items: flex-start;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-run-timeline__step {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+
+.studio-run-timeline__step::before {
+  content: "";
+  position: absolute;
+  inset-block-start: calc(var(--space-2) - var(--border-width-1));
+  inset-inline-start: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.studio-run-timeline__step:first-child::before {
+  display: none;
+}
+
+.studio-run-timeline__dot {
+  position: relative;
+  z-index: 1;
+  width: var(--space-3);
+  height: var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+}
+
+.studio-run-timeline__step--done::before,
+.studio-run-timeline__step--current::before {
+  background: var(--color-green);
+}
+
+.studio-run-timeline__step--done .studio-run-timeline__dot {
+  border-color: var(--color-green);
+  background: var(--color-green);
+}
+
+.studio-run-timeline__step--current .studio-run-timeline__dot {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 var(--space-1) var(--accent-soft);
+}
+
+.studio-run-timeline__step--done,
+.studio-run-timeline__step--current {
+  color: var(--color-text);
+}
+
+.studio-run-timeline__meta {
+  margin-top: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-run-timeline__meta code {
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  padding: 0 var(--space-1);
+}
+
+.studio-permission-row {
+  overflow: hidden;
+}
+
+.studio-permission-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.studio-policy-toggle {
+  display: inline-flex;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: var(--space-1);
+}
+
+.studio-policy-toggle__option {
+  min-height: var(--control-h-sm);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 0 var(--space-2);
+  text-transform: capitalize;
+}
+
+.studio-policy-toggle__option[data-active="true"] {
+  background: var(--color-elevated);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.studio-policy-toggle__option--ask[data-active="true"] { color: var(--accent-text); }
+.studio-policy-toggle__option--deny[data-active="true"] { color: var(--color-red); }
+
+.studio-permission-row__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.studio-permission-rule {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.studio-permission-rule span {
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.studio-permission-rule input {
+  min-height: var(--control-h-sm);
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-base) 72%, var(--color-elevated) 28%);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-3);
+}
+
+.studio-deliverable-card {
+  overflow: hidden;
+}
+
+.studio-deliverable-card__head {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.studio-deliverable-card__icon {
+  background: var(--accent-action-fill);
+  color: var(--accent-action-foreground);
+}
+
+.studio-deliverable-card__head p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-deliverable-card__preview {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  margin: 0 var(--space-4) var(--space-3);
+  border: var(--border-width-1) dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background:
+    repeating-linear-gradient(135deg, var(--color-surface), var(--color-surface) 7px, transparent 7px, transparent 14px);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.studio-deliverable-card .studio-actions,
+.studio-deliverable-card__capture,
+.studio-deliverable-card__captured {
+  margin: 0 var(--space-4) var(--space-3);
+}
+
+.studio-deliverable-card__capture {
+  width: calc(100% - (var(--space-4) * 2));
+  border-style: dashed;
+}
+
+.studio-deliverable-card__captured {
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-green) 12%, transparent);
+  color: var(--color-green);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.studio-u-progress-track,
+.studio-working-style-bars__row span:last-child {
+  display: block;
+  height: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+}
+
+.studio-u-progress-fill,
+.studio-working-style-bars__row i {
+  display: block;
+  width: var(--studio-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+}
+.studio-projects-surface {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-5);
+}.studio-team-count,
+.studio-team-empty {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-team-count {
+  display: inline-flex;
+  min-width: var(--space-6);
+  height: var(--space-6);
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+}@media (max-width: 720px) {
+  .studio-projects-surface {
+    padding: var(--space-3);
+  }
+}.studio-u-row-surface,
+.studio-person-row {
+  gap: var(--space-3);
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+  box-shadow: var(--shadow-1), var(--specular);
+  padding: var(--space-3) var(--space-4);
+}
+.studio-person-row__role span {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-person-row__role {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+  text-align: end;
+}
+
+.studio-wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: var(--border-width-1) solid var(--color-border-subtle);
+  background: var(--color-surface);
+  padding: var(--space-2);
+}
+
+.studio-wizard-steps button {
+  gap: var(--space-2);
+  min-height: var(--control-h-md);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0 var(--space-3);
+}
+
+.studio-wizard-steps button > span {
+  display: inline-flex;
+  width: var(--space-5);
+  height: var(--space-5);
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-elevated);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+}
+
+.studio-wizard-steps button[data-active="true"] {
+  background: var(--color-elevated);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.studio-wizard-steps button[data-active="true"] > span {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+.studio-wizard-step-pane {
+  padding: var(--space-5);
+}
+
+.studio-wizard-step-pane h3 {
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.studio-wizard-step-pane p {
+  margin: var(--space-1) 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.studio-trait-slider {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.studio-trait-slider__label,
+.studio-trait-slider__ends {
+  justify-content: space-between;
+}
+
+.studio-trait-slider__label span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.studio-trait-slider__label strong {
+  color: var(--accent-text);
+}
+
+.studio-trait-slider input[type="range"] {
+  accent-color: var(--color-accent);
+  width: 100%;
+}
+
+.studio-trait-slider__ends {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.studio-working-style-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.studio-working-style-bars__row {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.studio-wiki-demo {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  min-height: 360px;
+  overflow: hidden;
+}
+
+@media (max-width: 920px) {
+  .studio-shell,
+  .studio-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-shell__sidebar {
+    border-block-end: var(--border-width-1) solid var(--color-border-subtle);
+    border-inline-end: 0;
+  }
+
+  .studio-page-header,
+  .studio-composer__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+/* The cooled chip tokens (--chip-warning/--chip-danger and the
+   --color-warning/--color-danger aliases) plus the full `.ui-badge` recipe (all 7
+   tones) are single-sourced in @open-cowork/ui primitivesSurfaceCss(), injected
+   via studioSurfaceStyles() at renderer startup, so desktop and web match. */
+
+.ui-kbd {
+  display: inline-flex;
+  min-width: var(--control-h-sm);
+  min-height: var(--control-h-sm);
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-base) 78%, var(--color-elevated) 22%);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: var(--lh-xs);
+  padding: 0 var(--space-2);
+}
+
+/* `.ui-segmented-control` + `.ui-segmented-thumb` (the pill track + sliding active
+   thumb) are single-sourced in @open-cowork/ui controlsSurfaceCss(), injected via
+   studioSurfaceStyles() at renderer startup, so desktop and web match. */
+
+.chat-composer-shell {
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-elevated);
+  transition:
+    border-color var(--dur-1) var(--ease-out),
+    background var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+
+.chat-composer-shell--drag {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 var(--border-width-1) color-mix(in srgb, var(--color-accent) 24%, transparent);
+}
+
+.chat-composer-textarea {
+  width: 100%;
+  min-height: 28px;
+  resize: none;
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  outline: none;
+  padding: 0;
+}
+
+.chat-composer-textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ui-textarea.chat-composer-textarea:focus-visible {
+  box-shadow: none;
+}
+
+.chat-current-directory {
+  max-width: calc(var(--space-12) * 3 + var(--space-4));
+}
+
+/* The chat menu surface is the shared glass `.theme-popover` (border + glass
+   bg + shadow + --radius-lg via `rounded-lg`), folded in so chat dropdowns
+   match the rest of the popover family. The inner header / search / option /
+   featured-boundary rules below own the menu's internal structure only. */
+
+.chat-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: var(--border-width-1) solid var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 560;
+  line-height: var(--lh-xs);
+  padding: var(--space-2) var(--space-3);
+}
+
+.chat-menu-search {
+  border-bottom: var(--border-width-1) solid var(--color-border-subtle);
+  padding: var(--space-2);
+}
+
+.chat-menu-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  transition:
+    background var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.chat-menu-option:hover,
+.chat-menu-option[data-highlighted="true"] {
+  background: var(--color-surface-hover);
+}
+
+/* Selected = current choice. Standardised on the shared popover-item
+   selected recipe: an inset accent ring (no accent fill), so all popover
+   menus signal "selected" the same way. */
+.chat-menu-option[aria-selected="true"] {
+  box-shadow: var(--ring-selected);
+}
+
+.chat-menu-featured-boundary {
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+  padding: var(--space-1) var(--space-3);
+  text-transform: uppercase;
+}
+
+.chat-keyboard-hints {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 66%, transparent);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  padding: var(--space-2) var(--space-3);
+}
+
+.chat-jump-latest {
+  position: absolute;
+  inset-inline: 0;
+  bottom: var(--space-3);
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.chat-jump-latest > * {
+  pointer-events: auto;
+  box-shadow: var(--shadow-card);
+}
+
+.chat-message-actions {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-message-actions {
+    opacity: 0;
+  }
+
+  .group:hover .chat-message-actions,
+  .chat-message-actions:focus-within {
+    opacity: 1;
+  }
+}
+
+.chat-message-action-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-elevated) 70%, transparent);
+  padding: var(--space-1);
+}
+
+.chat-user-bubble {
+  align-self: flex-end;
+  border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl);
+  background: var(--color-surface-active);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  padding: var(--space-2) var(--space-4);
+  white-space: pre-wrap;
+}
+
+.chat-message-sending {
+  align-self: flex-end;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.chat-markdown-content {
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+}
+
+.chat-markdown-content--streaming > :last-child {
+  background: linear-gradient(100deg, var(--color-text) 30%, var(--color-accent) 50%, var(--color-text) 70%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ui-stream-shimmer 2.4s linear infinite;
+}
+
+.chat-markdown-content--streaming > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: var(--space-2);
+  height: 1em;
+  margin-inline-start: var(--space-1);
+  transform: translateY(0.16em);
+  border-radius: var(--radius-xs);
+  background: var(--color-accent);
+  animation: ui-stream-caret 1s steps(2, start) infinite;
+}
+
+.chat-attachment-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-active);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  padding: var(--space-2) var(--space-3);
+}
+
+.chat-attachment-preview {
+  max-width: calc(var(--space-12) * 4);
+}
+
+.chat-attachment-name {
+  max-width: calc(var(--space-12) * 2 + var(--space-6));
+}
+
+.chat-tool-chart-frame {
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.chat-tool-image {
+  max-height: calc(var(--space-12) * 8 + var(--space-4));
+}
+
+.chat-tool-details {
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--specular);
+  animation: ui-disclosure-in var(--dur-3) var(--ease-spring) both;
+}
+
+.chat-tool-status-icon {
+  color: var(--color-text-muted);
+}
+
+.chat-tool-status-icon--running {
+  color: var(--color-accent);
+}
+
+.chat-tool-status-icon--error {
+  color: var(--color-red);
+}
+
+.chat-error-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-red) 30%, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-red) 5%, transparent);
+  color: var(--color-red);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  padding: var(--space-3) var(--space-4);
+}

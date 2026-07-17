@@ -5,7 +5,7 @@ import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { normalizeSessionInfo, normalizeTodoItems } from '@open-cowork/runtime-host'
 import { shortSessionId, asRecord, readRecordArray, readRecordValue, readString, extractRuntimeErrorMessage, normalizePermissionEvent, readRuntimeSessionId } from '@open-cowork/shared'
 import type { BrowserWindow } from 'electron'
-import { trackPermission } from './permission-tracker.ts'
+import { getPermissionSession, trackPermission } from './permission-tracker.ts'
 import { log } from '@open-cowork/shared/node'
 import { dropSessionFromDispatcherQueues, publishNotification } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
@@ -206,17 +206,25 @@ export function handleRuntimeSideEffectEvent(input: {
       const permissionType = normalized.permissionType
       const permissionId = normalized.id
       const permissionSessionId = normalized.sessionId
+      if (!permissionId) {
+        log('permission', `Ignoring ${permissionType} permission without request id for ${shortSessionId(permissionSessionId)}`)
+        return true
+      }
+
+      // Dual directory SSE subscriptions (runtime-home + sandbox) often deliver
+      // the same permission.v2.asked twice. Track first, drop duplicates.
+      if (getPermissionSession(permissionId) === permissionSessionId
+        || (permissionSessionId && getPermissionSession(permissionId))) {
+        return true
+      }
+
       log('permission', `Received ${permissionType} permission ${shortSessionId(permissionSessionId)} id=${permissionId}`)
-      if (permissionId && permissionSessionId) {
+      if (permissionSessionId) {
         trackPermission(permissionId, permissionSessionId)
       }
 
       const rootSessionId = resolveRootSession(permissionSessionId)
       if (!rootSessionId) return true
-      if (!permissionId) {
-        log('permission', `Ignoring ${permissionType} permission without request id for ${shortSessionId(permissionSessionId)}`)
-        return true
-      }
 
       const taskRunId = permissionSessionId && permissionSessionId !== rootSessionId
         ? (getTaskRunIdForChild(permissionSessionId)

@@ -1,6 +1,6 @@
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { randomBytes } from 'node:crypto'
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import {
@@ -103,6 +103,58 @@ function snapshotManagedNativeAgents(env: NodeJS.ProcessEnv, configDir: string) 
   }
 }
 
+/**
+ * Optional AI-SDK provider packages to seed into OPENCODE_CONFIG_DIR/node_modules.
+ *
+ * OpenRouter no longer needs `@openrouter/ai-sdk-provider` here: managed V2 serve
+ * forces `npm: @ai-sdk/openai-compatible` via composed config + settings apiKey
+ * (see `buildOpenRouterProviderRuntimeConfig`). Keep this hook empty unless a
+ * future provider requires a non-bundled package that OpenCode cannot resolve.
+ */
+const MANAGED_PROVIDER_NPM_PACKAGES: readonly string[] = []
+
+/**
+ * Seed optional AI-SDK provider packages into the temp OPENCODE_CONFIG_DIR.
+ * No-op while MANAGED_PROVIDER_NPM_PACKAGES is empty.
+ */
+export function seedManagedProviderPackages(env: NodeJS.ProcessEnv, configDir: string) {
+  if (MANAGED_PROVIDER_NPM_PACKAGES.length === 0) return
+  const configHome = env.XDG_CONFIG_HOME?.trim()
+  if (!configHome) return
+
+  const seeded: string[] = []
+  for (const packageName of MANAGED_PROVIDER_NPM_PACKAGES) {
+    const source = join(configHome, 'opencode', 'node_modules', ...packageName.split('/'))
+    if (!existsSync(join(source, 'package.json'))) continue
+    const target = join(configDir, 'node_modules', ...packageName.split('/'))
+    mkdirSync(dirname(target), { recursive: true })
+    cpSync(source, target, { recursive: true, force: true, dereference: true })
+    seeded.push(packageName)
+  }
+  if (seeded.length === 0) return
+
+  const packageJsonPath = join(configDir, 'package.json')
+  // Prefer try-read over existsSync+read (avoids TOCTOU / CodeQL js/file-system-race).
+  // Missing or unreadable package.json is treated as an empty dependency map.
+  let packageJson: { dependencies?: Record<string, string> } = { dependencies: {} }
+  try {
+    packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as typeof packageJson
+  } catch {
+    packageJson = { dependencies: {} }
+  }
+  const dependencies = { ...(packageJson.dependencies || {}) }
+  for (const packageName of seeded) {
+    const versionPath = join(configDir, 'node_modules', ...packageName.split('/'), 'package.json')
+    try {
+      const version = (JSON.parse(readFileSync(versionPath, 'utf8')) as { version?: string }).version
+      dependencies[packageName] = version ? String(version) : dependencies[packageName] || '*'
+    } catch {
+      dependencies[packageName] = dependencies[packageName] || '*'
+    }
+  }
+  writeFileSync(packageJsonPath, `${JSON.stringify({ ...packageJson, dependencies }, null, 2)}\n`, { mode: 0o644 })
+}
+
 export function buildManagedOpencodeServerEnvironment(
   env: NodeJS.ProcessEnv,
   config?: OpencodeServerOptions['config'],
@@ -128,6 +180,9 @@ export function buildManagedOpencodeServerEnvironment(
         // enabled app-owned Markdown agents beside the composed config so V2
         // sees the exact catalog selected for this runtime generation.
         snapshotManagedNativeAgents(env, dir)
+        // Seed AI-SDK provider packages (e.g. OpenRouter) into the temp config
+        // dir so OpenCode can load them without a network install on every boot.
+        seedManagedProviderPackages(env, dir)
       } catch (error) {
         // If the write fails the server object (and its close() cleanup hook) is never
         // returned, so remove the freshly created dir here rather than leaking it.
@@ -143,7 +198,7 @@ export function buildManagedOpencodeServerEnvironment(
       throw new Error('Managed OpenCode config writer must return an opencode.json or opencode.jsonc path.')
     }
     // OPENCODE_CONFIG_CONTENT is consumed only by OpenCode's classic config
-    // layer in 1.17.20. OPENCODE_CONFIG_DIR is shared by the classic and V2
+    // layer. OPENCODE_CONFIG_DIR is shared by the classic and V2
     // layers, so one native file keeps both execution surfaces in lockstep and
     // avoids Linux's per-environment-string E2BIG limit at every config size.
     delete next.OPENCODE_CONFIG

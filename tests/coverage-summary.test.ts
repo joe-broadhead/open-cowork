@@ -355,7 +355,7 @@ test('coverage summary enforces package ratchets for subprocess and shipped runt
   })
   assert.deepEqual(CLOUD_CLIENT_COVERAGE_INPUT.thresholds, {
     lines: 70,
-    functions: 30,
+    functions: 32, // JOE-867 ratchet
     branches: 72,
   })
   assert.ok(MCP_HANDLER_COVERAGE_INPUT.includePathPrefixes.includes('mcps/knowledge/dist/'))

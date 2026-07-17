@@ -41,11 +41,12 @@ const allowedSdkImportPaths = new Set([
   'packages/cloud-server/src/opencode-runtime-adapter.ts',
   'packages/cloud-server/src/runtime-adapter.ts',
   'packages/cloud-server/src/worker-scoped-runtime-adapter.ts',
+  'apps/desktop/src/main/durable-session-events.ts',
   'apps/desktop/src/main/event-subscriptions.ts',
   'apps/desktop/src/main/events.ts',
   'apps/desktop/src/main/ipc/context.ts',
   'apps/desktop/src/main/ipc/provider-handlers.ts',
-  'apps/desktop/src/main/question-normalization.ts',
+  // question-normalization moved to runtime-host (JOE-842) — no SDK import
   'apps/desktop/src/main/runtime-mcp-status-polling.ts',
   'apps/standalone-gateway/src/opencode.ts',
   'packages/runtime-host/src/agent-config.ts',
@@ -136,32 +137,57 @@ test('native-v2-covered capabilities do not regress to classic client methods', 
   assert.deepEqual(violations, [], `covered capabilities must use client.v2.*:\n${violations.join('\n')}`)
 })
 
+/**
+ * JOE-845 classic SDK gap allowlist (OpenCode pin-gated).
+ *
+ * Full burn-down is Won't Do on OpenCode 1.18.1 — generated V2 clients lack
+ * working routes for these methods. Do NOT invent V2 wrappers.
+ *
+ * Ratchet rules:
+ * - Exact file:method → call count. Silent expansion fails this test.
+ * - Every method must appear in docs/opencode-sdk-v2-boundary.md and the residual
+ *   registry in docs/opencode-classic-sdk-burndown.md.
+ * - On each OpenCode bump: prove a real V2 route, switch the call site, then
+ *   remove the row + update the burndown registry in the same commit.
+ */
 const classicSdkGapAllowlist = new Map<string, number>([
+  // MCP group — no V2 MCP surface on 1.18.1
   ['apps/desktop/src/main/events.ts:mcp.status', 1],
   ['apps/desktop/src/main/ipc-handlers.ts:mcp.auth.authenticate', 1],
   ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.auth.authenticate', 1],
   ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.auth.remove', 1],
   ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.connect', 1],
   ['apps/desktop/src/main/ipc/catalog-handlers.ts:mcp.disconnect', 1],
+  // Explorer gaps — V2 fs.read lacks wildcard; status/symbols/text missing
   ['apps/desktop/src/main/ipc/explorer-handlers.ts:file.read', 1],
   ['apps/desktop/src/main/ipc/explorer-handlers.ts:file.status', 1],
   ['apps/desktop/src/main/ipc/explorer-handlers.ts:find.symbols', 1],
   ['apps/desktop/src/main/ipc/explorer-handlers.ts:find.text', 1],
+  // Session mutations without working native V2 routes
   ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.delete', 1],
   ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.diff', 1],
   ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.share', 1],
-  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.summarize', 1],
+  ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.summarize', 1], // v2.session.compact → OperationUnavailable
   ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.unshare', 1],
   ['apps/desktop/src/main/ipc/session-action-handlers.ts:session.update', 1],
   ['apps/desktop/src/main/ipc/session-command-handlers.ts:session.command', 1],
   ['apps/desktop/src/main/ipc/session-command-handlers.ts:session.todo', 1],
   ['apps/desktop/src/main/ipc/session-handlers.ts:session.fork', 1],
   ['apps/desktop/src/main/runtime-mcp-recovery.ts:mcp.connect', 2],
+  // Runtime tool catalog — V2 lists agents/commands/skills, not effective tools
   ['packages/runtime-host/src/runtime-tools.ts:tool.list', 1],
   ['packages/runtime-host/src/session-history-loader.ts:session.diff', 1],
   ['packages/runtime-host/src/session-history-loader.ts:session.todo', 2],
   ['packages/runtime-host/src/session-history-loader.ts:session.update', 1],
 ])
+
+/** Distinct classic methods represented in the allowlist (JOE-845 residual set). */
+const classicSdkGapMethods = new Set(
+  [...classicSdkGapAllowlist.keys()].map((key) => key.slice(key.indexOf(':') + 1)),
+)
+
+/** Pin version residual burn-down is blocked on. Update when OpenCode is bumped. */
+const OPENCODE_CLASSIC_GAP_PIN = '1.18.1'
 
 test('classic SDK calls are limited to documented native-V2 capability gaps', () => {
   const classicCall = /\b(?:client|options\.client)\.((?:session|mcp|tool|file|find)\.[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/g
@@ -186,6 +212,55 @@ test('classic SDK calls are limited to documented native-V2 capability gaps', ()
     const method = key.slice(key.indexOf(':') + 1)
     assert.match(boundaryDoc, new RegExp(`\`${escapeRegex(method)}\``), `${method} must be documented as a native-V2 gap`)
   }
+})
+
+test('JOE-845: classic gap residual runway is documented and pin-gated', () => {
+  const burndownDoc = readFileSync(join(root, 'docs/opencode-classic-sdk-burndown.md'), 'utf8')
+  assert.match(burndownDoc, /Won't Do \(full burn-down\) while pinned to OpenCode 1\.18\.1/)
+  assert.match(burndownDoc, new RegExp(escapeRegex(OPENCODE_CLASSIC_GAP_PIN)))
+  assert.match(boundaryDoc, /opencode-classic-sdk-burndown\.md/)
+
+  // Every allowlisted method must appear as a residual registry row.
+  for (const method of classicSdkGapMethods) {
+    assert.match(
+      burndownDoc,
+      new RegExp(`\`${escapeRegex(method)}\``),
+      `${method} must be tracked in docs/opencode-classic-sdk-burndown.md residual registry`,
+    )
+  }
+
+  // Runtime authority packages must stay on the residual pin until a real bump.
+  // Only desktop + runtime-host ship the opencode-ai binary package; cloud and
+  // standalone depend on the SDK client alone.
+  for (const manifestPath of [
+    'apps/desktop/package.json',
+    'apps/standalone-gateway/package.json',
+    'packages/cloud-server/package.json',
+    'packages/runtime-host/package.json',
+  ]) {
+    const manifest = JSON.parse(readFileSync(join(root, manifestPath), 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
+    assert.equal(
+      manifest.dependencies?.['@opencode-ai/sdk'],
+      OPENCODE_CLASSIC_GAP_PIN,
+      `${manifestPath} @opencode-ai/sdk must match classic-gap pin ${OPENCODE_CLASSIC_GAP_PIN}`,
+    )
+  }
+  for (const manifestPath of ['apps/desktop/package.json', 'packages/runtime-host/package.json']) {
+    const manifest = JSON.parse(readFileSync(join(root, manifestPath), 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
+    assert.equal(
+      manifest.dependencies?.['opencode-ai'],
+      OPENCODE_CLASSIC_GAP_PIN,
+      `${manifestPath} opencode-ai must match classic-gap pin ${OPENCODE_CLASSIC_GAP_PIN}`,
+    )
+  }
+
+  // Ratchet: residual method count cannot shrink without a corresponding doc burn
+  // note, and must not grow silently (allowlist equality already enforces growth).
+  assert.equal(classicSdkGapMethods.size, 19, 'expected 19 distinct classic gap methods on OpenCode 1.18.1')
 })
 
 function stripComments(source: string) {

@@ -1,15 +1,31 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  approvalsSurfaceCss,
-  artifactsSurfaceCss,
-  channelsSurfaceCss,
-  controlsSurfaceCss,
-  knowledgeGraphCss,
-  projectsSurfaceCss,
-  studioSurfaceStyles,
-  wikiSurfaceCss,
-} from '../packages/ui/src/surface-styles.ts'
+import { artifactsSurfaceCss } from '../packages/ui/src/styles/artifacts-surface.ts'
+import { knowledgeGraphCss } from '../packages/ui/src/styles/knowledge-graph-surface.ts'
+import { approvalsSurfaceCss } from '../packages/ui/src/styles/approvals-surface.ts'
+import { wikiSurfaceCss } from '../packages/ui/src/styles/wiki-surface.ts'
+import { channelsSurfaceCss } from '../packages/ui/src/styles/channels-surface.ts'
+import { projectsSurfaceCss } from '../packages/ui/src/styles/projects-surface.ts'
+import { controlsSurfaceCss } from '../packages/ui/src/styles/controls-surface.ts'
+import { primitivesSurfaceCss } from '../packages/ui/src/styles/primitives-surface.ts'
+import { sharedKeyframesCss } from '../packages/ui/src/styles/shared-keyframes.ts'
+
+// Mirror packages/ui/src/surface-styles.ts aggregate (JOE-851 domain split).
+// Node strip-types tests import domain .ts modules directly; the package barrel
+// resolves via tsc emit (.js) for runtime consumers.
+function studioSurfaceStyles(): string {
+  return [
+    sharedKeyframesCss(),
+    controlsSurfaceCss(),
+    primitivesSurfaceCss(),
+    artifactsSurfaceCss(),
+    knowledgeGraphCss(),
+    approvalsSurfaceCss(),
+    wikiSurfaceCss(),
+    channelsSurfaceCss(),
+    projectsSurfaceCss(),
+  ].join('\n')
+}
 import { extractCssRules } from './helpers/css-rules.ts'
 
 // A CSS regression net for the single-sourced studio surfaces. The desktop

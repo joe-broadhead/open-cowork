@@ -4,7 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { switchToSession } from '../../helpers/switchToSession'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
-import { Button, Dialog, IconButton, Tooltip } from '../ui'
+import { Button, Dialog, IconButton, Tooltip } from '@open-cowork/ui'
 import { DiffViewer } from './DiffViewer'
 
 // Live-placeholder messages have no server-side anchor yet; action

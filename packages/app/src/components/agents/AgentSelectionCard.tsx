@@ -2,19 +2,11 @@ import type { AgentColor, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgentDe
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from './AgentAvatar'
 import {
-  BuiltinIcon,
-  CustomIcon,
-  RuntimeIcon,
-} from './agent-attribute-icons'
+  BuiltinIcon, CustomIcon, RuntimeIcon, } from './agent-attribute-icons'
 import {
-  agentChroma,
-  computeAgentScope,
-  scopeLabel,
-  scopeTone,
-  type AgentScope,
-} from './agent-builder-utils'
+  agentChroma, computeAgentScope, scopeLabel, scopeTone, AgentScope, } from './agent-builder-utils'
 import type { AgentCatalog } from '@open-cowork/shared'
-import { Badge, Button, Card } from '../ui'
+import { Badge, Button, Card } from '@open-cowork/ui'
 
 // Roster card for the Agents page. It keeps the character-select
 // feeling through avatar, color, and compact stats, but leaves deep

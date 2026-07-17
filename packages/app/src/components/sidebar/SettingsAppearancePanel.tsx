@@ -1,6 +1,6 @@
 import { DENSITY_OPTIONS, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId, type UiTheme, getUserFacingThemes, THEME_MATCHED_ACCENT } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
-import { Badge, Card, SegmentedControl, Select } from '../ui'
+import { Badge, Card, SegmentedControl, Select } from '@open-cowork/ui'
 import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
 
 function colorSchemeLabel(scheme: ColorScheme) {

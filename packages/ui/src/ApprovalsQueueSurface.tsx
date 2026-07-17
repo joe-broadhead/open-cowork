@@ -5,7 +5,7 @@ import { EmptyState } from './EmptyState.js'
 import { ErrorState } from './ErrorState.js'
 import { Textarea } from './Input.js'
 import { Skeleton } from './Skeleton.js'
-import { ApprovalCard, CoworkerAvatar, type StudioAction, type StudioTone } from './StudioPrimitives.js'
+import { StudioApprovalCard, CoworkerAvatar, type StudioAction, type StudioTone } from './StudioPrimitives.js'
 import { cn } from './utils.js'
 
 export type ApprovalsQueueOption = {
@@ -273,7 +273,7 @@ function PermissionCard({
   const actions = actionItems.filter(isStudioAction)
 
   return (
-    <ApprovalCard
+    <StudioApprovalCard
       className="studio-approval-item"
       data-kind="permission"
       title={item.description || item.tool || 'Permission requested'}
@@ -290,7 +290,7 @@ function PermissionCard({
       </div>
       {metaChips(item)}
       {permissionDetails(item)}
-    </ApprovalCard>
+    </StudioApprovalCard>
   )
 }
 
@@ -306,7 +306,7 @@ function QuestionCard({
   onRejectQuestion?: ApprovalsQueueSurfaceProps['onRejectQuestion']
 }) {
   return (
-    <ApprovalCard
+    <StudioApprovalCard
       className="studio-approval-item"
       data-kind="question"
       title={questionTitle(item)}
@@ -330,7 +330,7 @@ function QuestionCard({
       </div>
       {metaChips(item)}
       <QuestionControls item={item} onReplyQuestion={onReplyQuestion} onRejectQuestion={onRejectQuestion} />
-    </ApprovalCard>
+    </StudioApprovalCard>
   )
 }
 

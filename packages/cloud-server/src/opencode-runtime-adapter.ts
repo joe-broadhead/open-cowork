@@ -23,6 +23,7 @@ import {
   sanitizeRuntimeEventRecord,
   sanitizeRuntimeEventValue,
   sanitizeCloudToolOutput,
+  translateOpencodeEvent,
 } from '@open-cowork/shared'
 import {
   createOpencodeClient,
@@ -513,8 +514,10 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
 }
 
 export function translateOpencodeRuntimeEventWithDiagnostics(raw: unknown): OpencodeRuntimeEventTranslation {
-  const event = normalizeRuntimeEventEnvelope(raw)
-  if (!event) {
+  // JOE-838: Canonical envelope + disposition come from shared translator.
+  // Cloud only fans out into CloudRuntimeEvent payload shapes after that.
+  const translation = translateOpencodeEvent(raw)
+  if (!translation.envelope || translation.disposition.status === 'invalid') {
     return {
       events: [],
       dropped: {
@@ -523,7 +526,30 @@ export function translateOpencodeRuntimeEventWithDiagnostics(raw: unknown): Open
       },
     }
   }
+  const event = translation.envelope
+  const disposition = translation.disposition
+  if (disposition.status === 'benign' || disposition.status === 'private') {
+    return {
+      events: [],
+      dropped: {
+        sdkEventType: event.type,
+        reason: 'no-projected-events',
+      },
+    }
+  }
   const properties = event.properties || {}
+  // Classification is authoritative for "is this a known SDK family?" —
+  // unknown dispositions fail closed as dropped unknown types. live-only and
+  // project dispositions still run through Cloud payload fan-out.
+  if (disposition.status === 'unknown') {
+    return {
+      events: [],
+      dropped: {
+        sdkEventType: event.type,
+        reason: 'unknown-event-type',
+      },
+    }
+  }
   const translated = knownOpencodeRuntimeEvents(event.type, properties)
   if (!translated) {
     return {
@@ -741,8 +767,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
   }
 
   const reconcileSessionHistory = async (state: DurableSessionSubscriptionState) => {
-    // 1.17.20 exposes this finite durable counterpart even though session.wait
-    // is not implemented. Querying it after active-set quiescence closes the
+    // OpenCode exposes this finite durable counterpart even when session.wait
+    // is unavailable. Querying it after active-set quiescence closes the
     // race where the live durable tail has not observed the final commit yet.
     if (typeof client.v2.session.history !== 'function') return
     while (!controller.signal.aborted) {
@@ -794,7 +820,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
         } catch (error) {
           if (controller.signal.aborted) break
           if (isSessionWaitCapabilityUnavailable(error)) {
-            // OpenCode 1.17.20 advertises wait in the SDK but its server method
+            // Some OpenCode v2 runtimes advertise wait in the SDK while the server method
             // is an OperationUnavailable stub. Detect only that typed 503 once;
             // auth and transport failures must keep retrying the preferred API.
             waitCapabilityUnavailable = true

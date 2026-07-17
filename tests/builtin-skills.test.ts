@@ -27,11 +27,6 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
     'agent-creator',
     'autoresearch',
     'chart-creator',
-    'clock',
-    'opencode-gateway',
-    'openwiki-edit-review',
-    'openwiki-ingest',
-    'openwiki-research',
     'skill-creator',
     'time-keep',
     'workflow-creator',
@@ -39,8 +34,8 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
 
   // Brand words whose display casing differs from naive Title Case, and full
   // skill names whose H1 keeps the lowercase brand form.
-  const displayWordOverrides: Record<string, string> = { openwiki: 'OpenWiki' }
-  const displayTitleOverrides: Record<string, string> = { 'time-keep': 'time-keep', 'opencode-gateway': 'Gateway Work Coordination' }
+  const displayWordOverrides: Record<string, string> = {}
+  const displayTitleOverrides: Record<string, string> = { 'time-keep': 'time-keep' }
 
   for (const skillName of skillNames) {
     assert.match(skillName, safeSkillName)

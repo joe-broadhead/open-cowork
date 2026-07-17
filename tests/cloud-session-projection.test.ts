@@ -53,7 +53,7 @@ test('cloud session projection persists approvals questions tools todos costs an
   const created = await service.createSession(principal)
   const sessionId = created.session.sessionId
 
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'tool.call',
     payload: {
       id: 'tool-1',
@@ -63,7 +63,7 @@ test('cloud session projection persists approvals questions tools todos costs an
       output: 'contents',
     },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'permission.requested',
     payload: {
       permissionId: 'permission-1',
@@ -73,7 +73,7 @@ test('cloud session projection persists approvals questions tools todos costs an
       description: 'Run git status',
     },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'question.asked',
     payload: {
       requestId: 'question-1',
@@ -85,20 +85,20 @@ test('cloud session projection persists approvals questions tools todos costs an
       }],
     },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'todos.updated',
     payload: {
       todos: [{ id: 'todo-1', content: 'Ship sync', status: 'in_progress', priority: 'high' }],
     },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'cost.updated',
     payload: {
       cost: 0.42,
       tokens: { input: 11, output: 7, reasoning: 3, cache: { read: 2, write: 1 } },
     },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'artifact.created',
     payload: {
       artifactId: 'artifact-1',
@@ -115,7 +115,7 @@ test('cloud session projection persists approvals questions tools todos costs an
       taskId: 'task-1',
     },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'artifact.updated',
     payload: {
       artifactId: 'artifact-1',
@@ -173,11 +173,11 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(pendingSummaries.items[0]?.pendingApprovals[0]?.description, 'Run git status')
   assert.equal(pendingSummaries.items[0]?.pendingQuestions[0]?.id, 'question-1')
 
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'permission.resolved',
     payload: { permissionId: 'permission-1', allowed: true },
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'question.resolved',
     payload: { requestId: 'question-1', answers: ['Yes'] },
   })
@@ -217,7 +217,7 @@ test('cloud assistant chunks keep projection running until explicit idle event',
     sessionId,
     status: 'running',
   })
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'prompt.submitted',
     payload: {
       messageId: 'command-1:user',
@@ -274,7 +274,7 @@ test('cloud projection bounds but does not rewrite intentional transcript conten
   const prompt = 'Email alice@example.com about /Users/alice/private-project/report.md'
   const answer = 'Use https://files.example/report?signature=keep-this-query'
 
-  await service.appendProductEvent(principal, sessionId, {
+  await service.domains.usage.appendProductEvent(principal, sessionId, {
     type: 'prompt.submitted',
     payload: { messageId: 'user-1', text: prompt },
   })
@@ -324,7 +324,7 @@ test('cloud runtime errors remain terminal through trailing idle without a succe
     externalWorkspaceId: 'error-watch-workspace',
     displayName: 'Error watch channel',
   })
-  await service.createCloudCoordinationWatch(principal, {
+  await service.domains.coordination.createCloudCoordinationWatch(principal, {
     workspaceId: `cloud:${principal.tenantId}`,
     target: { kind: 'session', id: sessionId },
     events: ['run.finished'],

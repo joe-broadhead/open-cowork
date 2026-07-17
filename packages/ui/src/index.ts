@@ -39,8 +39,8 @@ export { SegmentedControl, type SegmentedControlOption, type SegmentedControlPro
 export { Skeleton, type SkeletonProps } from './Skeleton.js'
 export { Switch, type SwitchProps } from './Switch.js'
 export {
-  ApprovalCard,
-  ArtifactCard,
+  StudioApprovalCard,
+  StudioArtifactCard,
   ChannelStatusCard,
   ChannelRow,
   ComposerShell,
@@ -64,8 +64,8 @@ export {
   WizardStepPane,
   WizardSteps,
   WorkingStyleBars,
-  type ApprovalCardProps,
-  type ArtifactCardProps,
+  type StudioApprovalCardProps,
+  type StudioArtifactCardProps,
   type ChannelRowProps,
   type ComposerShellProps,
   type ConversationLaneActivity,

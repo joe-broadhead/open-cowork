@@ -234,6 +234,8 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Advanced/ }))
+    // JOE-876: RuntimeConfigPanel is collapsed by default — expand progressive disclosure first.
+    await user.click(await screen.findByRole('button', { name: 'Show advanced' }))
     const toolingBridge = await screen.findByRole('switch', { name: 'Developer config bridge' })
     expect(toolingBridge).toHaveAttribute('aria-checked', 'true')
 
@@ -359,12 +361,12 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Advanced/ }))
-    await user.type(screen.getByLabelText('Model ID'), 'deepseek/deepseek-v4-flash:free')
+    await user.type(screen.getByLabelText('Model ID'), 'qwen/qwen3-coder-flash')
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
     expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
-      selectedSmallModelId: 'deepseek/deepseek-v4-flash:free',
+      selectedSmallModelId: 'qwen/qwen3-coder-flash',
     })
   })
 
@@ -376,7 +378,7 @@ describe('SettingsPanel', () => {
       providers: {
         ...config.providers,
         available: config.providers.available.map((provider) => provider.id === 'openrouter'
-          ? { ...provider, smallModel: 'deepseek/deepseek-v4-flash:free' }
+          ? { ...provider, smallModel: 'qwen/qwen3-coder-flash' }
           : provider),
       },
     }

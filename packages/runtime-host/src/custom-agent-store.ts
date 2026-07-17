@@ -517,13 +517,22 @@ function deriveToolIdsFromPermission(
   // tools such as `websearch` / `webfetch` are represented as direct permission
   // keys, not MCP patterns, so expose those direct keys as selected tools.
   const nativeToolIds = Array.from(patterns)
-    .filter((pattern) => !pattern.startsWith('mcp__') && /^[a-z][a-z0-9_-]*$/.test(pattern))
+    .filter((pattern) => (
+      !pattern.startsWith('mcp__')
+      && !isMcpPermissionRulePattern(pattern)
+      && /^[a-z][a-z0-9_-]*$/.test(pattern)
+    ))
 
   const customMcpIds = [
     ...readScopedMcps('machine'),
     ...(scope === 'project' && directory ? readScopedMcps('project', directory) : []),
   ]
-    .filter((mcp) => Array.from(patterns).some((pattern) => pattern === `mcp__${mcp.name}__*` || pattern.startsWith(`mcp__${mcp.name}__`)))
+    .filter((mcp) => Array.from(patterns).some((pattern) => (
+      pattern === `mcp__${mcp.name}__*`
+      || pattern.startsWith(`mcp__${mcp.name}__`)
+      || pattern === `${mcp.name}_*`
+      || pattern.startsWith(`${mcp.name}_`)
+    )))
     .map((mcp) => mcp.name)
 
   return Array.from(new Set([...configuredToolIds, ...nativeToolIds, ...customMcpIds])).sort((a, b) => a.localeCompare(b))

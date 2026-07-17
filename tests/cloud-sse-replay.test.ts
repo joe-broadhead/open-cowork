@@ -148,3 +148,28 @@ test('SSE stream registry enforces a per-org concurrent-connection cap', () => {
   const d = mockSseConn()
   assert.equal(registry.track(d.req, d.res, () => {}, scope), true)
 })
+
+test('maxSseConnectionsPerOrg default is the documented production default (JOE-844)', async () => {
+  const { DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG } = await import('@open-cowork/cloud-server/http-routes/sse-limits')
+  const { resolveCloudBootstrapOptionsFromEnv } = await import('@open-cowork/cloud-server/app')
+  assert.equal(DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG, 200)
+  assert.equal(resolveCloudBootstrapOptionsFromEnv({}).maxSseConnectionsPerOrg, 200)
+  assert.equal(
+    resolveCloudBootstrapOptionsFromEnv({ OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG: '50' }).maxSseConnectionsPerOrg,
+    50,
+  )
+})
+
+test('production topology docs recommend multi-pod SSE NOTIFY + connection caps (JOE-844)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { join, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const cloudDoc = readFileSync(join(repoRoot, 'docs/open-cowork-cloud.md'), 'utf8')
+  const topologyDoc = readFileSync(join(repoRoot, 'docs/deployment-topologies.md'), 'utf8')
+  assert.match(cloudDoc, /Multi-pod SSE load guidance/)
+  assert.match(cloudDoc, /OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true/)
+  assert.match(cloudDoc, /OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG/)
+  assert.match(topologyDoc, /OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true/)
+  assert.match(topologyDoc, /MAX_SSE_CONNECTIONS_PER_ORG/)
+})

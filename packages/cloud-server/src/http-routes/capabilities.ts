@@ -9,17 +9,17 @@ export async function handleCapabilitiesApiRoute(input: CloudApiRouteInput): Pro
   }
 
   if (!collection && req.method === 'GET') {
-    tools.writeJson(res, 200, await options.service.listCapabilityCatalog(context.principal), options.corsOrigin)
+    tools.writeJson(res, 200, await options.service.domains.capabilities.listCapabilityCatalog(context.principal), options.corsOrigin)
     return true
   }
 
   if (collection === 'tools') {
     if (!itemId && req.method === 'GET') {
-      tools.writeJson(res, 200, { tools: await options.service.listCapabilityTools(context.principal) }, options.corsOrigin)
+      tools.writeJson(res, 200, { tools: await options.service.domains.capabilities.listCapabilityTools(context.principal) }, options.corsOrigin)
       return true
     }
     if (itemId && !itemAction && req.method === 'GET') {
-      const tool = await options.service.getCapabilityTool(context.principal, itemId)
+      const tool = await options.service.domains.capabilities.getCapabilityTool(context.principal, itemId)
       if (!tool) {
         tools.writeError(res, 404, 'Capability tool was not found.', options.corsOrigin)
         return true
@@ -31,11 +31,11 @@ export async function handleCapabilitiesApiRoute(input: CloudApiRouteInput): Pro
 
   if (collection === 'skills') {
     if (!itemId && req.method === 'GET') {
-      tools.writeJson(res, 200, { skills: await options.service.listCapabilitySkills(context.principal) }, options.corsOrigin)
+      tools.writeJson(res, 200, { skills: await options.service.domains.capabilities.listCapabilitySkills(context.principal) }, options.corsOrigin)
       return true
     }
     if (itemId && !itemAction && req.method === 'GET') {
-      const skill = await options.service.getCapabilitySkill(context.principal, itemId)
+      const skill = await options.service.domains.capabilities.getCapabilitySkill(context.principal, itemId)
       if (!skill) {
         tools.writeError(res, 404, 'Capability skill was not found.', options.corsOrigin)
         return true
@@ -44,7 +44,7 @@ export async function handleCapabilitiesApiRoute(input: CloudApiRouteInput): Pro
       return true
     }
     if (itemId && itemAction === 'bundle' && req.method === 'GET') {
-      const bundle = await options.service.getCapabilitySkillBundle(context.principal, itemId)
+      const bundle = await options.service.domains.capabilities.getCapabilitySkillBundle(context.principal, itemId)
       if (!bundle) {
         tools.writeError(res, 404, 'Capability skill bundle was not found.', options.corsOrigin)
         return true

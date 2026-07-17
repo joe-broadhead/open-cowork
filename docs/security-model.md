@@ -173,9 +173,18 @@ flag, so it cannot be used to reach an instance metadata service. The guard
 runs at save time (`custom:add-mcp`), test time (`custom:test-mcp`), and
 runtime registration, so public-looking hostnames that resolve into
 private networks at those policy checkpoints are skipped before OpenCode
-receives the MCP entry. After registration, OpenCode owns the actual
-HTTP connection; Open Cowork does not proxy or pin DNS for the runtime
-transport.
+receives the MCP entry.
+
+**DNS pin / residual SSRF (JOE-826):** At runtime handoff, cleartext `http:`
+MCP entries are rewritten to connect to a policy-validated resolved address
+while preserving the original `Host` header (`pinHttpMcpRemoteEntry`). That
+closes the DNS-rebinding window for HTTP. **HTTPS residual:** OpenCode owns
+the TLS transport; IP-pinning would break SNI and certificate hostname checks,
+so `https:` MCPs stay hostname-based after the pre-connect DNS policy check.
+Operators who need stronger guarantees for HTTPS MCPs should terminate TLS at
+a trusted reverse proxy with a fixed upstream IP, or restrict MCPs to known
+static endpoints. Cloud-metadata targets remain hard-denied on every policy
+check regardless of protocol.
 
 ### stdio policy (stdio MCPs)
 
@@ -185,10 +194,12 @@ the MCP can be saved. Shell metacharacters, `..` segments, and
 redirection operators are all rejected.
 
 Package runners such as `npx`, `bunx`, and `uvx` remain explicit trust
-decisions. Adding an MCP that runs `npx some-package` is equivalent to
-trusting that package publisher and whatever version resolution selects.
-Prefer pinned package specs such as `some-package@1.2.3` for repeatable
-MCP configuration.
+decisions **and require a version-pinned package argument** (JOE-827).
+Floating names (`npx some-package`) and `@latest` / `@*` tags are rejected
+at save/validate time. Use `some-package@1.2.3`, scoped
+`@scope/name@1.2.3`, `uvx name==1.2.3`, or a local script path.
+Unpinned installs are equivalent to remote code execution under the MCP
+privilege boundary.
 
 ### MCP tool approvals
 
@@ -464,9 +475,10 @@ URL credentials, or local home-directory paths.
   fixed release yet, add only its `CVE-*` or `GHSA-*` identifier to
   `pnpm.auditConfig.ignoreCves` or `pnpm.auditConfig.ignoreGhsas` in the root
   `package.json`. `scripts/pnpm-audit.mjs` enforces that allowlist around
-  `pnpm audit --json`. The PR must include a justification, impact notes, and
-  an owner/date for removal; the entry is removed once a patched release ships
-  and is re-reviewed during monthly maintenance.
+  the installed pnpm dependency graph and npm Bulk Advisory API. The PR must
+  include a justification, impact notes, and an owner/date for removal; the
+  entry is removed once a patched release ships and is re-reviewed during
+  monthly maintenance.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

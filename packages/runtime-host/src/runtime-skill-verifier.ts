@@ -29,9 +29,21 @@ export async function verifyRuntimeSkillCatalog(client: OpencodeClient, director
       directory ? { location: { directory } } : undefined,
       { throwOnError: true },
     )
-    const result = compareRuntimeSkills(expectedNames, response.data.data)
-    if (result.missing.length > 0) {
+    // V2 skill.list can return { name } and/or nested metadata; accept common shapes.
+    const listed = (response.data.data || []).map((skill) => {
+      const record = skill as RuntimeSkill & { id?: string; source?: { name?: string } }
+      return {
+        name: record.name || record.id || record.source?.name || '',
+      }
+    })
+    const result = compareRuntimeSkills(expectedNames, listed)
+    // skills.paths composition already registers configured bundles for the
+    // session. An empty list early in boot is usually catalog timing, not a
+    // missing install — only warn when the list is non-empty but incomplete.
+    if (result.missing.length > 0 && result.available.length > 0) {
       log('runtime', `OpenCode skill catalog missing configured skills: ${result.missing.join(', ')}`)
+    } else if (result.missing.length > 0 && result.available.length === 0) {
+      log('runtime', `OpenCode skill.list returned 0 skills (configured ${result.expected.length}); skills.paths composition remains authoritative`)
     }
     return result
   } catch (error) {

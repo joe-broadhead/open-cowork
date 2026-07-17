@@ -4,8 +4,10 @@ import type {
 } from '@open-cowork/gateway-channel'
 import type {
   ChannelSessionBindingRecord,
+} from '@open-cowork/cloud-client/domains/channels'
+import type {
   CloudTransportSessionEvent,
-} from '@open-cowork/cloud-client'
+} from '@open-cowork/cloud-client/domains/transport'
 
 import type { CloudGateway } from '../cloud-gateway.js'
 import {

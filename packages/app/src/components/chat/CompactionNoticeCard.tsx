@@ -1,6 +1,6 @@
 import type { CompactionNotice } from '../../stores/session'
 import { t } from '../../helpers/i18n'
-import { Badge, Card, Icon, type BadgeTone } from '../ui'
+import { Badge, Card, Icon, type BadgeTone } from '@open-cowork/ui'
 
 // Describe why this compaction happened. Overflow = the context window was
 // full and the runtime had no choice. Voluntary = auto-compaction fired

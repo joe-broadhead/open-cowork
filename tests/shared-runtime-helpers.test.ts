@@ -14,8 +14,8 @@ test('validateCustomAgentDraft reports missing references and duplicate names', 
     description: 'Researches product signals.',
     scope: 'machine',
     siblingNames: ['researcher'],
-    availableToolIds: ['clock'],
-    availableSkillNames: ['clock'],
+    availableToolIds: ['time-keep'],
+    availableSkillNames: ['time-keep'],
     toolIds: ['missing-tool'],
     skillNames: ['missing-skill'],
   })
@@ -48,6 +48,7 @@ test('default tool trace rules keep configurable core categories', () => {
   assert.equal(rulesById.get('skill')?.match[0]?.exact?.includes('skill'), true)
   assert.equal(rulesById.get('task')?.pluralLabel, 'delegations')
   assert.equal(rulesById.get('chart')?.match.some((matcher) => matcher.prefixes?.includes('mcp__charts__')), true)
+  assert.equal(rulesById.get('time')?.match.some((matcher) => matcher.prefixes?.includes('time-keep_')), true)
 })
 
 test('shared OpenCode skill validation canonicalizes and rejects drift', () => {

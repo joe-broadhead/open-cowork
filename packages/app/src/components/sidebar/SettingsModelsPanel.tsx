@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { Badge, Button, Card, Input } from '../ui'
+import { Badge, Button, Card, Input } from '@open-cowork/ui'
 import { credentialFieldIsSecret, isCredentialMask } from '../provider/credential-merge'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 import {

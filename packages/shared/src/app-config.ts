@@ -44,7 +44,7 @@ export interface BrandThemeDefinition {
 }
 
 export type BrandingSidebarTopVariant = 'icon' | 'text' | 'icon-text' | 'logo' | 'logo-text'
-export type BrandingSidebarMediaFit = 'vertical' | 'horizontal'
+export type BrandingSidebarMediaFit = 'bounded' | 'vertical' | 'horizontal'
 export type BrandingSidebarMediaAlign = 'start' | 'center' | 'end'
 
 export interface BrandingSidebarTopConfig {
@@ -236,34 +236,39 @@ export function parseGatewayProductMode(value: unknown): GatewayProductMode | nu
   const text = typeof value === 'string' ? value.trim() : ''
   if (!text) return null
   if (text === 'cloud_channel' || text === 'standalone' || text === 'hybrid') return text
-  throw new Error(`Unsupported gateway productMode ${text}. Use cloud_channel, standalone, or hybrid.`)
+  throw new Error(`Unsupported gateway productMode ${text}. Valid values: cloud_channel (apps/gateway), standalone (apps/standalone-gateway), hybrid (reserved).`)
 }
 
 export function assertCloudChannelGatewayProductMode(productMode: GatewayProductMode) {
   if (productMode === 'cloud_channel') return
+  // JOE-897: fail-closed messages name the correct binary / env family.
   if (productMode === 'standalone') {
     throw new Error(
-      'Gateway productMode=standalone is a separate Standalone Team Gateway app. '
-      + 'The current apps/gateway daemon only supports productMode=cloud_channel and must stay a Cloud client.',
+      'OPEN_COWORK_GATEWAY_PRODUCT_MODE=standalone (or gateway.productMode=standalone) is not supported by '
+      + 'apps/gateway (Cloud Channel Gateway binary). Use apps/standalone-gateway with '
+      + 'OPEN_COWORK_STANDALONE_GATEWAY_* configuration instead. apps/gateway only accepts productMode=cloud_channel.',
     )
   }
   throw new Error(
-    'Gateway productMode=hybrid is reserved for a later Cloud-connected edge/standalone design. '
-    + 'The current apps/gateway daemon only supports productMode=cloud_channel.',
+    'OPEN_COWORK_GATEWAY_PRODUCT_MODE=hybrid (or gateway.productMode=hybrid) is reserved for a future design. '
+    + 'The Cloud Channel Gateway binary (apps/gateway) only accepts productMode=cloud_channel. '
+    + 'For private execution authority use apps/standalone-gateway (OPEN_COWORK_STANDALONE_GATEWAY_*).',
   )
 }
 
 export function assertStandaloneGatewayProductMode(productMode: GatewayProductMode) {
   if (productMode === 'standalone') return
+  // JOE-897: name the correct binary / env family in fail-closed messages.
   if (productMode === 'cloud_channel') {
     throw new Error(
-      'Gateway productMode=cloud_channel is the Cloud Channel Gateway app. '
-      + 'Standalone Gateway deployments must use productMode=standalone.',
+      'productMode=cloud_channel is owned by the Cloud Channel Gateway binary (apps/gateway, '
+      + 'OPEN_COWORK_GATEWAY_*). Standalone Gateway (apps/standalone-gateway, OPEN_COWORK_STANDALONE_GATEWAY_*) '
+      + 'only accepts productMode=standalone.',
     )
   }
   throw new Error(
-    'Gateway productMode=hybrid is reserved for a later Cloud-connected edge/standalone design. '
-    + 'Standalone Gateway deployments must use productMode=standalone.',
+    'productMode=hybrid is reserved for a future design. Standalone Gateway (apps/standalone-gateway, '
+    + 'OPEN_COWORK_STANDALONE_GATEWAY_*) only accepts productMode=standalone.',
   )
 }
 
@@ -378,9 +383,10 @@ export interface AppMetadata {
 
 export type RuntimePermissionPolicy = 'allow' | 'ask' | 'deny'
 
-// Per-deployment desktop feature flags. A downstream builder disables a product area
-// (it disappears from the sidebar and its route is blocked) by setting its key false;
-// omitted keys default to enabled, so the standard build ships everything.
+// Per-deployment desktop feature flags. A key set to false hides the area from
+// the sidebar and blocks its route. Primary thesis surfaces default ON when
+// omitted; secondary Studio surfaces default OFF until explicitly enabled
+// (progressive disclosure — JOE-849).
 export type DesktopFeatureKey =
   | 'projects'
   | 'knowledge'
@@ -391,10 +397,36 @@ export type DesktopFeatureKey =
   | 'tools'
   | 'artifacts'
 
+/** Primary nav thesis: Chat/Team/Tools/Projects/Playbooks (+ Home/Settings). */
+export const DESKTOP_PRIMARY_FEATURE_KEYS = [
+  'projects',
+  'team',
+  'playbooks',
+  'tools',
+] as const satisfies readonly DesktopFeatureKey[]
+
+/**
+ * Secondary Studio surfaces — default-off until polished or opted in via
+ * `features.<key>: true` in open-cowork.config.json.
+ */
+export const DESKTOP_SECONDARY_FEATURE_KEYS = [
+  'knowledge',
+  'approvals',
+  'channels',
+  'artifacts',
+] as const satisfies readonly DesktopFeatureKey[]
+
+const DESKTOP_SECONDARY_FEATURE_SET: ReadonlySet<DesktopFeatureKey> = new Set(
+  DESKTOP_SECONDARY_FEATURE_KEYS,
+)
+
 export type DesktopFeatureFlags = Partial<Record<DesktopFeatureKey, boolean>>
 
 export function isDesktopFeatureEnabled(features: DesktopFeatureFlags | undefined, key: DesktopFeatureKey): boolean {
-  return features?.[key] !== false
+  const explicit = features?.[key]
+  if (explicit !== undefined) return explicit === true
+  // Omitted secondary keys stay hidden; primary keys stay visible.
+  return !DESKTOP_SECONDARY_FEATURE_SET.has(key)
 }
 
 export interface PublicAppConfig {

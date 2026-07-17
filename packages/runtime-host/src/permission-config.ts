@@ -5,7 +5,7 @@ import type {
   PermissionRuleConfig,
 } from '@opencode-ai/sdk/v2'
 import { resolve, join } from 'node:path'
-import { getProjectOverlayDirName } from './config-loader-core.js'
+import { expandMcpToolPermissionPatterns, getProjectOverlayDirName } from './config-loader-core.js'
 import {
   getMachineSkillsDir,
   getRuntimeHomeDir,
@@ -208,14 +208,24 @@ export function buildPermissionConfig(options: {
     list: 'allow',
   }
 
-  for (const pattern of options.toolPatternsToDeny || []) permission[pattern] = 'deny'
-  for (const pattern of options.askPatterns || []) permission[pattern] = 'ask'
-  for (const pattern of options.allowPatterns || []) permission[pattern] = 'allow'
+  // Dual-expand mcp__server__tool ↔ server_tool so OpenCode 1.18+ permission
+  // evaluation matches the tool ids SessionTools actually registers.
+  const toolPatternsToDeny = expandMcpToolPermissionPatterns(options.toolPatternsToDeny || [])
+  const allowPatterns = expandMcpToolPermissionPatterns(options.allowPatterns || [])
+  const askPatterns = expandMcpToolPermissionPatterns(options.askPatterns || [])
+  const deniedPatterns = expandMcpToolPermissionPatterns(options.deniedPatterns || [])
+
+  for (const pattern of toolPatternsToDeny) permission[pattern] = 'deny'
+  // Allow first, then ask, so specific ask rules (e.g. time-keep_timer_set /
+  // mcp__time-keep__timer_set) win over broader allow wildcards
+  // (time-keep_* / mcp__time-keep__*). Denies still win last.
+  for (const pattern of allowPatterns) permission[pattern] = 'allow'
+  for (const pattern of askPatterns) permission[pattern] = 'ask'
   // App-level native tool policy wins over broad allow/ask pattern expansion.
   // Downstream builds must be able to turn off web/bash/write globally even
   // if a bundled agent still lists a native tool in its capability config.
   const requestedActionFor = (key: NativePermissionActionKey) =>
-    requestedNativeAction(key, options.askPatterns, options.allowPatterns)
+    requestedNativeAction(key, askPatterns, allowPatterns)
   setTrailingPermissionRule(permission, 'codesearch', webAccess, requestedActionFor('codesearch'), options.requireNativeToolPattern === true)
   setTrailingPermissionRule(permission, 'webfetch', webAccess, requestedActionFor('webfetch'), options.requireNativeToolPattern === true)
   setTrailingPermissionRule(permission, 'websearch', webSearchAccess, requestedActionFor('websearch'), options.requireNativeToolPattern === true)
@@ -223,7 +233,7 @@ export function buildPermissionConfig(options: {
   setTrailingPermissionRule(permission, 'edit', editAccess, requestedActionFor('edit'), options.requireNativeToolPattern === true)
   setTrailingPermissionRule(permission, 'write', editAccess, requestedActionFor('write'), options.requireNativeToolPattern === true)
   setTrailingPermissionRule(permission, 'apply_patch', editAccess, requestedActionFor('apply_patch'), options.requireNativeToolPattern === true)
-  for (const pattern of options.deniedPatterns || []) permission[pattern] = 'deny'
+  for (const pattern of deniedPatterns) permission[pattern] = 'deny'
 
   return permission
 }

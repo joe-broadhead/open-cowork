@@ -40,6 +40,15 @@ audit event — they are not silently completed and they do not run. Team tasks,
 watches, and scheduled workflows therefore have durable queue/table shape but
 no execution engine in this product mode yet.
 
+### Product decision (JOE-875)
+
+**Unsupported job kinds stay fail-closed.** We do **not** claim full workflow /
+watch / team_task execution in Standalone until those engines are implemented
+on shared kernels. Docs and doctor surfaces must not advertise them as ready.
+Webhook rate limiting is shared with Cloud Channel Gateway via
+`@open-cowork/gateway-channel` (`WebhookRateLimiter`). Event translation
+unification tracks JOE-838.
+
 Those Gateway-owned surfaces use the shared
 [Coordination Model](coordination-model.md): team projects/tasks map to
 Projects and Tasks, background jobs map to Runs, cron/scheduled jobs map to

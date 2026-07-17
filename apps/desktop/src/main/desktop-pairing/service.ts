@@ -18,6 +18,7 @@ import type {
 import {
   DESKTOP_PAIRING_COMMAND_KINDS,
   DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED,
+  DESKTOP_PAIRING_REMOTE_ALLOWED_RISK_SUMMARY,
 } from '@open-cowork/shared'
 import {
   redactDesktopPairingSessionInfo,
@@ -212,6 +213,21 @@ export class DesktopPairingService {
     const next = updateDesktopPairingRecord(existing, input, this.now())
     this.store.save(next)
     this.audit(next.id, input.enabled === false ? 'pairing.disabled' : input.enabled === true ? 'pairing.enabled' : 'pairing.updated')
+    // JOE-830: elevating to remote_allowed is a root-equivalent trust decision —
+    // always emit an explicit audit event so operators can detect/rotate.
+    const elevatedApprovals = existing.policy.remoteApprovals !== 'remote_allowed'
+      && next.policy.remoteApprovals === 'remote_allowed'
+    const elevatedQuestions = existing.policy.remoteQuestions !== 'remote_allowed'
+      && next.policy.remoteQuestions === 'remote_allowed'
+    if (elevatedApprovals || elevatedQuestions) {
+      this.audit(next.id, 'pairing.remote_allowed_enabled', {
+        reason: DESKTOP_PAIRING_REMOTE_ALLOWED_RISK_SUMMARY,
+        metadata: {
+          remoteApprovals: next.policy.remoteApprovals,
+          remoteQuestions: next.policy.remoteQuestions,
+        },
+      })
+    }
     if (input.enabled === false) this.disconnect(next.id)
     if (input.enabled === true) void this.connect(next.id)
     return publicRecord(next, this.credentialStore.get(next.id))
@@ -394,6 +410,26 @@ export class DesktopPairingService {
       payload: { kind: command.kind },
     }])
     const leaseToken = command.lease?.leaseToken || null
+    // JOE-830: remote_allowed elevates the pairing token to root-equivalent for
+    // approvals/questions. Require a live lease fence before any remote command
+    // executes so a replayed claim without broker lease ownership is rejected.
+    const remoteAuthorityEnabled = record.policy.remoteApprovals === 'remote_allowed'
+      || record.policy.remoteQuestions === 'remote_allowed'
+    if (remoteAuthorityEnabled && (!leaseToken || !command.lease?.leaseExpiresAt)) {
+      const result: DesktopPairingCommandResult = {
+        ok: false,
+        status: 'blocked_by_policy',
+        message: 'Remote-allowed pairings require a broker command lease (leaseToken + leaseExpiresAt) before execution.',
+      }
+      this.audit(record.id, 'command.blocked', {
+        ...this.auditFields(command),
+        reason: result.message,
+      })
+      const resultDelivery = await this.deliverCommandResult(context, transport, command, result, leaseToken)
+      const latest = this.saveCommandSequence(record, command.sequence)
+      if (resultDelivery.ok || latest.status === 'revoked') return latest
+      return this.markOfflineRecord(latest, resultDelivery.error)
+    }
     let result: DesktopPairingCommandResult
     try {
       result = await this.executeCommand(record, command)

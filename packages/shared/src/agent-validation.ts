@@ -37,8 +37,30 @@ function isModernMcpPermissionRulePattern(pattern: string) {
   return false
 }
 
+/** Native OpenCode tools that contain `_` but are not MCP tools. */
+const NATIVE_UNDERSCORE_TOOL_IDS = new Set([
+  'apply_patch',
+  'todo_write',
+  'todowrite',
+])
+
+/**
+ * OpenCode 1.18+ MCP tool ids: `${server}_${tool}` (e.g. `time-keep_current_time`,
+ * `charts_*`). Accept these alongside Claude-style `mcp__server__tool` patterns.
+ */
+function isOpenCodeMcpPermissionRulePattern(pattern: string) {
+  // Claude-style mcp__… patterns are handled separately; do not re-parse them here.
+  if (!pattern || startsWithMcpPrefix(pattern)) return false
+  if (pattern.includes('/') || pattern.includes('\\')) return false
+  if (NATIVE_UNDERSCORE_TOOL_IDS.has(pattern.toLowerCase())) return false
+  // server_* namespace wildcard
+  if (/^[a-z0-9][a-z0-9_-]*_\*$/i.test(pattern)) return true
+  // server_tool (tool segment may include _ and * wildcards)
+  return /^[a-z0-9][a-z0-9_-]*_[a-z0-9*][a-z0-9_*-]*$/i.test(pattern)
+}
+
 export function isMcpPermissionRulePattern(pattern: string) {
-  return isModernMcpPermissionRulePattern(pattern)
+  return isModernMcpPermissionRulePattern(pattern) || isOpenCodeMcpPermissionRulePattern(pattern)
 }
 
 export type CustomAgentDraftValidationInput = {

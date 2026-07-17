@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
-  AdminManagedPolicyResult,
-  AdminSetPolicyInput,
-  ManagedPolicyPermissionCeiling,
-  ManagedPolicyPermissionDimension,
-} from '@open-cowork/shared'
+  AdminManagedPolicyResult, AdminSetPolicyInput, ManagedPolicyPermissionCeiling, ManagedPolicyPermissionDimension, } from '@open-cowork/shared'
 import { MANAGED_POLICY_PERMISSION_DIMENSIONS } from '@open-cowork/shared'
-import { Button, Input, SegmentedControl, Select, Switch, toast } from '../ui'
+import { Button, Input, SegmentedControl, Select, Switch } from '@open-cowork/ui'
+import { toast } from '../ui/Toaster'
 import { t } from '../../helpers/i18n'
 import { AdminSectionHeader, AdminStateBlock } from './AdminPrimitives'
 import { useAdminResource } from './useAdminResource'

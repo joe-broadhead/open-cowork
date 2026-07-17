@@ -124,6 +124,7 @@ test('root lint script runs all release gate checks', () => {
     'node scripts/build-docs-mermaid-vendor.mjs --check',
     'node scripts/check-preload-channels.mjs',
     'node scripts/check-shared-dist.mjs',
+    'pnpm lint:dead-code',
   ])
   assert.equal(requireScript('docs:vendor:build'), 'node scripts/build-docs-mermaid-vendor.mjs')
   assert.equal(requireScript('docs:vendor:check'), 'node scripts/build-docs-mermaid-vendor.mjs --check')

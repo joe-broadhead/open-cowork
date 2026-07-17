@@ -26,6 +26,8 @@ export type ToastSourceError = {
 export type ToasterProps = {
   errors?: ToastSourceError[]
   onDismissError?: (id: string) => void
+  /** Optional recovery action for global app errors (JOE-879 Health Center). */
+  onOpenHealthCenter?: () => void
 }
 
 type ToastRecord = {
@@ -65,7 +67,7 @@ function toastTitle(tone: ToastTone) {
   }
 }
 
-function globalErrorToToast(error: ToastSourceError): ToastRecord {
+function globalErrorToToast(error: ToastSourceError, onOpenHealthCenter?: () => void): ToastRecord {
   return {
     id: `global:${error.id}`,
     title: 'App error',
@@ -73,6 +75,14 @@ function globalErrorToToast(error: ToastSourceError): ToastRecord {
     tone: 'error',
     durationMs: DEFAULT_DURATION_MS,
     order: error.order,
+    ...(onOpenHealthCenter
+      ? {
+          action: {
+            label: 'Open Health Center',
+            onClick: onOpenHealthCenter,
+          },
+        }
+      : {}),
   }
 }
 
@@ -198,7 +208,7 @@ function ToastCard({
   )
 }
 
-export function Toaster({ errors = [], onDismissError }: ToasterProps = {}) {
+export function Toaster({ errors = [], onDismissError, onOpenHealthCenter }: ToasterProps = {}) {
   const [localToasts, setLocalToasts] = useState<ToastRecord[]>([])
 
   useEffect(() => {
@@ -222,11 +232,11 @@ export function Toaster({ errors = [], onDismissError }: ToasterProps = {}) {
 
   const visibleToasts = useMemo(() => {
     return [
-      ...errors.map(globalErrorToToast),
+      ...errors.map((error) => globalErrorToToast(error, onOpenHealthCenter)),
       ...localToasts,
     ]
       .sort((a, b) => a.order - b.order)
-  }, [errors, localToasts])
+  }, [errors, localToasts, onOpenHealthCenter])
 
   if (visibleToasts.length === 0) return null
 

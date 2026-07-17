@@ -222,11 +222,11 @@ Cloud Web cannot drift.
 
 The information architecture is split into two surfaces:
 
-- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, Knowledge, Channels, and Artifacts.
+- Workbench: Projects, Chat, Team, Tools & Skills, Playbooks, Knowledge, Channels, and Artifacts.
 - Admin: Org, Members, Profiles & Policy, BYOK, Connections, Billing, Gateway,
   Audit, Usage, and Diagnostics.
 
-The Threads and Chat panels are the first interactive workbench surfaces:
+The Projects and Chat panels are the first interactive workbench surfaces:
 
 - `GET /api/sessions` loads the user-scoped durable session list. It accepts
   `limit`, opaque `cursor`, `status`, `profileName`, and text query via `q` or
@@ -265,20 +265,20 @@ names, or object keys in long-lived state.
 
 The rest of the Workbench uses the same cloud API contract:
 
-- Agents are derived from the current profile's allowed agent list plus the
-  cloud-safe tool and skill catalog. Starting an agent creates a cloud thread
-  and pins that agent into the composer; execution still flows through the
-  cloud worker and OpenCode runtime.
+- Team (coworkers) is derived from the current profile's allowed agent list plus
+  the cloud-safe tool and skill catalog. Starting a coworker creates a cloud
+  project chat and pins that agent into the composer; execution still flows
+  through the cloud worker and OpenCode runtime.
 - Tools & Skills browse `/api/capabilities`, including source, scope, agent
   relationships, and policy notes. The browser renders cloud-safe metadata
   only; custom content that is synced but disabled by profile policy is shown as
   unavailable rather than exposed with local process details or secrets.
-- Workflows use `/api/workflows` for durable definitions and run history,
+- Playbooks use `/api/workflows` for durable definitions and run history,
   `POST /api/workflows/:id/run` for manual runs, and the pause/resume/archive
-  routes for lifecycle changes. Manual runs can open the generated run thread so
+  routes for lifecycle changes. Manual runs can open the generated run chat so
   users can inspect the same projection shown in Chat.
-- Artifacts includes a selected-thread browser plus selected-chat history from
-  the hydrated durable projection. Cross-thread artifact browsing remains
+- Artifacts includes a selected-chat browser plus selected-chat history from
+  the hydrated durable projection. Cross-chat artifact browsing remains
   deferred until Cloud exposes a durable artifact index API. Artifact bodies are
   still fetched only on explicit user action.
 
@@ -754,7 +754,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS` / `OPEN_COWORK_CLOUD_SECRET_KEY_PREVIOUS_REF` | Comma-separated retired envelope keys (raw values or secret-manager refs) kept in the decrypt keyring for rotation. New writes always use the current key and stamp its key id; already-stored ciphertexts decrypt with the matching retired key. Re-encrypt and drop the old key once migration completes. |
-| `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies; falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos. |
+| `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies (minimum **32 bytes**, same floor as envelope secret keys). Falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos only — public production requires a distinct cookie secret. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
@@ -797,8 +797,23 @@ Set these environment variables in every role:
 Data-retention variables (scheduler/all-in-one roles). The scheduler runs a bounded, batched
 retention sweep no more than once per `OPEN_COWORK_CLOUD_RETENTION_INTERVAL_MS`. Every window is in
 milliseconds and deletes rows older than the window, oldest-first; a window of `0`/unset disables
-that prune (the scheduler does nothing destructive until you opt in). The event-log windows are
-compliance/replay-sensitive — they default **off**:
+that prune (the scheduler does nothing destructive until you opt in).
+
+**Public production (JOE-841 / JOE-835):** `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production`
+**fails closed** unless both `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` and
+`OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` are set to positive values. Local and
+self-host tiers may leave event retention off, but unbounded `cloud_session_events` /
+`cloud_workspace_events` growth will hurt SSE replay latency, backup size, and cost — set
+windows as soon as a tenant is non-demo.
+
+Recommended production starting points (adjust to compliance policy):
+
+| Table | Recommended window | Notes |
+| --- | --- | --- |
+| Session events | `1209600000` (14 days) | Durable session projection still covers the trimmed window for UI state. |
+| Workspace events | `1209600000` (14 days) | Keep aligned with session events (written 1:1). |
+| Audit events | policy-driven | Leave off until legal/compliance approves prune. |
+| Usage events | after export | Leave off until billing aggregation/export is complete. |
 
 | Variable | Meaning |
 | --- | --- |
@@ -807,10 +822,10 @@ compliance/replay-sensitive — they default **off**:
 | `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS` | Prune terminal (`sent`/`dead`) channel deliveries older than this. Off by default. |
 | `OPEN_COWORK_CLOUD_RETENTION_CHANNEL_INTERACTION_MS` | Prune expired one-shot channel-interaction tokens older than this. Off by default. |
 | `OPEN_COWORK_CLOUD_RETENTION_STALE_THROTTLE_MS` | Prune stale rate-limit windows + expired auth-backoff rows. Pure bookkeeping that grows one row per client IP, so this defaults **on** at one hour; `0` disables. |
-| `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default; the durable session projection still covers the trimmed window. |
+| `OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS` | Prune `cloud_session_events` (the durable SSE replay log) older than this. Off by default for local/self-host; **required** for `public_production`. Durable session projection still covers the trimmed window. |
 | `OPEN_COWORK_CLOUD_RETENTION_AUDIT_EVENT_MS` | Prune `cloud_audit_events` older than this. Off by default — enable only if your compliance/retention policy permits deleting the audit trail. |
 | `OPEN_COWORK_CLOUD_RETENTION_USAGE_EVENT_MS` | Prune `cloud_usage_events` older than this. Off by default — enable only after the usage data has been exported/aggregated for billing. |
-| `OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` | Prune `cloud_workspace_events` older than this. Written 1:1 with `cloud_session_events`, so set this alongside `RETENTION_SESSION_EVENT_MS` to bound the workspace-event log's growth; the durable projection still covers the trimmed window. Off by default. |
+| `OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS` | Prune `cloud_workspace_events` older than this. Written 1:1 with `cloud_session_events`; **required** for `public_production`. Durable projection still covers the trimmed window. |
 | `OPEN_COWORK_CLOUD_CONCURRENCY_RECONCILE_MS` | Optional interval for the scheduler to recompute the concurrency gauges (`cloud_concurrency_counters`) from their source tables. Off by default — the gauges are drift-free for normal activity; enable as a belt-and-suspenders correction (e.g. one hour). |
 
 Managed billing variables:
@@ -1029,11 +1044,31 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS` | Idle eviction window for cached worker runtimes (default `1800000`, 30 minutes). |
 | `OPEN_COWORK_CLOUD_PG_LOCK_TIMEOUT_MS` | Postgres `lock_timeout` per connection (default `0`, disabled). Set a non-zero value to bound how long a statement waits on a row/table lock before failing fast. |
 | `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` | Maximum simultaneous TCP connections accepted by the cloud HTTP server (default `10000`). A connection-exhaustion guard above the Node default of unbounded. |
-| `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams per org (default `200`). Excess subscriptions for one org are rejected so a single tenant cannot exhaust stream slots. |
+| `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams **per org per web pod** (default `200`). Enforced by the SSE stream registry on every session, workspace, and channel-delivery stream; excess subscriptions for one org receive an SSE error and are dropped so a single tenant cannot exhaust stream slots. Size this to concurrent interactive users × open tabs, not historical sessions. |
 | `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS` | SSE read-poll cadence in milliseconds (default `1000`). Each open stream polls the control plane at this interval for new events; lower it to cut delivery latency at the cost of more control-plane queries, raise it to shed query load at the cost of latency. |
-| `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Opt-in Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). When `true`, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and web pods open one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop above always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) for byte-for-byte unchanged poll-only delivery. |
+| `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). **Production multi-web-pod topologies should set this to `true`.** When enabled, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and each web pod opens one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) only for single-process demos that want byte-for-byte poll-only delivery. |
 | `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS` | Backstop read-poll cadence (default `15000`, 15 seconds) applied **only** to NOTIFY-addressable SSE topics when `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` is enabled. With the accelerator on, `LISTEN`/`NOTIFY` drives low-latency delivery, so the per-topic poll relaxes to this longer backstop cadence (bounded by `max(OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS, this)`), cutting steady-state control-plane queries. Has no effect when the accelerator is off — poll cadence stays at `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS`. |
 | `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
+
+### Multi-pod SSE load guidance
+
+Split-role production Cloud keeps durable events in Postgres. Every open SSE
+stream still needs a delivery path from the worker that wrote the event to the
+web pod holding the browser connection:
+
+| Topology | Recommended SSE settings | Why |
+| --- | --- | --- |
+| Single `all-in-one` demo | defaults (`SSE_PG_NOTIFY` off, poll 1s) | One process; poll loop is enough. |
+| Single web pod + separate workers | `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` | Workers and web do not share memory; NOTIFY cuts end-to-end latency without depending on pod-local buses. |
+| Multiple web pods behind a load balancer | **`OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` (required for scale)** | Cross-pod wake; poll-only multiplies control-plane reads by `streams × pods × (1000 / pollMs)`. |
+| Large interactive orgs | raise `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` only with evidence; keep `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` above `web_replicas × max_per_org × orgs_per_pod` | Caps are per pod; global capacity is `replicas × per-org cap` under sticky routing assumptions. |
+
+Load-planning rule of thumb for multi-pod web:
+
+1. Enable `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` on **web and worker** roles (worker emits NOTIFY; web LISTENs).
+2. Keep `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS` at `1000` (or higher) and rely on NOTIFY for low latency; tune `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS` (default 15s) as the safety net.
+3. Size `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` to concurrent tabs per org (default 200). Rejected streams reconnect transparently after a slot frees.
+4. Include SSE in launch load gates (`OPEN_COWORK_LOAD_INCLUDE_SSE=true`) so reconnect storms and per-org caps appear in evidence before production traffic.
 
 `OPEN_COWORK_CLOUD_PUBLIC_URL` doubles as the HSTS switch: the server only emits
 `Strict-Transport-Security` when `OPEN_COWORK_CLOUD_PUBLIC_URL` is an HTTPS,
@@ -1189,3 +1224,5 @@ browser is not the only protection.
   mode is loopback/local-only. `header` mode is only for a reverse proxy that
   strips caller-supplied identity headers and injects trusted
   `x-open-cowork-*` headers.
+
+See also [Worker-scoped runtime adapter](worker-scoped-runtime-adapter.md).

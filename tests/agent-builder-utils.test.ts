@@ -203,13 +203,19 @@ describe('validateAgentDraft', () => {
     const cases: Array<[string, boolean]> = [
       ['mcp__github__pull_request_read', true],
       ['mcp__github_api__repos_*', true],
-      ['github_pull_request_read', false],
-      ['github_*', false],
+      // OpenCode 1.18+ form
+      ['github_pull_request_read', true],
+      ['github_*', true],
+      ['time-keep_current_time', true],
+      ['time-keep_*', true],
+      ['charts_bar_chart', true],
       ['mcp__github/delete_repo', false],
       ['mcp__github_', false],
       ['mcp___github__delete_repo', false],
-      ['repo_clone', false],
+      // OpenCode-shaped ids use server_tool; bare native tools do not.
+      ['repo_clone', true],
       ['bash', false],
+      ['apply_patch', false],
     ]
 
     for (const [pattern, expected] of cases) {

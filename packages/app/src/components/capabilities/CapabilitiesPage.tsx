@@ -1,19 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
-  BuiltInAgentDetail,
-  CapabilitySkill,
-  CapabilitySkillBundle,
-  CapabilityTool,
-  CustomAgentConfig,
-  CustomAgentSummary,
-  CustomMcpConfig,
-  CustomSkillConfig,
-  RuntimeToolDescriptor,
-  WorkflowListPayload,
-} from '@open-cowork/shared'
+  BuiltInAgentDetail, CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomAgentConfig, CustomAgentSummary, CustomMcpConfig, CustomSkillConfig, RuntimeToolDescriptor, WorkflowListPayload, } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
-import { Button, Card, ErrorState, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '../ui'
+import { Button, Card, ErrorState, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '@open-cowork/ui'
 import { useSessionStore } from '../../stores/session'
 import { useEscape } from '../../hooks/useEscape'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'

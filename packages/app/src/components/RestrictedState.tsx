@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react'
-import { EmptyState, type IconName } from './ui'
+import type { ReactNode } from 'react'
+import { EmptyState, type IconName } from '@open-cowork/ui'
 
 export type RestrictedStateProps = {
   /** Human title for the restricted panel, e.g. "Switch to Local for desktop Knowledge". */

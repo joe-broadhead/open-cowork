@@ -264,6 +264,7 @@ describe('CommandPalette', () => {
     render(
       <CommandPalette
         onClose={onClose}
+        features={{ knowledge: true }}
         onNavigate={onNavigate}
         onCreateThread={vi.fn(async () => null)}
         onEnsureSession={vi.fn(async () => true)}

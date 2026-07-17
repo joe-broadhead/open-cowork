@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { ApprovalsQueueSurface } from '@open-cowork/ui'
-import { ErrorState } from './index'
+import { ApprovalsQueueSurface, ErrorState } from '@open-cowork/ui'
 
 describe('ErrorState', () => {
   it('names what happened and how to fix it, with a recovery action', async () => {

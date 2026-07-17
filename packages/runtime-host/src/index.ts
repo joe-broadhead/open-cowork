@@ -5,6 +5,7 @@
 // (tests/opencode-sdk-boundary.test.ts) and ships in the cloud Docker image.
 export * from './opencode-adapter.js'
 export * from './opencode-v2.js'
+export * from './opencode-durable-session-events.js'
 export * from './runtime-managed-server-protocol.js'
 export * from './runtime-managed-server-output.js'
 export * from './runtime-managed-server-core.js'
@@ -20,4 +21,5 @@ export * from './model-info-utils.js'
 export * from './branding-assets.js'
 export * from './jsonc.js'
 export * from './inflight-dedup.js'
+export * from './bounded-map.js'
 export * from './e2e-remote-debugging.js'

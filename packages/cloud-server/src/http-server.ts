@@ -19,7 +19,12 @@ import {
   routeAllowsOperationalToken,
   routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
-import { SSE_MAX_BUFFERED_BYTES, SSE_REPLAY_BATCH, SSE_TCP_KEEPALIVE_MS } from './http-routes/sse-limits.ts'
+import {
+  DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG,
+  SSE_MAX_BUFFERED_BYTES,
+  SSE_REPLAY_BATCH,
+  SSE_TCP_KEEPALIVE_MS,
+} from './http-routes/sse-limits.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleScimApiRoute } from './http-routes/scim.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
@@ -421,7 +426,7 @@ async function handleCloudWorkflowWebhook(
     if (!authAccepted) throw new WebhookHttpError(429, 'Too many rejected workflow webhook requests. Try again later.')
     const { body, rawBody } = await readJsonBodyWithRaw(req, options.maxBodyBytes || 256 * 1024)
     const auth = extractSignatureWebhookAuth(req, rawBody)
-    const started = await options.service.runWorkflowWebhook({
+    const started = await options.service.domains.workflows.runWorkflowWebhook({
       workflowId,
       auth,
       payload: body,
@@ -481,7 +486,7 @@ async function handleBillingWebhook(
     })
     if (!authAccepted) throw new CloudHttpError(429, 'Too many rejected billing webhook requests. Try again later.')
     const { body, rawBody } = await readJsonBodyWithRaw(req, options.maxBodyBytes || 256 * 1024)
-    const verified = await options.service.verifyBillingWebhook({
+    const verified = await options.service.domains.billing.verifyBillingWebhook({
       headers: requestHeaderRecord(req),
       rawBody,
       body,
@@ -497,7 +502,7 @@ async function handleBillingWebhook(
       writeJson(res, 200, { ok: true, replayed: true }, options.corsOrigin)
       return
     }
-    const result = await options.service.applyBillingWebhookResult(verified)
+    const result = await options.service.domains.billing.applyBillingWebhookResult(verified)
     await replayClaim.accept()
     writeJson(res, 200, {
       ok: true,
@@ -535,10 +540,10 @@ async function handleBillingWebhook(
 // Default per-org SSE connection cap when the resolver did not supply one. The
 // env var (OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG) is parsed once in the
 // central resolver and passed through CloudHttpServerOptions.maxSseConnectionsPerOrg.
-const DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG = 200
-
 function sseMaxConnectionsPerOrg(options: CloudHttpServerOptions): number {
   const value = options.maxSseConnectionsPerOrg
+  // Always enforce a positive cap (JOE-844). A missing/invalid option falls back to
+  // the documented default so multi-tenant pods cannot run uncapped by accident.
   return Number.isInteger(value) && (value as number) > 0 ? (value as number) : DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG
 }
 
@@ -1142,7 +1147,7 @@ async function handleApiRequest(
     const workflowAction = action
 
     if (!workflowId && req.method === 'GET') {
-      writeJson(res, 200, await options.service.listWorkflows(context.principal, {
+      writeJson(res, 200, await options.service.domains.workflows.listWorkflows(context.principal, {
         limit: parseLimit(context.url),
         cursor: context.url.searchParams.get('cursor'),
       }), options.corsOrigin)
@@ -1152,7 +1157,7 @@ async function handleApiRequest(
     if (!workflowId && req.method === 'POST') {
       const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const draft = body as Partial<WorkflowDraft>
-      const workflow = await options.service.createWorkflow(context.principal, {
+      const workflow = await options.service.domains.workflows.createWorkflow(context.principal, {
         title: readString(draft.title) || '',
         instructions: readString(draft.instructions) || '',
         agentName: readString(draft.agentName) || 'build',
@@ -1176,7 +1181,7 @@ async function handleApiRequest(
         writeError(res, 403, 'Internal scheduler token is missing or invalid.', options.corsOrigin)
         return
       }
-      const started = await options.service.claimAndStartDueWorkflow()
+      const started = await options.service.domains.workflows.claimAndStartDueWorkflow()
       const processed = started
         ? await processSessionCommandIfConfigured(options, started.tenantId, started.sessionId)
         : 0
@@ -1200,7 +1205,7 @@ async function handleApiRequest(
     }
 
     if (!workflowAction && req.method === 'GET') {
-      const workflow = await options.service.getWorkflow(context.principal, workflowId)
+      const workflow = await options.service.domains.workflows.getWorkflow(context.principal, workflowId)
       if (!workflow) {
         writeError(res, 404, 'Workflow was not found.', options.corsOrigin)
         return
@@ -1212,12 +1217,12 @@ async function handleApiRequest(
     if (workflowAction === 'run' && req.method === 'POST') {
       const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const triggerType = readString(body.triggerType) as WorkflowTriggerType | null
-      const started = await options.service.runWorkflow(context.principal, workflowId, {
+      const started = await options.service.domains.workflows.runWorkflow(context.principal, workflowId, {
         triggerType: triggerType || 'manual',
         triggerPayload: readRecord(body.triggerPayload),
       })
       const processed = await processSessionCommandIfConfigured(options, started.tenantId, started.sessionId)
-      const workflow = await options.service.getWorkflow(context.principal, workflowId)
+      const workflow = await options.service.domains.workflows.getWorkflow(context.principal, workflowId)
       writeJson(res, 202, {
         ...started,
         workflow: workflow || started.workflow,
@@ -1233,7 +1238,7 @@ async function handleApiRequest(
         : workflowAction === 'pause'
           ? 'paused'
           : 'archived'
-      const workflow = await options.service.updateWorkflowStatus(context.principal, workflowId, status)
+      const workflow = await options.service.domains.workflows.updateWorkflowStatus(context.principal, workflowId, status)
       if (!workflow) {
         writeError(res, 404, 'Workflow was not found.', options.corsOrigin)
         return
@@ -1792,7 +1797,7 @@ export class CloudHttpServer {
 
       // SCIM 2.0 provisioning (#895): mounted top-level (pre-user-auth) because the IdP
       // presents the org's SCIM bearer token, not a user session. The handler owns its
-      // own auth (service.authenticateScim) and renders SCIM error shapes.
+      // own auth (service.domains.scim.authenticate) and renders SCIM error shapes.
       if (url.pathname === '/scim/v2' || url.pathname.startsWith('/scim/v2/')) {
         await this.enforceIpRateLimit(req)
         await handleScimApiRoute({
@@ -1818,7 +1823,7 @@ export class CloudHttpServer {
           writeError(res, 400, 'An invite token is required.', requestOptions.corsOrigin)
           return
         }
-        const membership = await this.options.service.acceptMembershipInvite(token)
+        const membership = await this.options.service.domains.members.acceptMembershipInvite(token)
         writeJson(res, 200, { membership }, requestOptions.corsOrigin)
         return
       }

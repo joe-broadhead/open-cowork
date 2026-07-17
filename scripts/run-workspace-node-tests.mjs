@@ -12,7 +12,6 @@ const testRoots = [
   'apps/standalone-gateway/src',
   'mcps/agents/tests',
   'mcps/charts/tests',
-  'mcps/clock/tests',
   'mcps/knowledge/tests',
   'mcps/semantic-ui/tests',
   'mcps/skills/tests',

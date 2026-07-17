@@ -360,7 +360,7 @@ test('write-only gating: with a lapsed/free plan reads/exports/admin succeed but
   assert.ok(usage)
 
   // ADMIN action still succeeds.
-  const audit = await service.listAuditEvents(owner)
+  const audit = await service.domains.overview.listAuditEvents(owner)
   assert.ok(Array.isArray(audit))
 
   // The read-only entitlement status the admin plane consults.

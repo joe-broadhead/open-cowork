@@ -1,10 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Open Cowork Config",
+  "description": "Thin product-mode compositor (JOE-840). Surfaces live under schemas/config/: desktop-core (default local product), cloud (control plane + cloudDesktop), gateway (channel/standalone). Edit the surface fragments, then run `node scripts/compose-config-schema.mjs` to refresh this packaged root.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "contractVersion": {
       "type": "integer",
       "const": 1,
@@ -12,33 +15,75 @@
     },
     "allowedEnvPlaceholders": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "branding": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "shortName": { "type": "string", "minLength": 1, "maxLength": 16 },
-        "appId": { "type": "string" },
-        "dataDirName": { "type": "string" },
-        "helpUrl": { "type": "string" },
-        "docsBaseUrl": { "type": "string" },
-        "appIcon": { "type": "string" },
-        "supportUrl": { "$ref": "#/$defs/cloudPublicBrandingSupportUrl" },
-        "privacyUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "securityUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "legalUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "projectNamespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-        "defaultTheme": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "shortName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "appId": {
+          "type": "string"
+        },
+        "dataDirName": {
+          "type": "string"
+        },
+        "helpUrl": {
+          "type": "string"
+        },
+        "docsBaseUrl": {
+          "type": "string"
+        },
+        "appIcon": {
+          "type": "string"
+        },
+        "supportUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingSupportUrl"
+        },
+        "privacyUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "securityUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "legalUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "projectNamespace": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "defaultTheme": {
+          "type": "string"
+        },
         "themes": {
           "type": "array",
-          "items": { "$ref": "#/$defs/brandThemeDefinition" }
+          "items": {
+            "$ref": "#/$defs/brandThemeDefinition"
+          }
         },
-        "sidebar": { "$ref": "#/$defs/brandingSidebar" },
-        "home": { "$ref": "#/$defs/brandingHome" }
+        "sidebar": {
+          "$ref": "#/$defs/brandingSidebar"
+        },
+        "home": {
+          "$ref": "#/$defs/brandingHome"
+        }
       },
-      "required": ["name", "appId", "dataDirName", "helpUrl"]
+      "required": [
+        "name",
+        "appId",
+        "dataDirName",
+        "helpUrl"
+      ]
     },
     "auth": {
       "type": "object",
@@ -46,23 +91,36 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["none", "google-oauth"]
+          "enum": [
+            "none",
+            "google-oauth"
+          ]
         },
         "googleOAuth": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "clientId": { "type": "string" },
-            "clientSecret": { "type": "string" },
+            "clientId": {
+              "type": "string"
+            },
+            "clientSecret": {
+              "type": "string"
+            },
             "scopes": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           },
-          "required": ["clientId"]
+          "required": [
+            "clientId"
+          ]
         }
       },
-      "required": ["mode"]
+      "required": [
+        "mode"
+      ]
     },
     "providers": {
       "type": "object",
@@ -70,7 +128,9 @@
       "properties": {
         "available": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "descriptors": {
           "type": "object",
@@ -79,10 +139,16 @@
           }
         },
         "defaultProvider": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "defaultModel": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "modelInfo": {
           "type": "object",
@@ -96,11 +162,21 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "npm": { "type": "string" },
-              "name": { "type": "string" },
-              "description": { "type": "string" },
-              "defaultModel": { "type": "string" },
-              "smallModel": { "type": "string" },
+              "npm": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "defaultModel": {
+                "type": "string"
+              },
+              "smallModel": {
+                "type": "string"
+              },
               "options": {
                 "type": "object",
                 "additionalProperties": true
@@ -111,14 +187,23 @@
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "name": { "type": "string" },
-                    "limit": { "$ref": "#/$defs/modelLimit" },
-                    "cost": { "$ref": "#/$defs/modelCost" },
+                    "name": {
+                      "type": "string"
+                    },
+                    "limit": {
+                      "$ref": "#/$defs/modelLimit"
+                    },
+                    "cost": {
+                      "$ref": "#/$defs/modelCost"
+                    },
                     "options": {
                       "type": "object",
                       "additionalProperties": true,
                       "properties": {
-                        "maxOutputTokens": { "type": "integer", "minimum": 1 }
+                        "maxOutputTokens": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
                       }
                     }
                   }
@@ -131,44 +216,70 @@
                 }
               }
             },
-            "required": ["npm", "name", "models"]
+            "required": [
+              "npm",
+              "name",
+              "models"
+            ]
           }
         }
       },
-      "required": ["available", "defaultProvider", "defaultModel"]
+      "required": [
+        "available",
+        "defaultProvider",
+        "defaultModel"
+      ]
     },
     "updates": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" },
-        "manualFallbackUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
-        "releaseSource": { "$ref": "#/$defs/updateReleaseSource" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "manualFallbackUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "releaseSource": {
+          "$ref": "#/$defs/updateReleaseSource"
+        }
       }
     },
     "tools": {
       "type": "array",
-      "items": { "$ref": "#/$defs/configuredTool" }
+      "items": {
+        "$ref": "#/$defs/configuredTool"
+      }
     },
     "skills": {
       "type": "array",
-      "items": { "$ref": "#/$defs/configuredSkill" }
+      "items": {
+        "$ref": "#/$defs/configuredSkill"
+      }
     },
     "mcps": {
       "type": "array",
-      "items": { "$ref": "#/$defs/configuredMcp" }
+      "items": {
+        "$ref": "#/$defs/configuredMcp"
+      }
     },
     "agents": {
       "type": "array",
-      "items": { "$ref": "#/$defs/configuredAgent" }
+      "items": {
+        "$ref": "#/$defs/configuredAgent"
+      }
     },
     "capabilityBundles": {
       "type": "array",
-      "items": { "$ref": "#/$defs/capabilityBundleManifest" }
+      "items": {
+        "$ref": "#/$defs/capabilityBundleManifest"
+      }
     },
     "agentStarterTemplates": {
       "type": "array",
-      "items": { "$ref": "#/$defs/agentStarterTemplate" }
+      "items": {
+        "$ref": "#/$defs/agentStarterTemplate"
+      }
     },
     "toolTrace": {
       "type": "object",
@@ -176,11 +287,15 @@
       "properties": {
         "rules": {
           "type": "array",
-          "items": { "$ref": "#/$defs/toolTraceRule" }
+          "items": {
+            "$ref": "#/$defs/toolTraceRule"
+          }
         },
         "additionalRules": {
           "type": "array",
-          "items": { "$ref": "#/$defs/toolTraceRule" }
+          "items": {
+            "$ref": "#/$defs/toolTraceRule"
+          }
         }
       }
     },
@@ -188,48 +303,99 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "build": { "$ref": "#/$defs/builtInAgentOverride" },
-        "plan": { "$ref": "#/$defs/builtInAgentOverride" },
-        "general": { "$ref": "#/$defs/builtInAgentOverride" },
-        "explore": { "$ref": "#/$defs/builtInAgentOverride" }
+        "build": {
+          "$ref": "#/$defs/builtInAgentOverride"
+        },
+        "plan": {
+          "$ref": "#/$defs/builtInAgentOverride"
+        },
+        "general": {
+          "$ref": "#/$defs/builtInAgentOverride"
+        },
+        "explore": {
+          "$ref": "#/$defs/builtInAgentOverride"
+        }
       }
     },
     "permissions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "bash": { "type": "string", "enum": ["allow", "ask", "deny"] },
-        "fileWrite": { "type": "string", "enum": ["allow", "ask", "deny"] },
-        "task": { "type": "string", "enum": ["allow", "ask", "deny"] },
-        "web": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "bash": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ]
+        },
+        "fileWrite": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ]
+        },
+        "task": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ]
+        },
+        "web": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ]
+        },
         "webSearch": {
           "type": "boolean",
           "description": "Enable OpenCode's native Exa-backed websearch integration by setting OPENCODE_ENABLE_EXA for the managed runtime."
         }
       },
-      "required": ["bash", "fileWrite", "task", "web"]
+      "required": [
+        "bash",
+        "fileWrite",
+        "task",
+        "web"
+      ]
     },
     "compaction": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "auto": { "type": "boolean" },
-        "prune": { "type": "boolean" },
-        "reserved": { "type": "integer", "minimum": 0 },
+        "auto": {
+          "type": "boolean"
+        },
+        "prune": {
+          "type": "boolean"
+        },
+        "reserved": {
+          "type": "integer",
+          "minimum": 0
+        },
         "agent": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "model": { "type": "string" },
-            "prompt": { "type": "string" },
-            "temperature": { "type": "number" }
+            "model": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "temperature": {
+              "type": "number"
+            }
           }
         }
       }
     },
-    "cloud": { "$ref": "#/$defs/cloudConfig" },
-    "cloudDesktop": { "$ref": "#/$defs/cloudDesktopConfig" },
-    "gateway": { "$ref": "#/$defs/gatewayConfig" },
     "i18n": {
       "type": "object",
       "additionalProperties": false,
@@ -251,7 +417,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" },
+        "enabled": {
+          "type": "boolean"
+        },
         "endpoint": {
           "type": "string",
           "maxLength": 2048,
@@ -269,7 +437,9 @@
           "additionalProperties": false,
           "description": "Opt-in, content-free adoption/usage signal. Only coarse anonymous events are ever transmitted; prompts, message/file content, and filesystem paths are never sent. Default off.",
           "properties": {
-            "enabled": { "type": "boolean" },
+            "enabled": {
+              "type": "boolean"
+            },
             "endpoint": {
               "type": "string",
               "maxLength": 2048,
@@ -290,620 +460,59 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "projects": { "type": "boolean" },
-        "knowledge": { "type": "boolean" },
-        "approvals": { "type": "boolean" },
-        "team": { "type": "boolean" },
-        "playbooks": { "type": "boolean" },
-        "channels": { "type": "boolean" },
-        "tools": { "type": "boolean" },
-        "artifacts": { "type": "boolean" }
+        "projects": {
+          "type": "boolean"
+        },
+        "knowledge": {
+          "type": "boolean"
+        },
+        "approvals": {
+          "type": "boolean"
+        },
+        "team": {
+          "type": "boolean"
+        },
+        "playbooks": {
+          "type": "boolean"
+        },
+        "channels": {
+          "type": "boolean"
+        },
+        "tools": {
+          "type": "boolean"
+        },
+        "artifacts": {
+          "type": "boolean"
+        }
       }
+    },
+    "cloud": {
+      "$ref": "#/$defs/cloudConfig"
+    },
+    "cloudDesktop": {
+      "$ref": "#/$defs/cloudDesktopConfig"
+    },
+    "gateway": {
+      "$ref": "#/$defs/gatewayConfig"
     }
   },
-  "required": ["contractVersion", "allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
+  "required": [
+    "contractVersion",
+    "allowedEnvPlaceholders",
+    "branding",
+    "auth",
+    "providers",
+    "tools",
+    "skills",
+    "mcps",
+    "agents",
+    "permissions"
+  ],
   "$defs": {
     "httpsOrLocalhostUrl": {
       "type": "string",
       "maxLength": 2048,
       "pattern": "^(https://|http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?/).+"
-    },
-    "cloudConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "role": { "$ref": "#/$defs/cloudRole" },
-        "defaultProfile": { "$ref": "#/$defs/cloudName" },
-        "publicBranding": { "$ref": "#/$defs/cloudPublicBranding" },
-        "profiles": {
-          "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/cloudProfile" }
-        },
-        "auth": { "$ref": "#/$defs/cloudAuth" },
-        "storage": { "$ref": "#/$defs/cloudStorage" },
-        "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
-        "projectSources": { "$ref": "#/$defs/cloudProjectSources" },
-        "features": { "$ref": "#/$defs/cloudFeatures" },
-        "abuse": { "$ref": "#/$defs/cloudAbuse" },
-        "billing": { "$ref": "#/$defs/cloudBilling" },
-        "entitlements": { "$ref": "#/$defs/cloudEntitlements" }
-      }
-    },
-    "cloudEntitlements": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "provider": { "type": "string", "enum": ["none", "stripe", "custom"] }
-      }
-    },
-    "cloudRole": {
-      "type": "string",
-      "enum": ["all-in-one", "web", "worker", "scheduler"]
-    },
-    "cloudPublicBrandingUrl": {
-      "type": "string",
-      "maxLength": 2048,
-      "pattern": "^https://.+"
-    },
-    "cloudPublicBrandingSupportUrl": {
-      "anyOf": [
-        { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        {
-          "type": "string",
-          "maxLength": 512,
-          "pattern": "^mailto:[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
-        }
-      ]
-    },
-    "cloudPublicBrandingTheme": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "background": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "surface": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "mutedSurface": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "border": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "text": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "mutedText": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "accent": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "accent2": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "accentSoft": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
-        "accentLine": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
-        "accentStrong": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "focus": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "warn": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "danger": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "ok": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "surfaceHover": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "surfaceActive": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
-        "borderSubtle": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "borderStrong": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "elevated": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "textSecondary": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "accentHover": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "accentForeground": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "green": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "amber": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "red": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "info": { "$ref": "#/$defs/cloudPublicBrandingColorToken" },
-        "shadowCard": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
-        "shadowElevated": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
-        "bgImage": { "$ref": "#/$defs/cloudPublicBrandingCssToken" }
-      }
-    },
-    "cloudPublicBrandingCssToken": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 512,
-      "pattern": "^[#A-Za-z0-9(),.%\\s-]+$"
-    },
-    "cloudPublicBrandingColorToken": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
-      "pattern": "^(#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})|rgba?\\([#A-Za-z0-9(),.%\\s-]+\\)|hsla?\\([#A-Za-z0-9(),.%\\s-]+\\)|[A-Za-z]+)$"
-    },
-    "cloudPublicDashboardCopy": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "subtitle": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "signInTitle": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "signInBody": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "byokDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "connectionsDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "gatewayDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "billingDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "usageDescription": { "type": "string", "minLength": 1, "maxLength": 240 }
-      }
-    },
-    "cloudManagedOrgConnectionLabels": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "desktopToken": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "gatewayToken": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "apiToken": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "cloudUrl": { "type": "string", "minLength": 1, "maxLength": 80 }
-      }
-    },
-    "cloudPublicBranding": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "productName": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "shortName": { "type": "string", "minLength": 1, "maxLength": 16 },
-        "description": { "type": "string", "maxLength": 300 },
-        "logoUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "faviconUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "ogImageUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "supportUrl": { "$ref": "#/$defs/cloudPublicBrandingSupportUrl" },
-        "privacyUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "securityUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "legalUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
-        "theme": { "$ref": "#/$defs/cloudPublicBrandingTheme" },
-        "dashboard": { "$ref": "#/$defs/cloudPublicDashboardCopy" },
-        "managedOrgConnectionLabels": { "$ref": "#/$defs/cloudManagedOrgConnectionLabels" }
-      }
-    },
-    "cloudDesktopConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "allowUserAddedConnections": { "type": "boolean" },
-        "preconfiguredConnections": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/cloudDesktopConnection" }
-        },
-        "requireManagedOrg": { "type": "boolean" },
-        "cacheMode": { "type": "string", "enum": ["full", "metadata-only", "disabled"] },
-        "cacheEncryptionFallback": { "type": "string", "enum": ["metadata-only", "disabled", "fail-startup"] }
-      }
-    },
-    "cloudDesktopConnection": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "baseUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
-        "label": { "type": "string", "minLength": 1, "maxLength": 80 }
-      },
-      "required": ["baseUrl"]
-    },
-    "gatewayConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "branding": { "$ref": "#/$defs/cloudPublicBranding" },
-        "server": { "$ref": "#/$defs/gatewayServerConfig" },
-        "productMode": { "type": "string", "enum": ["cloud_channel", "standalone", "hybrid"], "description": "Gateway product mode. `cloud_channel` (the apps/gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup." },
-        "mode": { "type": "string", "enum": ["self-host", "managed"] },
-        "logging": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "level": { "type": "string", "enum": ["debug", "info", "warn", "error", "silent"] }
-          }
-        },
-        "metrics": { "$ref": "#/$defs/gatewayBooleanToggle" },
-        "diagnostics": { "$ref": "#/$defs/gatewayBooleanToggle" },
-        "timeouts": { "$ref": "#/$defs/gatewayTimeouts" },
-        "providers": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/gatewayProviderConfig" }
-        }
-      }
-    },
-    "gatewayServerConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "host": { "type": "string", "minLength": 1, "maxLength": 253 },
-        "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
-        "publicBaseUrl": {
-          "anyOf": [
-            { "$ref": "#/$defs/httpsOrLocalhostUrl" },
-            { "type": "null" }
-          ]
-        },
-        "adminToken": {
-          "anyOf": [
-            { "type": "string", "maxLength": 4096 },
-            { "type": "null" }
-          ]
-        },
-        "allowLoopbackOperatorBypass": { "type": "boolean" },
-        "maxRequestBodyBytes": { "type": "integer", "minimum": 1024, "maximum": 67108864 },
-        "trustProxyHeaders": { "type": "boolean" },
-        "trustedProxyCidrs": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true
-        }
-      }
-    },
-    "gatewayTimeouts": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "webhookDeliveryMs": { "type": "integer", "minimum": 100, "maximum": 120000 },
-        "smtpMs": { "type": "integer", "minimum": 100, "maximum": 120000 },
-        "shutdownDrainMs": { "type": "integer", "minimum": 100, "maximum": 120000 }
-      }
-    },
-    "gatewayBooleanToggle": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" }
-      }
-    },
-    "gatewayProviderConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/cloudName" },
-        "kind": {
-          "type": "string",
-          "enum": ["fake", "telegram", "slack", "email", "webhook", "discord", "whatsapp", "signal", "cli"],
-          "description": "Channel provider kind. `telegram`/`slack`/`email`/`webhook` are turnkey (native ingress); `discord`/`whatsapp`/`signal` are bridge-only and require an external relay configured via `settings.deliveryUrl` + `credentials.sharedSecret`."
-        },
-        "enabled": { "type": "boolean" },
-        "channelBindingId": { "$ref": "#/$defs/cloudName" },
-        "externalWorkspaceId": {
-          "anyOf": [
-            { "type": "string", "minLength": 1, "maxLength": 512 },
-            { "type": "null" }
-          ]
-        },
-        "defaultAgent": {
-          "anyOf": [
-            { "type": "string", "minLength": 1, "maxLength": 512 },
-            { "type": "null" }
-          ]
-        },
-        "credentials": {
-          "type": "object",
-          "additionalProperties": { "type": "string", "maxLength": 4096 }
-        },
-        "settings": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      },
-      "required": ["kind", "channelBindingId"],
-      "allOf": [
-        {
-          "if": {
-            "properties": { "kind": { "enum": ["discord", "whatsapp", "signal"] } },
-            "required": ["kind"]
-          },
-          "then": {
-            "properties": {
-              "credentials": {
-                "type": "object",
-                "properties": { "sharedSecret": { "type": "string", "minLength": 1 } },
-                "required": ["sharedSecret"]
-              },
-              "settings": {
-                "type": "object",
-                "properties": { "deliveryUrl": { "type": "string", "minLength": 1 } },
-                "required": ["deliveryUrl"]
-              }
-            },
-            "required": ["credentials", "settings"]
-          }
-        }
-      ]
-    },
-    "cloudName": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 80,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
-    },
-    "cloudStringList": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
-    },
-    "cloudFeatures": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "chat": { "type": "boolean" },
-        "agents": { "type": "boolean" },
-        "artifacts": { "type": "boolean" },
-        "threadIndex": { "type": "boolean" },
-        "workflows": { "type": "boolean" },
-        "webhooks": { "type": "boolean" },
-        "settings": { "type": "boolean" },
-        "customSkills": { "type": "boolean" },
-        "customAgents": { "type": "boolean" },
-        "customMcps": { "type": "boolean" },
-        "knowledge": { "type": "boolean" },
-        "channels": { "type": "boolean" },
-        "byok": { "type": "boolean" }
-      }
-    },
-    "cloudAbuse": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "maxConcurrentSessionsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxConcurrentWorkflowRunsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxActiveWorkersPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxQueuedCommandsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxQueueAgeMs": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxWorkflowRunsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxGatewayPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxWorkerMinutesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxGatewayDeliveriesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxGatewayChannelBindingsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxArtifactBytesPerDay": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "httpRateLimit": { "$ref": "#/$defs/cloudRateLimit" },
-        "authBackoff": { "$ref": "#/$defs/cloudAuthBackoff" }
-      }
-    },
-    "cloudRateLimit": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "windowMs": { "$ref": "#/$defs/cloudPositiveInteger" },
-        "maxRequests": { "$ref": "#/$defs/cloudPositiveInteger" }
-      }
-    },
-    "cloudAuthBackoff": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "windowMs": { "$ref": "#/$defs/cloudPositiveInteger" },
-        "maxFailures": { "$ref": "#/$defs/cloudPositiveInteger" },
-        "backoffMs": { "$ref": "#/$defs/cloudPositiveInteger" }
-      }
-    },
-    "cloudPositiveInteger": {
-      "type": "integer",
-      "minimum": 1
-    },
-    "cloudPositiveIntegerOrNull": {
-      "anyOf": [
-        { "$ref": "#/$defs/cloudPositiveInteger" },
-        { "type": "null" }
-      ]
-    },
-    "cloudBilling": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "provider": { "type": "string", "enum": ["none", "stub", "stripe"] },
-        "defaultPlanKey": { "$ref": "#/$defs/cloudName" },
-        "plans": {
-          "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/cloudBillingPlan" }
-        },
-        "stripe": { "$ref": "#/$defs/cloudStripeBilling" }
-      }
-    },
-    "cloudBillingPlan": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "label": { "type": "string", "maxLength": 80 },
-        "stripePriceId": { "type": "string", "maxLength": 256 },
-        "entitlements": { "$ref": "#/$defs/cloudBillingEntitlements" }
-      }
-    },
-    "cloudBillingEntitlements": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "features": { "$ref": "#/$defs/cloudFeatures" },
-        "allowedProfiles": {
-          "anyOf": [
-            { "$ref": "#/$defs/cloudStringList" },
-            { "type": "null" }
-          ]
-        },
-        "allowedProviders": {
-          "anyOf": [
-            { "$ref": "#/$defs/cloudStringList" },
-            { "type": "null" }
-          ]
-        },
-        "maxConcurrentSessionsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxConcurrentWorkflowRunsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxActiveWorkersPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxQueuedCommandsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxQueueAgeMs": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxWorkflowRunsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxGatewayPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxWorkerMinutesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxGatewayDeliveriesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxGatewayChannelBindingsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "maxArtifactBytesPerDay": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
-        "allowNewSessions": { "type": "boolean" },
-        "allowPrompts": { "type": "boolean" },
-        "allowWorkers": { "type": "boolean" }
-      }
-    },
-    "cloudStripeBilling": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "apiKeyRef": { "type": "string", "maxLength": 512 },
-        "webhookSecretRef": { "type": "string", "maxLength": 512 },
-        "defaultPriceId": { "type": "string", "maxLength": 256 },
-        "successUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
-        "cancelUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
-        "portalReturnUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" }
-      }
-    },
-    "cloudRuntimePolicy": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "configSource": { "type": "string", "enum": ["app"] },
-        "launcher": { "type": "string", "enum": ["node"] },
-        "allowMachineRuntimeConfig": { "type": "boolean" },
-        "allowLocalStdioMcps": { "type": "boolean" },
-        "allowHostProjectDirectories": { "type": "boolean" },
-        "allowRemoteApprovalResponses": { "type": "boolean" },
-        "allowedLocalMcpNames": { "$ref": "#/$defs/cloudStringList" },
-        "allowedHostProjectDirectories": { "$ref": "#/$defs/cloudStringList" }
-      }
-    },
-    "cloudProjectSources": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "git": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "allowedHosts": { "$ref": "#/$defs/cloudStringList" },
-            "allowedRepositories": { "$ref": "#/$defs/cloudStringList" },
-            "allowFileUrls": { "type": "boolean" }
-          }
-        },
-        "uploadedSnapshots": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "maxFiles": { "type": "integer", "minimum": 1 },
-            "maxBytes": { "type": "integer", "minimum": 1 }
-          }
-        },
-        "managedWorkspaces": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" }
-          }
-        }
-      }
-    },
-    "cloudProjectSource": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "kind": { "const": "git" },
-            "repositoryUrl": { "type": "string", "minLength": 1, "maxLength": 2048 },
-            "ref": { "type": ["string", "null"], "maxLength": 512 },
-            "subdirectory": { "type": ["string", "null"], "maxLength": 1024 },
-            "credentialRef": { "type": ["string", "null"], "maxLength": 512 }
-          },
-          "required": ["kind", "repositoryUrl"]
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "kind": { "const": "snapshot" },
-            "snapshotId": { "type": "string", "minLength": 1, "maxLength": 512 },
-            "objectKey": { "type": "string", "minLength": 1, "maxLength": 1024 },
-            "fileCount": { "type": "integer", "minimum": 0 },
-            "byteCount": { "type": "integer", "minimum": 0 },
-            "title": { "type": ["string", "null"], "maxLength": 256 }
-          },
-          "required": ["kind", "snapshotId", "objectKey", "fileCount", "byteCount"]
-        }
-      ]
-    },
-    "cloudProfile": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "label": { "type": "string", "maxLength": 80 },
-        "description": { "type": "string", "maxLength": 400 },
-        "agents": { "$ref": "#/$defs/cloudStringList" },
-        "tools": { "$ref": "#/$defs/cloudStringList" },
-        "mcps": { "$ref": "#/$defs/cloudStringList" },
-        "features": { "$ref": "#/$defs/cloudFeatures" },
-        "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
-        "defaultProjectSource": {
-          "anyOf": [
-            { "$ref": "#/$defs/cloudProjectSource" },
-            { "type": "null" }
-          ]
-        }
-      }
-    },
-    "cloudAuth": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "mode": { "type": "string", "enum": ["none", "header", "oidc"] },
-        "issuerUrl": { "type": "string", "pattern": "^https://.+" },
-        "clientId": { "type": "string", "maxLength": 512 },
-        "clientSecretRef": { "type": "string", "maxLength": 512 },
-        "headerSecret": { "type": "string", "maxLength": 4096 },
-        "headerSecretRef": { "type": "string", "maxLength": 512 },
-        "headerAllowUnsigned": { "type": "boolean" },
-        "headerMaxSignatureAgeMs": { "type": "integer", "minimum": 1000, "maximum": 3600000 },
-        "callbackPath": { "type": "string", "pattern": "^/[A-Za-z0-9/_-]*$" },
-        "cookieSecretRef": { "type": "string", "maxLength": 512 },
-        "allowedEmailDomains": { "$ref": "#/$defs/cloudStringList" },
-        "allowSelfServiceSignup": { "type": "boolean" },
-        "signupMode": { "type": "string", "enum": ["disabled", "invite", "domain", "open"] },
-        "apiTokens": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "defaultTtlMs": { "type": "integer", "minimum": 60000, "maximum": 31536000000 },
-            "maxTtlMs": { "type": "integer", "minimum": 60000, "maximum": 31536000000 },
-            "allowedScopes": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": ["desktop", "gateway", "admin", "operator", "worker-internal"]
-              },
-              "uniqueItems": true,
-              "maxItems": 5
-            }
-          }
-        }
-      }
-    },
-    "cloudStorage": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "controlPlane": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "kind": { "type": "string", "enum": ["local", "postgres"] },
-            "urlRef": { "type": "string", "maxLength": 512 }
-          }
-        },
-        "objectStore": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "type": "string",
-              "enum": ["filesystem", "s3", "gcs", "azure-blob", "digitalocean-spaces", "minio"]
-            },
-            "bucket": { "type": "string", "maxLength": 512 },
-            "region": { "type": "string", "maxLength": 128 },
-            "endpoint": { "type": "string", "maxLength": 2048 },
-            "prefix": { "type": "string", "maxLength": 512 },
-            "credentialsRef": { "type": "string", "maxLength": 512 }
-          }
-        }
-      }
     },
     "updateChannel": {
       "type": "string",
@@ -913,17 +522,29 @@
     },
     "updateReleaseSource": {
       "oneOf": [
-        { "$ref": "#/$defs/githubUpdateReleaseSource" },
-        { "$ref": "#/$defs/genericHttpUpdateReleaseSource" },
-        { "$ref": "#/$defs/gcsUpdateReleaseSource" }
+        {
+          "$ref": "#/$defs/githubUpdateReleaseSource"
+        },
+        {
+          "$ref": "#/$defs/genericHttpUpdateReleaseSource"
+        },
+        {
+          "$ref": "#/$defs/gcsUpdateReleaseSource"
+        }
       ]
     },
     "githubUpdateReleaseSource": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "kind": { "const": "github-releases" },
-        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "kind": {
+          "const": "github-releases"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
         "owner": {
           "type": "string",
           "minLength": 1,
@@ -936,32 +557,63 @@
           "maxLength": 100,
           "pattern": "^[A-Za-z0-9._-]+$"
         },
-        "channel": { "$ref": "#/$defs/updateChannel" },
+        "channel": {
+          "$ref": "#/$defs/updateChannel"
+        },
         "auth": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "kind": { "type": "string", "enum": ["none", "github-token"] },
-            "token": { "type": "string", "maxLength": 4096 }
+            "kind": {
+              "type": "string",
+              "enum": [
+                "none",
+                "github-token"
+              ]
+            },
+            "token": {
+              "type": "string",
+              "maxLength": 4096
+            }
           },
-          "required": ["kind"]
+          "required": [
+            "kind"
+          ]
         }
       },
-      "required": ["kind"]
+      "required": [
+        "kind"
+      ]
     },
     "genericHttpUpdateReleaseSource": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "kind": { "const": "generic-http" },
-        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "url": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
-        "channel": { "$ref": "#/$defs/updateChannel" },
+        "kind": {
+          "const": "generic-http"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "url": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "channel": {
+          "$ref": "#/$defs/updateChannel"
+        },
         "auth": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "kind": { "type": "string", "enum": ["none", "static-headers"] },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "none",
+                "static-headers"
+              ]
+            },
             "headers": {
               "type": "object",
               "additionalProperties": {
@@ -970,17 +622,28 @@
               }
             }
           },
-          "required": ["kind"]
+          "required": [
+            "kind"
+          ]
         }
       },
-      "required": ["kind", "url"]
+      "required": [
+        "kind",
+        "url"
+      ]
     },
     "gcsUpdateReleaseSource": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "kind": { "const": "gcs" },
-        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "kind": {
+          "const": "gcs"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
         "bucket": {
           "type": "string",
           "minLength": 3,
@@ -992,53 +655,93 @@
           "maxLength": 512,
           "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).*$"
         },
-        "channel": { "$ref": "#/$defs/updateChannel" },
+        "channel": {
+          "$ref": "#/$defs/updateChannel"
+        },
         "auth": {
           "oneOf": [
             {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "kind": { "const": "google-oauth" },
+                "kind": {
+                  "const": "google-oauth"
+                },
                 "requiredScopes": {
                   "type": "array",
-                  "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
                 }
               },
-              "required": ["kind"]
+              "required": [
+                "kind"
+              ]
             },
             {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "kind": { "const": "signed-url-broker" },
-                "brokerUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+                "kind": {
+                  "const": "signed-url-broker"
+                },
+                "brokerUrl": {
+                  "$ref": "#/$defs/httpsOrLocalhostUrl"
+                },
                 "requiredScopes": {
                   "type": "array",
-                  "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
                 }
               },
-              "required": ["kind", "brokerUrl"]
+              "required": [
+                "kind",
+                "brokerUrl"
+              ]
             }
           ]
         }
       },
-      "required": ["kind", "bucket"]
+      "required": [
+        "kind",
+        "bucket"
+      ]
     },
     "brandingSidebar": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "top": { "$ref": "#/$defs/brandingSidebarTop" },
-        "lower": { "$ref": "#/$defs/brandingSidebarLower" }
+        "top": {
+          "$ref": "#/$defs/brandingSidebarTop"
+        },
+        "lower": {
+          "$ref": "#/$defs/brandingSidebarLower"
+        }
       }
     },
     "brandingSidebarTop": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "variant": { "type": "string", "enum": ["icon", "text", "icon-text", "logo", "logo-text"] },
-        "icon": { "type": "string", "maxLength": 16 },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "icon",
+            "text",
+            "icon-text",
+            "logo",
+            "logo-text"
+          ]
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 16
+        },
         "logoAsset": {
           "type": "string",
           "maxLength": 512,
@@ -1049,20 +752,52 @@
           "minimum": 16,
           "maximum": 96
         },
-        "mediaFit": { "type": "string", "enum": ["vertical", "horizontal"] },
-        "mediaAlign": { "type": "string", "enum": ["start", "center", "end"] },
-        "title": { "type": "string", "maxLength": 48 },
-        "subtitle": { "type": "string", "maxLength": 96 },
-        "ariaLabel": { "type": "string", "maxLength": 96 }
+        "mediaFit": {
+          "type": "string",
+          "enum": [
+            "bounded",
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "mediaAlign": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 96
+        },
+        "ariaLabel": {
+          "type": "string",
+          "maxLength": 96
+        }
       }
     },
     "brandingSidebarLower": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "text": { "type": "string", "maxLength": 120 },
-        "secondaryText": { "type": "string", "maxLength": 160 },
-        "linkLabel": { "type": "string", "maxLength": 64 },
+        "text": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "secondaryText": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "linkLabel": {
+          "type": "string",
+          "maxLength": 64
+        },
         "linkUrl": {
           "type": "string",
           "maxLength": 2048,
@@ -1074,11 +809,26 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "greeting": { "type": "string", "maxLength": 120 },
-        "subtitle": { "type": "string", "maxLength": 180 },
-        "composerPlaceholder": { "type": "string", "maxLength": 120 },
-        "suggestionLabel": { "type": "string", "maxLength": 48 },
-        "statusReadyLabel": { "type": "string", "maxLength": 48 }
+        "greeting": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "composerPlaceholder": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "suggestionLabel": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "statusReadyLabel": {
+          "type": "string",
+          "maxLength": 48
+        }
       }
     },
     "capabilityBundleId": {
@@ -1101,19 +851,38 @@
     },
     "capabilityBundleCompatibilityTier": {
       "type": "string",
-      "enum": ["supported", "experimental", "blocked", "unsupported"]
+      "enum": [
+        "supported",
+        "experimental",
+        "blocked",
+        "unsupported"
+      ]
     },
     "capabilityBundleProductModeMap": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "desktop-local": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "desktop-cloud": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "cloud-web": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "cloud-channel-gateway": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "standalone-gateway": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "paired-desktop": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "headless-host": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" }
+        "desktop-local": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "desktop-cloud": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "cloud-web": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "cloud-channel-gateway": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "standalone-gateway": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "paired-desktop": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "headless-host": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        }
       }
     },
     "capabilityBundleResource": {
@@ -1122,22 +891,54 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["opencode-plugin", "skill", "agent", "mcp", "provider", "workflow", "command", "native-helper"]
+          "enum": [
+            "opencode-plugin",
+            "skill",
+            "agent",
+            "mcp",
+            "provider",
+            "workflow",
+            "command",
+            "native-helper"
+          ]
         },
-        "id": { "$ref": "#/$defs/capabilityBundleId" },
-        "title": { "type": "string", "maxLength": 160 },
-        "source": { "type": "string", "maxLength": 2048 },
-        "ownedByBundle": { "type": "boolean" },
+        "id": {
+          "$ref": "#/$defs/capabilityBundleId"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "ownedByBundle": {
+          "type": "boolean"
+        },
         "productModes": {
           "type": "array",
-          "items": { "$ref": "#/$defs/capabilityBundleProductMode" },
+          "items": {
+            "$ref": "#/$defs/capabilityBundleProductMode"
+          },
           "uniqueItems": true
         },
-        "compatibilityTier": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
-        "url": { "type": "string", "maxLength": 2048 },
-        "command": { "type": "string", "maxLength": 2048 }
+        "compatibilityTier": {
+          "$ref": "#/$defs/capabilityBundleCompatibilityTier"
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "command": {
+          "type": "string",
+          "maxLength": 2048
+        }
       },
-      "required": ["kind", "id"]
+      "required": [
+        "kind",
+        "id"
+      ]
     },
     "capabilityBundleResourceIdentity": {
       "type": "object",
@@ -1145,11 +946,25 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["opencode-plugin", "skill", "agent", "mcp", "provider", "workflow", "command", "native-helper"]
+          "enum": [
+            "opencode-plugin",
+            "skill",
+            "agent",
+            "mcp",
+            "provider",
+            "workflow",
+            "command",
+            "native-helper"
+          ]
         },
-        "id": { "$ref": "#/$defs/capabilityBundleId" }
+        "id": {
+          "$ref": "#/$defs/capabilityBundleId"
+        }
       },
-      "required": ["kind", "id"]
+      "required": [
+        "kind",
+        "id"
+      ]
     },
     "capabilityBundleResourceSelector": {
       "$ref": "#/$defs/capabilityBundleResourceIdentity"
@@ -1160,37 +975,81 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["provider", "filesystem", "mcp", "shell", "workflow", "plugin", "network", "credential"]
+          "enum": [
+            "provider",
+            "filesystem",
+            "mcp",
+            "shell",
+            "workflow",
+            "plugin",
+            "network",
+            "credential"
+          ]
         },
-        "id": { "$ref": "#/$defs/capabilityBundleId" },
-        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "required": { "type": "boolean" }
+        "id": {
+          "$ref": "#/$defs/capabilityBundleId"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "required": {
+          "type": "boolean"
+        }
       },
-      "required": ["kind", "id", "reason"]
+      "required": [
+        "kind",
+        "id",
+        "reason"
+      ]
     },
     "capabilityBundleManifest": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "format": { "const": "open-cowork-capability-bundle-v1" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "version": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "owner": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "format": {
+          "const": "open-cowork-capability-bundle-v1"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
         "compatibility": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "opencode": { "type": "string", "maxLength": 160 },
-            "productModes": { "$ref": "#/$defs/capabilityBundleProductModeMap" }
+            "opencode": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "productModes": {
+              "$ref": "#/$defs/capabilityBundleProductModeMap"
+            }
           }
         },
         "resources": {
           "type": "array",
-          "items": { "$ref": "#/$defs/capabilityBundleResource" }
+          "items": {
+            "$ref": "#/$defs/capabilityBundleResource"
+          }
         },
         "permissions": {
           "type": "array",
-          "items": { "$ref": "#/$defs/capabilityBundlePermission" }
+          "items": {
+            "$ref": "#/$defs/capabilityBundlePermission"
+          }
         },
         "uninstall": {
           "type": "object",
@@ -1198,32 +1057,66 @@
           "properties": {
             "removes": {
               "type": "array",
-              "items": { "$ref": "#/$defs/capabilityBundleResourceSelector" },
+              "items": {
+                "$ref": "#/$defs/capabilityBundleResourceSelector"
+              },
               "uniqueItems": true
             },
             "preserves": {
               "type": "array",
-              "items": { "$ref": "#/$defs/capabilityBundleResourceSelector" },
+              "items": {
+                "$ref": "#/$defs/capabilityBundleResourceSelector"
+              },
               "uniqueItems": true
             }
           }
         }
       },
-      "required": ["format", "name", "version", "owner", "resources", "permissions"]
+      "required": [
+        "format",
+        "name",
+        "version",
+        "owner",
+        "resources",
+        "permissions"
+      ]
     },
     "credentialField": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "key": { "type": "string" },
-        "runtimeKey": { "type": "string" },
-        "label": { "type": "string" },
-        "description": { "type": "string" },
-        "placeholder": { "type": "string" },
-        "secret": { "type": "boolean" },
-        "required": { "type": "boolean" },
-        "env": { "type": "string" },
-        "type": { "type": "string", "enum": ["text", "select", "radio"] },
+        "key": {
+          "type": "string"
+        },
+        "runtimeKey": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "env": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "select",
+            "radio"
+          ]
+        },
         "options": {
           "type": "array",
           "minItems": 1,
@@ -1231,38 +1124,74 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "label": { "type": "string" },
-              "value": { "type": "string" },
-              "hint": { "type": "string" }
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "hint": {
+                "type": "string"
+              }
             },
-            "required": ["label", "value"]
+            "required": [
+              "label",
+              "value"
+            ]
           }
         },
         "when": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "key": { "type": "string" },
-            "op": { "type": "string", "enum": ["eq", "neq"] },
-            "value": { "type": "string" }
+            "key": {
+              "type": "string"
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "eq",
+                "neq"
+              ]
+            },
+            "value": {
+              "type": "string"
+            }
           },
-          "required": ["key", "op", "value"]
+          "required": [
+            "key",
+            "op",
+            "value"
+          ]
         }
       },
-      "required": ["key", "label", "description"],
+      "required": [
+        "key",
+        "label",
+        "description"
+      ],
       "allOf": [
         {
           "if": {
-            "required": ["type"],
+            "required": [
+              "type"
+            ],
             "properties": {
-              "type": { "enum": ["select", "radio"] }
+              "type": {
+                "enum": [
+                  "select",
+                  "radio"
+                ]
+              }
             }
           },
           "then": {
             "properties": {
               "options": {}
             },
-            "required": ["options"]
+            "required": [
+              "options"
+            ]
           }
         }
       ]
@@ -1271,40 +1200,79 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "limit": { "$ref": "#/$defs/modelLimit" },
-        "cost": { "$ref": "#/$defs/modelCost" },
-        "featured": { "type": "boolean" },
-        "contextLength": { "type": "number" }
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "limit": {
+          "$ref": "#/$defs/modelLimit"
+        },
+        "cost": {
+          "$ref": "#/$defs/modelCost"
+        },
+        "featured": {
+          "type": "boolean"
+        },
+        "contextLength": {
+          "type": "number"
+        }
       },
-      "required": ["id", "name"]
+      "required": [
+        "id",
+        "name"
+      ]
     },
     "modelInfo": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "limit": { "$ref": "#/$defs/modelLimit" },
-        "cost": { "$ref": "#/$defs/modelCost" }
+        "limit": {
+          "$ref": "#/$defs/modelLimit"
+        },
+        "cost": {
+          "$ref": "#/$defs/modelCost"
+        }
       }
     },
     "modelLimit": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "context": { "type": "integer", "minimum": 1 },
-        "output": { "type": "integer", "minimum": 1 }
+        "context": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "modelCost": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "input": { "type": "number", "minimum": 0 },
-        "output": { "type": "number", "minimum": 0 },
-        "cache_read": { "type": "number", "minimum": 0 },
-        "cache_write": { "type": "number", "minimum": 0 }
+        "input": {
+          "type": "number",
+          "minimum": 0
+        },
+        "output": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cache_read": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cache_write": {
+          "type": "number",
+          "minimum": 0
+        }
       }
     },
     "providerDescriptorConfig": {
@@ -1313,16 +1281,30 @@
       "properties": {
         "runtime": {
           "type": "string",
-          "enum": ["builtin", "custom"]
+          "enum": [
+            "builtin",
+            "custom"
+          ]
         },
         "runtimeActivation": {
           "type": "string",
-          "enum": ["implicit", "config"]
+          "enum": [
+            "implicit",
+            "config"
+          ]
         },
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "defaultModel": { "type": "string" },
-        "smallModel": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "defaultModel": {
+          "type": "string"
+        },
+        "smallModel": {
+          "type": "string"
+        },
         "options": {
           "type": "object",
           "additionalProperties": true
@@ -1343,83 +1325,182 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "url": { "type": "string", "pattern": "^https://.+" },
-            "responsePath": { "type": "string" },
-            "idField": { "type": "string" },
-            "nameField": { "type": "string" },
-            "descriptionField": { "type": "string" },
-            "contextLengthField": { "type": "string" },
-            "authHeader": { "type": "string" },
-            "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
-            "cacheTtlMinutes": { "type": "number" }
+            "url": {
+              "type": "string",
+              "pattern": "^https://.+"
+            },
+            "responsePath": {
+              "type": "string"
+            },
+            "idField": {
+              "type": "string"
+            },
+            "nameField": {
+              "type": "string"
+            },
+            "descriptionField": {
+              "type": "string"
+            },
+            "contextLengthField": {
+              "type": "string"
+            },
+            "authHeader": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[A-Fa-f0-9]{64}$"
+            },
+            "cacheTtlMinutes": {
+              "type": "number"
+            }
           },
-          "required": ["url"]
+          "required": [
+            "url"
+          ]
         }
       },
-      "required": ["name", "description", "credentials", "models"]
+      "required": [
+        "name",
+        "description",
+        "credentials",
+        "models"
+      ]
     },
     "configuredTool": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "icon": { "type": "string" },
-        "description": { "type": "string" },
-        "kind": { "type": "string", "enum": ["mcp", "built-in"] },
-        "namespace": { "type": "string" },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "mcp",
+            "built-in"
+          ]
+        },
+        "namespace": {
+          "type": "string"
+        },
         "patterns": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "writeAccess": { "type": "boolean" },
+        "writeAccess": {
+          "type": "boolean"
+        },
         "defaultAccess": {
           "type": "boolean",
           "description": "Allow this read-only tool for every app-managed agent by default."
         },
         "allowPatterns": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "askPatterns": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       },
-      "required": ["id", "name", "description", "kind"]
+      "required": [
+        "id",
+        "name",
+        "description",
+        "kind"
+      ]
     },
     "configuredSkill": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "badge": { "type": "string", "enum": ["Skill"] },
-        "sourceName": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "badge": {
+          "type": "string",
+          "enum": [
+            "Skill"
+          ]
+        },
+        "sourceName": {
+          "type": "string"
+        },
         "toolIds": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       },
-      "required": ["name", "description", "badge", "sourceName"]
+      "required": [
+        "name",
+        "description",
+        "badge",
+        "sourceName"
+      ]
     },
     "configuredMcp": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "type": { "type": "string", "enum": ["local", "remote"] },
-        "description": { "type": "string" },
-        "authMode": { "type": "string", "enum": ["none", "oauth", "api_token"] },
-        "packageName": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "local",
+            "remote"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "authMode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "oauth",
+            "api_token"
+          ]
+        },
+        "packageName": {
+          "type": "string"
+        },
         "command": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "url": { "type": "string" },
+        "url": {
+          "type": "string"
+        },
         "headers": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "headerSettings": {
           "type": "array",
@@ -1427,11 +1508,20 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "header": { "type": "string" },
-              "key": { "type": "string" },
-              "prefix": { "type": "string" }
+              "header": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              }
             },
-            "required": ["header", "key"]
+            "required": [
+              "header",
+              "key"
+            ]
           }
         },
         "envSettings": {
@@ -1440,83 +1530,185 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "env": { "type": "string" },
-              "key": { "type": "string" }
+              "env": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              }
             },
-            "required": ["env", "key"]
+            "required": [
+              "env",
+              "key"
+            ]
           }
         },
         "credentials": {
           "type": "array",
-          "items": { "$ref": "#/$defs/credentialField" }
+          "items": {
+            "$ref": "#/$defs/credentialField"
+          }
         },
-        "credentialHelp": { "type": "string" },
-        "allowPrivateNetwork": { "type": "boolean" },
-        "googleAuth": { "type": "boolean" }
+        "credentialHelp": {
+          "type": "string"
+        },
+        "allowPrivateNetwork": {
+          "type": "boolean"
+        },
+        "googleAuth": {
+          "type": "boolean"
+        }
       },
-      "required": ["name", "type", "description", "authMode"]
+      "required": [
+        "name",
+        "type",
+        "description",
+        "authMode"
+      ]
     },
     "configuredAgent": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "label": { "type": "string" },
-        "description": { "type": "string" },
-        "instructions": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
         "skillNames": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "toolIds": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "allowTools": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "askTools": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "color": { "type": "string" },
-        "hidden": { "type": "boolean" },
-        "mode": { "type": "string", "enum": ["primary", "subagent"] },
-        "model": { "type": "string" },
-        "variant": { "type": "string" },
-        "temperature": { "type": "number", "minimum": 0 },
-        "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
-        "steps": { "type": "integer", "minimum": 1 },
+        "color": {
+          "type": "string"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "subagent"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "steps": {
+          "type": "integer",
+          "minimum": 1
+        },
         "options": {
           "type": "object",
           "additionalProperties": true
         }
       },
-      "required": ["name", "description", "instructions"]
+      "required": [
+        "name",
+        "description",
+        "instructions"
+      ]
     },
     "agentStarterTemplate": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string" },
-        "label": { "type": "string" },
-        "description": { "type": "string" },
-        "color": { "type": "string" },
-        "mode": { "type": "string", "enum": ["primary", "subagent"] },
-        "instructions": { "type": "string" },
-        "temperature": { "type": ["number", "null"], "minimum": 0 },
-        "steps": { "type": ["integer", "null"], "minimum": 1 },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "subagent"
+          ]
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "temperature": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "steps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
         "toolIds": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "skillNames": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       },
-      "required": ["id", "label", "description", "color", "instructions"]
+      "required": [
+        "id",
+        "label",
+        "description",
+        "color",
+        "instructions"
+      ]
     },
     "toolTraceMatcher": {
       "type": "object",
@@ -1524,15 +1716,21 @@
       "properties": {
         "exact": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "prefixes": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "contains": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -1540,84 +1738,1505 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string" },
-        "label": { "type": "string" },
-        "pluralLabel": { "type": "string" },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "pluralLabel": {
+          "type": "string"
+        },
         "match": {
           "type": "array",
-          "items": { "$ref": "#/$defs/toolTraceMatcher" }
+          "items": {
+            "$ref": "#/$defs/toolTraceMatcher"
+          }
         }
       },
-      "required": ["id", "label", "match"]
+      "required": [
+        "id",
+        "label",
+        "match"
+      ]
     },
     "brandThemeTokens": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "base": { "type": "string" },
-        "surface": { "type": "string" },
-        "surfaceHover": { "type": "string" },
-        "surfaceActive": { "type": "string" },
-        "elevated": { "type": "string" },
-        "border": { "type": "string" },
-        "borderSubtle": { "type": "string" },
-        "borderStrong": { "type": "string" },
-        "text": { "type": "string" },
-        "textSecondary": { "type": "string" },
-        "textMuted": { "type": "string" },
-        "accent": { "type": "string" },
-        "accentHover": { "type": "string" },
-        "green": { "type": "string" },
-        "amber": { "type": "string" },
-        "red": { "type": "string" },
-        "info": { "type": "string" },
-        "accentForeground": { "type": "string" },
-        "shadowCard": { "type": "string" },
-        "shadowElevated": { "type": "string" },
-        "bgImage": { "type": "string" }
+        "base": {
+          "type": "string"
+        },
+        "surface": {
+          "type": "string"
+        },
+        "surfaceHover": {
+          "type": "string"
+        },
+        "surfaceActive": {
+          "type": "string"
+        },
+        "elevated": {
+          "type": "string"
+        },
+        "border": {
+          "type": "string"
+        },
+        "borderSubtle": {
+          "type": "string"
+        },
+        "borderStrong": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "textSecondary": {
+          "type": "string"
+        },
+        "textMuted": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string"
+        },
+        "accentHover": {
+          "type": "string"
+        },
+        "green": {
+          "type": "string"
+        },
+        "amber": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "info": {
+          "type": "string"
+        },
+        "accentForeground": {
+          "type": "string"
+        },
+        "shadowCard": {
+          "type": "string"
+        },
+        "shadowElevated": {
+          "type": "string"
+        },
+        "bgImage": {
+          "type": "string"
+        }
       },
       "required": [
-        "base", "surface", "surfaceHover", "surfaceActive", "elevated",
-        "border", "borderSubtle", "text", "textSecondary", "textMuted",
-        "accent", "accentHover", "green", "amber", "red", "info",
-        "accentForeground", "shadowCard", "shadowElevated", "bgImage"
+        "base",
+        "surface",
+        "surfaceHover",
+        "surfaceActive",
+        "elevated",
+        "border",
+        "borderSubtle",
+        "text",
+        "textSecondary",
+        "textMuted",
+        "accent",
+        "accentHover",
+        "green",
+        "amber",
+        "red",
+        "info",
+        "accentForeground",
+        "shadowCard",
+        "shadowElevated",
+        "bgImage"
       ]
     },
     "brandThemeDefinition": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-        "label": { "type": "string" },
-        "description": { "type": "string" },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
         "swatches": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "dark": { "$ref": "#/$defs/brandThemeTokens" },
-        "light": { "$ref": "#/$defs/brandThemeTokens" }
+        "dark": {
+          "$ref": "#/$defs/brandThemeTokens"
+        },
+        "light": {
+          "$ref": "#/$defs/brandThemeTokens"
+        }
       },
-      "required": ["id", "label", "dark"]
+      "required": [
+        "id",
+        "label",
+        "dark"
+      ]
     },
     "builtInAgentOverride": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "disable": { "type": "boolean" },
-        "hidden": { "type": "boolean" },
-        "description": { "type": "string" },
-        "instructions": { "type": "string" },
-        "color": { "type": "string" },
-        "model": { "type": "string" },
-        "variant": { "type": "string" },
-        "temperature": { "type": "number", "minimum": 0 },
-        "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
-        "steps": { "type": "integer", "minimum": 1 },
+        "disable": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "steps": {
+          "type": "integer",
+          "minimum": 1
+        },
         "options": {
           "type": "object",
           "additionalProperties": true
         }
       }
+    },
+    "cloudPublicBrandingUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https://.+"
+    },
+    "cloudPublicBrandingSupportUrl": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^mailto:[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+        }
+      ]
+    },
+    "cloudConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/cloudRole"
+        },
+        "defaultProfile": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "publicBranding": {
+          "$ref": "#/$defs/cloudPublicBranding"
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/cloudProfile"
+          }
+        },
+        "auth": {
+          "$ref": "#/$defs/cloudAuth"
+        },
+        "storage": {
+          "$ref": "#/$defs/cloudStorage"
+        },
+        "runtime": {
+          "$ref": "#/$defs/cloudRuntimePolicy"
+        },
+        "projectSources": {
+          "$ref": "#/$defs/cloudProjectSources"
+        },
+        "features": {
+          "$ref": "#/$defs/cloudFeatures"
+        },
+        "abuse": {
+          "$ref": "#/$defs/cloudAbuse"
+        },
+        "billing": {
+          "$ref": "#/$defs/cloudBilling"
+        },
+        "entitlements": {
+          "$ref": "#/$defs/cloudEntitlements"
+        }
+      }
+    },
+    "cloudEntitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "stripe",
+            "custom"
+          ]
+        }
+      }
+    },
+    "cloudRole": {
+      "type": "string",
+      "enum": [
+        "all-in-one",
+        "web",
+        "worker",
+        "scheduler"
+      ]
+    },
+    "cloudPublicBrandingTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surface": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "mutedSurface": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "border": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "text": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "mutedText": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accent": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accent2": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentSoft": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "accentLine": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "accentStrong": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "focus": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "warn": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "danger": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "ok": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surfaceHover": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surfaceActive": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "borderSubtle": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "borderStrong": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "elevated": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "textSecondary": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentHover": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentForeground": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "green": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "amber": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "red": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "info": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "shadowCard": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "shadowElevated": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "bgImage": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        }
+      }
+    },
+    "cloudPublicBrandingCssToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[#A-Za-z0-9(),.%\\s-]+$"
+    },
+    "cloudPublicBrandingColorToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})|rgba?\\([#A-Za-z0-9(),.%\\s-]+\\)|hsla?\\([#A-Za-z0-9(),.%\\s-]+\\)|[A-Za-z]+)$"
+    },
+    "cloudPublicDashboardCopy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "subtitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "signInTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "signInBody": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "byokDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "connectionsDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "gatewayDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "billingDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "usageDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    },
+    "cloudManagedOrgConnectionLabels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "desktopToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "gatewayToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "apiToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "cloudUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "cloudPublicBranding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "productName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "shortName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "logoUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "faviconUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "ogImageUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "supportUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingSupportUrl"
+        },
+        "privacyUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "securityUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "legalUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "theme": {
+          "$ref": "#/$defs/cloudPublicBrandingTheme"
+        },
+        "dashboard": {
+          "$ref": "#/$defs/cloudPublicDashboardCopy"
+        },
+        "managedOrgConnectionLabels": {
+          "$ref": "#/$defs/cloudManagedOrgConnectionLabels"
+        }
+      }
+    },
+    "cloudDesktopConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "allowUserAddedConnections": {
+          "type": "boolean"
+        },
+        "preconfiguredConnections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cloudDesktopConnection"
+          }
+        },
+        "requireManagedOrg": {
+          "type": "boolean"
+        },
+        "cacheMode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "metadata-only",
+            "disabled"
+          ]
+        },
+        "cacheEncryptionFallback": {
+          "type": "string",
+          "enum": [
+            "metadata-only",
+            "disabled",
+            "fail-startup"
+          ]
+        }
+      }
+    },
+    "cloudDesktopConnection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "baseUrl"
+      ]
+    },
+    "cloudName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "cloudStringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "cloudFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "type": "boolean"
+        },
+        "agents": {
+          "type": "boolean"
+        },
+        "artifacts": {
+          "type": "boolean"
+        },
+        "threadIndex": {
+          "type": "boolean"
+        },
+        "workflows": {
+          "type": "boolean"
+        },
+        "webhooks": {
+          "type": "boolean"
+        },
+        "settings": {
+          "type": "boolean"
+        },
+        "customSkills": {
+          "type": "boolean"
+        },
+        "customAgents": {
+          "type": "boolean"
+        },
+        "customMcps": {
+          "type": "boolean"
+        },
+        "knowledge": {
+          "type": "boolean"
+        },
+        "channels": {
+          "type": "boolean"
+        },
+        "byok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cloudAbuse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxConcurrentSessionsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxConcurrentWorkflowRunsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxActiveWorkersPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueuedCommandsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueueAgeMs": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkflowRunsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkerMinutesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayDeliveriesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayChannelBindingsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxArtifactBytesPerDay": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "httpRateLimit": {
+          "$ref": "#/$defs/cloudRateLimit"
+        },
+        "authBackoff": {
+          "$ref": "#/$defs/cloudAuthBackoff"
+        }
+      }
+    },
+    "cloudRateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "windowMs": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        "maxRequests": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        }
+      }
+    },
+    "cloudAuthBackoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "windowMs": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        "maxFailures": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        "backoffMs": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        }
+      }
+    },
+    "cloudPositiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cloudPositiveIntegerOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cloudBilling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "stub",
+            "stripe"
+          ]
+        },
+        "defaultPlanKey": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "plans": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/cloudBillingPlan"
+          }
+        },
+        "stripe": {
+          "$ref": "#/$defs/cloudStripeBilling"
+        }
+      }
+    },
+    "cloudBillingPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "stripePriceId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "entitlements": {
+          "$ref": "#/$defs/cloudBillingEntitlements"
+        }
+      }
+    },
+    "cloudBillingEntitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "features": {
+          "$ref": "#/$defs/cloudFeatures"
+        },
+        "allowedProfiles": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowedProviders": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxConcurrentSessionsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxConcurrentWorkflowRunsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxActiveWorkersPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueuedCommandsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueueAgeMs": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkflowRunsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkerMinutesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayDeliveriesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayChannelBindingsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxArtifactBytesPerDay": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "allowNewSessions": {
+          "type": "boolean"
+        },
+        "allowPrompts": {
+          "type": "boolean"
+        },
+        "allowWorkers": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cloudStripeBilling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiKeyRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "webhookSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "defaultPriceId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "successUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "cancelUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "portalReturnUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        }
+      }
+    },
+    "cloudRuntimePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configSource": {
+          "type": "string",
+          "enum": [
+            "app"
+          ]
+        },
+        "launcher": {
+          "type": "string",
+          "enum": [
+            "node"
+          ]
+        },
+        "allowMachineRuntimeConfig": {
+          "type": "boolean"
+        },
+        "allowLocalStdioMcps": {
+          "type": "boolean"
+        },
+        "allowHostProjectDirectories": {
+          "type": "boolean"
+        },
+        "allowRemoteApprovalResponses": {
+          "type": "boolean"
+        },
+        "allowedLocalMcpNames": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "allowedHostProjectDirectories": {
+          "$ref": "#/$defs/cloudStringList"
+        }
+      }
+    },
+    "cloudProjectSources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "allowedHosts": {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            "allowedRepositories": {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            "allowFileUrls": {
+              "type": "boolean"
+            }
+          }
+        },
+        "uploadedSnapshots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxFiles": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "managedWorkspaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "cloudProjectSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "git"
+            },
+            "repositoryUrl": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "ref": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 512
+            },
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 1024
+            },
+            "credentialRef": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 512
+            }
+          },
+          "required": [
+            "kind",
+            "repositoryUrl"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "snapshot"
+            },
+            "snapshotId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "objectKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "fileCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "byteCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "kind",
+            "snapshotId",
+            "objectKey",
+            "fileCount",
+            "byteCount"
+          ]
+        }
+      ]
+    },
+    "cloudProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "agents": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "tools": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "mcps": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "features": {
+          "$ref": "#/$defs/cloudFeatures"
+        },
+        "runtime": {
+          "$ref": "#/$defs/cloudRuntimePolicy"
+        },
+        "defaultProjectSource": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cloudProjectSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "cloudAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "header",
+            "oidc"
+          ]
+        },
+        "issuerUrl": {
+          "type": "string",
+          "pattern": "^https://.+"
+        },
+        "clientId": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "clientSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "headerSecret": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "headerSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "headerAllowUnsigned": {
+          "type": "boolean"
+        },
+        "headerMaxSignatureAgeMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        },
+        "callbackPath": {
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9/_-]*$"
+        },
+        "cookieSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "allowedEmailDomains": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "allowSelfServiceSignup": {
+          "type": "boolean"
+        },
+        "signupMode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "invite",
+            "domain",
+            "open"
+          ]
+        },
+        "apiTokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultTtlMs": {
+              "type": "integer",
+              "minimum": 60000,
+              "maximum": 31536000000
+            },
+            "maxTtlMs": {
+              "type": "integer",
+              "minimum": 60000,
+              "maximum": 31536000000
+            },
+            "allowedScopes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "desktop",
+                  "gateway",
+                  "admin",
+                  "operator",
+                  "worker-internal"
+                ]
+              },
+              "uniqueItems": true,
+              "maxItems": 5
+            }
+          }
+        }
+      }
+    },
+    "cloudStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "controlPlane": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "local",
+                "postgres"
+              ]
+            },
+            "urlRef": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        },
+        "objectStore": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "filesystem",
+                "s3",
+                "gcs",
+                "azure-blob",
+                "digitalocean-spaces",
+                "minio"
+              ]
+            },
+            "bucket": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "region": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "endpoint": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "prefix": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "credentialsRef": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        }
+      }
+    },
+    "gatewayConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branding": {
+          "$ref": "#/$defs/cloudPublicBranding"
+        },
+        "server": {
+          "$ref": "#/$defs/gatewayServerConfig"
+        },
+        "productMode": {
+          "type": "string",
+          "enum": [
+            "cloud_channel",
+            "standalone",
+            "hybrid"
+          ],
+          "description": "Gateway product mode. `cloud_channel` (the apps/gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "self-host",
+            "managed"
+          ]
+        },
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "level": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error",
+                "silent"
+              ]
+            }
+          }
+        },
+        "metrics": {
+          "$ref": "#/$defs/gatewayBooleanToggle"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/gatewayBooleanToggle"
+        },
+        "timeouts": {
+          "$ref": "#/$defs/gatewayTimeouts"
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gatewayProviderConfig"
+          }
+        }
+      }
+    },
+    "gatewayServerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "publicBaseUrl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/httpsOrLocalhostUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adminToken": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowLoopbackOperatorBypass": {
+          "type": "boolean"
+        },
+        "maxRequestBodyBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 67108864
+        },
+        "trustProxyHeaders": {
+          "type": "boolean"
+        },
+        "trustedProxyCidrs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gatewayTimeouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "webhookDeliveryMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        },
+        "smtpMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        },
+        "shutdownDrainMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        }
+      }
+    },
+    "gatewayBooleanToggle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "gatewayProviderConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "fake",
+            "telegram",
+            "slack",
+            "email",
+            "webhook",
+            "discord",
+            "whatsapp",
+            "signal",
+            "cli"
+          ],
+          "description": "Channel provider kind. `telegram`/`slack`/`email`/`webhook` are turnkey (native ingress); `discord`/`whatsapp`/`signal` are bridge-only and require an external relay configured via `settings.deliveryUrl` + `credentials.sharedSecret`."
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "channelBindingId": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "externalWorkspaceId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "defaultAgent": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "kind",
+        "channelBindingId"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "discord",
+                  "whatsapp",
+                  "signal"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "properties": {
+                  "sharedSecret": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "sharedSecret"
+                ]
+              },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "deliveryUrl": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "deliveryUrl"
+                ]
+              }
+            },
+            "required": [
+              "credentials",
+              "settings"
+            ]
+          }
+        }
+      ]
     }
   }
 }

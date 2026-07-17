@@ -1,7 +1,7 @@
 import type { TodoItem } from '@open-cowork/shared'
 import { sortTodos, todoPriorityVisual, todoStatusVisual } from './todo-utils'
 import { t } from '../../helpers/i18n'
-import { Badge, type BadgeTone } from '../ui'
+import { Badge, type BadgeTone } from '@open-cowork/ui'
 
 function priorityBadgeTone(priority: string | null | undefined): BadgeTone {
   const normalized = (priority || '').toLowerCase()

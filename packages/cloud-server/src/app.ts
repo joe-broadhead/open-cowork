@@ -68,6 +68,11 @@ import { isManagedCloudSecretRef } from './secret-ref-policy.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler, type CloudRetentionOptions } from './scheduler.ts'
+import {
+  DEFAULT_RUNTIME_DELTA_FLUSH_MS,
+  createRuntimeDeltaCoalescer,
+  type RuntimeDeltaCoalescer,
+} from './runtime-delta-coalescer.ts'
 import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { resolveEntitlementResolver } from './entitlements/entitlement-provider.ts'
@@ -368,7 +373,11 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     // HTTP connection caps resolved/validated here (instead of read from process.env
     // inside the HTTP server) so they travel through CloudHttpServerOptions like every
     // other knob. Defaults preserve the previous in-server behaviour (200 / 10000).
-    maxSseConnectionsPerOrg: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG'), 200),
+    maxSseConnectionsPerOrg: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG'),
+      // Keep in sync with DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG (http-routes/sse-limits).
+      200,
+    ),
     maxConnections: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONNECTIONS'), 10_000),
     // SSE read-poll cadence (ms). The replay loop polls Postgres at this interval for the
     // life of each connection; operators trade delivery latency against control-plane query
@@ -470,7 +479,13 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
     if (expectedSecret && !constantTimeStringEqual(readHeader(req, 'x-open-cowork-header-auth-secret'), expectedSecret)) {
       throw new CloudHttpError(401, 'Trusted header authentication secret is invalid.')
     }
-    if (expectedSecret && options.requireSignedHeaders) {
+    // JOE-832: whenever a shared secret is configured, require HMAC-signed
+    // identity headers. Unsigned role headers cannot elevate to owner/admin.
+    const mustVerifySignature = Boolean(expectedSecret) || Boolean(options.requireSignedHeaders)
+    if (mustVerifySignature) {
+      if (!expectedSecret) {
+        throw new CloudHttpError(401, 'Trusted header authentication requires a configured secret for signed headers.')
+      }
       assertHeaderAuthSignature(req, expectedSecret, {
         maxAgeMs: options.maxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
         now: options.now,
@@ -482,6 +497,9 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
     const role = readHeader(req, 'x-open-cowork-user-role') || defaults.role || 'member'
     if (role !== 'owner' && role !== 'admin' && role !== 'member') {
       throw new CloudHttpError(401, 'Trusted header authentication role is invalid.')
+    }
+    if (!mustVerifySignature && (role === 'owner' || role === 'admin')) {
+      throw new CloudHttpError(401, 'Trusted header authentication refuses elevated roles without signed headers.')
     }
     return {
       tenantId,
@@ -640,7 +658,10 @@ export function createCloudAuthResolverForConfig(
   if (config.cloud.auth.mode === 'header') {
     return createHeaderCloudAuthResolver({}, {
       headerSecret: config.cloud.auth.headerSecret,
-      requireSignedHeaders: Boolean(config.cloud.auth.headerSecret && !config.cloud.auth.headerAllowUnsigned),
+      // Signature verification is mandatory whenever a secret is set (JOE-832).
+      // headerAllowUnsigned is ignored once a secret exists; loopback demos without
+      // a secret remain the only unsigned path.
+      requireSignedHeaders: Boolean(config.cloud.auth.headerSecret),
       maxSignatureAgeMs: config.cloud.auth.headerMaxSignatureAgeMs,
     })
   }
@@ -881,6 +902,24 @@ export function assertCloudProductionDeploymentSafe(input: {
   if (input.auth.mode === 'header' && input.auth.headerAllowUnsigned) {
     throw new Error('Public production trusted-header deployments require signed identity headers.')
   }
+
+  // JOE-835 / JOE-841: durable event tables grow without bound when retention
+  // windows stay null. Public production must set explicit prune windows for the
+  // high-volume session/workspace event logs (audit/usage remain operator-opt-in).
+  const sessionEventRetentionMs = parsePositiveInt(envValue(input.env, 'OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS'), 0)
+  const workspaceEventRetentionMs = parsePositiveInt(envValue(input.env, 'OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS'), 0)
+  if (!sessionEventRetentionMs) {
+    throw new Error(
+      'Public production cloud deployments require OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS '
+      + '(milliseconds) so cloud_session_events cannot grow without bound.',
+    )
+  }
+  if (!workspaceEventRetentionMs) {
+    throw new Error(
+      'Public production cloud deployments require OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS '
+      + '(milliseconds) so cloud_workspace_events cannot grow without bound.',
+    )
+  }
 }
 
 function assertCloudProductionCoreAdaptersSafe(input: {
@@ -1062,146 +1101,13 @@ export function createRetryingRuntimeEventRouter(options: {
     throw lastError
   }
 }
-
-// Token-granular `assistant.message` append deltas (projected from the SDK
-// `message.part.delta`) arrive one per token. Materializing each one rewrites the WHOLE
-// session projection (+ ~5 DB round-trips per event), so M streamed tokens cost O(M²)
-// write amplification. This coalescer buffers consecutive append deltas per session and
-// flushes them as ONE append on a short timer (a streaming window, not a debounce — so a
-// long stream still advances every ~flushDelayMs) or at the next non-append boundary
-// event, so a single materialize+persist covers many tokens.
-//
-// Correctness: the projection reducer appends each delta onto the same message, so
-// `existing + (d1 + d2 + … + dN)` is byte-identical to `((existing + d1) + d2) … + dN`.
-// Non-append events flush the session's pending delta FIRST so transcript order is
-// preserved (deltas land before the snapshot/tool/idle that follows them). The coalescer
-// serializes handling per session before invoking route(); the production route is also
-// wrapped in createSessionSerializedRuntimeEventRouter as a durable-boundary safeguard.
-// Pending deltas
-// are flushed when the session goes idle (a boundary), and `flushAll` flushes any tail on
-// shutdown, so no token is lost. Sequence ordering is preserved: coalescing only reduces
-// the number of appended events; the survivors stay monotonic and in arrival order.
-export const DEFAULT_RUNTIME_DELTA_FLUSH_MS = 60
-
-type RuntimeDeltaPending = {
-  event: CloudRuntimeEvent
-  messageId: string
-  timer: ReturnType<typeof setTimeout> | null
+// JOE-870: delta coalescer lives in runtime-delta-coalescer.ts (out of bootstrap).
+export {
+  DEFAULT_RUNTIME_DELTA_FLUSH_MS,
+  createRuntimeDeltaCoalescer,
+  type RuntimeDeltaCoalescer,
 }
 
-export type RuntimeDeltaCoalescer = {
-  handle(event: CloudRuntimeEvent): Promise<void>
-  flushAll(): Promise<void>
-}
-
-function isAppendDeltaEvent(event: CloudRuntimeEvent) {
-  return event.type === 'assistant.message'
-    && event.payload.mode === 'append'
-    && typeof event.payload.content === 'string'
-    && typeof event.payload.sessionId === 'string'
-}
-
-function runtimeEventMessageId(event: CloudRuntimeEvent) {
-  return typeof event.payload.messageId === 'string' ? event.payload.messageId : ''
-}
-
-export function createRuntimeDeltaCoalescer(options: {
-  route: (event: CloudRuntimeEvent) => Promise<void>
-  flushDelayMs?: number
-  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
-  clearTimer?: (handle: ReturnType<typeof setTimeout>) => void
-}): RuntimeDeltaCoalescer {
-  const flushDelayMs = options.flushDelayMs ?? DEFAULT_RUNTIME_DELTA_FLUSH_MS
-  const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
-  const clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle))
-  const pendingBySession = new Map<string, RuntimeDeltaPending>()
-  const tailBySession = new Map<string, Promise<void>>()
-
-  const enqueueSession = (sessionId: string, operation: () => Promise<void>) => {
-    const previous = tailBySession.get(sessionId) ?? Promise.resolve()
-    const next = previous.then(operation)
-    // A rejected operation must remain visible to its caller without poisoning later
-    // events on the same session. Keep a non-rejecting tail solely for serialization.
-    const guarded = next.then(() => {}, () => {})
-    tailBySession.set(sessionId, guarded)
-    void guarded.then(() => {
-      if (tailBySession.get(sessionId) === guarded) tailBySession.delete(sessionId)
-    })
-    return next
-  }
-
-  // Called only from that session's ordered operation queue.
-  const flushSession = async (sessionId: string): Promise<void> => {
-    const pending = pendingBySession.get(sessionId)
-    if (!pending) return
-    pendingBySession.delete(sessionId)
-    if (pending.timer) clearTimer(pending.timer)
-    await options.route(pending.event)
-  }
-
-  const processEvent = async (event: CloudRuntimeEvent) => {
-    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
-
-    if (sessionId && isAppendDeltaEvent(event)) {
-      const messageId = runtimeEventMessageId(event)
-      const pending = pendingBySession.get(sessionId)
-      if (pending && pending.messageId === messageId) {
-        // Same streaming message: concatenate the delta onto the buffered append. The
-        // timer keeps running (window, not debounce) so the stream still flushes on cadence.
-        pending.event = {
-          ...pending.event,
-          payload: {
-            ...pending.event.payload,
-            content: String(pending.event.payload.content ?? '') + String(event.payload.content ?? ''),
-          },
-        }
-        return
-      }
-      // A delta for a different message (or none buffered): flush the old one first to keep
-      // order, then start a fresh window for this message.
-      if (pending) await flushSession(sessionId)
-      const timer = setTimer(() => {
-        // Timer flushes enter the same session queue as source events. A boundary already
-        // received can therefore never be overtaken by a later timer continuation.
-        void enqueueSession(sessionId, () => flushSession(sessionId))
-      }, flushDelayMs)
-      pendingBySession.set(sessionId, {
-        event: { ...event, payload: { ...event.payload } },
-        messageId,
-        timer,
-      })
-      return
-    }
-
-    // Boundary event: flush this session's pending deltas before routing it so the
-    // transcript order (deltas → snapshot/tool/idle) is preserved. Both route() calls are
-    // processed on one session queue; the durable route is additionally serialized as a
-    // defence in depth against callers that use it outside this coalescer (issue #855).
-    // Returning the durable route promise supplies natural backpressure to the
-    // SDK subscription. At most one routed event plus one coalesced pending
-    // delta exists per session, rather than an unbounded promise tail.
-    if (sessionId) await flushSession(sessionId)
-    await options.route(event)
-  }
-
-  const handle = (event: CloudRuntimeEvent) => {
-    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
-    return sessionId
-      ? enqueueSession(sessionId, () => processEvent(event))
-      : processEvent(event)
-  }
-
-  const flushAll = async () => {
-    // First let already-enqueued source events populate/flush their buffers. A caller may
-    // invoke flushAll immediately after handle() without awaiting the individual handles.
-    await Promise.all([...tailBySession.values()])
-    await Promise.all([...pendingBySession.keys()].map((sessionId) => (
-      enqueueSession(sessionId, () => flushSession(sessionId))
-    )))
-  }
-
-  return { handle, flushAll }
-}
 
 function loopErrorAttributes(error: unknown) {
   return {
@@ -1686,7 +1592,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
               }
             }
             if (restoredCheckpointEntries === 0) {
-              const source = await service.getSessionProjectSource(lease.tenantId, lease.sessionId)
+              const source = await service.domains.projectSources.getSessionProjectSource(lease.tenantId, lease.sessionId)
               if (source) {
                 await projectSources.restoreProjectSource({
                   tenantId: lease.tenantId,
