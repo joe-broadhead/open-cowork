@@ -119,6 +119,10 @@ nav:
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
+      - Singleton cache reset contracts: singleton-cache-reset-contracts.md
+      - Worker-scoped runtime adapter: worker-scoped-runtime-adapter.md
+      - Managed OpenCode server hosts: managed-opencode-server-hosts.md
+      - Cloud dual control-plane tax: cloud-dual-control-plane.md
       - Frontend Architecture: frontend-architecture.md
       - Product Contract: product-contract.md
       - Coordination Model: coordination-model.md
