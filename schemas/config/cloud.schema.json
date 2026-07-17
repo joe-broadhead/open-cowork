@@ -1,0 +1,1064 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cowork.local/schemas/config/cloud.schema.json",
+  "title": "Open Cowork Cloud Config Surface",
+  "description": "Cloud control-plane and cloudDesktop connection trees. Compose with desktop-core for full validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cloud": {
+      "$ref": "#/$defs/cloudConfig"
+    },
+    "cloudDesktop": {
+      "$ref": "#/$defs/cloudDesktopConfig"
+    }
+  },
+  "$defs": {
+    "cloudConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/cloudRole"
+        },
+        "defaultProfile": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "publicBranding": {
+          "$ref": "#/$defs/cloudPublicBranding"
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/cloudProfile"
+          }
+        },
+        "auth": {
+          "$ref": "#/$defs/cloudAuth"
+        },
+        "storage": {
+          "$ref": "#/$defs/cloudStorage"
+        },
+        "runtime": {
+          "$ref": "#/$defs/cloudRuntimePolicy"
+        },
+        "projectSources": {
+          "$ref": "#/$defs/cloudProjectSources"
+        },
+        "features": {
+          "$ref": "#/$defs/cloudFeatures"
+        },
+        "abuse": {
+          "$ref": "#/$defs/cloudAbuse"
+        },
+        "billing": {
+          "$ref": "#/$defs/cloudBilling"
+        },
+        "entitlements": {
+          "$ref": "#/$defs/cloudEntitlements"
+        }
+      }
+    },
+    "cloudEntitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "stripe",
+            "custom"
+          ]
+        }
+      }
+    },
+    "cloudRole": {
+      "type": "string",
+      "enum": [
+        "all-in-one",
+        "web",
+        "worker",
+        "scheduler"
+      ]
+    },
+    "cloudPublicBrandingUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https://.+"
+    },
+    "cloudPublicBrandingSupportUrl": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^mailto:[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+        }
+      ]
+    },
+    "cloudPublicBrandingTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surface": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "mutedSurface": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "border": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "text": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "mutedText": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accent": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accent2": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentSoft": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "accentLine": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "accentStrong": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "focus": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "warn": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "danger": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "ok": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surfaceHover": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "surfaceActive": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "borderSubtle": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "borderStrong": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "elevated": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "textSecondary": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentHover": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "accentForeground": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "green": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "amber": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "red": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "info": {
+          "$ref": "#/$defs/cloudPublicBrandingColorToken"
+        },
+        "shadowCard": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "shadowElevated": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        },
+        "bgImage": {
+          "$ref": "#/$defs/cloudPublicBrandingCssToken"
+        }
+      }
+    },
+    "cloudPublicBrandingCssToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[#A-Za-z0-9(),.%\\s-]+$"
+    },
+    "cloudPublicBrandingColorToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})|rgba?\\([#A-Za-z0-9(),.%\\s-]+\\)|hsla?\\([#A-Za-z0-9(),.%\\s-]+\\)|[A-Za-z]+)$"
+    },
+    "cloudPublicDashboardCopy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "subtitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "signInTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "signInBody": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "byokDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "connectionsDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "gatewayDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "billingDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "usageDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    },
+    "cloudManagedOrgConnectionLabels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "desktopToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "gatewayToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "apiToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "cloudUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "cloudPublicBranding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "productName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "shortName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "logoUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "faviconUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "ogImageUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "supportUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingSupportUrl"
+        },
+        "privacyUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "securityUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "legalUrl": {
+          "$ref": "#/$defs/cloudPublicBrandingUrl"
+        },
+        "theme": {
+          "$ref": "#/$defs/cloudPublicBrandingTheme"
+        },
+        "dashboard": {
+          "$ref": "#/$defs/cloudPublicDashboardCopy"
+        },
+        "managedOrgConnectionLabels": {
+          "$ref": "#/$defs/cloudManagedOrgConnectionLabels"
+        }
+      }
+    },
+    "cloudDesktopConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "allowUserAddedConnections": {
+          "type": "boolean"
+        },
+        "preconfiguredConnections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cloudDesktopConnection"
+          }
+        },
+        "requireManagedOrg": {
+          "type": "boolean"
+        },
+        "cacheMode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "metadata-only",
+            "disabled"
+          ]
+        },
+        "cacheEncryptionFallback": {
+          "type": "string",
+          "enum": [
+            "metadata-only",
+            "disabled",
+            "fail-startup"
+          ]
+        }
+      }
+    },
+    "cloudDesktopConnection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "baseUrl"
+      ]
+    },
+    "cloudName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "cloudStringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "cloudFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "type": "boolean"
+        },
+        "agents": {
+          "type": "boolean"
+        },
+        "artifacts": {
+          "type": "boolean"
+        },
+        "threadIndex": {
+          "type": "boolean"
+        },
+        "workflows": {
+          "type": "boolean"
+        },
+        "webhooks": {
+          "type": "boolean"
+        },
+        "settings": {
+          "type": "boolean"
+        },
+        "customSkills": {
+          "type": "boolean"
+        },
+        "customAgents": {
+          "type": "boolean"
+        },
+        "customMcps": {
+          "type": "boolean"
+        },
+        "knowledge": {
+          "type": "boolean"
+        },
+        "channels": {
+          "type": "boolean"
+        },
+        "byok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cloudAbuse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxConcurrentSessionsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxConcurrentWorkflowRunsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxActiveWorkersPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueuedCommandsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueueAgeMs": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkflowRunsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkerMinutesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayDeliveriesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayChannelBindingsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxArtifactBytesPerDay": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "httpRateLimit": {
+          "$ref": "#/$defs/cloudRateLimit"
+        },
+        "authBackoff": {
+          "$ref": "#/$defs/cloudAuthBackoff"
+        }
+      }
+    },
+    "cloudRateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "windowMs": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        "maxRequests": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        }
+      }
+    },
+    "cloudAuthBackoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "windowMs": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        "maxFailures": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        "backoffMs": {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        }
+      }
+    },
+    "cloudPositiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cloudPositiveIntegerOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cloudPositiveInteger"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cloudBilling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "stub",
+            "stripe"
+          ]
+        },
+        "defaultPlanKey": {
+          "$ref": "#/$defs/cloudName"
+        },
+        "plans": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/cloudBillingPlan"
+          }
+        },
+        "stripe": {
+          "$ref": "#/$defs/cloudStripeBilling"
+        }
+      }
+    },
+    "cloudBillingPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "stripePriceId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "entitlements": {
+          "$ref": "#/$defs/cloudBillingEntitlements"
+        }
+      }
+    },
+    "cloudBillingEntitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "features": {
+          "$ref": "#/$defs/cloudFeatures"
+        },
+        "allowedProfiles": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowedProviders": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxConcurrentSessionsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxConcurrentWorkflowRunsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxActiveWorkersPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueuedCommandsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxQueueAgeMs": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkflowRunsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayPromptsPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxWorkerMinutesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayDeliveriesPerHour": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxGatewayChannelBindingsPerOrg": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "maxArtifactBytesPerDay": {
+          "$ref": "#/$defs/cloudPositiveIntegerOrNull"
+        },
+        "allowNewSessions": {
+          "type": "boolean"
+        },
+        "allowPrompts": {
+          "type": "boolean"
+        },
+        "allowWorkers": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cloudStripeBilling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiKeyRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "webhookSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "defaultPriceId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "successUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "cancelUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        },
+        "portalReturnUrl": {
+          "$ref": "#/$defs/httpsOrLocalhostUrl"
+        }
+      }
+    },
+    "cloudRuntimePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configSource": {
+          "type": "string",
+          "enum": [
+            "app"
+          ]
+        },
+        "launcher": {
+          "type": "string",
+          "enum": [
+            "node"
+          ]
+        },
+        "allowMachineRuntimeConfig": {
+          "type": "boolean"
+        },
+        "allowLocalStdioMcps": {
+          "type": "boolean"
+        },
+        "allowHostProjectDirectories": {
+          "type": "boolean"
+        },
+        "allowRemoteApprovalResponses": {
+          "type": "boolean"
+        },
+        "allowedLocalMcpNames": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "allowedHostProjectDirectories": {
+          "$ref": "#/$defs/cloudStringList"
+        }
+      }
+    },
+    "cloudProjectSources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "allowedHosts": {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            "allowedRepositories": {
+              "$ref": "#/$defs/cloudStringList"
+            },
+            "allowFileUrls": {
+              "type": "boolean"
+            }
+          }
+        },
+        "uploadedSnapshots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxFiles": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "managedWorkspaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "cloudProjectSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "git"
+            },
+            "repositoryUrl": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "ref": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 512
+            },
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 1024
+            },
+            "credentialRef": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 512
+            }
+          },
+          "required": [
+            "kind",
+            "repositoryUrl"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "snapshot"
+            },
+            "snapshotId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "objectKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "fileCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "byteCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "kind",
+            "snapshotId",
+            "objectKey",
+            "fileCount",
+            "byteCount"
+          ]
+        }
+      ]
+    },
+    "cloudProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "agents": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "tools": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "mcps": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "features": {
+          "$ref": "#/$defs/cloudFeatures"
+        },
+        "runtime": {
+          "$ref": "#/$defs/cloudRuntimePolicy"
+        },
+        "defaultProjectSource": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cloudProjectSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "cloudAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "header",
+            "oidc"
+          ]
+        },
+        "issuerUrl": {
+          "type": "string",
+          "pattern": "^https://.+"
+        },
+        "clientId": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "clientSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "headerSecret": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "headerSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "headerAllowUnsigned": {
+          "type": "boolean"
+        },
+        "headerMaxSignatureAgeMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        },
+        "callbackPath": {
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9/_-]*$"
+        },
+        "cookieSecretRef": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "allowedEmailDomains": {
+          "$ref": "#/$defs/cloudStringList"
+        },
+        "allowSelfServiceSignup": {
+          "type": "boolean"
+        },
+        "signupMode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "invite",
+            "domain",
+            "open"
+          ]
+        },
+        "apiTokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultTtlMs": {
+              "type": "integer",
+              "minimum": 60000,
+              "maximum": 31536000000
+            },
+            "maxTtlMs": {
+              "type": "integer",
+              "minimum": 60000,
+              "maximum": 31536000000
+            },
+            "allowedScopes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "desktop",
+                  "gateway",
+                  "admin",
+                  "operator",
+                  "worker-internal"
+                ]
+              },
+              "uniqueItems": true,
+              "maxItems": 5
+            }
+          }
+        }
+      }
+    },
+    "cloudStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "controlPlane": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "local",
+                "postgres"
+              ]
+            },
+            "urlRef": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        },
+        "objectStore": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "filesystem",
+                "s3",
+                "gcs",
+                "azure-blob",
+                "digitalocean-spaces",
+                "minio"
+              ]
+            },
+            "bucket": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "region": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "endpoint": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "prefix": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "credentialsRef": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        }
+      }
+    }
+  }
+}

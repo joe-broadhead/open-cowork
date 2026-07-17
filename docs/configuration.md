@@ -7,6 +7,26 @@ Full resolved configs must also declare `contractVersion: 1`, the current
 versioned downstream distribution contract. Partial overlays may omit it
 because they merge over the built-in default.
 
+## Product-mode schema surfaces (JOE-840)
+
+The packaged schema is a **thin compositor** over three product-mode fragments:
+
+| Surface | Fragment | Owns |
+| --- | --- | --- |
+| Desktop core | `schemas/config/desktop-core.schema.json` | Branding, auth, providers, agents, skills, MCPs, features, i18n, telemetry — no `cloud` / `gateway` trees |
+| Cloud | `schemas/config/cloud.schema.json` | `cloud` control plane + `cloudDesktop` |
+| Gateway | `schemas/config/gateway.schema.json` | `gateway` channel / standalone operator settings |
+
+Edit the fragments, then refresh the packaged root:
+
+```bash
+node scripts/compose-config-schema.mjs
+node scripts/compose-config-schema.mjs --check   # CI drift guard
+```
+
+Desktop-only distributors can treat `desktop-core` as the mental model and
+validation surface without carrying cloud theme/entitlement/gateway trees.
+
 ## Top-level sections
 
 The default upstream config is organized into:
@@ -27,6 +47,8 @@ The default upstream config is organized into:
 - `compaction`
 - `i18n`
 - `telemetry`
+- `cloud` / `cloudDesktop` (cloud surface)
+- `gateway` (gateway surface)
 
 ## Branding
 
