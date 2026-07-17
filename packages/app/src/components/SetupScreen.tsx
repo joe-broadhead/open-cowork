@@ -269,10 +269,11 @@ export function SetupScreen({
   const connectionIsCurrent = connectionTest.status === 'success'
     && connectionTest.signature === currentConnectionSignature
   const connectionNeedsRetest = connectionTest.status === 'success' && !connectionIsCurrent
-  const setupProgress = connectionIsCurrent ? 3 : modelId.trim() ? 2 : providerId ? 1 : 0
+  // Minimal path progress: provider → model → ready for chat (connection test optional).
+  const setupProgress = canContinue ? 3 : modelId.trim() ? 2 : providerId ? 1 : 0
   const progressPercent = connectionTest.status === 'testing'
     ? phaseProgress[runtimeProgress?.phase || 'starting']
-    : connectionIsCurrent
+    : canContinue
       ? 100
       : Math.max(12, setupProgress * 28)
   const visibleRuntimeProgress = connectionTest.status === 'testing' || connectionIsCurrent
@@ -402,12 +403,30 @@ export function SetupScreen({
     }
   }
 
-  const handleContinue = () => {
-    if (!connectionIsCurrent) {
-      setError(t('setup.connectionRequired', 'Test this provider and model before continuing.'))
+  const handleContinue = async () => {
+    // Minimal path: provider → model (+ required credentials) → chat.
+    // Connection test remains available but does not block first success.
+    if (!canContinue) {
+      setError(t('setup.connectionMissingFields', 'Choose a provider, enter the required key, and choose a model before continuing.'))
       return
     }
-    onComplete()
+    setSaving(true)
+    setError(null)
+    try {
+      const saved = await saveSetupSelection()
+      if (!saved) return
+      // Best-effort runtime start so the first chat can open quickly.
+      try {
+        await window.coworkApi.runtime.restart()
+      } catch {
+        // Soft-fail: settings are saved; runtime can recover on first prompt.
+      }
+      onComplete()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -428,9 +447,9 @@ export function SetupScreen({
         <section aria-label={t('setup.progress', 'Setup progress')} className="rounded-2xl border border-border-subtle bg-elevated p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             {[
-              { label: t('setup.stepConnect', 'Connect a model'), done: setupProgress >= 1 },
+              { label: t('setup.stepConnect', 'Connect a provider'), done: setupProgress >= 1 },
               { label: t('setup.stepChoose', 'Choose model'), done: setupProgress >= 2 },
-              { label: t('setup.stepDone', 'Done'), done: setupProgress >= 3 },
+              { label: t('setup.stepDone', 'Start chatting'), done: setupProgress >= 3 },
             ].map((step, index) => (
               <div key={step.label} className="flex items-center gap-2 text-sm text-text-secondary">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${step.done ? 'border-accent bg-accent text-accent-foreground' : 'border-border-subtle text-text-muted'}`}>
@@ -691,7 +710,7 @@ export function SetupScreen({
 
         {connectionNeedsRetest ? (
           <div role="status" className="rounded-xl border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-amber">
-            {t('setup.connectionStale', 'The provider or model changed. Test the connection again before continuing.')}
+            {t('setup.connectionStale', 'The provider or model changed. Optionally re-test the connection, or continue to chat.')}
           </div>
         ) : null}
         {error ? (
@@ -719,9 +738,10 @@ export function SetupScreen({
           <Button
             variant="primary"
             fullWidth
-            onClick={handleContinue}
-            disabled={!connectionIsCurrent || saving}
-            disabledReason={!connectionIsCurrent ? t('setup.continueDisabled', 'Test this provider and model first.') : null}
+            onClick={() => void handleContinue()}
+            loading={saving && connectionTest.status !== 'testing'}
+            disabled={!canContinue || saving}
+            disabledReason={!canContinue ? t('setup.continueDisabled', 'Choose a provider, enter required credentials, and choose a model first.') : null}
           >
             {t('setup.continue', 'Get Started')}
           </Button>
