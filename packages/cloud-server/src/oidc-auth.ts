@@ -460,8 +460,9 @@ export function createOidcBrowserAuthProvider(
   config: CloudAuthConfig,
   options: OidcBrowserAuthOptions,
 ): CloudBrowserAuthProvider {
-  if (!options.stateCookieSecret || Buffer.byteLength(options.stateCookieSecret) < 16) {
-    throw new Error('OIDC browser auth state cookie secret must be at least 16 bytes.')
+  // JOE-828: match session-cookie floor so OIDC state cookies are not the weak link.
+  if (!options.stateCookieSecret || Buffer.byteLength(options.stateCookieSecret) < 32) {
+    throw new Error('OIDC browser auth state cookie secret must be at least 32 bytes.')
   }
   const verifier = createOidcVerifier(config, options)
   const callbackPath = normalizeCallbackPath(config.callbackPath)
