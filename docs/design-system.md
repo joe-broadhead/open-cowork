@@ -78,21 +78,34 @@ work should happen in the package:
 - `WorkbenchLayout`, `ActionCluster`, and `DiffView` for the shared
   workflow IA: threads/context, active conversation, top-right actions, and
   review-first artifacts/diffs.
-- `StudioShell`, `StudioPageHeader`, `CoworkerAvatar`, `CoworkerCard`,
-  `ComposerShell`, `TaskLane`, `ReviewPanel`, `ApprovalCard`, `ArtifactCard`,
-  `ProjectCard`, and `ChannelStatusCard` for the new Studio product language.
-  These are presentational primitives only; OpenCode still owns execution,
-  sessions, child sessions, approvals, questions, and tool semantics.
-- Phase-2 Studio surfaces should also use the production-specific primitives in
-  the same package before creating app-local markup: `ConversationLaneCard`,
-  `KanbanBoard`, `KanbanTaskCard`, drawer-capable `Dialog`, `RunTimeline`,
-  `PermissionEditorRow`, `DeliverableCard`, progress-enabled `ProjectCard`,
-  `ChannelRow`, `PersonRow`, `WizardSteps`, `WizardStepPane`, `TraitSlider`,
-  `WorkingStyleBars`, `WikiSpaceRail`, and `WikiPage`. The renderer renders all
-  of these in `#/ui-primitives` from the same `@open-cowork/ui` primitives on
-  both Desktop and Cloud Web.
+- Studio product language primitives (see **Studio adoption map** below). These
+  are presentational only; OpenCode still owns execution, sessions, child
+  sessions, approvals, questions, and tool semantics.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
+
+## Studio adoption map
+
+Decision (**JOE-854**): **adopt for high-traffic production surfaces; demote
+gallery-only primitives** so the dual-stack is intentional rather than half-
+finished. Production Team/chat/domain components may wrap Studio shells; they
+must not reimplement a second visual system.
+
+| Primitive / surface | Status | Production owner |
+| --- | --- | --- |
+| `ApprovalCard` (`@open-cowork/ui`) | **Adopted — shared base** | Presentational shell used by Approvals queue (`ApprovalsQueueSurface`) and by chat `packages/app/.../chat/ApprovalCard.tsx` (product logic + IPC). No second card chrome. |
+| `ApprovalsQueueSurface` / `ArtifactsLibrarySurface` / `ChannelsGatewaySurface` / `ProjectsKanbanSurface` | **Adopted** | Studio utility pages in `packages/app/src/components/studio/` and Projects board. |
+| `ReviewPanel`, `TaskLane`, `DiffView` | **Adopted** | Session inspector, Home review snapshot, chat diff controller. |
+| `StudioPageHeader` | **Adopted** | Studio utility pages. |
+| `AgentCapabilityProfileView` | **Adopted** | Agent builder / Team capability profile. |
+| `CoworkerCard`, `CoworkerAvatar` | **Adopted for list/preview** | Team/list browse cards and gallery. **Agent builder** keeps app-local `AgentCard` (identity form + capability profile) — domain form, not a second card language. |
+| `StudioShell`, `ComposerShell` | **Demoted (gallery / future shell)** | Catalog at `#/ui-primitives` and future shell work. Production chrome remains app `Sidebar` + workbench layout until a full shell migration. |
+| `PermissionEditorRow` | **Demoted (gallery)** | Gallery + future Agent permissions polish. Production `AgentPermissionEditor` owns the form model today. |
+| `ArtifactCard` / `DeliverableCard` / `Kanban*` / `ConversationLaneCard` / `RunTimeline` / wizard + wiki primitives | **Adopted where surfaces exist; otherwise gallery** | Prefer these before new app-local cards when wiring a surface. |
+
+When adding a new Studio-looking control, extend `@open-cowork/ui` first, then
+compose product state in `packages/app`. Do not ship a parallel ApprovalCard,
+Diff chrome, or empty-state without a documented exception in this map.
 
 `packages/ui/src/index.ts` is the single import surface for the package: every
 primitive, surface, hook, and helper is re-exported there, so consumers import

@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react'
 import type { PendingApproval } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, Icon } from '@open-cowork/ui'
+import {
+  ApprovalCard as StudioApprovalCard,
+  Badge,
+  Button,
+  Icon,
+  type StudioAction,
+} from '@open-cowork/ui'
 import {
   describePermission,
   detectRunawayApprovals,
@@ -86,6 +92,11 @@ function RunawayWarning({
   )
 }
 
+/**
+ * Chat/thread approval card. Product logic (permission model, runaway
+ * detection, IPC respond) lives here; the visual shell is the shared Studio
+ * `ApprovalCard` from `@open-cowork/ui` so Approvals queue and chat share one base.
+ */
 export function ApprovalCard({
   approval,
   queueCount = 1,
@@ -152,66 +163,86 @@ export function ApprovalCard({
 
   const hasInput = approval.input && Object.keys(approval.input).length > 0
   const inputJson = hasInput ? safeStringifyInput(approval.input) : ''
+  const busy = responding !== null
+
+  const actions = useMemo<StudioAction[]>(() => {
+    const next: StudioAction[] = []
+    if (onOpenSource) {
+      next.push({
+        id: 'source',
+        variant: 'ghost',
+        rightIcon: 'external-link',
+        children: t('approval.openSource', 'Source'),
+        onClick: onOpenSource,
+        disabled: busy,
+      })
+    }
+    next.push(
+      {
+        id: 'deny',
+        variant: 'danger',
+        children: t('approval.deny', 'Deny'),
+        onClick: () => { void respond(false) },
+        disabled: busy,
+      },
+      {
+        id: 'approve',
+        variant: 'primary',
+        children: t('approval.approve', 'Approve'),
+        onClick: () => { void respond(true) },
+        disabled: busy,
+      },
+    )
+    return next
+  // respond closes over responding; busy is the stable gate for the action row.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, onOpenSource])
 
   return (
-    <Card className="chat-approval-card overflow-hidden" padding="md">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5">
-          <span className="chat-approval-icon" aria-hidden>
-            <Icon name={descriptor.icon} size={16} />
-          </span>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-sm font-medium text-text">{descriptor.title}</div>
-              <Badge tone={descriptor.tone}>{descriptor.typeLabel}</Badge>
-              {descriptor.destructive ? (
-                <Badge tone="danger">{t('approval.destructive', 'Destructive')}</Badge>
-              ) : null}
-              {queueCount > 1 ? (
-                <Badge tone="warning">{t('approval.queueCount', '{{count}} pending', { count: queueCount })}</Badge>
-              ) : null}
-            </div>
-            <div className="mt-0.5 text-2xs text-text-muted">{descriptor.message}</div>
-            {descriptor.metadata.length ? (
-              <dl className="chat-approval-meta mt-2 space-y-1.5">
-                {descriptor.metadata.map((field) => (
-                  <MetadataRow key={field.key} field={field} />
-                ))}
-              </dl>
-            ) : null}
-            {hasInput && (
-              <details className="mt-1.5 group">
-                <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-2xs text-text-muted hover:text-text">
-                  <Icon name="chevron-right" size={16} className="transition-transform group-open:rotate-90" aria-hidden />
-                  {t('approval.inspectInput', 'Inspect raw request')}
-                </summary>
-                <pre className="mt-1.5 max-h-48 overflow-auto rounded-md bg-surface-hover p-2 text-2xs leading-relaxed text-text-secondary whitespace-pre-wrap break-words">
-                  {inputJson}
-                </pre>
-              </details>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {onOpenSource ? (
-            <Button onClick={onOpenSource} size="sm" variant="ghost" rightIcon="external-link">
-              {t('approval.openSource', 'Source')}
-            </Button>
-          ) : null}
-          <Button onClick={() => respond(false)} size="sm" variant="danger" loading={responding === 'deny'} disabled={responding !== null}>
-            {t('approval.deny', 'Deny')}
-          </Button>
-          <Button onClick={() => respond(true)} size="sm" variant="primary" loading={responding === 'allow'} disabled={responding !== null}>
-            {t('approval.approve', 'Approve')}
-          </Button>
-        </div>
+    <StudioApprovalCard
+      title={descriptor.title}
+      body={descriptor.message}
+      danger={descriptor.destructive}
+      className="chat-approval-card"
+      data-approval-base="studio"
+      actions={actions}
+    >
+      <div className="chat-approval-card__badges flex flex-wrap items-center gap-2">
+        <span className="chat-approval-icon" aria-hidden>
+          <Icon name={descriptor.icon} size={16} />
+        </span>
+        <Badge tone={descriptor.tone}>{descriptor.typeLabel}</Badge>
+        {descriptor.destructive ? (
+          <Badge tone="danger">{t('approval.destructive', 'Destructive')}</Badge>
+        ) : null}
+        {queueCount > 1 ? (
+          <Badge tone="warning">{t('approval.queueCount', '{{count}} pending', { count: queueCount })}</Badge>
+        ) : null}
       </div>
+      {descriptor.metadata.length ? (
+        <dl className="chat-approval-meta mt-2 space-y-1.5">
+          {descriptor.metadata.map((field) => (
+            <MetadataRow key={field.key} field={field} />
+          ))}
+        </dl>
+      ) : null}
+      {hasInput && (
+        <details className="mt-1.5 group">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-2xs text-text-muted hover:text-text">
+            <Icon name="chevron-right" size={16} className="transition-transform group-open:rotate-90" aria-hidden />
+            {t('approval.inspectInput', 'Inspect raw request')}
+          </summary>
+          <pre className="mt-1.5 max-h-48 overflow-auto rounded-md bg-surface-hover p-2 text-2xs leading-relaxed text-text-secondary whitespace-pre-wrap break-words">
+            {inputJson}
+          </pre>
+        </details>
+      )}
       {runaway ? (
-        <RunawayWarning count={runaway.count} onRejectAll={rejectAllLikeThis} disabled={responding !== null} />
+        <RunawayWarning count={runaway.count} onRejectAll={rejectAllLikeThis} disabled={busy} />
       ) : null}
       {error ? (
         <div role="alert" className="mt-2 text-2xs text-red">{error}</div>
       ) : null}
-    </Card>
+    </StudioApprovalCard>
   )
 }

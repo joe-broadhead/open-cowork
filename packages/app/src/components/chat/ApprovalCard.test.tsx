@@ -30,6 +30,14 @@ afterEach(() => {
 })
 
 describe('ApprovalCard typed copy', () => {
+  it('uses the shared Studio ApprovalCard shell as its visual base', () => {
+    const { container } = render(<ApprovalCard approval={emailApproval} />)
+    const shell = container.querySelector('.studio-decision-card.chat-approval-card')
+    expect(shell).toBeTruthy()
+    expect(shell).toHaveAttribute('data-approval-base', 'studio')
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+  })
+
   it('renders a typed title, type badge, and structured metadata for a bash command', () => {
     const approval: PendingApproval = {
       id: 'p-bash', sessionId: 'session-1', tool: 'bash',
