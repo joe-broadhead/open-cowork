@@ -493,6 +493,7 @@ export function buildSessionStateFromItems(
     }
 
     if (item.type === 'message_reasoning') {
+      // Pure-style patch apply: helpers return replacement field bags; assign onto the local reducer state only.
       Object.assign(next, withMessageReasoning(next, {
         messageId: item.messageId || item.id,
         content: item.content || '',
