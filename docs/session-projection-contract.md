@@ -93,3 +93,12 @@ When adding an event:
 This contract is the compatibility boundary between synced product surfaces.
 It should grow through typed events and tests, not through surface-specific
 parsing of runtime internals.
+
+## SessionEngine injection (JOE-872)
+
+Desktop production code continues to use the process singleton
+`sessionEngine` from `@open-cowork/runtime-host/session-engine`.
+
+Multi-tenant and unit tests should call `createSessionEngine()` for an
+isolated engine instance so session state, view caches, and busy maps do
+not leak across cases.
