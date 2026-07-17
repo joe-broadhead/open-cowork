@@ -19,19 +19,13 @@ const frontendDoc = readFileSync(join(root, 'docs/frontend-architecture.md'), 'u
 // silently keep growing. Lower a budget (never raise it) whenever a file shrinks.
 const GENERAL_LINE_BUDGET = 900
 const documentedLargeFileBudgets = new Map([
-  // browser/cowork-api.ts — the browser cloud API facade. Backlog: split by
-  // domain (sessions/threads/artifacts/workflows) to mirror cloud-client domains.
-  ['packages/app/src/browser/cowork-api.ts', 1_446],
   // components/HomePage.tsx — the launchpad shell. Backlog: extract feed,
   // quick-actions, and hero sections into feature components.
   // #920 extracted the shared composer menu/dismiss hooks; the inline HomeComposer has now
   // been extracted to components/home/HomeComposer.tsx (with shared primary-agent-mode helpers
   // in components/home/primary-agent-mode.ts), lowering this budget. See docs/frontend-architecture.md.
+  // JOE-884: Sidebar + cowork-api fell under the general 900-line budget after splits.
   ['packages/app/src/components/HomePage.tsx', 630],
-  // components/layout/Sidebar.tsx — the primary nav shell. Backlog: extract the
-  // per-section nav groups into dedicated components. Grew by the RBAC-gated Admin
-  // control-plane nav entry (#896); still a decomposition backlog.
-  ['packages/app/src/components/layout/Sidebar.tsx', 960],
 ])
 
 function productionSourceFiles(directory: string): string[] {

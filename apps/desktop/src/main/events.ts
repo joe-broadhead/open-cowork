@@ -15,13 +15,15 @@ import {
   handleMessagePartDeltaEvent,
   handleMessagePartUpdatedEvent,
   handleMessageUpdatedEvent,
+  sweepSessionScopedMessageState,
+  type SessionScopedMessageState,
+} from './event-message-handlers.ts'
+import {
   handleNativeStepEndedEvent,
   handleNativeTextDeltaEvent,
   handleNativeTextEndedEvent,
   handleNativeToolEvent,
-  sweepSessionScopedMessageState,
-  type SessionScopedMessageState,
-} from './event-message-handlers.ts'
+} from './event-message-native-handlers.ts'
 import { handleRuntimeSideEffectEvent } from './event-runtime-handlers.ts'
 import {
   attachDirectoryDurableHub,
