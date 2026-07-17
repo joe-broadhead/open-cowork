@@ -19,10 +19,15 @@ const CARD_TITLE =
 const CARD_TEXT =
   'color: var(--color-text-muted); font-size: var(--text-xs); line-height: var(--lh-xs); margin: 0'
 
-const globalsCss = readFileSync(
-  fileURLToPath(new URL('../packages/app/src/styles/globals.css', import.meta.url)),
-  'utf8',
-)
+const stylesRoot = fileURLToPath(new URL('../packages/app/src/styles/', import.meta.url))
+const globalsCss = [
+  'globals.css',
+  'domains/base.css',
+  'domains/studio.css',
+  'domains/chat.css',
+  'domains/shell.css',
+  'domains/settings.css',
+].map((name) => readFileSync(`${stylesRoot}${name}`, 'utf8')).join('\n')
 const primitivesTsx = readFileSync(
   fileURLToPath(new URL('../packages/ui/src/StudioPrimitives.tsx', import.meta.url)),
   'utf8',

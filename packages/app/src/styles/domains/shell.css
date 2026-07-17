@@ -1,0 +1,248 @@
+/* Domain: shell.css
+ * Ownership (JOE-851): Window title bar, sidebar active nav, app chrome.
+ * Entry: packages/app/src/styles/globals.css imports all domains.
+ */
+/* Window title bar carries the screen breadcrumb on a translucent, blurred surface
+   (prototype .topbar). */
+.title-bar {
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.home-motion-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.home-motion-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 54px;
+  width: 100%;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 68%, transparent);
+  color: var(--color-text);
+  padding: var(--space-2);
+  text-align: left;
+  transition:
+    background var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+
+.home-motion-row:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
+  background: var(--color-surface-hover);
+  transform: translateY(-1px);
+}
+
+.home-motion-title,
+.home-motion-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-motion-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: var(--lh-sm);
+}
+
+.home-motion-meta,
+.home-motion-badge,
+.home-motion-empty {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.home-motion-badge {
+  justify-self: end;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.home-motion-empty {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  border: var(--border-width-1) dashed var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.home-team-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  max-width: 100%;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-surface) 62%, transparent);
+  color: var(--color-text-secondary);
+  padding: var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-1), var(--specular);
+}
+
+.home-team-strip:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.home-team-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: var(--lh-xs);
+  white-space: nowrap;
+}
+
+.home-team-avatars {
+  display: inline-flex;
+  align-items: center;
+}
+
+.home-team-avatar {
+  margin-left: calc(-1 * var(--space-1));
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-base) 68%, transparent);
+}
+
+.home-team-avatar:first-child {
+  margin-left: 0;
+}
+
+@media (max-width: 640px) {
+  .home-example-grid,
+  .home-coworker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-motion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-team-strip {
+    align-items: stretch;
+    border-radius: var(--radius-lg);
+    flex-direction: column;
+  }
+}
+
+.home-coachmark {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: var(--border-width-1) solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border-subtle));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  padding: var(--space-3);
+}
+
+.home-image-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  padding: var(--space-1) var(--space-3);
+}
+
+.home-status-strip {
+  background: color-mix(in srgb, var(--color-surface) 62%, transparent);
+}
+
+.home-recent-accent {
+  height: var(--border-width-1);
+  width: var(--space-8);
+  background: color-mix(in srgb, var(--color-accent) 34%, var(--color-border-subtle));
+}
+
+.sidebar-nav-item {
+  position: relative;
+}
+
+.sidebar-nav-primary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  padding: var(--space-2) var(--space-3);
+  transition:
+    background var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+/* Active nav: accent-soft fill + accent icon + a 3px accent left bar with a squared
+   outer edge (prototype .nav-item.on / .nav-item.on::before). */
+.sidebar-nav-item[aria-current="page"] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.sidebar-nav-item[aria-current="page"] svg {
+  color: var(--color-accent);
+}
+.sidebar-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--color-accent);
+}
+
+.settings-dialog-shell {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-dialog-loading {
+  display: flex;
+  min-height: calc(var(--space-12) * 6);
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-dialog-intro,
+.settings-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settings-dialog-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: calc(var(--space-12) * 4) minmax(0, 1fr);
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 58%, transparent);
+}
+

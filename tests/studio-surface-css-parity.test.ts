@@ -59,18 +59,53 @@ const SINGLE_SOURCED_PREFIXES = [
   '@keyframes ui-polish-row-in',
 ]
 
-const sharedCss = readFileSync(join(root, 'packages/ui/src/surface-styles.ts'), 'utf8')
-const desktopCss = readFileSync(join(root, 'packages/app/src/styles/globals.css'), 'utf8')
+function readCssTree(relativeDir: string): string {
+  const dir = join(root, relativeDir)
+  // Barrel + domain modules (JOE-851 split).
+  const files = [
+    join(dir, '..', 'surface-styles.ts'),
+    ...[
+      'artifacts-surface.ts',
+      'knowledge-graph-surface.ts',
+      'approvals-surface.ts',
+      'wiki-surface.ts',
+      'channels-surface.ts',
+      'projects-surface.ts',
+      'controls-surface.ts',
+      'primitives-surface.ts',
+      'shared-keyframes.ts',
+    ].map((name) => join(dir, name)),
+  ]
+  return files.map((file) => readFileSync(file, 'utf8')).join('\n')
+}
+
+function readAppCssTree(): string {
+  const styles = join(root, 'packages/app/src/styles')
+  const domains = join(styles, 'domains')
+  const domainFiles = [
+    'base.css',
+    'studio.css',
+    'chat.css',
+    'shell.css',
+    'settings.css',
+  ].map((name) => join(domains, name))
+  return [join(styles, 'globals.css'), ...domainFiles]
+    .map((file) => readFileSync(file, 'utf8'))
+    .join('\n')
+}
+
+const sharedCss = readCssTree('packages/ui/src/styles')
+const desktopCss = readAppCssTree()
 
 for (const prefix of SINGLE_SOURCED_PREFIXES) {
   test(`shared @open-cowork/ui surface CSS is the single source for ${prefix}`, () => {
     assert.ok(
       sharedCss.includes(prefix),
-      `${prefix} must be defined in packages/ui/src/surface-styles.ts`,
+      `${prefix} must be defined in packages/ui surface style modules`,
     )
     assert.ok(
       !desktopCss.includes(prefix),
-      `${prefix} is consolidated — it must not be re-defined in apps/desktop globals.css`,
+      `${prefix} is consolidated — it must not be re-defined in packages/app styles`,
     )
   })
 }
