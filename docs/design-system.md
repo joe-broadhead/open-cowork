@@ -118,7 +118,7 @@ must not reimplement a second visual system.
 | `CoworkerCard`, `CoworkerAvatar` | **Adopted for list/preview** | Team/list browse cards and gallery. **Agent builder** keeps app-local `AgentCard` (identity form + capability profile) — domain form, not a second card language. |
 | `StudioShell`, `ComposerShell` | **Demoted (gallery / future shell)** | Catalog at `#/ui-primitives` and future shell work. Production chrome remains app `Sidebar` + workbench layout until a full shell migration. |
 | `PermissionEditorRow` | **Demoted (gallery)** | Gallery + future Agent permissions polish. Production `AgentPermissionEditor` owns the form model today. |
-| `ArtifactCard` / `DeliverableCard` / `Kanban*` / `ConversationLaneCard` / `RunTimeline` / wizard + wiki primitives | **Adopted where surfaces exist; otherwise gallery** | Prefer these before new app-local cards when wiring a surface. |
+| `StudioArtifactCard` / `DeliverableCard` / `Kanban*` / `ConversationLaneCard` / `RunTimeline` / wizard + wiki primitives | **Adopted where surfaces exist; otherwise gallery** | Prefer these before new app-local cards when wiring a surface. |
 
 When adding a new Studio-looking control, extend `@open-cowork/ui` first, then
 compose product state in `packages/app`. Do not ship a parallel ApprovalCard,
@@ -127,6 +127,12 @@ Diff chrome, or empty-state without a documented exception in this map.
 `packages/ui/src/index.ts` is the single import surface for the package: every
 primitive, surface, hook, and helper is re-exported there, so consumers import
 from `@open-cowork/ui` and never reach into deep paths. `PrimitiveGallery`
+marks each section with `data-gallery-maturity` of **production** (adopted in the
+shipping shell) or **experimental** (Studio/design fiction — not product chrome
+until an adopt decision). Contributors must not treat experimental gallery demos
+as shipped UX.
+
+`PrimitiveGallery`
 renders the catalog live at `#/ui-primitives` on both Desktop and Cloud Web.
 
 ## Component Catalog
