@@ -91,7 +91,6 @@ test('cloud core has enforceable domain module boundaries', () => {
     'quota-service.ts',
     'channel-service.ts',
     'workflow-service.ts',
-    'projection-service.ts',
     'managed-worker-service.ts',
     'session-command-service.ts',
     'usage-governance-service.ts',
@@ -99,6 +98,13 @@ test('cloud core has enforceable domain module boundaries', () => {
   for (const file of expectedServices) {
     assert.equal(existsSync(join(cloudRoot, 'services', file)), true, `${file} domain service is missing`)
   }
+
+  // JOE-880: pure re-export shell services/projection-service.ts removed; barrel still exposes CloudProjectionService.
+  const servicesIndex = readFileSync(join(cloudRoot, 'services', 'index.ts'), 'utf8')
+  assert.match(servicesIndex, /CloudSessionProjectionService as CloudProjectionService/)
+  assert.match(servicesIndex, /session-projection-service/)
+  assert.equal(existsSync(join(cloudRoot, 'services', 'projection-service.ts')), false)
+
 })
 
 test('cloud client exposes a thin public barrel and domain barrels', () => {

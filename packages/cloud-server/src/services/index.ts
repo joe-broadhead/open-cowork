@@ -18,8 +18,10 @@ export { CloudChannelService } from './channel-service.ts'
 export type { CloudChannelServiceDelegate } from './channel-service.ts'
 export { CloudWorkflowService } from './workflow-service.ts'
 export type { CloudWorkflowServiceDelegate } from './workflow-service.ts'
-export { CloudProjectionService } from './projection-service.ts'
-export type { AppendProjectedEventInput } from './projection-service.ts'
+export {
+  CloudSessionProjectionService as CloudProjectionService,
+} from '../session-projection-service.ts'
+export type { AppendProjectedEventInput } from '../session-projection-service.ts'
 export { CloudMemberService } from './member-service.ts'
 export type {
   CloudEmailMessage,
