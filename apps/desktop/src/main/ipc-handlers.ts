@@ -64,6 +64,7 @@ import {
   executeSemanticUiLocalAction,
 } from './semantic-ui-local-actions.ts'
 import { seedReplayedChildSessionLineage } from './event-task-state.ts'
+import { IpcSecurityError } from '@open-cowork/shared/ipc-security-errors'
 
 export { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
 
@@ -97,7 +98,10 @@ function assertTrustedIpcSender(event: IpcSenderEvent, channel: string, devServe
   const senderUrl = typeof senderFrame?.url === 'string' ? senderFrame.url : ''
   if (isTrustedIpcSenderUrl(senderUrl, devServerUrl)) return
   log('security', `Rejected IPC ${channel} from untrusted sender frame: ${senderUrl || 'unknown'}`)
-  throw new Error('Rejected IPC request from untrusted renderer frame.')
+  throw new IpcSecurityError({
+    code: 'UNTRUSTED_RENDERER_FRAME',
+    message: 'Rejected IPC request from untrusted renderer frame.',
+  })
 }
 
 export function setupIpcHandlers(

@@ -1,3 +1,4 @@
+import { IpcSecurityError } from '@open-cowork/shared/ipc-security-errors'
 import { realpathSync, statSync } from 'fs'
 import { resolve } from 'path'
 
@@ -32,7 +33,11 @@ export class ProjectDirectoryGrantRegistry {
     if (this.grantedDirectories.has(normalized) || this.lookupTrustSource(normalized) !== null) {
       return normalized
     }
-    throw new Error('Project directory must be selected with the native directory picker before use.')
+    throw new IpcSecurityError({
+      code: 'DIRECTORY_GRANT_REQUIRED',
+      message: 'Project directory must be selected with the native directory picker before use.',
+      recovery: 'Choose the folder again with the native picker to grant access.',
+    })
   }
 }
 
@@ -45,16 +50,28 @@ export function normalizeProjectDirectory(directory: string) {
     stat = statSync(resolved)
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      throw new Error('Project directory must exist before it can be granted. Create the folder, then re-select it with the native directory picker.')
+      throw new IpcSecurityError({
+      code: 'DIRECTORY_GRANT_MISSING_PATH',
+      message: 'Project directory must exist before it can be granted.',
+      recovery: 'Create the folder, then re-select it with the native directory picker.',
+    })
     }
     throw error
   }
   if (!stat.isDirectory()) {
-    throw new Error('Project path must be a directory.')
+    throw new IpcSecurityError({
+      code: 'DIRECTORY_GRANT_NOT_DIRECTORY',
+      message: 'Project path must be a directory.',
+      recovery: 'Select a folder, not a file.',
+    })
   }
   const realPath = realpathSync.native(resolved)
   if (!statSync(realPath).isDirectory()) {
-    throw new Error('Project path must be a directory.')
+    throw new IpcSecurityError({
+      code: 'DIRECTORY_GRANT_NOT_DIRECTORY',
+      message: 'Project path must be a directory.',
+      recovery: 'Select a folder, not a file.',
+    })
   }
   return realPath
 }
