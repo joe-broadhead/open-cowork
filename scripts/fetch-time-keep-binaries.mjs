@@ -124,7 +124,9 @@ async function fetchPlatform(key) {
     throw new Error(`Checksum mismatch for ${tarName}: expected ${expected}, got ${actual}`)
   }
 
-  execFileSync('tar', ['-xzf', tarPath, '-C', tmpDir], { stdio: 'pipe' })
+  // Use relative paths: Windows tar treats `D:\…` as a remote host (`D:`),
+  // which breaks extraction with "Cannot connect to D: resolve failed".
+  execFileSync('tar', ['-xzf', tarName], { cwd: tmpDir, stdio: 'pipe' })
 
   const found = findBinary(tmpDir, spec.binaryName)
   if (!found) {
