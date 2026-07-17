@@ -38,10 +38,34 @@ Electron test runner, pass `OPEN_COWORK_SCREENSHOT_EXECUTABLE`:
 OPEN_COWORK_SCREENSHOT_EXECUTABLE="apps/desktop/release/mac-arm64/Open Cowork.app" pnpm screenshots
 ```
 
+## Bitrot prevention (cadence)
+
+The `auto/` set is **build output**. Filenames may still use legacy harness
+ids (`agents`, `workflows-*`, `capabilities-*`) even when product copy says
+Team / Playbooks / Tools & Skills — regenerate rather than hand-editing PNGs.
+
+| Trigger | Action |
+| --- | --- |
+| **Major UI language change** (nav labels, page titles, empty-state copy) | Run `pnpm screenshots` and commit the refreshed PNGs in the same PR as the product change, or immediately after |
+| **Studio surface add/remove/default-on change** | Extend or prune harness captures in `apps/desktop/tests/screenshots.ts`, then regenerate; drop PNGs that no page embeds and no release note needs |
+| **Design-token / chrome refresh** | Regenerate the full auto set so docs do not ship mixed visual eras |
+| **Release cut that advertises UI** | Confirm screenshots still match default nav (Home, Projects, Knowledge, Approvals, Team, Playbooks, Channels, Tools & Skills, Artifacts, Settings) before tagging |
+| **Routine maintenance** | At least once per minor release series that touches renderer chrome; otherwise leave untouched |
+
+Do **not** leave stale product language visible in docs screenshots after a
+rename ships. Prefer regenerating over cropping or caption disclaimers.
+
+When a capture is unused by `docs/*.md` and `README.md` and is not required for
+release-note review, prune it from `auto/` and remove the harness step so the
+set stays intentional rather than accumulating dead PNGs.
+
 ## What the auto set covers
 
-Top-level pages: `home`, `agents`, `capabilities-tools`,
-`capabilities-skills`, `workflows-overview`, `chat-thread`.
+Harness output names (product surface in parentheses):
+
+Top-level pages: `home` (Home), `agents` (Team), `capabilities-tools` /
+`capabilities-skills` (Tools & Skills), `workflows-overview` (Playbooks),
+`chat-thread` (Chat).
 
 Sub-views: `agents-template-picker`, `agents-builder`,
 `agents-builder-detail`, `capabilities-tool-detail`,
@@ -49,32 +73,37 @@ Sub-views: `agents-template-picker`, `agents-builder`,
 `sidebar-search`, `workflows-template`, `workflows-detail`.
 
 Settings tabs: `settings-appearance`, `settings-models`,
-`settings-permissions`, `settings-workflows`, `settings-storage`.
+`settings-permissions`, `settings-workflows` (Playbook preferences),
+`settings-storage`.
+
+Secondary Studio surfaces (Knowledge, Approvals, Channels, Artifacts) are not
+yet in the auto harness; add captures when those pages become release-facing
+in docs, then update this inventory.
 
 ## Auto screenshot inventory
 
-| Surface | Screenshot |
+| Product surface | Screenshot |
 | --- | --- |
 | Home | [`auto/home.png`](auto/home.png) |
-| Chat thread | [`auto/chat-thread.png`](auto/chat-thread.png) |
+| Chat | [`auto/chat-thread.png`](auto/chat-thread.png) |
 | Chat mention picker | [`auto/chat-mention-picker.png`](auto/chat-mention-picker.png) |
 | Sidebar search | [`auto/sidebar-search.png`](auto/sidebar-search.png) |
-| Agents overview | [`auto/agents.png`](auto/agents.png) |
-| Agents template picker | [`auto/agents-template-picker.png`](auto/agents-template-picker.png) |
-| Agent builder | [`auto/agents-builder.png`](auto/agents-builder.png) |
-| Agent builder detail | [`auto/agents-builder-detail.png`](auto/agents-builder-detail.png) |
-| Tools overview | [`auto/capabilities-tools.png`](auto/capabilities-tools.png) |
-| Skills overview | [`auto/capabilities-skills.png`](auto/capabilities-skills.png) |
+| Team | [`auto/agents.png`](auto/agents.png) |
+| Team template picker | [`auto/agents-template-picker.png`](auto/agents-template-picker.png) |
+| Team builder | [`auto/agents-builder.png`](auto/agents-builder.png) |
+| Team builder detail | [`auto/agents-builder-detail.png`](auto/agents-builder-detail.png) |
+| Tools & Skills (tools) | [`auto/capabilities-tools.png`](auto/capabilities-tools.png) |
+| Tools & Skills (skills) | [`auto/capabilities-skills.png`](auto/capabilities-skills.png) |
 | Tool detail | [`auto/capabilities-tool-detail.png`](auto/capabilities-tool-detail.png) |
 | Add tool | [`auto/capabilities-add-tool.png`](auto/capabilities-add-tool.png) |
 | Add skill | [`auto/capabilities-add-skill.png`](auto/capabilities-add-skill.png) |
-| Workflows overview | [`auto/workflows-overview.png`](auto/workflows-overview.png) |
-| Workflow template | [`auto/workflows-template.png`](auto/workflows-template.png) |
-| Workflow detail | [`auto/workflows-detail.png`](auto/workflows-detail.png) |
+| Playbooks | [`auto/workflows-overview.png`](auto/workflows-overview.png) |
+| Playbook template | [`auto/workflows-template.png`](auto/workflows-template.png) |
+| Playbook detail | [`auto/workflows-detail.png`](auto/workflows-detail.png) |
 | Settings appearance | [`auto/settings-appearance.png`](auto/settings-appearance.png) |
 | Settings models | [`auto/settings-models.png`](auto/settings-models.png) |
 | Settings permissions | [`auto/settings-permissions.png`](auto/settings-permissions.png) |
-| Settings workflows | [`auto/settings-workflows.png`](auto/settings-workflows.png) |
+| Settings playbooks | [`auto/settings-workflows.png`](auto/settings-workflows.png) |
 | Settings storage | [`auto/settings-storage.png`](auto/settings-storage.png) |
 
 ## Capture guidelines for manual assets

@@ -66,9 +66,10 @@ and linked from the release Go/No-Go report.
 - [ ] [Packaging and Gateway Product Modes](packaging-and-product-modes.md) matches
       the current Desktop, Cloud, Gateway, Standalone Gateway, image, package,
       and compatibility-alias behavior
-- [ ] if a primary UI route changed, `pnpm screenshots` has regenerated
-      `docs/assets/auto/` and the changed screenshots were reviewed before
-      release
+- [ ] if a primary UI route or product-language change shipped, `pnpm screenshots`
+      has regenerated `docs/assets/auto/` and the changed screenshots were
+      reviewed before release (cadence and inventory:
+      [docs/assets/README.md](assets/README.md))
 - [ ] `docs/architecture.md` OpenCode SDK policy points to `apps/desktop/package.json` and `pnpm-lock.yaml`
 - [ ] `SECURITY.md` and `SUPPORT.md` are current
 - [ ] `pnpm audit:prod` and `pnpm audit:full` output has been reviewed if CI stayed green only because of an explicit audit exception
