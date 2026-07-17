@@ -3,7 +3,7 @@ import type { PendingApproval } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import {
-  ApprovalCard as StudioApprovalCard,
+  StudioApprovalCard,
   Badge,
   Button,
   Icon,
@@ -95,7 +95,7 @@ function RunawayWarning({
 /**
  * Chat/thread approval card. Product logic (permission model, runaway
  * detection, IPC respond) lives here; the visual shell is the shared Studio
- * `ApprovalCard` from `@open-cowork/ui` so Approvals queue and chat share one base.
+ * `StudioApprovalCard` from `@open-cowork/ui` so Approvals queue and chat share one Studio shell; the chat domain export remains `ApprovalCard`.
  */
 export function ApprovalCard({
   approval,
