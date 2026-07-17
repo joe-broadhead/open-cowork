@@ -132,7 +132,7 @@ interface Props {
   compact?: boolean
 }
 
-function ArtifactCard({
+function ToolArtifactCard({
   artifact,
   attaching,
   exporting,
@@ -284,7 +284,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
       {/* Charts always visible regardless of expand state */}
       {currentSessionId && artifacts.map((artifact) => (
-        <ArtifactCard
+        <ToolArtifactCard
           key={`artifact-${artifact.id}`}
           artifact={artifact}
           attaching={attachingArtifactId === artifact.id}
