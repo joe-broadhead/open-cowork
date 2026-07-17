@@ -113,6 +113,9 @@ Remove an allowlist entry as soon as the pinned SDK exposes a working native V2
 equivalent. Do not emulate these OpenCode-owned behaviors in Open Cowork.
 
 **Status on OpenCode 1.18.1 (verified):** no allowlist row is burnable yet.
+**JOE-845 decision:** full classic-allowlist burn-down is **Won't Do** on this
+pin — do not invent V2 APIs. Track residuals and reopen on every OpenCode bump
+via [opencode-classic-sdk-burndown.md](opencode-classic-sdk-burndown.md).
 
 | Gap | Why it stays classic |
 |-----|----------------------|
@@ -125,7 +128,8 @@ equivalent. Do not emulate these OpenCode-owned behaviors in Open Cowork.
 
 Burn-down is gated on an OpenCode SDK/runtime bump that proves each method,
 then removes the exact allowlist entry in `tests/opencode-sdk-boundary.test.ts`
-and switches the call site to `client.v2.*`.
+and switches the call site to `client.v2.*`. See the residual registry and bump
+checklist in [opencode-classic-sdk-burndown.md](opencode-classic-sdk-burndown.md).
 
 ## Shared Event Contract
 
