@@ -81,19 +81,19 @@ export function DiffViewer({ sessionId, messageId, onClose, embedded = false }: 
     </div>
   )
 
+  // Both embedded (ThreadList shell) and modal paths share DiffView as the
+  // single visual chrome family. DiffViewer owns session/message IPC + row
+  // expansion; DiffView owns the review shell (header, file list hooks, a11y).
   if (embedded) {
     return (
-      <section
+      <DiffView
+        title={title}
+        subtitle={subtitle || undefined}
         className="desktop-diff-view flex min-h-0 flex-col"
-        aria-label={title}
-        data-diff-view="true"
+        actions={<ViewModeToggle mode={viewMode} onChange={setViewMode} />}
       >
-        <div className="flex min-h-8 items-center justify-end gap-3 border-b border-border-subtle pb-3">
-          {subtitle ? <span className="me-auto text-xs text-text-muted">{subtitle}</span> : null}
-          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
-        </div>
         {fileContent}
-      </section>
+      </DiffView>
     )
   }
 
