@@ -264,9 +264,10 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (typeof settings.webSearchEnabled === 'boolean') update.webSearchEnabled = settings.webSearchEnabled && appPermissions.webSearch
   const taskPermission = normalizeRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
   if (taskPermission) update.taskPermission = taskPermission
-  const externalDirectoryPermission = normalizeRuntimePermissionPolicy(settings.externalDirectoryPermission, 'ask')
+  // Ceiling is allow so users can opt into no-prompt; defaults stay ask (JOE-831).
+  const externalDirectoryPermission = normalizeRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
   if (externalDirectoryPermission) update.externalDirectoryPermission = externalDirectoryPermission
-  const mcpPermission = normalizeRuntimePermissionPolicy(settings.mcpPermission, 'ask')
+  const mcpPermission = normalizeRuntimePermissionPolicy(settings.mcpPermission, 'allow')
   if (mcpPermission) update.mcpPermission = mcpPermission
   if (typeof settings.requireApprovalBeforeSending === 'boolean') update.requireApprovalBeforeSending = settings.requireApprovalBeforeSending
   if (typeof settings.notificationVoiceReplies === 'boolean') update.notificationVoiceReplies = settings.notificationVoiceReplies
@@ -299,8 +300,8 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
   const fileWritePermission = normalizeRuntimePermissionPolicy(raw?.fileWritePermission, appPermissions.fileWrite) || defaults.fileWritePermission
   const webPermission = normalizeRuntimePermissionPolicy(raw?.webPermission, appPermissions.web) || defaults.webPermission
   const taskPermission = normalizeRuntimePermissionPolicy(raw?.taskPermission, appPermissions.task) || defaults.taskPermission
-  const externalDirectoryPermission = normalizeRuntimePermissionPolicy(raw?.externalDirectoryPermission, 'ask') || defaults.externalDirectoryPermission
-  const mcpPermission = normalizeRuntimePermissionPolicy(raw?.mcpPermission, 'ask') || defaults.mcpPermission
+  const externalDirectoryPermission = normalizeRuntimePermissionPolicy(raw?.externalDirectoryPermission, 'allow') || defaults.externalDirectoryPermission
+  const mcpPermission = normalizeRuntimePermissionPolicy(raw?.mcpPermission, 'allow') || defaults.mcpPermission
   const next: AppSettings = {
     ...defaults,
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -620,8 +621,10 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
   const fileWritePermission = clampRuntimePermissionPolicy(settings.fileWritePermission, appPermissions.fileWrite)
   const webPermission = clampRuntimePermissionPolicy(settings.webPermission, appPermissions.web)
   const taskPermission = clampRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
-  const externalDirectoryPermission = clampRuntimePermissionPolicy(settings.externalDirectoryPermission, 'ask')
-  const mcpPermission = clampRuntimePermissionPolicy(settings.mcpPermission, 'ask')
+  // Ceiling is allow (product max); defaults for missing keys remain ask (JOE-831).
+  // Clamping to 'ask' would incorrectly prevent users from opting into allow.
+  const externalDirectoryPermission = clampRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
+  const mcpPermission = clampRuntimePermissionPolicy(settings.mcpPermission, 'allow')
 
   return {
     ...settings,

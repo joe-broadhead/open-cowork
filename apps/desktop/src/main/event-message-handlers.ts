@@ -976,3 +976,11 @@ export function handleMessagePartUpdatedEvent(
     || handleUpdatedCompactionPart(ctx)
     || handleUpdatedToolPart(ctx)
 }
+
+// Re-export native V2 handlers for callers/tests that import from this module (JOE-884).
+export {
+  handleNativeStepEndedEvent,
+  handleNativeTextDeltaEvent,
+  handleNativeTextEndedEvent,
+  handleNativeToolEvent,
+} from './event-message-native-handlers.ts'
