@@ -21,6 +21,7 @@ import {
 // cross-connection NOTIFY delivery (in-memory/PGlite do not model it); that is exercised
 // only by the real-Postgres CI path (OPEN_COWORK_TEST_POSTGRES_URL).
 
+// Prefer waitFor predicates (JOE-882). Keep tiny delays only as scheduler yields.
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function waitFor(predicate: () => boolean, label: string) {
@@ -112,7 +113,7 @@ test('hub wake() triggers an immediate *ForStream read for the matching topic', 
     // A non-matching wake key is a harmless no-op.
     const after = loadCalls.length
     hub.wake(sessionSseWakeKey('tenant', 'other'))
-    await delay(20)
+    await delay(0)
     assert.equal(loadCalls.length, after)
   } finally {
     unsubscribe()
@@ -156,7 +157,7 @@ test('hub wake() no longer fires once the last subscriber for a wake key unsubsc
   unsubscribe()
   const before = loadCalls.length
   hub.wake(wakeKey) // index entry must be gone — no read
-  await delay(20)
+  await delay(0)
   assert.equal(loadCalls.length, before)
   hub.close()
 })
@@ -257,6 +258,6 @@ test('listener stops reconnecting after close()', async () => {
   await listener.close()
   // A late drop after close must not schedule another reconnect.
   clients[0]!.emit('error', new Error('late drop'))
-  await delay(30)
+  await delay(0)
   assert.equal(clients.length, 1)
 })
