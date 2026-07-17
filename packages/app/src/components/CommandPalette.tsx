@@ -109,7 +109,7 @@ export function CommandPalette({
           return true
         } catch {
           setSessionPrimaryAgent(sessionId, previousAgent)
-          useSessionStore.getState().addGlobalError('Could not switch agent mode. Please try again.')
+          useSessionStore.getState().addGlobalError('Could not switch agent mode. Check runtime health, then try again from the mode menu.')
           return false
         }
       },
