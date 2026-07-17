@@ -297,6 +297,8 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   // wired into the feed effect deps below to re-run the same fetch on demand.
   const [launchpadRefreshNonce, setLaunchpadRefreshNonce] = useState(0)
   const launchpadRequestIdRef = useRef(0)
+  // JOE-855: honor Settings → Smart suggestions (hide launchpad ideas when off).
+  const [smartSuggestions, setSmartSuggestions] = useState(true)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = useMemo(
@@ -320,6 +322,16 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   }, [specialistAgents])
 
   const firstRun = sessions.filter((session) => (session.kind || 'interactive') === 'interactive').length === 0
+  useEffect(() => {
+    let cancelled = false
+    void window.coworkApi.settings.get().then((settings) => {
+      if (cancelled) return
+      setSmartSuggestions(settings.notificationSmartSuggestions !== false)
+    }).catch(() => {
+      if (!cancelled) setSmartSuggestions(true)
+    })
+    return () => { cancelled = true }
+  }, [])
   const sessionFeedKey = useMemo(
     () => sessions
       .map((session) => `${session.id}:${session.updatedAt}:${session.title || ''}:${session.kind || 'interactive'}`)
@@ -535,9 +547,11 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
 
         {firstRun && !coachmarkDismissed && <HomeCoachmark onDismiss={handleDismissCoachmark} />}
 
-        <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
+        {smartSuggestions ? (
+          <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
+        ) : null}
 
-        {launchpadInitialized ? (
+        {smartSuggestions && launchpadInitialized ? (
           <Suspense fallback={<div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status">{t('home.motion.loading', 'Loading')}</div>}>
             <LaunchpadMotionGrid
               feed={launchpadFeed}
@@ -549,11 +563,11 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
               onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
             />
           </Suspense>
-        ) : (
+        ) : smartSuggestions ? (
           <div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status" aria-live="polite">
             {t('home.motion.loading', 'Loading')}
           </div>
-        )}
+        ) : null}
 
         <TeamStrip
           agents={suggestedAgents}
