@@ -125,7 +125,35 @@ Chat subscribes to `session:patch` / `sessionUpdated` /
 flushed on an animation frame at a minimum `STREAM_FLUSH_INTERVAL_MS`
 (~32ms) interval, while certain patches commit immediately. Bursts (a
 single assistant turn fires many patches) coalesce into frame-aligned
-refreshes rather than an 800ms debounce.
+refreshes rather than an 800ms debounce. Pending patches are capped at
+`MAX_PENDING_SESSION_PATCHES_PER_WINDOW` (512) before falling back to a
+full view catch-up.
+
+## Hot-path Map/Set bounds (desktop + runtime-host)
+
+Long-lived process caches must share the same bound pattern as warm
+session details (12), patch flush (512), worker lease LRU, and
+coordination watch list (1000): size and/or TTL caps with FIFO/LRU
+eviction and tests.
+
+| Cache | Cap | Eviction |
+| --- | --- | --- |
+| Warm session details | 12 (+ active/busy) | LRU prune on activate |
+| Pending session patches / window | 512 | Drop + view catch-up |
+| History refresh queue | 256 | Drop oldest queued id |
+| Permission routing map | 1000 | FIFO |
+| Capability tool method cache | 500 + 30s TTL | FIFO + TTL |
+| Runtime tool cache | 64 + 30s TTL | FIFO + TTL |
+| Runtime catalog snapshot | 64 + 30s TTL | FIFO + TTL |
+| Directory-scoped OpenCode clients | 64 | LRU |
+| Durable event hubs (directories) | 64 | FIFO on attach |
+| Durable sessions / directory hub | 256 | approx LRU |
+| Approved skill-import picker tokens | 64 | FIFO |
+| Worker lease cache (cloud) | 4096 default | LRU |
+| Coordination watch list queries | ≤1000 | SQL `LIMIT` |
+
+`packages/runtime-host/src/bounded-map.ts` provides the shared
+`setBoundedMapEntry` / `enforceMapMaxSize` helpers for new maps.
 
 ## Cloud API query guardrails
 

@@ -11,6 +11,8 @@ import {
 import {
   __testShouldSuppress,
   __testTrackSession,
+  isSessionDurablyTracked,
+  MAX_DURABLE_SESSIONS_PER_DIRECTORY,
   resetDurableSessionHubsForTests,
 } from '../apps/desktop/src/main/durable-session-events.ts'
 
@@ -88,6 +90,24 @@ test('desktop durable hub suppresses global transcript once a session is admitte
     assert.equal(__testShouldSuppress(null, 'ses_1', 'message.part.updated'), true)
     assert.equal(__testShouldSuppress(null, 'ses_1', 'permission.v2.asked'), false)
     assert.equal(__testShouldSuppress(null, 'ses_other', 'session.next.text.delta'), false)
+  } finally {
+    resetDurableSessionHubsForTests()
+  }
+})
+
+test('durable hub evicts oldest sessions under the per-directory cap (JOE-839)', () => {
+  resetDurableSessionHubsForTests()
+  try {
+    for (let index = 0; index < MAX_DURABLE_SESSIONS_PER_DIRECTORY + 5; index += 1) {
+      __testTrackSession(null, `ses_cap_${index}`, index + 1)
+    }
+    // Oldest sessions are gone; newest remain tracked.
+    assert.equal(isSessionDurablyTracked(null, 'ses_cap_0'), false)
+    assert.equal(isSessionDurablyTracked(null, 'ses_cap_4'), false)
+    assert.equal(
+      isSessionDurablyTracked(null, `ses_cap_${MAX_DURABLE_SESSIONS_PER_DIRECTORY + 4}`),
+      true,
+    )
   } finally {
     resetDurableSessionHubsForTests()
   }
