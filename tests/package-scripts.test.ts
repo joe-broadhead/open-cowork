@@ -78,9 +78,12 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'node scripts/ensure-electron-binary.mjs',
   ])
 
+  // Package tests rebuild shared deps (e.g. gateway-provider-webhook) in each
+  // package script; serialize them like build:packages to avoid concurrent
+  // dist write races that surface as missing named exports under CI load.
   assert.deepEqual(splitScriptSteps(requireScript('test')), [
     'pnpm test:prepare',
-    'pnpm --filter=./packages/* test',
+    'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
@@ -89,7 +92,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
 
   assert.deepEqual(splitScriptSteps(requireScript('test:coverage:node')), [
     'pnpm test:prepare',
-    'pnpm --filter=./packages/* test',
+    'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
