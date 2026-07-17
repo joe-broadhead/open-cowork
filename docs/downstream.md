@@ -514,7 +514,13 @@ Two things happen when this is set:
    inline English default when no translation exists. Partial
    catalogs are fine; untranslated keys stay in English.
 
-### Launch posture: English-first, honestly partial elsewhere
+### Launch posture: English-first, non-English is experimental
+
+**Maturity (JOE-860):** Localization outside English is **experimental /
+partial**, not a marketed multilingual product. Do not advertise Open Cowork
+as fully localized in non-English languages until coverage is raised for
+priority locales. The language picker and Settings copy surface the honest
+partial-coverage figure; English fallbacks are intentional.
 
 The public build is **English-first**. The built-in non-English
 catalogs (ar, de, es, fr, hi, it, ja, ko, pt, ru, zh) currently
