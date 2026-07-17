@@ -322,6 +322,10 @@
       "types": "./dist/session-engine-helpers.d.ts",
       "import": "./dist/session-engine-helpers.js"
     },
+    "./question-normalization": {
+      "types": "./dist/question-normalization.d.ts",
+      "import": "./dist/question-normalization.js"
+    },
     "./session-event-dispatcher": {
       "types": "./dist/session-event-dispatcher.d.ts",
       "import": "./dist/session-event-dispatcher.js"

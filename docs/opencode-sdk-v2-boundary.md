@@ -67,8 +67,10 @@ still touch SDK event/types at the desktop edge.
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
 - `apps/desktop/src/main/ipc/provider-handlers.ts`
-- `apps/desktop/src/main/question-normalization.ts`
 - `apps/desktop/src/main/runtime-mcp-status-polling.ts`
+
+Desktop residual seams and removal plan: [desktop-composition-shell.md](desktop-composition-shell.md) (JOE-842).
+`question-normalization` moved to `@open-cowork/runtime-host` (no SDK import).
 - `apps/standalone-gateway/src/opencode.ts`
 - `packages/runtime-host/src/agent-config.ts`
 - `packages/runtime-host/src/agent-prompts.ts`
