@@ -30,7 +30,7 @@ function writeSkillBundle(root: string, name: string, description: string) {
   )
 }
 
-test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', () => {
+test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', async () => {
   const tempRoot = testTempDir('open-cowork-runtime-config-')
   const configDir = join(tempRoot, 'downstream')
   const projectRoot = join(tempRoot, 'project')
@@ -92,6 +92,8 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     selectedModelId: 'fast',
     bashPermission: 'allow',
     fileWritePermission: 'deny',
+    // Explicit allow so per-MCP allow modes are not clamped by the JOE-831 ask default.
+    mcpPermission: 'allow',
   })
 
   saveCustomMcp({
@@ -99,26 +101,28 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     directory: projectRoot,
     name: 'warehouse',
     type: 'http',
-    url: 'https://warehouse.example.test/mcp',
+    // Literal public IPs avoid DNS (JOE-837 runtime resolve) in unit tests.
+    url: 'http://8.8.8.8/mcp',
   })
   saveCustomMcp({
     scope: 'project',
     directory: projectRoot,
     name: 'analytics',
     type: 'http',
-    url: 'https://analytics.example.test/mcp',
+    url: 'http://1.1.1.1/mcp',
     permissionMode: 'allow',
   })
 
   try {
-    const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    // JOE-837: HTTP MCP registration requires the DNS-aware runtime builder.
+    const runtimeConfig = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
 
     assert.equal(runtimeConfig.model, 'test-provider/fast')
     assert.equal(runtimeConfig.small_model, 'test-provider/small')
     assert.deepEqual(runtimeConfig.enabled_providers, ['test-provider'])
     assert.equal(runtimeConfig.provider['test-provider'].options.baseUrl, 'https://runtime.example.test')
-    assert.equal(runtimeConfig.mcp.warehouse.url, 'https://warehouse.example.test/mcp')
-    assert.equal(runtimeConfig.mcp.analytics.url, 'https://analytics.example.test/mcp')
+    assert.equal(runtimeConfig.mcp.warehouse.url, 'http://8.8.8.8/mcp')
+    assert.equal(runtimeConfig.mcp.analytics.url, 'http://1.1.1.1/mcp')
     assert.equal(runtimeConfig.permission['mcp__warehouse__*'], 'ask')
     assert.equal(runtimeConfig.permission['mcp__analytics__*'], 'allow')
     assert.equal(runtimeConfig.agent.build.permission['mcp__warehouse__*'], 'ask')
@@ -127,7 +131,7 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     assert.equal(runtimeConfig.permission.write, 'deny')
 
     saveSettings({ mcpPermission: 'ask' })
-    const askMcpConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    const askMcpConfig = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
     assert.equal(askMcpConfig.permission['mcp__analytics__*'], 'ask')
     assert.equal(askMcpConfig.permission['mcp__warehouse__*'], 'ask')
     assert.equal(askMcpConfig.permission['mcp__clock__*'], 'ask')
@@ -135,7 +139,7 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     assert.equal(askMcpConfig.agent.build.permission['mcp__analytics__*'], 'ask')
 
     saveSettings({ mcpPermission: 'deny' })
-    const denyMcpConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    const denyMcpConfig = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
     assert.equal(denyMcpConfig.mcp.analytics, undefined)
     assert.equal(denyMcpConfig.mcp.warehouse, undefined)
     assert.equal(denyMcpConfig.permission['mcp__analytics__*'], 'deny')
@@ -162,7 +166,7 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
   }
 })
 
-test('buildRuntimeConfig applies the org managed policy: tightens permissions and disables extension classes', () => {
+test('buildRuntimeConfig applies the org managed policy: tightens permissions and disables extension classes', async () => {
   const tempRoot = testTempDir('open-cowork-runtime-policy-')
   const configDir = join(tempRoot, 'downstream')
   const downstreamRoot = join(tempRoot, 'downstream-root')
@@ -188,7 +192,7 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
   process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
   clearConfigCaches()
   saveSettings({ selectedProviderId: 'openrouter', selectedModelId: 'auto', bashPermission: 'allow' })
-  saveCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse', type: 'http', url: 'https://warehouse.example.test/mcp' })
+  saveCustomMcp({ scope: 'project', directory: projectRoot, name: 'warehouse', type: 'http', url: 'http://8.8.8.8/mcp' })
   saveCustomSkill({
     scope: 'project',
     directory: projectRoot,
@@ -202,9 +206,9 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
     copySkillsAndAgents(projectRoot)
-    const baseline = buildRuntimeConfig(projectRoot) as Record<string, any>
+    const baseline = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
     assert.equal(baseline.permission.bash, 'allow')
-    assert.equal(baseline.mcp.warehouse?.url, 'https://warehouse.example.test/mcp')
+    assert.equal(baseline.mcp.warehouse?.url, 'http://8.8.8.8/mcp')
     assert.equal(baseline.skills.customSkills, undefined)
     assert.equal(baseline.permission.skill['managed-skill'], 'allow')
     assert.equal(baseline.permission.skill['custom-review'], 'allow')
@@ -221,7 +225,7 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
     }
     setActiveManagedPolicy(policy)
     copySkillsAndAgents(projectRoot)
-    const governed = buildRuntimeConfig(projectRoot) as Record<string, any>
+    const governed = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
     assert.equal(governed.permission.bash, 'deny')
     // The custom MCP is dropped entirely by the extension-class gate.
     assert.equal(governed.mcp.warehouse, undefined)
@@ -583,6 +587,14 @@ test('custom agent permission overrides preserve nested guardrails and exact leg
         customAgents: [],
       },
     })
+    saveSettings({
+      mcpPermission: 'allow',
+      externalDirectoryPermission: 'allow',
+      bashPermission: 'allow',
+      fileWritePermission: 'allow',
+      webPermission: 'allow',
+      webSearchEnabled: true,
+    })
     const permission = buildCustomAgentPermissionFromCatalog({
       scope: 'machine',
       directory: null,
@@ -687,16 +699,20 @@ test('built-in all-skill permission is bounded by the managed runtime skill cata
 
 test('buildRuntimeConfig gives the charts agent explicit access to the managed chart skill directory', () => {
   const projectRoot = join(process.cwd(), '.open-cowork-test', 'open-cowork-charts-project')
-  const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
-
-  assert.equal(
-    runtimeConfig.agent?.charts?.permission?.external_directory?.[`${projectRoot}/.opencowork/skill-bundles/*`],
-    'allow',
-  )
-  assert.equal(
-    runtimeConfig.agent?.charts?.permission?.external_directory?.['*'],
-    'deny',
-  )
+  const original = loadSettings()
+  try {
+    saveSettings({ ...original, externalDirectoryPermission: 'allow' })
+    clearConfigCaches()
+    const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    const chartExternal = runtimeConfig.agent?.charts?.permission?.external_directory
+    const skillPath = Object.keys(chartExternal || {}).find((key) => key.includes('skill-bundles'))
+    assert.ok(skillPath, `expected charts skill-bundles path, got ${JSON.stringify(chartExternal)}`)
+    assert.equal(chartExternal[skillPath], 'allow')
+    assert.equal(chartExternal['*'], 'deny')
+  } finally {
+    saveSettings(original)
+    clearConfigCaches()
+  }
 })
 
 test('buildRuntimeConfig delegates to custom agents whose app-owned skills need frontmatter healing', () => {

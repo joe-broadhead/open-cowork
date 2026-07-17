@@ -45,7 +45,8 @@ test('agent tool actions preview and save through the shared custom-agent store 
     assert.equal(preview.agent.name, 'weekly-analyst')
     assert.equal(preview.permission?.skill && typeof preview.permission.skill === 'object', true)
     assert.equal((preview.permission?.skill as Record<string, string>)['agent-creator'], 'allow')
-    assert.equal(preview.permission?.['mcp__agents__preview_agent'], 'allow')
+    // JOE-831: MCP permissions default to ask for least privilege.
+    assert.equal(preview.permission?.['mcp__agents__preview_agent'], 'ask')
     assert.equal(preview.permission?.['mcp__agents__save_agent'], 'ask')
 
     const saved = await saveAgentFromTool(draft)

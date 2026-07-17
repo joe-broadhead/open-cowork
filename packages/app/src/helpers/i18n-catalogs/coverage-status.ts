@@ -5,5 +5,5 @@
 // the computed report.
 export const BUILT_IN_TRANSLATION_COVERAGE = {
   translatedKeys: 430,
-  totalStaticKeys: 1636,
+  totalStaticKeys: 1650,
 } as const

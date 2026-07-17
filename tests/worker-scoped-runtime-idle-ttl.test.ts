@@ -18,7 +18,13 @@ import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-ad
 import { createWorkerScopedRuntimeAdapter } from '@open-cowork/cloud-server/worker-scoped-runtime-adapter'
 
 function seededStore() {
-  return new InMemoryControlPlaneStore()
+  const store = new InMemoryControlPlaneStore()
+  // JOE-866 tests: BYOK secret listing requires an org row for the tenant.
+  store.ensureOrgForTenant({
+    tenantId: 'tenant-a',
+    name: 'Tenant A',
+  })
+  return store
 }
 
 test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
@@ -39,6 +45,8 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
     maxRuntimeEntries: 10,
     runtimeIdleTtlMs: 50,
     runtimeFactory(input) {
+      // No subscribeEvents: synchronous fake adapters own execution for the
+      // prompt call and clear executionActive when it returns (idle-TTL reaps).
       return {
         async createSession() {
           return {
@@ -50,9 +58,6 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
         },
         async promptSession() {},
         async abortSession() {},
-        subscribeEvents() {
-          return () => {}
-        },
         async close() {
           closed.push(input.execution.sessionId)
         },
@@ -70,9 +75,10 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
     assert.deepEqual(closed, [])
 
     // Prefer polling over a fixed multi-second sleep (JOE-882 flake guidance).
-    const deadline = Date.now() + 3_000
+    // Sweep interval is max(1000, ttl/2) so wait past at least one tick.
+    const deadline = Date.now() + 4_000
     while (!closed.includes('session-idle') && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 25))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
 
     assert.ok(

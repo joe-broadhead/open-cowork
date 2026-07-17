@@ -40,6 +40,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'directory-grants.ts',
   'durable-session-events.ts',
   'event-message-handlers.ts',
+  'event-message-native-handlers.ts',
   'event-runtime-handlers.ts',
   'event-subscriptions.ts',
   'event-task-run-dispatch.ts',
