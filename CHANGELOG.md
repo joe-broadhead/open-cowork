@@ -17,6 +17,28 @@ planned before broad distribution.
 
 ## [Unreleased]
 
+### Fixed
+
+- OpenRouter managed V2 serve: compose `@ai-sdk/openai-compatible` with the
+  stored API key (models.dev's `@openrouter/ai-sdk-provider` package is not
+  loadable in `opencode serve`); align connection-test auth with boot.
+- Transcript double-render: scope OpenCode V2 part ids by message id so reused
+  ids like `text-0` cannot overwrite earlier assistant bubbles.
+- macOS packaging integrity: rewrite runtime component hashes after codesign
+  (`afterSign`) so ad-hoc signatures do not fail component verification.
+- Permission prompts: dedupe dual directory-SSE delivery of the same
+  `permission.v2.asked` request id.
+- Skill catalog boot noise when `v2.skill.list` is empty early (skills.paths
+  remains authoritative).
+
+### Changed
+
+- Dropped seeding of `@openrouter/ai-sdk-provider` into temp config dirs;
+  OpenRouter uses composed openai-compatible config only.
+- Wired delegated permission-inheritance checks into agent composition (log
+  soft warnings instead of silent policy theater).
+- Prefer MCP clock/time-keep tools over shell CLIs in skill docs.
+
 ### Added
 
 - Workflow Designer setup threads and the bundled `workflows` MCP for creating
@@ -36,7 +58,7 @@ planned before broad distribution.
 
 ### Changed
 
-- Upgraded the bundled OpenCode SDK and embedded runtime to `1.17.20`.
+- Upgraded the bundled OpenCode SDK and embedded runtime to `1.18.1`.
 - Updated CI/development to Node `22.23.1` and production container images to
   the Node `24.18.0` LTS line; Docker dependency automation now requires
   deliberate review before crossing Node major versions.

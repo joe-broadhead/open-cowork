@@ -42,9 +42,7 @@
         "src/**/*.{ts,tsx}",
         "tests/**/*.{ts,tsx}"
       ],
-      "ignore": [
-        "src/main/permission-inheritance.ts"
-      ],
+      "ignore": [],
       "ignoreBinaries": [
         "electron"
       ],

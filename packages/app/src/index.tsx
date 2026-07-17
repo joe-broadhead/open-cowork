@@ -54,12 +54,26 @@ function renderStartupError(error: unknown) {
   body.append(shell)
 }
 
+function isBenignStartupRejection(error: unknown) {
+  // View Transition API rejects with AbortError when a later navigation
+  // supersedes an in-flight transition. That is not a bootstrap failure.
+  if (!error || typeof error !== 'object') return false
+  const record = error as { name?: unknown; message?: unknown }
+  if (record.name !== 'AbortError') return false
+  const message = typeof record.message === 'string' ? record.message : ''
+  return message === 'Transition was skipped' || message.includes('Transition was skipped')
+}
+
 window.addEventListener('error', (event) => {
   console.error('Renderer startup error:', event.error || event.message)
   renderStartupError(event.error || event.message)
 })
 
 window.addEventListener('unhandledrejection', (event) => {
+  if (isBenignStartupRejection(event.reason)) {
+    event.preventDefault()
+    return
+  }
   console.error('Renderer startup rejection:', event.reason)
   renderStartupError(event.reason)
 })

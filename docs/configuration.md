@@ -314,18 +314,24 @@ by OpenCode and lets OpenCode persist the credential inside the managed runtime
 home.
 
 For direct built-in providers, the model picker is runtime-backed: once the
-OpenCode runtime is running, Open Cowork overlays `client.provider.list()`
-models onto the static descriptor. That keeps OpenAI/Codex and downstream
-OpenCode-native provider model menus current without hardcoding every upstream
-model id in this repo.
+OpenCode runtime is running, Open Cowork overlays the **native V2** catalog
+(`client.v2.provider.list` + `client.v2.model.list`) onto the static
+descriptor. That keeps OpenAI/Codex and downstream OpenCode-native provider
+model menus current without hardcoding every upstream model id in this repo.
+
+**OpenRouter** is special-cased for managed V2 serve: Cowork composes
+`provider.openrouter` with `npm: @ai-sdk/openai-compatible`, the public
+OpenRouter base URL, and the API key from Settings (plus `auth.json` for
+classic CLI compatibility). Do not rely on models.dev's default
+`@openrouter/ai-sdk-provider` package inside packaged `opencode serve`.
 
 Downstream builds can reuse the same path for any OpenCode-native provider. Add
 the provider id to `providers.available`, add a descriptor with `"runtime":
 "builtin"`, and leave `models: []` if OpenCode should own the live model
-catalog. If OpenCode exposes provider auth for that id through
-`client.provider.auth()`, Open Cowork will show the returned OAuth methods and
-call OpenCode's `provider.oauth.authorize` / `provider.oauth.callback` APIs
-directly; the app does not implement provider-specific login logic.
+catalog. If OpenCode exposes provider auth for that id through V2 integration
+methods, Open Cowork will show the returned OAuth methods and call OpenCode's
+integration authorize/callback APIs directly; the app does not implement
+provider-specific login logic.
 
 ### Dynamic model catalogs
 

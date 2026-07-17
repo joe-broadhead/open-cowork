@@ -27,11 +27,31 @@ export { removeParentSession } from './event-runtime-handlers.ts'
 const UNKNOWN_EVENT_LOG_INTERVAL_MS = 60_000
 const unknownEventLastLoggedAt = new Map<string, number>()
 
+// Benign control-plane events from OpenCode 1.18.x that we intentionally do
+// not project into SessionView. Suppress log spam; still reconnect/retry on
+// real stream failures elsewhere.
+const KNOWN_BENIGN_EVENT_TYPES = new Set([
+  'server.connected',
+  'plugin.added',
+  'plugin.removed',
+  'catalog.updated',
+  'reference.updated',
+  'integration.updated',
+  'installation.updated',
+  'lsp.updated',
+  'file.edited',
+  'file.watcher.updated',
+  'vcs.branch.updated',
+  'project.updated',
+  'server.heartbeat',
+])
+
 function dispatchRuntimeEvent(win: BrowserWindow, event: RuntimeSessionEvent) {
   dispatchRuntimeSessionEvent(win, event)
 }
 
 function logUnknownRuntimeEvent(type: string, scopeLabel: string) {
+  if (KNOWN_BENIGN_EVENT_TYPES.has(type)) return
   const now = Date.now()
   const lastLoggedAt = unknownEventLastLoggedAt.get(type) || 0
   if (now - lastLoggedAt < UNKNOWN_EVENT_LOG_INTERVAL_MS) return

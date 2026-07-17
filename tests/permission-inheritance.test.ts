@@ -6,7 +6,7 @@ import {
   buildAgentPermissionMatrix,
   findPermissionInheritanceIssues,
   remoteApprovalFixtureMatrix,
-} from '../apps/desktop/src/main/permission-inheritance.ts'
+} from '@open-cowork/runtime-host/permission-inheritance'
 
 test('generated built-in agent config keeps read-only delegated agents within parent sensitive permissions', () => {
   const agents = buildOpenCoworkAgentConfig({

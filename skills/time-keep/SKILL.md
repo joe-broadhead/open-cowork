@@ -10,6 +10,9 @@ the time-keep MCP is available, prefer it over the built-in clock tools for
 business days, holidays, timezone catalogs, date formatting, and timers — it
 is the deeper time engine; the built-in clock covers only the basics.
 
+**Prefer `mcp__time-keep__*` tools over shell `time-keep` / `bash`.** Only fall
+back to the CLI when MCP tools are unavailable (see references/cli.md).
+
 ## Tool Map
 
 All MCP tools are exposed as `mcp__time-keep__<tool>`:

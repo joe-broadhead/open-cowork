@@ -142,7 +142,12 @@ test('getRuntimeInputDiagnostics reports built-in provider credential overrides 
     assert.equal(diagnostics.providerName, 'OpenRouter')
     assert.equal(diagnostics.providerPackage, null)
     assert.deepEqual(diagnostics.credentialOverrideKeys, ['apiKey'])
-    assert.deepEqual(diagnostics.providerOptions, {})
+    // OpenRouter is composed as openai-compatible with a public baseURL (not the
+    // models.dev OpenRouter package). Diagnostics surface that option so the UI
+    // matches what runtime will hand to OpenCode — still without secrets.
+    assert.deepEqual(diagnostics.providerOptions, {
+      baseURL: 'https://openrouter.ai/api/v1',
+    })
     assert.deepEqual(diagnostics.capabilities?.find((capability) => capability.kind === 'provider')?.evidence?.credentialOverrideKeys, ['apiKey'])
     assert.equal(diagnostics.conflicts?.some((conflict) => (
       conflict.kind === 'model'

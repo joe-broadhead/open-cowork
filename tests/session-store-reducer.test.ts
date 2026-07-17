@@ -403,7 +403,10 @@ test('new streamed messages sort after hydrated history', () => {
 
   assert.equal(messages.at(-1)?.id, 'msg-3')
   assert.ok(updated.messageById['msg-3'].order > updated.messageById['msg-2'].order)
-  assert.ok(updated.messagePartsById['msg-3:part-1'].order > updated.messagePartsById['msg-2:part-1'].order)
+  assert.ok(
+    updated.messagePartsById['msg-3::msg-3:part-1'].order
+    > updated.messagePartsById['msg-2::msg-2:part-1'].order,
+  )
 })
 
 test('history hydration does not re-import the live user placeholder after a real message absorbed it', () => {
@@ -585,6 +588,147 @@ test('real assistant ids absorb placeholder live messages without leaving duplic
   assert.equal(messages[0]?.id, 'msg-1')
   assert.equal(messages[0]?.content, 'Hello world')
   assert.equal(state.messageById['session-1:assistant:live'], undefined)
+})
+
+test('distinct assistant messages with the same provider part id keep independent text', () => {
+  // OpenCode V2 reuses part ids like `text-0` across turns. A flat parts map
+  // without message scoping made every prior assistant bubble show the latest reply.
+  const state = createEmptySessionViewState({ hydrated: true })
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_first',
+    role: 'assistant',
+    content: "I'm doing great, thanks for asking!",
+    segmentId: 'text-0',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_second',
+    role: 'assistant',
+    content: 'Great, let me use the time-keep tools!',
+    segmentId: 'text-0',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_third',
+    role: 'assistant',
+    content: "Here's the current time across multiple timezones.",
+    segmentId: 'text-0',
+    replace: true,
+  }))
+
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+  assert.equal(messages.length, 3)
+  assert.equal(messages[0]?.content, "I'm doing great, thanks for asking!")
+  assert.equal(messages[1]?.content, 'Great, let me use the time-keep tools!')
+  assert.equal(messages[2]?.content, "Here's the current time across multiple timezones.")
+  assert.equal(messages.filter((message) => message.content.includes('current time')).length, 1)
+})
+
+test('authoritative replace drops stream segment that used messageId as part id', () => {
+  // OpenCode deltas often omit partId, so the stream lands on segmentId === messageId.
+  // History / part.updated then replace with the real part id and full text. Without
+  // collapsing the residual stream segment, the transcript joins both copies.
+  const state = createEmptySessionViewState({ hydrated: true })
+  const full = [
+    'Here you go — the full time-keep rundown:',
+    '',
+    '| Timezone | Local Time |',
+    '|----------|------------|',
+    '| WITA | 4:39 PM |',
+    '| UTC | 8:39 AM |',
+  ].join('\n')
+
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_answer',
+    role: 'assistant',
+    content: full,
+    // Stream residual: partId missing → segmentId defaults to messageId.
+    segmentId: 'msg_answer',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_answer',
+    role: 'assistant',
+    content: full,
+    segmentId: 'text-0',
+    replace: true,
+  }))
+
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0]?.content, full)
+  assert.equal(messages[0]?.segments?.length, 1)
+  assert.equal(messages[0]?.segments?.[0]?.id, 'msg_answer::text-0')
+  assert.equal(messages[0]?.content.split('| WITA |').length - 1, 1)
+})
+
+test('history replace absorbs live stream and does not leave a second assistant bubble', () => {
+  const state = createEmptySessionViewState({ hydrated: true })
+  const full = '## Current Time\n\nThursday, July 16, 2026 — 4:39 PM WITA'
+
+  Object.assign(state, withMessageText(state, {
+    messageId: 'session-time:assistant:live',
+    role: 'assistant',
+    content: full,
+    segmentId: 'session-time:segment:live',
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_final',
+    role: 'assistant',
+    content: full,
+    segmentId: 'part_text',
+    replace: true,
+  }))
+
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0]?.id, 'msg_final')
+  assert.equal(messages[0]?.content, full)
+  assert.equal(state.messageById['session-time:assistant:live'], undefined)
+})
+
+test('mergeStreamingStateFromExisting skips residual assistant content already in the snapshot', () => {
+  const history = buildSessionStateFromItems([
+    {
+      type: 'message',
+      id: 'evt-final',
+      messageId: 'msg_final',
+      partId: 'part_text',
+      role: 'assistant',
+      content: 'Here is the answer once.',
+      timestamp: '2026-07-16T08:39:00.000Z',
+    },
+  ])
+
+  const existing = createEmptySessionViewState({ hydrated: true, lastEventAt: Date.parse('2026-07-16T08:39:30.000Z') })
+  Object.assign(existing, withMessageText(existing, {
+    messageId: 'session-1:assistant:live',
+    role: 'assistant',
+    content: 'Here is the answer once.',
+    segmentId: 'session-1:segment:live',
+  }))
+
+  const merged = buildSessionStateFromItems(
+    [
+      {
+        type: 'message',
+        id: 'evt-final',
+        messageId: 'msg_final',
+        partId: 'part_text',
+        role: 'assistant',
+        content: 'Here is the answer once.',
+        timestamp: '2026-07-16T08:39:00.000Z',
+      },
+    ],
+    existing,
+    { preserveStreamingState: true },
+  )
+
+  const messages = buildMessages(merged.messageIds, merged.messageById, merged.messagePartsById)
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0]?.id, 'msg_final')
+  assert.equal(messages[0]?.content, 'Here is the answer once.')
+  assert.equal(history.messageById['msg_final']?.id, 'msg_final')
 })
 
 test('late placeholder patches append into the current real assistant message', () => {
