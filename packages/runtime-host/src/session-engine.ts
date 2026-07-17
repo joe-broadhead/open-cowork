@@ -39,6 +39,16 @@ type SessionEngineOptions = {
   sequence?: SessionViewSequence
 }
 
+/** Clone at the IPC/read boundary so callers cannot mutate engine-owned view graphs (JOE-868). */
+function cloneSessionViewForIpc(view: SessionView): SessionView {
+  try {
+    return structuredClone(view)
+  } catch {
+    // SessionView is JSON-safe in practice; fall back to a shallow shell if structuredClone fails.
+    return { ...view }
+  }
+}
+
 function upsertById<T extends { id: string }>(
   items: T[],
   item: T,
@@ -199,7 +209,7 @@ export class SessionEngine {
       && cached.busy === busy
       && cached.awaitingPermission === awaitingPermission
     ) {
-      return cached.view
+      return cloneSessionViewForIpc(cached.view)
     }
 
     const view = deriveVisibleSessionPatch(
@@ -216,7 +226,7 @@ export class SessionEngine {
       awaitingPermission,
       view,
     })
-    return view
+    return cloneSessionViewForIpc(view)
   }
 
   getSessionMeta(sessionId: string) {
@@ -646,4 +656,11 @@ export class SessionEngine {
   }
 }
 
-export const sessionEngine = new SessionEngine()
+/** Factory for isolated engines (multi-tenant tests). Desktop uses {@link sessionEngine}. */
+export function createSessionEngine(): SessionEngine {
+  return new SessionEngine()
+}
+
+/** Process singleton for the desktop main process. Prefer {@link createSessionEngine} in tests. */
+export const sessionEngine = createSessionEngine()
+
