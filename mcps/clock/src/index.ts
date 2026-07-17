@@ -2,10 +2,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
-const MS_PER_SECOND = 1000
-const MS_PER_MINUTE = 60 * MS_PER_SECOND
-const MS_PER_HOUR = 60 * MS_PER_MINUTE
-const MS_PER_DAY = 24 * MS_PER_HOUR
+import {
+  MS_PER_DAY,
+  MS_PER_HOUR,
+  MS_PER_MINUTE,
+  MS_PER_SECOND,
+  assertTimeZone,
+  systemTimeZone,
+  textResult,
+} from './time-math.ts'
 
 const dateTimeSchema = z.string().min(1).describe('ISO instant, ISO date, or local date-time. Local date-times require a timezone.')
 const timezoneSchema = z.string().min(1).describe('IANA timezone, for example UTC, Europe/London, or America/New_York.')
@@ -18,33 +23,6 @@ type ZonedParts = {
   hour: number
   minute: number
   second: number
-}
-
-function textResult(value: unknown) {
-  return {
-    content: [{
-      type: 'text' as const,
-      text: JSON.stringify(value),
-    }],
-  }
-}
-
-function systemTimeZone() {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-  } catch {
-    return 'UTC'
-  }
-}
-
-function assertTimeZone(value: string | undefined | null, fallback = systemTimeZone()) {
-  const timeZone = (value || fallback).trim()
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date())
-  } catch {
-    throw new Error(`Invalid IANA timezone: ${timeZone}`)
-  }
-  return timeZone
 }
 
 function toNumber(value: string | undefined, fallback = 0) {
