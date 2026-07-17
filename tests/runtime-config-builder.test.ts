@@ -134,8 +134,10 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     const askMcpConfig = await buildRuntimeConfigForRuntime(projectRoot) as Record<string, any>
     assert.equal(askMcpConfig.permission['mcp__analytics__*'], 'ask')
     assert.equal(askMcpConfig.permission['mcp__warehouse__*'], 'ask')
-    assert.equal(askMcpConfig.permission['mcp__time-keep__*'], 'ask')
-    assert.equal(askMcpConfig.agent.build.permission['mcp__time-keep__*'], 'ask')
+    // defaultAccess first-party tools (time-keep) stay allow for reads under global MCP ask.
+    assert.equal(askMcpConfig.permission['mcp__time-keep__*'], 'allow')
+    assert.equal(askMcpConfig.agent.build.permission['mcp__time-keep__*'], 'allow')
+    assert.equal(askMcpConfig.agent.build.permission['mcp__time-keep__timer_set'], 'ask')
     assert.equal(askMcpConfig.agent.build.permission['mcp__analytics__*'], 'ask')
 
     saveSettings({ mcpPermission: 'deny' })

@@ -104,11 +104,17 @@ export type ResolvedRuntimeMcpEntry =
     type: 'local'
     command: string[]
     environment?: Record<string, string>
+    /** OpenCode: start this MCP when the runtime boots (default true when set). */
+    enabled?: boolean
+    /** OpenCode: timeout ms for listing tools after spawn. */
+    timeout?: number
   }
   | {
     type: 'remote'
     url: string
     headers?: Record<string, string>
+    enabled?: boolean
+    timeout?: number
   }
 
 // Why a bundled MCP was skipped from `config.mcp` on this boot.
@@ -292,6 +298,10 @@ function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): Res
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
       command: nodeCommand.command,
+      // Explicit enable so OpenCode attaches tools to agent sessions (docs recommend enabled: true).
+      enabled: true,
+      // Cold-start native binaries (e.g. time-keep) can exceed the 5s default tool-list timeout.
+      timeout: builtin.command ? 15_000 : 10_000,
     }
     const env: Record<string, string> = { ...nodeCommand.environment }
 
@@ -377,6 +387,8 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
       command: [resolvedCommand, ...(custom.args || [])],
+      enabled: true,
+      timeout: 10_000,
     }
     if (Object.keys(env).length > 0) entry.environment = env
     return entry

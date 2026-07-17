@@ -8,9 +8,13 @@ description: Use the time-keep MCP for reliable time context - IANA timezone ops
 Open Cowork’s **only** agent time engine. Backed by the bundled
 [time-keep](https://github.com/joe-broadhead/time-keep) native MCP (stdio).
 
-**Always prefer `mcp__time-keep__*` tools** over shell `date`, `bash`, or inventing
-times from model memory. Do not fall back to CLI unless those MCP tools are
-missing from your tool list.
+**Always call the real tools** (function calling), for example
+`mcp__time-keep__current_time`. Prefer these over shell `date`, `bash`, or inventing
+times from model memory.
+
+If you do not see `mcp__time-keep__*` in your tool list, say so briefly and stop —
+do **not** invent CLI fallbacks or pretend to call MCP. The desktop app should list
+time-keep when the bundled MCP is connected (status bar MCP count).
 
 ## Tool Map
 

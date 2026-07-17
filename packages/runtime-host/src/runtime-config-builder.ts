@@ -650,13 +650,28 @@ function buildRuntimeConfigWithCustomMcpsResult(
     ...approvalCustomMcpPatterns,
   ]))
   const isMcpPattern = (pattern: string) => isKnownMcpToolPattern(pattern, mcpToolPatterns)
-  const allowedPatterns = rawAllowedPatterns.filter((pattern) => !isMcpPattern(pattern) || mcpPolicy === 'allow')
+  // First-party tools marked defaultAccess stay auto-allowed for their allowPatterns even
+  // when the user keeps the global MCP policy at "ask" (JOE-831). Mutation tools still use
+  // askPatterns (e.g. time-keep timer_set). This matches the old clock MCP UX.
+  const defaultAccessMcpAllow = new Set(
+    configuredTools
+      .filter((tool) => tool.defaultAccess === true)
+      .flatMap((tool) => getConfiguredToolAllowPatterns(tool))
+      .filter(isMcpPattern),
+  )
+  const allowedPatterns = Array.from(new Set([
+    ...rawAllowedPatterns.filter((pattern) => !isMcpPattern(pattern) || mcpPolicy === 'allow'),
+    ...(mcpPolicy === 'ask' || mcpPolicy === 'allow' ? Array.from(defaultAccessMcpAllow) : []),
+  ]))
   const askPatterns = Array.from(new Set([
     ...rawAskPatterns.filter((pattern) => !isMcpPattern(pattern)),
     ...(mcpPolicy === 'allow'
       ? rawAskPatterns.filter(isMcpPattern)
       : mcpPolicy === 'ask'
-        ? [...rawAllowedPatterns, ...rawAskPatterns].filter(isMcpPattern)
+        ? [
+          ...rawAllowedPatterns.filter((pattern) => isMcpPattern(pattern) && !defaultAccessMcpAllow.has(pattern)),
+          ...rawAskPatterns.filter(isMcpPattern),
+        ]
         : []),
   ]))
   const allToolPatterns = Array.from(new Set([

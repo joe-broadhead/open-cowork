@@ -209,8 +209,10 @@ export function buildPermissionConfig(options: {
   }
 
   for (const pattern of options.toolPatternsToDeny || []) permission[pattern] = 'deny'
-  for (const pattern of options.askPatterns || []) permission[pattern] = 'ask'
+  // Allow first, then ask, so specific ask rules (e.g. mcp__time-keep__timer_set)
+  // win over broader allow wildcards (mcp__time-keep__*). Denies still win last.
   for (const pattern of options.allowPatterns || []) permission[pattern] = 'allow'
+  for (const pattern of options.askPatterns || []) permission[pattern] = 'ask'
   // App-level native tool policy wins over broad allow/ask pattern expansion.
   // Downstream builds must be able to turn off web/bash/write globally even
   // if a bundled agent still lists a native tool in its capability config.

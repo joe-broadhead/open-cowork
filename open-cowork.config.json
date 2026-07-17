@@ -99,7 +99,7 @@
       "description": "Local-first agent clock MCP (joe-broadhead/time-keep): IANA timezone ops, calendar queries, date arithmetic, business days, offline holidays (2000-2030), and local SQLite timers. Bundled native binary in desktop builds.",
       "kind": "built-in",
       "namespace": "time-keep",
-      "writeAccess": true,
+      "writeAccess": false,
       "defaultAccess": true,
       "patterns": ["mcp__time-keep__*"],
       "allowPatterns": ["mcp__time-keep__*"],

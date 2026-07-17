@@ -285,6 +285,7 @@ export async function getMcpStatus(client: OpencodeClient) {
       else failed.push(`${entry.name}=${entry.rawStatus || 'unknown'}`)
     }
     const parts = [`${connected.length}/${entries.length} connected`]
+    if (connected.length > 0) parts.push(`[${connected.join(', ')}]`)
     if (needsAuth.length > 0) parts.push(`needs-auth=[${needsAuth.join(', ')}]`)
     if (failed.length > 0) parts.push(`failed=[${failed.join(', ')}]`)
     log('mcp', `Status: ${parts.join(' ')}`)
