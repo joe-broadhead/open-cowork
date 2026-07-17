@@ -21,6 +21,7 @@ export const DEFAULT_TOOL_TRACE_RULES: ToolTraceRule[] = [
   { id: 'task', label: 'delegation', pluralLabel: 'delegations', match: [{ exact: ['task'] }] },
   { id: 'command', label: 'command', pluralLabel: 'commands', match: [{ exact: ['bash', 'command'] }, { contains: ['bash'] }] },
   { id: 'chart', label: 'chart', pluralLabel: 'charts', match: [{ prefixes: ['charts_', 'mcp__charts__'] }] },
+  { id: 'time', label: 'time lookup', pluralLabel: 'time lookups', match: [{ prefixes: ['time-keep_', 'mcp__time-keep__'] }] },
   { id: 'query', label: 'query', pluralLabel: 'queries', match: [{ prefixes: ['nova_execute_sql', 'mcp__nova__execute_sql'] }] },
   {
     id: 'inspection',

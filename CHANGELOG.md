@@ -40,6 +40,9 @@ planned before broad distribution.
 - Wired delegated permission-inheritance checks into agent composition (log
   soft warnings instead of silent policy theater).
 - Prefer MCP clock/time-keep tools over shell CLIs in skill docs.
+- Dual-expand MCP permission patterns to OpenCode 1.18+ `server_tool` ids
+  (e.g. `time-keep_current_time`) so agents can call time-keep/charts tools
+  that status-bar MCP connectivity already exposed.
 - Desktop local chat attaches each prompt admission to a durable
   `v2.session.events` tail from `admittedSeq` (global SSE stays control-plane
   and suppresses tracked-session transcript). Classic SDK allowlist remains

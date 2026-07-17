@@ -27,10 +27,12 @@ Open Cowork ships seven bundled MCP servers (`agents`, `charts`, `clock`,
 `knowledge`, `semantic-ui`, `skills`, `workflows`) plus one external-CLI
 MCP configured out of the box (`time-keep`), and seven bundled skills. The cards
 below cover the most useful examples.
-When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
-uses `mcp__<server>__<tool>` form, for example
-`mcp__charts__bar_chart`. Source MCP code and tests may still refer to the
-short tool name such as `bar_chart`.
+When an agent calls a bundled MCP tool through OpenCode 1.18+, the runtime tool
+id uses OpenCode’s `${server}_${tool}` form, for example `charts_bar_chart` or
+`time-keep_current_time`. Open Cowork permission patterns still accept the
+Claude-style `mcp__<server>__<tool>` form and dual-expand it to the OpenCode
+id so allow/ask rules match what the model can call. Source MCP code and tests
+may still refer to the short tool name such as `bar_chart`.
 
 <div class="grid cards" markdown>
 
@@ -40,9 +42,10 @@ short tool name such as `bar_chart`.
 
     Renders Vega-Lite charts and Mermaid diagrams entirely inside the main
     process. 18+ chart tools; runtime ids include
-    `mcp__charts__bar_chart`, `mcp__charts__line_chart`,
-    `mcp__charts__sankey`, `mcp__charts__mermaid`, and
-    `mcp__charts__custom_spec`. Source: `mcps/charts/src/index.ts`.
+    `charts_bar_chart`, `charts_line_chart`,
+    `charts_sankey`, `charts_mermaid`, and
+    `charts_custom_spec` (permission patterns also accept
+    `mcp__charts__…`). Source: `mcps/charts/src/index.ts`.
 
 
 -   :material-timer-outline: **`time-keep` MCP** <span class="status-badge preview">preview</span>
@@ -53,10 +56,12 @@ short tool name such as `bar_chart`.
     [time-keep](https://github.com/joe-broadhead/time-keep) CLI: IANA
     timezone catalogs and DST detail, calendar queries, date arithmetic
     and formatting, business-day counts, offline holiday lookups
-    (2000–2030), and local SQLite timers. Read and lookup tools are
-    auto-allowed; `timer_set`/`timer_delete` ask for approval. The tool
-    is bundled into desktop builds as `Resources/bin/time-keep` (pin: `third_party/time-keep/VERSION`).
-    Fetch with `pnpm binaries:time-keep`.
+    (2000–2030), and local SQLite timers. OpenCode tool ids are
+    `time-keep_current_time`, `time-keep_date_arithmetic`, and so on.
+    Read and lookup tools are auto-allowed; `time-keep_timer_set` /
+    `time-keep_timer_delete` ask for approval. The tool is bundled into
+    desktop builds as `Resources/bin/time-keep` (pin:
+    `third_party/time-keep/VERSION`). Fetch with `pnpm binaries:time-keep`.
 
 -   :material-source-branch-sync: **OpenCode Gateway MCP** <span class="status-badge external">external</span>
 

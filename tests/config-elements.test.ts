@@ -15,6 +15,7 @@ import {
   getConfiguredToolsFromConfig,
   getConfigError,
   getAppConfig,
+  getConfiguredToolAllowPatterns,
   getConfiguredToolAskPatterns,
   getPublicAppConfig,
   getProviderDescriptors,
@@ -35,9 +36,14 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'knowledge')!).includes('mcp__knowledge__propose_knowledge_edit'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'semantic-ui')!).includes('mcp__semantic-ui__ui_execute_action'), true)
   // time-keep: read/lookup tools auto-allowed; timer mutations (local SQLite
-  // state) ask for approval.
-  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!).includes('mcp__time-keep__timer_set'), true)
+  // state) ask for approval. Patterns dual-expand to OpenCode server_tool ids.
+  const timeKeepAsk = getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!)
+  assert.equal(timeKeepAsk.includes('mcp__time-keep__timer_set'), true)
+  assert.equal(timeKeepAsk.includes('time-keep_timer_set'), true)
   assert.equal(tools.find((tool) => tool.id === 'time-keep')?.allowPatterns?.includes('mcp__time-keep__*'), true)
+  const timeKeepAllow = getConfiguredToolAllowPatterns(tools.find((tool) => tool.id === 'time-keep')!)
+  assert.equal(timeKeepAllow.includes('mcp__time-keep__*'), true)
+  assert.equal(timeKeepAllow.includes('time-keep_*'), true)
   assert.equal(tools.find((tool) => tool.id === 'time-keep')?.defaultAccess, true)
   const providers = getProviderDescriptors()
   assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai,github-copilot')
