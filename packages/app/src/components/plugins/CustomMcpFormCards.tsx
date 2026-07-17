@@ -1,6 +1,7 @@
 import type { CustomMcpTestResult, CustomSkillConfig } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
+import { SegmentedControl } from '@open-cowork/ui'
 import { PluginIcon } from './PluginIcon'
 import type { CustomMcpFormType, CustomMcpPermissionMode } from './custom-mcp-form-support'
 
@@ -19,46 +20,23 @@ export function ToolApprovalsCard({
           Choose how assigned coworkers should handle this MCP&apos;s tool calls.
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <button
-          type="button"
-          aria-pressed={permissionMode === 'ask'}
-          onClick={() => onPermissionModeChange('ask')}
-          className="rounded-lg border px-3 py-3 text-left cursor-pointer transition-colors"
-          style={{
-            borderColor: permissionMode === 'ask'
-              ? 'color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle))'
-              : 'var(--color-border-subtle)',
-            background: permissionMode === 'ask'
-              ? 'color-mix(in srgb, var(--color-accent) 9%, var(--color-elevated))'
-              : 'var(--color-elevated)',
-          }}
-        >
-          <span className="block text-xs font-medium text-text">{t('mcpForm.approvalAsk', 'Ask before tool calls')}</span>
-          <span className="mt-1 block text-2xs leading-relaxed text-text-muted">
-            OpenCode asks for approval before an assigned coworker uses this MCP.
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-pressed={permissionMode === 'allow'}
-          onClick={() => onPermissionModeChange('allow')}
-          className="rounded-lg border px-3 py-3 text-left cursor-pointer transition-colors"
-          style={{
-            borderColor: permissionMode === 'allow'
-              ? 'color-mix(in srgb, var(--color-amber) 45%, var(--color-border-subtle))'
-              : 'var(--color-border-subtle)',
-            background: permissionMode === 'allow'
-              ? 'color-mix(in srgb, var(--color-amber) 7%, var(--color-elevated))'
-              : 'var(--color-elevated)',
-          }}
-        >
-          <span className="block text-xs font-medium text-text">{t('mcpForm.approvalAllow', 'Trusted, auto-approve')}</span>
-          <span className="mt-1 block text-2xs leading-relaxed text-text-muted">
-            Assigned coworkers can call this MCP without approval prompts. Use only for MCPs you control or trust.
-          </span>
-        </button>
-      </div>
+      <SegmentedControl
+        label={t('mcpForm.toolApprovals', 'Tool approvals')}
+        value={permissionMode}
+        onChange={(value) => onPermissionModeChange(value as CustomMcpPermissionMode)}
+        options={[
+          {
+            value: 'ask',
+            label: t('mcpForm.approvalAsk', 'Ask before tool calls'),
+            description: 'OpenCode asks for approval before an assigned coworker uses this MCP.',
+          },
+          {
+            value: 'allow',
+            label: t('mcpForm.approvalAllow', 'Trusted, auto-approve'),
+            description: 'Assigned coworkers can call this MCP without approval prompts. Use only for MCPs you control or trust.',
+          },
+        ]}
+      />
     </div>
   )
 }
