@@ -314,8 +314,8 @@ describe('SetupScreen', () => {
     )
 
     await user.click(screen.getByRole('button', { name: /Set up a team or server deployment/ }))
-    const bridgeToggle = await screen.findByRole('checkbox', { name: /Reuse developer tools from this Mac/ })
-    expect(bridgeToggle).toBeChecked()
+    const bridgeToggle = await screen.findByRole('switch', { name: /Reuse developer tools from this Mac/ })
+    expect(bridgeToggle).toHaveAttribute('aria-checked', 'true')
 
     await user.click(bridgeToggle)
     await user.click(screen.getByRole('button', { name: 'Test connection' }))
