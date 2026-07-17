@@ -24,6 +24,9 @@ directories:
   output: release
   buildResources: resources
 afterPack: ../../scripts/desktop-after-pack.mjs
+# Codesign mutates the bundled OpenCode Mach-O; rewrite integrity hashes after
+# sign and re-sign only the outer .app (see scripts/desktop-after-sign.mjs).
+afterSign: ../../scripts/desktop-after-sign.mjs
 files:
   - dist/**/*
   - package.json
@@ -58,11 +61,6 @@ extraResources:
     filter:
       - "dist/**/*"
       - "package.json"
-  - from: ../../mcps/clock
-    to: mcps/clock
-    filter:
-      - "dist/**/*"
-      - "package.json"
   - from: ../../mcps/agents
     to: mcps/agents
     filter:
@@ -75,6 +73,16 @@ extraResources:
       - "package.json"
   - from: ../../mcps/workflows
     to: mcps/workflows
+    filter:
+      - "dist/**/*"
+      - "package.json"
+  - from: ../../mcps/semantic-ui
+    to: mcps/semantic-ui
+    filter:
+      - "dist/**/*"
+      - "package.json"
+  - from: ../../mcps/knowledge
+    to: mcps/knowledge
     filter:
       - "dist/**/*"
       - "package.json"

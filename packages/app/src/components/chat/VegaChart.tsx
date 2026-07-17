@@ -53,15 +53,15 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
 
   const chartTheme = useMemo<VegaChartTheme>(() => {
     const styles = getComputedStyle(document.documentElement)
-    const surface = styles.getPropertyValue('--color-surface').trim() || '#1c1d26'
-    const text = styles.getPropertyValue('--color-text').trim() || '#f0f0f0'
-    const textSecondary = styles.getPropertyValue('--color-text-secondary').trim() || '#a0a0aa'
-    const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#8b8d99'
+    const surface = styles.getPropertyValue('--color-surface').trim() || DEFAULT_DARK_BRAND_THEME.surface
+    const text = styles.getPropertyValue('--color-text').trim() || DEFAULT_DARK_BRAND_THEME.text
+    const textSecondary = styles.getPropertyValue('--color-text-secondary').trim() || DEFAULT_DARK_BRAND_THEME.textSecondary
+    const textMuted = styles.getPropertyValue('--color-text-muted').trim() || DEFAULT_DARK_BRAND_THEME.textMuted
     return {
       axis: ensureReadableTextColor(textSecondary, surface),
       title: ensureReadableTextColor(text, surface),
-      grid: styles.getPropertyValue('--color-border-subtle').trim() || 'rgba(255,255,255,0.08)',
-      domain: styles.getPropertyValue('--color-border').trim() || 'rgba(255,255,255,0.12)',
+      grid: styles.getPropertyValue('--color-border-subtle').trim() || DEFAULT_DARK_BRAND_THEME.borderSubtle,
+      domain: styles.getPropertyValue('--color-border').trim() || DEFAULT_DARK_BRAND_THEME.border,
       // Fallbacks derive from the canonical brand theme so they can't drift from the tokens the
       // CSS vars are generated from (#923). They fire only if a `--color-*` var resolves empty.
       accent: styles.getPropertyValue('--color-accent').trim() || DEFAULT_DARK_BRAND_THEME.accent,

@@ -31,7 +31,7 @@ import {
   Tooltip,
   TraitSlider,
   WorkbenchLayout,
-} from '.'
+} from '@open-cowork/ui'
 import { PrimitiveGallery } from './PrimitiveGallery'
 
 describe('Icon', () => {

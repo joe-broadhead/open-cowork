@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ProjectsKanbanSurface } from '@open-cowork/ui'
 import type { CoordinationBoardPayload, CoordinationProject, CoordinationTask } from '@open-cowork/shared'
-import { toast } from '../ui'
+import { toast } from '../ui/Toaster'
 import { t } from '../../helpers/i18n'
 
 type ProjectsBoardPageProps = {

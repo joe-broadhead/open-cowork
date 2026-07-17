@@ -512,3 +512,39 @@ test('remote revoke command cannot resurrect a revoked pairing after ack', async
   assert.equal(credentialStore.get(pairing.record.id), null)
   assert.equal(transport.acks[0]?.leaseToken, 'lease-revoke')
 })
+
+
+test('desktop pairing remote_allowed requires lease fencing before execution (JOE-830)', async () => {
+  const transport = new MemoryTransport()
+  const { service: pairingService, pairing } = service({
+    transport,
+    create: {
+      policy: {
+        remoteApprovals: 'local_confirmation',
+        remoteQuestions: 'local_confirmation',
+      },
+    },
+  })
+
+  pairingService.update(pairing.record.id, {
+    policy: {
+      remoteApprovals: 'remote_allowed',
+      remoteQuestions: 'remote_allowed',
+    },
+  })
+  assert.ok(pairingService.auditLog(pairing.record.id).some((event) => event.action === 'pairing.remote_allowed_enabled'))
+
+  transport.commands.push({
+    id: 'cmd-no-lease',
+    kind: 'status',
+    pairingId: pairing.record.id,
+    workspaceId: 'local',
+    sequence: 1,
+    createdAt: '2026-06-01T12:00:00.000Z',
+  })
+  await pairingService.connect(pairing.record.id)
+  assert.equal(transport.failures.length + transport.acks.length, 1)
+  const delivered = transport.failures[0]?.result || transport.acks[0]?.result
+  assert.equal(delivered?.ok, false)
+  assert.match(String(delivered?.message || ''), /lease/i)
+})

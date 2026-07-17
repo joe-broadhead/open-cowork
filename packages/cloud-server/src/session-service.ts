@@ -1,29 +1,10 @@
-import { type WorkflowWebhookAuth, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { randomUUID } from 'crypto'
-import type {
-  CapabilitySkill,
-  CapabilityTool,
-  CloudProjectedSessionEventType,
-  CoordinationTarget,
-  CoordinationWatch,
-  CoordinationWatchEvent,
-  CoordinationWatchInput,
-  CoordinationWatchStatus,
-  CoordinationWatchUpdateInput,
-  WorkflowDetail,
-  WorkflowDraft,
-  WorkflowListPayload,
-  WorkflowStatus,
-  WorkflowTriggerType,
-} from '@open-cowork/shared'
+import type { CoordinationWatchEvent } from '@open-cowork/shared'
 import {
   type CloudSessionMessage,
   type CloudSessionProjectionView,
-  type CloudProjectSnapshotUploadInput,
-  type CloudProjectSnapshotUploadResult,
   type CloudProjectSource,
   type CloudProjectSourceInput,
-  type CloudProjectSourcePolicyVerdict,
   type SessionImportItemCounts,
   type SessionImportRequest,
   normalizeCloudProjectSource,
@@ -31,29 +12,11 @@ import {
 } from '@open-cowork/shared'
 import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
-  ApiTokenScope,
-  BillingSubscriptionRecord,
-  ChannelBindingRecord,
-  ChannelDeliveryRecord,
-  ChannelIdentityRecord,
-  ChannelInteractionRecord,
-  ChannelCursorUpdateResult,
-  ChannelProviderEventClaimResult,
-  ChannelProviderEventRecord,
-  ChannelProviderEventType,
-  ChannelProviderId,
-  ChannelSessionBindingRecord,
   CloudArtifactIndexRecord,
   CloudLaunchpadSessionSummaryRecord,
-  ControlPlaneMembershipStatus,
-  ControlPlaneRole,
   ControlPlaneStore,
-  HeadlessAgentRecord,
-  IssuedChannelInteractionRecord,
   ListCloudArtifactIndexInput,
   ListCloudLaunchpadSessionSummariesInput,
-  ManagedWorkerPoolStatus,
-  ManagedWorkerStatus,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
@@ -61,8 +24,6 @@ import type {
   UpsertCloudArtifactIndexInput,
   ListSessionsPageInput,
   ListSessionsPageRecord,
-  ThreadSmartFilterRecord,
-  ThreadTagRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
 import { CloudServiceError } from './cloud-service-error.ts'
@@ -71,11 +32,8 @@ import {
   isBillingConfigured,
   type BillingAdapter,
   type BillingAction,
-  type BillingCheckoutResult,
-  type BillingPortalResult,
-  type BillingWebhookResult,
 } from './billing-adapter.ts'
-import type { ByokSecretMetadata, ByokSecretStore } from './byok-secret-store.ts'
+import type { ByokSecretStore } from './byok-secret-store.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEvent,
@@ -86,11 +44,6 @@ import {
 } from './cloud-config.ts'
 import type { CloudProjectSourceService as CloudProjectSourceStore } from './project-source-service.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
-import type {
-  PublicChannelBindingRecord,
-  PublicChannelDeliveryRecord,
-  PublicChannelIdentityRecord,
-} from './public-channel-records.ts'
 import {
   CloudSessionProjectionService,
   type AppendProjectedEventInput,
@@ -107,41 +60,22 @@ import {
 } from './services/member-service.ts'
 import { CloudCoordinationService } from './services/coordination-service.ts'
 import { CloudPrincipalService } from './services/principal-service.ts'
-import {
-  CloudRoleService,
-  type CreateCustomRoleRequest,
-  type UpdateCustomRoleRequest,
-} from './services/role-service.ts'
-import {
-  CloudPolicyService,
-  type SetManagedPolicyRequest,
-} from './services/policy-service.ts'
-import {
-  CloudSsoService,
-  type UpsertSsoConfigRequest,
-} from './services/sso-service.ts'
+import { CloudRoleService } from './services/role-service.ts'
+import { CloudPolicyService } from './services/policy-service.ts'
+import { CloudSsoService } from './services/sso-service.ts'
 import { CloudScimService } from './services/scim-service.ts'
 import { CloudScimReconciler } from './scim-reconciler.ts'
 import { createSsoVerifierRegistry, type SsoAssertionVerifier } from './sso-assertion.ts'
 import type { SecretAdapter } from './secret-adapter.ts'
 import type { SsoProtocol } from './control-plane-sso.ts'
-import type { ScimGroupInput, ScimUserInput, ScimUserPatch } from './scim-schema.ts'
 import { CloudSessionImportService } from './services/session-import-service.ts'
 import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
 import { CloudSessionExecutionService } from './session-execution-operations.ts'
 import { CloudCapabilityService } from './services/capability-service.ts'
 import { CloudSettingMetadataService } from './services/setting-metadata-service.ts'
-import {
-  CloudOverviewService,
-  type CloudAdminPolicyOverview,
-  type CloudWorkspaceOverview,
-} from './services/overview-service.ts'
+import { CloudOverviewService } from './services/overview-service.ts'
 import {
   CloudAuditService,
-  type AuditExportOptions,
-  type AuditExportStream,
-  type AuditQueryFilters,
-  type AuditQueryPage,
   type DataPlaneAuditInput,
 } from './services/audit-service.ts'
 import { CloudProjectSourceService } from './services/project-source-service.ts'
@@ -154,18 +88,8 @@ import {
   assertRemoteApprovalInteractionAllowed,
   type RemoteInteractionPolicyInput,
 } from './services/remote-approval-policy.ts'
-import {
-  type CloudIdentityPolicy,
-  type PublicApiTokenRecord,
-} from './services/api-token-policy.ts'
-import {
-  CloudManagedWorkerService,
-  type CreateManagedWorkerPoolRequest,
-  type ListManagedWorkersRequest,
-  type ManagedWorkerHeartbeatRequest,
-  type RegisterManagedWorkerRequest,
-  type UpdateManagedWorkerPoolRequest,
-} from './services/managed-worker-service.ts'
+import { type CloudIdentityPolicy } from './services/api-token-policy.ts'
+import { CloudManagedWorkerService } from './services/managed-worker-service.ts'
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
 import { CloudEntitlementService } from './services/entitlement-service.ts'
 import { UnlimitedEntitlementResolver, type EntitlementResolver } from './entitlements/entitlement-resolver.ts'
@@ -191,15 +115,10 @@ import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
 import {
   DISABLED_ABUSE_POLICY,
   HOUR_MS,
-  type ChannelActorInput,
-  type ChannelInteractionResolutionInput,
-  type CloudDiagnosticsBundle,
   type CloudPrincipal,
   type CloudSessionView,
   type CloudUsageSummary,
-  type CloudWorkflowStartResult,
   type CreateCloudSessionRecordInput,
-  type IssuedPublicApiTokenRecord,
 } from './session-service-types.ts'
 
 export type {
@@ -236,7 +155,33 @@ export { CloudServiceError } from './cloud-service-error.ts'
 
 export type { CloudSessionMessage, CloudSessionProjectionView }
 
+export type CloudSessionServiceDomains = {
+  apiTokens: CloudApiTokenOperationsService
+  audit: CloudAuditService
+  billing: CloudBillingOperationsService
+  byok: CloudByokService
+  capabilities: CloudCapabilityService
+  channels: CloudChannelDomainService
+  coordination: CloudCoordinationService
+  diagnostics: CloudDiagnosticsOperationsService
+  managedWorkers: CloudManagedWorkerService
+  members: CloudMemberService
+  overview: CloudOverviewService
+  policy: CloudPolicyService
+  principals: CloudPrincipalService
+  projectSources: CloudProjectSourceService
+  roles: CloudRoleService
+  scim: CloudScimService
+  scimReconciler: CloudScimReconciler
+  settings: CloudSettingMetadataService
+  sso: CloudSsoService
+  threads: CloudThreadOrganizationService
+  usage: CloudUsageOperationsService
+  workflows: CloudWorkflowOperationsService
+}
+
 export class CloudSessionService {
+  readonly domains: CloudSessionServiceDomains
   private readonly store: ControlPlaneStore
   private readonly runtime: CloudRuntimeAdapter
   private readonly policy: CloudRuntimePolicy
@@ -439,7 +384,7 @@ export class CloudSessionService {
       byokService: this.byokService,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
-      getBillingSubscription: (principal) => this.getBillingSubscription(principal),
+      getBillingSubscription: (principal) => this.billingOperations.getBillingSubscription(principal),
       getUsageSummary: (principal, limit) => this.getUsageSummary(principal, limit),
     })
     this.apiTokenOperations = new CloudApiTokenOperationsService({
@@ -502,6 +447,30 @@ export class CloudSessionService {
       principalOrgId: (principal) => this.principalOrgId(principal),
       auditActor: (principal) => this.auditActor(principal),
     })
+    this.domains = {
+      apiTokens: this.apiTokenOperations,
+      audit: this.auditService,
+      billing: this.billingOperations,
+      byok: this.byokService,
+      capabilities: this.capabilityService,
+      channels: this.channelDomain,
+      coordination: this.coordinationService,
+      diagnostics: this.diagnosticsOperations,
+      managedWorkers: this.managedWorkerService,
+      members: this.memberService,
+      overview: this.overviewService,
+      policy: this.policyService,
+      principals: this.principalService,
+      projectSources: this.projectSourceService,
+      roles: this.roleService,
+      scim: this.scimService,
+      scimReconciler: this.scimReconciler,
+      settings: this.settingMetadataService,
+      sso: this.ssoService,
+      threads: this.threadOrganization,
+      usage: this.usageOperations,
+      workflows: this.workflowOperations,
+    }
   }
 
   get eventBus() {
@@ -510,21 +479,6 @@ export class CloudSessionService {
 
   get workspaceEventBus() {
     return this.workspaceEvents
-  }
-
-  validateProjectSource(source: CloudProjectSourceInput | null | undefined): CloudProjectSourcePolicyVerdict {
-    return this.projectSourceService.validateProjectSource(source)
-  }
-
-  async uploadProjectSnapshot(
-    principal: CloudPrincipal,
-    input: CloudProjectSnapshotUploadInput,
-  ): Promise<CloudProjectSnapshotUploadResult> {
-    return this.projectSourceService.uploadProjectSnapshot(principal, input)
-  }
-
-  async getSessionProjectSource(tenantId: string, sessionId: string): Promise<CloudProjectSource | null> {
-    return this.projectSourceService.getSessionProjectSource(tenantId, sessionId)
   }
 
   private normalizeAndValidateProjectSource(
@@ -554,177 +508,6 @@ export class CloudSessionService {
     return this.principalService.ensurePrincipal(principal)
   }
 
-  // --- Enterprise SSO configuration (#895), gated on sso:manage ---
-  getSsoConfig(principal: CloudPrincipal) {
-    return this.ssoService.getSsoConfig(principal)
-  }
-
-  upsertSsoConfig(principal: CloudPrincipal, input: UpsertSsoConfigRequest) {
-    return this.ssoService.upsertSsoConfig(principal, input)
-  }
-
-  deleteSsoConfig(principal: CloudPrincipal) {
-    return this.ssoService.deleteSsoConfig(principal)
-  }
-
-  rotateScimToken(principal: CloudPrincipal) {
-    return this.ssoService.rotateScimToken(principal)
-  }
-
-  // The SSO login binding: verify a raw IdP assertion → bootstrapped principal.
-  authenticateSso(input: { orgId: string, rawAssertion: string }) {
-    return this.ssoService.authenticateSso(input)
-  }
-
-  // --- SCIM 2.0 provisioning (#895), authenticated by the per-org SCIM bearer token ---
-  authenticateScim(bearerToken: string | null) {
-    return this.scimService.authenticate(bearerToken)
-  }
-
-  listScimMembers(orgId: string, filter: { email?: string | null } = {}) {
-    return this.scimService.listMembers(orgId, filter)
-  }
-
-  getScimMember(orgId: string, accountId: string) {
-    return this.scimService.getMember(orgId, accountId)
-  }
-
-  createScimUser(orgId: string, input: ScimUserInput) {
-    return this.scimService.createUser(orgId, input)
-  }
-
-  replaceScimUser(orgId: string, accountId: string, input: ScimUserInput) {
-    return this.scimService.replaceUser(orgId, accountId, input)
-  }
-
-  patchScimUser(orgId: string, accountId: string, patch: ScimUserPatch) {
-    return this.scimService.patchUser(orgId, accountId, patch)
-  }
-
-  deprovisionScimUser(orgId: string, accountId: string) {
-    return this.scimService.deprovisionUser(orgId, accountId)
-  }
-
-  syncScimGroup(orgId: string, input: ScimGroupInput) {
-    return this.scimService.syncGroup(orgId, input)
-  }
-
-  // Drain the durable SCIM sync-event queue (retry with backoff); run periodically by the
-  // scheduler and directly by tests. Returns processed/succeeded/failed counts.
-  drainScimSyncQueue(input: { orgId?: string | null, limit?: number } = {}) {
-    return this.scimReconciler.drain(input)
-  }
-
-  enqueueScimReconcile(orgId: string) {
-    return this.scimReconciler.enqueueReconcile(orgId)
-  }
-
-  async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {
-    return this.overviewService.getWorkspaceOverview(principal)
-  }
-
-  async getAdminPolicyOverview(principal: CloudPrincipal): Promise<CloudAdminPolicyOverview> {
-    return this.overviewService.getAdminPolicyOverview(principal)
-  }
-
-  listOrgMembers(
-    principal: CloudPrincipal,
-    input: { query?: string | null, limit?: number | null } = {},
-  ): Promise<PublicOrgMemberRecord[]> {
-    return this.memberService.listOrgMembers(principal, input)
-  }
-
-  inviteOrgMember(
-    principal: CloudPrincipal,
-    input: { email: string, role?: ControlPlaneRole | null },
-  ): Promise<MembershipInviteResult> {
-    return this.memberService.inviteOrgMember(principal, input)
-  }
-
-  acceptMembershipInvite(token: string): Promise<{
-    orgId: string
-    accountId: string
-    email: string
-    role: ControlPlaneRole
-    status: ControlPlaneMembershipStatus
-  }> {
-    return this.memberService.acceptMembershipInvite(token)
-  }
-
-  updateOrgMember(
-    principal: CloudPrincipal,
-    accountId: string,
-    input: {
-      role?: ControlPlaneRole | null
-      status?: ControlPlaneMembershipStatus | null
-      confirm?: string | null
-    },
-  ): Promise<PublicOrgMemberRecord> {
-    return this.memberService.updateOrgMember(principal, accountId, input)
-  }
-
-  deprovisionOrgMember(principal: CloudPrincipal, accountId: string): Promise<PublicOrgMemberRecord> {
-    return this.memberService.deprovisionOrgMember(principal, accountId)
-  }
-
-  listPermissionCatalog() {
-    return this.roleService.listPermissionCatalog()
-  }
-
-  listCustomRoles(principal: CloudPrincipal) {
-    return this.roleService.listCustomRoles(principal)
-  }
-
-  createCustomRole(principal: CloudPrincipal, input: CreateCustomRoleRequest) {
-    return this.roleService.createCustomRole(principal, input)
-  }
-
-  updateCustomRole(principal: CloudPrincipal, roleKey: string, input: UpdateCustomRoleRequest) {
-    return this.roleService.updateCustomRole(principal, roleKey, input)
-  }
-
-  deleteCustomRole(principal: CloudPrincipal, roleKey: string) {
-    return this.roleService.deleteCustomRole(principal, roleKey)
-  }
-
-  assignMemberRole(principal: CloudPrincipal, accountId: string, input: { roleKey: string | null }) {
-    return this.roleService.assignMemberRole(principal, accountId, input)
-  }
-
-  resolveMemberPermissions(principal: CloudPrincipal, accountId: string) {
-    return this.roleService.resolveMemberPermissions(principal, accountId)
-  }
-
-  getManagedPolicy(principal: CloudPrincipal) {
-    return this.policyService.getManagedPolicy(principal)
-  }
-
-  setManagedPolicy(principal: CloudPrincipal, input: SetManagedPolicyRequest) {
-    return this.policyService.setManagedPolicy(principal, input)
-  }
-
-  getEffectiveManagedPolicy(principal: CloudPrincipal) {
-    return this.policyService.getEffectiveManagedPolicy(principal)
-  }
-
-  async listAuditEvents(
-    principal: CloudPrincipal,
-    input: { limit?: number | null } = {},
-  ) {
-    return this.overviewService.listAuditEvents(principal, input)
-  }
-
-  // Filterable, keyset-paginated audit query (#899). Gated on audit:read.
-  queryAuditEvents(principal: CloudPrincipal, filters: AuditQueryFilters = {}): Promise<AuditQueryPage> {
-    return this.auditService.queryAuditEvents(principal, filters)
-  }
-
-  // Streamed, redacted-by-default JSON/CSV export (#899). Unredacted mode is
-  // org-admin-only and records its own audit event.
-  exportAuditEvents(principal: CloudPrincipal, options: AuditExportOptions = {}): Promise<AuditExportStream> {
-    return this.auditService.exportAuditEvents(principal, options)
-  }
-
   // Fire-and-forget data-plane audit emission for callers outside this service
   // (e.g. the artifact service, which already holds a session-service handle).
   // Best-effort by construction: emitDataPlaneEvent never rejects on a write error.
@@ -751,58 +534,6 @@ export class CloudSessionService {
       actor: this.auditActor(principal),
       ...event,
     })
-  }
-
-  createManagedWorkerPool(principal: CloudPrincipal, input: CreateManagedWorkerPoolRequest) {
-    return this.managedWorkerService.createPool(principal, input)
-  }
-
-  updateManagedWorkerPool(principal: CloudPrincipal, poolId: string, input: UpdateManagedWorkerPoolRequest) {
-    return this.managedWorkerService.updatePool(principal, poolId, input)
-  }
-
-  listManagedWorkerPools(principal: CloudPrincipal, input: { status?: ManagedWorkerPoolStatus | null, limit?: number | null } = {}) {
-    return this.managedWorkerService.listPools(principal, input)
-  }
-
-  registerManagedWorker(principal: CloudPrincipal, input: RegisterManagedWorkerRequest) {
-    return this.managedWorkerService.registerWorker(principal, input)
-  }
-
-  listManagedWorkers(principal: CloudPrincipal, input: ListManagedWorkersRequest = {}) {
-    return this.managedWorkerService.listWorkers(principal, input)
-  }
-
-  getManagedWorker(principal: CloudPrincipal, workerId: string) {
-    return this.managedWorkerService.getWorker(principal, workerId)
-  }
-
-  updateManagedWorkerLifecycle(principal: CloudPrincipal, workerId: string, status: ManagedWorkerStatus, input: { reason?: string | null } = {}) {
-    return this.managedWorkerService.updateWorkerLifecycle(principal, workerId, status, input)
-  }
-
-  issueManagedWorkerCredential(principal: CloudPrincipal, workerId: string, input: { scopes?: string[] | null, expiresAt?: Date | null } = {}) {
-    return this.managedWorkerService.issueCredential(principal, workerId, input)
-  }
-
-  listManagedWorkerCredentials(principal: CloudPrincipal, workerId: string) {
-    return this.managedWorkerService.listCredentials(principal, workerId)
-  }
-
-  rotateManagedWorkerCredential(principal: CloudPrincipal, workerId: string, credentialId: string, input: { expiresAt?: Date | null } = {}) {
-    return this.managedWorkerService.rotateCredential(principal, workerId, credentialId, input)
-  }
-
-  revokeManagedWorkerCredential(principal: CloudPrincipal, workerId: string, credentialId: string) {
-    return this.managedWorkerService.revokeCredential(principal, workerId, credentialId)
-  }
-
-  recordManagedWorkerHeartbeat(principal: CloudPrincipal, workerId: string, input: ManagedWorkerHeartbeatRequest = {}) {
-    return this.managedWorkerService.recordHeartbeat(principal, workerId, input)
-  }
-
-  listManagedWorkerHeartbeats(principal: CloudPrincipal, input: { workerId?: string | null, limit?: number | null } = {}) {
-    return this.managedWorkerService.listHeartbeats(principal, input)
   }
 
   async createSession(principal: CloudPrincipal, input: {
@@ -1051,293 +782,6 @@ export class CloudSessionService {
     return this.store.listWorkerHeartbeats()
   }
 
-  async listByokSecrets(principal: CloudPrincipal): Promise<ByokSecretMetadata[]> {
-    return this.byokService.listSecrets(principal)
-  }
-
-  async getByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
-    return this.byokService.getSecret(principal, providerId)
-  }
-
-  async setByokSecret(
-    principal: CloudPrincipal,
-    input: { providerId: string, plaintext?: string | null, kmsRef?: string | null },
-  ): Promise<ByokSecretMetadata> {
-    return this.byokService.setSecret(principal, input)
-  }
-
-  async disableByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
-    return this.byokService.disableSecret(principal, providerId)
-  }
-
-  async validateByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
-    return this.byokService.validateSecret(principal, providerId)
-  }
-
-  async overrideByokSecretValidation(
-    principal: CloudPrincipal,
-    providerId: string,
-    reason: string,
-  ): Promise<ByokSecretMetadata | null> {
-    return this.byokService.overrideValidation(principal, providerId, reason)
-  }
-
-  async listHeadlessAgents(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<HeadlessAgentRecord[]> {
-    return this.channelDomain.listHeadlessAgents(principal, input)
-  }
-
-  async createHeadlessAgent(
-    principal: CloudPrincipal,
-    input: {
-      name: string
-      profileName?: string | null
-      status?: HeadlessAgentRecord['status']
-      managed?: boolean
-      agentId?: string | null
-    },
-  ): Promise<HeadlessAgentRecord> {
-    return this.channelDomain.createHeadlessAgent(principal, input)
-  }
-
-  async updateHeadlessAgent(
-    principal: CloudPrincipal,
-    agentId: string,
-    input: {
-      name?: string
-      profileName?: string
-      status?: HeadlessAgentRecord['status']
-      managed?: boolean
-    },
-  ): Promise<HeadlessAgentRecord | null> {
-    return this.channelDomain.updateHeadlessAgent(principal, agentId, input)
-  }
-
-  async listChannelBindings(
-    principal: CloudPrincipal,
-    agentId?: string | null,
-    input: { limit?: number | null } = {},
-  ): Promise<PublicChannelBindingRecord[]> {
-    return this.channelDomain.listChannelBindings(principal, agentId, input)
-  }
-
-  async createChannelBinding(
-    principal: CloudPrincipal,
-    input: {
-      agentId: string
-      provider: ChannelProviderId
-      displayName: string
-      externalWorkspaceId?: string | null
-      status?: ChannelBindingRecord['status']
-      credentialRef?: string | null
-      settings?: Record<string, unknown>
-      bindingId?: string | null
-    },
-  ): Promise<PublicChannelBindingRecord> {
-    return this.channelDomain.createChannelBinding(principal, input)
-  }
-
-  async updateChannelBinding(
-    principal: CloudPrincipal,
-    bindingId: string,
-    input: {
-      displayName?: string
-      status?: ChannelBindingRecord['status']
-      credentialRef?: string | null
-      settings?: Record<string, unknown>
-    },
-  ): Promise<PublicChannelBindingRecord | null> {
-    return this.channelDomain.updateChannelBinding(principal, bindingId, input)
-  }
-
-  async resolveChannelIdentity(
-    principal: CloudPrincipal,
-    input: {
-      provider: ChannelProviderId
-      channelBindingId?: string | null
-      externalWorkspaceId?: string | null
-      externalUserId: string
-      identityId?: string | null
-      accountId?: string | null
-      role?: ChannelIdentityRecord['role']
-      status?: ChannelIdentityRecord['status']
-      metadata?: Record<string, unknown>
-    },
-  ): Promise<ChannelIdentityRecord> {
-    return this.channelDomain.resolveChannelIdentity(principal, input)
-  }
-
-  async listChannelIdentities(
-    principal: CloudPrincipal,
-    input: {
-      provider?: ChannelProviderId | null
-      externalWorkspaceId?: string | null
-      role?: ChannelIdentityRecord['role'] | null
-      status?: ChannelIdentityRecord['status'] | null
-      limit?: number | null
-    } = {},
-  ): Promise<PublicChannelIdentityRecord[]> {
-    return this.channelDomain.listChannelIdentities(principal, input)
-  }
-
-  async bindChannelSession(
-    principal: CloudPrincipal,
-    input: ChannelActorInput & {
-      channelBindingId: string
-      provider: ChannelProviderId
-      externalChatId: string
-      externalThreadId: string
-      sessionId?: string | null
-      title?: string | null
-      lastEventSequence?: number
-      lastWorkspaceSequence?: number
-      lastChatMessageId?: string | null
-    },
-  ): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView }> {
-    return this.channelDomain.bindChannelSession(principal, input)
-  }
-
-  async getChannelSessionByThread(
-    principal: CloudPrincipal,
-    input: {
-      provider: ChannelProviderId
-      externalWorkspaceId?: string | null
-      externalChatId: string
-      externalThreadId: string
-    },
-  ): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null> {
-    return this.channelDomain.getChannelSessionByThread(principal, input)
-  }
-
-  async updateChannelCursor(
-    principal: CloudPrincipal,
-    input: {
-      bindingId: string
-      lastEventSequence: number
-      lastWorkspaceSequence: number
-      lastChatMessageId?: string | null
-    },
-  ): Promise<ChannelCursorUpdateResult> {
-    return this.channelDomain.updateChannelCursor(principal, input)
-  }
-
-  async enqueueChannelPrompt(
-    principal: CloudPrincipal,
-    input: ChannelActorInput & {
-      bindingId: string
-      text: string
-      agent?: string | null
-      commandId?: string | null
-    },
-  ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
-    return this.channelDomain.enqueueChannelPrompt(principal, input)
-  }
-
-  async createChannelInteraction(
-    principal: CloudPrincipal,
-    input: {
-      agentId: string
-      sessionId: string
-      provider: ChannelProviderId
-      kind: ChannelInteractionRecord['kind']
-      targetId: string
-      externalInteractionId?: string | null
-      createdByIdentityId?: string | null
-      expiresAt?: Date | null
-      interactionId?: string | null
-      tokenSecret?: string | null
-    },
-  ): Promise<IssuedChannelInteractionRecord> {
-    return this.channelDomain.createChannelInteraction(principal, input)
-  }
-
-  async resolveChannelInteraction(
-    principal: CloudPrincipal,
-    input: ChannelInteractionResolutionInput,
-  ): Promise<{ interaction: ChannelInteractionRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
-    return this.channelDomain.resolveChannelInteraction(principal, input)
-  }
-
-  async createChannelDelivery(
-    principal: CloudPrincipal,
-    input: {
-      agentId: string
-      channelBindingId: string
-      sessionBindingId?: string | null
-      provider: ChannelProviderId
-      target: Record<string, unknown>
-      eventType: string
-      payload: Record<string, unknown>
-      status?: ChannelDeliveryRecord['status']
-      nextAttemptAt?: Date | null
-      deliveryId?: string | null
-    },
-  ): Promise<PublicChannelDeliveryRecord> {
-    return this.channelDomain.createChannelDelivery(principal, input)
-  }
-
-  async validateChannelDeliveryTarget(
-    principal: CloudPrincipal,
-    input: {
-      agentId: string
-      channelBindingId: string
-      sessionBindingId?: string | null
-      provider: ChannelProviderId
-    },
-  ): Promise<void> {
-    return this.channelDomain.validateChannelDeliveryTarget(principal, input)
-  }
-
-  async createCloudCoordinationWatch(
-    principal: CloudPrincipal,
-    input: CoordinationWatchInput & { workspaceId: string },
-  ): Promise<CoordinationWatch> {
-    return this.coordinationService.createCloudCoordinationWatch(principal, input)
-  }
-
-  async updateCloudCoordinationWatch(
-    principal: CloudPrincipal,
-    workspaceId: string,
-    watchId: string,
-    patch: CoordinationWatchUpdateInput,
-  ): Promise<CoordinationWatch | null> {
-    return this.coordinationService.updateCloudCoordinationWatch(principal, workspaceId, watchId, patch)
-  }
-
-  async getCloudCoordinationWatch(
-    principal: CloudPrincipal,
-    workspaceId: string,
-    watchId: string,
-  ): Promise<CoordinationWatch | null> {
-    return this.coordinationService.getCloudCoordinationWatch(principal, workspaceId, watchId)
-  }
-
-  async listCloudCoordinationWatches(
-    principal: CloudPrincipal,
-    input: {
-      workspaceId: string
-      target?: CoordinationTarget | null
-      status?: CoordinationWatchStatus | null
-      limit?: number | null
-    },
-  ): Promise<CoordinationWatch[]> {
-    return this.coordinationService.listCloudCoordinationWatches(principal, input)
-  }
-
-  async deleteCloudCoordinationWatch(
-    principal: CloudPrincipal,
-    workspaceId: string,
-    watchId: string,
-  ): Promise<boolean> {
-    return this.coordinationService.deleteCloudCoordinationWatch(principal, workspaceId, watchId)
-  }
-
-  async emitCloudCoordinationWatchEvent(
-    principal: CloudPrincipal,
-    event: CoordinationWatchEvent,
-  ): Promise<void> {
-    return this.coordinationService.emitCloudCoordinationWatchEvent(principal, event)
-  }
-
   async resolveOrgIdForTenant(tenantId: string): Promise<string> {
     const normalizedTenantId = tenantId.trim() || 'default'
     const org = await this.store.ensureOrgForTenant({
@@ -1345,285 +789,6 @@ export class CloudSessionService {
       name: normalizedTenantId,
     })
     return org.orgId
-  }
-
-  async listChannelDeliveries(
-    principal: CloudPrincipal,
-    input: {
-      deliveryId?: string | null
-      status?: ChannelDeliveryRecord['status'] | null
-      channelBindingId?: string | null
-      limit?: number | null
-    } = {},
-  ): Promise<PublicChannelDeliveryRecord[]> {
-    return this.channelDomain.listChannelDeliveries(principal, input)
-  }
-
-  async retryChannelDelivery(
-    principal: CloudPrincipal,
-    deliveryId: string,
-  ): Promise<PublicChannelDeliveryRecord | null> {
-    return this.channelDomain.retryChannelDelivery(principal, deliveryId)
-  }
-
-  async deadLetterChannelDelivery(
-    principal: CloudPrincipal,
-    input: { deliveryId: string, lastError?: string | null },
-  ): Promise<PublicChannelDeliveryRecord | null> {
-    return this.channelDomain.deadLetterChannelDelivery(principal, input)
-  }
-
-  async claimNextChannelDelivery(
-    principal: CloudPrincipal,
-    input: { claimedBy: string, ttlMs?: number, now?: Date, channelBindingIds?: readonly string[] | null },
-  ): Promise<ChannelDeliveryRecord | null> {
-    return this.channelDomain.claimNextChannelDelivery(principal, input)
-  }
-
-  async ackChannelDelivery(
-    principal: CloudPrincipal,
-    input: {
-      deliveryId: string
-      claimedBy?: string | null
-      status: Extract<ChannelDeliveryRecord['status'], 'sent' | 'failed' | 'dead'>
-      lastError?: string | null
-      nextAttemptAt?: Date | null
-    },
-  ): Promise<PublicChannelDeliveryRecord | null> {
-    return this.channelDomain.ackChannelDelivery(principal, input)
-  }
-
-  async claimChannelProviderEvent(
-    principal: CloudPrincipal,
-    input: {
-      provider: ChannelProviderId
-      providerInstanceId: string
-      channelBindingId?: string | null
-      externalWorkspaceId?: string | null
-      providerEventId: string
-      eventType: ChannelProviderEventType
-      claimedBy: string
-      ttlMs?: number | null
-      metadata?: Record<string, unknown>
-    },
-  ): Promise<ChannelProviderEventClaimResult> {
-    return this.channelDomain.claimChannelProviderEvent(principal, input)
-  }
-
-  async completeChannelProviderEvent(
-    principal: CloudPrincipal,
-    input: {
-      eventId: string
-      channelBindingId?: string | null
-      claimedBy: string
-      status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
-      retryable?: boolean
-      lastError?: string | null
-    },
-  ): Promise<ChannelProviderEventRecord | null> {
-    return this.channelDomain.completeChannelProviderEvent(principal, input)
-  }
-
-  async listSettingMetadata(principal: CloudPrincipal) {
-    return this.settingMetadataService.listSettingMetadata(principal)
-  }
-
-  async getSettingMetadata(principal: CloudPrincipal, key: string) {
-    return this.settingMetadataService.getSettingMetadata(principal, key)
-  }
-
-  async setSettingMetadata(
-    principal: CloudPrincipal,
-    input: { key: string, value: Record<string, unknown> },
-  ) {
-    return this.settingMetadataService.setSettingMetadata(principal, input)
-  }
-
-  async listCapabilityCatalog(principal: CloudPrincipal) {
-    return this.capabilityService.listCapabilityCatalog(principal)
-  }
-
-  async listCapabilityTools(principal: CloudPrincipal): Promise<CapabilityTool[]> {
-    return this.capabilityService.listCapabilityTools(principal)
-  }
-
-  async getCapabilityTool(principal: CloudPrincipal, toolId: string): Promise<CapabilityTool | null> {
-    return this.capabilityService.getCapabilityTool(principal, toolId)
-  }
-
-  async listCapabilitySkills(principal: CloudPrincipal): Promise<CapabilitySkill[]> {
-    return this.capabilityService.listCapabilitySkills(principal)
-  }
-
-  async getCapabilitySkill(principal: CloudPrincipal, skillName: string): Promise<CapabilitySkill | null> {
-    return this.capabilityService.getCapabilitySkill(principal, skillName)
-  }
-
-  async getCapabilitySkillBundle(principal: CloudPrincipal, skillName: string) {
-    return this.capabilityService.getCapabilitySkillBundle(principal, skillName)
-  }
-
-  async listThreadTags(principal: CloudPrincipal): Promise<ThreadTagRecord[]> {
-    return this.threadOrganization.listThreadTags(principal)
-  }
-
-  async createThreadTag(
-    principal: CloudPrincipal,
-    input: { name: string, color?: string | null },
-  ): Promise<ThreadTagRecord> {
-    return this.threadOrganization.createThreadTag(principal, input)
-  }
-
-  async updateThreadTag(
-    principal: CloudPrincipal,
-    tagId: string,
-    input: { name?: string, color?: string | null },
-  ): Promise<ThreadTagRecord | null> {
-    return this.threadOrganization.updateThreadTag(principal, tagId, input)
-  }
-
-  async deleteThreadTag(principal: CloudPrincipal, tagId: string): Promise<boolean> {
-    return this.threadOrganization.deleteThreadTag(principal, tagId)
-  }
-
-  async applyThreadTag(principal: CloudPrincipal, tagId: string, sessionIds: string[]): Promise<void> {
-    return this.threadOrganization.applyThreadTag(principal, tagId, sessionIds)
-  }
-
-  async removeThreadTag(principal: CloudPrincipal, tagId: string, sessionIds: string[]): Promise<void> {
-    return this.threadOrganization.removeThreadTag(principal, tagId, sessionIds)
-  }
-
-  async listThreadMetadata(principal: CloudPrincipal, input: { tagIds?: string[], limit?: number } = {}) {
-    return this.threadOrganization.listThreadMetadata(principal, input)
-  }
-
-  async listThreadSmartFilters(principal: CloudPrincipal): Promise<ThreadSmartFilterRecord[]> {
-    return this.threadOrganization.listThreadSmartFilters(principal)
-  }
-
-  async createThreadSmartFilter(
-    principal: CloudPrincipal,
-    input: { name: string, query: Record<string, unknown> },
-  ): Promise<ThreadSmartFilterRecord> {
-    return this.threadOrganization.createThreadSmartFilter(principal, input)
-  }
-
-  async updateThreadSmartFilter(
-    principal: CloudPrincipal,
-    filterId: string,
-    input: { name?: string, query?: Record<string, unknown> },
-  ): Promise<ThreadSmartFilterRecord | null> {
-    return this.threadOrganization.updateThreadSmartFilter(principal, filterId, input)
-  }
-
-  async deleteThreadSmartFilter(principal: CloudPrincipal, filterId: string): Promise<boolean> {
-    return this.threadOrganization.deleteThreadSmartFilter(principal, filterId)
-  }
-
-  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null, cursor?: string | null } = {}): Promise<WorkflowListPayload> {
-    return this.workflowOperations.listWorkflows(principal, input)
-  }
-
-  async getWorkflow(principal: CloudPrincipal, workflowId: string): Promise<WorkflowDetail | null> {
-    return this.workflowOperations.getWorkflow(principal, workflowId)
-  }
-
-  async createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowDetail> {
-    return this.workflowOperations.createWorkflow(principal, draft)
-  }
-
-  async updateWorkflowStatus(
-    principal: CloudPrincipal,
-    workflowId: string,
-    status: WorkflowStatus,
-  ): Promise<WorkflowDetail | null> {
-    return this.workflowOperations.updateWorkflowStatus(principal, workflowId, status)
-  }
-
-  async runWorkflow(
-    principal: CloudPrincipal,
-    workflowId: string,
-    input: {
-      triggerType?: WorkflowTriggerType
-      triggerPayload?: Record<string, unknown> | null
-    } = {},
-  ): Promise<CloudWorkflowStartResult> {
-    return this.workflowOperations.runWorkflow(principal, workflowId, input)
-  }
-
-  async claimAndStartDueWorkflow(now = new Date(), claimedBy?: string | null): Promise<CloudWorkflowStartResult | null> {
-    return this.workflowOperations.claimAndStartDueWorkflow(now, claimedBy)
-  }
-
-  async runWorkflowWebhook(input: {
-    workflowId: string
-    auth: WorkflowWebhookAuth
-    payload: Record<string, unknown>
-    securityStore: WorkflowWebhookSecurityStore
-    now?: Date
-  }): Promise<CloudWorkflowStartResult> {
-    return this.workflowOperations.runWorkflowWebhook(input)
-  }
-
-  async appendProductEvent(
-    principal: CloudPrincipal,
-    sessionId: string,
-    input: {
-      eventId?: string
-      type: CloudProjectedSessionEventType
-      payload?: Record<string, unknown>
-      createdAt?: Date
-    },
-  ) {
-    return this.usageOperations.appendProductEvent(principal, sessionId, input)
-  }
-
-  async assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number) {
-    return this.usageOperations.assertArtifactUploadAllowed(principal, bytes)
-  }
-
-  async reserveArtifactUploadQuota(principal: CloudPrincipal, input: {
-    sessionId: string
-    artifactId: string
-    objectKey: string
-    filename: string
-    contentType: string | null
-    expectedBytes: number
-    expiresAt: string
-  }) {
-    return this.usageOperations.reserveArtifactUploadQuota(principal, input)
-  }
-
-  async getArtifactUploadReservation(principal: CloudPrincipal, input: {
-    sessionId: string
-    artifactId: string
-  }) {
-    return this.usageOperations.getArtifactUploadReservation(principal, input)
-  }
-
-  async settleArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
-    sessionId: string
-    artifactId: string
-    actualBytes: number
-  }) {
-    return this.usageOperations.settleArtifactUploadQuotaReservation(principal, input)
-  }
-
-  async releaseArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
-    sessionId: string
-    artifactId: string
-    status: 'expired' | 'failed'
-  }) {
-    return this.usageOperations.releaseArtifactUploadQuotaReservation(principal, input)
-  }
-
-  async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
-    return this.usageOperations.recordArtifactUploaded(principal, sessionId, artifactId, bytes)
-  }
-
-  async recordArtifactDownloaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
-    return this.usageOperations.recordArtifactDownloaded(principal, sessionId, artifactId, bytes)
   }
 
   async recordWorkerMinutes(input: {
@@ -1684,76 +849,6 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     this.principalService.assertAnyPermission(principal, ['operations:view', 'billing:manage'], 'Usage analytics requires the "operations:view" or "billing:manage" permission.')
     return this.usageGovernance.getUsageSummary(this.principalOrgId(principal), limit)
-  }
-
-  async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
-    return this.diagnosticsOperations.getDiagnosticsBundle(principal)
-  }
-
-  async listApiTokens(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<PublicApiTokenRecord[]> {
-    return this.apiTokenOperations.listApiTokens(principal, input)
-  }
-
-  async issueApiToken(
-    principal: CloudPrincipal,
-    input: {
-      name: string
-      scopes: ApiTokenScope[]
-      expiresAt?: Date | null
-      channelBindingIds?: readonly string[] | null
-    },
-  ): Promise<IssuedPublicApiTokenRecord> {
-    return this.apiTokenOperations.issueApiToken(principal, input)
-  }
-
-  async revokeApiToken(principal: CloudPrincipal, tokenId: string): Promise<PublicApiTokenRecord | null> {
-    return this.apiTokenOperations.revokeApiToken(principal, tokenId)
-  }
-
-  async grantApiTokenChannelBinding(
-    principal: CloudPrincipal,
-    tokenId: string,
-    input: { channelBindingId: string },
-  ): Promise<{ grant: { orgId: string, tokenId: string, channelBindingId: string, createdAt: string }, token: PublicApiTokenRecord }> {
-    return this.apiTokenOperations.grantApiTokenChannelBinding(principal, tokenId, input)
-  }
-
-  async getBillingSubscription(principal: CloudPrincipal) {
-    return this.billingOperations.getBillingSubscription(principal)
-  }
-
-  async createBillingCheckout(
-    principal: CloudPrincipal,
-    input: { planKey?: string | null, successUrl?: string | null, cancelUrl?: string | null },
-  ): Promise<BillingCheckoutResult> {
-    return this.billingOperations.createBillingCheckout(principal, input)
-  }
-
-  async createBillingPortal(
-    principal: CloudPrincipal,
-    input: { returnUrl?: string | null },
-  ): Promise<BillingPortalResult> {
-    return this.billingOperations.createBillingPortal(principal, input)
-  }
-
-  async verifyBillingWebhook(input: {
-    headers: Record<string, string | undefined>
-    rawBody: string
-    body: Record<string, unknown>
-  }): Promise<BillingWebhookResult> {
-    return this.billingOperations.verifyBillingWebhook(input)
-  }
-
-  async applyBillingWebhookResult(result: BillingWebhookResult): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
-    return this.billingOperations.applyBillingWebhookResult(result)
-  }
-
-  async handleBillingWebhook(input: {
-    headers: Record<string, string | undefined>
-    rawBody: string
-    body: Record<string, unknown>
-  }): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
-    return this.billingOperations.handleBillingWebhook(input)
   }
 
   async claimHttpRateLimit(input: {

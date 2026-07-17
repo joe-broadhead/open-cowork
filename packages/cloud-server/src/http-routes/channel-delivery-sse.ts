@@ -85,7 +85,7 @@ export async function handleChannelDeliveriesSse(
     pollActive = true
     try {
       const requestedChannelBindingIds = channelBindingIds.length > 0 ? channelBindingIds : null
-      let claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy: requestedClaimedBy, ttlMs, channelBindingIds: requestedChannelBindingIds })
+      let claimed = await options.service.domains.channels.claimNextChannelDelivery(context.principal, { claimedBy: requestedClaimedBy, ttlMs, channelBindingIds: requestedChannelBindingIds })
       while (claimed && !closed && !res.destroyed) {
         writeChannelDeliverySseEvent(res, claimed)
         // Backpressure: a consumer draining slower than deliveries are produced would
@@ -95,7 +95,7 @@ export async function handleChannelDeliveriesSse(
           res.destroy()
           break
         }
-        claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy: requestedClaimedBy, ttlMs, channelBindingIds: requestedChannelBindingIds })
+        claimed = await options.service.domains.channels.claimNextChannelDelivery(context.principal, { claimedBy: requestedClaimedBy, ttlMs, channelBindingIds: requestedChannelBindingIds })
       }
       if (!closed && !res.destroyed) res.write(': keep-alive\n\n')
     } catch (error) {

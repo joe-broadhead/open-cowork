@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Button, Dialog } from './ui'
+import { Button, Dialog } from '@open-cowork/ui'
 
 export type ConfirmDialogProps = {
   open: boolean

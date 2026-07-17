@@ -1,5 +1,5 @@
 import type { AdminEntitlements } from '@open-cowork/shared'
-import { Badge } from '../ui'
+import { Badge } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 import { AdminSectionHeader } from './AdminPrimitives'
 

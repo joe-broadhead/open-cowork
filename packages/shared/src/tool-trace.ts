@@ -21,6 +21,12 @@ export const DEFAULT_TOOL_TRACE_RULES: ToolTraceRule[] = [
   { id: 'task', label: 'delegation', pluralLabel: 'delegations', match: [{ exact: ['task'] }] },
   { id: 'command', label: 'command', pluralLabel: 'commands', match: [{ exact: ['bash', 'command'] }, { contains: ['bash'] }] },
   { id: 'chart', label: 'chart', pluralLabel: 'charts', match: [{ prefixes: ['charts_', 'mcp__charts__'] }] },
+  { id: 'time', label: 'time lookup', pluralLabel: 'time lookups', match: [{ prefixes: ['time-keep_', 'mcp__time-keep__'] }] },
+  { id: 'skill bundle', label: 'skill bundle action', pluralLabel: 'skill bundle actions', match: [{ prefixes: ['skills_', 'mcp__skills__'] }] },
+  { id: 'agent config', label: 'agent config action', pluralLabel: 'agent config actions', match: [{ prefixes: ['agents_', 'mcp__agents__'] }] },
+  { id: 'workflow', label: 'workflow action', pluralLabel: 'workflow actions', match: [{ prefixes: ['workflows_', 'mcp__workflows__'] }] },
+  { id: 'knowledge', label: 'knowledge action', pluralLabel: 'knowledge actions', match: [{ prefixes: ['knowledge_', 'mcp__knowledge__'] }] },
+  { id: 'ui status', label: 'UI status action', pluralLabel: 'UI status actions', match: [{ prefixes: ['semantic-ui_', 'mcp__semantic-ui__'] }] },
   { id: 'query', label: 'query', pluralLabel: 'queries', match: [{ prefixes: ['nova_execute_sql', 'mcp__nova__execute_sql'] }] },
   {
     id: 'inspection',

@@ -27,8 +27,8 @@ async function makeFixture() {
   await store.ensureUser({ tenantId: 'org-1', userId: 'owner', email: 'owner@example.test', role: 'owner' })
   const owner: CloudPrincipal = { tenantId: 'org-1', userId: 'owner', email: 'owner@example.test', authSource: 'user' }
   await service.ensurePrincipal(owner)
-  await service.upsertSsoConfig(owner, { protocol: 'oidc', enabled: true, verifiedDomains: ['example.test'] })
-  const { scimToken } = await service.rotateScimToken(owner)
+  await service.domains.sso.upsertSsoConfig(owner, { protocol: 'oidc', enabled: true, verifiedDomains: ['example.test'] })
+  const { scimToken } = await service.domains.sso.rotateScimToken(owner)
 
   const server = createCloudHttpServer({ service, policy, publicBranding: DEFAULT_CONFIG.cloud.publicBranding })
   const baseUrl = await server.listen()

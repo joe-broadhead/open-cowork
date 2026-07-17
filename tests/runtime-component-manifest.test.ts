@@ -13,8 +13,8 @@ function manifest(overrides: Partial<RuntimeComponentManifest> = {}): RuntimeCom
     components: [{
       id: 'opencode-cli',
       kind: 'opencode-cli',
-      version: '1.17.20',
-      upstreamVersion: '1.17.20',
+      version: '1.18.1',
+      upstreamVersion: '1.18.1',
       platform: 'darwin',
       arch: 'arm64',
       path: '/Users/alice/private/open-cowork/opencode',
@@ -138,7 +138,7 @@ test('runtime component manifest builder records observed component versions and
         'semantic-ui-mcp': semanticPath,
       },
       componentVersions: {
-        'opencode-cli': 'opencode 1.17.20',
+        'opencode-cli': 'opencode 1.18.1',
         'opencode-sdk': '2.3.4',
         'workflow-mcp': '0.0.0',
         'agent-tool-mcp': '0.0.0',
@@ -149,8 +149,8 @@ test('runtime component manifest builder records observed component versions and
     })
 
     const cli = observedManifest.components.find((component) => component.id === 'opencode-cli')
-    assert.equal(cli?.version, '1.17.20')
-    assert.equal(cli?.observedVersion, '1.17.20')
+    assert.equal(cli?.version, '1.18.1')
+    assert.equal(cli?.observedVersion, '1.18.1')
     assert.equal(cli?.sourcePolicy, 'development')
     assert.equal(cli?.observedSha256, createHash('sha256').update('opencode-binary').digest('hex'))
     assert.equal(observedManifest.components.some((component) => component.id === 'semantic-ui-mcp'), true)
@@ -173,7 +173,7 @@ test('runtime component manifest builder does not hash symlinked component paths
         'opencode-cli': symlinkPath,
       },
       componentVersions: {
-        'opencode-cli': 'opencode 1.17.20',
+        'opencode-cli': 'opencode 1.18.1',
       },
       generatedAt: '2026-06-02T00:00:00.000Z',
       isPackaged: false,
@@ -197,7 +197,7 @@ test('runtime component verification merges expected manifests with observed has
       components: [{
         id: 'opencode-cli',
         kind: 'opencode-cli',
-        version: '1.17.20',
+        version: '1.18.1',
         path: cliPath,
         sha256: `sha256:${'b'.repeat(64)}`,
         sourcePolicy: 'bundled',
@@ -207,7 +207,7 @@ test('runtime component verification merges expected manifests with observed has
 
     const report = await buildRuntimeComponentVerificationReport({
       componentPaths: { 'opencode-cli': cliPath },
-      componentVersions: { 'opencode-cli': '1.17.20' },
+      componentVersions: { 'opencode-cli': '1.18.1' },
       manifestPath,
       now: () => new Date('2026-06-02T01:00:00.000Z'),
     })
@@ -223,7 +223,7 @@ test('runtime component verification merges expected manifests with observed has
 test('runtime component verification reports missing packaged manifests with observed evidence', async () => {
   const report = await buildRuntimeComponentVerificationReport({
     componentVersions: {
-      'opencode-cli': '1.17.20',
+      'opencode-cli': '1.18.1',
       'opencode-sdk': '2.3.4',
       'workflow-mcp': '0.0.0',
       'agent-tool-mcp': '0.0.0',
@@ -259,7 +259,7 @@ const NULL_COMPONENT_PATHS = {
   'semantic-ui-mcp': null,
 } as const
 const COMPONENT_VERSIONS = {
-  'opencode-cli': '1.17.20',
+  'opencode-cli': '1.18.1',
   'opencode-sdk': '2.3.4',
   'workflow-mcp': '0.0.0',
   'agent-tool-mcp': '0.0.0',

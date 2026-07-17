@@ -93,6 +93,31 @@ regenerated from disk on demand via `session-history-loader.ts`.
 Consequence: memory usage stays flat even with thousands of
 persisted sessions, because only a dozen are live at any moment.
 
+## Session registry scale notes (large thread counts)
+
+The on-disk session index (`sessions.json`) remains the source of
+truth for every local thread. In memory:
+
+- Session rows live in a `Map` keyed by id (`getSessionRecord` is O(1)).
+- An inverted **directory trust index** maps `resolve(directory)` →
+  session ids so project-directory grant checks do not clone/sort the
+  full registry (see `lookupSessionDirectoryTrust`).
+- `listSessionRecords()` still clones every row and sorts by
+  `updatedAt` for UI/list consumers. Hot paths that only need existence
+  or an id probe must use `getSessionRecord`,
+  `lookupSessionDirectoryTrust`, or `listSessionRecords({ sort: false })`
+  instead of `listSessionRecords().find(...)`.
+
+| Thread count | Expected behaviour |
+| --- | --- |
+| ≤ ~500 | Full sorted list is cheap; sidebar virtualization keeps the DOM flat. |
+| ~1k–5k | Prefer unsorted / indexed probes on grant and background paths; UI list remains sorted but is virtualized. |
+| 10k+ | Boot still reads the JSON registry linearly (not yet SQLite-backed). Trust lookups stay O(1) via the inverted index. Prefer thread-index / smart-filter surfaces over scanning every row in product UI. |
+
+Warm session details stay capped at 12 regardless of registry size;
+registry growth is storage and boot-parse cost, not live memory for
+chat views.
+
 ## Live session events
 
 Chat subscribes to `session:patch` / `sessionUpdated` /
@@ -100,7 +125,35 @@ Chat subscribes to `session:patch` / `sessionUpdated` /
 flushed on an animation frame at a minimum `STREAM_FLUSH_INTERVAL_MS`
 (~32ms) interval, while certain patches commit immediately. Bursts (a
 single assistant turn fires many patches) coalesce into frame-aligned
-refreshes rather than an 800ms debounce.
+refreshes rather than an 800ms debounce. Pending patches are capped at
+`MAX_PENDING_SESSION_PATCHES_PER_WINDOW` (512) before falling back to a
+full view catch-up.
+
+## Hot-path Map/Set bounds (desktop + runtime-host)
+
+Long-lived process caches must share the same bound pattern as warm
+session details (12), patch flush (512), worker lease LRU, and
+coordination watch list (1000): size and/or TTL caps with FIFO/LRU
+eviction and tests.
+
+| Cache | Cap | Eviction |
+| --- | --- | --- |
+| Warm session details | 12 (+ active/busy) | LRU prune on activate |
+| Pending session patches / window | 512 | Drop + view catch-up |
+| History refresh queue | 256 | Drop oldest queued id |
+| Permission routing map | 1000 | FIFO |
+| Capability tool method cache | 500 + 30s TTL | FIFO + TTL |
+| Runtime tool cache | 64 + 30s TTL | FIFO + TTL |
+| Runtime catalog snapshot | 64 + 30s TTL | FIFO + TTL |
+| Directory-scoped OpenCode clients | 64 | LRU |
+| Durable event hubs (directories) | 64 | FIFO on attach |
+| Durable sessions / directory hub | 256 | approx LRU |
+| Approved skill-import picker tokens | 64 | FIFO |
+| Worker lease cache (cloud) | 4096 default | LRU |
+| Coordination watch list queries | ≤1000 | SQL `LIMIT` |
+
+`packages/runtime-host/src/bounded-map.ts` provides the shared
+`setBoundedMapEntry` / `enforceMapMaxSize` helpers for new maps.
 
 ## Cloud API query guardrails
 
@@ -238,9 +291,11 @@ that leaves the warm set.
   already exists and backs the sandboxed render path; what is not yet
   optimized is defaulting large-dataset display to server-side
   rendering.
-- **Session registry indexing** — 10k sessions on disk read linearly
-  on every boot. Needs a lightweight index (SQLite or a sidecar
-  B-tree) before the app targets long-term heavy users.
+- **Session registry on-disk format** — 10k sessions on disk still
+  read linearly on every boot. Directory grant trust is now O(1) via
+  an in-memory inverted index, but the boot parse itself still wants a
+  lightweight on-disk index (SQLite or a sidecar B-tree) before the app
+  targets long-term heavy users.
 - **Per-org concurrency-counter write ceiling** — cloud concurrency
   quotas are kept in `cloud_concurrency_counters` as one row per
   `(org, counter_key)`, giving O(1) quota reads. The write side is a

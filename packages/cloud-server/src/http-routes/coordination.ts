@@ -305,7 +305,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
   if (collection === 'watches') {
     if (!itemId && req.method === 'GET') {
       try {
-        const watches = await options.service.listCloudCoordinationWatches(context.principal, {
+        const watches = await options.service.domains.coordination.listCloudCoordinationWatches(context.principal, {
           workspaceId,
           target: watchTargetFromQuery(context.url),
           status: watchStatusFromQuery(context.url),
@@ -328,7 +328,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
         assertImplementedWatchTarget(target)
         if (!await requireWatchTargetInWorkspace(input, target, workspaceId)) return true
         const watchInputBody = await validateWatchChannel(input, body)
-        tools.writeJson(res, 201, await options.service.createCloudCoordinationWatch(context.principal, {
+        tools.writeJson(res, 201, await options.service.domains.coordination.createCloudCoordinationWatch(context.principal, {
           ...watchCreateInputFromBody(watchInputBody, target),
           workspaceId,
         }), options.corsOrigin)
@@ -358,7 +358,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
         } else if (hasOwnField(body, 'recipient')) {
           watchInputBody = normalizeCloudWatchRecipient(input, body)
         }
-        const watch = await options.service.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, watchUpdateInputFromBody(watchInputBody, target))
+        const watch = await options.service.domains.coordination.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, watchUpdateInputFromBody(watchInputBody, target))
         if (!watch) {
           tools.writeError(res, 404, 'Coordination watch was not found.', options.corsOrigin)
           return true
@@ -374,7 +374,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
       if (!existingWatch) return true
       try {
         await validateExistingWatchMutation(input, existingWatch)
-        const watch = await options.service.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, { status: 'paused' })
+        const watch = await options.service.domains.coordination.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, { status: 'paused' })
         tools.writeJson(res, watch ? 200 : 404, watch || { error: 'Coordination watch was not found.' }, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
@@ -386,7 +386,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
       if (!existingWatch) return true
       try {
         await validateExistingWatchMutation(input, existingWatch)
-        const watch = await options.service.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, { status: 'active' })
+        const watch = await options.service.domains.coordination.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, { status: 'active' })
         tools.writeJson(res, watch ? 200 : 404, watch || { error: 'Coordination watch was not found.' }, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
@@ -398,7 +398,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
       if (!existingWatch) return true
       try {
         await validateExistingWatchMutation(input, existingWatch)
-        tools.writeJson(res, 200, { deleted: await options.service.deleteCloudCoordinationWatch(context.principal, workspaceId, itemId) }, options.corsOrigin)
+        tools.writeJson(res, 200, { deleted: await options.service.domains.coordination.deleteCloudCoordinationWatch(context.principal, workspaceId, itemId) }, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
       }

@@ -87,6 +87,9 @@ Production inputs:
 - worker checkpoints before multiple workers
 - `/livez` and `/readyz` probes
 - backup/restore evidence
+- multi-web-pod SSE: `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` on web and worker
+  roles, plus `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` sized to concurrent
+  tabs (default `200`; see `docs/open-cowork-cloud.md#multi-pod-sse-load-guidance`)
 
 Reference kit:
 

@@ -55,6 +55,10 @@ extra_javascript:
 
 plugins:
   - search
+  - redirects:
+      redirect_maps:
+        # JOE-857: product page renamed Threads → Projects
+        threads.md: projects.md
   - minify:
       minify_html: true
       htmlmin_opts:
@@ -103,16 +107,22 @@ nav:
       - Desktop App Guide: desktop-app.md
       - Glossary: glossary.md
   - Use:
-      - Projects: threads.md
+      - Projects: projects.md
       - Playbooks: workflows.md
       - Workflow Recipes: workflow-recipes.md
       - Team: agent-authoring.md
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
       - OpenWiki Knowledge Base: openwiki.md
+      - Knowledge store ownership: knowledge-store-ownership.md
+      - OpenCode Gateway: opencode-gateway.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
+      - Singleton cache reset contracts: singleton-cache-reset-contracts.md
+      - Worker-scoped runtime adapter: worker-scoped-runtime-adapter.md
+      - Managed OpenCode server hosts: managed-opencode-server-hosts.md
+      - Cloud dual control-plane tax: cloud-dual-control-plane.md
       - Frontend Architecture: frontend-architecture.md
       - Product Contract: product-contract.md
       - Coordination Model: coordination-model.md

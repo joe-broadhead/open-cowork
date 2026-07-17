@@ -3,13 +3,9 @@ import { PluginIcon } from '../plugins/PluginIcon'
 import { t } from '../../helpers/i18n'
 import { entityChroma } from '../../helpers/entity-chroma'
 import {
-  buildCapabilityMapSections,
-  mergedRuntimeToolset,
-  prettyKind,
-  type CapabilityMapGroup,
-} from './capabilities-page-support.ts'
+  buildCapabilityMapSections, mergedRuntimeToolset, prettyKind, CapabilityMapGroup, } from './capabilities-page-support.ts'
 import { EmptyGrid } from './capabilities-page-components.tsx'
-import { Badge, Card, Icon, type BadgeTone } from '../ui'
+import { Badge, Card, Icon, type BadgeTone } from '@open-cowork/ui'
 
 type CapabilityMapViewProps = {
   groups: CapabilityMapGroup[]

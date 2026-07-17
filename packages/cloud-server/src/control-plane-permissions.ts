@@ -53,9 +53,29 @@ const CONTROL_PLANE_PERMISSION_SET = new Set<string>(CONTROL_PLANE_PERMISSIONS)
 // Built-in roles keep their existing broad capabilities so nothing that programs
 // against owner/admin/member changes. Custom roles are how an org expresses a
 // NARROWER (or differently-shaped) capability set than the built-ins.
+// JOE-833: least-privilege admin vs owner.
+// Owner retains full control-plane power (billing, SSO, role catalog, org destroy).
+// Admin keeps day-to-day operations (members, sessions, workflows, policy, audit, tokens)
+// but cannot manage billing, SSO federation, or the custom-role catalog alone.
+const ADMIN_PERMISSIONS: readonly ControlPlanePermission[] = [
+  'org:read',
+  'org:manage',
+  'members:read',
+  'members:manage',
+  'api_tokens:read',
+  'api_tokens:manage',
+  'policy:manage',
+  'audit:read',
+  'sessions:read',
+  'sessions:write',
+  'workflows:manage',
+  'operations:view',
+  'diagnostics:view',
+]
+
 export const BUILTIN_ROLE_PERMISSIONS: Record<ControlPlaneRole, readonly ControlPlanePermission[]> = {
   owner: [...CONTROL_PLANE_PERMISSIONS],
-  admin: [...CONTROL_PLANE_PERMISSIONS],
+  admin: [...ADMIN_PERMISSIONS],
   member: ['org:read', 'members:read', 'sessions:read', 'sessions:write'],
 } as const
 

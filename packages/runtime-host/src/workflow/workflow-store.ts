@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { getAppPathHost, getSafeStorageHost, type WebhookAuthFailureRecord, type WorkflowWebhookReplayClaim, type WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import type {
   CloudProjectionCheckpoint,
@@ -48,6 +48,44 @@ const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
 const VALID_STATUS = new Set<WorkflowStatus>(['active', 'paused', 'running', 'failed', 'archived'])
 const VALID_RUN_STATUS = new Set<WorkflowRunStatus>(['queued', 'running', 'completed', 'failed', 'cancelled'])
+
+// Inverted index: resolve(project_directory) → presence. Project-directory grant
+// trust must not listWorkflows() (full row + recent runs) just to answer "is this
+// path known?" (JOE-896). Rebuilt lazily from a project_directory-only scan and
+// invalidated on create / store reset.
+let workflowDirectoryTrustIndex: Set<string> | null = null
+
+function invalidateWorkflowDirectoryTrustIndex() {
+  workflowDirectoryTrustIndex = null
+}
+
+function loadWorkflowDirectoryTrustIndex(): Set<string> {
+  if (workflowDirectoryTrustIndex) return workflowDirectoryTrustIndex
+  const rows = getWorkflowDb().prepare(
+    `select project_directory from workflows where project_directory is not null and trim(project_directory) != ''`,
+  ).all() as Array<{ project_directory: string }>
+  const next = new Set<string>()
+  for (const row of rows) {
+    try {
+      next.add(resolve(row.project_directory))
+    } catch {
+      // Skip unresolvable stored paths rather than failing the trust probe.
+    }
+  }
+  workflowDirectoryTrustIndex = next
+  return next
+}
+
+export type WorkflowDirectoryTrustSource = 'workflow-record'
+
+/**
+ * O(1) average directory trust probe for project-directory grants.
+ * `directory` should be the realpath-normalized grant candidate.
+ */
+export function lookupWorkflowDirectoryTrust(directory: string): WorkflowDirectoryTrustSource | null {
+  if (!directory) return null
+  return loadWorkflowDirectoryTrustIndex().has(resolve(directory)) ? 'workflow-record' : null
+}
 
 const WORKFLOW_BASELINE_SQL = `
   create table workflow_meta (
@@ -177,6 +215,7 @@ export function setWorkflowDatabaseForTests(db: DatabaseSync | null) {
   workflowDb = null
   workflowDbForTests = null
   transactionCounter = 0
+  invalidateWorkflowDirectoryTrustIndex()
   if (db) {
     initDb(db)
     workflowDbForTests = db
@@ -611,6 +650,7 @@ export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | n
     )
     bumpWorkflowProjectionVersion(db)
   })
+  invalidateWorkflowDirectoryTrustIndex()
   return getWorkflow(id, webhookBaseUrl)!
 }
 
@@ -855,4 +895,5 @@ export function clearWorkflowStoreCache() {
   workflowDb = null
   workflowDbForTests = null
   transactionCounter = 0
+  invalidateWorkflowDirectoryTrustIndex()
 }

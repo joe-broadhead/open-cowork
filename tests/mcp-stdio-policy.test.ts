@@ -9,7 +9,45 @@ test('allows common bare runtime commands for local MCPs', () => {
     name: 'filesystem',
     scope: 'machine',
     directory: null,
+    command: 'node',
+  }))
+})
+
+test('package runners require version-pinned package specs (JOE-827)', () => {
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'floating',
+    scope: 'machine',
+    directory: null,
     command: 'npx',
+    args: ['-y', 'some-mcp'],
+  }), /unpinned package/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'latest',
+    scope: 'machine',
+    directory: null,
+    command: 'npx',
+    args: ['-y', 'some-mcp@latest'],
+  }), /unpinned package/)
+  assert.doesNotThrow(() => validateCustomMcpStdioCommand({
+    name: 'pinned',
+    scope: 'machine',
+    directory: null,
+    command: 'npx',
+    args: ['-y', 'some-mcp@1.2.3'],
+  }))
+  assert.doesNotThrow(() => validateCustomMcpStdioCommand({
+    name: 'scoped-pinned',
+    scope: 'machine',
+    directory: null,
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem@0.6.2'],
+  }))
+  assert.doesNotThrow(() => validateCustomMcpStdioCommand({
+    name: 'uvx-pinned',
+    scope: 'machine',
+    directory: null,
+    command: 'uvx',
+    args: ['mcp-server-fetch==0.1.0'],
   }))
 })
 
@@ -207,7 +245,7 @@ test('allows legitimate MCP invocations with flags that are not evals', () => {
     scope: 'machine',
     directory: null,
     command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-github'],
+    args: ['-y', '@modelcontextprotocol/server-github@0.6.2'],
   }))
   assert.doesNotThrow(() => validateCustomMcpStdioCommand({
     name: 'local-script',

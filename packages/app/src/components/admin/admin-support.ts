@@ -4,15 +4,9 @@
 // permission-catalog copy, and formatting/download helpers. Kept separate so the
 // gating rules are unit-testable without rendering.
 
-import type {
-  AdminAccess,
-  AdminAuditEvent,
-  AdminEntitlements,
-  ControlPlanePermission,
-  ControlPlaneRole,
-} from '@open-cowork/shared'
+import type { AdminAccess, AdminAuditEvent, AdminEntitlements, ControlPlanePermission, ControlPlaneRole, } from '@open-cowork/shared'
 import { hasAdminPermission } from '@open-cowork/shared'
-import type { IconName } from '../ui'
+import type { IconName } from '@open-cowork/ui'
 
 export type AdminSectionId =
   | 'members'

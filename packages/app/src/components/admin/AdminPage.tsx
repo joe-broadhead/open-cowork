@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Icon, StudioPageHeader } from '../ui'
+import { Icon, StudioPageHeader } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 import { AdminError, AdminLoading, AdminPermissionGate } from './AdminPrimitives'
 import { useAdminResource } from './useAdminResource'

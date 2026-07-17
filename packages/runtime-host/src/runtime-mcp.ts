@@ -9,7 +9,7 @@ import { getMachineSkillsDir } from './runtime-paths.js'
 import { getAdcPathIfAvailable, getCachedAccessToken } from './auth.js'
 import { log } from '@open-cowork/shared/node'
 import { getAgentToolBridgeEnvironment } from './agent-tool-bridge.js'
-import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.js'
+import { evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.js'
 import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridge.js'
 import { getKnowledgeToolBridgeEnvironment } from './knowledge/knowledge-tool-bridge.js'
 import { getSemanticUiBridgeEnvironment } from './semantic-ui-bridge.js'
@@ -36,6 +36,51 @@ export function resolveBundledMcpScriptPath(name: string) {
   return mcpPath(name)
 }
 
+/**
+ * Resolve a native CLI binary shipped with Open Cowork (e.g. time-keep).
+ *
+ * Packaged: `Resources/bin/<name>`
+ * Dev/test: `third_party/<name>/platforms/<platform-arch>/<name>`
+ *
+ * Returns null when only PATH lookup remains.
+ */
+export function resolveBundledNativeBinary(name: string): string | null {
+  const bare = name.replace(/\.exe$/i, '')
+  const exe = process.platform === 'win32' ? `${bare}.exe` : bare
+  const platformKey = `${process.platform}-${process.arch}`
+
+  if (getAppPathHost()?.isPackaged) {
+    const resources = (process as { resourcesPath?: string }).resourcesPath
+    if (resources) {
+      const packaged = join(resources, 'bin', exe)
+      if (existsSync(packaged)) return packaged
+    }
+  }
+
+  // Dev + unit tests: prefer monorepo-relative paths. resourcePath() assumes an
+  // Electron appPath under apps/desktop (../../ = repo root); plain node tests
+  // often run with cwd at the repo root, so also check process.cwd() directly.
+  const candidates = [
+    join(process.cwd(), 'third_party', bare, 'platforms', platformKey, exe),
+    join(process.cwd(), 'bin', exe),
+    resourcePath('bin', exe),
+    resourcePath('third_party', bare, 'platforms', platformKey, exe),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/** Rewrite bare command[0] to a bundled absolute path when available. */
+export function resolveLocalMcpCommand(command: string[]): string[] {
+  const head = command[0]?.trim()
+  if (!head) return command
+  if (head.includes('/') || head.includes('\\')) return command
+  const bundled = resolveBundledNativeBinary(head)
+  return bundled ? [bundled, ...command.slice(1)] : command
+}
+
 export function resolveBundledMcpNodeCommand(scriptPath: string, options: {
   isPackaged?: boolean
   executablePath?: string
@@ -59,11 +104,17 @@ export type ResolvedRuntimeMcpEntry =
     type: 'local'
     command: string[]
     environment?: Record<string, string>
+    /** OpenCode: start this MCP when the runtime boots (default true when set). */
+    enabled?: boolean
+    /** OpenCode: timeout ms for listing tools after spawn. */
+    timeout?: number
   }
   | {
     type: 'remote'
     url: string
     headers?: Record<string, string>
+    enabled?: boolean
+    timeout?: number
   }
 
 // Why a bundled MCP was skipped from `config.mcp` on this boot.
@@ -132,7 +183,7 @@ function isOAuthMcp(builtin: BundleMcp): boolean {
   return builtin.authMode === 'oauth'
 }
 
-// A bundled MCP that runs an EXTERNAL command (e.g. the openwiki CLI) is only
+// A bundled MCP that runs an EXTERNAL command (for example a user-installed CLI) is only
 // spawnable when that binary actually resolves. Skip it cleanly otherwise —
 // same principle as the auth/credential prerequisites below: the UI should
 // show an install CTA, not a confusing SDK spawn failure.
@@ -142,6 +193,9 @@ function externalCommandResolves(command: string[] | undefined): boolean {
   if (executable.includes('/') || executable.includes('\\')) {
     return existsSync(isAbsolute(executable) ? executable : resolve(executable))
   }
+  // Prefer binaries we ship (e.g. Resources/bin/time-keep) before PATH — GUI
+  // launches often miss login-shell PATH where user installs live.
+  if (resolveBundledNativeBinary(executable)) return true
   // Bare name: resolvable iff present in some PATH entry. `node` is always
   // present in dev, and packaged builds use packageName entries instead. Use the
   // platform PATH delimiter (';' on Windows, ':' elsewhere) and, on Windows,
@@ -167,13 +221,15 @@ export function evaluateBuiltInMcp(builtin: BundleMcp, settings: CoworkSettings)
     return { status: 'skipped', reason: 'disabled-by-user' }
   }
 
-  if (builtin.type === 'local' && builtin.command && !externalCommandResolves(builtin.command)) {
-    return { status: 'skipped', reason: 'command-not-installed' }
-  }
-
+  // Honor explicit user disable before install/PATH checks so diagnostics
+  // report "disabled" even when the binary is absent on CI hosts.
   const explicit = getExplicitEnabledState(builtin, settings)
   if (explicit === false) {
     return { status: 'skipped', reason: 'disabled-by-user' }
+  }
+
+  if (builtin.type === 'local' && builtin.command && !externalCommandResolves(builtin.command)) {
+    return { status: 'skipped', reason: 'command-not-installed' }
   }
 
   if (explicit !== true) {
@@ -239,11 +295,15 @@ function googleAuthEnv(mcpName: string, googleAuth: boolean | undefined): Record
 function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
   if (builtin.type === 'local') {
     const nodeCommand = builtin.command
-      ? { command: builtin.command, environment: {} }
+      ? { command: resolveLocalMcpCommand(builtin.command), environment: {} }
       : resolveBundledMcpNodeCommand(mcpPath(builtin.packageName || builtin.name))
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
       command: nodeCommand.command,
+      // Explicit enable so OpenCode attaches tools to agent sessions (docs recommend enabled: true).
+      enabled: true,
+      // Cold-start native binaries (e.g. time-keep) can exceed the 5s default tool-list timeout.
+      timeout: builtin.command ? 15_000 : 10_000,
     }
     const env: Record<string, string> = { ...nodeCommand.environment }
 
@@ -302,7 +362,21 @@ export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkS
   return resolution.status === 'ready' ? resolution.entry : null
 }
 
+/**
+ * Static (sync) custom MCP resolve — **stdio / local only**.
+ *
+ * JOE-837: HTTP MCPs must use `resolveCustomMcpRuntimeEntryForRuntime` so DNS
+ * policy + cleartext pin (JOE-826) cannot be skipped by a wrong-path call.
+ * Calling this with `type: 'http'` throws fail-closed.
+ */
 export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedRuntimeMcpEntry | null {
+  if (custom.type === 'http') {
+    throw new Error(
+      `HTTP MCP ${custom.name || '(unnamed)'} requires resolveCustomMcpRuntimeEntryForRuntime `
+      + '(DNS-aware runtime path). The static resolve path is stdio-only (JOE-837).',
+    )
+  }
+
   if (custom.type === 'stdio' && custom.command) {
     const env: Record<string, string> = { ...(custom.env || {}) }
     Object.assign(env, googleAuthEnv(custom.name, custom.googleAuth))
@@ -315,33 +389,57 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
       command: [resolvedCommand, ...(custom.args || [])],
+      enabled: true,
+      timeout: 10_000,
     }
     if (Object.keys(env).length > 0) entry.environment = env
     return entry
   }
 
-  if (custom.type === 'http' && custom.url) {
-    // Defense-in-depth: the URL policy also runs at save/test time, but
-    // a tampered config file on disk (corruption, manual edit,
-    // out-of-band write) would otherwise bypass the guard. Re-evaluate
-    // here so the runtime NEVER spawns an HTTP MCP that fails the
-    // policy, regardless of what's persisted.
-    const verdict = evaluateHttpMcpUrl(custom.url, { allowPrivateNetwork: custom.allowPrivateNetwork })
-    if (!verdict.ok) {
-      log('mcp', `Rejecting HTTP MCP ${custom.name}: ${verdict.reason}`)
-      return null
-    }
-    const entry: ResolvedRuntimeMcpEntry = {
-      type: 'remote',
-      url: custom.url,
-    }
-    if (custom.headers && Object.keys(custom.headers).length > 0) {
-      entry.headers = custom.headers
-    }
-    return entry
+  return null
+}
+
+/**
+ * JOE-826: pin cleartext HTTP MCP connections to a DNS-policy-validated address
+ * while preserving the original Host header. HTTPS cannot be IP-pinned without
+ * breaking SNI/certificate validation — those stay hostname-based with the
+ * residual DNS rebinding window documented in docs/security-model.md.
+ */
+export function pinHttpMcpRemoteEntry(input: {
+  url: URL
+  resolvedAddresses?: string[]
+  headers?: Record<string, string>
+}): { url: string; headers?: Record<string, string> } {
+  const baseHeaders = input.headers && Object.keys(input.headers).length > 0
+    ? { ...input.headers }
+    : undefined
+  const addresses = (input.resolvedAddresses || []).filter(Boolean)
+  if (input.url.protocol !== 'http:' || addresses.length === 0) {
+    return { url: input.url.toString(), headers: baseHeaders }
   }
 
-  return null
+  const originalHostname = input.url.hostname
+  const address = addresses[0]!
+  // Literal IP targets are already pinned by definition.
+  if (originalHostname === address) {
+    return { url: input.url.toString(), headers: baseHeaders }
+  }
+
+  const pinned = new URL(input.url.toString())
+  // WHATWG URL accepts bare IPv6 via hostname setter and adds brackets in href.
+  pinned.hostname = address
+
+  const hostHeader = input.url.port
+    ? `${originalHostname}:${input.url.port}`
+    : originalHostname
+  const headers: Record<string, string> = { ...(baseHeaders || {}) }
+  // Pin Host so virtual-hosted MCPs still route correctly; do not allow a
+  // config-supplied Host header to undo the pin semantics.
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'host') delete headers[key]
+  }
+  headers.Host = hostHeader
+  return { url: pinned.toString(), headers }
 }
 
 export async function resolveCustomMcpRuntimeEntryForRuntime(
@@ -354,8 +452,8 @@ export async function resolveCustomMcpRuntimeEntryForRuntime(
   // entry. Save/test handlers also validate URLs, but a hostname can
   // re-resolve between save and runtime boot. Re-run the DNS-aware policy
   // here so tampered config files and point-in-time private DNS resolutions
-  // are rejected before handoff. OpenCode owns the actual HTTP connection
-  // after registration; Open Cowork does not proxy or pin that transport.
+  // are rejected before handoff. For cleartext HTTP we also pin the connect
+  // URL to a validated address (JOE-826). HTTPS remains hostname-based.
   const verdict = await evaluateHttpMcpUrlResolved(custom.url, {
     ...options,
     allowPrivateNetwork: custom.allowPrivateNetwork,
@@ -364,12 +462,17 @@ export async function resolveCustomMcpRuntimeEntryForRuntime(
     log('mcp', `Rejecting HTTP MCP ${custom.name}: ${verdict.reason}`)
     return null
   }
+  const pinned = pinHttpMcpRemoteEntry({
+    url: verdict.url,
+    resolvedAddresses: verdict.resolvedAddresses,
+    headers: custom.headers,
+  })
   const entry: ResolvedRuntimeMcpEntry = {
     type: 'remote',
-    url: custom.url,
+    url: pinned.url,
   }
-  if (custom.headers && Object.keys(custom.headers).length > 0) {
-    entry.headers = custom.headers
+  if (pinned.headers && Object.keys(pinned.headers).length > 0) {
+    entry.headers = pinned.headers
   }
   return entry
 }

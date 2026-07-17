@@ -33,6 +33,10 @@ const scanRoot = join(root, 'packages/ui/src')
 const primitivePaletteFiles = new Set([
   'packages/ui/src/knowledge-hues.ts',
   'packages/ui/src/utils.ts',
+  // Provider logo glyphs are identity artwork, not theme chrome. Keep the
+  // literal brand colors in one explicit source rather than counting them as
+  // app component token debt.
+  'packages/app/src/components/plugins/PluginIcon.tsx',
 ])
 
 // Pure ink/white are allowed inside material math (no semantic token exists).
@@ -118,11 +122,10 @@ if (errors.length) {
   process.exit(1)
 }
 
-// packages/app pre-dates the token discipline and still carries a batch of raw color literals.
-// Rather than block on migrating them all at once, ratchet the count DOWN: the check fails if a
-// NEW raw color is introduced (count above the baseline), and the baseline must be lowered as
-// they are migrated. This stops the app's raw-color debt from growing (#917).
-const APP_RAW_COLOR_BASELINE = 74
+// packages/app now has a zero raw-color baseline. Keep the ratchet here so any
+// newly introduced app raw color fails loudly and has to move to semantic
+// tokens (var(--color-*) / color-mix) or an explicit primitive artwork allowlist.
+const APP_RAW_COLOR_BASELINE = 0
 const appScanRoot = join(root, 'packages/app/src')
 const appErrors = []
 scan(appScanRoot, appErrors)

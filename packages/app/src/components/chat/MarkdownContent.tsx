@@ -12,6 +12,12 @@ type CacheEntry = {
 const MAX_CACHE_SIZE = 200
 const htmlCache = new Map<string, CacheEntry>()
 
+/** Test/reset hook (JOE-889) — empties the module-level markdown HTML cache. */
+export function clearMarkdownHtmlCache() {
+  htmlCache.clear()
+}
+
+
 function touchCache(key: string, entry: CacheEntry) {
   htmlCache.delete(key)
   htmlCache.set(key, entry)

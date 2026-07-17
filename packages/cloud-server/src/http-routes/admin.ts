@@ -67,14 +67,14 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
 
   if (!itemId && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      policy: await options.service.getAdminPolicyOverview(context.principal),
+      policy: await options.service.domains.overview.getAdminPolicyOverview(context.principal),
     }, options.corsOrigin)
     return true
   }
 
   if (itemId === 'policy' && !action && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      policy: await options.service.getAdminPolicyOverview(context.principal),
+      policy: await options.service.domains.overview.getAdminPolicyOverview(context.principal),
     }, options.corsOrigin)
     return true
   }
@@ -99,7 +99,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   // The assignable permission catalog custom-role editors render against (#896).
   if (itemId === 'permission-catalog' && !action && req.method === 'GET') {
     tools.writeJson(res, 200, {
-      permissions: options.service.listPermissionCatalog(),
+      permissions: options.service.domains.roles.listPermissionCatalog(),
     }, options.corsOrigin)
     return true
   }
@@ -108,7 +108,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   if (itemId === 'roles') {
     if (!action && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        roles: await options.service.listCustomRoles(context.principal),
+        roles: await options.service.domains.roles.listCustomRoles(context.principal),
       }, options.corsOrigin)
       return true
     }
@@ -121,7 +121,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
         return true
       }
       tools.writeJson(res, 201, {
-        role: await options.service.createCustomRole(context.principal, {
+        role: await options.service.domains.roles.createCustomRole(context.principal, {
           roleKey,
           name,
           description: tools.readString(body.description),
@@ -134,7 +134,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     if (action && artifactId === 'update' && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       tools.writeJson(res, 200, {
-        role: await options.service.updateCustomRole(context.principal, action, {
+        role: await options.service.domains.roles.updateCustomRole(context.principal, action, {
           name: Object.prototype.hasOwnProperty.call(body, 'name') ? tools.readString(body.name) : undefined,
           description: Object.prototype.hasOwnProperty.call(body, 'description') ? tools.readString(body.description) : undefined,
           baseRole: Object.prototype.hasOwnProperty.call(body, 'baseRole') ? memberRole(body.baseRole) : undefined,
@@ -145,7 +145,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     }
     if (action && !artifactId && req.method === 'DELETE') {
       tools.writeJson(res, 200, {
-        deleted: await options.service.deleteCustomRole(context.principal, action),
+        deleted: await options.service.domains.roles.deleteCustomRole(context.principal, action),
       }, options.corsOrigin)
       return true
     }
@@ -154,7 +154,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   if (itemId === 'members') {
     if (!action && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        members: await options.service.listOrgMembers(context.principal, {
+        members: await options.service.domains.members.listOrgMembers(context.principal, {
           query: context.url.searchParams.get('q'),
           limit: tools.parseLimit(context.url),
         }),
@@ -169,7 +169,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
         tools.writeError(res, 400, 'Member invite requires an email address.', options.corsOrigin)
         return true
       }
-      const invited = await options.service.inviteOrgMember(context.principal, { email, role })
+      const invited = await options.service.domains.members.inviteOrgMember(context.principal, { email, role })
       tools.writeJson(res, 201, {
         member: invited.member,
         inviteToken: invited.inviteToken,
@@ -180,7 +180,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     if (action && input.artifactId === 'update' && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       tools.writeJson(res, 200, {
-        member: await options.service.updateOrgMember(context.principal, action, {
+        member: await options.service.domains.members.updateOrgMember(context.principal, action, {
           role: memberRole(body.role),
           status: memberStatus(body.status),
           confirm: tools.readString(body.confirm),
@@ -193,9 +193,9 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     if (action && input.artifactId === 'role' && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const roleKey = body.roleKey === null ? null : tools.readString(body.roleKey)
-      await options.service.assignMemberRole(context.principal, action, { roleKey })
+      await options.service.domains.roles.assignMemberRole(context.principal, action, { roleKey })
       tools.writeJson(res, 200, {
-        member: await options.service.updateOrgMember(context.principal, action, {}),
+        member: await options.service.domains.members.updateOrgMember(context.principal, action, {}),
       }, options.corsOrigin)
       return true
     }
@@ -204,14 +204,14 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   // Enterprise SSO config CRUD (#895), gated on sso:manage inside the service.
   if (itemId === 'sso') {
     if (!action && req.method === 'GET') {
-      tools.writeJson(res, 200, { sso: await options.service.getSsoConfig(context.principal) }, options.corsOrigin)
+      tools.writeJson(res, 200, { sso: await options.service.domains.sso.getSsoConfig(context.principal) }, options.corsOrigin)
       return true
     }
     if (!action && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const protocol = body.protocol === 'saml' || body.protocol === 'oidc' ? body.protocol : undefined
       tools.writeJson(res, 200, {
-        sso: await options.service.upsertSsoConfig(context.principal, {
+        sso: await options.service.domains.sso.upsertSsoConfig(context.principal, {
           protocol,
           enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
           enforced: typeof body.enforced === 'boolean' ? body.enforced : undefined,
@@ -233,17 +233,17 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
       return true
     }
     if (action === 'scim-token' && req.method === 'POST') {
-      tools.writeJson(res, 201, await options.service.rotateScimToken(context.principal), options.corsOrigin)
+      tools.writeJson(res, 201, await options.service.domains.sso.rotateScimToken(context.principal), options.corsOrigin)
       return true
     }
     if (!action && req.method === 'DELETE') {
-      tools.writeJson(res, 200, { deleted: await options.service.deleteSsoConfig(context.principal) }, options.corsOrigin)
+      tools.writeJson(res, 200, { deleted: await options.service.domains.sso.deleteSsoConfig(context.principal) }, options.corsOrigin)
       return true
     }
   }
 
   if (itemId === 'audit' && !action && req.method === 'GET') {
-    const page = await options.service.queryAuditEvents(context.principal, {
+    const page = await options.service.domains.audit.queryAuditEvents(context.principal, {
       ...auditQueryFilters(context.url),
       limit: tools.parseLimit(context.url),
       cursor: context.url.searchParams.get('cursor'),
@@ -259,7 +259,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
       format,
       unredacted: context.url.searchParams.get('unredacted') === 'true',
     }
-    const stream = await options.service.exportAuditEvents(context.principal, exportOptions)
+    const stream = await options.service.domains.audit.exportAuditEvents(context.principal, exportOptions)
     writeCorsHeaders(res, options.corsOrigin)
     res.writeHead(200, {
       'content-type': stream.contentType,
@@ -278,7 +278,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   if (itemId === 'worker-pools') {
     if (!action && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        pools: await options.service.listManagedWorkerPools(context.principal, {
+        pools: await options.service.domains.managedWorkers.listPools(context.principal, {
           status: poolStatus(context.url.searchParams.get('status')),
           limit: tools.parseLimit(context.url),
         }),
@@ -294,7 +294,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
         return true
       }
       tools.writeJson(res, 201, {
-        pool: await options.service.createManagedWorkerPool(context.principal, {
+        pool: await options.service.domains.managedWorkers.createPool(context.principal, {
           poolId: tools.readString(body.poolId) || undefined,
           name,
           mode,
@@ -309,7 +309,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     }
     if (action && artifactId === 'update' && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const pool = await options.service.updateManagedWorkerPool(context.principal, action, {
+      const pool = await options.service.domains.managedWorkers.updatePool(context.principal, action, {
         name: tools.readString(body.name) || undefined,
         status: poolStatus(body.status) || undefined,
         region: Object.prototype.hasOwnProperty.call(body, 'region') ? tools.readString(body.region) : undefined,
@@ -325,7 +325,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
   if (itemId === 'workers') {
     if (!action && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        workers: await options.service.listManagedWorkers(context.principal, {
+        workers: await options.service.domains.managedWorkers.listWorkers(context.principal, {
           poolId: context.url.searchParams.get('poolId'),
           status: workerStatus(context.url.searchParams.get('status')),
           limit: tools.parseLimit(context.url),
@@ -342,7 +342,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
         return true
       }
       tools.writeJson(res, 201, {
-        worker: await options.service.registerManagedWorker(context.principal, {
+        worker: await options.service.domains.managedWorkers.registerWorker(context.principal, {
           workerId: tools.readString(body.workerId) || undefined,
           poolId,
           displayName,
@@ -354,7 +354,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
       return true
     }
     if (action && !artifactId && req.method === 'GET') {
-      const worker = await options.service.getManagedWorker(context.principal, action)
+      const worker = await options.service.domains.managedWorkers.getWorker(context.principal, action)
       tools.writeJson(res, worker ? 200 : 404, { worker }, options.corsOrigin)
       return true
     }
@@ -369,7 +369,7 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
             : artifactId === 'revoke'
               ? 'revoked'
               : artifactId
-      const worker = await options.service.updateManagedWorkerLifecycle(context.principal, action, lifecycleStatus as ManagedWorkerStatus, {
+      const worker = await options.service.domains.managedWorkers.updateWorkerLifecycle(context.principal, action, lifecycleStatus as ManagedWorkerStatus, {
         reason: tools.readString(body.reason),
       })
       tools.writeJson(res, worker ? 200 : 404, { worker }, options.corsOrigin)
@@ -377,14 +377,14 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     }
     if (action && artifactId === 'credentials' && !context.segments[5] && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        credentials: await options.service.listManagedWorkerCredentials(context.principal, action),
+        credentials: await options.service.domains.managedWorkers.listCredentials(context.principal, action),
       }, options.corsOrigin)
       return true
     }
     if (action && artifactId === 'credentials' && !context.segments[5] && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       tools.writeJson(res, 201, {
-        credential: await options.service.issueManagedWorkerCredential(context.principal, action, {
+        credential: await options.service.domains.managedWorkers.issueCredential(context.principal, action, {
           scopes: tools.readStringArray(body.scopes),
           expiresAt: tools.readOptionalDate(body.expiresAt),
         }),
@@ -394,20 +394,20 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
     if (action && artifactId === 'credentials' && context.segments[5] && context.segments[6] === 'rotate' && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       tools.writeJson(res, 201, {
-        credential: await options.service.rotateManagedWorkerCredential(context.principal, action, context.segments[5], {
+        credential: await options.service.domains.managedWorkers.rotateCredential(context.principal, action, context.segments[5], {
           expiresAt: tools.readOptionalDate(body.expiresAt),
         }),
       }, options.corsOrigin)
       return true
     }
     if (action && artifactId === 'credentials' && context.segments[5] && context.segments[6] === 'revoke' && req.method === 'POST') {
-      const credential = await options.service.revokeManagedWorkerCredential(context.principal, action, context.segments[5])
+      const credential = await options.service.domains.managedWorkers.revokeCredential(context.principal, action, context.segments[5])
       tools.writeJson(res, credential ? 200 : 404, { credential }, options.corsOrigin)
       return true
     }
     if (action && artifactId === 'heartbeats' && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        heartbeats: await options.service.listManagedWorkerHeartbeats(context.principal, {
+        heartbeats: await options.service.domains.managedWorkers.listHeartbeats(context.principal, {
           workerId: action,
           limit: tools.parseLimit(context.url),
         }),

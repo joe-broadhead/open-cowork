@@ -14,7 +14,7 @@ import {
 
 const issuerUrl = 'https://auth.example.test'
 const clientId = 'open-cowork-cloud'
-const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
+const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests!'
 
 function base64Url(value: Buffer | string) {
   return Buffer.from(value)

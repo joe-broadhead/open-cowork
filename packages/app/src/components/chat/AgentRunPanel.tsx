@@ -7,30 +7,10 @@ import { ElapsedClock } from './ElapsedClock'
 import { AgentRunLane } from './AgentRunLane'
 import { useLiveNow } from './useLiveNow'
 import {
-  buildOrchestrationTree,
-  formatAgentName,
-  formatCost,
-  formatTokensCompact,
-  groupCostTotal,
-  groupMaxElapsed,
-  groupTokenTotal,
-  selectAggregateTiming,
-  summarizeStatus,
-} from './agent-run-utils'
+  buildOrchestrationTree, formatAgentName, formatCost, formatTokensCompact, groupCostTotal, groupMaxElapsed, groupTokenTotal, selectAggregateTiming, summarizeStatus, } from './agent-run-utils'
 import {
-  DEFAULT_AGENT_RUN_FILTER_STATE,
-  type AgentRunActivityFilter,
-  type AgentRunFilterState,
-  type AgentRunStatusFilter,
-  buildAgentRunFilterSummary,
-  buildTaskRunMetrics,
-  buildTaskReviewIndex,
-  readAgentRunFilterState,
-  reviewActivityForTask,
-  selectAgentRunVisibleTasks,
-  writeAgentRunFilterState,
-} from './agent-run-filter-model'
-import { Button, Card, EmptyState, Select } from '../ui'
+  DEFAULT_AGENT_RUN_FILTER_STATE, type AgentRunActivityFilter, type AgentRunFilterState, type AgentRunStatusFilter, buildAgentRunFilterSummary, buildTaskRunMetrics, buildTaskReviewIndex, readAgentRunFilterState, reviewActivityForTask, selectAgentRunVisibleTasks, writeAgentRunFilterState, } from './agent-run-filter-model'
+import { Button, Card, EmptyState, Select } from '@open-cowork/ui'
 
 // Swim-lane block that renders delegated OpenCode tasks as a compact
 // timeline. Nested sub-agent delegations render as indented child lanes.

@@ -1,26 +1,34 @@
 import {
   createHttpSseCloudTransportAdapter,
-  type ChannelActorInput,
-  type ChannelCursorUpdateResult,
-  type ChannelDeliveryRecord,
-  type ChannelIdentityRecord,
-  type ChannelProviderEventClaimResult,
-  type ChannelProviderEventRecord,
-  type ChannelSessionBindingRecord,
-  type CloudChannelInteractionMutationResponse,
-  type CloudChannelProviderEventStatus,
-  type CloudChannelProviderEventType,
-  type CloudChannelProviderId,
-  type CloudChannelPromptMutationResponse,
-  type CloudSessionCommandAckResponse,
-  type CloudSessionCommandMutationResponse,
-  type SessionArtifactAttachment,
-  type CloudSessionView,
-  type CloudTransportAdapter,
-  type CloudTransportSessionEvent,
-  type CloudTransportSubscription,
-  type IssuedChannelInteractionRecord,
 } from '@open-cowork/cloud-client'
+import type {
+  ChannelActorInput,
+  ChannelCursorUpdateResult,
+  ChannelDeliveryRecord,
+  ChannelIdentityRecord,
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
+  ChannelSessionBindingRecord,
+  CloudChannelInteractionMutationResponse,
+  CloudChannelProviderEventStatus,
+  CloudChannelProviderEventType,
+  CloudChannelProviderId,
+  CloudChannelPromptMutationResponse,
+  IssuedChannelInteractionRecord,
+} from '@open-cowork/cloud-client/domains/channels'
+import type {
+  CloudSessionCommandAckResponse,
+  CloudSessionCommandMutationResponse,
+  CloudSessionView,
+} from '@open-cowork/cloud-client/domains/sessions'
+import type {
+  SessionArtifactAttachment,
+} from '@open-cowork/cloud-client/domains/artifacts'
+import type {
+  CloudTransportAdapter,
+  CloudTransportSessionEvent,
+  CloudTransportSubscription,
+} from '@open-cowork/cloud-client/domains/transport'
 
 import type { GatewayCloudConnectionConfig } from './config.js'
 

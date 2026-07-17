@@ -248,8 +248,11 @@ function configuredToolIdsForPermissionPattern(pattern: string) {
 }
 
 function mcpNamespaceFromPermissionPattern(pattern: string) {
-  const match = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__[^/]+$/i)
-  return match?.[1] || null
+  const claude = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__/i)
+  if (claude?.[1]) return claude[1]
+  // OpenCode 1.18+ form: server_tool / server_*
+  const openCode = pattern.match(/^([a-z0-9][a-z0-9-]*)_/i)
+  return openCode?.[1] || null
 }
 
 type NativePermissionRule = {

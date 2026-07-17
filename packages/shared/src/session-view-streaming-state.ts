@@ -39,13 +39,33 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
         .map((segmentId) => existing.messageReasoningById[segmentId])
         .filter((segment): segment is NonNullable<typeof segment> => Boolean(segment))
       if (segments.length === 0 && reasoning.length === 0) continue
+      const existingContent = renderMessageSegments(segments)
+      // History/view snapshots can land under a different message id than the
+      // stream used. If a next message of the same role already carries this
+      // answer (or a longer authoritative copy), skip the residual stream bubble.
+      if (existingContent && existingMessage.role === 'assistant') {
+        const alreadyCovered = messageState.messageIds.some((nextId) => {
+          const candidate = messageState.messageById[nextId]
+          if (!candidate || candidate.role !== 'assistant') return false
+          if (isLivePlaceholderMessageId(candidate.id, 'assistant')) return false
+          const nextSegments = buildMessageSegments(candidate, messageState.messagePartsById)
+          const nextContent = renderMessageSegments(nextSegments)
+          return nextContent === existingContent
+            || nextContent.startsWith(existingContent)
+            || (
+              existingContent.length >= 16
+              && nextContent.includes(existingContent)
+            )
+        })
+        if (alreadyCovered) continue
+      }
       messageState = importMessage(messageState, {
         id: existingMessage.id,
         role: existingMessage.role,
         attachments: existingMessage.attachments,
         segments,
         reasoning,
-        content: renderMessageSegments(segments),
+        content: existingContent,
         order: existingMessage.order,
       })
       continue

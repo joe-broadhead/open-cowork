@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { channelWebhookErrorCode } from "@open-cowork/gateway-channel";
+import { channelWebhookErrorCode, WebhookRateLimiter } from "@open-cowork/gateway-channel";
 import { resolveHttpClientSource } from "@open-cowork/shared";
 
 import { renderStandaloneGatewayDashboard, renderStandaloneGatewayMetrics } from "./dashboard.js";
@@ -17,88 +17,13 @@ const webhookRateLimitMaxRequests = 120;
 const webhookAuthBackoffWindowMs = 60_000;
 const webhookAuthBackoffMaxFailures = 20;
 const webhookAuthBackoffMs = 60_000;
-const maxWebhookRateRecords = 10_000;
 const standaloneHttpErrorMarker = Symbol("standalone-http-error");
-
-interface WebhookRateRecord {
-  count: number;
-  resetAt: number;
-  blockedUntil: number;
-}
 
 type StandaloneHttpError = Error & {
   statusCode: number;
   publicMessage: string;
   retryAfterMs?: number;
   [standaloneHttpErrorMarker]: true;
-}
-
-class WebhookRateLimiter {
-  private readonly records = new Map<string, WebhookRateRecord>();
-
-  claim(key: string, nowMs: number, windowMs: number, maxRequests: number): { ok: true } | { ok: false; retryAfterMs: number } {
-    const record = this.record(key, nowMs, windowMs);
-    if (record.blockedUntil > nowMs) return { ok: false, retryAfterMs: record.blockedUntil - nowMs };
-    record.count += 1;
-    if (record.count > maxRequests) {
-      record.blockedUntil = Math.max(record.blockedUntil, record.resetAt);
-      return { ok: false, retryAfterMs: record.blockedUntil - nowMs };
-    }
-    return { ok: true };
-  }
-
-  check(key: string, nowMs: number, windowMs: number): { ok: true } | { ok: false; retryAfterMs: number } {
-    const record = this.record(key, nowMs, windowMs);
-    if (record.blockedUntil > nowMs) return { ok: false, retryAfterMs: record.blockedUntil - nowMs };
-    return { ok: true };
-  }
-
-  backoff(key: string, nowMs: number, windowMs: number, maxFailures: number, backoffMs: number): void {
-    const record = this.record(key, nowMs, windowMs);
-    record.count += 1;
-    if (record.count >= maxFailures) {
-      record.blockedUntil = Math.max(record.blockedUntil, nowMs + backoffMs);
-    }
-  }
-
-  private record(key: string, nowMs: number, windowMs: number): WebhookRateRecord {
-    const existing = this.records.get(key);
-    if (existing && existing.resetAt > nowMs) return existing;
-    const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 };
-    this.records.set(key, record);
-    if (this.records.size > maxWebhookRateRecords) this.prune(nowMs);
-    // Evict by relevance, not insertion order (audit P3-11): prefer dropping a record that is NOT
-    // currently blocking, and among equals the one expiring soonest. FIFO-by-insertion could evict
-    // an early-inserted hot key that is still BLOCKING — resetting an attacker's block — while idle
-    // keys persisted.
-    while (this.records.size > maxWebhookRateRecords) {
-      let evictKey: string | null = null;
-      let evictBlocking = true;
-      let evictExpiry = Infinity;
-      for (const [candidateKey, candidate] of this.records) {
-        const blocking = candidate.blockedUntil > nowMs;
-        const expiry = Math.max(candidate.resetAt, candidate.blockedUntil);
-        if (
-          evictKey === null
-          || (!blocking && evictBlocking)
-          || (blocking === evictBlocking && expiry < evictExpiry)
-        ) {
-          evictKey = candidateKey;
-          evictBlocking = blocking;
-          evictExpiry = expiry;
-        }
-      }
-      if (!evictKey) break;
-      this.records.delete(evictKey);
-    }
-    return record;
-  }
-
-  private prune(nowMs: number): void {
-    for (const [key, record] of this.records) {
-      if (record.resetAt <= nowMs && record.blockedUntil <= nowMs) this.records.delete(key);
-    }
-  }
 }
 
 export interface StandaloneGatewayServer {
@@ -250,21 +175,36 @@ function isAdminRequest(config: StandaloneGatewayConfig, req: IncomingMessage): 
 }
 
 function enforceWebhookLimit(limiter: WebhookRateLimiter, key: string): void {
-  const verdict = limiter.claim(key, Date.now(), webhookRateLimitWindowMs, webhookRateLimitMaxRequests);
+  const verdict = limiter.claim({
+    key,
+    nowMs: Date.now(),
+    windowMs: webhookRateLimitWindowMs,
+    maxRequests: webhookRateLimitMaxRequests,
+  });
   if (!verdict.ok) {
     throw httpError(429, "Too many Standalone Gateway webhook requests. Try again later.", verdict.retryAfterMs);
   }
 }
 
 function enforceWebhookAuthBackoff(limiter: WebhookRateLimiter, key: string): void {
-  const verdict = limiter.check(key, Date.now(), webhookAuthBackoffWindowMs);
+  const verdict = limiter.check({
+    key,
+    nowMs: Date.now(),
+    windowMs: webhookAuthBackoffWindowMs,
+  });
   if (!verdict.ok) {
     throw httpError(429, "Too many rejected Standalone Gateway webhook requests. Try again later.", verdict.retryAfterMs);
   }
 }
 
 function recordWebhookAuthFailure(limiter: WebhookRateLimiter, key: string): void {
-  limiter.backoff(key, Date.now(), webhookAuthBackoffWindowMs, webhookAuthBackoffMaxFailures, webhookAuthBackoffMs);
+  limiter.backoff({
+    key,
+    nowMs: Date.now(),
+    windowMs: webhookAuthBackoffWindowMs,
+    maxFailures: webhookAuthBackoffMaxFailures,
+    backoffMs: webhookAuthBackoffMs,
+  });
 }
 
 function webhookSource(

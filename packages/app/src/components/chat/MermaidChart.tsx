@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
+import { DEFAULT_DARK_BRAND_THEME } from '@open-cowork/shared'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { t } from '../../helpers/i18n'
 
@@ -83,11 +84,11 @@ export function MermaidChart({ diagram, title }: Props) {
 
   const chartTheme = useMemo<MermaidTheme>(() => {
     const styles = getComputedStyle(document.documentElement)
-    const surface = styles.getPropertyValue('--color-surface').trim() || '#1c1d26'
-    const elevated = styles.getPropertyValue('--color-elevated').trim() || '#252633'
-    const text = styles.getPropertyValue('--color-text').trim() || '#f1f3ff'
-    const secondary = styles.getPropertyValue('--color-text-secondary').trim() || '#c3c7e8'
-    const border = styles.getPropertyValue('--color-border').trim() || '#40465f'
+    const surface = styles.getPropertyValue('--color-surface').trim() || DEFAULT_DARK_BRAND_THEME.surface
+    const elevated = styles.getPropertyValue('--color-elevated').trim() || DEFAULT_DARK_BRAND_THEME.elevated
+    const text = styles.getPropertyValue('--color-text').trim() || DEFAULT_DARK_BRAND_THEME.text
+    const secondary = styles.getPropertyValue('--color-text-secondary').trim() || DEFAULT_DARK_BRAND_THEME.textSecondary
+    const border = styles.getPropertyValue('--color-border').trim() || DEFAULT_DARK_BRAND_THEME.border
 
     return {
       textColor: text,
@@ -129,7 +130,7 @@ export function MermaidChart({ diagram, title }: Props) {
       const computed = getComputedStyle(element as Element)
       return computed.fill && computed.fill !== 'none'
         ? computed.fill
-        : (computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)'
+        : (computed.backgroundColor && computed.backgroundColor !== 'transparent' && !computed.backgroundColor.endsWith(', 0)')
           ? computed.backgroundColor
           : chartTheme.mainBkg)
     }

@@ -6,7 +6,7 @@ import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { credentialFieldIsSecret } from '../provider/credential-merge'
-import { Button, Card, EmptyState, Icon, Input, Select } from '../ui'
+import { Button, Card, EmptyState, Icon, Input, Select } from '@open-cowork/ui'
 
 function describeCapabilityError(error: unknown) {
   return error instanceof Error ? error.message : String(error)

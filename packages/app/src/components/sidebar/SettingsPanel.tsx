@@ -1,22 +1,15 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import type {
-  EffectiveAppSettings,
-  PublicAppConfig,
-  SandboxCleanupResult,
-  SandboxStorageStats,
-} from '@open-cowork/shared'
+  EffectiveAppSettings, PublicAppConfig, SandboxCleanupResult, SandboxStorageStats, } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
-  getAppearancePreferences,
-  saveAppearancePreferences,
-  type AppearancePreferences,
-} from '../../helpers/theme'
+  getAppearancePreferences, saveAppearancePreferences, type AppearancePreferences, } from '../../helpers/theme'
 import { useSessionStore } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { Badge, Button, Dialog, Input, Skeleton, Switch } from '../ui'
+import { Badge, Button, Dialog, Input, Skeleton, Switch } from '@open-cowork/ui'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
 import { LanguagePicker } from './SettingsLanguagePicker'
@@ -160,19 +153,31 @@ function SettingsToggleRow({
   description,
   checked,
   onToggle,
+  disabled,
+  statusLabel,
 }: {
   title: string
   description: string
   checked: boolean
   onToggle: () => void
+  disabled?: boolean
+  /** JOE-855: honest status when a toggle is preference-only / not yet runtime-wired. */
+  statusLabel?: string
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <div className="text-xs font-semibold text-text">{title}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-xs font-semibold text-text">{title}</div>
+          {statusLabel ? (
+            <span className="rounded-full border border-border-subtle bg-surface px-2 py-0.5 text-2xs font-medium text-text-muted">
+              {statusLabel}
+            </span>
+          ) : null}
+        </div>
         <div className="mt-1 text-xs leading-relaxed text-text-muted">{description}</div>
       </div>
-      <Switch checked={checked} onCheckedChange={onToggle} aria-label={title} />
+      <Switch checked={checked} onCheckedChange={onToggle} disabled={disabled} aria-label={title} />
     </div>
   )
 }
@@ -189,9 +194,13 @@ function SettingsNotificationsPanel({
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
         <SettingsToggleRow
           title={t('settings.notifications.voiceReplies', 'Voice replies')}
-          description={t('settings.notifications.voiceRepliesDescription', 'Let coworkers answer out loud when a workflow explicitly asks for voice output.')}
+          description={t(
+            'settings.notifications.voiceRepliesDescription',
+            'Preference is saved for a future voice-output path. No speech synthesis runs in this release — enablement will not change agent behavior yet.',
+          )}
           checked={settings.notificationVoiceReplies}
           onToggle={() => update({ notificationVoiceReplies: !settings.notificationVoiceReplies })}
+          statusLabel={t('settings.notifications.comingSoon', 'Coming soon')}
         />
         <SettingsToggleRow
           title={t('settings.notifications.smartSuggestions', 'Smart suggestions')}
@@ -201,9 +210,13 @@ function SettingsNotificationsPanel({
         />
         <SettingsToggleRow
           title={t('settings.notifications.dailyDigest', 'Daily digest')}
-          description={t('settings.notifications.dailyDigestDescription', 'Send a morning summary of completed runs, blocked work, and fresh artifacts.')}
+          description={t(
+            'settings.notifications.dailyDigestDescription',
+            'Preference is saved for a future morning summary. Open Cowork does not send digest emails or push digests in this release.',
+          )}
           checked={settings.notificationDailyDigest}
           onToggle={() => update({ notificationDailyDigest: !settings.notificationDailyDigest })}
+          statusLabel={t('settings.notifications.comingSoon', 'Coming soon')}
         />
         <SettingsToggleRow
           title={t('settings.notifications.sounds', 'Sounds')}
@@ -245,7 +258,10 @@ function SettingsPrivacyPanel({
         </div>
         <SettingsToggleRow
           title={t('settings.privacy.shareUsage', 'Help improve the product')}
-          description={t('settings.privacy.shareUsageDescription', 'Share anonymized usage signals only. Prompt text, artifacts, credentials, and local paths are never included.')}
+          description={t(
+            'settings.privacy.shareUsageDescription',
+            'When on, coarse anonymized adoption events may be sent only if an HTTPS telemetry endpoint is configured. Prompt text, artifacts, credentials, and local paths are never included. Off by default.',
+          )}
           checked={settings.privacyShareAnonymizedUsage}
           onToggle={() => update({ privacyShareAnonymizedUsage: !settings.privacyShareAnonymizedUsage })}
         />

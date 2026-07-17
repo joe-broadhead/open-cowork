@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   auditLevelFromArgs,
-  auditResultRequiresFailure,
+  buildBulkAdvisoryPayload,
+  collectInstalledPackages,
+  normalizeBulkAdvisoryReport,
   summarizeAuditReport,
 } from '../scripts/pnpm-audit.mjs'
 
@@ -47,18 +49,65 @@ test('pnpm audit argument parser supports separated and equals audit-level forms
   assert.equal(auditLevelFromArgs([]), 'low')
 })
 
-test('pnpm audit subprocess failures fail closed without ignored advisory proof', () => {
-  assert.equal(auditResultRequiresFailure(1, { ignored: [], failures: [] }), true)
-  assert.equal(auditResultRequiresFailure(1, { ignored: [], failures: [{ advisory: { id: 1 }, ids: new Set() }] }), true)
+test('pnpm audit bulk payload is built from external installed packages', () => {
+  const installed = collectInstalledPackages([
+    {
+      dependencies: {
+        '@open-cowork/shared': {
+          version: '0.0.0',
+          path: '/repo/packages/shared',
+        },
+        lodash: {
+          version: '4.17.20',
+          path: '/repo/node_modules/.pnpm/lodash@4.17.20/node_modules/lodash',
+          dependencies: {
+            minimist: {
+              version: '0.0.8',
+              path: '/repo/node_modules/.pnpm/minimist@0.0.8/node_modules/minimist',
+            },
+          },
+        },
+      },
+      devDependencies: {
+        semver: {
+          version: '7.8.5',
+          path: '/repo/node_modules/.pnpm/semver@7.8.5/node_modules/semver',
+        },
+      },
+    },
+  ])
+
+  assert.deepEqual(buildBulkAdvisoryPayload(installed), {
+    lodash: ['4.17.20'],
+    minimist: ['0.0.8'],
+    semver: ['7.8.5'],
+  })
 })
 
-test('pnpm audit subprocess failure may pass only when every threshold advisory is ignored', () => {
-  assert.equal(
-    auditResultRequiresFailure(1, {
-      ignored: [{ advisory: { id: 1 }, ids: new Set(['GHSA-AAAA-BBBB-CCCC']) }],
-      failures: [],
-    }),
-    false,
-  )
-  assert.equal(auditResultRequiresFailure(0, { ignored: [], failures: [] }), false)
+test('pnpm audit normalizes npm bulk advisories with installed version filtering', () => {
+  const installed = new Map([
+    ['lodash', new Set(['4.17.20', '4.17.21'])],
+  ])
+  const report = normalizeBulkAdvisoryReport({
+    lodash: [
+      {
+        id: 1108258,
+        url: 'https://github.com/advisories/GHSA-29mw-wpgm-hmr9',
+        title: 'Regular Expression Denial of Service (ReDoS) in lodash',
+        severity: 'moderate',
+        vulnerable_versions: '>=4.0.0 <4.17.21',
+      },
+      {
+        id: 999,
+        severity: 'critical',
+        vulnerable_versions: '<1.0.0',
+      },
+    ],
+  }, installed)
+
+  const advisories = Object.values(report.advisories)
+  assert.equal(advisories.length, 1)
+  assert.equal(advisories[0]?.module_name, 'lodash')
+  assert.equal(advisories[0]?.github_advisory_id, 'GHSA-29MW-WPGM-HMR9')
+  assert.deepEqual(advisories[0]?.findings[0]?.versions, ['4.17.20'])
 })

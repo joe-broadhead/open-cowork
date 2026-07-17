@@ -339,8 +339,40 @@ export function getConfiguredToolById(toolId: string) {
   return getConfiguredToolsFromConfig().find((tool) => tool.id === toolId) || null
 }
 
+/**
+ * OpenCode 1.18+ registers MCP tools as `${sanitize(server)}_${sanitize(tool)}`
+ * (e.g. `time-keep_current_time`), not Claude-style `mcp__server__tool`.
+ * Expand permission patterns so both forms match what the model can call and
+ * what OpenCode evaluates at tool-execution time.
+ *
+ * - `mcp__time-keep__current_time` → also `time-keep_current_time`
+ * - `mcp__time-keep__*` → also `time-keep_*`
+ * - `mcp__*` has no single underscore dual (left as-is)
+ */
+export function toOpenCodeMcpToolPattern(pattern: string): string | null {
+  if (!pattern || pattern === 'mcp__*' || pattern === 'mcp__') return null
+  if (!pattern.startsWith('mcp__')) return null
+  // Avoid ReDoS-prone regexes with nested quantifiers; parse the separator
+  // positions and validate the server segment with a linear scan.
+  const body = pattern.slice('mcp__'.length)
+  const sep = body.indexOf('__')
+  if (sep <= 0) return null
+  const server = body.slice(0, sep)
+  const rest = body.slice(sep + 2)
+  if (!server || !rest) return null
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(server)) return null
+  return `${server}_${rest}`
+}
+
 export function expandMcpToolPermissionPatterns(patterns: string[]) {
-  return Array.from(new Set(patterns))
+  const expanded = new Set<string>()
+  for (const pattern of patterns) {
+    if (!pattern) continue
+    expanded.add(pattern)
+    const dual = toOpenCodeMcpToolPattern(pattern)
+    if (dual) expanded.add(dual)
+  }
+  return Array.from(expanded)
 }
 
 export function getConfiguredToolAllowPatterns(tool: ConfiguredTool) {
@@ -358,7 +390,7 @@ export function getConfiguredToolPatterns(tool: ConfiguredTool) {
   return Array.from(new Set([
     ...getConfiguredToolAllowPatterns(tool),
     ...getConfiguredToolAskPatterns(tool),
-    ...(tool.patterns || []),
+    ...expandMcpToolPermissionPatterns([...(tool.patterns || [])]),
   ]))
 }
 

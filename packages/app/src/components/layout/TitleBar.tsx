@@ -1,6 +1,6 @@
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
-import { IconButton } from '../ui'
+import { IconButton } from '@open-cowork/ui'
 import type { AppView } from '../../app-types'
 
 // Breadcrumb label for the current screen. The window title bar carries the

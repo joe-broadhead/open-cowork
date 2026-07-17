@@ -165,13 +165,27 @@ function mergeShellEnvironment(shellEnvironment: Record<string, string>) {
   })
 }
 
+/**
+ * PATH entries that GUI launches (macOS .app, dock, Finder) often miss because
+ * they do not inherit login-shell PATH. Keep this list aligned with common
+ * user-local and package-manager install roots so external MCPs like
+ * `time-keep` (`~/.local/bin`) still resolve when shell-env load times out.
+ */
+export function getFallbackPathEntries(home = homedir()): string[] {
+  return [
+    join(home, '.local', 'bin'),
+    join(home, 'bin'),
+    join(home, '.opencode', 'bin'),
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    join(home, '.cargo', 'bin'),
+  ]
+}
+
 function applyFallbackPath() {
   const currentEnvironment = { ...process.env }
   const fallbackPaths = dedupePathEntries([
-    join(homedir(), '.opencode', 'bin'),
-    '/usr/local/bin',
-    '/opt/homebrew/bin',
-    join(homedir(), '.cargo', 'bin'),
+    ...getFallbackPathEntries(),
     ...(currentEnvironment.PATH || '').split(delimiter),
   ])
   process.env.PATH = fallbackPaths.join(delimiter)

@@ -1,40 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ApprovalsQueueSurface,
-  ArtifactsLibrarySurface,
-  ChannelsGatewaySurface,
-  type ApprovalsQueuePermissionItem,
-  type ApprovalsQueueQuestionItem,
-} from '@open-cowork/ui'
+  ApprovalsQueueSurface, ArtifactsLibrarySurface, ChannelsGatewaySurface, type ApprovalsQueuePermissionItem, type ApprovalsQueueQuestionItem, } from '@open-cowork/ui'
 import {
-  defaultArtifactStatusForKind,
-  inferArtifactKind,
-  isSafeArtifactOpenTarget,
-  type ArtifactIndexEntry,
-  type ArtifactIndexPayload,
-  type ArtifactStatus,
-  channelProviderLabel,
-  type ChannelAgentRecord,
-  type ChannelBindingPublicRecord,
-  type ChannelDeliveryPublicRecord,
-  type ChannelIdentityPublicRecord,
-  type ChannelProviderKind,
-  type ChannelProviderStatus,
-  type CoordinationWatch,
-  type CoordinationWatchInput,
-} from '@open-cowork/shared'
+  defaultArtifactStatusForKind, inferArtifactKind, isSafeArtifactOpenTarget, type ArtifactIndexEntry, type ArtifactIndexPayload, type ArtifactStatus, channelProviderLabel, type ChannelAgentRecord, type ChannelBindingPublicRecord, type ChannelDeliveryPublicRecord, type ChannelIdentityPublicRecord, type ChannelProviderKind, type ChannelProviderStatus, type CoordinationWatch, type CoordinationWatchInput, } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
 import {
-  Badge,
-  Button,
-  Card,
-  Dialog,
-  Icon,
-  StudioPageHeader,
-} from '../ui'
+  Badge, Button, Card, Dialog, Icon, StudioPageHeader } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import {
   approvalQueueActionKey,
@@ -116,7 +90,7 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
       <StudioPageHeader
         eyebrow={t('studio.approvals.eyebrow', 'Review')}
         title={t('studio.approvals.title', 'Approvals')}
-        description={t('studio.approvals.description', 'OpenCode permission requests and questions stay runtime-owned; this page gives you one place to answer waiting inputs across chats and channels.')}
+        description={t('studio.approvals.description', 'Backlog across threads. Urgent asks also appear inline in the chat that is waiting — resolve either place; both clear the same request.')}
         actions={[{
           id: 'open-chat',
           children: currentSessionId ? t('studio.approvals.openChat', 'Open chat') : t('studio.approvals.startChat', 'Start from Home'),

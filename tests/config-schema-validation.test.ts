@@ -77,7 +77,7 @@ test('agent starter template schema accepts primary and subagent modes', () => {
       color: 'azure',
       mode: 'primary',
       instructions: 'Own the main conversation.',
-      toolIds: ['clock'],
+      toolIds: ['time-keep'],
       skillNames: [],
     },
     {
@@ -116,7 +116,7 @@ test('branding sidebar and home overrides validate', () => {
       variant: 'icon-text',
       icon: 'AC',
       mediaSize: 36,
-      mediaFit: 'vertical',
+      mediaFit: 'bounded',
       mediaAlign: 'center',
       title: 'Acme AI',
       subtitle: 'Private workspace',

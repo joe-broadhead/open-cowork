@@ -1,6 +1,6 @@
 import type { EffectiveAppSettings } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Card, Input, Switch } from '../ui'
+import { Card, Input, Switch } from '@open-cowork/ui'
 import {
   fieldLabelCls,
   sectionLabelCls,

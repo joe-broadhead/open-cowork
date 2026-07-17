@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { channelWebhookErrorCode, constantTimeStringEqual } from '@open-cowork/gateway-channel'
-import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client'
+import { channelWebhookErrorCode, constantTimeStringEqual, GatewayWebhookRateLimiter } from '@open-cowork/gateway-channel'
+import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client/domains/channels'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'
@@ -14,91 +14,8 @@ class GatewayHttpError extends Error {
   }
 }
 
-type GatewayWebhookRateRecord = {
-  count: number
-  resetAt: number
-  blockedUntil: number
-}
-
-const maxWebhookRateRecords = 10_000
-
-export class GatewayWebhookRateLimiter {
-  private readonly records = new Map<string, GatewayWebhookRateRecord>()
-
-  constructor(private readonly maxRecords = maxWebhookRateRecords) {}
-
-  claim(input: { key: string, nowMs: number, windowMs: number, maxRequests: number }) {
-    const record = this.record(input.key, input.nowMs, input.windowMs)
-    if (record.blockedUntil > input.nowMs) {
-      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    record.count += 1
-    if (record.count > input.maxRequests) {
-      record.blockedUntil = Math.max(record.blockedUntil, record.resetAt)
-      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    return { ok: true as const }
-  }
-
-  backoff(input: { key: string, nowMs: number, windowMs: number, maxFailures: number, backoffMs: number }) {
-    const record = this.record(input.key, input.nowMs, input.windowMs)
-    if (record.blockedUntil > input.nowMs) {
-      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    record.count += 1
-    if (record.count >= input.maxFailures) {
-      record.blockedUntil = Math.max(record.blockedUntil, input.nowMs + input.backoffMs)
-    }
-    return { ok: true as const }
-  }
-
-  check(input: { key: string, nowMs: number, windowMs: number }) {
-    const record = this.record(input.key, input.nowMs, input.windowMs)
-    if (record.blockedUntil > input.nowMs) {
-      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    return { ok: true as const }
-  }
-
-  private record(key: string, nowMs: number, windowMs: number) {
-    const existing = this.records.get(key)
-    if (existing && existing.resetAt > nowMs) return existing
-    const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 }
-    this.records.set(key, record)
-    if (this.records.size > this.maxRecords) this.prune(nowMs)
-    // Evict by relevance, not insertion order (audit P3-11): prefer dropping a record that is NOT
-    // currently blocking, and among equals the one expiring soonest. FIFO-by-insertion could evict
-    // an early-inserted hot key that is still BLOCKING — resetting an attacker's block — while idle
-    // keys persisted.
-    while (this.records.size > this.maxRecords) {
-      let evictKey: string | null = null
-      let evictBlocking = true
-      let evictExpiry = Infinity
-      for (const [candidateKey, candidate] of this.records) {
-        const blocking = candidate.blockedUntil > nowMs
-        const expiry = Math.max(candidate.resetAt, candidate.blockedUntil)
-        if (
-          evictKey === null
-          || (!blocking && evictBlocking)
-          || (blocking === evictBlocking && expiry < evictExpiry)
-        ) {
-          evictKey = candidateKey
-          evictBlocking = blocking
-          evictExpiry = expiry
-        }
-      }
-      if (!evictKey) break
-      this.records.delete(evictKey)
-    }
-    return record
-  }
-
-  private prune(nowMs: number) {
-    for (const [key, record] of this.records) {
-      if (record.resetAt <= nowMs && record.blockedUntil <= nowMs) this.records.delete(key)
-    }
-  }
-}
+// JOE-875: shared kernel lives in @open-cowork/gateway-channel.
+export { GatewayWebhookRateLimiter } from '@open-cowork/gateway-channel'
 
 const webhookRateLimit = {
   windowMs: 60_000,

@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
-  AgentCatalog,
-  CustomAgentConfig,
-  CustomAgentPermissionOverride,
-  ProviderModelDescriptor,
-  PublicAppConfig,
-} from '@open-cowork/shared'
+  AgentCatalog, CustomAgentConfig, CustomAgentPermissionOverride, ProviderModelDescriptor, PublicAppConfig, } from '@open-cowork/shared'
 import {
-  computeAgentCapabilityProfile,
-} from '@open-cowork/shared'
+  computeAgentCapabilityProfile, } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
 import { AgentAvatar } from './AgentAvatar'
 import { useEscape } from '../../hooks/useEscape'
@@ -17,22 +11,12 @@ import { AgentStaticPreview } from './AgentStaticPreview'
 import { AgentCapabilitiesTab } from './AgentCapabilitiesTab'
 import { InstructionsTab } from './InstructionsTab'
 import {
-  InferenceTab,
-  ScopeRow,
-  WorkbenchTabs,
-  resolveAgentBuilderModelSelection,
-  type WorkbenchTab,
-} from './AgentBuilderPrimitives'
+  InferenceTab, ScopeRow, WorkbenchTabs, resolveAgentBuilderModelSelection, type WorkbenchTab, } from './AgentBuilderPrimitives'
 import { AgentPermissionEditor } from './AgentPermissionEditor'
 import { buildInitialAgentDraft, type BuilderTarget } from './agent-builder-drafts'
 import {
-  applyTemplate,
-  augmentCatalogForBuiltIn,
-  linkedSkillNamesForTool,
-  validateAgentDraft,
-  type AgentTemplate,
-} from './agent-builder-utils'
-import { Badge, Button, Card, Icon, SegmentedControl } from '../ui'
+  applyTemplate, augmentCatalogForBuiltIn, linkedSkillNamesForTool, validateAgentDraft, type AgentTemplate, } from './agent-builder-utils'
+import { Badge, Button, Card, Icon, SegmentedControl } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { getStarterTemplates } from './starter-templates'
 

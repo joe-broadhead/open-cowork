@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { t } from '../helpers/i18n'
 import { BrandMark } from './BrandMark'
-import { Button } from './ui'
+import { Button } from '@open-cowork/ui'
 
 export function LoadingScreen({
   brandName,

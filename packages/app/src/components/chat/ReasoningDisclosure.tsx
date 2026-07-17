@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { ReasoningSegment } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { MarkdownContent } from './MarkdownContent'
-import { Icon } from '../ui'
+import { Icon } from '@open-cowork/ui'
 
 function renderReasoningSegments(segments: ReasoningSegment[]) {
   return segments

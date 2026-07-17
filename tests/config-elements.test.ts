@@ -15,6 +15,7 @@ import {
   getConfiguredToolsFromConfig,
   getConfigError,
   getAppConfig,
+  getConfiguredToolAllowPatterns,
   getConfiguredToolAskPatterns,
   getPublicAppConfig,
   getProviderDescriptors,
@@ -25,38 +26,35 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   const mcps = getConfiguredMcpsFromConfig()
   const agents = getConfiguredAgentsFromConfig()
 
-  assert.equal(tools.map((tool) => tool.id).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep,opencode-gateway')
-  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'clock,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator,openwiki-research,openwiki-edit-review,openwiki-ingest,time-keep,opencode-gateway')
-  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'clock,charts,skills,agents,workflows,knowledge,semantic-ui,openwiki,time-keep,opencode-gateway')
+  assert.equal(tools.map((tool) => tool.id).join(','), 'time-keep,charts,skills,agents,workflows,knowledge,semantic-ui')
+  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'time-keep,autoresearch,chart-creator,skill-creator,agent-creator,workflow-creator')
+  assert.equal(mcps.map((mcp) => mcp.name).join(','), 'time-keep,charts,skills,agents,workflows,knowledge,semantic-ui')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,agent-builder,workflow-designer,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'agents')!).includes('mcp__agents__save_agent'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'workflows')!).includes('mcp__workflows__create_workflow'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'knowledge')!).includes('mcp__knowledge__propose_knowledge_edit'), true)
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'semantic-ui')!).includes('mcp__semantic-ui__ui_execute_action'), true)
-  // OpenWiki ships the pack's trust posture: read tier auto-allowed, proposal
-  // tier asks, write tier structurally absent (the MCP runs --tools proposal).
-  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'openwiki')!).includes('mcp__openwiki__wiki.propose_edit'), true)
-  assert.equal(tools.find((tool) => tool.id === 'openwiki')?.allowPatterns?.includes('mcp__openwiki__wiki.search'), true)
   // time-keep: read/lookup tools auto-allowed; timer mutations (local SQLite
-  // state) ask for approval.
-  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!).includes('mcp__time-keep__timer_set'), true)
-  assert.equal(tools.find((tool) => tool.id === 'time-keep')?.allowPatterns?.includes('mcp__time-keep__business_days'), true)
-  // opencode-gateway: inspection tools auto-allowed; durable-work mutations ask.
-  // Tools are exposed to OpenCode with the `gateway_` prefix (opencode-gateway >= 1.x).
-  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'opencode-gateway')!).includes('mcp__opencode-gateway__gateway_task_create'), true)
-  assert.equal(tools.find((tool) => tool.id === 'opencode-gateway')?.allowPatterns?.includes('mcp__opencode-gateway__gateway_briefing'), true)
-  assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'clock')!).length, 0)
-  assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
+  // state) ask for approval. Patterns dual-expand to OpenCode server_tool ids.
+  const timeKeepAsk = getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'time-keep')!)
+  assert.equal(timeKeepAsk.includes('mcp__time-keep__timer_set'), true)
+  assert.equal(timeKeepAsk.includes('time-keep_timer_set'), true)
+  assert.equal(tools.find((tool) => tool.id === 'time-keep')?.allowPatterns?.includes('mcp__time-keep__*'), true)
+  const timeKeepAllow = getConfiguredToolAllowPatterns(tools.find((tool) => tool.id === 'time-keep')!)
+  assert.equal(timeKeepAllow.includes('mcp__time-keep__*'), true)
+  assert.equal(timeKeepAllow.includes('time-keep_*'), true)
+  assert.equal(tools.find((tool) => tool.id === 'time-keep')?.defaultAccess, true)
   const providers = getProviderDescriptors()
   assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai,github-copilot')
-  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'deepseek/deepseek-v4-flash:free')
+  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'qwen/qwen3-coder-flash')
   const copilot = providers.find((provider) => provider.id === 'github-copilot')
   assert.equal(copilot?.credentials.length, 0)
   assert.equal(copilot?.models.length, 0)
   assert.equal(getAppConfig().permissions.bash, 'allow')
   assert.equal(getAppConfig().permissions.fileWrite, 'allow')
   assert.equal(getAppConfig().permissions.webSearch, true)
+  assert.equal(getAppConfig().branding.sidebar?.top?.mediaFit, 'bounded')
 })
 
 test('GitHub Copilot provider descriptor matches pinned OpenCode runtime discovery fixture', () => {

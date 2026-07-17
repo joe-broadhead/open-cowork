@@ -82,45 +82,45 @@ export async function handleScimApiRoute(input: ScimRouteInput): Promise<boolean
 
   try {
     if (resource === 'ServiceProviderConfig' && method === 'GET') {
-      await service.authenticateScim(readBearerToken(req))
+      await service.domains.scim.authenticate(readBearerToken(req))
       writeScim(res, 200, serviceProviderConfig(), corsOrigin)
       return true
     }
-    const { orgId } = await service.authenticateScim(readBearerToken(req))
+    const { orgId } = await service.domains.scim.authenticate(readBearerToken(req))
     const baseUrl = scimBaseUrl(req)
 
     if (resource === 'Users') {
       if (!resourceId && method === 'GET') {
-        const members = await service.listScimMembers(orgId, { email: parseUserNameFilter(url) })
+        const members = await service.domains.scim.listMembers(orgId, { email: parseUserNameFilter(url) })
         writeScim(res, 200, scimListResponse(members.map((member) => scimUserResource(member, baseUrl)), members.length), corsOrigin)
         return true
       }
       if (!resourceId && method === 'POST') {
         const parsed = parseScimUser(await tools.readJsonBody(req, maxBodyBytes))
-        const member = await service.createScimUser(orgId, parsed)
+        const member = await service.domains.scim.createUser(orgId, parsed)
         writeScim(res, 201, scimUserResource(member, baseUrl), corsOrigin)
         return true
       }
       if (resourceId && method === 'GET') {
-        const member = await service.getScimMember(orgId, resourceId)
+        const member = await service.domains.scim.getMember(orgId, resourceId)
         if (!member) return notFound(res, 'SCIM user was not found.', corsOrigin)
         writeScim(res, 200, scimUserResource(member, baseUrl), corsOrigin)
         return true
       }
       if (resourceId && method === 'PUT') {
         const parsed = parseScimUser(await tools.readJsonBody(req, maxBodyBytes))
-        const member = await service.replaceScimUser(orgId, resourceId, parsed)
+        const member = await service.domains.scim.replaceUser(orgId, resourceId, parsed)
         writeScim(res, 200, scimUserResource(member, baseUrl), corsOrigin)
         return true
       }
       if (resourceId && method === 'PATCH') {
         const patch = parseScimPatch(await tools.readJsonBody(req, maxBodyBytes))
-        const member = await service.patchScimUser(orgId, resourceId, patch)
+        const member = await service.domains.scim.patchUser(orgId, resourceId, patch)
         writeScim(res, 200, scimUserResource(member, baseUrl), corsOrigin)
         return true
       }
       if (resourceId && method === 'DELETE') {
-        await service.deprovisionScimUser(orgId, resourceId)
+        await service.domains.scim.deprovisionUser(orgId, resourceId)
         writeCorsHeaders(res, corsOrigin)
         res.writeHead(204).end()
         return true
@@ -128,7 +128,7 @@ export async function handleScimApiRoute(input: ScimRouteInput): Promise<boolean
     }
 
     if (resource === 'Groups' && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-      const group = await service.syncScimGroup(orgId, parseScimGroup(await tools.readJsonBody(req, maxBodyBytes)))
+      const group = await service.domains.scim.syncGroup(orgId, parseScimGroup(await tools.readJsonBody(req, maxBodyBytes)))
       writeScim(res, method === 'POST' ? 201 : 200, {
         schemas: ['urn:ietf:params:scim:schemas:core:2.0:Group'],
         id: group.id,

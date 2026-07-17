@@ -84,6 +84,10 @@ type SessionFlushIdentity = {
 const SESSION_PATCH_FLUSH_INTERVAL_MS = 8
 const MAX_PENDING_SESSION_PATCHES_PER_WINDOW = 512
 const MAX_SESSION_PATCHES_PER_FLUSH = 128
+// Bound concurrent history refresh workers (JOE-839). Entries self-delete when
+// the refresh loop finishes; without a ceiling a history_refresh storm across
+// many sessions can pin unbounded concurrent disk/SDK work.
+export const MAX_HISTORY_REFRESH_QUEUE = 256
 
 const pendingViewFlushByWindowId = new Map<number, PendingViewFlush>()
 const pendingPatchFlushByWindowId = new Map<number, PendingPatchFlush>()
@@ -482,10 +486,25 @@ function queueSessionViewPublish(win: RendererWindow, sessionId: string, workspa
 function queueSessionHistoryRefresh(win: RendererWindow, sessionId: string) {
   const existing = historyRefreshQueue.get(sessionId)
   if (existing) {
+    // Touch as newest so a busy session is not the next eviction victim.
+    historyRefreshQueue.delete(sessionId)
+    historyRefreshQueue.set(sessionId, existing)
     existing.win = win
     existing.queued = true
     incrementPerfCounter('session.history.refresh.coalesced')
     return
+  }
+
+  if (historyRefreshQueue.size >= MAX_HISTORY_REFRESH_QUEUE) {
+    // Drop the oldest in-flight/queued refresh rather than growing without bound
+    // during a history_refresh storm (JOE-839). The session remains on disk; the
+    // next event for it re-queues.
+    const oldestId = historyRefreshQueue.keys().next().value
+    if (typeof oldestId === 'string') {
+      historyRefreshQueue.delete(oldestId)
+      incrementPerfCounter('session.history.refresh.evicted')
+      log('events', `Evicted history refresh queue entry for ${shortSessionId(oldestId)} under cap ${MAX_HISTORY_REFRESH_QUEUE}`)
+    }
   }
 
   const pending = {
