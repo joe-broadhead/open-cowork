@@ -1241,12 +1241,14 @@ test('cloud app stores Knowledge data under the configured cloud app data root',
 
   try {
     assert.ok(app.url)
+    // JOE-832: elevated roles require signed header auth; knowledge list is
+    // available to members over unsigned loopback header auth (no secret).
     const response = await fetch(`${app.url}/api/knowledge`, {
       headers: {
         'x-open-cowork-tenant-id': 'tenant-knowledge',
         'x-open-cowork-user-id': 'user-knowledge',
         'x-open-cowork-user-email': 'knowledge@example.test',
-        'x-open-cowork-user-role': 'owner',
+        'x-open-cowork-user-role': 'member',
       },
     })
     assert.equal(response.status, 200)
@@ -2165,6 +2167,51 @@ test('cloud app wires OIDC browser login when session cookies are configured', a
     await app?.close()
     globalThis.fetch = originalFetch
   }
+})
+
+test('cloud header auth requires signatures whenever a secret is configured (JOE-832)', async () => {
+  const timestamp = Math.floor(Date.parse('2026-01-01T00:00:00.000Z') / 1000).toString()
+  const baseHeaders = {
+    'x-open-cowork-header-auth-secret': 'trusted-proxy-secret',
+    'x-open-cowork-header-auth-timestamp': timestamp,
+    'x-open-cowork-tenant-id': 'tenant-1',
+    'x-open-cowork-tenant-name': 'Tenant 1',
+    'x-open-cowork-user-id': 'user-1',
+    'x-open-cowork-user-email': 'user@example.test',
+  }
+  // Secret present ⇒ signatures mandatory even when requireSignedHeaders is omitted.
+  const auth = createHeaderCloudAuthResolver({}, {
+    headerSecret: 'trusted-proxy-secret',
+    now: () => new Date('2026-01-01T00:01:00.000Z'),
+  })
+  await assert.rejects(async () => {
+    await auth({
+      headers: baseHeaders,
+    } as unknown as IncomingMessage)
+  }, /signature is required/)
+  const principal = await auth({
+    headers: {
+      ...baseHeaders,
+      'x-open-cowork-header-auth-signature': signHeaderCloudAuthRequest({
+        headers: baseHeaders,
+        secret: 'trusted-proxy-secret',
+        timestamp,
+      }),
+    },
+  } as unknown as IncomingMessage)
+  assert.equal(principal.role, 'member')
+
+  // Without a shared secret, elevated roles are refused (cannot mint owner).
+  const unsigned = createHeaderCloudAuthResolver({}, {})
+  await assert.rejects(async () => {
+    await unsigned({
+      headers: {
+        'x-open-cowork-user-role': 'owner',
+        'x-open-cowork-user-id': 'u',
+        'x-open-cowork-user-email': 'u@example.test',
+      },
+    } as unknown as IncomingMessage)
+  }, /elevated roles without signed headers/)
 })
 
 test('cloud header auth resolver maps request headers to tenant principal', async () => {

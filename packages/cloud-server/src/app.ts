@@ -470,7 +470,13 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
     if (expectedSecret && !constantTimeStringEqual(readHeader(req, 'x-open-cowork-header-auth-secret'), expectedSecret)) {
       throw new CloudHttpError(401, 'Trusted header authentication secret is invalid.')
     }
-    if (expectedSecret && options.requireSignedHeaders) {
+    // JOE-832: whenever a shared secret is configured, require HMAC-signed
+    // identity headers. Unsigned role headers cannot elevate to owner/admin.
+    const mustVerifySignature = Boolean(expectedSecret) || Boolean(options.requireSignedHeaders)
+    if (mustVerifySignature) {
+      if (!expectedSecret) {
+        throw new CloudHttpError(401, 'Trusted header authentication requires a configured secret for signed headers.')
+      }
       assertHeaderAuthSignature(req, expectedSecret, {
         maxAgeMs: options.maxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
         now: options.now,
@@ -482,6 +488,9 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
     const role = readHeader(req, 'x-open-cowork-user-role') || defaults.role || 'member'
     if (role !== 'owner' && role !== 'admin' && role !== 'member') {
       throw new CloudHttpError(401, 'Trusted header authentication role is invalid.')
+    }
+    if (!mustVerifySignature && (role === 'owner' || role === 'admin')) {
+      throw new CloudHttpError(401, 'Trusted header authentication refuses elevated roles without signed headers.')
     }
     return {
       tenantId,
@@ -640,7 +649,10 @@ export function createCloudAuthResolverForConfig(
   if (config.cloud.auth.mode === 'header') {
     return createHeaderCloudAuthResolver({}, {
       headerSecret: config.cloud.auth.headerSecret,
-      requireSignedHeaders: Boolean(config.cloud.auth.headerSecret && !config.cloud.auth.headerAllowUnsigned),
+      // Signature verification is mandatory whenever a secret is set (JOE-832).
+      // headerAllowUnsigned is ignored once a secret exists; loopback demos without
+      // a secret remain the only unsigned path.
+      requireSignedHeaders: Boolean(config.cloud.auth.headerSecret),
       maxSignatureAgeMs: config.cloud.auth.headerMaxSignatureAgeMs,
     })
   }
