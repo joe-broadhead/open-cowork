@@ -1,4 +1,4 @@
-import { evaluateBuiltInMcp, resolveBundledMcpNodeCommand, resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
+import { evaluateBuiltInMcp, pinHttpMcpRemoteEntry, resolveBundledMcpNodeCommand, resolveCustomMcpRuntimeEntryForRuntime } from '@open-cowork/runtime-host/runtime-mcp'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
@@ -180,6 +180,42 @@ test('resolveCustomMcpRuntimeEntryForRuntime rejects public hostnames that resol
   })
 
   assert.equal(entry, null)
+})
+
+test('resolveCustomMcpRuntimeEntryForRuntime pins cleartext HTTP MCP to resolved address (JOE-826)', async () => {
+  const pinned = pinHttpMcpRemoteEntry({
+    url: new URL('http://mcp.example.com:8080/api'),
+    resolvedAddresses: ['203.0.113.10'],
+    headers: { Authorization: 'Bearer t', Host: 'evil.example' },
+  })
+  assert.equal(pinned.url, 'http://203.0.113.10:8080/api')
+  assert.equal(pinned.headers?.Host, 'mcp.example.com:8080')
+  assert.equal(pinned.headers?.Authorization, 'Bearer t')
+
+  // HTTPS is not IP-pinned (SNI/cert require the original hostname).
+  const httpsPinned = pinHttpMcpRemoteEntry({
+    url: new URL('https://mcp.example.com/api'),
+    resolvedAddresses: ['203.0.113.10'],
+  })
+  assert.equal(httpsPinned.url, 'https://mcp.example.com/api')
+
+  const entry = await resolveCustomMcpRuntimeEntryForRuntime({
+    scope: 'machine',
+    name: 'http-pin',
+    type: 'http',
+    url: 'http://mcp.example.com/tools',
+    headers: { 'x-api-key': 'k' },
+  }, {
+    // Public unicast address that passes the non-routable/special-use blocks.
+    resolveHostname: async () => [{ address: '8.8.8.8', family: 4 }],
+  })
+  assert.ok(entry)
+  assert.equal(entry?.type, 'remote')
+  if (entry?.type === 'remote') {
+    assert.equal(entry.url, 'http://8.8.8.8/tools')
+    assert.equal(entry.headers?.Host, 'mcp.example.com')
+    assert.equal(entry.headers?.['x-api-key'], 'k')
+  }
 })
 
 test('evaluateBuiltInMcp — local MCP missing required credentials is skipped as not-configured', () => {

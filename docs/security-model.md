@@ -173,9 +173,18 @@ flag, so it cannot be used to reach an instance metadata service. The guard
 runs at save time (`custom:add-mcp`), test time (`custom:test-mcp`), and
 runtime registration, so public-looking hostnames that resolve into
 private networks at those policy checkpoints are skipped before OpenCode
-receives the MCP entry. After registration, OpenCode owns the actual
-HTTP connection; Open Cowork does not proxy or pin DNS for the runtime
-transport.
+receives the MCP entry.
+
+**DNS pin / residual SSRF (JOE-826):** At runtime handoff, cleartext `http:`
+MCP entries are rewritten to connect to a policy-validated resolved address
+while preserving the original `Host` header (`pinHttpMcpRemoteEntry`). That
+closes the DNS-rebinding window for HTTP. **HTTPS residual:** OpenCode owns
+the TLS transport; IP-pinning would break SNI and certificate hostname checks,
+so `https:` MCPs stay hostname-based after the pre-connect DNS policy check.
+Operators who need stronger guarantees for HTTPS MCPs should terminate TLS at
+a trusted reverse proxy with a fixed upstream IP, or restrict MCPs to known
+static endpoints. Cloud-metadata targets remain hard-denied on every policy
+check regardless of protocol.
 
 ### stdio policy (stdio MCPs)
 
