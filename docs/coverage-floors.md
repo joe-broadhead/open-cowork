@@ -14,3 +14,16 @@ Authoritative ratchets live in `scripts/coverage-summary.mjs`.
 2. For MCP: extract helpers next to handlers and test them; keep contract spawns.
 3. Ratchet floors **down** never? Ratchet **up** only after `pnpm test:coverage` shows headroom.
 4. Product-critical suites take CI priority over architecture meta (JOE-895).
+
+
+## Workspace-node immediate actions (JOE-874)
+
+Target modules for the next ratchet toward ≥60% lines:
+
+- Desktop main-adjacent node suites already under `tests/` (directory grants,
+  durable session events, IPC registration)
+- Gateway + standalone-gateway package tests (already high)
+- MCP in-process pure helpers (see JOE-871 clock time-math)
+
+Run `pnpm test:coverage:node` / workspace coverage and only then raise
+`WORKSPACE_NODE_COVERAGE_INPUT.thresholds` in `scripts/coverage-summary.mjs`.
