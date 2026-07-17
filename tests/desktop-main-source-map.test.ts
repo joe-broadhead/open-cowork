@@ -38,6 +38,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'destructive-actions.ts',
   'diagnostics-export.ts',
   'directory-grants.ts',
+  'durable-session-events.ts',
   'event-message-handlers.ts',
   'event-runtime-handlers.ts',
   'event-subscriptions.ts',

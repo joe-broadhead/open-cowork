@@ -62,6 +62,7 @@ still touch SDK event/types at the desktop edge.
 - `packages/cloud-server/src/opencode-runtime-adapter.ts`
 - `packages/cloud-server/src/runtime-adapter.ts`
 - `packages/cloud-server/src/worker-scoped-runtime-adapter.ts`
+- `apps/desktop/src/main/durable-session-events.ts`
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`
 - `apps/desktop/src/main/ipc/context.ts`
