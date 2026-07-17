@@ -159,6 +159,16 @@ global `*:focus-visible` accent outline plus its own state styling.
 | `WorkbenchLayout` / `ActionCluster` / `DiffView` | workflow IA | `--studio-*`, `--color-border-subtle`, `--z-sticky` |
 | Studio cards/rows/lanes (`CoworkerCard`, `TaskLane`, `KanbanBoard`, `ReviewPanel`, …) | Studio product language | `--coworker-*`, `--lane-*`, `--review-*`, `--density-*` |
 
+### Diff ownership (JOE-847)
+
+| Layer | Module | Role |
+| --- | --- | --- |
+| Presentational shell | `@open-cowork/ui` `DiffView` | Shared review chrome (`data-diff-view`), header, file list hooks, empty state. Used by SessionInspector and every DiffViewer path. |
+| Session controller | `packages/app/.../chat/DiffViewer` | Loads `session.diff`, view-mode toggle, expand/collapse rows (`DiffViewerRows`). Always wraps content in `DiffView` (modal + embedded). |
+| Row/patch rendering | `DiffViewerRows` / `DiffViewerRowBlocks` | Unified/split hunk UI for a single file. |
+
+Do not introduce a second top-level diff chrome. New review UIs compose `DiffView` and optionally the DiffViewer controller.
+
 ## Agent Builder
 
 The Agent Builder summary uses the shared deterministic capability profile:
