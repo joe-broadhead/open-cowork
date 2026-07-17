@@ -351,11 +351,16 @@ export function getConfiguredToolById(toolId: string) {
  */
 export function toOpenCodeMcpToolPattern(pattern: string): string | null {
   if (!pattern || pattern === 'mcp__*' || pattern === 'mcp__') return null
-  const match = /^mcp__([a-zA-Z0-9][a-zA-Z0-9_-]*)__(.+)$/.exec(pattern)
-  if (!match) return null
-  const server = match[1]
-  const rest = match[2]
+  if (!pattern.startsWith('mcp__')) return null
+  // Avoid ReDoS-prone regexes with nested quantifiers; parse the separator
+  // positions and validate the server segment with a linear scan.
+  const body = pattern.slice('mcp__'.length)
+  const sep = body.indexOf('__')
+  if (sep <= 0) return null
+  const server = body.slice(0, sep)
+  const rest = body.slice(sep + 2)
   if (!server || !rest) return null
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(server)) return null
   return `${server}_${rest}`
 }
 
