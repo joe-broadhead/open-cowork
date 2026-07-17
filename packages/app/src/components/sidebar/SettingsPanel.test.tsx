@@ -234,6 +234,8 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Advanced/ }))
+    // JOE-876: RuntimeConfigPanel is collapsed by default — expand progressive disclosure first.
+    await user.click(await screen.findByRole('button', { name: 'Show advanced' }))
     const toolingBridge = await screen.findByRole('switch', { name: 'Developer config bridge' })
     expect(toolingBridge).toHaveAttribute('aria-checked', 'true')
 

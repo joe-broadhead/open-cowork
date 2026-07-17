@@ -182,10 +182,10 @@ describe('AgentBuilderPage', () => {
     expect(screen.getByText('Built-in - tune via the builtInAgents config block')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create coworker' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Instructions' }))
+    await user.click(screen.getByRole('radio', { name: 'Instructions' }))
     expect(screen.getByText(/uses OpenCode's native built-in prompt/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Capabilities' }))
+    await user.click(screen.getByRole('radio', { name: 'Capabilities' }))
     expect(screen.getAllByText('Web Search').length).toBeGreaterThan(0)
     expect(create).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
