@@ -865,6 +865,9 @@ test('public production deployment guard fails closed without durable dependenci
     OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
     OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+    // JOE-835: production requires explicit durable event retention windows.
+    OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
+    OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
   }
 
   assert.throws(() => assertCloudProductionDeploymentSafe({
@@ -898,6 +901,34 @@ test('public production deployment guard fails closed without durable dependenci
     publicUrl: 'https://cloud.example.test',
   }), /RUN_MIGRATIONS=false/)
 
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: {
+      ...productionEnv,
+      OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS: undefined,
+    },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /RETENTION_SESSION_EVENT_MS/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: {
+      ...productionEnv,
+      OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS: undefined,
+    },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /RETENTION_WORKSPACE_EVENT_MS/)
+
   assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
     tier: 'public_production',
     role: 'web',
@@ -930,6 +961,8 @@ test('public production deployment guard enforces strong secrets and web auth po
     OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
     OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+    OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
+    OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
   }
 
   assert.throws(() => assertCloudProductionDeploymentSafe({
@@ -1039,6 +1072,8 @@ test('public production cloud app rejects in-memory adapter overrides after depe
       OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cloud.example.test',
       OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: 'gcs',
       OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: 'open-cowork-test-bucket',
+      OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
+      OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -2305,6 +2340,8 @@ test('public production deployment guard rejects reusing the secret key as the c
     OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
     OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_SECRET, // identical → crypto key reuse
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+    OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
+    OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS: String(14 * 24 * 60 * 60 * 1000),
   }
   assert.throws(() => assertCloudProductionDeploymentSafe({
     tier: 'public_production',
