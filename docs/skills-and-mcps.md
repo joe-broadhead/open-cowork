@@ -79,9 +79,9 @@ may still refer to the short tool name such as `bar_chart`.
     ---
 
     Lets agents enumerate, read, write, and delete skill bundles from chat.
-    Runtime ids include `mcp__skills__list_skill_bundles`,
-    `mcp__skills__get_skill_bundle`, `mcp__skills__save_skill_bundle`,
-    and `mcp__skills__delete_skill_bundle`.
+    Runtime ids include `skills_list_skill_bundles`,
+    `skills_get_skill_bundle`, `skills_save_skill_bundle`,
+    and `skills_delete_skill_bundle`.
     Source: `mcps/skills/src/index.ts`.
 
 -   :material-account-cog: **`agents` MCP** <span class="status-badge stable">stable</span>
@@ -90,9 +90,9 @@ may still refer to the short tool name such as `bar_chart`.
 
     Lets approved agents preview, read, save, and delete custom OpenCode
     agents through the same validation path as the desktop UI. Runtime ids
-    include `mcp__agents__list_agents`, `mcp__agents__get_agent`,
-    `mcp__agents__preview_agent`, `mcp__agents__save_agent`, and
-    `mcp__agents__delete_agent`. Source: `mcps/agents/src/index.ts`.
+    include `agents_list_agents`, `agents_get_agent`,
+    `agents_preview_agent`, `agents_save_agent`, and
+    `agents_delete_agent`. Source: `mcps/agents/src/index.ts`.
 
 -   :material-calendar-sync: **`workflows` MCP** <span class="status-badge stable">stable</span>
 
@@ -100,8 +100,8 @@ may still refer to the short tool name such as `bar_chart`.
 
     Lets a Workflow Designer setup thread preview and save repeatable Open Cowork
     workflows with manual, scheduled, or webhook triggers. Runtime ids:
-    `mcp__workflows__preview_workflow` and
-    `mcp__workflows__create_workflow`; create accepts the preview token returned
+    `workflows_preview_workflow` and
+    `workflows_create_workflow`; create accepts the preview token returned
     by the confirmed preview. Source:
     `mcps/workflows/src/index.ts`.
 
@@ -112,9 +112,9 @@ may still refer to the short tool name such as `bar_chart`.
     Reads high-level Open Cowork app status and visible product state, lists
     allowlisted semantic actions, and can execute approval-gated redacted
     diagnostics export through a loopback-only, tokenized bridge. Runtime ids:
-    `mcp__semantic-ui__ui_status`, `mcp__semantic-ui__ui_snapshot`,
-    `mcp__semantic-ui__ui_list_actions`, and
-    `mcp__semantic-ui__ui_execute_action`. It does not expose DOM selectors,
+    `semantic-ui_ui_status`, `semantic-ui_ui_snapshot`,
+    `semantic-ui_ui_list_actions`, and
+    `semantic-ui_ui_execute_action`. It does not expose DOM selectors,
     screenshots, hidden secrets, local MCP process details, or artifact bodies.
     Source: `mcps/semantic-ui/src/index.ts`.
 
@@ -126,7 +126,7 @@ may still refer to the short tool name such as `bar_chart`.
     tokenized bridge (loopback `http://` on desktop, the cloud `https://` public
     URL in cloud). Proposals stay `PENDING` until a Maintainer reviews them — the
     agent can never publish directly. Runtime id:
-    `mcp__knowledge__propose_knowledge_edit`. Source: `mcps/knowledge/src/index.ts`.
+    `knowledge_propose_knowledge_edit`. Source: `mcps/knowledge/src/index.ts`.
 
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>
 

@@ -43,6 +43,9 @@ planned before broad distribution.
 - Dual-expand MCP permission patterns to OpenCode 1.18+ `server_tool` ids
   (e.g. `time-keep_current_time`) so agents can call time-keep/charts tools
   that status-bar MCP connectivity already exposed.
+- Align skills, agent instructions, tool-trace, and permission-pattern
+  validation with OpenCode `server_tool` naming (charts/skills/agents/workflows
+  and custom MCP builder rules).
 - Desktop local chat attaches each prompt admission to a durable
   `v2.session.events` tail from `admittedSeq` (global SSE stays control-plane
   and suppresses tracked-session transcript). Classic SDK allowlist remains

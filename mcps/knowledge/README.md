@@ -6,7 +6,7 @@ Maintainer reviews them in Open Cowork.
 
 ## Tool
 
-- `mcp__knowledge__propose_knowledge_edit` — submit a proposed page (title +
+- `knowledge_propose_knowledge_edit` — submit a proposed page (title +
   ordered blocks + optional links) for human review.
 
 ## Environment

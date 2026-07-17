@@ -509,7 +509,7 @@ describe('AgentBuilderPage', () => {
     )
 
     expect(
-      screen.getAllByText('MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.').length,
+      screen.getAllByText('MCP tools permission rule pattern must look like mcp__server__tool or server_tool (OpenCode form).').length,
     ).toBeGreaterThanOrEqual(1)
     for (const button of screen.getAllByRole('button', { name: 'Hire coworker' })) {
       expect(button).toBeDisabled()
