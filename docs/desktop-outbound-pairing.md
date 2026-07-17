@@ -29,6 +29,10 @@ The paired Desktop path has these invariants:
   remote authority.
 - Every remote command and pairing lifecycle change is written to the local
   audit log.
+- `remote_allowed` is root-equivalent for the elevated decision surface (JOE-830):
+  treat the pairing token like a local agent credential, require broker lease
+  fencing on every claimed command, audit elevation, and rotate/revoke on
+  suspicion.
 
 ## Pairing Records
 
@@ -93,6 +97,21 @@ The broker owns distributed claim semantics; Desktop owns local policy checks
 and execution. Commands after the last durable sequence can be replayed safely
 because Desktop acknowledges each command id and persists the last observed
 sequence.
+
+When `policy.remoteApprovals` or `policy.remoteQuestions` is `remote_allowed`,
+Desktop **requires** a non-empty `lease.leaseToken` and `lease.leaseExpiresAt`
+before executing any claimed command. Missing leases are blocked and audited
+as `command.blocked`. Enabling `remote_allowed` also writes
+`pairing.remote_allowed_enabled` to the local audit log with operator risk copy
+(`DESKTOP_PAIRING_REMOTE_ALLOWED_RISK_SUMMARY` in `@open-cowork/shared`).
+
+### Threat model notes (`remote_allowed`)
+
+| Threat | Residual risk | Operator control |
+| --- | --- | --- |
+| Stolen pairing token | Attacker can claim commands as the paired device | Rotate token; revoke pairing; prefer `local_confirmation` |
+| Compromised broker | Broker can inject approval/question answers | Keep remote decisions local; fence with leases; audit |
+| Replay without lease | Stale/forged claim without lease ownership | Fail closed without `leaseToken` + `leaseExpiresAt` |
 
 Paired Desktop command acknowledgements are lease-fenced, not projection-fenced.
 The command result envelope includes `projectionFence: null` and

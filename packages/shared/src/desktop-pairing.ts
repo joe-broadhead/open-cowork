@@ -177,11 +177,16 @@ export type DesktopPairingAuditAction =
   | 'pairing.connected'
   | 'pairing.offline'
   | 'pairing.revoked'
+  | 'pairing.remote_allowed_enabled'
   | 'command.accepted'
   | 'command.completed'
   | 'command.failed'
   | 'command.blocked'
   | 'remote.event.published'
+
+/** JOE-830: operator-facing risk copy when elevating remote approvals/questions. */
+export const DESKTOP_PAIRING_REMOTE_ALLOWED_RISK_SUMMARY =
+  'remote_allowed treats a compromised broker or stolen pairing token as full local agent control for approvals and questions. Prefer local_confirmation; rotate the pairing token immediately if remote_allowed is ever enabled by mistake.'
 
 export type DesktopPairingAuditEvent = {
   id: string
