@@ -221,13 +221,15 @@ export function evaluateBuiltInMcp(builtin: BundleMcp, settings: CoworkSettings)
     return { status: 'skipped', reason: 'disabled-by-user' }
   }
 
-  if (builtin.type === 'local' && builtin.command && !externalCommandResolves(builtin.command)) {
-    return { status: 'skipped', reason: 'command-not-installed' }
-  }
-
+  // Honor explicit user disable before install/PATH checks so diagnostics
+  // report "disabled" even when the binary is absent on CI hosts.
   const explicit = getExplicitEnabledState(builtin, settings)
   if (explicit === false) {
     return { status: 'skipped', reason: 'disabled-by-user' }
+  }
+
+  if (builtin.type === 'local' && builtin.command && !externalCommandResolves(builtin.command)) {
+    return { status: 'skipped', reason: 'command-not-installed' }
   }
 
   if (explicit !== true) {
