@@ -344,6 +344,49 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
   return null
 }
 
+/**
+ * JOE-826: pin cleartext HTTP MCP connections to a DNS-policy-validated address
+ * while preserving the original Host header. HTTPS cannot be IP-pinned without
+ * breaking SNI/certificate validation — those stay hostname-based with the
+ * residual DNS rebinding window documented in docs/security-model.md.
+ */
+export function pinHttpMcpRemoteEntry(input: {
+  url: URL
+  resolvedAddresses?: string[]
+  headers?: Record<string, string>
+}): { url: string; headers?: Record<string, string> } {
+  const baseHeaders = input.headers && Object.keys(input.headers).length > 0
+    ? { ...input.headers }
+    : undefined
+  const addresses = (input.resolvedAddresses || []).filter(Boolean)
+  if (input.url.protocol !== 'http:' || addresses.length === 0) {
+    return { url: input.url.toString(), headers: baseHeaders }
+  }
+
+  const originalHostname = input.url.hostname
+  const address = addresses[0]!
+  // Literal IP targets are already pinned by definition.
+  if (originalHostname === address) {
+    return { url: input.url.toString(), headers: baseHeaders }
+  }
+
+  const pinned = new URL(input.url.toString())
+  // WHATWG URL accepts bare IPv6 via hostname setter and adds brackets in href.
+  pinned.hostname = address
+
+  const hostHeader = input.url.port
+    ? `${originalHostname}:${input.url.port}`
+    : originalHostname
+  const headers: Record<string, string> = { ...(baseHeaders || {}) }
+  // Pin Host so virtual-hosted MCPs still route correctly; do not allow a
+  // config-supplied Host header to undo the pin semantics.
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'host') delete headers[key]
+  }
+  headers.Host = hostHeader
+  return { url: pinned.toString(), headers }
+}
+
 export async function resolveCustomMcpRuntimeEntryForRuntime(
   custom: CustomMcpConfig,
   options: McpUrlResolutionOptions = {},
@@ -354,8 +397,8 @@ export async function resolveCustomMcpRuntimeEntryForRuntime(
   // entry. Save/test handlers also validate URLs, but a hostname can
   // re-resolve between save and runtime boot. Re-run the DNS-aware policy
   // here so tampered config files and point-in-time private DNS resolutions
-  // are rejected before handoff. OpenCode owns the actual HTTP connection
-  // after registration; Open Cowork does not proxy or pin that transport.
+  // are rejected before handoff. For cleartext HTTP we also pin the connect
+  // URL to a validated address (JOE-826). HTTPS remains hostname-based.
   const verdict = await evaluateHttpMcpUrlResolved(custom.url, {
     ...options,
     allowPrivateNetwork: custom.allowPrivateNetwork,
@@ -364,12 +407,17 @@ export async function resolveCustomMcpRuntimeEntryForRuntime(
     log('mcp', `Rejecting HTTP MCP ${custom.name}: ${verdict.reason}`)
     return null
   }
+  const pinned = pinHttpMcpRemoteEntry({
+    url: verdict.url,
+    resolvedAddresses: verdict.resolvedAddresses,
+    headers: custom.headers,
+  })
   const entry: ResolvedRuntimeMcpEntry = {
     type: 'remote',
-    url: custom.url,
+    url: pinned.url,
   }
-  if (custom.headers && Object.keys(custom.headers).length > 0) {
-    entry.headers = custom.headers
+  if (pinned.headers && Object.keys(pinned.headers).length > 0) {
+    entry.headers = pinned.headers
   }
   return entry
 }
