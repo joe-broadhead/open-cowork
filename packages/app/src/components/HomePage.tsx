@@ -503,7 +503,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
     // Sits on the themed --color-base + its --bg-image aurora wash (set per theme).
     <div className="flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <div className="measure-column px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
-        <h1 className="font-display text-hero leading-[1.04] font-semibold tracking-[-0.03em] text-text text-center">
+        <h1 className="font-display text-hero leading-[1.04] font-semibold text-text text-center">
           {brandedGreeting ?? (
             <>{timeGreeting.lead} <span className="studio-greeting-accent">{timeGreeting.accent}</span>.</>
           )}
