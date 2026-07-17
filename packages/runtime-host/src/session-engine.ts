@@ -209,20 +209,18 @@ export class SessionEngine {
       && cached.busy === busy
       && cached.awaitingPermission === awaitingPermission
     ) {
-      // JOE-868: return the same IPC-boundary clone while the revision is stable so
-      // renderer memoization keeps identity equality without exposing the engine graph.
-      return cached.view
+      // JOE-868: always clone at the read boundary so callers cannot mutate the
+      // engine-owned graph. Structural equality holds; identity may not.
+      return cloneSessionViewForIpc(cached.view)
     }
 
-    const derived = deriveVisibleSessionPatch(
+    const view = deriveVisibleSessionPatch(
       state,
       sessionId,
       this.busySessions,
       this.awaitingPermissionSessions,
       this.sessionViewTiming(),
     )
-    // Cache the cloned boundary view, not the internal derived object.
-    const view = cloneSessionViewForIpc(derived)
     this.viewCacheById.set(sessionId, {
       revision: state.revision,
       lastEventAt: state.lastEventAt,
@@ -230,7 +228,7 @@ export class SessionEngine {
       awaitingPermission,
       view,
     })
-    return view
+    return cloneSessionViewForIpc(view)
   }
 
   getSessionMeta(sessionId: string) {
