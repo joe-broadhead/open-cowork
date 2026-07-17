@@ -819,7 +819,7 @@ available from Build mode only, preserving Plan mode's read-only contract.
 
 Workflow setup has one reserved configured-agent contract:
 `workflow-designer`. When workflows are enabled, downstream builds should keep
-that agent id in `agents`; otherwise the Workflows page cannot open setup
+that agent id in `agents`; otherwise the Playbooks page cannot open setup
 threads. If a downstream build intentionally renames or removes it, update the
 workflow setup policy in code and config together.
 

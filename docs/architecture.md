@@ -113,7 +113,7 @@ Open Cowork exposes Desktop, Cloud Web, and Gateway surfaces through explicit
 workspace authorities:
 
 - **Desktop Local workspace** uses the local Electron main process and local
-  OpenCode runtime. Threads, local project paths, local stdio MCPs, machine
+  OpenCode runtime. Project chats, local project paths, local stdio MCPs, machine
   runtime config, local settings, and local artifacts remain on that device.
 - **Cloud workspace** uses Open Cowork Cloud as the control plane. Desktop and
   web clients sync because both read and write the same tenant-scoped cloud
@@ -281,7 +281,7 @@ The Electron main process:
 - bridges IPC
 - manages window lifecycle
 - owns local storage, session registry access, and rebuildable sidecar
-  projections such as the Threads index
+  projections such as the Projects (thread-index) sidecar
 - enforces desktop-side policy and safety boundaries
 
 Code:
@@ -296,7 +296,7 @@ Code:
   `packages/runtime-host/src/mcp-stdio-policy.ts`,
   `packages/runtime-host/src/shell-env.ts` — policy and safety boundaries.
 - `packages/runtime-host/src/thread-index/thread-index-store.ts` and
-  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local Threads
+  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local Projects
   search/tag projection over the session registry and session history.
 
 ### 4. Event projection layer
@@ -342,9 +342,9 @@ The renderer owns:
 - navigation
 - chat UX
 - the welcoming Home composer
-- the Threads workspace for indexed history search, tags, saved filters, and
+- the Projects workspace for indexed history search, tags, saved filters, and
   suggestions
-- tools, skills, and agents UI
+- Team (coworkers), Tools & Skills, and secondary Studio surfaces
 - settings
 - artifact presentation
 
