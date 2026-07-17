@@ -6,7 +6,7 @@ import { getDocsBaseUrl } from '../helpers/brand'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
-import { Badge, Button } from '@open-cowork/ui'
+import { Badge, Button, Input, Switch } from '@open-cowork/ui'
 import { BrandMark } from './BrandMark'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -554,7 +554,7 @@ export function SetupScreen({
                   return (
                     <label key={credential.key} className="flex flex-col gap-1.5">
                       <span className="text-sm font-medium text-text-secondary">{credential.label}</span>
-                      <input
+                      <Input
                         type={credentialIsSecret ? 'password' : 'text'}
                         value={selectedCredentials[credential.key] || ''}
                         onFocus={() => {
@@ -564,7 +564,6 @@ export function SetupScreen({
                         }}
                         onChange={(event) => updateCredential(credential.key, event.target.value)}
                         placeholder={credential.placeholder}
-                        className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-text-muted focus:border-accent/40"
                       />
                       <span className="text-xs text-text-muted">{credential.description}</span>
                     </label>
@@ -613,12 +612,11 @@ export function SetupScreen({
             ) : (
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-text-secondary">{t('setup.modelIdLabel', 'Model ID')}</span>
-                <input
+                <Input
                   type="text"
                   value={modelId}
                   onChange={(event) => setModelId(event.target.value)}
                   placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
-                  className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-text-muted focus:border-accent/40"
                 />
                 <span className="text-xs text-text-muted">
                   {t('setup.liveModelsHint', 'This provider fills its model list after sign-in.')}
@@ -629,8 +627,9 @@ export function SetupScreen({
         ) : null}
 
         <section className="rounded-2xl border border-border-subtle bg-elevated p-4">
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setAdvancedOpen((current) => !current)}
             className="flex w-full items-center justify-between gap-3 text-start"
             aria-expanded={advancedOpen}
@@ -644,7 +643,7 @@ export function SetupScreen({
               </span>
             </span>
             <span className="text-sm text-accent">{advancedOpen ? t('common.hide', 'Hide') : t('common.show', 'Show')}</span>
-          </button>
+          </Button>
 
           {advancedOpen ? (
             <div className="mt-4 flex flex-col gap-4">
@@ -684,15 +683,8 @@ export function SetupScreen({
                 </div>
               ) : null}
 
-              <div className="flex items-start gap-3 rounded-xl border border-border-subtle bg-base px-3.5 py-3">
-                <input
-                  id="setup-runtime-tooling-bridge"
-                  type="checkbox"
-                  checked={runtimeToolingBridgeEnabled}
-                  onChange={(event) => setRuntimeToolingBridgeEnabled(event.target.checked)}
-                  className="mt-0.5"
-                />
-                <label htmlFor="setup-runtime-tooling-bridge" className="flex min-w-0 cursor-pointer flex-col gap-1">
+              <div className="flex items-start justify-between gap-3 rounded-xl border border-border-subtle bg-base px-3.5 py-3">
+                <div className="flex min-w-0 flex-col gap-1">
                   <span id="setup-runtime-tooling-bridge-title" className="text-sm font-semibold text-text">
                     {t('setup.toolingBridgeTitle', 'Reuse developer tools from this Mac')}
                   </span>
@@ -702,7 +694,12 @@ export function SetupScreen({
                       'Allow coworkers to see standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for stricter isolation; you can change it later in Settings.',
                     )}
                   </span>
-                </label>
+                </div>
+                <Switch
+                  checked={runtimeToolingBridgeEnabled}
+                  onCheckedChange={(checked) => setRuntimeToolingBridgeEnabled(checked)}
+                  aria-labelledby="setup-runtime-tooling-bridge-title"
+                />
               </div>
             </div>
           ) : null}
