@@ -49,9 +49,26 @@ lower tier re-skins everything above it without editing the higher tiers.
    in structure and brand-variable in color. Consumers read these variables; they
    never read primitives directly.
 3. **Component** — `packages/ui/src` React components and their CSS-in-TS
-   (`surface-styles.ts`), plus the renderer classes in
-   `packages/app/src/styles/globals.css`. Component code consumes semantic tokens
-   only.
+   (`surface-styles.ts` barrel + `packages/ui/src/styles/*-surface.ts` domains),
+   plus the renderer classes in `packages/app/src/styles/globals.css` (entry)
+   and `packages/app/src/styles/domains/{base,shell,studio,chat,settings}.css`.
+   Component code consumes semantic tokens only.
+
+### Style module ownership (JOE-851)
+
+| Module | Owns |
+| --- | --- |
+| `packages/ui/src/styles/controls-surface.ts` | Input/select/menu/segmented/button control chrome |
+| `packages/ui/src/styles/primitives-surface.ts` | Empty/skeleton/card primitives |
+| `packages/ui/src/styles/*-surface.ts` (artifacts, approvals, wiki, channels, projects, knowledge) | Named Studio product surfaces |
+| `packages/ui/src/styles/shared-keyframes.ts` | Cross-app keyframes |
+| `packages/ui/src/surface-styles.ts` | Aggregate `studioSurfaceStyles()` barrel |
+| `packages/app/src/styles/domains/base.css` | Fonts, `@theme`, type roles, focus/scroll/drag |
+| `packages/app/src/styles/domains/shell.css` | Title bar, sidebar active nav, app chrome |
+| `packages/app/src/styles/domains/studio.css` | App-local Studio shell/card language |
+| `packages/app/src/styles/domains/chat.css` | Chat approval, thinking, workbench, markdown |
+| `packages/app/src/styles/domains/settings.css` | Settings section rail/list |
+| `packages/app/src/styles/globals.css` | Single renderer entry (`@import` domains) |
 
 **Semantic-tokens-only guard.** `scripts/check-design-token-usage.mjs` (run by
 `pnpm lint`) fails if Tier-3 component code in `packages/ui/src` hardcodes a raw
