@@ -106,7 +106,7 @@ test('gateway config separates product mode from deployment mode', () => {
 
   assert.throws(() => resolveGatewayConfigBase({}, {
     OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'standalone',
-  }), /Standalone Team Gateway app/)
+  }), /apps\/standalone-gateway|OPEN_COWORK_STANDALONE_GATEWAY|Cloud Channel Gateway binary/)
   assert.throws(() => resolveGatewayConfigBase({}, {
     OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'hybrid',
   }), /reserved for a later/)
