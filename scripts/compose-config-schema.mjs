@@ -64,11 +64,11 @@ if (checkOnly) {
     )
     process.exit(1)
   }
-  console.log('[compose-config-schema] ok — packaged root matches surface fragments')
+  process.stdout.write('[compose-config-schema] ok — packaged root matches surface fragments\n')
   process.exit(0)
 }
 
 writeFileSync(outputPath, serialized)
-console.log(
-  `[compose-config-schema] wrote open-cowork.config.schema.json (${Object.keys(composed.properties).length} properties, ${Object.keys(composed.$defs).length} $defs)`,
+process.stdout.write(
+  `[compose-config-schema] wrote open-cowork.config.schema.json (${Object.keys(composed.properties).length} properties, ${Object.keys(composed.$defs).length} $defs)\n`,
 )
