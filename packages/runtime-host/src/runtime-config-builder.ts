@@ -581,9 +581,20 @@ function buildRuntimeConfigWithCustomMcpsResult(
         })
         continue
       }
-      const entry = resolvedCustomMcpEntries
-        ? resolvedCustomMcpEntries.get(customMcp.name) || null
-        : resolveCustomMcpRuntimeEntry(customMcp)
+      // JOE-837: HTTP MCPs only register from the DNS-aware pre-resolve map.
+      // Sync/static path is stdio-only; never call it for remote MCPs.
+      let entry: ResolvedRuntimeMcpEntry | null = null
+      if (resolvedCustomMcpEntries) {
+        entry = resolvedCustomMcpEntries.get(customMcp.name) || null
+      } else if (customMcp.type === 'http') {
+        diagnostics.push({
+          scope: 'mcp',
+          message: `Skipping HTTP MCP ${customMcp.name}: requires DNS-aware runtime resolve (JOE-837). Use buildRuntimeConfigForRuntime.`,
+        })
+        continue
+      } else {
+        entry = resolveCustomMcpRuntimeEntry(customMcp)
+      }
       if (!entry) continue
       mcpConfig[customMcp.name] = entry
     }
