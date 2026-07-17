@@ -28,6 +28,20 @@ export type NativeSessionCreateInput = {
   model?: ModelRef
 }
 
+/**
+ * Peel the OpenCode SDK V2 **double data envelope** `{ data: { data: T } }`.
+ *
+ * Footgun (JOE-873): the generated client already wraps HTTP JSON once; some
+ * routes nest a second `{ data }` so product code must use this helper rather
+ * than reading `.data` ad hoc. When bumping `@opencode-ai/sdk`, re-check whether
+ * envelopes collapsed to a single layer — if so, keep this function as the sole
+ * unwrap point and update tests in `tests/opencode-v2-unwrap.test.ts`.
+ *
+ * SDK bump checklist:
+ * 1. Inspect a `session.create` / `session.get` raw response shape.
+ * 2. Run unwrap unit tests (single vs double envelope).
+ * 3. Only then change this function — never scatter `.data.data` in call sites.
+ */
 export function unwrapNativeData<T>(value: unknown): T {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('OpenCode V2 returned an invalid response envelope.')
