@@ -663,4 +663,3 @@ export function createSessionEngine(): SessionEngine {
 
 /** Process singleton for the desktop main process. Prefer {@link createSessionEngine} in tests. */
 export const sessionEngine = createSessionEngine()
-

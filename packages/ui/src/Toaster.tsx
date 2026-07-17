@@ -232,11 +232,11 @@ export function Toaster({ errors = [], onDismissError, onOpenHealthCenter }: Toa
 
   const visibleToasts = useMemo(() => {
     return [
-      ...errors.map(globalErrorToToast),
+      ...errors.map((error) => globalErrorToToast(error, onOpenHealthCenter)),
       ...localToasts,
     ]
       .sort((a, b) => a.order - b.order)
-  }, [errors, localToasts])
+  }, [errors, localToasts, onOpenHealthCenter])
 
   if (visibleToasts.length === 0) return null
 
