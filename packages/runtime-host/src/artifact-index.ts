@@ -23,7 +23,7 @@ import { getAppDataDir } from './config-loader-core.js'
 import { listCoordinationTasks } from './coordination/coordination-service.js'
 import { initializeLocalSqliteSchema } from './local-sqlite-schema.js'
 import { sessionEngine } from './session-engine.js'
-import { getSessionRecord, listSessionRecords, type SessionRecord } from './session-registry.js'
+import { getSessionRecord, type SessionRecord } from './session-registry.js'
 import { setSessionHistoryViewIndexHandler, syncSessionView } from './session-history-loader.js'
 
 const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 1

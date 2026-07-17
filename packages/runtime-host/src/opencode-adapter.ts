@@ -36,13 +36,6 @@ function boundedArray(value: unknown): unknown[] {
   return asArray(value).slice(0, RUNTIME_EVENT_MAX_COLLECTION_ENTRIES)
 }
 
-function hasEnumerableOwnProperty(value: Record<string, unknown>) {
-  for (const key in value) {
-    if (Object.prototype.hasOwnProperty.call(value, key)) return true
-  }
-  return false
-}
-
 export type NormalizedTokens = {
   input: number
   output: number

@@ -56,7 +56,7 @@ test('createCloudChannelsClient and threads client exercise high-value domain me
   const threads = createCloudThreadsClient({ request })
 
   // Call whatever public methods exist without assuming full surface.
-  for (const [name, value] of Object.entries(channels as Record<string, unknown>)) {
+  for (const [_name, value] of Object.entries(channels as Record<string, unknown>)) {
     if (typeof value === 'function') {
       try {
         await (value as (...args: unknown[]) => Promise<unknown>).call(channels, 'id', {})
@@ -65,7 +65,7 @@ test('createCloudChannelsClient and threads client exercise high-value domain me
       }
     }
   }
-  for (const [name, value] of Object.entries(threads as Record<string, unknown>)) {
+  for (const [_name, value] of Object.entries(threads as Record<string, unknown>)) {
     if (typeof value === 'function') {
       try {
         await (value as (...args: unknown[]) => Promise<unknown>).call(threads, {}, {})

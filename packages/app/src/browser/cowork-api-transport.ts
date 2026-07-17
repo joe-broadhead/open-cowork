@@ -2,7 +2,6 @@
 // Extracted from cowork-api.ts (JOE-884).
 
 import {
-  cloudSessionViewToSessionView,
   emptySessionView,
   type SessionInfo,
   type SessionPatch,
@@ -120,7 +119,7 @@ export function browserUnavailable(name: string): never {
 // storage. The artifact upload API hands us base64 (or base64url); the object store wants the
 // bytes themselves. Used only by the presigned-upload fast path; the buffered path posts the
 // base64 string unchanged through the cloud API.
-function base64ToBytes(value: string): Uint8Array {
+export function base64ToBytes(value: string): Uint8Array {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
   const binary = atob(normalized)
   const bytes = new Uint8Array(binary.length)
@@ -129,7 +128,7 @@ function base64ToBytes(value: string): Uint8Array {
 }
 
 // Shape of the cloud "begin presigned upload" response (POST /artifacts?transfer=presigned).
-type PresignedUploadBegin = {
+export type PresignedUploadBegin = {
   transfer?: string
   artifactId?: string
   uploadUrl?: string
