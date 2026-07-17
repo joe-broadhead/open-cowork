@@ -17,6 +17,29 @@ Public shared types:
 - `CloudSessionEventType`
 - `CloudProjectedSessionEventType`
 
+## Session state machine ownership (JOE-846)
+
+Three machines exist for reopen parity and multi-device sync. They share pure
+helpers in `packages/shared/src/session-machine-reducers.ts` but keep separate
+inputs:
+
+| Machine | Code | Owns | Inputs |
+| --- | --- | --- | --- |
+| **Live** | `packages/runtime-host/src/session-engine.ts` | Streaming deltas, busy/awaiting flags, live tool/task upserts | `RuntimeSessionEvent` |
+| **History** | `packages/runtime-host/src/session-history-projector.ts` | Reload/hydration from OpenCode history API | Session messages/parts |
+| **Cloud** | `packages/shared/src/cloud-session-projection.ts` | Durable product-event projection for web/gateway/paired desktop | `CloudSessionEventRecord` |
+
+Shared pure policy (do not fork per machine):
+
+- `deriveSessionInteractionFlags` — generating vs awaiting permission/question
+- `resolveAssistantMessageContent` — append vs replace assistant text
+- `deriveToolStatus` — tool running/complete/error
+- `upsertProjectionById` — id-keyed list upserts
+
+Convergence plan: keep three machines until reopen + multi-device sync stay
+proven; grow shared reducers, not parallel type maps. Parity coverage lives in
+`tests/session-machine-parity.test.ts`.
+
 Changing the meaning of an existing event or projection field requires a
 version bump, a migration or compatibility path for stored projections, and
 tests proving older snapshots still hydrate safely. Adding a new event type is
