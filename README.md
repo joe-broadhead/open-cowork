@@ -280,7 +280,7 @@ Start here:
 - [Getting Started](docs/getting-started.md)
 - [Desktop App Guide](docs/desktop-app.md)
 - [Glossary](docs/glossary.md)
-- [Projects](docs/threads.md)
+- [Projects](docs/projects.md)
 - [Workflows](docs/workflows.md)
 - [Workflow Recipes](docs/workflow-recipes.md)
 - [Agent Authoring](docs/agent-authoring.md)

@@ -55,6 +55,10 @@ extra_javascript:
 
 plugins:
   - search
+  - redirects:
+      redirect_maps:
+        # JOE-857: product page renamed Threads → Projects
+        threads.md: projects.md
   - minify:
       minify_html: true
       htmlmin_opts:
@@ -103,7 +107,7 @@ nav:
       - Desktop App Guide: desktop-app.md
       - Glossary: glossary.md
   - Use:
-      - Projects: threads.md
+      - Projects: projects.md
       - Playbooks: workflows.md
       - Workflow Recipes: workflow-recipes.md
       - Team: agent-authoring.md
