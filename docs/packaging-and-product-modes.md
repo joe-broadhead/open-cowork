@@ -131,3 +131,14 @@ pnpm deploy:validate
 pnpm deploy:launch:validate
 pnpm ops:validate
 ```
+
+
+## Env naming disambiguation (channel vs standalone)
+
+| Binary | Package | Product mode value | Env family |
+| --- | --- | --- | --- |
+| Cloud Channel Gateway | `apps/gateway` | `cloud_channel` only | `OPEN_COWORK_GATEWAY_*` (includes `OPEN_COWORK_GATEWAY_PRODUCT_MODE`) |
+| Standalone Gateway | `apps/standalone-gateway` | `standalone` only | `OPEN_COWORK_STANDALONE_GATEWAY_*` |
+
+`OPEN_COWORK_GATEWAY_PRODUCT_MODE` is **not** a switch that turns `apps/gateway` into Standalone.
+Setting it to `standalone` or `hybrid` fails closed and names the correct binary in the error message.
