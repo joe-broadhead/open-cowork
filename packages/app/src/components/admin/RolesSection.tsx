@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { AdminCustomRole, ControlPlanePermission, ControlPlaneRole } from '@open-cowork/shared'
-import { Button, Dialog, Input, Select, Textarea, toast } from '../ui'
+import { Button, Dialog, Input, Select, Textarea } from '@open-cowork/ui'
+import { toast } from '../ui/Toaster'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { t } from '../../helpers/i18n'
 import { AdminSectionHeader, AdminStateBlock, AdminTable } from './AdminPrimitives'

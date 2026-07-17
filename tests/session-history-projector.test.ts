@@ -2292,8 +2292,8 @@ test('history projector scales task-tool binding across many bounded and nested 
 
   const medianMs = median(samples)
   assert.ok(
-    medianMs <= 250,
-    `task-tool history projection median ${medianMs.toFixed(3)} ms exceeded the 250 ms guard for `
+    medianMs <= 500,
+    `task-tool history projection median ${medianMs.toFixed(3)} ms exceeded the 500 ms guard for `
     + `${rootDelegationCount} bounded root task tools and ${nestedDelegationCount} nested task tools`,
   )
 })

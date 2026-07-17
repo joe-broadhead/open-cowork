@@ -1,7 +1,7 @@
 import type { ConversationTaskContext } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
 import { t } from '../../helpers/i18n'
-import { ActionCluster, Badge, Button, Icon } from '../ui'
+import { ActionCluster, Badge, Button, Icon } from '@open-cowork/ui'
 
 type ChatThreadHeaderProps = {
   currentSession: Session | null

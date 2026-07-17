@@ -117,13 +117,47 @@ for back-compat, such as:
 - on-disk project namespace
 - legacy migration notes
 
+### Product language (user-facing)
+
+Prefer product names in UI copy, docs, and PR titles. Keep code identifiers
+when they are the real API surface.
+
+| Prefer (product) | Avoid in user-facing copy | Code / internal OK |
+| --- | --- | --- |
+| **Projects** | Threads page / Threads workspace | `threads:search`, `thread-index`, route ids |
+| **Team** / **coworker** | Agents page as the nav label | `agents` package paths, OpenCode agent ids |
+| **Playbooks** | Workflows page as the nav label | `workflows` store/MCP, `workflow-*` files |
+| **Tools & Skills** | Capabilities as the only label | `capabilities` routes/components |
+| **Chat**, **Knowledge**, **Approvals**, **Channels**, **Artifacts** | Inventing alternate studio names | feature flags under `DesktopFeatureKey` |
+
+Canonical UI surface list: [Desktop App Guide](docs/desktop-app.md). Glossary:
+[docs/glossary.md](docs/glossary.md). Icon inventory: [docs/iconography.md](docs/iconography.md).
+
+### Design-system adoption map
+
+| Layer | Status | Where |
+| --- | --- | --- |
+| Tokens + CSS variables | **Adopted** | `packages/shared` design tokens → generated CSS; see [docs/design-system.md](docs/design-system.md) |
+| Core primitives (`Button`, `Input`, `Select`, `Dialog`, `Icon`, …) | **Adopted** for new work | `@open-cowork/ui` (`packages/ui`) |
+| Studio primitives (shell, coworker cards, lanes, wiki, channels, …) | **Partial** | Prefer `packages/ui` Studio exports; some renderer surfaces still half-adopted (see JOE-854) |
+| Setup / Agent builder / Custom MCP forms | **Partial** | Migrate raw `<button>`/`<input>` to design-system controls (JOE-848, JOE-894) |
+| `globals.css` / large surface CSS | **In progress** | Split and token-ratchet work (JOE-851); do not add new raw palette or ad-hoc type scales |
+
+Rules for agents changing UI:
+- Import from `@open-cowork/ui`; do not grow a private `components/ui` barrel.
+- New chrome/nav icons go through `Icon` / `IconButton` and `docs/iconography.md`.
+- Do not reintroduce demo-era copy (gated by `tests/product-language.test.ts`).
+
 If you change a user-visible product surface, update the relevant docs:
 - `README.md`
 - `docs/index.md`
 - `docs/getting-started.md`
 - `docs/desktop-app.md`
+- `docs/projects.md` (Projects history surface; formerly `threads.md`)
 - `docs/workflows.md`
 - `docs/architecture.md`
+- `docs/iconography.md`
+- `docs/glossary.md`
 - `docs/release-checklist.md`
 
 ## Validation expectations
@@ -143,7 +177,7 @@ git diff --check
 
 Use extra targeted checks when relevant:
 - `pnpm perf:check` for renderer/runtime performance-sensitive changes
-- `pnpm audit --prod --audit-level high` for dependency/security work
+- `pnpm audit:prod` / `pnpm audit:full` for dependency/security work
 - `pnpm --dir apps/desktop dist:ci` for packaging / release-path changes
 
 ## Branch and repo conventions

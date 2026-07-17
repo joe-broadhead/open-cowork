@@ -24,14 +24,15 @@ nearly every non-trivial capability in the desktop app.</p>
 ## What ships in the box
 
 Open Cowork ships seven bundled MCP servers (`agents`, `charts`, `clock`,
-`knowledge`, `semantic-ui`, `skills`, `workflows`) plus three external-CLI
-MCPs configured out of the box (`openwiki` — see [OpenWiki](openwiki.md) —
-`time-keep`, and `opencode-gateway`), and eleven bundled skills. The cards
+`knowledge`, `semantic-ui`, `skills`, `workflows`) plus one external-CLI
+MCP configured out of the box (`time-keep`), and seven bundled skills. The cards
 below cover the most useful examples.
-When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
-uses `mcp__<server>__<tool>` form, for example
-`mcp__charts__bar_chart`. Source MCP code and tests may still refer to the
-short tool name such as `bar_chart`.
+When an agent calls a bundled MCP tool through OpenCode 1.18+, the runtime tool
+id uses OpenCode’s `${server}_${tool}` form, for example `charts_bar_chart` or
+`time-keep_current_time`. Open Cowork permission patterns still accept the
+Claude-style `mcp__<server>__<tool>` form and dual-expand it to the OpenCode
+id so allow/ask rules match what the model can call. Source MCP code and tests
+may still refer to the short tool name such as `bar_chart`.
 
 <div class="grid cards" markdown>
 
@@ -41,19 +42,11 @@ short tool name such as `bar_chart`.
 
     Renders Vega-Lite charts and Mermaid diagrams entirely inside the main
     process. 18+ chart tools; runtime ids include
-    `mcp__charts__bar_chart`, `mcp__charts__line_chart`,
-    `mcp__charts__sankey`, `mcp__charts__mermaid`, and
-    `mcp__charts__custom_spec`. Source: `mcps/charts/src/index.ts`.
+    `charts_bar_chart`, `charts_line_chart`,
+    `charts_sankey`, `charts_mermaid`, and
+    `charts_custom_spec` (permission patterns also accept
+    `mcp__charts__…`). Source: `mcps/charts/src/index.ts`.
 
--   :material-clock-outline: **`clock` MCP** <span class="status-badge stable">stable</span>
-
-    ---
-
-    Resolves current time, timezone conversions, date ranges, durations,
-    and calendar math without network or filesystem access. Runtime ids
-    include `mcp__clock__current_time`, `mcp__clock__convert_time`,
-    `mcp__clock__date_math`, `mcp__clock__date_range`, and
-    `mcp__clock__duration_between`. Source: `mcps/clock/src/index.ts`.
 
 -   :material-timer-outline: **`time-keep` MCP** <span class="status-badge preview">preview</span>
 
@@ -63,42 +56,32 @@ short tool name such as `bar_chart`.
     [time-keep](https://github.com/joe-broadhead/time-keep) CLI: IANA
     timezone catalogs and DST detail, calendar queries, date arithmetic
     and formatting, business-day counts, offline holiday lookups
-    (2000–2030), and local SQLite timers. Read and lookup tools are
-    auto-allowed; `timer_set`/`timer_delete` ask for approval. The tool
-    reports as not installed until the `time-keep` binary is on PATH —
-    the built-in `clock` MCP stays the zero-install fallback.
+    (2000–2030), and local SQLite timers. OpenCode tool ids are
+    `time-keep_current_time`, `time-keep_date_arithmetic`, and so on.
+    Read and lookup tools are auto-allowed; `time-keep_timer_set` /
+    `time-keep_timer_delete` ask for approval. The tool is bundled into
+    desktop builds as `Resources/bin/time-keep` (pin:
+    `third_party/time-keep/VERSION`). Fetch with `pnpm binaries:time-keep`.
 
--   :material-route: **`opencode-gateway` MCP** <span class="status-badge preview">preview</span>
+-   :material-source-branch-sync: **OpenCode Gateway MCP** <span class="status-badge external">external</span>
 
     ---
 
-    Connects to the local
-    [joe-broadhead/opencode-gateway](https://github.com/joe-broadhead/opencode-gateway)
-    daemon for durable Initiatives, Issues, runs, teams, and human gates. Install
-    that exact project from source; the same name on the public npm registry is
-    a different project and is not a compatible substitute. Run Gateway's
-    `setup` and `install`, then provision a strong operator-scoped token in an
-    owner-only file. Set `OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE` to that
-    absolute path in the Gateway daemon environment and enter the same path in
-    Tools & Skills. This explicit opt-in keeps Gateway's hardened
-    capability-scoped loopback enabled; Open Cowork passes only the file path to
-    the trusted MCP process, not the token value. Gateway currently
-    auto-provisions only an admin token file, which must not be reused here.
-    Start the daemon and verify with `opencode-gateway doctor`.
-
-    Open Cowork launches `opencode-gateway mcp --tools operate`: reads are
-    auto-allowed and operate mutations ask, while admin tools remain absent. In
-    particular, permission approval is admin-only; the operate surface can
-    reject a pending OpenCode permission but cannot grant shell/edit authority.
+    Optional sibling service for durable Initiatives, Issues, scheduler
+    runs, Mission Control, and channel operations. It is not bundled as a
+    default Open Cowork MCP; install and run OpenCode Gateway separately,
+    then add its `gateway` stdio MCP only for trusted local/downstream
+    profiles. Use the `read`, `operate`, or `admin` tool tier deliberately.
+    See [OpenCode Gateway](opencode-gateway.md).
 
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 
     ---
 
     Lets agents enumerate, read, write, and delete skill bundles from chat.
-    Runtime ids include `mcp__skills__list_skill_bundles`,
-    `mcp__skills__get_skill_bundle`, `mcp__skills__save_skill_bundle`,
-    and `mcp__skills__delete_skill_bundle`.
+    Runtime ids include `skills_list_skill_bundles`,
+    `skills_get_skill_bundle`, `skills_save_skill_bundle`,
+    and `skills_delete_skill_bundle`.
     Source: `mcps/skills/src/index.ts`.
 
 -   :material-account-cog: **`agents` MCP** <span class="status-badge stable">stable</span>
@@ -107,9 +90,9 @@ short tool name such as `bar_chart`.
 
     Lets approved agents preview, read, save, and delete custom OpenCode
     agents through the same validation path as the desktop UI. Runtime ids
-    include `mcp__agents__list_agents`, `mcp__agents__get_agent`,
-    `mcp__agents__preview_agent`, `mcp__agents__save_agent`, and
-    `mcp__agents__delete_agent`. Source: `mcps/agents/src/index.ts`.
+    include `agents_list_agents`, `agents_get_agent`,
+    `agents_preview_agent`, `agents_save_agent`, and
+    `agents_delete_agent`. Source: `mcps/agents/src/index.ts`.
 
 -   :material-calendar-sync: **`workflows` MCP** <span class="status-badge stable">stable</span>
 
@@ -117,8 +100,8 @@ short tool name such as `bar_chart`.
 
     Lets a Workflow Designer setup thread preview and save repeatable Open Cowork
     workflows with manual, scheduled, or webhook triggers. Runtime ids:
-    `mcp__workflows__preview_workflow` and
-    `mcp__workflows__create_workflow`; create accepts the preview token returned
+    `workflows_preview_workflow` and
+    `workflows_create_workflow`; create accepts the preview token returned
     by the confirmed preview. Source:
     `mcps/workflows/src/index.ts`.
 
@@ -129,9 +112,9 @@ short tool name such as `bar_chart`.
     Reads high-level Open Cowork app status and visible product state, lists
     allowlisted semantic actions, and can execute approval-gated redacted
     diagnostics export through a loopback-only, tokenized bridge. Runtime ids:
-    `mcp__semantic-ui__ui_status`, `mcp__semantic-ui__ui_snapshot`,
-    `mcp__semantic-ui__ui_list_actions`, and
-    `mcp__semantic-ui__ui_execute_action`. It does not expose DOM selectors,
+    `semantic-ui_ui_status`, `semantic-ui_ui_snapshot`,
+    `semantic-ui_ui_list_actions`, and
+    `semantic-ui_ui_execute_action`. It does not expose DOM selectors,
     screenshots, hidden secrets, local MCP process details, or artifact bodies.
     Source: `mcps/semantic-ui/src/index.ts`.
 
@@ -143,7 +126,7 @@ short tool name such as `bar_chart`.
     tokenized bridge (loopback `http://` on desktop, the cloud `https://` public
     URL in cloud). Proposals stay `PENDING` until a Maintainer reviews them — the
     agent can never publish directly. Runtime id:
-    `mcp__knowledge__propose_knowledge_edit`. Source: `mcps/knowledge/src/index.ts`.
+    `knowledge_propose_knowledge_edit`. Source: `mcps/knowledge/src/index.ts`.
 
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>
 
@@ -159,7 +142,7 @@ short tool name such as `bar_chart`.
 
     Teaches agents to call the `clock` MCP before answering with current
     dates, relative ranges, timezone conversions, durations, or calendar
-    math. Source: `skills/clock/SKILL.md`.
+    math. Source: `skills/time-keep/SKILL.md`.
 
 -   :material-flask: **`autoresearch` skill** <span class="status-badge stable">stable</span>
 
@@ -287,7 +270,7 @@ stdio MCPs) or holds an HTTP client (for HTTP MCPs).
 Bundled MCPs are looked up at:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
-2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/knowledge`, `mcps/semantic-ui`, `mcps/skills`, `mcps/workflows`)
+2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, the bundled time-keep binary, `mcps/knowledge`, `mcps/semantic-ui`, `mcps/skills`, `mcps/workflows`)
 
 User-added MCPs live under `mcps.user.*` in `settings.enc` and are added
 through Tools & Skills. They are validated by:

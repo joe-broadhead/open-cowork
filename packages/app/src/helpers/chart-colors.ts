@@ -1,3 +1,5 @@
+import { DEFAULT_DARK_BRAND_THEME } from '@open-cowork/shared'
+
 type Rgba = {
   r: number
   g: number
@@ -84,8 +86,8 @@ function contrastRatio(foreground: string | null | undefined, background: string
 
 function pickReadableTextColor(
   background: string | null | undefined,
-  light = '#f5f7ff',
-  dark = '#141824',
+  light = DEFAULT_DARK_BRAND_THEME.text,
+  dark = DEFAULT_DARK_BRAND_THEME.base,
 ) {
   const luminance = relativeLuminance(parseCssColor(background))
   if (luminance === null) return light
@@ -95,8 +97,8 @@ function pickReadableTextColor(
 export function ensureReadableTextColor(
   preferred: string | null | undefined,
   background: string | null | undefined,
-  light = '#f5f7ff',
-  dark = '#141824',
+  light = DEFAULT_DARK_BRAND_THEME.text,
+  dark = DEFAULT_DARK_BRAND_THEME.base,
 ) {
   const ratio = contrastRatio(preferred, background)
   if (ratio !== null && ratio >= 4.5 && preferred) return preferred

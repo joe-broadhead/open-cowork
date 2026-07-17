@@ -34,7 +34,6 @@ const WORKSPACE_SOURCE_INVENTORY = {
     { path: 'apps/standalone-gateway/dist', extensions: ['.js', '.mjs'], excludeFileNames: ['main.js', 'types.js'] },
     { path: 'mcps/agents/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/charts/dist', extensions: ['.js', '.mjs'] },
-    { path: 'mcps/clock/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/knowledge/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/semantic-ui/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/skills/dist', extensions: ['.js', '.mjs'] },
@@ -78,7 +77,6 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
     'apps/standalone-gateway/dist/',
     'mcps/agents/dist/',
     'mcps/charts/dist/',
-    'mcps/clock/dist/',
     'mcps/knowledge/dist/',
     'mcps/semantic-ui/dist/',
     'mcps/skills/dist/',
@@ -151,7 +149,6 @@ export const MCP_HANDLER_COVERAGE_INPUT = {
   includePathPrefixes: [
     'mcps/agents/dist/',
     'mcps/charts/dist/',
-    'mcps/clock/dist/',
     'mcps/knowledge/dist/',
     'mcps/semantic-ui/dist/',
     'mcps/skills/dist/',
@@ -162,7 +159,6 @@ export const MCP_HANDLER_COVERAGE_INPUT = {
     roots: [
       { path: 'mcps/agents/dist', extensions: ['.js', '.mjs'] },
       { path: 'mcps/charts/dist', extensions: ['.js', '.mjs'] },
-      { path: 'mcps/clock/dist', extensions: ['.js', '.mjs'] },
       { path: 'mcps/knowledge/dist', extensions: ['.js', '.mjs'] },
       { path: 'mcps/semantic-ui/dist', extensions: ['.js', '.mjs'] },
       { path: 'mcps/skills/dist', extensions: ['.js', '.mjs'] },
@@ -218,7 +214,7 @@ export const CLOUD_CLIENT_COVERAGE_INPUT = {
       { path: 'packages/cloud-client/src', extensions: ['.ts'], excludeFileNames: ['contracts.ts', 'index.ts'] },
     ],
   },
-  thresholds: { lines: 70, functions: 30, branches: 72 },
+  thresholds: { lines: 70, functions: 32, branches: 72 }, // JOE-867 ratchet
 }
 export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 58 } }
 export const NODE_ONLY_INPUTS = [

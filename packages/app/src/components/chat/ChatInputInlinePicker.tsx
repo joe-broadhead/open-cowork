@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import { compactDescription } from './chat-input-utils'
 import type { InlinePickerState, MentionableAgent } from './chat-input-types'
-import { Badge, Card } from '../ui'
+import { Badge, Card } from '@open-cowork/ui'
 
 type ChatInputInlinePickerProps = {
   picker: InlinePickerState | null

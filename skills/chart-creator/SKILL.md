@@ -9,7 +9,7 @@ Use this skill when the user asks for a chart, diagram, visual explanation, or c
 
 ## Core Rule
 
-When the charts MCP is available, call the appropriate `mcp__charts__*` tool. Do not merely print a Vega-Lite spec or Mermaid source unless the user explicitly asks for raw source only.
+When the charts MCP is available, call the appropriate `charts_*` tool. Do not merely print a Vega-Lite spec or Mermaid source unless the user explicitly asks for raw source only.
 
 ## Workflow
 
@@ -22,24 +22,24 @@ When the charts MCP is available, call the appropriate `mcp__charts__*` tool. Do
 
 ## Tool Choice
 
-- `mcp__charts__line_chart`: default for ordered trends over dates, times, weeks, months, versions, or ranks.
-- `mcp__charts__bar_chart`: category comparison or ranking. Use bars for dates only when discrete daily/weekly/monthly magnitudes are the point; keep dates chronological, not value-sorted. For horizontal bars, use `x` for the numeric value and `y` for the category.
-- `mcp__charts__area_chart`: magnitude or composition over an ordered sequence; use only when filled area helps, not for ordinary single-series trends.
-- `mcp__charts__scatter_plot`: relationship between two numeric measures.
-- `mcp__charts__pie_chart`: simple part-to-whole with a small category count; use `donut` for a cleaner share view.
-- `mcp__charts__heatmap`: intensity by two dimensions.
-- `mcp__charts__map`: geographic points with latitude and longitude fields; use only when location is the primary dimension.
-- `mcp__charts__histogram` or `mcp__charts__boxplot`: distributions.
-- `mcp__charts__funnel_chart`: ordered stage dropoff.
-- `mcp__charts__waterfall_chart`: additive positive/negative contributions.
-- `mcp__charts__bump_chart`: rank changes over time.
-- `mcp__charts__streamgraph`: centered stacked areas for composition changing over time; avoid when ordinary stacked areas are clearer.
-- `mcp__charts__calendar_heatmap`: daily intensity across weeks/months/years when the calendar pattern matters.
-- `mcp__charts__bullet_chart`: actual vs target with optional qualitative ranges.
-- `mcp__charts__candlestick_chart`: open, high, low, close values across a time axis.
-- `mcp__charts__sankey`: weighted flows between stages or categories.
-- `mcp__charts__mermaid`: process, flow, sequence, or architecture diagrams rather than quantitative charts.
-- `mcp__charts__custom_spec`: only when the standard tools cannot express the needed visual.
+- `charts_line_chart`: default for ordered trends over dates, times, weeks, months, versions, or ranks.
+- `charts_bar_chart`: category comparison or ranking. Use bars for dates only when discrete daily/weekly/monthly magnitudes are the point; keep dates chronological, not value-sorted. For horizontal bars, use `x` for the numeric value and `y` for the category.
+- `charts_area_chart`: magnitude or composition over an ordered sequence; use only when filled area helps, not for ordinary single-series trends.
+- `charts_scatter_plot`: relationship between two numeric measures.
+- `charts_pie_chart`: simple part-to-whole with a small category count; use `donut` for a cleaner share view.
+- `charts_heatmap`: intensity by two dimensions.
+- `charts_map`: geographic points with latitude and longitude fields; use only when location is the primary dimension.
+- `charts_histogram` or `charts_boxplot`: distributions.
+- `charts_funnel_chart`: ordered stage dropoff.
+- `charts_waterfall_chart`: additive positive/negative contributions.
+- `charts_bump_chart`: rank changes over time.
+- `charts_streamgraph`: centered stacked areas for composition changing over time; avoid when ordinary stacked areas are clearer.
+- `charts_calendar_heatmap`: daily intensity across weeks/months/years when the calendar pattern matters.
+- `charts_bullet_chart`: actual vs target with optional qualitative ranges.
+- `charts_candlestick_chart`: open, high, low, close values across a time axis.
+- `charts_sankey`: weighted flows between stages or categories.
+- `charts_mermaid`: process, flow, sequence, or architecture diagrams rather than quantitative charts.
+- `charts_custom_spec`: only when the standard tools cannot express the needed visual.
 
 ## Data Viz Standards
 

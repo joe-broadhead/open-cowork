@@ -9,17 +9,9 @@ import { SessionArtifactList } from './SessionArtifactList'
 import { TodoListView } from './TodoListView'
 import { countTodos, summarizeTodoCounts } from './todo-utils'
 import {
-  computeBreakdown,
-  formatCost,
-  formatDateTime,
-  formatInteger,
-  formatModelLabel,
-  formatProviderLabel,
-  formatTokens,
-  serializeToolPayload,
-} from './session-inspector-utils'
+  computeBreakdown, formatCost, formatDateTime, formatInteger, formatModelLabel, formatProviderLabel, formatTokens, serializeToolPayload, } from './session-inspector-utils'
 import { getModelContextLimit } from '../../helpers/model-info'
-import { DiffView, ReviewPanel, TaskLane, type DiffViewFile } from '../ui'
+import { DiffView, ReviewPanel, TaskLane, type DiffViewFile } from '@open-cowork/ui'
 
 type InspectorTab = 'context' | 'messages' | 'todos' | 'artifacts'
 

@@ -38,6 +38,9 @@ import type { CloudTransportAdapter } from '@open-cowork/cloud-client/adapter'
 import type { SessionListPage } from '@open-cowork/cloud-client/domains/sessions'
 ```
 
+The root entry point intentionally exports only the HTTP/SSE adapter factory and
+transport error helpers. Import typed domain contracts and domain-specific
+clients from the domain entry points rather than relying on a catch-all barrel.
 The package exports only compiled `dist` entry points:
 
 - `@open-cowork/cloud-client`

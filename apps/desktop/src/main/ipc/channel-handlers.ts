@@ -362,82 +362,82 @@ function isLocalWatch(watchId: string) {
 export function registerChannelHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'channels:providers', optionalObjectArg<WorkspaceOptions>('channel provider options', normalizeWorkspaceOptions), async (event, options) => {
     assertLocalWorkspace(context, event, options)
-    const bindings = await getDesktopChannelService().listChannelBindings(localPrincipal(), null, { limit: 500 })
+    const bindings = await getDesktopChannelService().domains.channels.listChannelBindings(localPrincipal(), null, { limit: 500 })
     return buildChannelProviderStatuses(bindings)
   })
 
   registerIpcInvoke(context, 'channels:agents:list', optionalObjectArg<ChannelAgentListOptions>('channel agent options', normalizeAgentListOptions), async (event, options) => {
     assertLocalWorkspace(context, event, options)
-    return getDesktopChannelService().listHeadlessAgents(localPrincipal(), { limit: options?.limit })
+    return getDesktopChannelService().domains.channels.listHeadlessAgents(localPrincipal(), { limit: options?.limit })
   })
 
   registerIpcInvoke(context, 'channels:agents:create', objectArg<ChannelAgentInput>('channel agent', normalizeAgentInput), async (event, input) => {
     assertLocalWorkspace(context, event, input)
-    const agent = await getDesktopChannelService().createHeadlessAgent(localPrincipal(), input)
+    const agent = await getDesktopChannelService().domains.channels.createHeadlessAgent(localPrincipal(), input)
     persistDesktopChannelSnapshot()
     return agent
   })
 
   registerIpcInvoke(context, 'channels:agents:update', stringAndObjectArgs<DesktopChannelAgentUpdateInput>('channel agent id', 'channel agent update', {}, normalizeAgentUpdateInput), async (event, agentId, input) => {
     assertLocalWorkspace(context, event)
-    const agent = await getDesktopChannelService().updateHeadlessAgent(localPrincipal(), agentId, input)
+    const agent = await getDesktopChannelService().domains.channels.updateHeadlessAgent(localPrincipal(), agentId, input)
     persistDesktopChannelSnapshot()
     return agent
   })
 
   registerIpcInvoke(context, 'channels:bindings:list', optionalObjectArg<ChannelBindingListOptions>('channel binding options', normalizeBindingListOptions), async (event, options) => {
     assertLocalWorkspace(context, event, options)
-    return getDesktopChannelService().listChannelBindings(localPrincipal(), options?.agentId, { limit: options?.limit })
+    return getDesktopChannelService().domains.channels.listChannelBindings(localPrincipal(), options?.agentId, { limit: options?.limit })
   })
 
   registerIpcInvoke(context, 'channels:bindings:connect', objectArg<ChannelBindingConnectInput>('channel binding', normalizeBindingInput), async (event, input) => {
     assertLocalWorkspace(context, event, input)
-    const binding = await getDesktopChannelService().createChannelBinding(localPrincipal(), input)
+    const binding = await getDesktopChannelService().domains.channels.createChannelBinding(localPrincipal(), input)
     persistDesktopChannelSnapshot()
     return binding
   })
 
   registerIpcInvoke(context, 'channels:bindings:update', stringAndObjectArgs<ChannelBindingUpdateInput>('channel binding id', 'channel binding update', {}, normalizeBindingUpdateInput), async (event, bindingId, input) => {
     assertLocalWorkspace(context, event)
-    const binding = await getDesktopChannelService().updateChannelBinding(localPrincipal(), bindingId, input)
+    const binding = await getDesktopChannelService().domains.channels.updateChannelBinding(localPrincipal(), bindingId, input)
     persistDesktopChannelSnapshot()
     return binding
   })
 
   registerIpcInvoke(context, 'channels:bindings:disconnect', stringAndOptionalObjectArgs<WorkspaceOptions>('channel binding id', 'workspace options', {}, normalizeWorkspaceOptions), async (event, bindingId, options) => {
     assertLocalWorkspace(context, event, options)
-    const binding = await getDesktopChannelService().updateChannelBinding(localPrincipal(), bindingId, { status: 'disabled' })
+    const binding = await getDesktopChannelService().domains.channels.updateChannelBinding(localPrincipal(), bindingId, { status: 'disabled' })
     persistDesktopChannelSnapshot()
     return binding
   })
 
   registerIpcInvoke(context, 'channels:people:list', optionalObjectArg<ChannelPeopleListOptions>('channel people options', normalizePeopleListOptions), async (event, options) => {
     assertLocalWorkspace(context, event, options)
-    return getDesktopChannelService().listChannelIdentities(localPrincipal(), options)
+    return getDesktopChannelService().domains.channels.listChannelIdentities(localPrincipal(), options)
   })
 
   registerIpcInvoke(context, 'channels:people:resolve', objectArg<ChannelPersonResolveInput>('channel person', normalizePersonResolveInput), async (event, input) => {
     assertLocalWorkspace(context, event, input)
-    const identity = await getDesktopChannelService().resolveChannelIdentity(localPrincipal(), input)
+    const identity = await getDesktopChannelService().domains.channels.resolveChannelIdentity(localPrincipal(), input)
     persistDesktopChannelSnapshot()
     return publicChannelIdentity(identity)
   })
 
   registerIpcInvoke(context, 'channels:deliveries:list', optionalObjectArg<ChannelDeliveryListOptions>('channel delivery options', normalizeDeliveryListOptions), async (event, options) => {
     assertLocalWorkspace(context, event, options)
-    return getDesktopChannelService().listChannelDeliveries(localPrincipal(), options)
+    return getDesktopChannelService().domains.channels.listChannelDeliveries(localPrincipal(), options)
   })
 
   registerIpcInvoke(context, 'channels:deliveries:retry', stringArg('channel delivery id'), async (event, deliveryId) => {
     assertLocalWorkspace(context, event)
-    const delivery = await getDesktopChannelService().retryChannelDelivery(localPrincipal(), deliveryId)
+    const delivery = await getDesktopChannelService().domains.channels.retryChannelDelivery(localPrincipal(), deliveryId)
     persistDesktopChannelSnapshot()
     return delivery
   })
 
   registerIpcInvoke(context, 'channels:deliveries:dead-letter', stringAndOptionalObjectArgs<ChannelDeliveryDeadLetterInput>('channel delivery id', 'channel delivery dead-letter input', {}, normalizeDeadLetterInput), async (event, deliveryId, input) => {
     assertLocalWorkspace(context, event, input)
-    const delivery = await getDesktopChannelService().deadLetterChannelDelivery(localPrincipal(), { deliveryId, lastError: input?.lastError })
+    const delivery = await getDesktopChannelService().domains.channels.deadLetterChannelDelivery(localPrincipal(), { deliveryId, lastError: input?.lastError })
     persistDesktopChannelSnapshot()
     return delivery
   })

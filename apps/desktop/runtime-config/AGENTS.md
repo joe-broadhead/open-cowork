@@ -66,7 +66,7 @@ Skills are reusable workflows and instructions. Use them when they materially im
 Tool rules:
 - prefer MCP tools over shell commands when the target system has an MCP
 - prefer read-only tools for inspection tasks
-- use the clock MCP before answering with current dates, relative date ranges, timezone conversions, durations, or calendar math
+- use the time-keep MCP tools via function calling (`time-keep_current_time`, `time-keep_date_arithmetic`, etc.) before answering with current dates, relative date ranges, timezone conversions, durations, holidays, business days, or calendar math — never invent shell/CLI fallbacks when those tools exist
 - use write-capable tools only when the task actually needs side effects
 - do not pretend a tool exists unless the runtime exposes it
 

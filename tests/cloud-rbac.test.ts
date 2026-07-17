@@ -29,6 +29,19 @@ test('permission model: normalization, resolution, removal, and role-key validat
   assert.equal(hasPermission(builtinRolePermissions('member'), 'sessions:write'), true)
   assert.equal(hasPermission(builtinRolePermissions('member'), 'roles:manage'), false)
 
+  // JOE-833: admin is least-privilege vs owner — day-to-day ops without
+  // billing/SSO/role-catalog ownership.
+  assert.equal(hasPermission(builtinRolePermissions('owner'), 'billing:manage'), true)
+  assert.equal(hasPermission(builtinRolePermissions('owner'), 'sso:manage'), true)
+  assert.equal(hasPermission(builtinRolePermissions('owner'), 'roles:manage'), true)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'billing:manage'), false)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'sso:manage'), false)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'roles:manage'), false)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'members:manage'), true)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'sessions:write'), true)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'workflows:manage'), true)
+  assert.equal(hasPermission(builtinRolePermissions('admin'), 'operations:view'), true)
+
   // normalize: dedupe + catalog order; reject unknown.
   assert.deepEqual(normalizeControlPlanePermissions(['sessions:write', 'sessions:read', 'sessions:read']), ['sessions:read', 'sessions:write'])
   assert.throws(() => normalizeControlPlanePermissions(['not:a:permission']), /unsupported permission/)

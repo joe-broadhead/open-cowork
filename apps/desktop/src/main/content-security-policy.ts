@@ -82,6 +82,14 @@ export const PACKAGED_CONTENT_SECURITY_POLICY = buildContentSecurityPolicy()
 //   7. `postMessage` handlers in the parent check `event.origin` and
 //      `event.source === iframe.contentWindow` before trusting the
 //      payload (see `packages/app/src/components/chat/VegaChart.tsx`).
+//   8. JOE-829 residual: even with (1)–(7), Vega expression evaluation is
+//      still CPU-bound in-process. `assertBoundedVegaSpecCardinality`
+//      (chart-spec-safety) fail-closes on amplifying / unknown transforms
+//      and grid sizes before `vega.parse`. The residual risk is CPU DoS if a
+//      transform estimator undercounts a novel Vega feature — mitigated by
+//      the fail-closed unknown-transform default and caps on generated rows /
+//      grid cells. There is no safe way to drop `unsafe-eval` without
+//      replacing Vega's runtime.
 export function buildChartFrameContentSecurityPolicy(options: ContentSecurityPolicyOptions = {}) {
   const devServerOrigin = normalizeDevServerOrigin(options.devServerUrl)
   const scriptSrc = new Set(["'self'", "'unsafe-eval'", `${CHART_FRAME_ASSET_PROTOCOL}:`])

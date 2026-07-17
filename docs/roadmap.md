@@ -1,8 +1,13 @@
 # Roadmap
 
-Last updated: 2026-07-05.
+Last updated: 2026-07-16.
 
-Open Cowork is now planned as a multi-authority product over OpenCode:
+Open Cowork is a multi-authority product over OpenCode. The strategic
+multi-surface program (Desktop, Cloud, Gateway) is largely **shipped** as the
+current architecture; this page records the product thesis and remaining
+hardening rather than open-ended greenfield work.
+
+Open Cowork is planned as a multi-authority product over OpenCode:
 
 - **Desktop:** local-first Electron app with local workspaces, optional cloud
   workspaces, and future outbound pairing.

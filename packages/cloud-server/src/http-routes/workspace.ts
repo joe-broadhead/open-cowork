@@ -20,14 +20,14 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
       allowedAgents: options.policy.allowedAgents,
       allowedTools: options.policy.allowedTools,
       allowedMcps: options.policy.allowedMcps,
-      managedPolicy: await options.service.getEffectiveManagedPolicy(context.principal),
+      managedPolicy: await options.service.domains.policy.getEffectiveManagedPolicy(context.principal),
       publicBranding: options.publicBranding || null,
     }, options.corsOrigin)
     return true
   }
 
   if (resource === 'workspace' && !itemId && req.method === 'GET') {
-    tools.writeJson(res, 200, await options.service.getWorkspaceOverview(context.principal), options.corsOrigin)
+    tools.writeJson(res, 200, await options.service.domains.overview.getWorkspaceOverview(context.principal), options.corsOrigin)
     return true
   }
 
@@ -56,7 +56,7 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
   if (resource === 'workers' && itemId && action === 'heartbeat' && req.method === 'POST') {
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     tools.writeJson(res, 200, {
-      heartbeat: await options.service.recordManagedWorkerHeartbeat(context.principal, itemId, {
+      heartbeat: await options.service.domains.managedWorkers.recordHeartbeat(context.principal, itemId, {
         version: tools.readString(body.version),
         capabilities: tools.readRecord(body.capabilities) || undefined,
         currentLoad: readNonNegativeInteger(body.currentLoad),
@@ -98,7 +98,7 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
   }
 
   if (resource === 'diagnostics' && !itemId && !action && req.method === 'GET') {
-    tools.writeJson(res, 200, await options.service.getDiagnosticsBundle(context.principal), options.corsOrigin)
+    tools.writeJson(res, 200, await options.service.domains.diagnostics.getDiagnosticsBundle(context.principal), options.corsOrigin)
     return true
   }
 

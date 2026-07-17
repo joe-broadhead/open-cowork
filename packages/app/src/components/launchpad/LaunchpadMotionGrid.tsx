@@ -1,12 +1,7 @@
-import type {
-  LaunchpadFeedPayload,
-  LaunchpadFreshArtifactItem,
-  LaunchpadInProgressItem,
-  LaunchpadWaitingItem,
-} from '@open-cowork/shared'
+import type { LaunchpadFeedPayload, LaunchpadFreshArtifactItem, LaunchpadInProgressItem, LaunchpadWaitingItem, } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../../app-types'
 import { formatDate, t } from '../../helpers/i18n'
-import { Badge, Button, Icon, type IconName, type StudioTone } from '../ui'
+import { Badge, Button, Icon, type IconName, type StudioTone } from '@open-cowork/ui'
 import { MAX_MOTION_ITEMS } from './constants'
 
 // The "In motion" launchpad: three columns (In progress / Waiting on you /

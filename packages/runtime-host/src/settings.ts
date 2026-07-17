@@ -131,8 +131,10 @@ function createDefaults(): AppSettings {
     webPermission,
     webSearchEnabled: appConfig.permissions.webSearch,
     taskPermission,
-    externalDirectoryPermission: 'allow',
-    mcpPermission: 'allow',
+    // Least-privilege defaults: require explicit user opt-in to allow external
+    // directory access and MCP tool namespaces (audit JOE-831).
+    externalDirectoryPermission: 'ask',
+    mcpPermission: 'ask',
     requireApprovalBeforeSending: true,
     notificationVoiceReplies: true,
     notificationSmartSuggestions: true,
@@ -262,6 +264,7 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (typeof settings.webSearchEnabled === 'boolean') update.webSearchEnabled = settings.webSearchEnabled && appPermissions.webSearch
   const taskPermission = normalizeRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
   if (taskPermission) update.taskPermission = taskPermission
+  // Ceiling is allow so users can opt into no-prompt; defaults stay ask (JOE-831).
   const externalDirectoryPermission = normalizeRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
   if (externalDirectoryPermission) update.externalDirectoryPermission = externalDirectoryPermission
   const mcpPermission = normalizeRuntimePermissionPolicy(settings.mcpPermission, 'allow')
@@ -618,6 +621,8 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
   const fileWritePermission = clampRuntimePermissionPolicy(settings.fileWritePermission, appPermissions.fileWrite)
   const webPermission = clampRuntimePermissionPolicy(settings.webPermission, appPermissions.web)
   const taskPermission = clampRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
+  // Ceiling is allow (product max); defaults for missing keys remain ask (JOE-831).
+  // Clamping to 'ask' would incorrectly prevent users from opting into allow.
   const externalDirectoryPermission = clampRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
   const mcpPermission = clampRuntimePermissionPolicy(settings.mcpPermission, 'allow')
 

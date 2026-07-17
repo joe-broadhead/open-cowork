@@ -314,8 +314,8 @@ describe('SetupScreen', () => {
     )
 
     await user.click(screen.getByRole('button', { name: /Set up a team or server deployment/ }))
-    const bridgeToggle = await screen.findByRole('checkbox', { name: /Reuse developer tools from this Mac/ })
-    expect(bridgeToggle).toBeChecked()
+    const bridgeToggle = await screen.findByRole('switch', { name: /Reuse developer tools from this Mac/ })
+    expect(bridgeToggle).toHaveAttribute('aria-checked', 'true')
 
     await user.click(bridgeToggle)
     await user.click(screen.getByRole('button', { name: 'Test connection' }))
@@ -326,7 +326,8 @@ describe('SetupScreen', () => {
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
     expect(awaitInitialization).not.toHaveBeenCalled()
     expect(testConnection).toHaveBeenCalledWith('openrouter', 'anthropic/claude-sonnet-4')
-    expect(restart).toHaveBeenCalledTimes(1)
+    // Once for Test connection, once for Get Started best-effort restart.
+    expect(restart).toHaveBeenCalledTimes(2)
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
@@ -380,7 +381,8 @@ describe('SetupScreen', () => {
     expect(restart).toHaveBeenCalledTimes(1)
     expect(testConnection).not.toHaveBeenCalled()
     expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Runtime config rejected provider options')
-    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    // Connection test failure does not block the minimal Get Started path.
+    expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled()
     expect(onComplete).not.toHaveBeenCalled()
   })
 
@@ -419,7 +421,8 @@ describe('SetupScreen', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Provider rejected the API key'))
     expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Provider rejected the API key')
-    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    // Optional connection test failure still allows continuing to chat.
+    expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled()
     expect(onComplete).not.toHaveBeenCalled()
   })
 
@@ -500,6 +503,41 @@ describe('SetupScreen', () => {
         'github-copilot': {},
       },
     }))
-    expect(restart).toHaveBeenCalledTimes(2)
+    // Auth prepare + Test connection + Get Started best-effort restart.
+    expect(restart).toHaveBeenCalledTimes(3)
+  })
+
+  it('allows Get Started without a successful connection test when provider and model are set', async () => {
+    const user = userEvent.setup()
+    const set = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates))
+    const restart = vi.fn(async () => ({ ready: true, error: null }))
+    const testConnection = vi.fn(async () => ({ ok: true }))
+    const onComplete = vi.fn()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-ready' })),
+        set,
+      },
+      runtime: { restart },
+      provider: { testConnection },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={onComplete}
+      />,
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Get Started' }))
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
+    expect(testConnection).not.toHaveBeenCalled()
+    expect(set).toHaveBeenCalled()
+    expect(restart).toHaveBeenCalledTimes(1)
   })
 })

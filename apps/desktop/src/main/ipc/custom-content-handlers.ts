@@ -26,6 +26,25 @@ import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
+// JOE-839: bound pending native-picker tokens. Abandoned pickers would otherwise
+// retain realpaths for the process lifetime (same FIFO pattern as permission-tracker).
+export const MAX_APPROVED_SKILL_IMPORT_DIRECTORIES = 64
+
+export function rememberApprovedSkillImportDirectory(
+  map: Map<string, string>,
+  token: string,
+  directory: string,
+  maxEntries = MAX_APPROVED_SKILL_IMPORT_DIRECTORIES,
+) {
+  if (map.has(token)) map.delete(token)
+  map.set(token, directory)
+  while (map.size > maxEntries) {
+    const oldest = map.keys().next().value
+    if (typeof oldest !== 'string') break
+    map.delete(oldest)
+  }
+}
+
 function validateName(name: string, type: string) {
   if (!name || !VALID_NAME.test(name)) {
     throw new Error(`Invalid ${type} name: "${name}". Use alphanumeric characters, hyphens, and underscores only (max 64 chars).`)
@@ -273,7 +292,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     if (result.canceled || !result.filePaths[0]) return null
     const directory = resolve(result.filePaths[0])
     const token = randomUUID()
-    context.approvedSkillImportDirectories.set(token, directory)
+    rememberApprovedSkillImportDirectory(context.approvedSkillImportDirectories, token, directory)
     return { token, directory }
   })
 

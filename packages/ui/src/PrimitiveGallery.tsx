@@ -11,8 +11,8 @@ import { Menu, Select } from './Select.js'
 import { SegmentedControl } from './SegmentedControl.js'
 import { Skeleton } from './Skeleton.js'
 import {
-  ApprovalCard,
-  ArtifactCard,
+  StudioApprovalCard,
+  StudioArtifactCard,
   ChannelRow,
   ChannelStatusCard,
   ComposerShell,
@@ -47,13 +47,27 @@ const tones = ['neutral', 'accent', 'success', 'warning', 'danger'] as const
 function GallerySection({
   title,
   children,
+  maturity = 'production',
 }: {
   title: string
   children: ReactNode
+  /** production = shipped in app chrome; experimental = Studio/design fiction not yet productized */
+  maturity?: 'production' | 'experimental'
 }) {
   return (
-    <section className="space-y-3">
-      <h2 className="font-display text-role-section-title font-bold text-text">{title}</h2>
+    <section className="space-y-3" data-gallery-maturity={maturity}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-display text-role-section-title font-bold text-text">{title}</h2>
+        <Badge tone={maturity === 'production' ? 'success' : 'warning'}>
+          {maturity === 'production' ? 'Production' : 'Experimental'}
+        </Badge>
+      </div>
+      {maturity === 'experimental' ? (
+        <p className="text-sm text-text-muted">
+          Design-system preview only. Not mounted by the production app shell unless a product
+          surface explicitly adopts it (see JOE-854 Studio adopt/cut).
+        </p>
+      ) : null}
       <Card padding="lg" className="space-y-4">
         {children}
       </Card>
@@ -78,6 +92,11 @@ export function PrimitiveGallery() {
         <header className="space-y-2">
           <Badge tone="accent">Design system QA</Badge>
           <h1 className="font-display text-role-page-title font-bold text-text">UI primitives</h1>
+          <p className="max-w-3xl text-sm text-text-secondary">
+            Sections marked <strong>Production</strong> are adopted by the shipping app shell.
+            Sections marked <strong>Experimental</strong> are Studio/design previews — not product
+            surfaces until an adopt decision lands (coordinate with Studio half-adoption work).
+          </p>
         </header>
 
         <GallerySection title="Buttons">
@@ -96,7 +115,7 @@ export function PrimitiveGallery() {
           </div>
         </GallerySection>
 
-        <GallerySection title="Studio Shell And Coworking Primitives">
+        <GallerySection title="Studio Shell And Coworking Primitives" maturity="experimental">
           <StudioShell
             brand={{ name: 'Open Cowork', subtitle: 'Studio preview' }}
             activeItemId="home"
@@ -167,7 +186,7 @@ export function PrimitiveGallery() {
                 status={{ label: '2 findings', tone: 'warning' }}
                 actions={[{ id: 'open', children: 'Open review' }]}
               >
-                <ApprovalCard
+                <StudioApprovalCard
                   title="Approve shell command"
                   requester="OpenCode permission"
                   body="The UI presents the wait state; OpenCode owns the approval contract."
@@ -185,7 +204,7 @@ export function PrimitiveGallery() {
                 progress={72}
                 progressLabel="72% ready"
               />
-              <ArtifactCard
+              <StudioArtifactCard
                 title="Roadmap brief"
                 description="Generated deliverable attached to the session."
                 status={{ label: 'Draft', tone: 'neutral' }}

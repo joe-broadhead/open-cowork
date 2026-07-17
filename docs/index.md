@@ -16,8 +16,8 @@ hide:
 <div class="cowork-stats" markdown>
 
 <div class="stat" markdown>
-  <div class="stat-value">7 MCPs · 11 skills</div>
-  <div class="stat-label">Bundled capabilities</div>
+  <div class="stat-value">8 MCPs · 7 skills</div>
+  <div class="stat-label">Configured capabilities</div>
 </div>
 
 <div class="stat" markdown>
@@ -54,12 +54,12 @@ own branding, providers, skills, and workflows.
 
 <div class="grid cards" markdown>
 
--   :material-source-branch:{ .lg } **Project & sandbox threads**
+-   :material-source-branch:{ .lg } **Project & sandbox chats**
 
     ---
 
-    Real-filesystem project threads for code work. Private,
-    Cowork-managed sandbox threads for reports, drafts, and artifacts —
+    Real-filesystem project chats for code work. Private,
+    Cowork-managed sandbox chats for reports, drafts, and artifacts —
     no risk of polluting your repo.
 
     [:octicons-arrow-right-24: Desktop App Guide](desktop-app.md)
@@ -72,7 +72,7 @@ own branding, providers, skills, and workflows.
     facets, user tags, saved filters, and suggestion-only categorization.
     The compact sidebar list stays focused on quick switching.
 
-    [:octicons-arrow-right-24: Projects](threads.md)
+    [:octicons-arrow-right-24: Projects](projects.md)
 
 -   :material-clock-outline:{ .lg } **Review-first playbooks**
 
@@ -106,12 +106,12 @@ own branding, providers, skills, and workflows.
 
     [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
 
--   :material-account-multiple:{ .lg } **Sub-agent delegation**
+-   :material-account-multiple:{ .lg } **Team coworker delegation**
 
     ---
 
-    Use `@agent` in chat to invoke specialist sub-agents. Custom agents
-    compile down to native OpenCode agent definitions — no parallel
+    Use `@coworker` in chat to invoke specialist Team members. Custom
+    coworkers compile down to native OpenCode agent definitions — no parallel
     execution layer, no hidden indirection.
 
     [:octicons-arrow-right-24: Architecture](architecture.md)
@@ -147,11 +147,46 @@ own branding, providers, skills, and workflows.
 | **End user** | Install the app, run my first session | [Getting Started](getting-started.md) → [Desktop App Guide](desktop-app.md) |
 | **Power user** | Schedule recurring work, build skills | [Playbooks](workflows.md) → [Workflow Recipes](workflow-recipes.md) |
 | **Downstream distributor** | Ship a branded internal build | [Configuration](configuration.md) → [Downstream Customization](downstream.md) |
-| **Contributor** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
-| **Operator / release manager** | Cut a release, run the gates | [Packaging and Gateway Product Modes](packaging-and-product-modes.md) → [Packaging and Releases](packaging-and-releases.md) |
+| **Desktop contributor** | Change Desktop UI/runtime composition | [Desktop contributor path](#desktop-contributor-path) → [First Contribution](first-contribution.md) |
+| **Contributor (general)** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
+| **Operator / release manager** | Cut a release, run the gates | [Operate docs map](#operate-docs-map) → [Packaging and Releases](packaging-and-releases.md) |
 | **Security reviewer** | Confirm the threat model holds | [Security Model](security-model.md) → [Telemetry and Privacy](privacy.md) |
 
 </div>
+
+## Desktop contributor path
+
+If you only touch **Desktop** (renderer, main process, local OpenCode
+composition), stay on this short path. You do **not** need the full Operate
+section for day-to-day work.
+
+1. **Run the app** — [Getting Started](getting-started.md) / [Development Environment](development-environment.md)
+2. **Product surfaces** — [Desktop App Guide](desktop-app.md) · [Projects](projects.md) · [Playbooks](workflows.md) · [Team](agent-authoring.md) · [Tools & Skills](skills-and-mcps.md)
+3. **Ownership boundaries** — [Architecture](architecture.md) · [Frontend Architecture](frontend-architecture.md) · [Design System](design-system.md)
+4. **Local checks** — `pnpm typecheck && pnpm lint && pnpm test && pnpm test:renderer` (see [First Contribution](first-contribution.md))
+5. **Only when packaging Desktop** — [Packaging and Releases](packaging-and-releases.md) · [Release Checklist](release-checklist.md) · [Verifying Releases](verifying-releases.md)
+
+Skip Cloud deploy runbooks, hybrid security gates, SSO/SCIM, and managed-worker
+ops unless your change actually crosses those boundaries.
+
+## Operate docs map
+
+The **Operate** nav is large on purpose: multi-authority production (Desktop,
+Cloud, Cloud Channel Gateway, Standalone Gateway) needs explicit gates. Prefer
+this map over copying prose between pages.
+
+| When you need… | Canonical page | Related (link, do not duplicate) |
+| --- | --- | --- |
+| Product names and package boundaries | [Packaging and Gateway Product Modes](packaging-and-product-modes.md) | [Versioning](versioning.md) |
+| Cloud control plane / workers | [Open Cowork Cloud](open-cowork-cloud.md) | [Managed Workers](managed-workers.md) · [Cloud Gateway Registration](cloud-gateway-registration.md) |
+| Which topology to run | [Deployment Topologies](deployment-topologies.md) | [Gateway Appliance](gateway-appliance.md) · [Standalone Gateway](standalone-gateway.md) |
+| Production go / no-go gates | [Deployment Readiness](deployment-readiness.md) | [Hybrid Security Gates](hybrid-security-gates.md) · [Launch Readiness](runbooks/launch-readiness.md) |
+| Cut a Desktop/Cloud release | [Packaging and Releases](packaging-and-releases.md) | [Release Checklist](release-checklist.md) · [Verifying Releases](verifying-releases.md) |
+| Incidents, restore, BYOK, SSO | Runbooks under **Operate** | [Backup and Restore](runbooks/backup-restore.md) · [Managed BYOK SaaS](runbooks/managed-byok-saas.md) · [SSO and SCIM](runbooks/sso-scim-setup.md) |
+
+Production gates stay mandatory for operators; desktop-only contributors should
+use the [Desktop contributor path](#desktop-contributor-path) instead of reading
+every Operate page.
 
 ## Install
 

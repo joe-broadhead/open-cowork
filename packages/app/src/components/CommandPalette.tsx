@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  BuiltInAgentDetail,
-  CustomAgentSummary,
-  DesktopFeatureFlags,
-  SessionInfo,
-} from '@open-cowork/shared'
+  BuiltInAgentDetail, CustomAgentSummary, DesktopFeatureFlags, SessionInfo, } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { t } from '../helpers/i18n'
 import { useEscape } from '../hooks/useEscape'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import type { PrimaryAgentMode } from '../stores/session'
-import { Badge, EmptyState, Input, Kbd } from './ui'
+import { Badge, EmptyState, Input, Kbd } from '@open-cowork/ui'
 import { ModalBackdrop } from './layout/ModalBackdrop'
 import {
   buildCommandPaletteItems,
@@ -113,7 +109,7 @@ export function CommandPalette({
           return true
         } catch {
           setSessionPrimaryAgent(sessionId, previousAgent)
-          useSessionStore.getState().addGlobalError('Could not switch agent mode. Please try again.')
+          useSessionStore.getState().addGlobalError('Could not switch agent mode. Check runtime health, then try again from the mode menu.')
           return false
         }
       },

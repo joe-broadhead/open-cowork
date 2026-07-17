@@ -42,6 +42,26 @@ For organizations, start from the authority that must own execution:
 - choose `full-hybrid` only after the smaller profiles are independently
   validated
 
+## Multi-pod Cloud SSE (production)
+
+When Cloud `web` scales horizontally (more than one web replica, or split
+`web`/`worker` roles), treat Postgres `LISTEN`/`NOTIFY` as a **production
+recommendation**, not an optional experiment:
+
+- Set `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` on web **and** worker roles
+  (workers emit identifiers-only NOTIFY after event commits; web pods LISTEN
+  and wake the matching SSE topic).
+- Keep the poll loop as the reliability backstop (default backstop
+  `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS=15000` when NOTIFY is on).
+- Enforce `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` (default `200`) so a
+  single org cannot pin unbounded stream slots on a pod.
+- See [Open Cowork Cloud — Multi-pod SSE load guidance](open-cowork-cloud.md#multi-pod-sse-load-guidance)
+  for sizing and load-gate notes.
+
+Poll-only SSE remains correct for single-process demos; multi-pod production
+without NOTIFY pays a linear poll tax per open stream and higher delivery
+latency under worker/web split.
+
 ## Production Boundaries
 
 Every topology has a different security boundary:

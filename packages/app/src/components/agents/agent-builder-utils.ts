@@ -64,9 +64,7 @@ export function agentChroma(color?: AgentColor | string | null): string {
     case 'success': return 'var(--color-green)'
     case 'warning': return 'var(--color-amber)'
     case 'info': return 'var(--color-info)'
-    // No semantic "secondary identity" token exists; a violet tuned to sit
-    // beside the accent without competing keeps it from reading grey.
-    case 'secondary': return '#7c6fd6'
+    case 'secondary': return 'color-mix(in srgb, var(--color-accent) 70%, var(--color-info))'
     case 'primary':
     case 'accent':
     default: return 'var(--color-accent)'
@@ -226,7 +224,7 @@ function validatePermissionOverrideRules(draft: CustomAgentConfig): AgentDraftIs
       if (override.key === 'mcp' && !isMcpPermissionRulePattern(pattern)) {
         issues.push({
           code: `permission_rule_pattern_invalid_mcp_${index}`,
-          message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool.',
+          message: 'MCP tools permission rule pattern must look like mcp__server__tool or server_tool (OpenCode form).',
         })
       }
     }

@@ -144,7 +144,7 @@ const eventSubscriptions = createRuntimeEventSubscriptionManager({
   },
 })
 
-// OpenCode 1.17.20 scopes `/api/event` to the directory carried by the SDK
+// OpenCode scopes `/api/event` to the directory carried by the SDK
 // client. Keep one subscription per live directory client so project sessions
 // receive their own text, tool, interaction, and terminal events.
 setDirectoryClientLifecycleHandlers({

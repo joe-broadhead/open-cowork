@@ -11,7 +11,9 @@ import {
   getTargetArchName,
   listInstalledOpencodePackages,
   packageTargetsArch,
+  runtimeComponentManifestResourceName,
   updateInstallCapabilityResourceName,
+  writePackagedRuntimeComponentManifest,
   writeUpdateInstallCapabilityResource,
 } from '../scripts/desktop-after-pack.mjs'
 
@@ -21,6 +23,21 @@ function makeNativePackage(virtualStoreDir: string, packageName: string, version
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: packageName, version }))
   writeFileSync(join(packageDir, 'bin', 'opencode'), 'binary')
   return packageDir
+}
+
+function makeManagedMcp(resourcesDir: string, name: string) {
+  const distDir = join(resourcesDir, 'mcps', name, 'dist')
+  mkdirSync(distDir, { recursive: true })
+  writeFileSync(join(resourcesDir, 'mcps', name, 'package.json'), JSON.stringify({ name, version: '0.0.0' }))
+  writeFileSync(join(distDir, 'index.js'), `// ${name} mcp\n`)
+  return join(distDir, 'index.js')
+}
+
+function makeSdkPackageJson(root: string) {
+  const packageJsonPath = join(root, 'sdk', 'package.json')
+  mkdirSync(join(root, 'sdk'), { recursive: true })
+  writeFileSync(packageJsonPath, JSON.stringify({ name: '@opencode-ai/sdk', version: '1.2.3' }))
+  return packageJsonPath
 }
 
 test('desktop-after-pack helpers parse pnpm store package names and target arches', () => {
@@ -85,19 +102,72 @@ test('desktop-after-pack copies native OpenCode packages into app.asar.unpacked'
   try {
     const store = join(root, '.pnpm')
     const appOutDir = join(root, 'out')
+    const resourcesDir = join(appOutDir, 'resources')
     mkdirSync(store, { recursive: true })
-    mkdirSync(appOutDir, { recursive: true })
+    mkdirSync(resourcesDir, { recursive: true })
     makeNativePackage(store, 'opencode-linux-x64')
 
     makeNativePackage(store, 'opencode-linux-x64', '0.9.0')
+    makeManagedMcp(resourcesDir, 'agents')
+    makeManagedMcp(resourcesDir, 'workflows')
+    makeManagedMcp(resourcesDir, 'semantic-ui')
+    const sdkPackageJsonPath = makeSdkPackageJson(root)
+    // after-pack bundles the vendored time-keep native binary; stub the source
+    // so the unit test does not require `pnpm binaries:time-keep` on CI hosts.
+    const timeKeepSource = join(root, 'time-keep-stub')
+    writeFileSync(timeKeepSource, 'time-keep-binary')
 
-    const afterPack = createDesktopAfterPack({ expectedVersion: '1.2.3', virtualStoreDir: store })
+    const afterPack = createDesktopAfterPack({
+      expectedVersion: '1.2.3',
+      virtualStoreDir: store,
+      sdkPackageJsonPath,
+      sourcePath: timeKeepSource,
+    })
     await afterPack({ appOutDir, arch: 'x64', electronPlatformName: 'linux' })
 
     const copiedPackage = join(appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'opencode-linux-x64')
     assert.equal(existsSync(join(copiedPackage, 'bin', 'opencode')), true)
     assert.equal(readFileSync(join(copiedPackage, 'bin', 'opencode'), 'utf8'), 'binary')
     assert.equal(JSON.parse(readFileSync(join(copiedPackage, 'package.json'), 'utf8')).version, '1.2.3')
+    assert.equal(existsSync(join(resourcesDir, 'bin', 'time-keep')), true)
+    assert.equal(readFileSync(join(resourcesDir, 'bin', 'time-keep'), 'utf8'), 'time-keep-binary')
+
+    const manifestPath = join(resourcesDir, runtimeComponentManifestResourceName)
+    assert.equal(existsSync(manifestPath), true)
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      format: string
+      components: Array<{ id: string; sha256?: string }>
+    }
+    assert.equal(manifest.format, 'open-cowork-runtime-component-manifest-v1')
+    const ids = new Set(manifest.components.map((component) => component.id))
+    for (const requiredId of ['opencode-cli', 'opencode-sdk', 'agent-tool-mcp', 'workflow-mcp', 'semantic-ui-mcp']) {
+      assert.equal(ids.has(requiredId), true, `missing ${requiredId}`)
+    }
+    assert.equal(manifest.components.every((component) => typeof component.sha256 === 'string' && component.sha256.length === 64), true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('writePackagedRuntimeComponentManifest fails closed when a managed component is missing', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-after-pack-manifest-'))
+  try {
+    const resourcesDir = join(root, 'resources')
+    mkdirSync(join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'opencode-linux-x64', 'bin'), { recursive: true })
+    writeFileSync(join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'opencode-linux-x64', 'bin', 'opencode'), 'binary')
+    makeManagedMcp(resourcesDir, 'agents')
+    makeManagedMcp(resourcesDir, 'workflows')
+    // semantic-ui intentionally omitted
+    const sdkPackageJsonPath = makeSdkPackageJson(root)
+
+    await assert.rejects(
+      () => writePackagedRuntimeComponentManifest(resourcesDir, {
+        electronPlatformName: 'linux',
+        arch: 'x64',
+        sdkPackageJsonPath,
+      }),
+      /missing semantic-ui-mcp/,
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

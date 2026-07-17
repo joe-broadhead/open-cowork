@@ -73,7 +73,7 @@ test('ensureRuntimeAfterAuthLogin does nothing for incomplete or failed auth flo
 })
 
 test('small model changes are runtime-sensitive settings updates', () => {
-  assert.equal(hasRuntimeSensitiveSettingsUpdate({ selectedSmallModelId: 'openrouter/deepseek/deepseek-v4-flash:free' }), true)
+  assert.equal(hasRuntimeSensitiveSettingsUpdate({ selectedSmallModelId: 'openrouter/qwen/qwen3-coder-flash' }), true)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ selectedSmallModelId: null }), true)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ webPermission: 'deny' }), true)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ webSearchEnabled: false }), true)

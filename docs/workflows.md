@@ -50,10 +50,10 @@ local project directory or host-path grant.
 4. You describe the repeatable task in plain language.
 5. Workflow Designer asks follow-up questions until the task, tools, skills,
    coworker, and triggers are clear.
-6. Workflow Designer calls the bundled `mcp__workflows__preview_workflow`
+6. Workflow Designer calls the bundled `workflows_preview_workflow`
    tool and shows the proposed workflow.
 7. After you explicitly confirm, Workflow Designer calls
-   `mcp__workflows__create_workflow` with the preview token returned by the
+   `workflows_create_workflow` with the preview token returned by the
    preview tool.
 
 The saved playbook points back to that setup chat so you can reopen the

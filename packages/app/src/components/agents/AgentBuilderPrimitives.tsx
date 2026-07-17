@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CustomAgentConfig, ProviderDescriptor, ProviderModelDescriptor } from '@open-cowork/shared'
 
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, Input, SegmentedControl, Select } from '../ui'
+import { Badge, Button, Card, Input, SegmentedControl, Select } from '@open-cowork/ui'
 
 export type WorkbenchTab = 'instructions' | 'capabilities' | 'inference' | 'preview'
 
@@ -27,27 +27,16 @@ export function WorkbenchTabs({
     { id: 'preview', label: 'OpenCode Preview' },
   ]
   return (
-    <div
-      className="flex border-b"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-    >
-      {tabs.map((entry) => (
-        <button
-          key={entry.id}
-          onClick={() => onChange(entry.id)}
-          className="flex-1 min-w-0 px-2.5 py-2.5 text-xs font-medium leading-tight cursor-pointer transition-colors"
-          style={{
-            color: tab === entry.id ? 'var(--color-text)' : 'var(--color-text-muted)',
-            background: tab === entry.id ? 'var(--color-surface-active)' : 'transparent',
-            borderBottom: tab === entry.id
-              ? '2px solid var(--color-accent)'
-              : '2px solid transparent',
-          }}
-        >
-          {entry.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label={t('agents.builder.workbenchTabs', 'Agent builder sections')}
+      value={tab}
+      onChange={(value) => onChange(value as WorkbenchTab)}
+      className="w-full"
+      options={tabs.map((entry) => ({
+        value: entry.id,
+        label: entry.label,
+      }))}
+    />
   )
 }
 

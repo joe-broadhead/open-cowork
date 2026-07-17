@@ -1,10 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HomeComposer } from './home/HomeComposer'
 import type {
-  BrandingHomeConfig,
-  LaunchpadFeedPayload,
-  LaunchpadFreshArtifactItem,
-} from '@open-cowork/shared'
+  BrandingHomeConfig, LaunchpadFeedPayload, LaunchpadFreshArtifactItem, } from '@open-cowork/shared'
 import { useSessionStore, type PrimaryAgentMode } from '../stores/session'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
@@ -17,12 +14,7 @@ import { useMentionableAgents } from './chat/useChatInputRuntime'
 import type { Attachment } from './chat/chat-input-types'
 import type { HomePromptOptions } from './home/home-prompt-options'
 import {
-  Card,
-  EmptyState,
-  Icon,
-  IconButton,
-  type IconName,
-} from './ui'
+  Card, EmptyState, Icon, IconButton, type IconName } from '@open-cowork/ui'
 import { MAX_MOTION_ITEMS } from './launchpad/constants'
 
 const LaunchpadMotionGrid = lazy(() => import('./launchpad/LaunchpadMotionGrid').then((module) => ({
@@ -305,6 +297,8 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   // wired into the feed effect deps below to re-run the same fetch on demand.
   const [launchpadRefreshNonce, setLaunchpadRefreshNonce] = useState(0)
   const launchpadRequestIdRef = useRef(0)
+  // JOE-855: honor Settings → Smart suggestions (hide launchpad ideas when off).
+  const [smartSuggestions, setSmartSuggestions] = useState(true)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = useMemo(
@@ -328,6 +322,16 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   }, [specialistAgents])
 
   const firstRun = sessions.filter((session) => (session.kind || 'interactive') === 'interactive').length === 0
+  useEffect(() => {
+    let cancelled = false
+    void window.coworkApi.settings.get().then((settings) => {
+      if (cancelled) return
+      setSmartSuggestions(settings.notificationSmartSuggestions !== false)
+    }).catch(() => {
+      if (!cancelled) setSmartSuggestions(true)
+    })
+    return () => { cancelled = true }
+  }, [])
   const sessionFeedKey = useMemo(
     () => sessions
       .map((session) => `${session.id}:${session.updatedAt}:${session.title || ''}:${session.kind || 'interactive'}`)
@@ -511,7 +515,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
     // Sits on the themed --color-base + its --bg-image aurora wash (set per theme).
     <div className="flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <div className="measure-column px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
-        <h1 className="font-display text-hero leading-[1.04] font-semibold tracking-[-0.03em] text-text text-center">
+        <h1 className="font-display text-hero leading-[1.04] font-semibold text-text text-center">
           {brandedGreeting ?? (
             <>{timeGreeting.lead} <span className="studio-greeting-accent">{timeGreeting.accent}</span>.</>
           )}
@@ -543,9 +547,11 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
 
         {firstRun && !coachmarkDismissed && <HomeCoachmark onDismiss={handleDismissCoachmark} />}
 
-        <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
+        {smartSuggestions ? (
+          <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
+        ) : null}
 
-        {launchpadInitialized ? (
+        {smartSuggestions && launchpadInitialized ? (
           <Suspense fallback={<div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status">{t('home.motion.loading', 'Loading')}</div>}>
             <LaunchpadMotionGrid
               feed={launchpadFeed}
@@ -557,11 +563,11 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
               onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
             />
           </Suspense>
-        ) : (
+        ) : smartSuggestions ? (
           <div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status" aria-live="polite">
             {t('home.motion.loading', 'Loading')}
           </div>
-        )}
+        ) : null}
 
         <TeamStrip
           agents={suggestedAgents}

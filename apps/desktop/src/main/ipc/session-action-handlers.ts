@@ -86,7 +86,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     const { client } = await context.getSessionClient(sessionId)
     log('session', `Summarizing ${shortSessionId(sessionId)}`)
     try {
-      // OpenCode 1.17.20 advertises v2.session.compact in the generated SDK,
+      // Some OpenCode v2 runtimes advertise session.compact in the generated SDK,
       // but the server method is still an OperationUnavailable stub. Keep the
       // working native classic route until the pinned runtime implements V2.
       await client.session.summarize({ sessionID: sessionId }, { throwOnError: true })

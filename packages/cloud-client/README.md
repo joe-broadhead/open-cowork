@@ -38,6 +38,9 @@ package.
 Modules outside the entry points above are internal implementation details.
 First-party clients and downstream deployers should not import source files,
 Desktop Cloud server files, control-plane stores, or runtime adapters directly.
+The root entry point intentionally stays small: use it for the HTTP/SSE adapter
+factory and transport error helpers, and import typed domain contracts from the
+`/domains/*` entry points.
 
 ## Basic Usage
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { getBuiltInLocales, getLocale, setLocale, t } from '../../helpers/i18n'
 import { BUILT_IN_TRANSLATION_COVERAGE } from '../../helpers/i18n-catalogs/coverage-status'
-import { Card, Select } from '../ui'
+import { Card, Select } from '@open-cowork/ui'
 import { fieldLabelCls } from './settings-panel-styles'
 
 // Honest partial-translation signal: every built-in non-English catalog shares
@@ -47,7 +47,7 @@ export function LanguagePicker() {
         <span className="text-2xs text-text-muted leading-relaxed mt-1">
           {t(
             'settings.language.description',
-            'Choose the interface language. The selection is remembered on this device. Partially-translated languages fall back to English for unlisted strings.',
+            'Choose the interface language. The selection is remembered on this device. Non-English locales are experimental/partial and fall back to English for unlisted strings.',
           )}
         </span>
       </div>

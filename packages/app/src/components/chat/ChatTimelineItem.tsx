@@ -8,7 +8,7 @@ import { AgentRunPanel } from './AgentRunPanel'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { ApprovalCard } from './ApprovalCard'
 import { agentRunFilterStorageKey } from './agent-run-filter-model'
-import { Icon, IconButton } from '../ui'
+import { Icon, IconButton } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 
 // Error timeline entries are append-only per-session runtime errors with no

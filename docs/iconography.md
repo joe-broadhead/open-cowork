@@ -17,17 +17,47 @@ The wrapper sets `currentColor`, a 24px Lucide grid, and a size-aware default
 `aria-hidden="true"`; interactive labels belong on the button or menu item
 that contains the icon.
 
-## Inventory
+## Default Studio navigation
+
+Source of truth for labels and icon names:
+`packages/app/src/components/layout/Sidebar.tsx` (`PRIMARY_NAV_ITEMS` and
+`MANAGE_NAV_ITEMS`). Every name below must exist in `Icon.tsx`.
+
+| Product label | View id | Lucide wrapper name | Present in `Icon.tsx` |
+| --- | --- | --- | --- |
+| Home | `home` | `home` | yes |
+| Projects | `projects` | `folder` | yes |
+| Knowledge | `knowledge` | `book-open` | yes |
+| Approvals | `approvals` | `circle-help` | yes |
+| Team | `team` | `users` | yes |
+| Playbooks | `playbooks` | `workflow` | yes |
+| Channels | `channels` | `activity` | yes |
+| Tools & Skills | `tools` | `blocks` | yes |
+| Artifacts | `artifacts` | `file` | yes |
+| Admin | `admin` | `shield-check` | yes |
+| Settings | `settings` | `settings-2` | yes |
+
+Do **not** document default nav as Agents / Workflows / Threads. User-facing
+names are Team / Playbooks / Projects; code may still use agent/workflow/thread
+identifiers.
+
+## Inventory (chrome and content)
 
 | Product meaning | Lucide wrapper name |
 | --- | --- |
 | Home | `home` |
-| Agents | `bot` |
-| People / collaborators | `users` |
-| Workflows | `workflow` |
-| Tools and skills | `blocks` |
-| Tools / actions | `wrench` |
+| Projects | `folder` |
+| Knowledge | `book-open` |
+| Approvals | `circle-help` |
+| Team (coworkers) | `users` |
+| Playbooks | `workflow` |
+| Channels | `activity` |
+| Tools & Skills | `blocks` |
+| Artifacts | `file` |
+| Admin | `shield-check` |
 | Health / readiness | `heart-pulse` or `activity` |
+| Tools / actions | `wrench` |
+| Coworker (portrait / detail) | `bot` |
 | Search | `search` |
 | Settings | `settings-2` |
 | Sidebar toggle | `panel-left` |
@@ -36,8 +66,7 @@ that contains the icon.
 | Stop | `square` |
 | Model / intelligence | `sparkles` |
 | Reasoning | `brain` |
-| Folder / project | `folder` |
-| Fork thread | `git-fork` |
+| Fork project chat | `git-fork` |
 | Confirm / selected | `check` |
 | Close / dismiss | `x` |
 | More options / select | `chevron-down` |
@@ -49,6 +78,8 @@ that contains the icon.
 
 - Add new icon names to `Icon.tsx` with named Lucide imports. Do not import the
   full icon namespace.
+- When adding a default-nav surface, update this page and `Sidebar.tsx` in the
+  same change so the inventory cannot lag product language.
 - Keep decorative icons hidden from assistive technology. Use `IconButton`
   when the icon itself is the control; its `label` prop is required.
 - Use sizes `16`, `20`, or `24` unless a product surface has a documented

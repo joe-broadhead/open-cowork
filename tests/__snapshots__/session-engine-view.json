@@ -42,7 +42,7 @@
       "segments": [
         {
           "content": "Please inspect the repo.",
-          "id": "msg-user:part:0",
+          "id": "msg-user::msg-user:part:0",
           "order": "<order>"
         }
       ],
@@ -58,7 +58,7 @@
       "segments": [
         {
           "content": "I will delegate a focused read.",
-          "id": "msg-assistant:part:0",
+          "id": "msg-assistant::msg-assistant:part:0",
           "order": "<order>"
         }
       ],

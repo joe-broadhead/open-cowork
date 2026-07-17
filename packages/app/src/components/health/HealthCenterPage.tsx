@@ -1,19 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  SETUP_HEALTH_CHECKS,
-  SETUP_INTENTS,
-  workspaceAuthorityContract,
-  type DesktopPairingPublicRecord,
-  type RuntimeCapabilityStatus,
-  type RuntimeInputDiagnostics,
-  type RuntimeStatus,
-  type SetupHealthStatus,
-  type WorkspaceApiSupport,
-  type WorkspaceExecutionAuthority,
-  type WorkspaceInfo,
-} from '@open-cowork/shared'
+  SETUP_HEALTH_CHECKS, SETUP_INTENTS, workspaceAuthorityContract, type DesktopPairingPublicRecord, type RuntimeCapabilityStatus, type RuntimeInputDiagnostics, type RuntimeStatus, type SetupHealthStatus, type WorkspaceApiSupport, type WorkspaceExecutionAuthority, type WorkspaceInfo, } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-import { Badge, Button, Card, type BadgeTone } from '../ui'
+import { Badge, Button, Card, type BadgeTone } from '@open-cowork/ui'
 
 type WorkspaceHealth = {
   workspace: WorkspaceInfo

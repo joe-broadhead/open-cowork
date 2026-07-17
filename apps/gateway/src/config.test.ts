@@ -106,16 +106,16 @@ test('gateway config separates product mode from deployment mode', () => {
 
   assert.throws(() => resolveGatewayConfigBase({}, {
     OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'standalone',
-  }), /Standalone Team Gateway app/)
+  }), /apps\/standalone-gateway|OPEN_COWORK_STANDALONE_GATEWAY|Cloud Channel Gateway binary/)
   assert.throws(() => resolveGatewayConfigBase({}, {
     OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'hybrid',
-  }), /reserved for a later/)
+  }), /reserved for a future design|cloud_channel/)
   assert.throws(() => resolveGatewayConfigBase({}, {
     OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'cloud',
-  }), /Unsupported gateway productMode/)
+  }), /Unsupported gateway productMode|only accepts productMode=cloud_channel/)
   assert.throws(() => resolveGatewayConfigBase({
     productMode: 'cloud' as never,
-  }, cloudEnv), /Unsupported gateway productMode/)
+  }, cloudEnv), /Unsupported gateway productMode|only accepts productMode=cloud_channel/)
 })
 
 test('gateway config resolves trusted proxy policy from config and env', () => {

@@ -84,4 +84,20 @@ test('buildPermissionConfig applies user-denied patterns after generated allow p
 
   assert.equal(permission['mcp__github__*'], 'allow')
   assert.equal(permission.mcp__github__delete_repo, 'deny')
+  // OpenCode 1.18+ tool ids use server_tool; dual-expand Claude-style patterns.
+  assert.equal(permission['github_*'], 'allow')
+  assert.equal(permission.github_delete_repo, 'deny')
+})
+
+test('buildPermissionConfig dual-expands time-keep MCP patterns to OpenCode tool ids', () => {
+  const permission = buildPermissionConfig({
+    allowPatterns: ['mcp__time-keep__*'],
+    askPatterns: ['mcp__time-keep__timer_set', 'mcp__time-keep__timer_delete'],
+  })
+
+  assert.equal(permission['mcp__time-keep__*'], 'allow')
+  assert.equal(permission['time-keep_*'], 'allow')
+  assert.equal(permission['mcp__time-keep__timer_set'], 'ask')
+  assert.equal(permission['time-keep_timer_set'], 'ask')
+  assert.equal(permission['time-keep_timer_delete'], 'ask')
 })

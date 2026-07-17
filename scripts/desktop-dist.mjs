@@ -73,6 +73,7 @@ try {
   await runStep('pnpm', ['--dir', '../..', 'build:shared'])
   await runStep('pnpm', ['build'])
   await runStep('pnpm', ['build:electron'])
+  await runStep('pnpm', ['--dir', '../..', 'binaries:time-keep'])
   await runStep('pnpm', ['--dir', '../..', 'build:mcps'])
   await runStep('electron-builder', ['--config', builderConfigPath, ...builderArgs])
 } finally {

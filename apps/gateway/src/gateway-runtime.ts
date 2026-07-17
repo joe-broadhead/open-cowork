@@ -5,7 +5,8 @@ import type {
   SentMessage,
 } from '@open-cowork/gateway-channel'
 import { chunkText } from '@open-cowork/gateway-channel'
-import { isCloudTransportError, type ChannelDeliveryRecord, type CloudChannelProviderId } from '@open-cowork/cloud-client'
+import type { ChannelDeliveryRecord, CloudChannelProviderId } from '@open-cowork/cloud-client/domains/channels'
+import { isCloudTransportError } from '@open-cowork/cloud-client/domains/transport'
 
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayConfig, GatewayProviderConfig } from './config.js'

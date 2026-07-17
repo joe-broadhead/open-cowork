@@ -1,9 +1,22 @@
-import { isTrustedResolvedShellPath, isTrustedShellPath } from '@open-cowork/runtime-host/shell-env'
+import {
+  getFallbackPathEntries,
+  isTrustedResolvedShellPath,
+  isTrustedShellPath,
+} from '@open-cowork/runtime-host/shell-env'
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+
+test('fallback PATH includes user-local bin for GUI-launched external MCPs', () => {
+  const home = homedir()
+  const entries = getFallbackPathEntries(home)
+  assert.ok(entries.includes(join(home, '.local', 'bin')), 'expected ~/.local/bin for tools like time-keep')
+  assert.ok(entries.includes(join(home, 'bin')), 'expected ~/bin')
+  assert.ok(entries.includes('/opt/homebrew/bin') || entries.includes('/usr/local/bin'))
+})
+
 test('isTrustedShellPath accepts only known shell binaries', () => {
   const trustedShell = ['/bin/sh', '/bin/bash', '/bin/zsh'].find((candidate) => isTrustedShellPath(candidate))
   assert.ok(trustedShell, 'expected at least one trusted shell path on the host')

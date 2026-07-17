@@ -3,7 +3,7 @@ import { MarkdownContent } from './MarkdownContent'
 import { MessageActions } from './MessageActions'
 import { ReasoningDisclosure } from './ReasoningDisclosure'
 import { t } from '../../helpers/i18n'
-import { Icon } from '../ui'
+import { Icon } from '@open-cowork/ui'
 
 import type { Message } from '../../stores/session'
 

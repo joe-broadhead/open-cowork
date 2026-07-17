@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button, EmptyState, Icon, Skeleton, type IconName } from '../ui'
+import { Button, EmptyState, Icon, Skeleton, type IconName } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 import type { AdminResourceState } from './useAdminResource'
 

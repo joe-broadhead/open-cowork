@@ -6,7 +6,6 @@ export const WORKSPACE_SUBPROCESS_COVERAGE_PREFIXES = [
   'apps/standalone-gateway/dist/',
   'mcps/agents/dist/',
   'mcps/charts/dist/',
-  'mcps/clock/dist/',
   'mcps/knowledge/dist/',
   'mcps/semantic-ui/dist/',
   'mcps/skills/dist/',
