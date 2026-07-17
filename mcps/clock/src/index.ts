@@ -10,7 +10,7 @@ import {
   assertTimeZone,
   systemTimeZone,
   textResult,
-} from './time-math.ts'
+} from './time-math.js'
 
 const dateTimeSchema = z.string().min(1).describe('ISO instant, ISO date, or local date-time. Local date-times require a timezone.')
 const timezoneSchema = z.string().min(1).describe('IANA timezone, for example UTC, Europe/London, or America/New_York.')

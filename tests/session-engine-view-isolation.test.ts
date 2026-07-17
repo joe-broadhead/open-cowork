@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createSessionEngine } from '@open-cowork/runtime-host/session-engine'
 
-test('getSessionView returns a clone so callers cannot mutate engine state (JOE-868)', () => {
+test('getSessionView seals views so callers cannot mutate engine state (JOE-868)', () => {
   const engine = createSessionEngine()
   engine.activateSession('ses_isolation')
   engine.applyStreamEvent({
@@ -10,13 +10,22 @@ test('getSessionView returns a clone so callers cannot mutate engine state (JOE-
     sessionId: 'ses_isolation',
     data: { type: 'busy' },
   } as never)
+
   const a = engine.getSessionView('ses_isolation')
   const b = engine.getSessionView('ses_isolation')
-  assert.notEqual(a, b)
+  // Identity is stable while the revision is cached (memoization-friendly).
+  assert.equal(a, b)
+  assert.ok(Object.isFrozen(a))
+
   const original = a.isGenerating
-  a.isGenerating = !original
+  assert.throws(() => {
+    // ESM is strict mode: assignment to a frozen property must throw.
+    ;(a as { isGenerating: boolean }).isGenerating = !original
+  }, TypeError)
+
   const c = engine.getSessionView('ses_isolation')
   assert.equal(c.isGenerating, original)
+  assert.equal(c, a)
 })
 
 test('createSessionEngine yields isolated engines for multi-tenant tests (JOE-872)', () => {
