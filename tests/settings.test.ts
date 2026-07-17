@@ -131,8 +131,8 @@ test('native permission ask defaults initialize fresh profiles with toggles enab
     assert.equal(settings.webPermission, 'allow')
     assert.equal(settings.webSearchEnabled, true)
     assert.equal(settings.taskPermission, 'allow')
-    assert.equal(settings.externalDirectoryPermission, 'allow')
-    assert.equal(settings.mcpPermission, 'allow')
+    assert.equal(settings.externalDirectoryPermission, 'ask')
+    assert.equal(settings.mcpPermission, 'ask')
     assert.equal(settings.requireApprovalBeforeSending, true)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
@@ -164,8 +164,8 @@ test('default public config initializes native permission toggles enabled', asyn
     assert.equal(settings.webPermission, 'allow')
     assert.equal(settings.webSearchEnabled, true)
     assert.equal(settings.taskPermission, 'allow')
-    assert.equal(settings.externalDirectoryPermission, 'allow')
-    assert.equal(settings.mcpPermission, 'allow')
+    assert.equal(settings.externalDirectoryPermission, 'ask')
+    assert.equal(settings.mcpPermission, 'ask')
     assert.equal(settings.notificationVoiceReplies, true)
     assert.equal(settings.notificationDailyDigest, false)
     assert.equal(settings.privacyKeepConversationHistory, true)
