@@ -68,6 +68,11 @@ import { isManagedCloudSecretRef } from './secret-ref-policy.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler, type CloudRetentionOptions } from './scheduler.ts'
+import {
+  DEFAULT_RUNTIME_DELTA_FLUSH_MS,
+  createRuntimeDeltaCoalescer,
+  type RuntimeDeltaCoalescer,
+} from './runtime-delta-coalescer.ts'
 import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { resolveEntitlementResolver } from './entitlements/entitlement-provider.ts'
@@ -1101,7 +1106,7 @@ export {
   DEFAULT_RUNTIME_DELTA_FLUSH_MS,
   createRuntimeDeltaCoalescer,
   type RuntimeDeltaCoalescer,
-} from './runtime-delta-coalescer.ts'
+}
 
 
 function loopErrorAttributes(error: unknown) {
