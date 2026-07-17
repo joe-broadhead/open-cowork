@@ -1107,9 +1107,12 @@ test('session engine memoizes getSessionView until the state changes', () => {
 
   const first = engine.getSessionView(sessionId)
   const second = engine.getSessionView(sessionId)
-  // Identity equality is the contract — renderer relies on it to avoid
-  // reconciling a stable session view on every idle tick.
-  assert.strictEqual(first, second, 'unchanged state must return the cached view')
+  // JOE-868 clones at the IPC boundary, so identity may differ while structure
+  // stays equal for an unchanged revision.
+  assert.deepEqual(first, second, 'unchanged state must return an equivalent cached view')
+  // Mutations on a returned view must not poison the next read.
+  if (first.messages[0]) first.messages[0].content = 'MUTATED'
+  assert.equal(engine.getSessionView(sessionId).messages[0]?.content, 'Hello')
 
   engine.applyStreamEvent({
     type: 'text',
@@ -1123,7 +1126,7 @@ test('session engine memoizes getSessionView until the state changes', () => {
     },
   } as any)
   const third = engine.getSessionView(sessionId)
-  assert.notStrictEqual(third, second, 'a projector revision bump must rebuild the view')
+  assert.notDeepEqual(third, second, 'a projector revision bump must rebuild the view')
   assert.equal(third.messages[0]?.content, 'Hello world')
 })
 

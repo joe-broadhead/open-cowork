@@ -390,6 +390,8 @@ test('custom agent permission overrides emit collapsed OpenCode permission keys'
     saveSettings({
       bashPermission: 'allow',
       fileWritePermission: 'allow',
+      externalDirectoryPermission: 'allow',
+      mcpPermission: 'allow',
     })
     const catalog = buildCustomAgentCatalog({
       builtinTools: builtinTools as any,
