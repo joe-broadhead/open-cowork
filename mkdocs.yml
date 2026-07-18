@@ -113,9 +113,9 @@ nav:
       - Team: agent-authoring.md
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
-      - OpenWiki Knowledge Base: openwiki.md
+      - Wiki: openwiki.md
       - Knowledge store ownership: knowledge-store-ownership.md
-      - OpenCode Gateway: opencode-gateway.md
+      - Gateway: opencode-gateway.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
@@ -172,6 +172,9 @@ nav:
       - Roadmap: roadmap.md
       - Contributing: contributing.md
       - First Contribution: first-contribution.md
+      - "ADR: Monorepo privacy": adr/monorepo-privacy.md
+      - "ADR: Product partitions": adr/product-partitions.md
+      - "ADR: Knowledge vs Wiki": adr/knowledge-vs-wiki.md
 
 extra:
   generator: false

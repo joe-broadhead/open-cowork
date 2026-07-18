@@ -63,16 +63,17 @@ may still refer to the short tool name such as `bar_chart`.
     desktop builds as `Resources/bin/time-keep` (pin:
     `third_party/time-keep/VERSION`). Fetch with `pnpm binaries:time-keep`.
 
--   :material-source-branch-sync: **OpenCode Gateway MCP** <span class="status-badge external">external</span>
+-   :material-source-branch-sync: **Gateway MCP** <span class="status-badge external">external</span>
 
     ---
 
-    Optional sibling service for durable Initiatives, Issues, scheduler
-    runs, Mission Control, and channel operations. It is not bundled as a
-    default Open Cowork MCP; install and run OpenCode Gateway separately,
-    then add its `gateway` stdio MCP only for trusted local/downstream
-    profiles. Use the `read`, `operate`, or `admin` tool tier deliberately.
-    See [OpenCode Gateway](opencode-gateway.md).
+    Optional sibling **Gateway** product for durable Initiatives, Issues,
+    scheduler runs, Mission Control, and related tools. Not bundled as a
+    default Open Cowork MCP; install `cowork-gateway` (or legacy
+    opencode-gateway) separately, then add its stdio MCP only for trusted
+    local/downstream profiles. Use the `read`, `operate`, or `admin` tool
+    tier deliberately. Distinct from **Channel Gateway**. See
+    [Gateway](opencode-gateway.md).
 
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 

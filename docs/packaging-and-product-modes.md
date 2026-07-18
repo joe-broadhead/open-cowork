@@ -12,31 +12,37 @@ support, and downstream builds.
 The most important rule is unchanged: Open Cowork is a product layer on top of
 OpenCode. It should not become a second OpenCode runtime.
 
+**Source of truth for monorepo product partitions and short names (Gateway,
+Wiki, Channel Gateway):** [Product partitions ADR](adr/product-partitions.md).
+**Importing private product history into this public repo:**
+[Monorepo privacy ADR](adr/monorepo-privacy.md).
+
 ## Product Names
 
-| Public name | Status | Owning code | Release artifact |
+| Public name | Status | Owning code (today → target) | Release artifact |
 | --- | --- | --- | --- |
 | Open Cowork Desktop | Supported | `apps/desktop` | macOS `.dmg`/`.zip`, Linux `.AppImage`/`.deb` |
 | Open Cowork Cloud | Supported for self-host beta and private hosted beta | cloud server code under `packages/cloud-server`; the browser UI is the unified renderer (`packages/app/src`) served by the cloud at `GET /` | `open-cowork-cloud` OCI image and Helm/Compose assets |
-| Open Cowork Gateway | Supported as a cloud channel adapter | `apps/gateway`, `packages/gateway-*` | `open-cowork-gateway` OCI image and Helm/Compose assets |
-| Open Cowork Standalone Gateway | Supported as a Gateway-only execution appliance | `apps/standalone-gateway` | source package and `open-cowork-gateway-standalone` CLI; OCI image can be added after the release gate exists |
+| **Channel Gateway** | Supported as a cloud channel adapter | `apps/gateway` → `apps/channel-gateway`; `packages/gateway-*` | OCI: `open-cowork-gateway` today → `open-cowork-channel-gateway` (dual-tag window) |
+| **Standalone Gateway** | Supported as a Gateway-only execution appliance | `apps/standalone-gateway` | CLI `open-cowork-gateway-standalone`; OCI image after release gate |
+| **Gateway** (durable work coordinator) | Monorepo import in progress | external → `products/gateway` | bin **`cowork-gateway`** (optional) |
+| **Wiki** | Monorepo import in progress | external → `products/wiki` | bin **`cowork-wiki`** (optional) |
+| **Knowledge** | Supported in-app | runtime-host + `mcps/knowledge` | bundled with Desktop/Cloud; not a separate CLI |
 | Open Cowork Mobile | Reserved | none yet | no artifact |
 | Open Cowork Teams | Reserved product/edition name | team and org policy surfaces across Cloud/Gateway | no separate runtime |
 
-Use **Open Cowork Gateway** as the user-facing umbrella. Be precise in
-operator docs:
+Be precise in operator docs — never use unqualified “the gateway”:
 
-- **Cloud Channel Gateway** means `apps/gateway`: it connects chat providers
-  to Open Cowork Cloud through HTTP/SSE and never spawns OpenCode.
-- **Standalone Gateway** means `apps/standalone-gateway`: it owns a private
-  OpenCode runtime and Gateway Postgres for Gateway-only deployments.
-
-Do not use `OpenCode Gateway` for Open Cowork product surfaces; OpenCode is
-the runtime and Open Cowork owns the Gateway product modes above. If a doc is
-specifically about the separate external
-[`opencode-gateway`](https://github.com/joe-broadhead/opencode-gateway)
-project, name it explicitly as **OpenCode Gateway** and mark it as an external
-integration rather than an Open Cowork Gateway mode.
+- **Channel Gateway** (`apps/gateway` today): chat providers → Open Cowork Cloud
+  through HTTP/SSE; never spawns OpenCode.
+- **Standalone Gateway** (`apps/standalone-gateway`): private OpenCode runtime +
+  Gateway Postgres for Gateway-only deployments.
+- **Gateway** (`products/gateway` after import; historically
+  `opencode-gateway`): durable Initiatives/Issues/scheduler/Mission Control +
+  MCP beside OpenCode. Optional; not default-on in public Desktop.
+- **Wiki** (`products/wiki` after import): standalone git-backed knowledge
+  product. Distinct from in-app **Knowledge**
+  ([Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md)).
 
 ## Package and Image Names
 
@@ -45,18 +51,22 @@ integration rather than an Open Cowork Gateway mode.
 | Desktop app | `@open-cowork/desktop` workspace package | internal workspace package |
 | Cloud image | `ghcr.io/<owner>/open-cowork-cloud:<tag>` | release image |
 | Cloud Helm chart | `helm/open-cowork-cloud` | release/deployment asset |
-| Cloud Channel Gateway app | `@open-cowork/gateway` workspace package | internal workspace package |
-| Cloud Channel Gateway image | `ghcr.io/<owner>/open-cowork-gateway:<tag>` | release image |
-| Cloud Channel Gateway Helm chart | `helm/open-cowork-gateway` | release/deployment asset |
+| Channel Gateway app | `@open-cowork/gateway` today → `@open-cowork/channel-gateway` | internal workspace package |
+| Channel Gateway image | `ghcr.io/<owner>/open-cowork-gateway:<tag>` today → `open-cowork-channel-gateway` | release image (compat dual-tag) |
+| Channel Gateway Helm chart | `helm/open-cowork-gateway` | release/deployment asset |
 | Standalone Gateway app | `@open-cowork/standalone-gateway` workspace package | internal workspace package |
 | Standalone Gateway CLI | `open-cowork-gateway-standalone` | source-built CLI |
+| Durable Gateway CLI | `cowork-gateway` (target after import) | independent product version (continues 1.3.x line) |
+| Wiki CLI | `cowork-wiki` (target after import) | independent product version |
 | Shared API client | `@open-cowork/cloud-client` | workspace source package; public SDK packaging requires its own release checklist |
 | Shared contracts | `@open-cowork/shared` | internal/shared workspace package |
 
-The release workflow publishes Desktop artifacts plus Cloud and Gateway OCI
-images. Workspace packages are not automatically public npm packages. If a
-package is promoted to a public SDK, it needs semver, API stability docs,
-README examples, changelog entries, and package-level provenance.
+The desktop/cloud release workflow publishes Desktop artifacts plus Cloud and
+**Channel Gateway** OCI images. Workspace packages are not automatically public
+npm packages. Gateway and Wiki publish as **independent** product artifacts
+when enabled (not on every Desktop tag). If a package is promoted to a public
+SDK, it needs semver, API stability docs, README examples, changelog entries,
+and package-level provenance.
 
 ## Product Modes
 

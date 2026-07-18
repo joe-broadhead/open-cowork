@@ -676,14 +676,14 @@ It also ships one command-launched bundled MCP (`type: local` with a
   queries, date arithmetic, business days, offline holidays (2000–2030), and
   SQLite timers (bundled native binary; pin in `third_party/time-keep/VERSION`)
 
-OpenWiki and OpenCode Gateway are no longer shipped as default MCP entries.
-Current OpenWiki is an optional documentation CLI workflow (see
-[OpenWiki](openwiki.md)). OpenCode Gateway is an optional external durable-work
-coordinator with its own daemon, dashboard, OpenCode profile installer, and
-`gateway_*` MCP tools (see [OpenCode Gateway](opencode-gateway.md)). Add it as
-a user-managed or downstream MCP only when the local Gateway daemon and
-credential file are intentionally provisioned; do not bundle it as a default
-public app dependency.
+**Wiki** and durable **Gateway** are not shipped as default MCP entries.
+Wiki is an optional standalone git-backed knowledge product (see
+[Wiki](openwiki.md)); it is not the in-app Knowledge store. Gateway is an
+optional durable work coordinator with its own daemon, dashboard, and MCP
+tools (see [Gateway](opencode-gateway.md)). Add either only as a user-managed
+or downstream MCP when intentionally provisioned; do not bundle them as
+default public app dependencies. See
+[Product partitions ADR](adr/product-partitions.md).
 
 User-added MCPs are stored separately from the shipped config.
 

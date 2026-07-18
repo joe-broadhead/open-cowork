@@ -41,5 +41,12 @@ When changing Knowledge:
       store, not a third ad-hoc store
 - [ ] Avoid embedding SQL or SQLite pragmas in UI or MCP packages
 
-See also [OpenWiki](openwiki.md) for the external docs CLI boundary (not a third
-in-product knowledge store).
+## Knowledge vs Wiki
+
+In-app **Knowledge** (this page) is **not** the optional **Wiki** product
+(`products/wiki` / `cowork-wiki`). Dual-track policy and non-merge rules:
+
+- [Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md)
+- [Wiki product](openwiki.md)
+
+Do not add a third ad-hoc store; do not dual-write Knowledge and Wiki.
