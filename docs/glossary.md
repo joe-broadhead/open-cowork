@@ -146,17 +146,19 @@ Standalone Gateway
     `open-cowork-gateway-standalone`.
 
 Gateway
-:   Optional durable work coordinator product (import target
-    `products/gateway`; historically opencode-gateway). Owns Initiatives,
-    Issues, scheduler, Mission Control, and durable MCP tools beside
-    OpenCode. Install bin target: **`cowork-gateway`**. Not default-on in
-    public Desktop. See [Gateway](opencode-gateway.md) and
+:   Optional durable work coordinator product at `products/gateway`
+    (package `cowork-gateway`; historically opencode-gateway). Owns
+    Initiatives, Issues, scheduler, Mission Control, and durable MCP tools
+    beside OpenCode. Install bins: **`cowork-gateway`** (preferred) and
+    `opencode-gateway` (compat). Not default-on in public Desktop. See
+    [Gateway](opencode-gateway.md) and
     [Product partitions ADR](adr/product-partitions.md).
 
 Wiki
-:   Optional git-backed knowledge product (import target `products/wiki`;
-    historically open-wiki). CLI target: **`cowork-wiki`**. Distinct from
-    in-app **Knowledge**. See [Wiki](openwiki.md) and
+:   Optional git-backed knowledge product at `products/wiki` (packages
+    `@openwiki/*`; historically open-wiki). Install bins: **`cowork-wiki`**
+    (preferred) and `openwiki` (compat). Distinct from in-app **Knowledge**.
+    See [Wiki](openwiki.md) and
     [Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md).
 
 Knowledge

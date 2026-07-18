@@ -1,51 +1,67 @@
 ---
 title: Gateway
-description: Optional durable work coordinator product (cowork-gateway); distinct from Channel Gateway and Standalone Gateway.
+description: Optional durable work coordinator (cowork-gateway). Distinct from Channel Gateway and Standalone Gateway.
 ---
 
 # Gateway
 
-**Gateway** is the Open Cowork family name for the optional durable work
-coordinator historically published as
-[opencode-gateway](https://github.com/joe-broadhead/opencode-gateway). After
-monorepo import it lives under `products/gateway` and installs as
-**`cowork-gateway`** (see [Product partitions ADR](adr/product-partitions.md)).
+**Gateway** is the Open Cowork product name for the optional **durable work
+coordinator**. Source of truth is the monorepo partition
+[`products/gateway`](https://github.com/joe-broadhead/open-cowork/tree/master/products/gateway)
+(package `cowork-gateway`, CLI **`cowork-gateway`**, compat bin
+`opencode-gateway`).
 
-Gateway owns local Initiatives/Issues, scheduler state, channel bindings for
-its own daemon model, Mission Control, and Gateway MCP tools. **OpenCode**
-still owns sessions, agents, skills, tools, permissions, and model execution.
+## Operator mental model
 
-Public Desktop builds **do not** bundle Gateway as a default MCP. Treat it as
-a trusted user-managed or downstream integration until explicitly linked.
+| Role | Owner |
+| --- | --- |
+| Sessions, agents, skills, tools, permissions, model execution | **OpenCode** |
+| Durable Initiatives/Issues, scheduler, Mission Control, Gateway MCP | **Gateway** |
+| Chat providers → Cloud (no OpenCode spawn) | **Channel Gateway** |
+| Gateway-only appliance + private OpenCode | **Standalone Gateway** |
+| In-app notes / proposals | **Knowledge** (not Gateway) |
+| Git-backed knowledge product | **Wiki** (not Gateway) |
 
-## Do not confuse Gateway with other “gateway” surfaces
+OpenCode **executes**. Gateway **coordinates durable work** that outlives any
+one session. Public Desktop builds **do not** bundle or pre-enable Gateway MCP.
 
-| Name | Code (today → target) | Role |
+## Do not confuse “gateway” surfaces
+
+| Name | Path | Role |
 | --- | --- | --- |
-| **Gateway** (this page) | external / `products/gateway` | Durable work coordinator + MCP for OpenCode |
-| **Channel Gateway** | `apps/channel-gateway` → `apps/channel-gateway` | Chat providers → Open Cowork Cloud (no OpenCode spawn) |
+| **Gateway** (this page) | `products/gateway` | Durable work coordinator + MCP beside OpenCode |
+| **Channel Gateway** | `apps/channel-gateway` | Chat providers → Open Cowork Cloud |
 | **Standalone Gateway** | `apps/standalone-gateway` | Gateway-only appliance with private OpenCode + Postgres |
 
-See [Packaging and product modes](packaging-and-product-modes.md).
+Never use unqualified “the gateway” in operator docs — always qualify.
 
-## Current integration posture
+## Install (standalone)
 
-- Install and operate Gateway separately (`cowork-gateway` once packaged;
-  until monorepo import, use the private opencode-gateway install path).
-- Run its setup/update flow for daemon config, token file, OpenCode assets,
-  and service lifecycle.
-- Add the Gateway MCP only when the OpenCode profile intentionally needs
-  durable tools.
-- Keep tool tiers narrow: `read` / `operate` / `admin` as documented by the
-  Gateway product.
-- Prefer token-file env vars over embedding bearer tokens in config.
+From a monorepo checkout (developers):
 
-## Manual MCP entry (shape)
+```bash
+pnpm install --frozen-lockfile
+pnpm --filter cowork-gateway build
+pnpm --filter cowork-gateway exec npm pack
+node products/gateway/scripts/standalone-smoke.mjs
+```
 
-When a local daemon is running and you want Desktop’s managed OpenCode
-runtime to see it, add a custom MCP pointing at the Gateway stdio server.
-Exact paths change with install method; prefer the published bin after
-monorepo packaging:
+From a packed tarball (clean machine):
+
+```bash
+npm install -g ./cowork-gateway-*.tgz
+cowork-gateway --version
+cowork-gateway doctor
+```
+
+Release tags use `gateway@v*` / `gateway-v*` (workflow
+`.github/workflows/release-gateway.yml`). Desktop `v*` releases do **not**
+publish Gateway by default.
+
+## Manual MCP entry (default off)
+
+When a local daemon is running and you intentionally want Desktop’s managed
+OpenCode runtime to see it:
 
 ```json
 {
@@ -62,24 +78,21 @@ monorepo packaging:
 }
 ```
 
-Use the port from `cowork-gateway status` (or legacy `opencode-gateway status`)
-if it is not `4097`. Validate owner-only token files; fail closed on unsafe
-paths.
+Use the port from `cowork-gateway status` if it is not `4097`. Prefer
+owner-only token files over embedding bearer tokens in config. Soft Desktop
+“link local Gateway” helpers stay **default off**
+([JOE-909](https://linear.app/joe-broadhead/issue/JOE-909)).
 
 ## Boundary notes
 
-- Open Cowork composes with Gateway through OpenCode-native MCP
-  configuration. It should not mirror Gateway’s scheduler, issue store, or
-  Mission Control inside Electron.
-- Public upstream Open Cowork builds must not assume a local Gateway
-  checkout, daemon, token file, or dashboard exists.
-- Downstream distributions may preconfigure Gateway MCP only when they also
-  own installation and support.
-- Cloud Web and Cloud APIs must not depend on a local Gateway daemon.
+- Compose via MCP / HTTP / config only — do not import Gateway into Electron main.
+- Public upstream builds must not assume a local Gateway checkout or daemon.
+- Downstream distributions may preconfigure Gateway MCP only when they own install and support.
+- Cloud Web / Channel Gateway must not require a local Gateway daemon.
 
 ## Related
 
+- Product docs in-tree: `products/gateway/docs/`
+- [Packaging and product modes](packaging-and-product-modes.md)
 - [Product partitions ADR](adr/product-partitions.md)
-- [Monorepo privacy ADR](adr/monorepo-privacy.md)
-- [Standalone Gateway](standalone-gateway.md)
-- [Gateway appliance (Channel / remote)](gateway-appliance.md)
+- [Standalone Gateway appliance](gateway-appliance.md)

@@ -49,3 +49,6 @@ jobs:
 
       - name: Release check (if present)
         run: pnpm --filter cowork-gateway release:check
+
+      - name: Standalone install smoke
+        run: node products/gateway/scripts/standalone-smoke.mjs

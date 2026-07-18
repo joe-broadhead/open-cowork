@@ -154,6 +154,10 @@
       "types": "./dist/mcp-url-policy.d.ts",
       "import": "./dist/mcp-url-policy.js"
     },
+    "./product-mcp-link": {
+      "types": "./dist/product-mcp-link.d.ts",
+      "import": "./dist/product-mcp-link.js"
+    },
     "./native-customizations": {
       "types": "./dist/native-customizations.d.ts",
       "import": "./dist/native-customizations.js"

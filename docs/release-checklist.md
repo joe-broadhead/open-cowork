@@ -6,8 +6,18 @@ Reference workflows in the repository root:
 
 - [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS unpackaged smoke validation, Windows pre-package targeted validation, macOS/Windows/Linux packaged smoke validation, and macOS/Windows/Linux packaging validation.
 - [`.github/workflows/docs.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/docs.yml) — strict MkDocs build + GitHub Pages deploy.
-- [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release.yml) — tag-driven release, signing preflight, checksums, provenance.
+- [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release.yml) — tag-driven **Desktop/Cloud** release, signing preflight, checksums, provenance. Does **not** publish Gateway/Wiki packs by default.
+- [`.github/workflows/release-gateway.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release-gateway.yml) — standalone **Gateway** (`gateway@v*` / manual). Pack + standalone smoke; no Electron.
+- [`.github/workflows/release-wiki.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release-wiki.yml) — standalone **Wiki** (`wiki@v*` / manual). `pack:cli` + standalone smoke; no Electron.
 - [`.github/workflows/monthly-maintenance.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/monthly-maintenance.yml) — monthly drift checks for dependencies and SDK compatibility.
+
+### Product partition releases (independent of Desktop)
+
+- [ ] Gateway version/tag aligns with `products/gateway/package.json` (1.3.x line)
+- [ ] Wiki pack version aligns with `products/wiki` / `@openwiki/cli` policy
+- [ ] `node products/gateway/scripts/standalone-smoke.mjs` green on the release candidate tarball
+- [ ] `node products/wiki/scripts/standalone-smoke.mjs` green on the release candidate tarball
+- [ ] Desktop release notes do not claim Gateway/Wiki publish unless product workflows also ran
 
 ## Release Claim Levels
 

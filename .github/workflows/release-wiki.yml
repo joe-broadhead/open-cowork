@@ -1,0 +1,85 @@
+# Standalone Wiki product release (JOE-912). Does not build Electron/Desktop.
+name: Release Wiki
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip unit tests (emergency only)'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'wiki@v*'
+      - 'wiki-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-wiki-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-wiki:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Product boundaries
+        run: pnpm boundaries:check
+
+      - name: Typecheck
+        run: pnpm --filter cowork-wiki-workspace typecheck
+
+      - name: Test
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests != true }}
+        run: pnpm --filter cowork-wiki-workspace test
+
+      - name: Pack CLI
+        run: pnpm --filter cowork-wiki-workspace pack:cli
+
+      - name: Standalone smoke
+        run: node products/wiki/scripts/standalone-smoke.mjs "$(ls products/wiki/artifacts/npm/*.tgz | head -1)"
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p artifacts/wiki
+          cp products/wiki/artifacts/npm/*.tgz artifacts/wiki/
+          cd artifacts/wiki
+          shasum -a 256 *.tgz | tee SHA256SUMS
+
+      - name: Upload pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowork-wiki-pack
+          path: artifacts/wiki/*
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" \
+            --title "Wiki ${tag}" \
+            --notes "Standalone Wiki CLI pack from monorepo products/wiki. Does not include Desktop." \
+            --verify-tag \
+            artifacts/wiki/* || \
+          gh release upload "$tag" artifacts/wiki/* --clobber

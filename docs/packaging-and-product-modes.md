@@ -37,12 +37,14 @@ Be precise in operator docs — never use unqualified “the gateway”:
   through HTTP/SSE; never spawns OpenCode.
 - **Standalone Gateway** (`apps/standalone-gateway`): private OpenCode runtime +
   Gateway Postgres for Gateway-only deployments.
-- **Gateway** (`products/gateway` after import; historically
-  `opencode-gateway`): durable Initiatives/Issues/scheduler/Mission Control +
-  MCP beside OpenCode. Optional; not default-on in public Desktop.
-- **Wiki** (`products/wiki` after import): standalone git-backed knowledge
-  product. Distinct from in-app **Knowledge**
-  ([Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md)).
+- **Gateway** (`products/gateway`; package `cowork-gateway`): durable
+  Initiatives/Issues/scheduler/Mission Control + MCP beside OpenCode. Optional;
+  not default-on in public Desktop. Standalone release:
+  `.github/workflows/release-gateway.yml` (`gateway@v*` tags).
+- **Wiki** (`products/wiki`; CLI `cowork-wiki` / `openwiki`): standalone
+  git-backed knowledge product. Distinct from in-app **Knowledge**
+  ([Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md)). Standalone release:
+  `.github/workflows/release-wiki.yml` (`wiki@v*` tags).
 
 ## Package and Image Names
 
@@ -56,8 +58,8 @@ Be precise in operator docs — never use unqualified “the gateway”:
 | Channel Gateway Helm chart | `helm/open-cowork-gateway` | release/deployment asset |
 | Standalone Gateway app | `@open-cowork/standalone-gateway` workspace package | internal workspace package |
 | Standalone Gateway CLI | `open-cowork-gateway-standalone` | source-built CLI |
-| Durable Gateway CLI | `cowork-gateway` (target after import) | independent product version (continues 1.3.x line) |
-| Wiki CLI | `cowork-wiki` (target after import) | independent product version |
+| Durable Gateway CLI | `cowork-gateway` (+ compat `opencode-gateway`) | independent product version (1.3.x line) |
+| Wiki CLI | `cowork-wiki` (+ compat `openwiki`) via `@openwiki/cli` pack | independent product version (0.x) |
 | Shared API client | `@open-cowork/cloud-client` | workspace source package; public SDK packaging requires its own release checklist |
 | Shared contracts | `@open-cowork/shared` | internal/shared workspace package |
 

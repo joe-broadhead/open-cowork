@@ -5,6 +5,9 @@
 > `cowork-gateway`; CLI bins `cowork-gateway` (preferred) and
 > `opencode-gateway` (compat shim). Import source commit is recorded in
 > `.import-source-commit`. Path-filtered CI: `.github/workflows/ci-gateway.yml`.
+> Standalone smoke: `node scripts/standalone-smoke.mjs` (from monorepo root:
+> `pnpm smoke:gateway-standalone`). Product release workflow:
+> `.github/workflows/release-gateway.yml` (`gateway@v*` tags).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node 22.13+ / 23.4+](https://img.shields.io/badge/node-22.13%2B%20%7C%2023.4%2B-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)

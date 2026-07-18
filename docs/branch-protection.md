@@ -44,7 +44,12 @@ protection in GitHub before merging the rename.
 
 Path-filtered workflows (not always required on Desktop-only PRs):
 
-- `CI Gateway` (`.github/workflows/ci-gateway.yml`) — `products/gateway/**`
-- `CI Wiki` (`.github/workflows/ci-wiki.yml`) — `products/wiki/**`
+- `CI Gateway` (`.github/workflows/ci-gateway.yml`) — `products/gateway/**` (includes standalone smoke)
+- `CI Wiki` (`.github/workflows/ci-wiki.yml`) — `products/wiki/**` (includes standalone smoke)
+
+Product release workflows (independent of Desktop `v*` tags):
+
+- `Release Gateway` (`.github/workflows/release-gateway.yml`) — `gateway@v*` / manual
+- `Release Wiki` (`.github/workflows/release-wiki.yml`) — `wiki@v*` / manual
 
 Core `CI` workflow remains the branch-protection baseline for monorepo master.

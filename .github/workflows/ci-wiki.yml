@@ -46,3 +46,6 @@ jobs:
 
       - name: Build Wiki CLI pack
         run: pnpm --filter cowork-wiki-workspace pack:cli
+
+      - name: Standalone install smoke
+        run: node products/wiki/scripts/standalone-smoke.mjs

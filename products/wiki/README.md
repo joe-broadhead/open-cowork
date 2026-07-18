@@ -6,7 +6,10 @@
 > (preferred) and `openwiki` (compat). Nested `pnpm-workspace.yaml` is disabled
 > (`pnpm-workspace.yaml.nested-disabled`) so the monorepo root owns workspaces.
 > Import source commit is recorded in `.import-source-commit`. Path-filtered CI:
-> `.github/workflows/ci-wiki.yml`.
+> `.github/workflows/ci-wiki.yml`. Standalone smoke:
+> `node scripts/standalone-smoke.mjs` (from monorepo root:
+> `pnpm smoke:wiki-standalone`). Product release workflow:
+> `.github/workflows/release-wiki.yml` (`wiki@v*` tags).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node 22.22.3+](https://img.shields.io/badge/node-22.22.3%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)

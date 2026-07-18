@@ -98,6 +98,7 @@ await fs.writeFile(
       keywords: ["openwiki", "wiki", "mcp", "agents", "knowledge-base"],
       bin: {
         openwiki: "./openwiki.js",
+        "cowork-wiki": "./openwiki.js",
       },
       types: "./openwiki.d.ts",
       files: [
