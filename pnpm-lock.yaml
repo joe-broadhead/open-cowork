@@ -489,10 +489,6 @@ importers:
         version: 6.0.3
 
   packages/gateway-channel:
-    dependencies:
-      '@open-cowork/shared':
-        specifier: workspace:*
-        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.20.0
