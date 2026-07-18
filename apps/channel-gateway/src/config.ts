@@ -854,18 +854,35 @@ function redactValue(key: string, value: unknown): unknown {
 
 export function redactGatewayDiagnosticText(value: string) {
   // Product-stable markers first (tests/contracts expect Bearer [redacted],
-  // token=[redacted], /Users/[redacted]). Then shared token-family scrubber
-  // covers the long tail (ya29., AIza, JWT, ghp_, oc*, etc.) without forking.
+  // token=[redacted] query form, /Users/[redacted]). Shared token-family
+  // scrubbing covers the long tail (ya29., AIza, JWT, ghp_, oc*, etc.).
+  // URLs are placeholder-protected so shared's whole-query collapse cannot
+  // rewrite `?token=[redacted]` into `?[REDACTED_QUERY]`.
   const bearerPlaceholder = '\uE000CGW_BEARER_REDACTED\uE001'
+  const urlPlaceholders: string[] = []
   let text = String(value || '')
+    .replace(/\bhttps?:\/\/[^\s"'<>]+/gi, (url) => {
+      const index = urlPlaceholders.length
+      urlPlaceholders.push(redactUrlSecrets(url))
+      return `\uE000CGW_URL_${index}\uE001`
+    })
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, bearerPlaceholder)
-  text = redactLocalPaths(redactUrlSecretsInText(text)
+  text = text
     .replace(/\b([A-Za-z0-9_-]{0,64}(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]{0,64})\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{16,}\2/gi, (_match, key: string) => {
       return `${key}=[redacted]`
     })
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]'))
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
   text = sharedRedactSecretText(text, Number.MAX_SAFE_INTEGER)
-  return text.split(bearerPlaceholder).join('Bearer [redacted]')
+  text = text.split(bearerPlaceholder).join('Bearer [redacted]')
+  for (let index = 0; index < urlPlaceholders.length; index += 1) {
+    text = text.split(`\uE000CGW_URL_${index}\uE001`).join(urlPlaceholders[index]!)
+  }
+  // Paths last so shared export sanitizer cannot rewrite product markers
+  // (`/Users/[redacted]`) into `/Users/[REDACTED_HOME]`.
+  return redactLocalPaths(text)
+    .replace(/\/Users\/\[REDACTED_HOME\]/g, '/Users/[redacted]')
+    .replace(/\/home\/\[REDACTED_HOME\]/g, '/home/[redacted]')
+    .replace(/[A-Z]:\\Users\\\[REDACTED_HOME\]/gi, 'C:\\Users\\[redacted]')
 }
 
 function redactUrlSecretsInText(value: string) {
