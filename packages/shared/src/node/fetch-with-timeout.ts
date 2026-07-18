@@ -51,11 +51,14 @@ export async function withDeadline<T>(
 ): Promise<T> {
   if (!timeoutMs || timeoutMs <= 0) return promise
   let timeout: NodeJS.Timeout | undefined
+  // Keep the deadline timer ref'd so it still fires when the raced promise is
+  // the only pending work (unref'd timers let node:test drain mid-suite).
   const deadline = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
-    timeout.unref?.()
   })
-  return Promise.race([promise, deadline]).finally(() => {
+  try {
+    return await Promise.race([promise, deadline])
+  } finally {
     if (timeout) clearTimeout(timeout)
-  })
+  }
 }

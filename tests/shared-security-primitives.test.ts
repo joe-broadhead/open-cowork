@@ -57,17 +57,20 @@ test('isLoopbackOrPrivateHost covers RFC1918 and localhost', () => {
 })
 
 test('withDeadline rejects after timeout', async () => {
-  // Resolvable hang so the test file does not leave a forever-pending promise
-  // (node:test cancels siblings when the event loop drains with open handles).
-  let release!: () => void
-  const hang = new Promise<void>((resolve) => {
-    release = resolve
+  let lateSettled = false
+  const late = new Promise<string>((resolve) => {
+    setTimeout(() => {
+      lateSettled = true
+      resolve('late')
+    }, 200)
   })
   await assert.rejects(
-    () => withDeadline(hang, 20, 'slow'),
-    /timed out after 20ms/,
+    () => withDeadline(late, 30, 'slow'),
+    /timed out after 30ms/,
   )
-  release()
+  // Drain the late timer so the suite does not leak a pending promise/handle.
+  await new Promise((resolve) => setTimeout(resolve, 220))
+  assert.equal(lateSettled, true)
 })
 
 test('fetchWithTimeout is exported as a function', () => {
