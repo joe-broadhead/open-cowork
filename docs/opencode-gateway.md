@@ -79,8 +79,14 @@ OpenCode runtime to see it:
 ```
 
 Use the port from `cowork-gateway status` if it is not `4097`. Prefer
-owner-only token files over embedding bearer tokens in config. Soft Desktop
-“link local Gateway” helpers stay **default off**
+owner-only token files over embedding bearer tokens in config.
+
+### Desktop soft link (default off)
+
+In **Tools & Skills → Connections**, use **Link local Gateway**. Desktop
+detects `cowork-gateway` / `opencode-gateway` on `PATH` (or a path you enter),
+writes a **machine-scope** custom MCP, and never embeds bearer secrets (token
+**file paths** only). Fresh installs have no Gateway MCP until you link.
 ([JOE-909](https://linear.app/joe-broadhead/issue/JOE-909)).
 
 ## Boundary notes

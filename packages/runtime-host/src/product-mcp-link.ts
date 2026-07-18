@@ -1,12 +1,14 @@
 /**
  * Soft-link helpers for optional Gateway / Wiki MCP entries (JOE-909).
  *
- * Pure builders only: Desktop Settings may call these later. Public builds
- * never pre-enable these MCPs in open-cowork.config.json.
+ * Pure builders + CustomMcpConfig conversion. Public builds never pre-enable
+ * these MCPs in open-cowork.config.json; Desktop only writes machine-scope
+ * custom MCP entries when the user explicitly links.
  */
 
 import { accessSync, constants, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join } from 'node:path'
+import type { CustomMcpConfig } from '@open-cowork/shared'
 
 export type ProductMcpLinkKind = 'gateway' | 'wiki'
 
@@ -33,15 +35,34 @@ export type ProductMcpLinkResult =
         command: string[]
         environment?: Record<string, string>
       }
+      /** Ready for saveCustomMcp / custom:add-mcp. */
+      customMcp: CustomMcpConfig
       label: string
       description: string
+      resolvedBinary: string
     }
   | {
       ok: false
-      code: 'binary_missing' | 'unsafe_command' | 'token_file_invalid' | 'unsupported'
+      code: 'binary_missing' | 'unsafe_command' | 'token_file_invalid' | 'unsupported' | 'wiki_root_required'
       message: string
       installHint: string
     }
+
+export type ProductMcpProbe = {
+  kind: ProductMcpLinkKind
+  name: string
+  label: string
+  found: boolean
+  resolvedBinary?: string
+  linked: boolean
+  installHint: string
+  docsPath: string
+}
+
+export const PRODUCT_MCP_LINK_NAMES = {
+  gateway: 'cowork-gateway',
+  wiki: 'cowork-wiki',
+} as const satisfies Record<ProductMcpLinkKind, string>
 
 const DEFAULT_BINS: Record<ProductMcpLinkKind, string[]> = {
   gateway: ['cowork-gateway', 'opencode-gateway'],
@@ -53,6 +74,16 @@ const INSTALL_HINTS: Record<ProductMcpLinkKind, string> = {
     'Install Gateway standalone (`cowork-gateway`), then retry. See docs/opencode-gateway.md.',
   wiki:
     'Install Wiki standalone (`cowork-wiki` / `openwiki`), then retry. See docs/openwiki.md.',
+}
+
+const DOCS_PATHS: Record<ProductMcpLinkKind, string> = {
+  gateway: 'docs/opencode-gateway.md',
+  wiki: 'docs/openwiki.md',
+}
+
+const LABELS: Record<ProductMcpLinkKind, string> = {
+  gateway: 'Gateway',
+  wiki: 'Wiki',
 }
 
 /** Reject shell metacharacters and relative traversal in command fields. */
@@ -154,32 +185,127 @@ export function buildProductMcpLink(request: ProductMcpLinkRequest): ProductMcpL
     if (request.tokenFile) {
       environment.OPENCODE_GATEWAY_HTTP_READ_TOKEN_FILE = request.tokenFile
     }
+    const command = [resolved, 'mcp']
+    const customMcp = toCustomMcpConfig({
+      name: PRODUCT_MCP_LINK_NAMES.gateway,
+      label: LABELS.gateway,
+      description: 'Optional durable work coordinator MCP (user-linked; default off).',
+      command,
+      environment,
+    })
     return {
       ok: true,
-      name: 'cowork-gateway',
-      config: {
-        type: 'local',
-        command: [resolved, 'mcp'],
-        environment,
-      },
-      label: 'Gateway',
-      description: 'Optional durable work coordinator MCP (user-linked; default off).',
+      name: PRODUCT_MCP_LINK_NAMES.gateway,
+      config: { type: 'local', command, environment },
+      customMcp,
+      label: LABELS.gateway,
+      description: customMcp.description || '',
+      resolvedBinary: resolved,
     }
   }
 
-  // wiki
+  // Wiki stdio MCP requires an explicit root for a useful local link.
+  if (!request.wikiRoot?.trim()) {
+    return {
+      ok: false,
+      code: 'wiki_root_required',
+      message: 'Wiki root path is required (the git-backed workspace directory).',
+      installHint: INSTALL_HINTS.wiki,
+    }
+  }
+  const wikiRoot = request.wikiRoot.trim()
+  const rootUnsafe = assertSafeCommandPath(wikiRoot)
+  if (rootUnsafe || !isAbsolute(wikiRoot)) {
+    return {
+      ok: false,
+      code: 'unsafe_command',
+      message: rootUnsafe || 'Wiki root must be an absolute path.',
+      installHint: INSTALL_HINTS.wiki,
+    }
+  }
+
   const environment: Record<string, string> = {}
-  if (request.wikiRoot) environment.OPENWIKI_ROOT = request.wikiRoot
   if (request.tokenFile) environment.OPENWIKI_TOKEN_FILE = request.tokenFile
+  // openwiki [--root <path>] mcp --stdio [--tools proposal]
+  const command = [resolved, '--root', wikiRoot, 'mcp', '--stdio', '--tools', 'proposal']
+  if (request.tokenFile) {
+    command.push('--token-file', request.tokenFile)
+  }
+  const customMcp = toCustomMcpConfig({
+    name: PRODUCT_MCP_LINK_NAMES.wiki,
+    label: LABELS.wiki,
+    description: 'Optional git-backed Wiki MCP (user-linked; default off).',
+    command,
+    environment: Object.keys(environment).length ? environment : undefined,
+  })
   return {
     ok: true,
-    name: 'cowork-wiki',
+    name: PRODUCT_MCP_LINK_NAMES.wiki,
     config: {
       type: 'local',
-      command: [resolved, 'mcp', 'serve', ...(request.wikiRoot ? ['--root', request.wikiRoot] : [])],
+      command,
       environment: Object.keys(environment).length ? environment : undefined,
     },
-    label: 'Wiki',
-    description: 'Optional git-backed Wiki MCP (user-linked; default off).',
+    customMcp,
+    label: LABELS.wiki,
+    description: customMcp.description || '',
+    resolvedBinary: resolved,
   }
+}
+
+export function toCustomMcpConfig(input: {
+  name: string
+  label: string
+  description: string
+  command: string[]
+  environment?: Record<string, string>
+}): CustomMcpConfig {
+  const [bin, ...args] = input.command
+  return {
+    scope: 'machine',
+    directory: null,
+    name: input.name,
+    label: input.label,
+    description: input.description,
+    type: 'stdio',
+    command: bin,
+    args,
+    env: input.environment,
+    // Soft-linked products start in ask mode; operators may raise later.
+    permissionMode: 'ask',
+    allowPrivateNetwork: false,
+  }
+}
+
+/** Probe PATH + linked custom MCP names for the Tools soft-link panel. */
+export function probeProductMcpLinks(input: {
+  linkedNames: Iterable<string>
+  pathEnv?: string
+  commandOverrides?: Partial<Record<ProductMcpLinkKind, string>>
+}): ProductMcpProbe[] {
+  const linked = new Set(input.linkedNames)
+  return (['gateway', 'wiki'] as const).map((kind) => {
+    const override = input.commandOverrides?.[kind]
+    const candidates = override?.trim() ? [override.trim()] : DEFAULT_BINS[kind]
+    let resolved: string | undefined
+    for (const candidate of candidates) {
+      if (assertSafeCommandPath(candidate)) continue
+      resolved = resolveBinaryOnPath(candidate, input.pathEnv)
+      if (resolved) break
+    }
+    return {
+      kind,
+      name: PRODUCT_MCP_LINK_NAMES[kind],
+      label: LABELS[kind],
+      found: Boolean(resolved),
+      resolvedBinary: resolved,
+      linked: linked.has(PRODUCT_MCP_LINK_NAMES[kind]),
+      installHint: INSTALL_HINTS[kind],
+      docsPath: DOCS_PATHS[kind],
+    }
+  })
+}
+
+export function isProductMcpLinkName(name: string): boolean {
+  return name === PRODUCT_MCP_LINK_NAMES.gateway || name === PRODUCT_MCP_LINK_NAMES.wiki
 }

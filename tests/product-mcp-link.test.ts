@@ -6,6 +6,8 @@ import { describe, it } from 'node:test'
 import {
   assertSafeCommandPath,
   buildProductMcpLink,
+  probeProductMcpLinks,
+  PRODUCT_MCP_LINK_NAMES,
   validateOwnerOnlyTokenFile,
 } from '@open-cowork/runtime-host/product-mcp-link'
 
@@ -40,9 +42,16 @@ describe('product MCP soft-link helpers (JOE-909)', () => {
     })
     assert.equal(result.ok, true)
     if (result.ok) {
-      assert.equal(result.name, 'cowork-gateway')
+      assert.equal(result.name, PRODUCT_MCP_LINK_NAMES.gateway)
       assert.deepEqual(result.config.command, [bin, 'mcp'])
       assert.equal(result.config.environment?.GATEWAY_DAEMON_URL, 'http://127.0.0.1:5097')
+      assert.equal(result.customMcp.type, 'stdio')
+      assert.equal(result.customMcp.command, bin)
+      assert.deepEqual(result.customMcp.args, ['mcp'])
+      assert.equal(result.customMcp.scope, 'machine')
+      assert.equal(result.customMcp.permissionMode, 'ask')
+      // Never embeds bearer secrets — token file path only when provided.
+      assert.equal(result.customMcp.env?.OPENCODE_GATEWAY_HTTP_READ_TOKEN, undefined)
     }
   })
 
@@ -57,22 +66,46 @@ describe('product MCP soft-link helpers (JOE-909)', () => {
     assert.equal(validateOwnerOnlyTokenFile(token), undefined)
   })
 
-  it('builds wiki MCP config when binary resolves', () => {
+  it('requires absolute wiki root and builds stdio MCP args', () => {
     const dir = mkdtempSync(join(tmpdir(), 'product-mcp-wiki-'))
     const bin = join(dir, 'cowork-wiki')
     writeFileSync(bin, '#!/bin/sh\n', { mode: 0o755 })
     chmodSync(bin, 0o755)
 
+    const missingRoot = buildProductMcpLink({ kind: 'wiki', command: bin })
+    assert.equal(missingRoot.ok, false)
+    if (!missingRoot.ok) assert.equal(missingRoot.code, 'wiki_root_required')
+
+    const wikiRoot = join(dir, 'wiki-root')
     const result = buildProductMcpLink({
       kind: 'wiki',
       command: bin,
-      wikiRoot: '/tmp/wiki-demo',
+      wikiRoot,
     })
     assert.equal(result.ok, true)
     if (result.ok) {
-      assert.equal(result.name, 'cowork-wiki')
-      assert.ok(result.config.command.includes('--root'))
-      assert.equal(result.config.environment?.OPENWIKI_ROOT, '/tmp/wiki-demo')
+      assert.equal(result.name, PRODUCT_MCP_LINK_NAMES.wiki)
+      assert.deepEqual(result.config.command, [bin, '--root', wikiRoot, 'mcp', '--stdio', '--tools', 'proposal'])
+      assert.equal(result.customMcp.command, bin)
+      assert.ok(result.customMcp.args?.includes('--stdio'))
     }
+  })
+
+  it('probes PATH and linked names for the soft-link panel', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'product-mcp-probe-'))
+    const bin = join(dir, 'cowork-gateway')
+    writeFileSync(bin, '#!/bin/sh\n', { mode: 0o755 })
+    chmodSync(bin, 0o755)
+
+    const probes = probeProductMcpLinks({
+      linkedNames: [PRODUCT_MCP_LINK_NAMES.gateway],
+      pathEnv: dir,
+    })
+    const gateway = probes.find((row) => row.kind === 'gateway')
+    const wiki = probes.find((row) => row.kind === 'wiki')
+    assert.equal(gateway?.found, true)
+    assert.equal(gateway?.linked, true)
+    assert.equal(wiki?.found, false)
+    assert.equal(wiki?.linked, false)
   })
 })

@@ -53,8 +53,10 @@ Wiki by default.
 
 - **Do not** ship a default Wiki MCP in public Open Cowork config.
 - Install Wiki separately; add MCP only as a **user-managed** custom MCP.
-- Soft Desktop “link local Wiki” stays **default off**
-  ([JOE-909](https://linear.app/joe-broadhead/issue/JOE-909)).
+- Soft Desktop **Link local Wiki** (Tools & Skills) stays **default off**
+  ([JOE-909](https://linear.app/joe-broadhead/issue/JOE-909)): requires an
+  absolute wiki root and `cowork-wiki` / `openwiki` on `PATH` (or an explicit
+  binary path). Token **files** only — never paste secrets into config.
 - Channel Gateway and Standalone Gateway must not require a local Wiki checkout.
 
 ## Boundary notes
