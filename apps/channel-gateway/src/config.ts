@@ -781,5 +781,3 @@ function cleanRecord(value: unknown) {
   return Object.fromEntries(Object.entries(value as Record<string, unknown>)
     .filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''))
 }
-
-
