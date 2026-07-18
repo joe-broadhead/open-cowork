@@ -20,10 +20,9 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    # Cost control: PR/default runs stay bounded. Deep security-and-quality is
-    # reserved for schedule + master (see queries below). Do not raise this to
-    # multi-hour budgets — monorepo product imports made full packs too expensive.
-    timeout-minutes: 45
+    # Cost control after monorepo product import: keep PR jobs bounded.
+    # Do not raise multi-hour budgets for PR CodeQL.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 45 || 90 }}
     strategy:
       fail-fast: false
       matrix:
@@ -43,13 +42,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Initialize CodeQL
+      - name: Initialize CodeQL (pull request)
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           languages: ${{ matrix.language }}
-          # PRs: security-extended (actionable, bounded cost).
-          # master + weekly schedule: security-and-quality (deeper, once per merge/week).
-          queries: ${{ (github.event_name == 'pull_request' && 'security-extended') || 'security-and-quality' }}
+          # Faster pack + exclude products/** (see codeql-config.yml).
+          queries: security-extended
+          config-file: .github/codeql/codeql-config.yml
+
+      - name: Initialize CodeQL (master / schedule)
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: ${{ matrix.language }}
+          # Deeper pack once per merge/week; full monorepo graph (no paths-ignore).
+          queries: security-and-quality
 
       - name: Build
         run: pnpm build
@@ -63,9 +71,6 @@ jobs:
           wait-for-processing: ${{ github.event.repository.private == false }}
 
       - name: Upload CodeQL SARIF artifact
-        # Private pre-release repositories may not have GitHub code scanning
-        # enabled. Still run CodeQL and retain the SARIF so the same workflow
-        # becomes a Security-tab upload automatically once the repo is public.
         if: github.event.repository.private == true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

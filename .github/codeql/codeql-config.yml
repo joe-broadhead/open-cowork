@@ -1,0 +1,18 @@
+# PR-scoped CodeQL config for the monorepo after product partitions.
+# products/gateway and products/wiki are large imported trees with path-filtered
+# product CI + secret-scan evidence; deep scans of those trees made PR CodeQL
+# exceed cost budgets (45m+). Full monorepo analysis remains available on master
+# schedule via security-and-quality without this paths-ignore (see workflow).
+#
+# This file is used for pull_request only (see .github/workflows/codeql.yml).
+
+name: open-cowork-pr
+
+paths-ignore:
+  - products/**
+  - '**/node_modules/**'
+  - '**/dist/**'
+  - '**/coverage/**'
+  - '**/site/**'
+  - docs/evidence/**
+  - THIRD_PARTY_LICENSES/**
