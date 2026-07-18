@@ -1,0 +1,78 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openwiki-workspace-backup
+  labels:
+    app.kubernetes.io/name: openwiki
+    app.kubernetes.io/instance: openwiki
+    app.kubernetes.io/part-of: openwiki
+spec:
+  schedule: "23 2 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: openwiki-workspace-backup
+            app.kubernetes.io/instance: openwiki
+            app.kubernetes.io/part-of: openwiki
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: openwiki-backup
+              image: ghcr.io/joe-broadhead/open-wiki:0.0.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: OPENWIKI_ROOT
+                  value: /data/wiki
+                - name: OPENWIKI_AUTOMATION_SERVICE
+                  value: "1"
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup create --out-dir /backups --json
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup verify latest --out-dir /backups --json
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup prune --out-dir /backups --keep-last 14 --keep-days 30 --json
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              volumeMounts:
+                - name: wiki-data
+                  mountPath: /data/wiki
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: wiki-data
+              persistentVolumeClaim:
+                claimName: openwiki-data
+            - name: backups
+              persistentVolumeClaim:
+                claimName: openwiki-workspace-backups
+            - name: tmp
+              emptyDir: {}

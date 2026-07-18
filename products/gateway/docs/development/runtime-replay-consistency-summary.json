@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M59",
+  "linearIssue": "JOE-501",
+  "mode": "m59_runtime_replay_consistency_harness",
+  "status": "implemented",
+  "releaseClaimBoundary": "local_beta_replay_consistency_only_no_release_claim_expansion",
+  "implementation": {
+    "module": "src/runtime-replay-consistency.ts",
+    "focusedTest": "src/__tests__/runtime-replay-consistency.test.ts",
+    "operatorDoc": "docs/operations/runtime-replay-consistency.md",
+    "operatorCommand": "opencode-gateway evidence replay-consistency --json"
+  },
+  "surfaces": [
+    "events",
+    "tasks",
+    "runs",
+    "worker_leases",
+    "task_dispatch_receipts",
+    "delegation_receipts",
+    "delegation_progress",
+    "progress_route_receipts",
+    "channel_bindings",
+    "project_bindings",
+    "session_links",
+    "dashboard_summary",
+    "evidence_export"
+  ],
+  "requiredDiagnostics": [
+    "owner",
+    "surface",
+    "entityKind",
+    "entityId",
+    "severity",
+    "safeRepairAction",
+    "repairMode",
+    "redacted",
+    "evidenceRefs"
+  ],
+  "repairPolicy": {
+    "automatic": "Allowed only for deterministic regeneration or exact duplicate dedupe.",
+    "operator_confirmed": "Required for missing lineage, conflicting progress payloads, stale leases, orphaned sessions, and channel rebinding.",
+    "blocked": "Required when evidence export is unsafe or a run cannot be trusted until backup evidence is restored."
+  },
+  "requiredGates": [
+    "npx vitest run src/__tests__/runtime-replay-consistency.test.ts",
+    "npm run typecheck",
+    "npm run evidence:safety",
+    "npm run build",
+    "npm run release:check",
+    "npm run verify",
+    "uv run --with-requirements docs/requirements.txt mkdocs build --strict"
+  ]
+}

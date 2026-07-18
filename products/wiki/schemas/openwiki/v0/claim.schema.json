@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/claim.schema.json",
+  "title": "OpenWiki Claim Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "text", "page_id", "source_ids", "confidence", "risk", "status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^claim:" },
+    "uri": { "type": "string", "pattern": "^openwiki://claim/" },
+    "type": { "const": "claim" },
+    "text": { "type": "string", "minLength": 1 },
+    "page_id": { "type": "string", "pattern": "^page:" },
+    "source_ids": { "type": "array", "items": { "type": "string", "pattern": "^source:" } },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "risk": { "enum": ["low", "medium", "high"] },
+    "last_verified_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["active", "stale", "disputed", "archived"] }
+  }
+}

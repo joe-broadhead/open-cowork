@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/answer.schema.json",
+  "title": "OpenWiki Answer Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["question", "answer", "citations", "evidence", "search"],
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string"
+    },
+    "citations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/citation" }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "search": {
+      "$ref": "search.schema.json"
+    }
+  },
+  "$defs": {
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "uri"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "uri": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "uri", "score", "citations"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "uri": { "type": "string" },
+        "score": { "type": "number" },
+        "summary": { "type": "string" },
+        "snippet": { "type": "string" },
+        "citations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/citation" }
+        }
+      }
+    }
+  }
+}

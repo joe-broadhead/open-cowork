@@ -1,0 +1,17 @@
+{{- if and .Values.workspaceBackup.enabled .Values.workspaceBackup.persistence.enabled (not .Values.workspaceBackup.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "openwiki.fullname" . }}-workspace-backups
+  labels:
+    {{- include "openwiki.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.workspaceBackup.persistence.accessModes | nindent 4 }}
+  {{- if .Values.workspaceBackup.persistence.storageClass }}
+  storageClassName: {{ .Values.workspaceBackup.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.workspaceBackup.persistence.size | quote }}
+{{- end }}

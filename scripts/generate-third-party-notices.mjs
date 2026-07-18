@@ -112,9 +112,33 @@ function isOpencodeCompanion(name) {
   return name.startsWith('opencode-') && name !== 'opencode-ai'
 }
 
-// Resolve the parent opencode-ai package's license id and LICENSE files from the
-// installed dependency tree so companion binaries can inherit real attribution.
-function resolveOpencodeAiParent(nodes) {
+// esbuild ships per-platform optional packages (@esbuild/<os>-<arch>). Only the
+// host platform is fully extracted in node_modules; other platforms still appear
+// in `pnpm list` with incomplete metadata. Attribute them from the parent
+// `esbuild` package so notices generation is platform-stable for CI.
+function isEsbuildCompanion(name) {
+  return name.startsWith('@esbuild/')
+}
+
+function isRegistryResolvedUrl(value) {
+  return /registry\.npmjs\.org|npm\.pkg\.github\.com|\.tgz(\?|$)/i.test(String(value || ''))
+}
+
+function detectLicenseFromLicenseFiles(licenseFiles) {
+  for (const file of licenseFiles) {
+    const text = String(file?.text || '').slice(0, 2048)
+    if (/MIT License/i.test(text)) return 'MIT'
+    if (/Apache License/i.test(text)) return 'Apache-2.0'
+    if (/BSD 3-Clause/i.test(text)) return 'BSD-3-Clause'
+    if (/ISC License/i.test(text)) return 'ISC'
+    if (/Mozilla Public License/i.test(text)) return 'MPL-2.0'
+  }
+  return 'UNKNOWN'
+}
+
+// Resolve a named production package's license / LICENSE files / repository from
+// the installed dependency tree (used for companion package inheritance).
+function resolveNamedParent(nodes, parentName) {
   let parent = null
   const walk = (node) => {
     if (parent) return
@@ -123,7 +147,7 @@ function resolveOpencodeAiParent(nodes) {
       for (const [dependencyName, dependency] of Object.entries(dependencies)) {
         if (parent) return
         const name = dependency?.name || dependency?.from || dependencyName
-        if (name === 'opencode-ai' && dependency?.path) {
+        if (name === parentName && dependency?.path) {
           const manifestPath = join(dependency.path, 'package.json')
           const manifest = existsSync(manifestPath) ? readJson(manifestPath) : {}
           const manifestLicense = normalizeLicense(manifest.license || manifest.licenses)
@@ -132,6 +156,7 @@ function resolveOpencodeAiParent(nodes) {
               ? detectLicenseFromFiles(dependency.path)
               : manifestLicense,
             licenseFiles: collectTextFiles(dependency.path, licenseFileNames),
+            repository: normalizeRepository(manifest.repository) || manifest.homepage || dependency.resolved || '',
           }
           return
         }
@@ -141,6 +166,22 @@ function resolveOpencodeAiParent(nodes) {
   }
   for (const node of nodes) walk(node)
   return parent
+}
+
+// Prefer previously committed non-registry Source URLs when the live install only
+// exposes a registry tarball (common for optional native deps on non-host OS).
+function loadCommittedSourceIndex() {
+  if (!existsSync(outputPath)) return new Map()
+  const index = new Map()
+  for (const line of readFileSync(outputPath, 'utf8').split('\n')) {
+    if (!line.startsWith('| ') || line.startsWith('| Package') || line.startsWith('| ---')) continue
+    const cells = line.slice(2, -2).split(' | ').map((cell) => cell.trim())
+    if (cells.length < 5) continue
+    const [name, version, , , source] = cells
+    if (!name || !version || !source || isRegistryResolvedUrl(source)) continue
+    index.set(`${name}@${version}`, source)
+  }
+  return index
 }
 
 function collectDependencyNodes(node, packages) {
@@ -180,11 +221,23 @@ function collectDependencyNodes(node, packages) {
             licenseFiles = opencodeAiParent.licenseFiles.map((file) => ({ ...file }))
           }
         }
+        let repository = normalizeRepository(manifest.repository) || manifest.homepage || dependency.resolved || ''
+        if (isEsbuildCompanion(name) && esbuildParent) {
+          if (license === 'UNKNOWN' && esbuildParent.license && esbuildParent.license !== 'UNKNOWN') {
+            license = esbuildParent.license
+          }
+          if ((!repository || isRegistryResolvedUrl(repository)) && esbuildParent.repository) {
+            repository = esbuildParent.repository
+          }
+          if (licenseFiles.length === 0 && esbuildParent.licenseFiles?.length) {
+            licenseFiles = esbuildParent.licenseFiles.map((file) => ({ ...file }))
+          }
+        }
         packages.set(key, {
           name,
           version: dependency.version,
           license,
-          repository: normalizeRepository(manifest.repository) || manifest.homepage || dependency.resolved || '',
+          repository,
           notices,
           licenseFiles,
         })
@@ -209,7 +262,9 @@ const listJson = execFileSync(
   { cwd: rootDir, encoding: 'utf8', maxBuffer: 100 * 1024 * 1024 },
 )
 const workspaceNodes = JSON.parse(listJson)
-const opencodeAiParent = resolveOpencodeAiParent(workspaceNodes)
+const opencodeAiParent = resolveNamedParent(workspaceNodes, 'opencode-ai')
+const esbuildParent = resolveNamedParent(workspaceNodes, 'esbuild')
+const committedSources = loadCommittedSourceIndex()
 const packages = new Map()
 for (const workspaceNode of workspaceNodes) {
   collectDependencyNodes(workspaceNode, packages)
@@ -223,6 +278,19 @@ const sortedPackages = [...packages.values()].sort((a, b) => {
 for (const item of sortedPackages) {
   if (item.licenseFiles.length === 0) {
     item.licenseFiles = collectExistingGeneratedLicenseFiles(item.name, item.version)
+  }
+  // Optional native packages often lack a full extract on non-host platforms.
+  // Prefer license text already bundled under THIRD_PARTY_LICENSES/ when the live
+  // install only reports UNKNOWN.
+  if (item.license === 'UNKNOWN' && item.licenseFiles.length > 0) {
+    const detected = detectLicenseFromLicenseFiles(item.licenseFiles)
+    if (detected !== 'UNKNOWN') item.license = detected
+  }
+  // Keep Source stable across OS when the live graph only has a registry tarball
+  // but a previous generation recorded a canonical repository URL.
+  if (!item.repository || isRegistryResolvedUrl(item.repository)) {
+    const committed = committedSources.get(`${item.name}@${item.version}`)
+    if (committed) item.repository = committed
   }
 }
 

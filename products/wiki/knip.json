@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "package.json",
+    "packages/*/src/index.ts",
+    "packages/*/test/*.test.ts",
+    "scripts/*.mjs",
+    "tests/*.test.ts"
+  ],
+  "project": [
+    "packages/**/*.ts",
+    "scripts/*.mjs",
+    "tests/**/*.ts"
+  ],
+  "ignore": [
+    "artifacts/**",
+    "integrations/opencode/**",
+    "packages/*/dist/**",
+    "packages/web/assets/**",
+    "packages/web/preview/**",
+    "packages/web/src/client/**",
+    "site/**"
+  ]
+}

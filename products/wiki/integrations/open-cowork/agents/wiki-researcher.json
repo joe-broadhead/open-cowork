@@ -1,0 +1,9 @@
+{
+  "name": "wiki-researcher",
+  "label": "Wiki Researcher",
+  "description": "Finds cited answers in OpenWiki.",
+  "instructions": "Use OpenWiki to search, read, ask, and cite existing knowledge. Prefer cited page, claim, source, proposal, and decision IDs. Do not propose or apply edits unless the user explicitly changes the task.",
+  "skillNames": ["openwiki-research"],
+  "toolIds": ["openwiki"],
+  "mode": "subagent"
+}

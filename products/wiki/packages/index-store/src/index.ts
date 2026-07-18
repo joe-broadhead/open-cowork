@@ -1,0 +1,4 @@
+export { graphCurrentIndexStoreNeighbors, graphCurrentIndexStoreOrphans, graphCurrentIndexStorePath, graphCurrentIndexStoreRelated, graphCurrentIndexStoreStale, readCurrentIndexStoreGraph } from "./graph.ts";
+export { checkIndexStoreIntegrity, listCurrentIndexStoreProposals, listCurrentIndexStoreRecords, listIndexStoreEdges, listIndexStoreRecords, readCurrentIndexStoreRecord, readCurrentIndexStoreWorkspaceIndex, readCurrentIndexStoreWorkspaceRegistry, readIndexStoreSummary } from "./queries.ts";
+export { rebuildIndexStore } from "./rebuild.ts";
+export type { DerivedEdgeRow, DerivedRecordRow, IndexStoreIntegrityResult, IndexStoreOptions, IndexStoreProposalList, IndexStoreProposalListOptions, IndexStoreRebuildResult, IndexStoreRecordGroupSummary, IndexStoreRecordList, IndexStoreRecordListItem, IndexStoreRecordListOptions, IndexStoreRecordRead, IndexStoreSummary, IndexStoreWorkspaceIndex } from "./types.ts";

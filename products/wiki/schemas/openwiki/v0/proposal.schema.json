@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/proposal.schema.json",
+  "title": "OpenWiki Proposal Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "uri",
+    "type",
+    "title",
+    "status",
+    "actor_id",
+    "target_ids",
+    "diff",
+    "created_at",
+    "path"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^proposal:"
+    },
+    "uri": {
+      "type": "string",
+      "pattern": "^openwiki://proposal/"
+    },
+    "type": {
+      "const": "proposal"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "open",
+        "accepted",
+        "rejected",
+        "applied",
+        "closed"
+      ]
+    },
+    "actor_id": {
+      "type": "string",
+      "pattern": "^actor:"
+    },
+    "target_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "target_path": {
+      "type": "string"
+    },
+    "base_commit": {
+      "type": "string"
+    },
+    "diff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "path"
+      ],
+      "properties": {
+        "format": {
+          "const": "unified"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "snapshot_path": {
+      "type": "string"
+    },
+    "snapshot_paths": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "validation_report_path": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "applied_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "applied_commit": {
+      "type": "string"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "closed_by": {
+      "type": "string",
+      "pattern": "^actor:"
+    },
+    "close_resolution": {
+      "enum": [
+        "closed",
+        "superseded",
+        "withdrawn",
+        "duplicate",
+        "stale",
+        "invalid"
+      ]
+    },
+    "close_rationale": {
+      "type": "string"
+    },
+    "superseded_by": {
+      "type": "string",
+      "pattern": "^proposal:"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

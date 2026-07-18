@@ -707,36 +707,52 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           short_sha="${GITHUB_SHA::12}"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          image="ghcr.io/${owner}/open-cowork-gateway"
-          staging_tag="${image}:release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
+          # Preferred image name is open-cowork-channel-gateway; open-cowork-gateway is a
+          # dual-tag alias for the same digest during the JOE-902 compatibility window.
+          image="ghcr.io/${owner}/open-cowork-channel-gateway"
+          image_alias="ghcr.io/${owner}/open-cowork-gateway"
+          staging_suffix="release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
+          staging_tag="${image}:${staging_suffix}"
+          staging_tag_alias="${image_alias}:${staging_suffix}"
           docker build -f docker/open-cowork-gateway/Dockerfile \
             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             --label "org.opencontainers.image.version=${version}" \
             -t "${staging_tag}" \
+            -t "${staging_tag_alias}" \
             .
           push_output="$(docker push "${staging_tag}")"
           printf '%s\n' "$push_output"
+          docker push "${staging_tag_alias}"
           digest="$(printf '%s\n' "$push_output" | awk '/digest: sha256:/ { for (i = 1; i <= NF; i += 1) if ($i == "digest:") print $(i + 1) }' | tail -1)"
           if [ -z "$digest" ]; then
             digest="$(docker buildx imagetools inspect "${staging_tag}" --format '{{.Manifest.Digest}}')"
           fi
           test -n "$digest"
           mkdir -p dist-oci
-          cat > dist-oci/open-cowork-gateway.image.json <<EOF
+          write_image_json() {
+            local out_path="$1"
+            local img="$2"
+            cat > "${out_path}" <<EOF
           {
-            "image": "${image}",
-            "tag": "${image}:${GITHUB_REF_NAME}",
-            "versionTag": "${image}:${version}",
-            "stagingTag": "${staging_tag}",
+            "image": "${img}",
+            "tag": "${img}:${GITHUB_REF_NAME}",
+            "versionTag": "${img}:${version}",
+            "stagingTag": "${img}:${staging_suffix}",
             "digest": "${digest}",
-            "digestRef": "${image}@${digest}",
+            "digestRef": "${img}@${digest}",
+            "aliases": ["${image}", "${image_alias}"],
+            "preferredImage": "${image}",
             "source": "https://github.com/${GITHUB_REPOSITORY}",
             "revision": "${GITHUB_SHA}",
             "workflow": "${GITHUB_WORKFLOW}",
             "runId": "${GITHUB_RUN_ID}"
           }
           EOF
+          }
+          write_image_json dist-oci/open-cowork-channel-gateway.image.json "${image}"
+          # Keep legacy evidence filename for release consumers that still look for it.
+          write_image_json dist-oci/open-cowork-gateway.image.json "${image_alias}"
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "digest_ref=${image}@${digest}" >> "$GITHUB_OUTPUT"

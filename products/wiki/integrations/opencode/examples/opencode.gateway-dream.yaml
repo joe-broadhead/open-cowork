@@ -1,0 +1,46 @@
+# OpenWiki dream-cycle profile fragment for OpenCode Gateway.
+# Merge the active workspaces and agentProfiles keys into gateway.config.yaml.
+# Then configure the OpenWiki MCP in OpenCode and create the schedule through
+# Gateway's chat command path rather than by writing directly to Gateway storage.
+
+workspaces:
+  - slug: openwiki
+    name: OpenWiki
+    repoPath: /absolute/path/to/wiki
+    opencodeBaseUrl: http://127.0.0.1:4101
+    opencodeUsername: opencode
+    opencodePasswordEnv: OPENCODE_OPENWIKI_LOCAL_PASSWORD
+    defaultAgent: plan
+    permissionProfile: readonly
+
+agentProfiles:
+  - slug: openwiki-dream
+    name: OpenWiki Dream Runner
+    workspaceSlug: openwiki
+    agent: plan
+    enabledMcps:
+      - openwiki
+    capabilities:
+      - readonly
+      - research
+      - artifact
+    canCreatePRs: false
+    canMergePRs: false
+    requiresReview: true
+    permissionProfile: readonly
+    mode: direct
+
+# OpenCode MCP snippet:
+# {
+#   "mcp": {
+#     "openwiki": {
+#       "type": "local",
+#       "enabled": true,
+#       "command": ["openwiki", "--root", "/absolute/path/to/wiki", "mcp", "--stdio", "--tools", "proposal", "--token-env", "OPENWIKI_PROPOSAL_TOKEN"]
+#     }
+#   }
+# }
+
+# Gateway schedule command:
+# /profile openwiki-dream
+# /cron add every 1d at 03:00 Run the OpenWiki dream cycle in dry-run/proposal mode. Use wiki.dream_run with phases index_refresh, stale_claims, orphan_pages, missing_backlinks, link_suggestions, report; set wait=true and create_proposals=false unless the operator explicitly asks for review proposals. Report the run ID, skipped phases, proposal IDs, and failures.

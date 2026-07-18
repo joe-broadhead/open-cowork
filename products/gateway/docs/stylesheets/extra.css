@@ -1,0 +1,71 @@
+:root {
+  --md-primary-fg-color: #4338ca;
+  --md-accent-fg-color: #06b6d4;
+}
+
+.md-typeset code {
+  background-color: var(--md-code-bg-color);
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.3rem;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+}
+
+.md-typeset .subtitle {
+  color: var(--md-default-fg-color--light);
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  margin-top: -0.5rem;
+}
+
+.surface-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.status-badge {
+  border-radius: 0.25rem;
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+}
+
+.status-badge.current {
+  background-color: #10b981;
+  color: #fff;
+}
+
+.md-typeset .grid.cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .mermaid {
+  font-size: 0.9rem;
+  overflow-x: auto;
+}
+
+.md-typeset .mermaid svg {
+  height: auto;
+  width: 100%;
+}

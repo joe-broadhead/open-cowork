@@ -8,7 +8,7 @@ const coverage = inputArgs.includes('--coverage')
 const explicitTestFiles = inputArgs.filter((entry) => entry !== '--coverage')
 
 const testRoots = [
-  'apps/gateway/src',
+  'apps/channel-gateway/src',
   'apps/standalone-gateway/src',
   'mcps/agents/tests',
   'mcps/charts/tests',

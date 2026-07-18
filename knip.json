@@ -7,7 +7,10 @@
     "apps/desktop/dist/**",
     "apps/desktop/out/**",
     "apps/desktop/release/**",
-    "THIRD_PARTY_LICENSES/**"
+    "THIRD_PARTY_LICENSES/**",
+    "products/gateway/**",
+    "products/wiki/**",
+    "docs/evidence/**"
   ],
   "ignoreDependencies": [
     "opencode-ai"
@@ -65,7 +68,7 @@
         "@fontsource-variable/schibsted-grotesk"
       ]
     },
-    "apps/gateway": {
+    "apps/channel-gateway": {
       "entry": [
         "src/index.ts",
         "src/*.test.ts"

@@ -194,7 +194,7 @@ test('cloud route, service, and client modules stay within ownership budgets', (
   assertSourceBudget('cloud HTTP route module', join(cloudRoot, 'http-routes'), 500)
   assertSourceBudget('cloud service module', join(cloudRoot, 'services'), 450)
   assertSourceBudget('cloud-client domain barrel', join(cloudClientRoot, 'domains'), 120)
-  assertSourceBudget('gateway production source module', join(root, 'apps/gateway/src'), 900)
+  assertSourceBudget('gateway production source module', join(root, 'apps/channel-gateway/src'), 900)
 })
 
 test('postgres store delegates row mapping to domain modules', () => {
@@ -268,7 +268,7 @@ test('cloud route and service modules stay behind store and runtime boundaries',
 test('client surfaces do not import server-only cloud internals', () => {
   const checkedRoots = [
     'packages/app/src',
-    'apps/gateway/src',
+    'apps/channel-gateway/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [

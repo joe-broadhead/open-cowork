@@ -1,6 +1,6 @@
 /**
  * Shared fixed-window webhook rate limiter used by both the Cloud Channel
- * Gateway (`apps/gateway`) and Standalone Gateway (`apps/standalone-gateway`).
+ * Gateway (`apps/channel-gateway`) and Standalone Gateway (`apps/standalone-gateway`).
  * JOE-875: one kernel, two product entrypoints.
  */
 

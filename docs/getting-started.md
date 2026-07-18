@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node `>=22.13` (supported floor). For development and CI parity, use the
+- Node `>=22.22.3` (supported monorepo floor). For development and CI parity, use the
   exact version pinned in `.nvmrc`.
 - pnpm `10.32.1` via Corepack
 - Python `>=3.11` for documentation work

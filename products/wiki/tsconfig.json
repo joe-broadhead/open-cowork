@@ -1,0 +1,84 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "types": [
+      "node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@openwiki/connectors": [
+        "packages/connectors/src/index.ts"
+      ],
+      "@openwiki/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@openwiki/git": [
+        "packages/git/src/index.ts"
+      ],
+      "@openwiki/harness-opencode": [
+        "packages/harness-opencode/src/index.ts"
+      ],
+      "@openwiki/http-api": [
+        "packages/http-api/src/index.ts"
+      ],
+      "@openwiki/index-store": [
+        "packages/index-store/src/index.ts"
+      ],
+      "@openwiki/jobs": [
+        "packages/jobs/src/index.ts"
+      ],
+      "@openwiki/mcp-server": [
+        "packages/mcp-server/src/index.ts"
+      ],
+      "@openwiki/policy": [
+        "packages/policy/src/index.ts"
+      ],
+      "@openwiki/postgres-runtime": [
+        "packages/postgres-runtime/src/index.ts"
+      ],
+      "@openwiki/repo": [
+        "packages/repo/src/index.ts"
+      ],
+      "@openwiki/search": [
+        "packages/search/src/index.ts"
+      ],
+      "@openwiki/skills": [
+        "packages/skills/src/index.ts"
+      ],
+      "@openwiki/static-export": [
+        "packages/static-export/src/index.ts"
+      ],
+      "@openwiki/storage": [
+        "packages/storage/src/index.ts"
+      ],
+      "@openwiki/validation": [
+        "packages/validation/src/index.ts"
+      ],
+      "@openwiki/web": [
+        "packages/web/src/index.ts"
+      ],
+      "@openwiki/workflows": [
+        "packages/workflows/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "packages/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "packages/*/dist/**"
+  ]
+}

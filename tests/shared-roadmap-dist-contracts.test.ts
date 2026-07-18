@@ -431,7 +431,7 @@ test('dist gateway product mode helpers keep cloud and standalone apps separate'
   assert.throws(() => parseGatewayProductMode('public'), /Unsupported gateway productMode/)
   assert.throws(() => resolveGatewayProductMode('standalone', undefined), /apps\/standalone-gateway/)
   assert.throws(() => resolveGatewayProductMode('hybrid', undefined), /reserved/)
-  assert.throws(() => resolveStandaloneGatewayProductMode('cloud_channel', undefined), /apps\/gateway/)
+  assert.throws(() => resolveStandaloneGatewayProductMode('cloud_channel', undefined), /apps\/channel-gateway/)
   assert.throws(() => resolveStandaloneGatewayProductMode('hybrid', undefined), /reserved/)
 })
 
@@ -443,7 +443,7 @@ test('source gateway product mode helpers reject cross-product configuration', (
   assert.doesNotThrow(() => sourceGatewayModes.assertStandaloneGatewayProductMode('standalone'))
   assert.throws(() => sourceGatewayModes.parseGatewayProductMode('public'), /Unsupported gateway productMode/)
   assert.throws(() => sourceGatewayModes.resolveGatewayProductMode('standalone', undefined), /apps\/standalone-gateway/)
-  assert.throws(() => sourceGatewayModes.resolveStandaloneGatewayProductMode('cloud_channel', undefined), /apps\/gateway/)
+  assert.throws(() => sourceGatewayModes.resolveStandaloneGatewayProductMode('cloud_channel', undefined), /apps\/channel-gateway/)
 })
 
 test('dist cloud gateway registration contracts distinguish external and edge authority', () => {

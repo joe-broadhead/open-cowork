@@ -59,6 +59,10 @@ plugins:
       redirect_maps:
         # JOE-857: product page renamed Threads → Projects
         threads.md: projects.md
+        # JOE-915: stable Gateway/Wiki product slugs (keep even if titles change)
+        # Historical private-repo docs sites should deep-link or banner to these pages.
+        gateway.md: opencode-gateway.md
+        wiki.md: openwiki.md
   - minify:
       minify_html: true
       htmlmin_opts:
@@ -113,9 +117,9 @@ nav:
       - Team: agent-authoring.md
       - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
-      - OpenWiki Knowledge Base: openwiki.md
+      - Wiki: openwiki.md
       - Knowledge store ownership: knowledge-store-ownership.md
-      - OpenCode Gateway: opencode-gateway.md
+      - Gateway: opencode-gateway.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
@@ -154,6 +158,7 @@ nav:
       - Deployment Readiness: deployment-readiness.md
       - Launch Readiness Gates: runbooks/launch-readiness.md
       - Launch Readiness Report: runbooks/launch-readiness-report.md
+      - Product repo freeze and archive: runbooks/product-repo-archive.md
       - Private Beta Launch: runbooks/private-beta-launch.md
       - Private Beta Support: runbooks/private-beta-support.md
       - Cloud Managed Operations: runbooks/cloud-managed-operations.md
@@ -172,6 +177,9 @@ nav:
       - Roadmap: roadmap.md
       - Contributing: contributing.md
       - First Contribution: first-contribution.md
+      - "ADR: Monorepo privacy": adr/monorepo-privacy.md
+      - "ADR: Product partitions": adr/product-partitions.md
+      - "ADR: Knowledge vs Wiki": adr/knowledge-vs-wiki.md
 
 extra:
   generator: false

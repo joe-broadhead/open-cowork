@@ -14,7 +14,7 @@ import { createCloudHttpServer } from '@open-cowork/cloud-server/http-server'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '@open-cowork/cloud-server/runtime-adapter'
 import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 import { CloudWorker } from '@open-cowork/cloud-server/worker'
-import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/channel-gateway/dist/index.js'
 
 function gatewayPolicy() {
   return {

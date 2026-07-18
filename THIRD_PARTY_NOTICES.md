@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `3214e4db320639f1a312ed64b18e6ce37ee1183fc33c615a55f92600b17e1e46`
-- Production package entries: 373
-- Bundled license directories: 359 (14 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `e9f4b48cd67246d64ee480dc0247c0dcf73745f0b31a004e611fb4c0298890f6`
+- Production package entries: 403
+- Bundled license directories: 388 (15 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -32,6 +32,32 @@ Each package remains licensed under its own license terms. The table below is pr
 | @aws/lambda-invoke-store | 0.3.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws__lambda-invoke-store@0.3.0/ | git+https://github.com/awslabs/aws-lambda-invoke-store.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
 | @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
+| @esbuild/aix-ppc64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__aix-ppc64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/android-arm | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__android-arm@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/android-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__android-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/android-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__android-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/darwin-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__darwin-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/darwin-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__darwin-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/freebsd-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__freebsd-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/freebsd-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__freebsd-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-arm | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-arm@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-ia32 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-ia32@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-loong64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-loong64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-mips64el | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-mips64el@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-ppc64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-ppc64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-riscv64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-riscv64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-s390x | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-s390x@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/netbsd-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__netbsd-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/netbsd-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__netbsd-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/openbsd-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__openbsd-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/openbsd-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__openbsd-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/openharmony-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__openharmony-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/sunos-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__sunos-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/win32-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/win32-ia32 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-ia32@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/win32-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
 | @fontsource-variable/mona-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @fontsource-variable/schibsted-grotesk | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__schibsted-grotesk@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @grammyjs/types | 3.28.0 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.28.0/ | git+https://github.com/grammyjs/types.git |
@@ -173,6 +199,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | es-errors | 1.3.0 | MIT | THIRD_PARTY_LICENSES/es-errors@1.3.0/ | git+https://github.com/ljharb/es-errors.git |
 | es-object-atoms | 1.1.1 | MIT | THIRD_PARTY_LICENSES/es-object-atoms@1.1.1/ | git+https://github.com/ljharb/es-object-atoms.git |
 | es-toolkit | 1.46.1 | MIT | THIRD_PARTY_LICENSES/es-toolkit@1.46.1/ | https://github.com/toss/es-toolkit.git |
+| esbuild | 0.28.1 | MIT | THIRD_PARTY_LICENSES/esbuild@0.28.1/ | git+https://github.com/evanw/esbuild.git |
 | escalade | 3.2.0 | MIT | THIRD_PARTY_LICENSES/escalade@3.2.0/ | lukeed/escalade |
 | escape-html | 1.0.3 | MIT | THIRD_PARTY_LICENSES/escape-html@1.0.3/ | component/escape-html |
 | etag | 1.8.1 | MIT | THIRD_PARTY_LICENSES/etag@1.8.1/ | jshttp/etag |
@@ -191,6 +218,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | forwarded | 0.2.0 | MIT | THIRD_PARTY_LICENSES/forwarded@0.2.0/ | jshttp/forwarded |
 | fresh | 2.0.0 | MIT | THIRD_PARTY_LICENSES/fresh@2.0.0/ | jshttp/fresh |
 | fs-extra | 10.1.0 | MIT | THIRD_PARTY_LICENSES/fs-extra@10.1.0/ | https://github.com/jprichardson/node-fs-extra |
+| fsevents | 2.3.3 | MIT | THIRD_PARTY_LICENSES/fsevents@2.3.3/ | https://github.com/fsevents/fsevents.git |
 | function-bind | 1.1.2 | MIT | THIRD_PARTY_LICENSES/function-bind@1.1.2/ | https://github.com/Raynos/function-bind.git |
 | gaxios | 7.1.4 | Apache-2.0 | THIRD_PARTY_LICENSES/gaxios@7.1.4/ | https://github.com/googleapis/google-cloud-node-core.git |
 | gcp-metadata | 8.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/gcp-metadata@8.1.2/ | https://github.com/googleapis/google-cloud-node-core.git |
@@ -286,6 +314,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | pkg-types | 1.3.1 | MIT | THIRD_PARTY_LICENSES/pkg-types@1.3.1/ | unjs/pkg-types |
 | points-on-curve | 0.2.0 | MIT | THIRD_PARTY_LICENSES/points-on-curve@0.2.0/ | git+https://github.com/pshihn/bezier-points.git |
 | points-on-path | 0.2.1 | MIT | THIRD_PARTY_LICENSES/points-on-path@0.2.1/ | git+https://github.com/pshihn/points-on-path.git |
+| postgres | 3.4.9 | Unlicense |  | porsager/postgres |
 | postgres-array | 2.0.0 | MIT | THIRD_PARTY_LICENSES/postgres-array@2.0.0/ | bendrucker/postgres-array |
 | postgres-bytea | 1.0.1 | MIT | THIRD_PARTY_LICENSES/postgres-bytea@1.0.1/ | bendrucker/postgres-bytea |
 | postgres-date | 1.0.7 | MIT | THIRD_PARTY_LICENSES/postgres-date@1.0.7/ | bendrucker/postgres-date |
@@ -329,6 +358,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | tr46 | 0.0.3 | MIT |  | git+https://github.com/Sebmaster/tr46.js.git |
 | ts-dedent | 2.2.0 | MIT | THIRD_PARTY_LICENSES/ts-dedent@2.2.0/ | https://github.com/tamino-martinius/node-ts-dedent.git |
 | tslib | 2.8.1 | 0BSD | THIRD_PARTY_LICENSES/tslib@2.8.1/ | https://github.com/Microsoft/tslib.git |
+| tsx | 4.23.1 | MIT | THIRD_PARTY_LICENSES/tsx@4.23.1/ | privatenumber/tsx |
 | type-is | 2.0.1 | MIT | THIRD_PARTY_LICENSES/type-is@2.0.1/ | jshttp/type-is |
 | ufo | 1.6.4 | MIT | THIRD_PARTY_LICENSES/ufo@1.6.4/ | unjs/ufo |
 | universalify | 2.0.1 | MIT | THIRD_PARTY_LICENSES/universalify@2.0.1/ | git+https://github.com/RyanZim/universalify.git |

@@ -1,0 +1,219 @@
+name: OpenWiki Image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/openwiki-image.yml"
+      - ".dockerignore"
+      - "Dockerfile"
+      - "deploy/docker/**"
+      - "integrations/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "templates/**"
+      - "tsconfig.json"
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/openwiki-image.yml"
+      - ".dockerignore"
+      - "Dockerfile"
+      - "deploy/docker/**"
+      - "integrations/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "templates/**"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image-smoke:
+    name: image smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+
+      - name: Create ignored Docker context sentinels
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts packages/web/assets packages/web/preview
+          printf 'do not ship\n' > artifacts/docker-context-sentinel.txt
+          printf 'do not ship\n' > packages/web/assets/docker-context-sentinel.txt
+          printf 'do not ship\n' > packages/web/preview/docker-context-sentinel.txt
+
+      - name: Build smoke image
+        run: docker build --tag openwiki/openwiki:ci .
+
+      - name: Verify ignored artifacts are absent from image
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint sh openwiki/openwiki:ci -c '
+            test ! -e /app/artifacts/docker-context-sentinel.txt &&
+            test ! -e /app/packages/web/assets/docker-context-sentinel.txt &&
+            test ! -e /app/packages/web/preview/docker-context-sentinel.txt
+          '
+
+      - name: Smoke test image
+        run: |
+          set -euo pipefail
+          container_id="$(docker run \
+            --detach \
+            --read-only \
+            --tmpfs /tmp:uid=1000,gid=1000,mode=1777 \
+            --tmpfs /data/wiki:uid=1000,gid=1000,mode=0770 \
+            --user 1000:1000 \
+            --publish 3030:3030 \
+            openwiki/openwiki:ci)"
+          trap 'docker logs "$container_id"; docker rm --force "$container_id"' EXIT
+          for _ in $(seq 1 60); do
+            if curl --fail --silent --show-error http://127.0.0.1:3030/readyz >/dev/null; then
+              curl --fail --silent --show-error http://127.0.0.1:3030/mcp-manifest.json >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Scan smoke image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: openwiki/openwiki:ci
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  image-publish:
+    name: image publish
+    if: github.event_name != 'pull_request'
+    needs:
+      - image-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+
+      - name: Build image for pre-publish scan
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: .
+          load: true
+          tags: openwiki/openwiki:prepublish-scan
+
+      - name: Scan image before publish
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: openwiki/openwiki:prepublish-scan
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        with:
+          images: ghcr.io/joe-broadhead/open-wiki
+          tags: |
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+
+      - id: publish
+        name: Push candidate image digest
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: .
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=ghcr.io/joe-broadhead/open-wiki,push-by-digest=true,name-canonical=true,push=true
+          provenance: true
+          sbom: true
+
+      - name: Scan candidate image digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ghcr.io/joe-broadhead/open-wiki@${{ steps.publish.outputs.digest }}
+          format: sarif
+          output: trivy-published-results.sarif
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload vulnerability scan
+        if: always() && github.event.repository.private == false
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        with:
+          sarif_file: trivy-published-results.sarif
+          wait-for-processing: false
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+
+      - name: Sign image digest
+        run: cosign sign --yes ghcr.io/joe-broadhead/open-wiki@${{ steps.publish.outputs.digest }}
+
+      - name: Attest image provenance
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-name: ghcr.io/joe-broadhead/open-wiki
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
+      - name: Promote scanned image tags
+        env:
+          IMAGE_DIGEST: ghcr.io/joe-broadhead/open-wiki@${{ steps.publish.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          tag_args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              tag_args+=(--tag "$tag")
+            fi
+          done <<< "$IMAGE_TAGS"
+          if [ "${#tag_args[@]}" -eq 0 ]; then
+            echo "No image tags were generated for promotion."
+            exit 1
+          fi
+          docker buildx imagetools create "${tag_args[@]}" "$IMAGE_DIGEST"

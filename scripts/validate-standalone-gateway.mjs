@@ -18,7 +18,7 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) throw new Error(`Missing standalone gateway artifact: ${file}`)
 }
 
-const cloudGatewayPackage = read('apps/gateway/package.json')
+const cloudGatewayPackage = read('apps/channel-gateway/package.json')
 if (cloudGatewayPackage.includes('@opencode-ai/sdk') || cloudGatewayPackage.includes('"pg"')) {
   throw new Error('Cloud Channel Gateway package must not depend on OpenCode SDK or Postgres.')
 }

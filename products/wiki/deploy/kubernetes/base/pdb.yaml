@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: openwiki
+  labels:
+    app.kubernetes.io/name: openwiki
+    app.kubernetes.io/instance: openwiki
+    app.kubernetes.io/part-of: openwiki
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openwiki
+      app.kubernetes.io/instance: openwiki

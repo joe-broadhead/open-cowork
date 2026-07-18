@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/page.schema.json",
+  "title": "OpenWiki Page Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "page_type", "title", "body_format", "body", "path", "source_ids", "claim_ids", "status", "topics", "created_at", "updated_at"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^page:[a-z][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$" },
+    "uri": { "type": "string", "pattern": "^openwiki://page/" },
+    "type": { "const": "page" },
+    "page_type": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string" },
+    "body_format": { "const": "markdown" },
+    "body": { "type": "string" },
+    "path": { "type": "string", "minLength": 1 },
+    "source_ids": { "type": "array", "items": { "type": "string", "pattern": "^source:" } },
+    "claim_ids": { "type": "array", "items": { "type": "string", "pattern": "^claim:" } },
+    "status": { "type": "string", "minLength": 1 },
+    "topics": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

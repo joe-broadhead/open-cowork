@@ -1,0 +1,11 @@
+[
+  {
+    "id": "section:all",
+    "title": "All Workspace Content",
+    "paths": [
+      "**"
+    ],
+    "visibility": "public",
+    "description": "Default permissive local section. Production workspaces should replace this with explicit team sections."
+  }
+]

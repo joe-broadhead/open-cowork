@@ -1,0 +1,32 @@
+{
+  "name": "@open-cowork/channel-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless Open Cowork channel gateway daemon",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/cloud-client build && pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-slack build && pnpm --filter @open-cowork/gateway-provider-email build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-provider-cli build && pnpm --filter @open-cowork/gateway-provider-discord build && pnpm --filter @open-cowork/gateway-provider-whatsapp build && pnpm --filter @open-cowork/gateway-provider-signal build && pnpm --filter @open-cowork/gateway-testing build && tsc",
+    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/cloud-client build && pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-slack build && pnpm --filter @open-cowork/gateway-provider-email build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-provider-cli build && pnpm --filter @open-cowork/gateway-provider-discord build && pnpm --filter @open-cowork/gateway-provider-whatsapp build && pnpm --filter @open-cowork/gateway-provider-signal build && pnpm --filter @open-cowork/gateway-testing build && tsc --noEmit",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@open-cowork/cloud-client": "workspace:*",
+    "@open-cowork/gateway-channel": "workspace:*",
+    "@open-cowork/gateway-provider-email": "workspace:*",
+    "@open-cowork/gateway-provider-cli": "workspace:*",
+    "@open-cowork/gateway-provider-discord": "workspace:*",
+    "@open-cowork/gateway-provider-signal": "workspace:*",
+    "@open-cowork/gateway-provider-slack": "workspace:*",
+    "@open-cowork/gateway-provider-telegram": "workspace:*",
+    "@open-cowork/gateway-provider-webhook": "workspace:*",
+    "@open-cowork/gateway-provider-whatsapp": "workspace:*",
+    "@open-cowork/gateway-testing": "workspace:*",
+    "@open-cowork/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "typescript": "^6.0.0"
+  }
+}

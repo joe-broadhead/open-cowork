@@ -1,0 +1,158 @@
+site_name: Gateway (Open Cowork)
+site_description: OpenCode-native durable work coordination for tasks, scheduler runs, channels, and service operations.
+site_url: https://joe-broadhead.github.io/open-cowork/opencode-gateway/
+repo_url: https://github.com/joe-broadhead/open-cowork
+repo_name: open-cowork
+edit_uri: edit/master/products/gateway/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/joe-broadhead/open-cowork/tree/master/products/gateway
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - CLI: getting-started/cli.md
+      - Installation: getting-started/installation.md
+      - OpenCode Setup: getting-started/opencode-setup.md
+      - Operator Mental Model: getting-started/operator-mental-model.md
+      - Quickstart: getting-started/quickstart.md
+  - Concepts:
+      - Agents And Skills: concepts/agents-and-skills.md
+      - Agent Presence: concepts/agent-presence.md
+      - Architecture: concepts/architecture.md
+      - Capacity Backpressure: concepts/capacity-backpressure.md
+      - Channel Adapter Contract: concepts/channel-adapter-contract.md
+      - Codebase Boundaries: concepts/codebase-boundaries.md
+      - Delegation Contract: concepts/delegation-contract.md
+      - Durable Work: concepts/durable-work.md
+      - Gateway Method: concepts/gateway-method.md
+      - Idempotency: concepts/idempotency.md
+      - Identity Graph: concepts/identity-graph.md
+      - Mission Control: concepts/mission-control.md
+      - Multi Daemon Scaling: concepts/multi-daemon-scaling.md
+      - Product Contract: concepts/product-contract.md
+      - Progress Update Policy: concepts/progress-update-policy.md
+      - Roadmap Supervision: concepts/roadmap-supervision.md
+      - Team Orchestration Protocol: concepts/team-orchestration-protocol.md
+  - Configuration:
+      - Agent Contracts: configuration/agent-contracts.md
+      - Agent Teams: configuration/agent-teams.md
+      - Blueprints: configuration/blueprints.md
+      - Channels: configuration/channels.md
+      - Environment Rollout: configuration/environment-rollout.md
+      - Environments: configuration/environments.md
+      - OpenCode Peers: configuration/opencode-peers.md
+      - Reference: configuration/reference.md
+      - Runtime Isolation: configuration/runtime-isolation.md
+      - Scheduler Profiles: configuration/scheduler-profiles.md
+  - API Reference:
+      - Channel Commands: api/channel-commands.md
+      - HTTP API: api/http-api.md
+      - MCP Tools: api/mcp-tools.md
+  - Operations:
+      - Backup Restore: operations/backup-restore.md
+      - Docker: operations/docker.md
+      - Governance: operations/governance.md
+      - Human Loop: operations/human-loop.md
+      - Observability Incidents: operations/observability-incidents.md
+      - Operator Feedback Loop: operations/operator-feedback-loop.md
+      - Operator Onboarding: operations/operator-onboarding.md
+      - Public Threat Model: operations/public-threat-model.md
+      - Quality Contracts: operations/quality-contracts.md
+      - Running: operations/running.md
+      - Runtime Replay Consistency: operations/runtime-replay-consistency.md
+      - Security: operations/security.md
+      - Service Lifecycle: operations/service-lifecycle.md
+      - Stress Suite: operations/stress-suite.md
+      - Troubleshooting: operations/troubleshooting.md
+  - Development:
+      - Adapter Sdk: development/adapter-sdk.md
+      - ADR OpenCode Workspaces: development/adr-opencode-workspaces.md
+      - Architecture Handoff Map: development/architecture-handoff-map.md
+      - Contributing: development/contributing.md
+      - Deferred Engineering ADR: development/deferred-engineering-adr.md
+      - Module Boundary Budget: development/module-boundary-budget.md
+      - OpenCode SDK Surface: development/opencode-sdk-surface.md
+      - Testing Release: development/testing-release.md
+      - Work Store Safety: development/work-store-safety.md
+  - History:
+      - Decision Log: history/decision-log.md
+      - Dogfood Case Study: history/dogfood-case-study.md

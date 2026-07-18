@@ -300,5 +300,5 @@ every Operate page.
 - [Glossary](glossary.md) — every term that shows up across these docs.
 - [Getting Started](getting-started.md) — install, sign in, run a session.
 - [Architecture](architecture.md) — the layers, the invariants, and why they're invariants.
-- [Packaging and Gateway Product Modes](packaging-and-product-modes.md) — product
+- [Packaging and Gateway Product Modes](packaging-and-product-modes.md) — product names, Channel Gateway dual-tag, package boundaries. ADRs: [partitions](adr/product-partitions.md) · [privacy](adr/monorepo-privacy.md) · [Knowledge vs Wiki](adr/knowledge-vs-wiki.md)
   names, package boundaries, release channels, and Gateway product-mode policy.

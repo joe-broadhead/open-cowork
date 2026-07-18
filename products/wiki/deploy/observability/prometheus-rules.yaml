@@ -1,0 +1,59 @@
+groups:
+  - name: openwiki.rules
+    rules:
+      - alert: OpenWikiNotReady
+        expr: openwiki_ready == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "OpenWiki readiness is failing"
+          description: "Inspect /readyz component details, then run the stale derived store or dependency-specific runbook."
+      - alert: OpenWikiHighErrorRate
+        expr: sum(rate(openwiki_http_requests_total{status=~"5.."}[5m])) by (workspace_id) > 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "OpenWiki is returning 5xx responses"
+          description: "Use request_id from logs and route/status labels to identify the failing operation."
+      - alert: OpenWikiMcpToolErrors
+        expr: sum(rate(openwiki_mcp_tool_calls_total{status="error"}[10m])) by (workspace_id, tool, mode) > 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenWiki MCP tool errors detected"
+          description: "Check structured mcp_tool_failed logs and the agent token or permission scope for the affected tool."
+      - alert: OpenWikiWriteLockBusy
+        expr: increase(openwiki_write_lock_acquisitions_total{status="busy"}[10m]) > 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenWiki write lock is busy"
+          description: "Run openwiki db write-lease --json and follow the stuck write lock runbook."
+      - alert: OpenWikiQueueBacklog
+        expr: sum(openwiki_queue_jobs{status="queued"}) by (workspace_id) > 25
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenWiki queue backlog is growing"
+          description: "Run openwiki runs monitor --json, inspect worker logs, and scale or repair workers."
+      - alert: OpenWikiStaleRunningJobs
+        expr: openwiki_queue_stale_running_jobs > 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenWiki has stale running jobs"
+          description: "Dry-run openwiki runs reap-stale before retrying or failing jobs."
+      - alert: OpenWikiSourceFetchFailures
+        expr: sum(rate(openwiki_source_fetch_attempts_total{status=~"failure|timeout"}[15m])) by (workspace_id, connector_kind) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenWiki source fetch failures detected"
+          description: "Check connector credentials, allowlists, DNS/SSRF blocks, and source.fetch run logs."

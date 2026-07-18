@@ -1,0 +1,91 @@
+# Standalone Gateway product release (JOE-912). Does not build Electron/Desktop.
+name: Release Gateway
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip unit tests (emergency only)'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'gateway@v*'
+      - 'gateway-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gateway-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Product boundaries
+        run: pnpm boundaries:check
+
+      - name: Build
+        run: pnpm --filter cowork-gateway build
+
+      - name: Typecheck
+        run: pnpm --filter cowork-gateway typecheck
+
+      - name: Test
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests != true }}
+        run: pnpm --filter cowork-gateway test
+
+      - name: Release check
+        run: pnpm --filter cowork-gateway release:check
+
+      - name: Pack
+        run: |
+          mkdir -p artifacts/gateway
+          pnpm --filter cowork-gateway exec npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/gateway"
+
+      - name: Standalone smoke
+        run: node products/gateway/scripts/standalone-smoke.mjs "$(ls artifacts/gateway/cowork-gateway-*.tgz | head -1)"
+
+      - name: Upload pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowork-gateway-pack
+          path: artifacts/gateway/*.tgz
+          if-no-files-found: error
+
+      - name: Checksums
+        run: |
+          cd artifacts/gateway
+          shasum -a 256 *.tgz | tee SHA256SUMS
+
+      - name: Attach to GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" \
+            --title "Gateway ${tag}" \
+            --notes "Standalone Gateway product pack from monorepo products/gateway. Does not include Desktop." \
+            --verify-tag \
+            artifacts/gateway/* || \
+          gh release upload "$tag" artifacts/gateway/* --clobber

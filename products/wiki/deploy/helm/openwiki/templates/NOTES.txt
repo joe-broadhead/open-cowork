@@ -1,0 +1,13 @@
+OpenWiki has been installed.
+
+Service:
+  {{ include "openwiki.fullname" . }}:{{ .Values.service.port }}
+
+Health checks:
+  /livez
+  /readyz
+Metrics:
+  /metrics (admin-scoped by default; set OPENWIKI_PUBLIC_METRICS=1 only behind an internal scrape path)
+
+If ingress is disabled, forward the service locally:
+  kubectl port-forward svc/{{ include "openwiki.fullname" . }} 3030:{{ .Values.service.port }}

@@ -21,18 +21,47 @@ Bad changes usually:
 - add prompt-only behavior where code/config should be the source of truth
 - hardcode downstream assumptions into the upstream app
 
+## Product partitions
+
+Sibling products (durable **Gateway**, **Wiki**) live under `products/` and keep
+independent installables. See [products/README.md](products/README.md) and
+[docs/adr/product-partitions.md](docs/adr/product-partitions.md).
+
+- Channel Gateway code: `apps/channel-gateway` (`@open-cowork/channel-gateway`)
+- Do not add durable Gateway sources under `apps/channel-gateway` or
+  `@open-cowork/channel-gateway`.
+
 ## Development setup
 
 Requirements:
-- Node `>=22.13` (supported floor). For development and CI parity, use the
-  exact version pinned in [`.nvmrc`](.nvmrc).
-- pnpm `10.32.1` via Corepack
+- Node monorepo floor **`>=22.22.3`** (max of product minima: Desktop/Gateway
+  need `>=22.13` for `node:sqlite`; Wiki needs `>=22.22.3`). For development
+  and CI parity, use the exact version pinned in [`.nvmrc`](.nvmrc)
+  (currently `22.23.1`).
+- **pnpm `10.32.1` only** for the whole monorepo (including `products/gateway`
+  and `products/wiki`). Do not mix pnpm 11 or npm workspaces for product
+  packages. Enable via Corepack:
+  `corepack enable && corepack prepare pnpm@10.32.1 --activate`
+- There is a **single lockfile** at the monorepo root (`pnpm-lock.yaml`).
+  Product packages do not ship their own `package-lock.json`.
 - Python `>=3.11` for docs work
 
 Install:
 
 ```bash
+corepack enable
+corepack prepare pnpm@10.32.1 --activate
 pnpm install
+```
+
+Product partitions (independent of Desktop release):
+
+```bash
+pnpm --filter cowork-gateway build && pnpm --filter cowork-gateway test
+pnpm --filter cowork-wiki-workspace test
+node products/gateway/scripts/standalone-smoke.mjs
+node products/wiki/scripts/standalone-smoke.mjs
+pnpm boundaries:check
 ```
 
 ## Common commands

@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 //
 // The Gateway runtime needs the root workspace manifests for `pnpm install
 // --prod`, the public config/schema and license material, plus the built
-// package artifacts that apps/gateway imports. It must not ship the monorepo
+// package artifacts that apps/channel-gateway imports. It must not ship the monorepo
 // source tree, tests, MCPs, desktop cloud artifacts, or release scripts.
 //
 // Usage: node scripts/prune-gateway-runtime.mjs <output-dir>
@@ -29,7 +29,7 @@ const ROOT_DIRS = [
 ]
 
 const RUNTIME_WORKSPACES = [
-  'apps/gateway',
+  'apps/channel-gateway',
   'packages/cloud-client',
   'packages/gateway-channel',
   'packages/gateway-provider-cli',
@@ -78,8 +78,8 @@ for (const workspace of RUNTIME_WORKSPACES) {
 }
 
 requirePath(
-  join(outDir, 'apps/gateway/dist/index.js'),
-  'Gateway entrypoint apps/gateway/dist/index.js',
+  join(outDir, 'apps/channel-gateway/dist/index.js'),
+  'Gateway entrypoint apps/channel-gateway/dist/index.js',
 )
 
 process.stdout.write(`[prune-gateway-runtime] wrote ${outDir} (${RUNTIME_WORKSPACES.length} workspace package artifacts, manifests + dist only)\n`)

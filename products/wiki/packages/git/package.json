@@ -1,0 +1,11 @@
+{
+  "name": "@openwiki/git",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@openwiki/core": "workspace:*",
+    "@openwiki/repo": "workspace:*"
+  }
+}

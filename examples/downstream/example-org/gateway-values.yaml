@@ -1,5 +1,5 @@
 image:
-  repository: registry.example.com/open-cowork-gateway
+  repository: registry.example.com/open-cowork-channel-gateway
   tag: v2026.05.0
 
 gateway:

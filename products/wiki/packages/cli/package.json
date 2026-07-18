@@ -1,0 +1,27 @@
+{
+  "name": "@openwiki/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "openwiki": "./src/main.ts",
+    "cowork-wiki": "./src/main.ts"
+  },
+  "dependencies": {
+    "@openwiki/core": "workspace:*",
+    "@openwiki/git": "workspace:*",
+    "@openwiki/harness-opencode": "workspace:*",
+    "@openwiki/http-api": "workspace:*",
+    "@openwiki/index-store": "workspace:*",
+    "@openwiki/jobs": "workspace:*",
+    "@openwiki/mcp-server": "workspace:*",
+    "@openwiki/policy": "workspace:*",
+    "@openwiki/postgres-runtime": "workspace:*",
+    "@openwiki/repo": "workspace:*",
+    "@openwiki/search": "workspace:*",
+    "@openwiki/skills": "workspace:*",
+    "@openwiki/static-export": "workspace:*",
+    "@openwiki/validation": "workspace:*",
+    "@openwiki/workflows": "workspace:*"
+  }
+}

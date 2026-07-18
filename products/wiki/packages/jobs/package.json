@@ -1,0 +1,19 @@
+{
+  "name": "@openwiki/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@openwiki/connectors": "workspace:*",
+    "@openwiki/core": "workspace:*",
+    "@openwiki/index-store": "workspace:*",
+    "@openwiki/policy": "workspace:*",
+    "@openwiki/postgres-runtime": "workspace:*",
+    "@openwiki/repo": "workspace:*",
+    "@openwiki/search": "workspace:*",
+    "@openwiki/static-export": "workspace:*",
+    "@openwiki/validation": "workspace:*",
+    "@openwiki/workflows": "workspace:*"
+  }
+}

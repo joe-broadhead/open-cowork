@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/validation-report.schema.json",
+  "title": "OpenWiki Validation Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "proposal_id", "status", "checked_at", "issues"],
+  "properties": {
+    "id": { "type": "string" },
+    "proposal_id": { "type": "string", "pattern": "^proposal:" },
+    "status": { "enum": ["passed", "failed"] },
+    "checked_at": { "type": "string", "format": "date-time" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "code", "message"],
+        "properties": {
+          "severity": { "enum": ["info", "warning", "error"] },
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    }
+  }
+}

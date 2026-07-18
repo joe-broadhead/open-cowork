@@ -1,0 +1,28 @@
+Transcript Export
+Meeting: Acme Launch Sync
+Date: 2026-05-31
+Participants:
+- Alice Chen, Acme Launch Operations
+- Bob Rivera, OpenWiki
+- Jordan Patel, Acme Product
+
+Transcript:
+Alice: We need the transcript export to become durable project knowledge before the launch review on Friday.
+Bob: I can document the OpenWiki sync workflow and keep the source transcript linked to every proposed page.
+Jordan: Acme will send weekly transcript exports after each launch operations meeting.
+Alice: Let's treat the first milestone as a private personal wiki, then move the same inbox pattern to team spaces.
+Bob: I will mark the due date as unstated because nobody gave me a deadline for the documentation task.
+Jordan: The key topics are launch readiness, meeting automation, and private GitHub sync.
+
+Decisions:
+- Acme will send weekly transcript exports.
+- The first test runs in proposal mode, not write mode.
+
+Action Items:
+- Bob owns documenting the transcript-to-OpenWiki sync workflow.
+- Alice owns confirming who can review meeting-derived proposals.
+- Jordan owns collecting the next launch operations transcript.
+
+Open Questions:
+- The due date for Bob's documentation task was not stated.
+- The private GitHub repository URL is user-provided.

@@ -3,6 +3,7 @@ import type {
   BuiltInAgentDetail, CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomAgentConfig, CustomAgentSummary, CustomMcpConfig, CustomSkillConfig, RuntimeToolDescriptor, WorkflowListPayload, } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
+import { ProductMcpLinkPanel } from './ProductMcpLinkPanel'
 import { Button, Card, ErrorState, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '@open-cowork/ui'
 import { useSessionStore } from '../../stores/session'
 import { useEscape } from '../../hooks/useEscape'
@@ -424,6 +425,12 @@ export function CapabilitiesPage({
             {t('capabilities.relationshipsDisabled', 'A relationship map of how coworkers use these tools and skills is coming soon.')}
           </p>
         )}
+
+        {tab === 'tools' || tab === 'map' ? (
+          <div className="mb-4">
+            <ProductMcpLinkPanel onChanged={loadAll} />
+          </div>
+        ) : null}
 
         {loading && tools.length === 0 && skills.length === 0 ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

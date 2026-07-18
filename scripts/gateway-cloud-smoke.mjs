@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { createHttpSseCloudTransportAdapter } from '../packages/cloud-client/dist/index.js'
-import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/channel-gateway/dist/index.js'
 import { WebhookCircuitOpenError } from '../packages/gateway-provider-webhook/dist/index.js'
 
 const args = parseArgs(process.argv.slice(2))

@@ -1,0 +1,25 @@
+{
+  "id": "propose-wiki-edit",
+  "label": "Propose Wiki Edit",
+  "description": "Draft and submit an OpenWiki page edit proposal.",
+  "agent": "wiki-editor",
+  "steps": [
+    {
+      "id": "read-target",
+      "tool": "mcp__openwiki__wiki.read_page",
+      "input": {
+        "id": "{{input.page_id}}"
+      }
+    },
+    {
+      "id": "propose",
+      "tool": "mcp__openwiki__wiki.propose_edit",
+      "input": {
+        "page_id": "{{input.page_id}}",
+        "body": "{{input.body}}",
+        "rationale": "{{input.rationale}}",
+        "actor_id": "actor:agent:wiki-editor"
+      }
+    }
+  ]
+}

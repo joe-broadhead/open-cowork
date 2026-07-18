@@ -1,0 +1,5 @@
+opencode-gateway:
+MOVED → https://github.com/joe-broadhead/open-cowork/tree/master/products/gateway (frozen 2026-07-18; pending archive)
+
+open-wiki:
+MOVED → https://github.com/joe-broadhead/open-cowork/tree/master/products/wiki (frozen 2026-07-18; pending archive)

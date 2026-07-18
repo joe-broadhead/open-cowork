@@ -32,6 +32,45 @@ export interface CustomMcpTestResult {
   error?: string | null
 }
 
+/** JOE-909: optional soft-link of monorepo Gateway / Wiki CLIs as custom MCPs. */
+export type ProductMcpLinkKind = 'gateway' | 'wiki'
+
+export interface ProductMcpProbe {
+  kind: ProductMcpLinkKind
+  name: string
+  label: string
+  found: boolean
+  resolvedBinary?: string
+  linked: boolean
+  installHint: string
+  docsPath: string
+}
+
+export interface ProductMcpLinkRequest {
+  kind: ProductMcpLinkKind
+  command?: string
+  gatewayDaemonUrl?: string
+  tokenFile?: string
+  wikiRoot?: string
+}
+
+export type ProductMcpLinkResponse =
+  | {
+      ok: true
+      name: string
+      label: string
+      description: string
+      resolvedBinary: string
+      customMcp: CustomMcpConfig
+      saved?: boolean
+    }
+  | {
+      ok: false
+      code: string
+      message: string
+      installHint: string
+    }
+
 export type McpPreflightStatus =
   | 'ok'
   | 'missing_credentials'

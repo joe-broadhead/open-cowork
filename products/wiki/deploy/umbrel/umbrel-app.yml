@@ -1,0 +1,26 @@
+manifestVersion: 1
+id: openwiki
+name: OpenWiki
+tagline: Private versioned wiki for humans and local agents
+icon: https://raw.githubusercontent.com/joe-broadhead/open-cowork/master/products/wiki/deploy/umbrel/icon.svg
+category: files
+version: "0.0.0"
+port: 3030
+description: >-
+  Wiki (Open Cowork) is a private, Git-backed knowledge base for humans and local agents.
+  This Umbrel package is intended for trusted home and LAN access, not direct
+  public internet write exposure.
+developer: Open Cowork
+website: https://github.com/joe-broadhead/open-cowork/tree/master/products/wiki
+submitter: Open Cowork
+submission: https://github.com/joe-broadhead/open-cowork
+repo: https://github.com/joe-broadhead/open-cowork
+support: https://github.com/joe-broadhead/open-cowork/issues
+gallery: []
+releaseNotes: >-
+  Initial local-first OpenWiki package with HTTP API, MCP stdio, static export,
+  proposal workflow, and local workspace backup artifacts.
+dependencies: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""

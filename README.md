@@ -306,7 +306,7 @@ Start here:
 
 ```text
 apps/desktop                       Electron shell — main process, preload bridge, and packaging — that loads the packages/app renderer; also hosts runtime composition and the cloud control plane
-apps/gateway                       Cloud Channel Gateway daemon
+apps/channel-gateway                       Cloud Channel Gateway daemon
 apps/standalone-gateway            Standalone Team Gateway appliance
 packages/app                       Unified renderer UI — runs on Electron (real IPC) and in the browser via the CoworkAPI shim (cloud)
 packages/ui                        Shared design-system primitives

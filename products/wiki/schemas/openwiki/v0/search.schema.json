@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/search.schema.json",
+  "title": "OpenWiki Search Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["results", "count", "total", "truncated", "persona"],
+  "properties": {
+    "serving_layer": { "type": "string", "enum": ["sqlite", "postgres"] },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "type", "title", "uri", "score", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "url": { "type": "string" },
+          "uri": { "type": "string" },
+          "score": { "type": "number" },
+          "matched_fields": { "type": "array", "items": { "type": "string" } },
+          "citations": { "type": "array" },
+          "updated_at": { "type": "string" },
+          "explain": { "type": "object" },
+          "highlights": {
+            "type": "object",
+            "additionalProperties": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "total": { "type": "integer", "minimum": 0 },
+    "total_relation": { "type": "string", "enum": ["exact", "capped"] },
+    "truncated": { "type": "boolean" },
+    "persona": { "type": "string" },
+    "next_cursor": { "type": "string" },
+    "facets": { "type": "object", "additionalProperties": true },
+    "facets_relation": { "type": "string", "enum": ["exact", "capped"] },
+    "explain": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "query_tokens": { "type": "array", "items": { "type": "string" } },
+        "mode": { "type": "string", "enum": ["lexical", "hybrid"] },
+        "fuzzy": { "type": "boolean" },
+        "rrf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "k", "overfetch", "fetch_limit"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "k": { "type": "number" },
+            "overfetch": { "type": "integer", "minimum": 1 },
+            "fetch_limit": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "retrievers_used": { "type": "array", "items": { "type": "string" } },
+        "retriever_stats": { "type": "object", "additionalProperties": true },
+        "ranking_signals": { "type": "array", "items": { "type": "string" } },
+        "reranker": { "type": "object", "additionalProperties": true },
+        "diagnostics": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "backend": { "type": "string", "enum": ["sqlite", "postgres"] },
+            "candidate_strategy": { "type": "string" },
+            "candidate_ids": { "type": "integer", "minimum": 0 },
+            "record_json_reads": { "type": "integer", "minimum": 0 },
+            "scanned_rows": { "type": "integer", "minimum": 0 },
+            "embedding_model": { "type": "string" },
+            "embedding_dimensions": { "type": "integer", "minimum": 1 },
+            "embedding_provider": { "type": "string" },
+            "policy_scan_capped": { "type": "boolean" },
+            "policy_scan_cap_rows": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  }
+}

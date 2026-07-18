@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 const repoRoot = process.cwd()
 
 const runtimeWorkspaces = [
-  'apps/gateway',
+  'apps/channel-gateway',
   'packages/cloud-client',
   'packages/gateway-channel',
   'packages/gateway-provider-cli',
@@ -58,7 +58,7 @@ test('gateway runtime prune emits only shipped manifests and built artifacts', (
       'open-cowork.config.schema.json',
       'LICENSE',
       'THIRD_PARTY_NOTICES.md',
-      'apps/gateway/dist/index.js',
+      'apps/channel-gateway/dist/index.js',
     ]) {
       assert.ok(files.includes(requiredFile), `pruned runtime is missing ${requiredFile}`)
     }

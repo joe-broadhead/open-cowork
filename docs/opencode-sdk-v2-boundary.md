@@ -34,6 +34,11 @@ registry shape; changing it is a compatibility review, not a snapshot refresh.
 - Standalone Gateway is a separate execution authority. Its SDK usage is
   limited to the documented private OpenCode adapter in
   `apps/standalone-gateway/src/opencode.ts`.
+- **Durable Gateway** (`products/gateway`, package `cowork-gateway`) is a
+  **product partition** that coordinates OpenCode via its own daemon/MCP and
+  may declare `@opencode-ai/sdk`. It is not part of the Desktop Electron
+  runtime-host path and must not be imported by `apps/desktop` or
+  `packages/app`.
 - Web, website, renderer, preload, and `@open-cowork/cloud-client` code must
   not import `@opencode-ai/sdk`.
 - Desktop and cloud runtime code may import the SDK only in the files listed
@@ -254,5 +259,5 @@ Use this checklist for every OpenCode SDK or `opencode-ai` runtime bump:
   `node --no-warnings --experimental-sqlite --experimental-strip-types --test tests/opencode-sdk-boundary.test.ts tests/opencode-sdk-event-projection.test.ts tests/cloud-opencode-runtime-adapter.test.ts tests/cloud-session-projection-contract.test.ts tests/gateway-package-boundary.test.ts`.
 - Run the BYOK runtime injection tests:
   `node --no-warnings --experimental-sqlite --experimental-strip-types --test tests/byok-runtime-injection.test.ts tests/byok-boundary-regression.test.ts`.
-- Run gateway renderer tests after `pnpm --filter @open-cowork/gateway build`:
-  `node --no-warnings --experimental-strip-types --test apps/gateway/src/event-renderer.test.ts`.
+- Run gateway renderer tests after `pnpm --filter @open-cowork/channel-gateway build`:
+  `node --no-warnings --experimental-strip-types --test apps/channel-gateway/src/event-renderer.test.ts`.

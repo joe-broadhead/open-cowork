@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/source.schema.json",
+  "title": "OpenWiki Source Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "title", "source_type", "retrieved_at", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^source:" },
+    "uri": { "type": "string", "pattern": "^openwiki://source/" },
+    "type": { "const": "source" },
+    "title": { "type": "string", "minLength": 1 },
+    "source_type": { "enum": ["webpage", "pdf", "document", "transcript", "image", "dataset", "manual"] },
+    "url": { "type": "string" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "content_hash": { "type": "string" },
+    "storage": { "type": "object" },
+    "trust": { "type": "object" },
+    "path": { "type": "string", "minLength": 1 }
+  }
+}

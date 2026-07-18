@@ -1,0 +1,71 @@
+name: OpenWiki Build Site
+
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        description: OpenWiki workspace root
+        required: false
+        default: examples/basic-wiki
+      out_dir:
+        description: Static export output directory
+        required: false
+        default: public
+      base_url:
+        description: Base URL for generated static links
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      root:
+        type: string
+        required: false
+        default: examples/basic-wiki
+      out_dir:
+        type: string
+        required: false
+        default: public
+      base_url:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Export static OpenWiki
+        env:
+          OPENWIKI_ROOT: ${{ inputs.root || 'examples/basic-wiki' }}
+          OPENWIKI_OUT_DIR: ${{ inputs.out_dir || 'public' }}
+          OPENWIKI_BASE_URL: ${{ inputs.base_url || '' }}
+        run: |
+          set -eu
+          args=(--root "$OPENWIKI_ROOT" export static --out-dir "$OPENWIKI_OUT_DIR" --json)
+          if [ -n "$OPENWIKI_BASE_URL" ]; then
+            args+=(--base-url "$OPENWIKI_BASE_URL")
+          fi
+          pnpm openwiki -- "${args[@]}" > openwiki-build-site.json
+      - name: Upload static site artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-static-site
+          path: |
+            ${{ inputs.root || 'examples/basic-wiki' }}/${{ inputs.out_dir || 'public' }}
+            openwiki-build-site.json

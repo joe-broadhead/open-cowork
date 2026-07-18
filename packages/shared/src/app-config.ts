@@ -236,7 +236,7 @@ export function parseGatewayProductMode(value: unknown): GatewayProductMode | nu
   const text = typeof value === 'string' ? value.trim() : ''
   if (!text) return null
   if (text === 'cloud_channel' || text === 'standalone' || text === 'hybrid') return text
-  throw new Error(`Unsupported gateway productMode ${text}. Valid values: cloud_channel (apps/gateway), standalone (apps/standalone-gateway), hybrid (reserved).`)
+  throw new Error(`Unsupported gateway productMode ${text}. Valid values: cloud_channel (apps/channel-gateway), standalone (apps/standalone-gateway), hybrid (reserved).`)
 }
 
 export function assertCloudChannelGatewayProductMode(productMode: GatewayProductMode) {
@@ -245,13 +245,13 @@ export function assertCloudChannelGatewayProductMode(productMode: GatewayProduct
   if (productMode === 'standalone') {
     throw new Error(
       'OPEN_COWORK_GATEWAY_PRODUCT_MODE=standalone (or gateway.productMode=standalone) is not supported by '
-      + 'apps/gateway (Cloud Channel Gateway binary). Use apps/standalone-gateway with '
-      + 'OPEN_COWORK_STANDALONE_GATEWAY_* configuration instead. apps/gateway only accepts productMode=cloud_channel.',
+      + 'apps/channel-gateway (Cloud Channel Gateway binary). Use apps/standalone-gateway with '
+      + 'OPEN_COWORK_STANDALONE_GATEWAY_* configuration instead. apps/channel-gateway only accepts productMode=cloud_channel.',
     )
   }
   throw new Error(
     'OPEN_COWORK_GATEWAY_PRODUCT_MODE=hybrid (or gateway.productMode=hybrid) is reserved for a future design. '
-    + 'The Cloud Channel Gateway binary (apps/gateway) only accepts productMode=cloud_channel. '
+    + 'The Cloud Channel Gateway binary (apps/channel-gateway) only accepts productMode=cloud_channel. '
     + 'For private execution authority use apps/standalone-gateway (OPEN_COWORK_STANDALONE_GATEWAY_*).',
   )
 }
@@ -261,7 +261,7 @@ export function assertStandaloneGatewayProductMode(productMode: GatewayProductMo
   // JOE-897: name the correct binary / env family in fail-closed messages.
   if (productMode === 'cloud_channel') {
     throw new Error(
-      'productMode=cloud_channel is owned by the Cloud Channel Gateway binary (apps/gateway, '
+      'productMode=cloud_channel is owned by the Cloud Channel Gateway binary (apps/channel-gateway, '
       + 'OPEN_COWORK_GATEWAY_*). Standalone Gateway (apps/standalone-gateway, OPEN_COWORK_STANDALONE_GATEWAY_*) '
       + 'only accepts productMode=standalone.',
     )

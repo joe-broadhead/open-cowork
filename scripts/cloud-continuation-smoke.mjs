@@ -11,7 +11,7 @@ import {
   cloudWorkspaceCacheKey,
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
-import { createGatewayDaemon, createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createGatewayDaemon, createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/channel-gateway/dist/index.js'
 
 const args = parseArgs(process.argv.slice(2))
 const debugEnabled = process.env.OPEN_COWORK_CONTINUATION_SMOKE_DEBUG === 'true'

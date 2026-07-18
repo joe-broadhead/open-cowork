@@ -5,11 +5,19 @@ import { validateCustomMcpStdioCommand } from '@open-cowork/runtime-host/mcp-std
 import { assertCustomMcpContentLimits, assertCustomSkillContent } from '@open-cowork/runtime-host/custom-content-limits'
 import { invalidateCustomAgentCatalogCache } from '@open-cowork/runtime-host/custom-agents'
 import { exportSetupBundle, importSetupBundle } from '@open-cowork/runtime-host/setup-bundle-store'
+import {
+  buildProductMcpLink,
+  probeProductMcpLinks,
+  type ProductMcpLinkKind,
+  type ProductMcpLinkResult,
+  type ProductMcpProbe,
+} from '@open-cowork/runtime-host/product-mcp-link'
 import { randomUUID } from 'crypto'
 import { resolve } from 'path'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig, RuntimeContextOptions, ScopedArtifactRef } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import {
+  noIpcArgs,
   objectAndOptionalObjectArgs,
   objectAndOptionalStringArgs,
   objectArg,
@@ -384,4 +392,79 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     }
     return result
   })
+
+  // JOE-909: optional Gateway / Wiki soft links (never pre-enabled in public config).
+  registerIpcInvoke(context, 'custom:product-mcp-probe', noIpcArgs, async (): Promise<ProductMcpProbe[]> => {
+    const linkedNames = listCustomMcps().map((entry) => entry.name)
+    return probeProductMcpLinks({ linkedNames })
+  })
+
+  registerIpcInvoke(
+    context,
+    'custom:product-mcp-link',
+    objectArg<ProductMcpLinkIpcRequest>('product MCP link request', validateProductMcpLinkRequest),
+    async (_event, request): Promise<ProductMcpLinkResult & { saved?: boolean }> => {
+      const result = buildProductMcpLink({
+        kind: request.kind,
+        command: request.command,
+        gatewayDaemonUrl: request.gatewayDaemonUrl,
+        tokenFile: request.tokenFile,
+        wikiRoot: request.wikiRoot,
+      })
+      if (!result.ok) return result
+
+      try {
+        assertCustomMcpContentLimits(result.customMcp)
+        validateCustomMcpStdioCommand(result.customMcp)
+        saveCustomMcp(result.customMcp)
+        invalidateCustomAgentCatalogCache()
+        log('custom', `Linked product MCP: ${result.name}`)
+        log('audit', `product-mcp.link kind=${request.kind} name=${result.name}`)
+        const { rebootRuntime } = await import('../index.ts')
+        await rebootRuntime()
+        return { ...result, saved: true }
+      } catch (err) {
+        context.logHandlerError(`custom:product-mcp-link ${result.name}`, err)
+        return {
+          ok: false,
+          code: 'unsupported',
+          message: err instanceof Error ? err.message : String(err),
+          installHint: 'Fix the MCP configuration and retry.',
+        }
+      }
+    },
+  )
+}
+
+type ProductMcpLinkIpcRequest = {
+  kind: ProductMcpLinkKind
+  command?: string
+  gatewayDaemonUrl?: string
+  tokenFile?: string
+  wikiRoot?: string
+}
+
+function validateProductMcpLinkRequest(
+  record: Record<string, unknown>,
+  _channel: string,
+  _label: string,
+): ProductMcpLinkIpcRequest {
+  const kind = record.kind
+  if (kind !== 'gateway' && kind !== 'wiki') {
+    throw new Error('Product MCP link kind must be gateway or wiki.')
+  }
+  const optional = (key: string) => {
+    const value = record[key]
+    if (value === undefined || value === null || value === '') return undefined
+    if (typeof value !== 'string') throw new Error(`${key} must be a string when provided.`)
+    if (value.length > 4096) throw new Error(`${key} is too long.`)
+    return value
+  }
+  return {
+    kind,
+    command: optional('command'),
+    gatewayDaemonUrl: optional('gatewayDaemonUrl'),
+    tokenFile: optional('tokenFile'),
+    wikiRoot: optional('wikiRoot'),
+  }
 }

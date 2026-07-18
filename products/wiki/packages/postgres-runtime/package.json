@@ -1,0 +1,13 @@
+{
+  "name": "@openwiki/postgres-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@openwiki/core": "workspace:*",
+    "@openwiki/policy": "workspace:*",
+    "@openwiki/repo": "workspace:*",
+    "postgres": "^3.4.5"
+  }
+}

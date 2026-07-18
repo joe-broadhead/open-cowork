@@ -5,7 +5,7 @@ description: Run the Cloud Channel Gateway on a VPS, Mac mini, Raspberry Pi, or 
 
 # Cloud Channel Gateway Appliance
 
-The current `apps/gateway` daemon is the **Cloud Channel Gateway**. It is the
+The current `apps/channel-gateway` daemon is the **Cloud Channel Gateway**. It is the
 headless channel surface for Open Cowork Cloud. It lets users talk to their
 cloud workspace from Telegram, Slack, email, webhooks, and future channels
 while Cloud remains the source of truth.
@@ -28,7 +28,7 @@ It must not create Gateway-owned Projects, Tasks, or Delegations in this mode.
 
 Standalone Team Gateway is a separate product mode. It may own a private
 OpenCode runtime and Gateway Postgres, but it is implemented by
-`apps/standalone-gateway`, not by `apps/gateway`, and must not be enabled
+`apps/standalone-gateway`, not by `apps/channel-gateway`, and must not be enabled
 through this daemon.
 
 Provider tiers, capabilities, signing requirements, and test expectations are
@@ -48,7 +48,7 @@ Gateway has two independent mode concepts:
 
 | Product mode | Execution authority | Current support |
 | --- | --- | --- |
-| `cloud_channel` | Cloud workers execute; Gateway is a Cloud HTTP/SSE client. | Supported by `apps/gateway`. |
+| `cloud_channel` | Cloud workers execute; Gateway is a Cloud HTTP/SSE client. | Supported by `apps/channel-gateway`. |
 | `standalone` | Gateway owns private OpenCode runtime and Gateway Postgres. | Supported by `apps/standalone-gateway`; current daemon fails closed. |
 | `hybrid` | Cloud-connected edge/standalone authority. | Reserved for a later trust and registration design. |
 

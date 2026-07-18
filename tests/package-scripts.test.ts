@@ -85,7 +85,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm test:prepare',
     'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
-    'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/channel-gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs',
   ])
@@ -94,7 +94,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm test:prepare',
     'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
-    'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/channel-gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/run-workspace-node-tests.mjs --coverage',
@@ -128,6 +128,7 @@ test('root lint script runs all release gate checks', () => {
     'node scripts/check-preload-channels.mjs',
     'node scripts/check-shared-dist.mjs',
     'pnpm lint:dead-code',
+    'pnpm boundaries:check',
   ])
   assert.equal(requireScript('docs:vendor:build'), 'node scripts/build-docs-mermaid-vendor.mjs')
   assert.equal(requireScript('docs:vendor:check'), 'node scripts/build-docs-mermaid-vendor.mjs --check')
@@ -153,7 +154,7 @@ test('dead-code gate covers every source workspace package', () => {
 test('contributor setup docs and dependency update governance match enforced engines', () => {
   assert.equal(nvmrc, '22.23.1')
   assert.equal(packageJson.packageManager, 'pnpm@10.32.1')
-  assert.equal(packageJson.engines?.node, '>=22.13')
+  assert.equal(packageJson.engines?.node, '>=22.22.3')
   assert.equal(packageJson.engines?.pnpm, '10.32.1')
   // The benchmark metadata records the environment that actually generated the
   // numbers. It intentionally exercises the supported Node floor; .nvmrc is the
@@ -164,7 +165,7 @@ test('contributor setup docs and dependency update governance match enforced eng
     node: 'v22.13.0',
   })
   assert.match(npmrc, /^engine-strict=true$/m)
-  assert.match(contributingDocs, /Node `>=22\.13`/)
+  assert.match(contributingDocs, /Node monorepo floor \*\*`>=22\.22\.3`\*\*/)
   assert.doesNotMatch(contributingDocs, /Node `>=22`[^.]/)
   for (const docs of [readmeDocs, contributingDocs, gettingStartedDocs, firstContributionDocs]) {
     assert.match(docs, /exact version pinned in .*`\.nvmrc`/i)
@@ -267,7 +268,7 @@ test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:desktop'), 'pnpm --filter @open-cowork/desktop build')
   assert.equal(requireScript('build:mcps'), 'pnpm --filter=./mcps/* build')
   assert.equal(requireScript('build:packages'), 'pnpm --workspace-concurrency=1 --filter=./packages/* build')
-  assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
+  assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/channel-gateway build')
   assert.equal(requireScript('build:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway build')
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
@@ -320,7 +321,7 @@ test('root typecheck script covers package, MCP, gateway, and desktop surfaces',
 
   assert.equal(requireScript('typecheck:cloud-server'), 'pnpm --filter @open-cowork/cloud-server typecheck')
   assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
-  assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
+  assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/channel-gateway typecheck')
   assert.equal(requireScript('typecheck:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway typecheck')
 })
 

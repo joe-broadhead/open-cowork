@@ -39,7 +39,7 @@ import {
   LOCAL_WORKSPACE_ID,
   createWorkspaceGateway,
 } from '../apps/desktop/src/main/workspace-gateway.ts'
-import { createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/channel-gateway/dist/index.js'
 
 type ContinuationFixture = Awaited<ReturnType<typeof createContinuationFixture>>
 
@@ -751,9 +751,9 @@ test('continuation client surfaces do not import the OpenCode SDK directly', () 
   const clientSurfaceFiles = [
     'packages/cloud-client/src/index.ts',
     'apps/desktop/src/main/cloud-workspace-adapter.ts',
-    'apps/gateway/src/cloud-gateway.ts',
-    'apps/gateway/src/session-stream-manager.ts',
-    'apps/gateway/src/daemon.ts',
+    'apps/channel-gateway/src/cloud-gateway.ts',
+    'apps/channel-gateway/src/session-stream-manager.ts',
+    'apps/channel-gateway/src/daemon.ts',
   ]
   for (const file of clientSurfaceFiles) {
     const source = readFileSync(file, 'utf8')

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/api/schema/stryker-core.json",
+  "_comment": "Mutation-testing gate. Runs off the PR path because it is slower than merge checks, but the workflow is blocking and the scope covers security-critical pure modules plus stable utility modules.",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "html", "json"],
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/mcp-tool-tiers.ts",
+    "src/task-summary.ts",
+    "src/gateway-tools.ts",
+    "src/security.ts",
+    "src/config.ts",
+    "src/runtime-metrics.ts",
+    "src/opencode-assets.ts",
+    "src/opencode-url-policy.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 60
+  }
+}

@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const gatewayPackages = [
-  'apps/gateway',
+  'apps/channel-gateway',
   'packages/gateway-channel',
   'packages/gateway-provider-cli',
   'packages/gateway-provider-discord',
@@ -41,7 +41,12 @@ test('gateway package names and imports stay inside channel-adapter boundaries',
       peerDependencies?: Record<string, string>
       optionalDependencies?: Record<string, string>
     }
-    assert.match(packageJson.name || '', /^@open-cowork\/gateway(?:-|$)/)
+    // Channel Gateway app package is @open-cowork/channel-gateway; shared channel
+    // libs stay under @open-cowork/gateway-* (channel, provider-*, testing).
+    assert.match(
+      packageJson.name || '',
+      /^@open-cowork\/(?:channel-gateway|gateway(?:-|$))/,
+    )
     for (const dependencySet of [
       packageJson.dependencies,
       packageJson.devDependencies,

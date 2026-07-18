@@ -83,6 +83,9 @@ import type {
   McpPreflightResult,
   CustomMcpTestResult,
   CustomSkillConfig,
+  ProductMcpLinkRequest,
+  ProductMcpLinkResponse,
+  ProductMcpProbe,
   RuntimeAgentDescriptor,
   ScopedArtifactRef,
 } from './custom-content.js'
@@ -583,6 +586,16 @@ export interface CoworkAPI {
     addMcp: (mcp: CustomMcpConfig) => Promise<boolean>
     removeMcp: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
     testMcp: (mcp: CustomMcpConfig) => Promise<CustomMcpTestResult>
+    /**
+     * JOE-909: probe PATH for cowork-gateway / cowork-wiki and whether machine-scope
+     * custom MCP entries are already linked. Never auto-links.
+     */
+    productMcpProbe: () => Promise<ProductMcpProbe[]>
+    /**
+     * Link a local Gateway or Wiki binary as a machine-scope custom MCP.
+     * Fails closed when the binary is missing or inputs are unsafe.
+     */
+    productMcpLink: (request: ProductMcpLinkRequest) => Promise<ProductMcpLinkResponse>
     listSkills: (options?: RuntimeContextOptions) => Promise<CustomSkillConfig[]>
     addSkill: (skill: CustomSkillConfig) => Promise<boolean>
     selectSkillDirectoryImport: () => Promise<SkillImportSelection | null>

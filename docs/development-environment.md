@@ -8,6 +8,18 @@ description: Local-only environment variables and test hooks for Open Cowork dev
 These variables are for local development, downstream packaging tests, and CI.
 They are not required for normal users.
 
+## Toolchain floor (JOE-913)
+
+| Tool | Monorepo policy |
+| --- | --- |
+| **Node** | Floor `>=22.22.3` (`package.json` `engines.node`). Pin exact CI/dev with the repository-root `.nvmrc`. |
+| **pnpm** | Exact `10.32.1` via Corepack (`packageManager` + `engines.pnpm`). No mixed majors. |
+| **npm** | Disabled for workspace install (`engines.npm: "0"`). Use only for standalone tarball consumer smokes. |
+| **Lockfile** | Single root `pnpm-lock.yaml`. No per-product `package-lock.json`. |
+
+If Corepack reports a pnpm major mismatch, fix `packageManager` / invoke Corepack
+pins — do not bypass with a global pnpm 11 for product packages.
+
 ## Renderer and app shell
 
 | Variable | Purpose | Notes |
@@ -67,6 +79,16 @@ Release-only variables are documented in
 [Packaging and Releases](packaging-and-releases.md) and
 [Release Checklist](release-checklist.md). Keep them in GitHub repository
 variables or secrets, not in local shell profiles.
+
+Desktop tags (`v*`) use `.github/workflows/release.yml` and do **not** publish
+Gateway/Wiki by default. Product tags:
+
+| Tag pattern | Workflow |
+| --- | --- |
+| `gateway@v*` / `gateway-v*` | `.github/workflows/release-gateway.yml` |
+| `wiki@v*` / `wiki-v*` | `.github/workflows/release-wiki.yml` |
+
+Manual dispatch is supported on both product release workflows.
 
 ## Development credential storage
 

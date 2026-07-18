@@ -1,0 +1,13 @@
+* @joe-broadhead
+
+.github/workflows/** @joe-broadhead
+deploy/** @joe-broadhead
+packages/http-api/** @joe-broadhead
+packages/mcp-server/** @joe-broadhead
+packages/git/** @joe-broadhead
+packages/repo/** @joe-broadhead
+schemas/** @joe-broadhead
+SECURITY.md @joe-broadhead
+docs/development/release.md @joe-broadhead
+docs/development/release-notes-template.md @joe-broadhead
+docs/development/public-release-docs-audit.md @joe-broadhead

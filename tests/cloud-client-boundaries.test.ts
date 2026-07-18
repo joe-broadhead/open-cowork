@@ -104,7 +104,7 @@ test('first-party client surfaces stay on public cloud-client/shared boundaries'
   const clientRoots = [
     'apps/desktop/src/preload',
     'packages/app/src',
-    'apps/gateway/src',
+    'apps/channel-gateway/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [

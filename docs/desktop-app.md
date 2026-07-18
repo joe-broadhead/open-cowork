@@ -185,7 +185,8 @@ with `features.knowledge: true` when you want durable notes next to Chat and
 Projects. Proposals remain review-gated; the surface does not invent a second
 execution runtime.
 
-See [OpenWiki Knowledge Base](openwiki.md) for the product contract.
+See [Wiki](openwiki.md) for the optional standalone Wiki product (distinct
+from in-app Knowledge).
 
 ## Approvals
 

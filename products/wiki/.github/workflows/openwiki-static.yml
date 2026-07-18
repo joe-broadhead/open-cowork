@@ -1,0 +1,123 @@
+name: OpenWiki Static Export
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/openwiki-static.yml"
+      - "examples/basic-wiki/**"
+      - "packages/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "docs/**"
+      - "tests/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  pages-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.detect.outputs.enabled }}
+    steps:
+      - id: detect
+        name: Detect GitHub Pages configuration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          if gh api "repos/${GH_REPOSITORY}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages is not enabled for this repository; skipping deployment."
+          fi
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install docs dependencies
+        run: python -m pip install -r docs/requirements.txt
+      - name: Install browser for screenshots
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: UI smoke
+        run: pnpm test:ui
+      - name: UI quality gate
+        run: pnpm test:ui-quality
+      - name: Bundle size gate
+        run: pnpm check:bundle
+      - name: Screenshots
+        run: pnpm screenshots
+      - name: Build public documentation site
+        run: mkdocs build --strict
+      - name: Export static OpenWiki
+        env:
+          OPENWIKI_PAGES_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/demo
+        run: pnpm openwiki -- --root examples/basic-wiki export static --out-dir public --base-url "$OPENWIKI_PAGES_BASE_URL"
+      - name: Add static OpenWiki demo to Pages artifact
+        run: |
+          set -euo pipefail
+          mkdir -p site/demo
+          cp -R examples/basic-wiki/public/. site/demo/
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-screenshots
+          path: artifacts/openwiki-screenshots
+      - name: Upload UI quality report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-ui-quality
+          path: artifacts/openwiki-ui-quality.json
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: site
+
+  deploy:
+    if: needs.pages-config.outputs.enabled == 'true'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - build
+      - pages-config
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128

@@ -18,6 +18,9 @@ export function createBrowserCustomApi(): CoworkAPI['custom'] {
     addMcp: () => browserUnavailable('custom.addMcp'),
     removeMcp: () => browserUnavailable('custom.removeMcp'),
     testMcp: () => browserUnavailable('custom.testMcp'),
+    // Product MCP soft-links require local binaries; not available in cloud web.
+    productMcpProbe: async () => [],
+    productMcpLink: () => browserUnavailable('custom.productMcpLink'),
     listSkills: async () => [],
     addSkill: () => browserUnavailable('custom.addSkill'),
     selectSkillDirectoryImport: async () => null,

@@ -2991,7 +2991,7 @@
             "standalone",
             "hybrid"
           ],
-          "description": "Gateway product mode. `cloud_channel` (the apps/gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup."
+          "description": "Gateway product mode. `cloud_channel` (the apps/channel-gateway daemon) and `standalone` (the Standalone Team Gateway app) are runnable today; `hybrid` is reserved for a future Cloud-connected edge design and currently fails fast at startup."
         },
         "mode": {
           "type": "string",

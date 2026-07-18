@@ -1,0 +1,89 @@
+{
+  "name": "cowork-gateway",
+  "version": "1.3.0",
+  "private": true,
+  "description": "Open Cowork Gateway \u2014 durable work coordinator (daemon, scheduler, Mission Control, MCP).",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "cowork-gateway": "./bin/cowork-gateway",
+    "opencode-gateway": "./bin/opencode-gateway"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "dev": "tsx src/daemon.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "node scripts/run-verify.mjs",
+    "release:check": "node scripts/check-release.mjs",
+    "evidence:safety": "node scripts/check-evidence-safety.mjs --preset release",
+    "release:artifacts": "node scripts/check-release-artifacts.mjs",
+    "pack:guard": "node scripts/check-pack-ready.mjs",
+    "prepack": "npm run build && npm run pack:guard",
+    "performance:budgets": "tsx src/cli.ts performance budgets --json --fail-blocked",
+    "validation:check": "node scripts/check-validation-gates.mjs",
+    "validation:select": "tsx src/validation-gate-selector-cli.ts",
+    "boundaries:check": "node scripts/check-module-boundaries.mjs",
+    "deps:snapshot": "node scripts/dependency-snapshot.mjs",
+    "test": "vitest run",
+    "test:stress": "vitest run src/__tests__/stress-suite.test.ts",
+    "test:stress:extended": "GATEWAY_STRESS_EXTENDED=1 vitest run src/__tests__/stress-suite.test.ts",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "docs:api": "npm run build && node scripts/generate-api-reference.mjs",
+    "start": "node dist/cli.js start",
+    "stop": "node dist/cli.js stop",
+    "status": "node dist/cli.js status",
+    "doctor": "node dist/cli.js doctor",
+    "setup": "node dist/cli.js setup",
+    "knip": "knip"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "src/templates/",
+    "docs/",
+    "mkdocs.yml",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@opencode-ai/sdk": "^1.17.18",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.2",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "fast-check": "4.8.0",
+    "knip": "^6.24.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "qs": "^6.15.2",
+    "vite": {
+      "esbuild": "^0.28.1"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents": false
+  },
+  "engines": {
+    "node": ">=22.13 <23 || >=23.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "products/gateway"
+  }
+}

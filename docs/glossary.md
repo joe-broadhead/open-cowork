@@ -20,10 +20,11 @@ OpenCode
 
 Open Cowork
 :   The multi-surface product layer on top of OpenCode: **Desktop** (local
-    Electron), **Cloud** (web + control plane + workers), and **Gateway**
-    (channel adapters and/or standalone team appliances). Owns UI,
-    configuration schema, workflow control plane, packaging, branding,
-    workspaces, and safety policies. Does **not** own execution.
+    Electron), **Cloud** (web + control plane + workers), **Channel Gateway**
+    and **Standalone Gateway** appliances, plus optional family products
+    **Gateway** (durable work) and **Wiki**. Owns UI, configuration schema,
+    workflow control plane, packaging, branding, workspaces, and safety
+    policies. Does **not** own model execution.
 
 Cowork
 :   Used as a verb in the UI ("What shall we cowork on today?"). Refers to
@@ -129,6 +130,42 @@ Run
 :   A single execution attempt for a workflow, linked back to the
     OpenCode session that produced it.
 
+## Product partitions (Gateway family & Wiki)
+
+Channel Gateway
+:   Cloud channel adapter (`apps/channel-gateway` today; target
+    `apps/channel-gateway`). Connects chat providers (Telegram, Slack, email,
+    …) to Open Cowork Cloud over HTTP/SSE. **Never** spawns OpenCode. OCI
+    image historically `open-cowork-gateway`; target
+    `open-cowork-channel-gateway`. See
+    [Packaging and product modes](packaging-and-product-modes.md).
+
+Standalone Gateway
+:   Gateway-only execution appliance (`apps/standalone-gateway`) with a
+    private OpenCode runtime and Gateway Postgres. CLI:
+    `open-cowork-gateway-standalone`.
+
+Gateway
+:   Optional durable work coordinator product at `products/gateway`
+    (package `cowork-gateway`; historically opencode-gateway). Owns
+    Initiatives, Issues, scheduler, Mission Control, and durable MCP tools
+    beside OpenCode. Install bins: **`cowork-gateway`** (preferred) and
+    `opencode-gateway` (compat). Not default-on in public Desktop. See
+    [Gateway](opencode-gateway.md) and
+    [Product partitions ADR](adr/product-partitions.md).
+
+Wiki
+:   Optional git-backed knowledge product at `products/wiki` (packages
+    `@openwiki/*`; historically open-wiki). Install bins: **`cowork-wiki`**
+    (preferred) and `openwiki` (compat). Distinct from in-app **Knowledge**.
+    See [Wiki](openwiki.md) and
+    [Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md).
+
+Knowledge
+:   In-app knowledge store and Studio surface: app-owned SQLite (desktop) or
+    Postgres (cloud), proposals via `mcps/knowledge`. Not the Wiki product.
+    See [Knowledge store ownership](knowledge-store-ownership.md).
+
 ## Configuration & distribution
 
 Downstream
@@ -156,11 +193,11 @@ Default Studio navigation (user-facing names):
 | --- | --- |
 | **Home** | Landing composer and recent work |
 | **Projects** | Indexed project-chat history, tags, filters |
-| **Knowledge** | OpenWiki spaces, pages, and proposals |
+| **Knowledge** | In-app knowledge spaces, pages, and proposals (not Wiki) |
 | **Approvals** | Cross-session review queue for permissions and questions |
 | **Team** | Built-in and custom coworkers |
 | **Playbooks** | Saved repeatable tasks (workflow definitions) |
-| **Channels** | Gateway channel connections and deliveries |
+| **Channels** | Channel Gateway connections and deliveries |
 | **Tools & Skills** | MCP tools, skills, and capability catalog |
 | **Artifacts** | Generated files, charts, and deliverables library |
 | **Settings** | Appearance, models, permissions, storage |
@@ -187,8 +224,9 @@ Tools & Skills
     The visibility/permission surface.
 
 Knowledge
-:   OpenWiki knowledge spaces and proposal review. See
-    [OpenWiki Knowledge Base](openwiki.md).
+:   In-app knowledge spaces and proposal review (secondary Studio surface).
+    See [Knowledge store ownership](knowledge-store-ownership.md). For the
+    optional standalone git-backed product, see [Wiki](openwiki.md).
 
 Approvals
 :   Studio queue for pending permissions and questions across sessions.
@@ -196,7 +234,7 @@ Approvals
     gates.
 
 Channels
-:   Gateway channel setup, bindings, and delivery status.
+:   Channel Gateway setup, bindings, and delivery status.
 
 Artifacts
 :   Library of generated outputs across chats (charts, files, reports).

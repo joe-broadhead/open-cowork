@@ -1,0 +1,13 @@
+{
+  "name": "openwiki",
+  "type": "local",
+  "description": "Search, read, cite, and propose edits to an OpenWiki knowledge base through the local OpenWiki CLI.",
+  "authMode": "none",
+  "command": [
+    "openwiki",
+    "mcp",
+    "--stdio",
+    "--tools",
+    "proposal"
+  ]
+}

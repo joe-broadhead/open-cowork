@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/run.schema.json",
+  "title": "OpenWiki Run Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "run_type", "status", "actor_id", "workspace_id", "created_at", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^run:" },
+    "uri": { "type": "string", "pattern": "^openwiki://run/" },
+    "type": { "const": "run" },
+    "run_type": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["queued", "running", "succeeded", "failed"] },
+    "actor_id": { "type": "string", "pattern": "^actor:" },
+    "workspace_id": { "type": "string", "pattern": "^workspace:" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "input": { "type": "object" },
+    "output": { "type": "object" },
+    "error": { "type": "string" },
+    "subject_ids": { "type": "array", "items": { "type": "string" } },
+    "subject_paths": { "type": "array", "items": { "type": "string" } },
+    "sensitivity": { "enum": ["public", "internal", "private"] },
+    "path": { "type": "string" }
+  }
+}

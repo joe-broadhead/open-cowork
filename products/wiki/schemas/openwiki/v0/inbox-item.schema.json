@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/inbox-item.schema.json",
+  "title": "OpenWiki Inbox Item Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "title", "inbox_kind", "provider", "status", "received_at", "updated_at", "idempotency_key", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^inbox:" },
+    "uri": { "type": "string", "pattern": "^openwiki://inbox/" },
+    "type": { "const": "inbox" },
+    "title": { "type": "string", "minLength": 1 },
+    "inbox_kind": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1 },
+    "adapter": { "type": "string" },
+    "status": { "enum": ["received", "queued", "processing", "proposed", "applied", "ignored", "failed", "superseded"] },
+    "owner_actor_id": { "type": "string", "pattern": "^actor:" },
+    "submitted_by": { "type": "string", "pattern": "^actor:" },
+    "target_space_id": { "type": "string", "pattern": "^section:" },
+    "target_path": { "type": "string" },
+    "external_id": { "type": "string" },
+    "origin": { "type": "string" },
+    "source_url": { "type": "string" },
+    "received_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "content_hash": { "type": "string", "pattern": "^sha256:" },
+    "payload": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "enum": ["git", "object"] },
+        "path": { "type": "string" },
+        "media_type": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "content_hash": { "type": "string", "pattern": "^sha256:" },
+        "backend": { "type": "string" }
+      }
+    },
+    "source_ids": { "type": "array", "items": { "type": "string", "pattern": "^source:" } },
+    "proposal_ids": { "type": "array", "items": { "type": "string", "pattern": "^proposal:" } },
+    "page_ids": { "type": "array", "items": { "type": "string", "pattern": "^page:" } },
+    "event_ids": { "type": "array", "items": { "type": "string", "pattern": "^event:" } },
+    "run_ids": { "type": "array", "items": { "type": "string", "pattern": "^run:" } },
+    "git_commits": { "type": "array", "items": { "type": "string" } },
+    "sensitivity": { "enum": ["public", "internal", "private"] },
+    "processing": { "type": "object" },
+    "metadata": { "type": "object" },
+    "validation_report": { "type": "object" },
+    "path": { "type": "string" }
+  }
+}

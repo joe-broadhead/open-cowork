@@ -17,7 +17,7 @@ COPY THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @open-cowork/shared build
-RUN pnpm --filter @open-cowork/gateway build
+RUN pnpm --filter @open-cowork/channel-gateway build
 # Prune to the runtime tree: root manifests/config/license material plus the
 # Gateway app and runtime package package.json + dist pairs. No source trees,
 # tests, MCPs, desktop artifacts, or release scripts ship in the public image.
@@ -48,4 +48,4 @@ USER node
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:'+(process.env.OPEN_COWORK_GATEWAY_PORT||'8790')+'/ready').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "apps/gateway/dist/index.js"]
+CMD ["node", "apps/channel-gateway/dist/index.js"]

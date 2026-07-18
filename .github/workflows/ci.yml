@@ -30,10 +30,12 @@ jobs:
 
       - name: Git diff check
         run: |
+          # Product partitions (products/**) own style via product CI/Biome; exclude
+          # them from monorepo git whitespace gates for modular independent tooling.
           if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            git diff --check HEAD^ HEAD
+            git diff --check HEAD^ HEAD -- . ':(exclude)products/**'
           else
-            git diff-tree --check --root --no-commit-id -r HEAD
+            git diff-tree --check --root --no-commit-id -r HEAD -- . ':(exclude)products/**'
           fi
 
       - name: Dependency review
@@ -187,7 +189,9 @@ jobs:
         run: |
           image_tag="${GITHUB_SHA:-ci}"
           docker build -f docker/open-cowork-gateway/Dockerfile \
+            -t open-cowork-channel-gateway:ci \
             -t open-cowork-gateway:ci \
+            -t ghcr.io/joe-broadhead/open-cowork-channel-gateway:"${image_tag}" \
             -t ghcr.io/joe-broadhead/open-cowork-gateway:"${image_tag}" \
             .
 

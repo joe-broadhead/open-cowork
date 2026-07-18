@@ -1,0 +1,199 @@
+replicaCount: 1
+terminationGracePeriodSeconds: 30
+deploymentStrategy:
+  type: Recreate
+
+image:
+  repository: ghcr.io/joe-broadhead/open-wiki
+  pullPolicy: IfNotPresent
+  tag: "0.0.0"
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 3030
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: wiki.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+
+openwiki:
+  root: /data/wiki
+  title: OpenWiki
+  host: 0.0.0.0
+  port: 3030
+  role: ""
+  bootstrapMode: inline
+  runtimeMode: ""
+  publicOrigin: ""
+  requireAuth: ""
+  oauthEnabled: ""
+  oauthIssuer: ""
+  oauthDynamicClientRegistration: ""
+  runtimeBackend: ""
+  readBackend: ""
+  searchBackend: ""
+  queueBackend: ""
+  operationalStateBackend: ""
+  writeCoordinatorBackend: ""
+  gitRemoteUrl: ""
+  trustedAuthHeaders: false
+  trustedAuthHeadersSecret:
+    existingSecret: ""
+    key: proxy-secret
+  extraEnv: []
+  envFrom: []
+
+enterprise:
+  enabled: false
+
+worker:
+  enabled: false
+  replicaCount: 1
+  pollMs: 1000
+  maxJobs: ""
+
+queueReaper:
+  enabled: false
+  schedule: "*/10 * * * *"
+  maxRuntimeMs: 1800000
+
+probes:
+  startup:
+    enabled: true
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    # Empty defaults to pods selected by this chart only. Set explicit ingress
+    # controller namespace/pod selectors for production traffic.
+    from: []
+  egress: []
+
+postgresBackup:
+  enabled: false
+  schedule: "17 2 * * *"
+  image:
+    repository: postgres
+    tag: "17-alpine"
+    digest: ""
+    pullPolicy: IfNotPresent
+  retentionDays: 30
+  existingSecret: ""
+  databaseUrlKey: database-url
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+workspaceBackup:
+  enabled: false
+  schedule: "23 2 * * *"
+  destinationId: ""
+  outDir: /backups
+  existingSecret: ""
+  extraEnv: []
+  envFrom: []
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+  retention:
+    keepLast: 14
+    keepDays: 30
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

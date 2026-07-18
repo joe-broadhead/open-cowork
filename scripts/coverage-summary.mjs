@@ -28,7 +28,7 @@ const SHARED_SOURCE_INVENTORY = {
 const WORKSPACE_SOURCE_INVENTORY = {
   minimumPercent: 90,
   roots: [
-    { path: 'apps/gateway/dist', extensions: ['.js', '.mjs'] },
+    { path: 'apps/channel-gateway/dist', extensions: ['.js', '.mjs'] },
     // Keep library modules in the ratchet; exclude the executable entrypoint
     // and type-only output that cannot be meaningfully imported in Node tests.
     { path: 'apps/standalone-gateway/dist', extensions: ['.js', '.mjs'], excludeFileNames: ['main.js', 'types.js'] },
@@ -73,7 +73,7 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
   name: 'Workspace Node',
   path: 'coverage/workspace/lcov.info',
   includePathPrefixes: [
-    'apps/gateway/dist/',
+    'apps/channel-gateway/dist/',
     'apps/standalone-gateway/dist/',
     'mcps/agents/dist/',
     'mcps/charts/dist/',
@@ -108,7 +108,7 @@ export const WORKSPACE_NODE_COVERAGE_INPUT = {
 export const GATEWAY_COVERAGE_INPUT = {
   name: 'Gateway',
   path: 'coverage/workspace/lcov.info',
-  includePathPrefixes: ['apps/gateway/dist/'],
+  includePathPrefixes: ['apps/channel-gateway/dist/'],
   thresholds: { lines: 90, functions: 88, branches: 72 },
 }
 export const STANDALONE_GATEWAY_COVERAGE_INPUT = {

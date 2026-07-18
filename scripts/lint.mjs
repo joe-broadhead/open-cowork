@@ -35,11 +35,16 @@ const ignoredDirs = new Set([
 const consoleLogAllowlist = new Set([
   'packages/shared/src/node/logger.ts',
   'scripts/lint.mjs',
+  'scripts/check-product-boundaries.mjs',
+  'scripts/check-product-archive-readiness.mjs',
+  'scripts/apply-private-repo-freeze-banners.mjs',
 ])
 const secretScanAllowlist = new Set([
   'packages/shared/src/log-sanitizer.ts',
   'scripts/lint.mjs',
   'tests/log-sanitizer.test.ts',
+  // Product protocol docs use illustrative token_hash / secret examples only.
+  'products/wiki/docs/spec/protocol/repository-format.md',
 ])
 const privateSdkAccessAllowlist = new Set([
   'scripts/lint.mjs',
@@ -118,7 +123,11 @@ function lintFile(fullPath) {
   const relPath = relative(root, fullPath)
   if (ignoredFiles.has(relPath)) return
   const ext = extname(fullPath)
-  const shouldLintStyle = styleLintExtensions.has(ext)
+  // Product partitions (Gateway/Wiki) own their style tooling (Biome/tsc) and
+  // are validated by path-filtered CI. Monorepo style gates stay on apps/packages/mcps.
+  // Secret scanning still covers products/ for public-repo safety.
+  const isProductPartition = relPath === 'products' || relPath.startsWith('products/')
+  const shouldLintStyle = styleLintExtensions.has(ext) && !isProductPartition
   const shouldScanSecrets = shouldScanSecretPath(relPath)
   if (!shouldLintStyle && !shouldScanSecrets) return
 

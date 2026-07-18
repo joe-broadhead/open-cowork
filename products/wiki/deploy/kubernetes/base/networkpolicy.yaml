@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openwiki
+  labels:
+    app.kubernetes.io/name: openwiki
+    app.kubernetes.io/instance: openwiki
+    app.kubernetes.io/part-of: openwiki
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: openwiki
+      app.kubernetes.io/instance: openwiki
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: openwiki
+              app.kubernetes.io/instance: openwiki
+      ports:
+        - protocol: TCP
+          port: 3030
+  egress: []

@@ -1597,19 +1597,19 @@ function validateHybridSecurityGates() {
     }
   }
 
-  const gatewayConfig = read('apps/gateway/src/config.ts')
+  const gatewayConfig = read('apps/channel-gateway/src/config.ts')
   for (const phrase of [
     'authenticated webhook ingress',
     'signingSecret',
     'webhookSecret',
   ]) {
     if (!gatewayConfig.includes(phrase)) {
-      throw new Error(`apps/gateway/src/config.ts must include ${phrase}`)
+      throw new Error(`apps/channel-gateway/src/config.ts must include ${phrase}`)
     }
   }
-  const gatewayConfigSafety = read('apps/gateway/src/config-safety.ts')
+  const gatewayConfigSafety = read('apps/channel-gateway/src/config-safety.ts')
   if (!gatewayConfigSafety.includes('Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN')) {
-    throw new Error('apps/gateway/src/config-safety.ts must include Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN')
+    throw new Error('apps/channel-gateway/src/config-safety.ts must include Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN')
   }
 
   const standaloneNetworkPolicy = read('apps/standalone-gateway/src/network-policy.ts')
@@ -2271,7 +2271,7 @@ function validateDocs() {
     '`whatsapp` | Tier 3',
     '`signal` | Tier 3',
     '`fake` | Tier demo',
-    'apps/gateway/src/provider-readiness.ts',
+    'apps/channel-gateway/src/provider-readiness.ts',
     'Public webhook providers must fail closed',
     'pnpm deploy:gateway:smoke',
   ]) {

@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: openwiki
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - pvc.yaml
+  - workspace-backup-pvc.yaml
+  - postgres-backup-pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+  - workspace-backup-cronjob.yaml
+  - postgres-backup-cronjob.yaml
+images:
+  - name: ghcr.io/joe-broadhead/open-wiki
+    # Base manifests use the release tag as a placeholder. Production overlays
+    # must replace this with `digest: sha256:<release-digest>`.
+    newTag: 0.0.0
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: openwiki
+      app.kubernetes.io/part-of: openwiki

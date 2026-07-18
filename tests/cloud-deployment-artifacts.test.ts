@@ -705,7 +705,9 @@ test('gateway Helm chart keeps provider-neutral gateway wiring explicit', () => 
   const serviceAccount = readRepoFile('helm/open-cowork-gateway/templates/serviceaccount.yaml')
 
   assert.match(chart, /name: open-cowork-gateway/)
-  assert.match(values, /repository: ghcr\.io\/joe-broadhead\/open-cowork-gateway/)
+  // Preferred OCI name is open-cowork-channel-gateway; dual-tag may still
+  // reference open-cowork-gateway as a compatibility alias in release docs.
+  assert.match(values, /repository: ghcr\.io\/joe-broadhead\/open-cowork-channel-gateway/)
   assert.match(values, /tag: "0\.0\.0"/)
   assert.match(values, /digest: ""/)
   assert.doesNotMatch(values, /tag: latest/)
@@ -915,7 +917,7 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   // pinned Node 22.x (stable/flag-free only on 23.4+).
   assert.match(dockerfile, /CMD \["node", "--experimental-sqlite", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
 
-  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/gateway build/)
+  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/channel-gateway build/)
   assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/shared build/)
   assert.match(gatewayDockerfile, /COPY open-cowork\.config\.json open-cowork\.config\.schema\.json/)
   assert.match(gatewayDockerfile, /COPY scripts \.\/scripts/)
@@ -929,7 +931,7 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(gatewayDockerfile, /OPEN_COWORK_GATEWAY_PORT=8790/)
   assert.match(gatewayDockerfile, /USER node/)
   assert.match(gatewayDockerfile, /\/ready/)
-  assert.match(gatewayDockerfile, /CMD \["node", "apps\/gateway\/dist\/index\.js"\]/)
+  assert.match(gatewayDockerfile, /CMD \["node", "apps\/channel-gateway\/dist\/index\.js"\]/)
 })
 
 test('cloud provider recipes stay thin compositions of the shared image and adapters', () => {
@@ -1330,7 +1332,9 @@ test('release workflow publishes versioned cloud and gateway OCI images', () => 
   assert.match(workflow, /docker\/open-cowork-cloud\/Dockerfile/)
   assert.match(workflow, /docker\/open-cowork-gateway\/Dockerfile/)
   assert.match(workflow, /image="ghcr\.io\/\$\{owner\}\/open-cowork-cloud"/)
-  assert.match(workflow, /image="ghcr\.io\/\$\{owner\}\/open-cowork-gateway"/)
+  // Preferred Channel Gateway image name; open-cowork-gateway remains dual-tag alias.
+  assert.match(workflow, /image="ghcr\.io\/\$\{owner\}\/open-cowork-channel-gateway"/)
+  assert.match(workflow, /image_alias="ghcr\.io\/\$\{owner\}\/open-cowork-gateway"/)
   assert.match(workflow, /release-candidate-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{short_sha\}/)
   assert.match(workflow, /docker push "\$\{staging_tag\}"/)
   assert.match(workflow, /Publish final OCI release tags/)

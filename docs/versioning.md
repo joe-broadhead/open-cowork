@@ -22,6 +22,26 @@ early-adopter forks aren't bumped to `1.0` prematurely. This is flagged
 explicitly in `CHANGELOG.md` under a `Breaking Changes` subsection
 whenever it applies. From `1.0` forward the semver contract is strict.
 
+
+
+## Multi-product versioning
+
+Open Cowork is a **product family** monorepo. Independent version lines:
+
+| Product | Path | Version line | Tag examples |
+| --- | --- | --- | --- |
+| Open Cowork Desktop / Cloud / Channel Gateway family | `apps/*`, `packages/*`, `mcps/*` | family `0.x` / future `1.x` | `v0.1.0` |
+| Gateway (durable work coordinator) | `products/gateway` | continues **1.3.x** after import | `gateway@1.3.1` or `cowork-gateway@1.3.1` |
+| Wiki | `products/wiki` | `0.x` when public | `wiki@0.1.0` or `cowork-wiki@0.1.0` |
+
+Use [Changesets](https://github.com/changesets/changesets) in **independent**
+mode (see `.changeset/config.json`). A Desktop release tag does **not**
+automatically publish Gateway or Wiki. A Gateway patch does **not** require a
+Desktop tag.
+
+Root `package.json` `version` remains the monorepo workspace marker for the
+Desktop/Cloud family, not a universal version for every product.
+
 ## Release cadence
 
 Open Cowork ships on a **rolling cadence** rather than a fixed calendar:
