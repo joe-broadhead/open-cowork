@@ -40,17 +40,18 @@ Keep secrets out of shell history, docs, Git commits, and issue trackers. Use re
 Clone, build, and link Gateway from source:
 
 ```bash
-git clone https://github.com/joe-broadhead/opencode-gateway.git
-cd opencode-gateway
-npm install
-npm run build
-npm link
+git clone https://github.com/joe-broadhead/open-cowork.git
+cd open-cowork
+corepack enable
+pnpm install --frozen-lockfile
+pnpm --filter cowork-gateway build
+pnpm --filter cowork-gateway exec npm link
 ```
 
 Run the setup wizard:
 
 ```bash
-opencode-gateway setup
+cowork-gateway setup
 ```
 
 The wizard configures the local Gateway workspace, dashboard/service port, OpenCode URL, model profiles, optional channel settings, Gateway state, routing, and OpenCode assets. It writes local config under the Gateway config directory and installs Gateway MCP, agents, and skills into the selected OpenCode profile.
@@ -58,7 +59,7 @@ The wizard configures the local Gateway workspace, dashboard/service port, OpenC
 For a non-interactive default pass on a disposable local profile:
 
 ```bash
-opencode-gateway setup --yes
+cowork-gateway setup --yes
 ```
 
 Restart OpenCode after setup if it was already running. OpenCode reads MCP, agent, and skill configuration at startup.

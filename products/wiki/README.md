@@ -14,7 +14,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node 22.22.3+](https://img.shields.io/badge/node-22.22.3%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)
 [![pnpm](https://img.shields.io/badge/pnpm-10.32.1-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
-[![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-wiki/)
+[![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/open-wiki/)
 
 <pre>
    ____                 _       ___ __   _
@@ -33,7 +33,7 @@ review history, and protect sensitive knowledge with Spaces. Git remains the
 canonical ledger under the hood, while the web UI, CLI, HTTP API, MCP server,
 and static export all serve the same records.
 
-[Docs](https://joe-broadhead.github.io/open-wiki/) • [Quick Start](#quick-start) • [Protocol Spec](docs/spec/openwiki-protocol-v0.1.md) • [Architecture](docs/development/architecture.md) • [Deployment](docs/deployment/overview.md)
+[Docs](https://joe-broadhead.github.io/open-cowork/open-wiki/) • [Quick Start](#quick-start) • [Protocol Spec](docs/spec/openwiki-protocol-v0.1.md) • [Architecture](docs/development/architecture.md) • [Deployment](docs/deployment/overview.md)
 
 ## What It Does
 
@@ -120,7 +120,7 @@ content unless a proxy, firewall, or static export boundary is in front of it.
 
 ## Documentation
 
-- Docs home: [joe-broadhead.github.io/open-wiki](https://joe-broadhead.github.io/open-wiki/)
+- Docs home: [joe-broadhead.github.io/open-cowork/open-wiki](https://joe-broadhead.github.io/open-cowork/open-wiki/)
 - Protocol spec: [`docs/spec/openwiki-protocol-v0.1.md`](docs/spec/openwiki-protocol-v0.1.md)
 - Architecture: [`docs/development/architecture.md`](docs/development/architecture.md)
 - Deployment: [`docs/deployment/overview.md`](docs/deployment/overview.md)

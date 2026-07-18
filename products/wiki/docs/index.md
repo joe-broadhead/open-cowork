@@ -25,11 +25,12 @@ records.
 
 ## Release Status
 
-OpenWiki `v0.0.0` is a public preview: source checkout, the generated
-`@openwiki/cli` package, the `ghcr.io/joe-broadhead/open-wiki` container
-image, and static export distribution. Expect rapid iteration on the road to
-`v0.1.0`. Static export and read-only hosted deployments are the safest
-public paths.
+OpenWiki `v0.0.0` is a public preview: source checkout from
+`products/wiki` in open-cowork, the generated `@openwiki/cli` / `cowork-wiki`
+package, container images published under open-cowork release tags
+(`wiki@v*`), and static export distribution. Expect rapid iteration on the
+road to `v0.1.0`. Static export and read-only hosted deployments are the
+safest public paths.
 Write-capable hosted deployments require an explicit authentication boundary and
 same-origin browser write protection.
 
@@ -38,8 +39,8 @@ same-origin browser write protection.
 - [Deployment profiles](deployment/profiles.md) and the
   [operations matrix](deployment/operations/matrix.md) define supported local,
   private, hosted, and static paths.
-- [Support](https://github.com/joe-broadhead/open-wiki/blob/master/SUPPORT.md),
-  [security reporting](https://github.com/joe-broadhead/open-wiki/blob/master/SECURITY.md),
-  [Code of Conduct](https://github.com/joe-broadhead/open-wiki/blob/master/CODE_OF_CONDUCT.md),
-  and [release notes](https://github.com/joe-broadhead/open-wiki/blob/master/CHANGELOG.md)
-  live at the repository root.
+- [Support](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/SUPPORT.md),
+  [security reporting](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/SECURITY.md),
+  [Code of Conduct](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/CODE_OF_CONDUCT.md),
+  and [release notes](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/CHANGELOG.md)
+  live under the monorepo product partition (also mirrored at the open-cowork root for project-wide policy).

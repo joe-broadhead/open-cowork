@@ -5,7 +5,7 @@ Open Cowork includes third-party open source packages in its production dependen
 Generation provenance:
 - pnpm lockfile SHA-256: `e9f4b48cd67246d64ee480dc0247c0dcf73745f0b31a004e611fb4c0298890f6`
 - Production package entries: 403
-- Bundled license directories: 362 (41 package entries have no standalone license file or are workspace links)
+- Bundled license directories: 388 (15 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -32,32 +32,32 @@ Each package remains licensed under its own license terms. The table below is pr
 | @aws/lambda-invoke-store | 0.3.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws__lambda-invoke-store@0.3.0/ | git+https://github.com/awslabs/aws-lambda-invoke-store.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
 | @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
-| @esbuild/aix-ppc64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.28.1.tgz |
-| @esbuild/android-arm | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.28.1.tgz |
-| @esbuild/android-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.28.1.tgz |
-| @esbuild/android-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.28.1.tgz |
-| @esbuild/darwin-arm64 | 0.28.1 | MIT |  | git+https://github.com/evanw/esbuild.git |
-| @esbuild/darwin-x64 | 0.28.1 | MIT |  | git+https://github.com/evanw/esbuild.git |
-| @esbuild/freebsd-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.28.1.tgz |
-| @esbuild/freebsd-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.28.1.tgz |
-| @esbuild/linux-arm | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.28.1.tgz |
-| @esbuild/linux-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.28.1.tgz |
-| @esbuild/linux-ia32 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.28.1.tgz |
-| @esbuild/linux-loong64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.28.1.tgz |
-| @esbuild/linux-mips64el | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.28.1.tgz |
-| @esbuild/linux-ppc64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.28.1.tgz |
-| @esbuild/linux-riscv64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.28.1.tgz |
-| @esbuild/linux-s390x | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.28.1.tgz |
-| @esbuild/linux-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.1.tgz |
-| @esbuild/netbsd-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/netbsd-arm64/-/netbsd-arm64-0.28.1.tgz |
-| @esbuild/netbsd-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.28.1.tgz |
-| @esbuild/openbsd-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/openbsd-arm64/-/openbsd-arm64-0.28.1.tgz |
-| @esbuild/openbsd-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.28.1.tgz |
-| @esbuild/openharmony-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/openharmony-arm64/-/openharmony-arm64-0.28.1.tgz |
-| @esbuild/sunos-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.28.1.tgz |
-| @esbuild/win32-arm64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.28.1.tgz |
-| @esbuild/win32-ia32 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.28.1.tgz |
-| @esbuild/win32-x64 | 0.28.1 | UNKNOWN |  | https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.28.1.tgz |
+| @esbuild/aix-ppc64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__aix-ppc64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/android-arm | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__android-arm@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/android-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__android-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/android-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__android-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/darwin-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__darwin-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/darwin-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__darwin-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/freebsd-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__freebsd-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/freebsd-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__freebsd-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-arm | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-arm@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-ia32 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-ia32@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-loong64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-loong64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-mips64el | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-mips64el@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-ppc64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-ppc64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-riscv64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-riscv64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-s390x | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-s390x@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/linux-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__linux-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/netbsd-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__netbsd-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/netbsd-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__netbsd-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/openbsd-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__openbsd-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/openbsd-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__openbsd-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/openharmony-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__openharmony-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/sunos-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__sunos-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/win32-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/win32-ia32 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-ia32@0.28.1/ | git+https://github.com/evanw/esbuild.git |
+| @esbuild/win32-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
 | @fontsource-variable/mona-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @fontsource-variable/schibsted-grotesk | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__schibsted-grotesk@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @grammyjs/types | 3.28.0 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.28.0/ | git+https://github.com/grammyjs/types.git |

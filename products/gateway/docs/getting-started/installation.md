@@ -12,37 +12,37 @@ OpenCode Gateway runs as a local Node.js service next to an OpenCode Web/TUI ser
 | cosign | current | Required to verify the signed checksum manifest for release bootstrap. |
 | Git | current | Required only for a source checkout or explicit unsafe-ref install. |
 
-## Install From Source
+## Install From Source (open-cowork monorepo)
+
+Gateway lives at `products/gateway` in the public **open-cowork** monorepo.
+The private `opencode-gateway` repository is frozen and must not be used for
+new installs.
 
 ```bash
-git clone https://github.com/joe-broadhead/opencode-gateway.git
-cd opencode-gateway
-npm ci --ignore-scripts
-npm rebuild esbuild --ignore-scripts=false
-npm run build
-npm install -g . --ignore-scripts
+git clone https://github.com/joe-broadhead/open-cowork.git
+cd open-cowork
+corepack enable
+pnpm install --frozen-lockfile
+pnpm --filter cowork-gateway build
+pnpm --filter cowork-gateway exec npm install -g . --ignore-scripts
+# Preferred binary: cowork-gateway (compat shim: opencode-gateway)
 ```
 
-## One-Command Bootstrap
+## Pack Install From Monorepo Release
 
-Tagged GitHub releases attach `install.sh`, a source archive, `SHA256SUMS`, and a Sigstore bundle. Download all four from one immutable tag, verify the checksum manifest against the exact tag workflow identity, verify both payload checksums, and only then execute the installer:
+Product releases attach an npm pack tarball on open-cowork tags matching
+`gateway@v*` (workflow: `.github/workflows/release-gateway.yml`). Download the
+`cowork-gateway-*.tgz` asset and its `SHA256SUMS` from the matching GitHub
+Release, verify the checksum, then install:
 
 ```bash
-TAG=v1.3.0
+TAG=gateway@v1.3.0
 TMP="$(mktemp -d)"
-BASE="https://github.com/joe-broadhead/opencode-gateway/releases/download/$TAG"
-ARCHIVE="opencode-gateway-$TAG.tar.gz"
+BASE="https://github.com/joe-broadhead/open-cowork/releases/download/${TAG}"
 
-curl -fSLo "$TMP/install.sh" "$BASE/install.sh"
+# Replace the tarball name with the exact asset from the release.
 curl -fSLo "$TMP/SHA256SUMS" "$BASE/SHA256SUMS"
-curl -fSLo "$TMP/SHA256SUMS.sigstore.json" "$BASE/SHA256SUMS.sigstore.json"
-curl -fSLo "$TMP/$ARCHIVE" "$BASE/$ARCHIVE"
-
-cosign verify-blob \
-  --bundle "$TMP/SHA256SUMS.sigstore.json" \
-  --certificate-identity "https://github.com/joe-broadhead/opencode-gateway/.github/workflows/ci.yml@refs/tags/$TAG" \
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  "$TMP/SHA256SUMS"
+curl -fSLo "$TMP/cowork-gateway.tgz" "$BASE/cowork-gateway-1.3.0.tgz"
 
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$TMP" && sha256sum -c SHA256SUMS)
@@ -50,13 +50,15 @@ else
   (cd "$TMP" && shasum -a 256 -c SHA256SUMS)
 fi
 
-bash "$TMP/install.sh" --version "$TAG"
+npm install -g "$TMP/cowork-gateway.tgz"
 rm -rf "$TMP"
 ```
 
-Do not use `curl ... | bash` or a mutable `main` URL for normal installation: the shell would execute before its signature and checksum could be verified. If the requested GitHub release or any required asset is absent, curl and `install.sh` fail clearly before changing the live installation.
-
-The installer independently re-verifies the signed manifest and archive checksum. It creates a collision-safe sibling such as `~/opencode-gateway.transaction.A1b2C3`, writes an installer ownership marker, and stages/builds inside it before changing the live tree. After the atomic switch it polls `readiness --strict` for a bounded startup grace (60 seconds by default, configurable from 10 through 300 with `OPENCODE_GATEWAY_INSTALL_STARTUP_GRACE_SECONDS`). An update failure stops the failed release, restores the transaction's `previous` tree, reinstalls its service definition, and polls until the restored release is ready. A failed first install also disables/removes the global CLI and user-service artifacts created by that run. If a global CLI or loaded/installed Gateway user service already exists without the selected install tree, the script stops before switching rather than treating those artifacts as its own. Configuration, durable state, and OpenCode profile assets are retained for diagnosis and retry. Failed rollback is reported as an operator incident, never as install success.
+Do not install from the frozen private `opencode-gateway` repository or its
+historical release assets for new deployments. Historical signed bootstrap
+(`install.sh` + cosign identity under `opencode-gateway`) remains valid only
+for already-pinned private-repo installs during the dual-publish freeze window;
+new operators should use monorepo source or `gateway@v*` pack assets.
 
 When stdin is not a terminal, setup uses non-interactive defaults; run `opencode-gateway setup` afterward to review them. From a terminal on a fresh install, the guided setup wizard runs. Flags:
 

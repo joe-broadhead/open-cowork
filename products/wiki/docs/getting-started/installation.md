@@ -9,18 +9,21 @@ and image digest.
 
 - Node.js 22.22.3 or newer; Node 24 is the primary CI and container runtime
 - Git, because workspace history and sync are Git-backed
-- pnpm 11.9.0 when working from a source checkout
+- pnpm 10.32.1 when working from the open-cowork monorepo (Corepack)
 - Docker when testing container deployment
 
 ## Source Checkout
 
+Wiki lives at `products/wiki` in the public **open-cowork** monorepo. The
+private `open-wiki` repository is frozen and must not be used for new
+checkouts.
+
 ```sh
-git clone https://github.com/joe-broadhead/open-wiki.git
-cd open-wiki
+git clone https://github.com/joe-broadhead/open-cowork.git
+cd open-cowork
 corepack enable
-corepack prepare pnpm@11.9.0 --activate
 pnpm install --frozen-lockfile
-pnpm validate
+pnpm --filter cowork-wiki-workspace validate
 ```
 
 Contributor checkouts can run the source CLI as documented in

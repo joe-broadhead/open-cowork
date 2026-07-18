@@ -11,7 +11,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node 22.13+ / 23.4+](https://img.shields.io/badge/node-22.13%2B%20%7C%2023.4%2B-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/opencode-gateway/)
+[![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/opencode-gateway/)
 
 <pre>
    ______      __
@@ -32,7 +32,7 @@ creating a second agent runtime. OpenCode keeps owning sessions, agents,
 skills, tools, permissions, and model execution; Gateway owns the durable
 work that outlives any one session.
 
-[Docs](https://joe-broadhead.github.io/opencode-gateway/) • [Operator Mental Model](docs/getting-started/operator-mental-model.md) • [Quickstart](docs/getting-started/quickstart.md) • [Architecture](docs/concepts/architecture.md) • [Decision Log](docs/history/decision-log.md)
+[Docs](https://joe-broadhead.github.io/open-cowork/opencode-gateway/) • [Operator Mental Model](docs/getting-started/operator-mental-model.md) • [Quickstart](docs/getting-started/quickstart.md) • [Architecture](docs/concepts/architecture.md) • [Decision Log](docs/history/decision-log.md)
 
 ## What It Does
 
@@ -61,27 +61,39 @@ work that outlives any one session.
 
 ## Quick Start
 
+Source of truth is the public **open-cowork** monorepo (`products/gateway`).
+The historical private `opencode-gateway` repository is frozen.
+
 ```sh
-git clone https://github.com/joe-broadhead/opencode-gateway.git
-cd opencode-gateway
-npm install
-npm run build
-npm link   # provides the opencode-gateway binary
+git clone https://github.com/joe-broadhead/open-cowork.git
+cd open-cowork
+corepack enable
+pnpm install --frozen-lockfile
+pnpm --filter cowork-gateway build
+pnpm --filter cowork-gateway exec npm link   # bins: cowork-gateway (+ opencode-gateway compat)
 
 # guided setup: config, OpenCode connection, service install
-opencode-gateway setup
+cowork-gateway setup
 
 # later, pull changes and reconcile config/state/service in one step
-opencode-gateway update
+cowork-gateway update
 
 # start the daemon and open Mission Control
-opencode-gateway start
-opencode-gateway status   # prints the configured port
+cowork-gateway start
+cowork-gateway status   # prints the configured port
 open http://127.0.0.1:4097/dashboard   # default port; use status if changed
 
 # create durable work
-opencode-gateway task add "Ship the weekly report"
-opencode-gateway status
+cowork-gateway task add "Ship the weekly report"
+cowork-gateway status
+```
+
+Standalone pack (no full monorepo link):
+
+```sh
+pnpm --filter cowork-gateway exec npm pack
+# or consume a `gateway@v*` GitHub Release asset from open-cowork
+npm install -g ./cowork-gateway-*.tgz
 ```
 
 OpenCode agents get the `gateway_*` MCP tools by adding Gateway as an MCP
