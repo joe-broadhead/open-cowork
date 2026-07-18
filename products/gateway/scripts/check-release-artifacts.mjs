@@ -359,11 +359,12 @@ check('trivy_source_config_secret_scan', 'mandatory',
   'Restore Trivy fs/config/secret scanning before release evidence.')
 
 check('install_update_docs', 'mandatory',
-  readme.includes('npm install')
-    && readme.includes('opencode-gateway setup')
-    && readme.includes('opencode-gateway update')
-    && cliDocs.includes('opencode-gateway update [--wizard]')
-    && cliDocs.includes('opencode-gateway setup [--yes]'),
+  // Monorepo SoT uses pnpm + cowork-gateway; dual-bin compat keeps opencode-gateway.
+  (readme.includes('npm install') || readme.includes('pnpm install') || readme.includes('pnpm --filter cowork-gateway'))
+    && (readme.includes('cowork-gateway setup') || readme.includes('opencode-gateway setup'))
+    && (readme.includes('cowork-gateway update') || readme.includes('opencode-gateway update'))
+    && (cliDocs.includes('opencode-gateway update [--wizard]') || cliDocs.includes('cowork-gateway update'))
+    && (cliDocs.includes('opencode-gateway setup [--yes]') || cliDocs.includes('cowork-gateway setup')),
   'Public docs align with current local install/update behavior.',
   'Update README and CLI docs when setup/update behavior changes.')
 

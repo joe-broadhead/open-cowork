@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 
 test('product boundary checker passes on the monorepo tree', () => {
   const result = spawnSync(process.execPath, ['scripts/check-product-boundaries.mjs'], {

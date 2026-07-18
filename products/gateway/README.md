@@ -74,9 +74,11 @@ pnpm --filter cowork-gateway exec npm link   # bins: cowork-gateway (+ opencode-
 
 # guided setup: config, OpenCode connection, service install
 cowork-gateway setup
+# compat shim (same binary): opencode-gateway setup
 
 # later, pull changes and reconcile config/state/service in one step
 cowork-gateway update
+# compat: opencode-gateway update
 
 # start the daemon and open Mission Control
 cowork-gateway start
@@ -94,6 +96,7 @@ Standalone pack (no full monorepo link):
 pnpm --filter cowork-gateway exec npm pack
 # or consume a `gateway@v*` GitHub Release asset from open-cowork
 npm install -g ./cowork-gateway-*.tgz
+# After install, both `cowork-gateway` and `opencode-gateway` are on PATH.
 ```
 
 OpenCode agents get the `gateway_*` MCP tools by adding Gateway as an MCP
