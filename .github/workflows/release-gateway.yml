@@ -44,6 +44,9 @@ jobs:
       - name: Product boundaries
         run: pnpm boundaries:check
 
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
+
       - name: Build
         run: pnpm --filter cowork-gateway build
 
@@ -60,7 +63,7 @@ jobs:
       - name: Pack
         run: |
           mkdir -p artifacts/gateway
-          pnpm --filter cowork-gateway exec npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/gateway"
+          node products/gateway/scripts/pack-standalone.mjs "$GITHUB_WORKSPACE/artifacts/gateway"
 
       - name: Standalone smoke
         run: node products/gateway/scripts/standalone-smoke.mjs "$(ls artifacts/gateway/cowork-gateway-*.tgz | head -1)"

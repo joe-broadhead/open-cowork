@@ -20,11 +20,18 @@ export function redactSecret(value?: string): string {
 }
 
 export function redactSensitiveText(value: string, config?: GatewayConfig, env: NodeJS.ProcessEnv = process.env): string {
-  // Shared sanitizer first (token families), then product-configured secrets.
-  let text = sharedRedactSecretText(String(value || ''))
-    .replace(BEARER_PATTERN, 'Bearer <redacted>')
-    .replace(KEY_VALUE_SECRET_PATTERN, (_match, key) => `${key}=<redacted>`)
-    .replace(TELEGRAM_TOKEN_PATTERN, token => redactSecret(token))
+  // Product-stable markers first (observability contracts + tests expect
+  // `Bearer <redacted>` / `token=<redacted>`). Use a private-use placeholder so
+  // the shared Authorization/Bearer scrubber does not collapse
+  // `Authorization: Bearer <redacted>` into a bare `[REDACTED_TOKEN]`.
+  // Unbounded maxLength: channel bodies own their length caps (Telegram limits).
+  const bearerPlaceholder = '\uE000GW_BEARER_REDACTED\uE001'
+  let text = String(value || '')
+    .replace(BEARER_PATTERN, bearerPlaceholder)
+    .replace(KEY_VALUE_SECRET_PATTERN, (_match: string, key: string) => `${key}=<redacted>`)
+    .replace(TELEGRAM_TOKEN_PATTERN, (token: string) => redactSecret(token))
+  text = sharedRedactSecretText(text, Number.MAX_SAFE_INTEGER)
+  text = text.split(bearerPlaceholder).join('Bearer <redacted>')
   for (const secret of configuredSecrets(config, env)) {
     text = text.split(secret).join(redactSecret(secret))
   }
