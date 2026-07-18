@@ -16,7 +16,7 @@ Freeze date: **2026-07-18**.
 | Step | Status |
 | --- | --- |
 | Monorepo SoT docs + readiness script | **Pass** (`node scripts/check-product-archive-readiness.mjs`) |
-| Freeze banners on private repos | **Wiki:** merged [open-wiki#49](https://github.com/joe-broadhead/open-wiki/pull/49). **Gateway:** [opencode-gateway#239](https://github.com/joe-broadhead/opencode-gateway/pull/239) (auto-merge when required checks pass) |
+| Freeze banners on private repos | **Wiki:** merged [open-wiki#49](https://github.com/joe-broadhead/open-wiki/pull/49). **Gateway:** merged [opencode-gateway#239](https://github.com/joe-broadhead/opencode-gateway/pull/239) |
 | GH repo descriptions | Updated to MOVED → open-cowork `products/{gateway,wiki}` |
 | GitHub `gh repo archive` | **Pending** monorepo PR merge to `master` + product smoke/release gate (maintainer) |
 

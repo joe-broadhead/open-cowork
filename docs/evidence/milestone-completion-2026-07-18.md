@@ -2,8 +2,9 @@
 
 ## Linear
 
-Milestone: **Monorepo product partitions (Gateway + Wiki)**  
+Milestone: **Monorepo product partitions (Gateway + Wiki)**.
 All child issues JOE-898…915 (incl. 901–902, 905, 909–914) are **Done**.
+JOE-911 optional package rename is **Canceled** (Won't Do this milestone).
 
 ## Monorepo delivery
 
@@ -20,7 +21,7 @@ All child issues JOE-898…915 (incl. 901–902, 905, 909–914) are **Done**.
 | Freeze date | 2026-07-18 |
 | Readiness script | pass |
 | open-wiki freeze PR | merged (#49) |
-| opencode-gateway freeze PR | #239 (auto-merge when checks pass) |
+| opencode-gateway freeze PR | merged (#239) |
 | Archive private repos | after PR #953 on `master` |
 
 ## Definition of done checklist
