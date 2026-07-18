@@ -35,3 +35,15 @@ See [docs/adr/product-partitions.md](../docs/adr/product-partitions.md).
 
 Do not put durable Gateway source under `apps/channel-gateway` or `@open-cowork/channel-gateway`
 (those names mean **Channel Gateway**).
+
+## Legacy private remotes (frozen)
+
+| Private repo | Freeze | Monorepo SoT |
+| --- | --- | --- |
+| `opencode-gateway` | 2026-07-18 | `products/gateway` |
+| `open-wiki` | 2026-07-18 | `products/wiki` |
+
+No new features on private remotes. Archive after monorepo lands on `master` and
+product release/smoke gates pass. See
+[docs/runbooks/product-repo-archive.md](../docs/runbooks/product-repo-archive.md)
+and `pnpm archive:readiness`.

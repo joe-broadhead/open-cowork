@@ -70,6 +70,20 @@ Skeleton paths (`products/*/README.md` stubs), Channel Gateway renames, CI scaff
 - Old private repos freeze and archive after monorepo is source of truth (see JOE-915).
 - npm/bin names follow the product partitions ADR (`cowork-gateway`, `cowork-wiki`).
 
+## Freeze and archive (JOE-915)
+
+| Field | Value |
+| --- | --- |
+| Freeze date | **2026-07-18** |
+| Source of truth | Public **open-cowork** monorepo (`products/gateway`, `products/wiki`) |
+| Private remotes | [opencode-gateway](https://github.com/joe-broadhead/opencode-gateway), [open-wiki](https://github.com/joe-broadhead/open-wiki) — no new features after freeze |
+| Archive gate | Monorepo on `master` + ≥1 monorepo product release/smoke per product |
+| Procedure | [Product repo freeze and archive runbook](../runbooks/product-repo-archive.md) |
+| Preflight | `node scripts/check-product-archive-readiness.mjs` |
+
+Git history is **not** deleted (out of scope). Dual-publish from private repos
+is frozen; prefer monorepo tags `gateway@v*` / `wiki@v*`.
+
 ## Non-goals
 
 - Making open-cowork private.

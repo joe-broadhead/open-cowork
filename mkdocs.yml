@@ -59,6 +59,10 @@ plugins:
       redirect_maps:
         # JOE-857: product page renamed Threads → Projects
         threads.md: projects.md
+        # JOE-915: stable Gateway/Wiki product slugs (keep even if titles change)
+        # Historical private-repo docs sites should deep-link or banner to these pages.
+        gateway.md: opencode-gateway.md
+        wiki.md: openwiki.md
   - minify:
       minify_html: true
       htmlmin_opts:
@@ -154,6 +158,7 @@ nav:
       - Deployment Readiness: deployment-readiness.md
       - Launch Readiness Gates: runbooks/launch-readiness.md
       - Launch Readiness Report: runbooks/launch-readiness-report.md
+      - Product repo freeze and archive: runbooks/product-repo-archive.md
       - Private Beta Launch: runbooks/private-beta-launch.md
       - Private Beta Support: runbooks/private-beta-support.md
       - Cloud Managed Operations: runbooks/cloud-managed-operations.md

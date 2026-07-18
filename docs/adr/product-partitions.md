@@ -93,10 +93,12 @@ Independent product versions (Changesets or equivalent — JOE-903):
 - Channel Gateway package rename (`apps/channel-gateway`) is complete; keep dual-tag OCI until operators migrate.
 - Docs and OCI names must update on a compatibility window (JOE-902, JOE-910).
 - Boundary enforcement becomes a CI concern (JOE-905).
+- Private **opencode-gateway** / **open-wiki** remotes freeze 2026-07-18 and archive after monorepo SoT + release gate (JOE-915).
 
 ## Related
 
 - [Monorepo privacy ADR](monorepo-privacy.md)
 - [Knowledge vs Wiki ADR](knowledge-vs-wiki.md)
+- [Product repo freeze and archive](../runbooks/product-repo-archive.md)
 - [Packaging and product modes](../packaging-and-product-modes.md)
 - [Glossary](../glossary.md)

@@ -117,7 +117,8 @@
     "typecheck:channel-gateway": "pnpm --filter @open-cowork/channel-gateway typecheck",
     "boundaries:check": "node scripts/check-product-boundaries.mjs",
     "smoke:gateway-standalone": "node products/gateway/scripts/standalone-smoke.mjs",
-    "smoke:wiki-standalone": "node products/wiki/scripts/standalone-smoke.mjs"
+    "smoke:wiki-standalone": "node products/wiki/scripts/standalone-smoke.mjs",
+    "archive:readiness": "node scripts/check-product-archive-readiness.mjs"
   },
   "engines": {
     "node": ">=22.22.3",

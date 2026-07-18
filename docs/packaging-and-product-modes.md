@@ -70,6 +70,20 @@ when enabled (not on every Desktop tag). If a package is promoted to a public
 SDK, it needs semver, API stability docs, README examples, changelog entries,
 and package-level provenance.
 
+### Dual-publish freeze (JOE-915)
+
+Private repos **opencode-gateway** and **open-wiki** are **frozen as of
+2026-07-18**. Do not cut new feature releases from those remotes. Monorepo
+tags:
+
+| Product | Tag pattern | Workflow |
+| --- | --- | --- |
+| Gateway | `gateway@v*` / `gateway-v*` | `.github/workflows/release-gateway.yml` |
+| Wiki | `wiki@v*` / `wiki-v*` | `.github/workflows/release-wiki.yml` |
+
+Archive procedure and README banners:
+[Product repo freeze and archive](runbooks/product-repo-archive.md).
+
 ## Channel Gateway image dual-tag (JOE-902)
 
 Preferred OCI repository name for the Cloud Channel Gateway is:
