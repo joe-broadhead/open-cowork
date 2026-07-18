@@ -2,7 +2,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { isChannelProviderKind, normalizeChannelProviderIdentity, type ChannelProviderKind } from '@open-cowork/gateway-channel'
-import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode, splitTrustedProxyCidrs } from '@open-cowork/shared'
+import {
+  jsonConfigCandidates,
+  parseJsoncText,
+  redactSecretText as sharedRedactSecretText,
+  resolveGatewayProductMode,
+  splitTrustedProxyCidrs,
+} from '@open-cowork/shared'
 import type { GatewayDeploymentConfig, GatewayProductMode, PublicBrandingConfig } from '@open-cowork/shared'
 
 import {
@@ -847,22 +853,19 @@ function redactValue(key: string, value: unknown): unknown {
 }
 
 export function redactGatewayDiagnosticText(value: string) {
-  return redactLocalPaths(redactUrlSecretsInText(value)
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+  // Product-stable markers first (tests/contracts expect Bearer [redacted],
+  // token=[redacted], /Users/[redacted]). Then shared token-family scrubber
+  // covers the long tail (ya29., AIza, JWT, ghp_, oc*, etc.) without forking.
+  const bearerPlaceholder = '\uE000CGW_BEARER_REDACTED\uE001'
+  let text = String(value || '')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, bearerPlaceholder)
+  text = redactLocalPaths(redactUrlSecretsInText(text)
     .replace(/\b([A-Za-z0-9_-]{0,64}(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]{0,64})\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{16,}\2/gi, (_match, key: string) => {
       return `${key}=[redacted]`
     })
-    .replace(/\bya29\.[0-9A-Za-z._-]+\b/g, '[redacted-token]')
-    .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, '[redacted-token]')
-    .replace(/\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
-    .replace(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, '[redacted-token]')
-    .replace(/\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
-    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
-    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
-    .replace(/\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g, '[redacted-token]')
-    .replace(/\boc(?:c|gw|w)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]'))
+  text = sharedRedactSecretText(text, Number.MAX_SAFE_INTEGER)
+  return text.split(bearerPlaceholder).join('Bearer [redacted]')
 }
 
 function redactUrlSecretsInText(value: string) {
