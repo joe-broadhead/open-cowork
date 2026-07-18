@@ -287,7 +287,7 @@ test('coverage summary reports the enforced shared-package ratchet', () => {
 
 test('coverage summary enforces a dedicated high-bar ratchet for the gateway delivery path', () => {
   assert.ok(DEFAULT_INPUTS.includes(GATEWAY_COVERAGE_INPUT))
-  assert.deepEqual(GATEWAY_COVERAGE_INPUT.includePathPrefixes, ['apps/gateway/dist/'])
+  assert.deepEqual(GATEWAY_COVERAGE_INPUT.includePathPrefixes, ['apps/channel-gateway/dist/'])
   assert.equal(GATEWAY_COVERAGE_INPUT.path, 'coverage/workspace/lcov.info')
   // The internet-facing gateway relay must stay well-exercised even though the combined
   // workspace floor reads low (subprocess-tested MCPs + the standalone appliance).
@@ -311,7 +311,7 @@ test('coverage summary reports the enforced shipped workspace ratchet', () => {
     ['main.js', 'types.js'],
   )
   for (const expectedPrefix of [
-    'apps/gateway/dist/',
+    'apps/channel-gateway/dist/',
     'apps/standalone-gateway/dist/',
     'mcps/workflows/dist/',
     'mcps/knowledge/dist/',

@@ -239,7 +239,7 @@ export default [
     // service can resolve each file.
     files: [
       'apps/desktop/src/**/*.ts', 'apps/desktop/src/**/*.tsx',
-      'apps/gateway/src/**/*.ts', 'apps/standalone-gateway/src/**/*.ts',
+      'apps/channel-gateway/src/**/*.ts', 'apps/standalone-gateway/src/**/*.ts',
       'packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx',
       'mcps/*/src/**/*.ts',
     ],
@@ -247,7 +247,7 @@ export default [
     // (they ship runtime-only dist), so the type service can't resolve those
     // test files. Skip them here; their production source is still covered.
     ignores: [
-      'apps/gateway/src/**/*.test.ts',
+      'apps/channel-gateway/src/**/*.test.ts',
       'apps/standalone-gateway/src/**/*.test.ts',
       'packages/cloud-client/src/**/*.test.ts',
       'packages/gateway-*/src/**/*.test.ts',

@@ -85,7 +85,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm test:prepare',
     'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
-    'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/channel-gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs',
   ])
@@ -94,7 +94,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm test:prepare',
     'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
-    'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/channel-gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/run-workspace-node-tests.mjs --coverage',
@@ -267,7 +267,7 @@ test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:desktop'), 'pnpm --filter @open-cowork/desktop build')
   assert.equal(requireScript('build:mcps'), 'pnpm --filter=./mcps/* build')
   assert.equal(requireScript('build:packages'), 'pnpm --workspace-concurrency=1 --filter=./packages/* build')
-  assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
+  assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/channel-gateway build')
   assert.equal(requireScript('build:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway build')
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
@@ -320,7 +320,7 @@ test('root typecheck script covers package, MCP, gateway, and desktop surfaces',
 
   assert.equal(requireScript('typecheck:cloud-server'), 'pnpm --filter @open-cowork/cloud-server typecheck')
   assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
-  assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
+  assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/channel-gateway typecheck')
   assert.equal(requireScript('typecheck:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway typecheck')
 })
 

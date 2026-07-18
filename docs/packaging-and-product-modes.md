@@ -23,7 +23,7 @@ Wiki, Channel Gateway):** [Product partitions ADR](adr/product-partitions.md).
 | --- | --- | --- | --- |
 | Open Cowork Desktop | Supported | `apps/desktop` | macOS `.dmg`/`.zip`, Linux `.AppImage`/`.deb` |
 | Open Cowork Cloud | Supported for self-host beta and private hosted beta | cloud server code under `packages/cloud-server`; the browser UI is the unified renderer (`packages/app/src`) served by the cloud at `GET /` | `open-cowork-cloud` OCI image and Helm/Compose assets |
-| **Channel Gateway** | Supported as a cloud channel adapter | `apps/gateway` → `apps/channel-gateway`; `packages/gateway-*` | OCI: `open-cowork-gateway` today → `open-cowork-channel-gateway` (dual-tag window) |
+| **Channel Gateway** | Supported as a cloud channel adapter | `apps/channel-gateway`; `packages/gateway-*` | preferred OCI `open-cowork-channel-gateway` (dual-tag `open-cowork-gateway`) |
 | **Standalone Gateway** | Supported as a Gateway-only execution appliance | `apps/standalone-gateway` | CLI `open-cowork-gateway-standalone`; OCI image after release gate |
 | **Gateway** (durable work coordinator) | Monorepo import in progress | external → `products/gateway` | bin **`cowork-gateway`** (optional) |
 | **Wiki** | Monorepo import in progress | external → `products/wiki` | bin **`cowork-wiki`** (optional) |
@@ -33,7 +33,7 @@ Wiki, Channel Gateway):** [Product partitions ADR](adr/product-partitions.md).
 
 Be precise in operator docs — never use unqualified “the gateway”:
 
-- **Channel Gateway** (`apps/gateway` today): chat providers → Open Cowork Cloud
+- **Channel Gateway** (`apps/channel-gateway`): chat providers → Open Cowork Cloud
   through HTTP/SSE; never spawns OpenCode.
 - **Standalone Gateway** (`apps/standalone-gateway`): private OpenCode runtime +
   Gateway Postgres for Gateway-only deployments.
@@ -51,8 +51,8 @@ Be precise in operator docs — never use unqualified “the gateway”:
 | Desktop app | `@open-cowork/desktop` workspace package | internal workspace package |
 | Cloud image | `ghcr.io/<owner>/open-cowork-cloud:<tag>` | release image |
 | Cloud Helm chart | `helm/open-cowork-cloud` | release/deployment asset |
-| Channel Gateway app | `@open-cowork/gateway` today → `@open-cowork/channel-gateway` | internal workspace package |
-| Channel Gateway image | `ghcr.io/<owner>/open-cowork-gateway:<tag>` today → `open-cowork-channel-gateway` | release image (compat dual-tag) |
+| Channel Gateway app | `@open-cowork/channel-gateway` | internal workspace package |
+| Channel Gateway image | preferred `ghcr.io/<owner>/open-cowork-channel-gateway:<tag>`; dual-tag `open-cowork-gateway` | release image (compat dual-tag) |
 | Channel Gateway Helm chart | `helm/open-cowork-gateway` | release/deployment asset |
 | Standalone Gateway app | `@open-cowork/standalone-gateway` workspace package | internal workspace package |
 | Standalone Gateway CLI | `open-cowork-gateway-standalone` | source-built CLI |
@@ -67,6 +67,32 @@ npm packages. Gateway and Wiki publish as **independent** product artifacts
 when enabled (not on every Desktop tag). If a package is promoted to a public
 SDK, it needs semver, API stability docs, README examples, changelog entries,
 and package-level provenance.
+
+## Channel Gateway image dual-tag (JOE-902)
+
+Preferred OCI repository name for the Cloud Channel Gateway is:
+
+```text
+ghcr.io/<owner>/open-cowork-channel-gateway:<tag>
+```
+
+During the compatibility window, release CI also tags the **same digest** as:
+
+```text
+ghcr.io/<owner>/open-cowork-gateway:<tag>
+```
+
+Helm chart defaults (`helm/open-cowork-gateway/values.yaml`) use the preferred
+`open-cowork-channel-gateway` repository. Operators still on the old name can
+set `image.repository` to `…/open-cowork-gateway` or continue consuming the
+legacy evidence file `open-cowork-gateway.image.json` (alias metadata).
+
+Compose service names remain `open-cowork-gateway` for local stacks; image
+tags `open-cowork-gateway:local` and `open-cowork-channel-gateway:local` are
+both produced in CI.
+
+Do **not** use either image name for the durable **Gateway** product
+(`cowork-gateway` / `products/gateway`).
 
 ## Product Modes
 
@@ -147,8 +173,8 @@ pnpm ops:validate
 
 | Binary | Package | Product mode value | Env family |
 | --- | --- | --- | --- |
-| Cloud Channel Gateway | `apps/gateway` | `cloud_channel` only | `OPEN_COWORK_GATEWAY_*` (includes `OPEN_COWORK_GATEWAY_PRODUCT_MODE`) |
+| Cloud Channel Gateway | `apps/channel-gateway` | `cloud_channel` only | `OPEN_COWORK_GATEWAY_*` (includes `OPEN_COWORK_GATEWAY_PRODUCT_MODE`) |
 | Standalone Gateway | `apps/standalone-gateway` | `standalone` only | `OPEN_COWORK_STANDALONE_GATEWAY_*` |
 
-`OPEN_COWORK_GATEWAY_PRODUCT_MODE` is **not** a switch that turns `apps/gateway` into Standalone.
+`OPEN_COWORK_GATEWAY_PRODUCT_MODE` is **not** a switch that turns `apps/channel-gateway` into Standalone.
 Setting it to `standalone` or `hybrid` fails closed and names the correct binary in the error message.

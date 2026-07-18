@@ -36,7 +36,7 @@ test('cloud route, service, client-domain, and gateway source modules stay bound
     { directory: 'packages/cloud-server/src/http-routes', maxLines: 500 },
     { directory: 'packages/cloud-server/src/services', maxLines: 450 },
     { directory: 'packages/cloud-client/src/domains', maxLines: 120 },
-    { directory: 'apps/gateway/src', maxLines: 900 },
+    { directory: 'apps/channel-gateway/src', maxLines: 900 },
   ]
 
   for (const budget of budgets) {
@@ -56,7 +56,7 @@ test('client surfaces do not import server-only cloud control-plane internals', 
   const clientRoots = [
     'apps/desktop/src/preload',
     'packages/app/src',
-    'apps/gateway/src',
+    'apps/channel-gateway/src',
     'packages/cloud-client/src',
   ]
   const forbidden = [

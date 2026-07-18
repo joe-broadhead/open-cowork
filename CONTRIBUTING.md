@@ -21,6 +21,16 @@ Bad changes usually:
 - add prompt-only behavior where code/config should be the source of truth
 - hardcode downstream assumptions into the upstream app
 
+## Product partitions
+
+Sibling products (durable **Gateway**, **Wiki**) live under `products/` and keep
+independent installables. See [products/README.md](products/README.md) and
+[docs/adr/product-partitions.md](docs/adr/product-partitions.md).
+
+- Channel Gateway code: `apps/channel-gateway` (`@open-cowork/channel-gateway`)
+- Do not add durable Gateway sources under `apps/channel-gateway` or
+  `@open-cowork/channel-gateway`.
+
 ## Development setup
 
 Requirements:

@@ -2,6 +2,8 @@ packages:
   - apps/*
   - mcps/*
   - packages/*
+  - products/gateway
+  - products/wiki
 
 # Supply-chain cooldown: refuse to resolve npm versions published less than this
 # many minutes ago (3 days). Blunts the "compromised package published hours before

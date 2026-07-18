@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/joe-broadhead/open-cowork-gateway
+  repository: ghcr.io/joe-broadhead/open-cowork-channel-gateway
   tag: "0.0.0"
   digest: ""
   pullPolicy: IfNotPresent

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 // Doc-coverage gate (audit Tranche E): every OPERATOR-facing OPEN_COWORK_* env var
 // the cloud control plane (`packages/cloud-server/src`) and the Cloud Channel
-// Gateway (`apps/gateway/src`) read from the environment must be documented in
+// Gateway (`apps/channel-gateway/src`) read from the environment must be documented in
 // `docs/open-cowork-cloud.md`. This stops new operator knobs from shipping
 // read-but-undocumented (the exact class of gap this tranche closed: CORS origin,
 // SSRF/runtime allowlist, the discord/whatsapp/signal bridge family, and the

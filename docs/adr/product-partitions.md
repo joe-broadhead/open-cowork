@@ -19,7 +19,7 @@ Open Cowork is the flagship multi-surface product on top of OpenCode. Two siblin
 - **opencode-gateway** — durable work coordinator (daemon, scheduler, Mission Control, MCP)
 - **open-wiki** — git-backed knowledge substrate (CLI, web, HTTP API, MCP)
 
-Inside open-cowork, **`apps/gateway` already means Cloud Channel Gateway** (chat → Cloud; no OpenCode spawn). Naming both “Gateway” without qualifiers causes operator and agent-tool ambiguity.
+Inside open-cowork, **Channel Gateway** is `apps/channel-gateway` / `@open-cowork/channel-gateway` (renamed from `apps/gateway`). Naming both that surface and durable **Gateway** without qualifiers causes operator and agent-tool ambiguity.
 
 ## Decision
 
@@ -29,7 +29,7 @@ Inside open-cowork, **`apps/gateway` already means Cloud Channel Gateway** (chat
 open-cowork/
   apps/
     desktop/
-    channel-gateway/      # target rename from apps/gateway (JOE-901)
+    channel-gateway/      # Channel Gateway (renamed from apps/gateway)
     standalone-gateway/
   packages/               # @open-cowork/* libraries
   mcps/                   # Open Cowork bundled MCPs
@@ -45,7 +45,7 @@ open-cowork/
 | --- | --- | --- | --- |
 | Open Cowork Desktop | `apps/desktop` | **Open Cowork** (Desktop) | GH release installers |
 | Open Cowork Cloud | `packages/cloud-server` + unified renderer | **Open Cowork** (Cloud) | `open-cowork-cloud` OCI |
-| `apps/gateway` | `apps/channel-gateway` | **Channel Gateway** | image: `open-cowork-channel-gateway` (compat: dual-tag `open-cowork-gateway` during transition) |
+| `apps/gateway` | `apps/channel-gateway` | **Channel Gateway** | preferred image `open-cowork-channel-gateway` (dual-tag `open-cowork-gateway`) |
 | `apps/standalone-gateway` | keep | **Standalone Gateway** | CLI: `open-cowork-gateway-standalone` |
 | opencode-gateway | `products/gateway` | **Gateway** | bin: **`cowork-gateway`** (optional shim `opencode-gateway` for one minor) |
 | open-wiki | `products/wiki` | **Wiki** | bin: **`cowork-wiki`** (optional shim `openwiki` during transition) |
@@ -90,7 +90,7 @@ Independent product versions (Changesets or equivalent — JOE-903):
 
 ## Consequences
 
-- Channel Gateway package rename is **mandatory before** durable Gateway import (JOE-901).
+- Channel Gateway package rename (`apps/channel-gateway`) is complete; keep dual-tag OCI until operators migrate.
 - Docs and OCI names must update on a compatibility window (JOE-902, JOE-910).
 - Boundary enforcement becomes a CI concern (JOE-905).
 

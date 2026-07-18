@@ -65,7 +65,7 @@
         "@fontsource-variable/schibsted-grotesk"
       ]
     },
-    "apps/gateway": {
+    "apps/channel-gateway": {
       "entry": [
         "src/index.ts",
         "src/*.test.ts"

@@ -18,10 +18,10 @@ test('BYOK management surface is not exposed through renderer cache or gateway p
     'apps/desktop/src/preload/index.ts',
     'apps/desktop/src/main/cloud-workspace-adapter.ts',
     'apps/desktop/src/main/cloud-workspace-cache.ts',
-    'apps/gateway/src/cloud-gateway.ts',
-    'apps/gateway/src/gateway-runtime.ts',
-    'apps/gateway/src/event-renderer.ts',
-    'apps/gateway/src/session-stream-manager.ts',
+    'apps/channel-gateway/src/cloud-gateway.ts',
+    'apps/channel-gateway/src/gateway-runtime.ts',
+    'apps/channel-gateway/src/event-renderer.ts',
+    'apps/channel-gateway/src/session-stream-manager.ts',
   ]
 
   for (const file of files) {

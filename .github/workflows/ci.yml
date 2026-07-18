@@ -187,7 +187,9 @@ jobs:
         run: |
           image_tag="${GITHUB_SHA:-ci}"
           docker build -f docker/open-cowork-gateway/Dockerfile \
+            -t open-cowork-channel-gateway:ci \
             -t open-cowork-gateway:ci \
+            -t ghcr.io/joe-broadhead/open-cowork-channel-gateway:"${image_tag}" \
             -t ghcr.io/joe-broadhead/open-cowork-gateway:"${image_tag}" \
             .
 

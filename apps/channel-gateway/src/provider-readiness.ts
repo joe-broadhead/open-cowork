@@ -67,7 +67,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
     localContractTests: [
       'packages/gateway-provider-telegram/src/telegram-provider.test.ts',
       'packages/gateway-provider-telegram/src/telegram-retry.test.ts',
-      'apps/gateway/src/daemon.test.ts',
+      'apps/channel-gateway/src/daemon.test.ts',
     ],
     liveSmoke: 'Use polling for private installs; webhook smoke requires HTTPS public URL plus Telegram webhook secret.',
   },
@@ -99,7 +99,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
     rateLimitBehavior: 'Provider surfaces Slack API failures to Gateway delivery retry/dead-letter policy.',
     localContractTests: [
       'packages/gateway-provider-slack/src/slack-provider.test.ts',
-      'apps/gateway/src/daemon.test.ts',
+      'apps/channel-gateway/src/daemon.test.ts',
     ],
     liveSmoke: 'Create a Slack app with Events and Interactivity pointed at /webhooks/slack; verify signed events and button callbacks.',
   },
@@ -131,7 +131,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
     rateLimitBehavior: 'SMTP and inbound webhook failures flow through Gateway delivery retry/dead-letter policy.',
     localContractTests: [
       'packages/gateway-provider-email/src/email-provider.test.ts',
-      'apps/gateway/src/event-renderer.test.ts',
+      'apps/channel-gateway/src/event-renderer.test.ts',
     ],
     liveSmoke: 'Send an inbound provider webhook or email fixture and verify the threaded reply path.',
   },
@@ -163,7 +163,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
     rateLimitBehavior: 'Bridge delivery uses bounded retry/backoff for transient HTTP failures.',
     localContractTests: [
       'packages/gateway-provider-webhook/src/webhook-provider.test.ts',
-      'apps/gateway/src/daemon.test.ts',
+      'apps/channel-gateway/src/daemon.test.ts',
     ],
     liveSmoke: 'Use a signed bridge fixture; public ingress must reject unsigned, stale, and replayed requests.',
   },
@@ -323,7 +323,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
     rateLimitBehavior: 'No provider-side rate limits; not for production ingress.',
     localContractTests: [
       'packages/gateway-testing/src/fake-channel.test.ts',
-      'apps/gateway/src/daemon.test.ts',
+      'apps/channel-gateway/src/daemon.test.ts',
       'scripts/gateway-cloud-smoke.mjs',
     ],
     liveSmoke: 'Allowed only for local loopback and CI smoke tests; public exposure requires an explicit demo override.',

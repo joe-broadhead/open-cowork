@@ -254,5 +254,5 @@ Use this checklist for every OpenCode SDK or `opencode-ai` runtime bump:
   `node --no-warnings --experimental-sqlite --experimental-strip-types --test tests/opencode-sdk-boundary.test.ts tests/opencode-sdk-event-projection.test.ts tests/cloud-opencode-runtime-adapter.test.ts tests/cloud-session-projection-contract.test.ts tests/gateway-package-boundary.test.ts`.
 - Run the BYOK runtime injection tests:
   `node --no-warnings --experimental-sqlite --experimental-strip-types --test tests/byok-runtime-injection.test.ts tests/byok-boundary-regression.test.ts`.
-- Run gateway renderer tests after `pnpm --filter @open-cowork/gateway build`:
-  `node --no-warnings --experimental-strip-types --test apps/gateway/src/event-renderer.test.ts`.
+- Run gateway renderer tests after `pnpm --filter @open-cowork/channel-gateway build`:
+  `node --no-warnings --experimental-strip-types --test apps/channel-gateway/src/event-renderer.test.ts`.

@@ -21,7 +21,7 @@ const sourceRoots = [
   'apps/desktop/src/main',
   'apps/desktop/src/preload',
   'packages/app/src',
-  'apps/gateway/src',
+  'apps/channel-gateway/src',
   'apps/standalone-gateway/src',
   'packages',
 ] as const

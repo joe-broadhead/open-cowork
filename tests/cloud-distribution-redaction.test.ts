@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { sanitizeCloudObservabilityAttributes } from '@open-cowork/cloud-server/observability'
-import { redactGatewayConfig, resolveGatewayConfig } from '../apps/gateway/dist/config.js'
+import { redactGatewayConfig, resolveGatewayConfig } from '../apps/channel-gateway/dist/config.js'
 import { redactAuditMetadata, redactAuditMetadataForExport } from '../packages/cloud-server/src/audit-redaction.ts'
 import {
   assertNoSecretFixtureLeaks,

@@ -110,7 +110,7 @@ Downstream extension work must start in the layer that owns the concept.
 
 | Extension point | Owning modules or artifacts | Required boundary |
 | --- | --- | --- |
-| Gateway channel providers | `packages/gateway-channel`, `packages/gateway-provider-*`, `apps/gateway/src/provider-registry.ts`, `apps/gateway/src/provider-readiness.ts` | Providers normalize channel I/O only. No OpenCode SDK imports, no direct control-plane DB access, no runtime ownership. |
+| Gateway channel providers | `packages/gateway-channel`, `packages/gateway-provider-*`, `apps/channel-gateway/src/provider-registry.ts`, `apps/channel-gateway/src/provider-readiness.ts` | Providers normalize channel I/O only. No OpenCode SDK imports, no direct control-plane DB access, no runtime ownership. |
 | Billing adapters | `packages/cloud-server/src/billing-adapter.ts`, `stub-billing-adapter.ts`, `stripe-billing-adapter.ts` | Core services consume provider-neutral subscription and entitlement records. Provider SDK imports stay behind adapters. |
 | Object-store adapters | `packages/cloud-server/src/object-store.ts` and deployment object-store config | Callers use object-store interfaces. Artifact, snapshot, and checkpoint code must not branch on cloud vendor ids. |
 | Secret/KMS adapters | `packages/cloud-server/src/secret-adapter.ts`, `byok-secret-store.ts`, secret ref resolvers | Secrets are refs or encrypted envelopes. Plaintext reveal is limited to the owning runtime role. |

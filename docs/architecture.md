@@ -122,7 +122,7 @@ workspace authorities:
 - **Cloud Channel Gateway** is a headless cloud client. It adapts Telegram,
   Slack, email, webhooks, and other channels onto the cloud HTTP/SSE contract.
   In this mode Gateway never imports the OpenCode SDK, starts OpenCode, or owns
-  control-plane Postgres state. The current `apps/gateway` daemon is this mode
+  control-plane Postgres state. The current `apps/channel-gateway` daemon is this mode
   and must use `productMode=cloud_channel`.
   Gateway-owned memory is only a fast path for provider SDK state, replay
   caches, delivery drains, and stream subscriptions; durable idempotency lives

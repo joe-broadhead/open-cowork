@@ -1,0 +1,13 @@
+{
+  "name": "cowork-wiki",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Stub for Wiki (cowork-wiki). Source lands via JOE-906 import.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "node -e \"console.log('[cowork-wiki] stub: nothing to build until import')\"",
+    "test": "node -e \"console.log('[cowork-wiki] stub: nothing to test until import')\"",
+    "typecheck": "node -e \"console.log('[cowork-wiki] stub: nothing to typecheck until import')\""
+  }
+}

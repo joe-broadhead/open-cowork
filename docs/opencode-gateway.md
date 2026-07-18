@@ -23,7 +23,7 @@ a trusted user-managed or downstream integration until explicitly linked.
 | Name | Code (today → target) | Role |
 | --- | --- | --- |
 | **Gateway** (this page) | external / `products/gateway` | Durable work coordinator + MCP for OpenCode |
-| **Channel Gateway** | `apps/gateway` → `apps/channel-gateway` | Chat providers → Open Cowork Cloud (no OpenCode spawn) |
+| **Channel Gateway** | `apps/channel-gateway` → `apps/channel-gateway` | Chat providers → Open Cowork Cloud (no OpenCode spawn) |
 | **Standalone Gateway** | `apps/standalone-gateway` | Gateway-only appliance with private OpenCode + Postgres |
 
 See [Packaging and product modes](packaging-and-product-modes.md).

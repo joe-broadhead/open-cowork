@@ -133,7 +133,7 @@ Run
 ## Product partitions (Gateway family & Wiki)
 
 Channel Gateway
-:   Cloud channel adapter (`apps/gateway` today; target
+:   Cloud channel adapter (`apps/channel-gateway` today; target
     `apps/channel-gateway`). Connects chat providers (Telegram, Slack, email,
     …) to Open Cowork Cloud over HTTP/SSE. **Never** spawns OpenCode. OCI
     image historically `open-cowork-gateway`; target

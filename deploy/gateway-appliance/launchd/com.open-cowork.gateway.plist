@@ -12,7 +12,7 @@
     <string>/usr/bin/env</string>
     <string>pnpm</string>
     <string>--filter</string>
-    <string>@open-cowork/gateway</string>
+    <string>@open-cowork/channel-gateway</string>
     <string>start</string>
   </array>
   <key>EnvironmentVariables</key>

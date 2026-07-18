@@ -243,7 +243,7 @@ projection, channel adapters, and deployment ergonomics.
 
 | Extension point | Owning modules | Contract |
 |---|---|---|
-| Gateway providers | `packages/gateway-provider-*`, `packages/gateway-channel`, `apps/gateway/src/provider-registry.ts` | Implement the provider contract and register capabilities. Gateway providers send/receive channel messages only; they do not spawn OpenCode, import Cloud stores, or own execution state. |
+| Gateway providers | `packages/gateway-provider-*`, `packages/gateway-channel`, `apps/channel-gateway/src/provider-registry.ts` | Implement the provider contract and register capabilities. Gateway providers send/receive channel messages only; they do not spawn OpenCode, import Cloud stores, or own execution state. |
 | Deployment recipes | `deploy/`, `helm/`, `docker-compose*.yml`, `scripts/validate-deployment-configs.mjs` | Compose public templates from config/env refs. Keep real project ids, domains, account ids, customer values, prices, and secrets in private deployment repos. |
 | Billing adapters | `packages/cloud-server/src/billing-adapter.ts`, `stripe-billing-adapter.ts`, `stub-billing-adapter.ts` | Add provider-specific billing behind the adapter. Core entitlement and quota logic consumes provider-neutral subscription records. |
 | Object-store adapters | `packages/cloud-server/src/object-store.ts`, deployment object-store config | Add storage providers behind the object-store interface. Artifact, upload, snapshot, and checkpoint callers should not branch on cloud provider names. |
@@ -271,7 +271,7 @@ Module changes should stay narrow:
 | `OPEN_COWORK_DOWNSTREAM_ROOT` | Root directory for a downstream distribution. Supplies config, skills, and MCPs. | unset |
 | `OPEN_COWORK_CONFIG_PATH` | Absolute path to a single override config file. Takes priority over `CONFIG_DIR` / `DOWNSTREAM_ROOT` config discovery. | unset |
 | `OPEN_COWORK_CONFIG_DIR` | Directory containing `config.json` or `open-cowork.config.json`. Merged after the single-file override. | unset |
-| `OPEN_COWORK_GATEWAY_CONFIG` | Gateway-only JSON config file. Overrides the shared `gateway` section when running `apps/gateway`. | unset |
+| `OPEN_COWORK_GATEWAY_CONFIG` | Gateway-only JSON config file. Overrides the shared `gateway` section when running `apps/channel-gateway`. | unset |
 | `OPEN_COWORK_GATEWAY_CONFIG_JSON` | Inline gateway-only JSON config. Highest-priority gateway override for process managers and tests. | unset |
 | `OPEN_COWORK_SANDBOX_DIR` | Root directory where sandbox threads create workspaces. | `~/Open Cowork Sandbox` |
 | `OPEN_COWORK_CHART_TIMEOUT_MS` | Main-process chart render timeout. Clamped to `[250, 10000]` ms. | `1500` |

@@ -15,7 +15,7 @@ runtime/control-plane ownership is a separate product mode and not part of this
 Cloud Channel Gateway readiness matrix.
 
 The typed source of truth is
-`apps/gateway/src/provider-readiness.ts`. The Gateway test suite verifies that
+`apps/channel-gateway/src/provider-readiness.ts`. The Gateway test suite verifies that
 this page, the matrix, and actual provider capabilities stay aligned.
 
 ## Provider Identity Contract
@@ -42,15 +42,15 @@ the kind for capability/policy decisions.
 
 | Provider | Tier | Status | Modes | Auth / signing | Approvals | Files | Contract tests |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `telegram` | Tier 1 | Launch | polling, webhook | Bot token; webhook secret when webhook mode is enabled | Inline buttons plus token fallback | Upload/download | `packages/gateway-provider-telegram/src/telegram-provider.test.ts`, `packages/gateway-provider-telegram/src/telegram-retry.test.ts`, `apps/gateway/src/daemon.test.ts` |
-| `slack` | Tier 1 | Launch | webhook | Bot token and Slack signing secret | Inline buttons plus token fallback | Upload/download | `packages/gateway-provider-slack/src/slack-provider.test.ts`, `apps/gateway/src/daemon.test.ts` |
-| `email` | Tier 1 | Launch | webhook | Inbound shared secret plus stable `messageId`/`id` replay key; SMTP credentials where required | Token fallback | Inbound uploads capped by Gateway request-body limit; outbound artifact links | `packages/gateway-provider-email/src/email-provider.test.ts`, `apps/gateway/src/event-renderer.test.ts` |
-| `webhook` | Tier 2 | Utility | webhook | HMAC/timestamp shared secret for ingress and outbound delivery | Inline buttons if bridge supports them; token fallback otherwise | Inline inbound files capped by Gateway request-body limit; outbound links | `packages/gateway-provider-webhook/src/webhook-provider.test.ts`, `apps/gateway/src/daemon.test.ts` |
+| `telegram` | Tier 1 | Launch | polling, webhook | Bot token; webhook secret when webhook mode is enabled | Inline buttons plus token fallback | Upload/download | `packages/gateway-provider-telegram/src/telegram-provider.test.ts`, `packages/gateway-provider-telegram/src/telegram-retry.test.ts`, `apps/channel-gateway/src/daemon.test.ts` |
+| `slack` | Tier 1 | Launch | webhook | Bot token and Slack signing secret | Inline buttons plus token fallback | Upload/download | `packages/gateway-provider-slack/src/slack-provider.test.ts`, `apps/channel-gateway/src/daemon.test.ts` |
+| `email` | Tier 1 | Launch | webhook | Inbound shared secret plus stable `messageId`/`id` replay key; SMTP credentials where required | Token fallback | Inbound uploads capped by Gateway request-body limit; outbound artifact links | `packages/gateway-provider-email/src/email-provider.test.ts`, `apps/channel-gateway/src/event-renderer.test.ts` |
+| `webhook` | Tier 2 | Utility | webhook | HMAC/timestamp shared secret for ingress and outbound delivery | Inline buttons if bridge supports them; token fallback otherwise | Inline inbound files capped by Gateway request-body limit; outbound links | `packages/gateway-provider-webhook/src/webhook-provider.test.ts`, `apps/channel-gateway/src/daemon.test.ts` |
 | `cli` | Tier 2 | Utility | stdio | Trusted local process boundary; no public HTTP ingress | Token fallback | Inbound metadata; outbound links | `packages/gateway-provider-cli/src/cli-provider.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
 | `discord` | Tier 3 | Later hardening (Discord Bridge) | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-discord/src/discord-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
 | `whatsapp` | Tier 3 | Later hardening (WhatsApp Bridge) | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-whatsapp/src/whatsapp-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
 | `signal` | Tier 3 | Later hardening (Signal Bridge) | signed bridge webhook | Bridge shared secret | Token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-signal/src/signal-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
-| `fake` | Tier demo | Demo only | local fake webhook | Explicit `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true`; loopback by default | Inline buttons plus token fallback | In-memory test files capped by Gateway request-body limit | `packages/gateway-testing/src/fake-channel.test.ts`, `apps/gateway/src/daemon.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
+| `fake` | Tier demo | Demo only | local fake webhook | Explicit `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true`; loopback by default | Inline buttons plus token fallback | In-memory test files capped by Gateway request-body limit | `packages/gateway-testing/src/fake-channel.test.ts`, `apps/channel-gateway/src/daemon.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
 
 ## Tier Policy
 
