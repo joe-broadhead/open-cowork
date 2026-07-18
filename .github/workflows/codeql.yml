@@ -20,7 +20,9 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Monorepo product partitions (products/gateway + products/wiki) expanded the
+    # JS/TS graph; security-and-quality analysis routinely exceeds 45m.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
