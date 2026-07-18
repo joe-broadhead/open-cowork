@@ -1,7 +1,9 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as net from 'node:net'
 import * as path from 'node:path'
+import { redactSecretText as sharedRedactSecretText } from '@open-cowork/shared'
+import { constantTimeEqualsDigest } from '@open-cowork/shared/node'
 import { getConfigDir, type ChannelAllowlistRule, type GatewayConfig } from './config.js'
 import { configuredRedactionValues, readScopedHttpTokenFile } from './secrets-lifecycle.js'
 import { decideHttpSecurityPolicy, type SecurityPolicyDecisionKind, type SecurityPolicyEvidence, type SecurityPolicyReasonCode } from './security-policy.js'
@@ -18,7 +20,8 @@ export function redactSecret(value?: string): string {
 }
 
 export function redactSensitiveText(value: string, config?: GatewayConfig, env: NodeJS.ProcessEnv = process.env): string {
-  let text = String(value || '')
+  // Shared sanitizer first (token families), then product-configured secrets.
+  let text = sharedRedactSecretText(String(value || ''))
     .replace(BEARER_PATTERN, 'Bearer <redacted>')
     .replace(KEY_VALUE_SECRET_PATTERN, (_match, key) => `${key}=<redacted>`)
     .replace(TELEGRAM_TOKEN_PATTERN, token => redactSecret(token))
@@ -731,13 +734,8 @@ function findHttpTokenGrant(token: string): HttpTokenGrant | undefined {
 }
 
 function constantTimeTokenEquals(a: string, b: string): boolean {
-  // Compare fixed-length SHA-256 digests rather than the raw tokens, so the
-  // comparison time never depends on token length or shared prefix — a raw
-  // `a.length !== b.length` short-circuit leaks the configured token's length
-  // through timing. Digests are always 32 bytes, so timingSafeEqual never throws.
-  const aDigest = createHash('sha256').update(a).digest()
-  const bDigest = createHash('sha256').update(b).digest()
-  return timingSafeEqual(aDigest, bDigest)
+  // Digest-based compare (shared) — no secret-length timing side channel.
+  return constantTimeEqualsDigest(a, b)
 }
 
 function configuredHttpTokens(): HttpTokenGrant[] {

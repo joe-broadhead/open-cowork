@@ -75,22 +75,12 @@ describe('typed OpencodeClient fake conformance', () => {
     expect(message).toMatchObject({ role: 'assistant', tokens: { cache: { read: 0, write: 0 } } })
   })
 
-  it('packages the upgraded @opencode-ai/sdk with createOpencodeClient export', async () => {
+  it('packages monorepo-aligned @opencode-ai/sdk 1.18.1 with createOpencodeClient export', async () => {
     const mod = await import('@opencode-ai/sdk')
     expect(typeof mod.createOpencodeClient).toBe('function')
-    // Pin body: install must be >= 1.17.16 from Phase 0; monorepo may resolve 1.18.x+.
     const pkgPath = new URL('../../node_modules/@opencode-ai/sdk/package.json', import.meta.url)
     const pkg = JSON.parse(await (await import('node:fs/promises')).readFile(pkgPath, 'utf8')) as { version: string }
-    const parts = String(pkg.version).split('.').map(n => Number(n))
-    const major = parts[0] ?? 0
-    const minor = parts[1] ?? 0
-    const patch = parts[2] ?? 0
-    expect(major).toBeGreaterThanOrEqual(1)
-    const atLeast11716 =
-      major > 1
-      || (major === 1 && minor > 17)
-      || (major === 1 && minor === 17 && patch >= 16)
-    expect(atLeast11716, `expected @opencode-ai/sdk >= 1.17.16, got ${pkg.version}`).toBe(true)
+    expect(pkg.version).toBe('1.18.1')
   })
 
   it('drives a real scheduler cycle end to end (fake accepted as OpencodeClient)', async () => {

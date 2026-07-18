@@ -1,12 +1,12 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { createBridge } from '../../shared/bridge.js'
+import {
+  connectStdioMcpServer,
+  createNamedMcpServer,
+  textResult,
+} from '../../shared/mcp-bootstrap.js'
 
-const server = new McpServer({
-  name: 'agents',
-  version: '1.0.0',
-})
+const server = createNamedMcpServer('agents', '1.0.0')
 
 const agentColorSchema = z.enum(['primary', 'warning', 'accent', 'success', 'info', 'secondary'])
 const permissionActionSchema = z.enum(['allow', 'ask', 'deny'])
@@ -59,15 +59,6 @@ async function postToBridge(path: '/list' | '/get' | '/preview' | '/save' | '/de
   return bridge.postToBridge(path, body)
 }
 
-function textResult(value: unknown) {
-  return {
-    content: [{
-      type: 'text' as const,
-      text: JSON.stringify(value),
-    }],
-  }
-}
-
 server.tool(
   'list_agents',
   'List custom Open Cowork agents. Built-in agents are read-only and are not modified by this MCP.',
@@ -106,5 +97,4 @@ server.tool(
 )
 
 process.stderr.write('[agents-mcp] Server started\n')
-const transport = new StdioServerTransport()
-await server.connect(transport)
+await connectStdioMcpServer(server)

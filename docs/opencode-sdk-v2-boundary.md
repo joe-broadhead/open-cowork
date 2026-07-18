@@ -36,7 +36,9 @@ registry shape; changing it is a compatibility review, not a snapshot refresh.
   `apps/standalone-gateway/src/opencode.ts`.
 - **Durable Gateway** (`products/gateway`, package `cowork-gateway`) is a
   **product partition** that coordinates OpenCode via its own daemon/MCP and
-  may declare `@opencode-ai/sdk`. It is not part of the Desktop Electron
+  may declare `@opencode-ai/sdk` at the **same pin as Desktop/Cloud (1.18.1)**.
+  It currently uses the classic client entry + `client.session.*` call shapes
+  (V2 field migration is a follow-up). It is not part of the Desktop Electron
   runtime-host path and must not be imported by `apps/desktop` or
   `packages/app`.
 - Web, website, renderer, preload, and `@open-cowork/cloud-client` code must
@@ -91,6 +93,14 @@ Desktop residual seams and removal plan: [desktop-composition-shell.md](desktop-
 - `packages/runtime-host/src/runtime-state.ts`
 - `packages/runtime-host/src/runtime.ts`
 - `packages/runtime-host/src/session-history-loader.ts`
+- `products/gateway/src/opencode-client.ts` (classic entry at pin 1.18.1; residual `client.session.*` call shapes)
+- `products/gateway/src/gateway-runtime.ts`
+- `products/gateway/src/channel-sync.ts`
+- `products/gateway/src/opencode-session-runtime.ts`
+- `products/gateway/src/live.ts`
+- `products/gateway/src/heartbeat.ts`
+- `products/gateway/src/scheduler.ts`
+- `products/gateway/src/observability.ts`
 
 ## Native V2 Capability Gaps
 
