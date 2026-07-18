@@ -89,13 +89,17 @@ await fs.writeFile(
     {
       name: "@openwiki/cli",
       version: rootPackage.version,
-      description: "OpenWiki CLI for versioned, permissioned knowledge bases and MCP agent access.",
+      description: "Wiki (Open Cowork) CLI for versioned, permissioned knowledge bases and MCP agent access.",
       type: "module",
       license: rootPackage.license,
-      homepage: rootPackage.homepage,
-      repository: rootPackage.repository,
-      bugs: rootPackage.bugs,
-      keywords: ["openwiki", "wiki", "mcp", "agents", "knowledge-base"],
+      homepage: rootPackage.homepage || "https://github.com/joe-broadhead/open-cowork/tree/master/products/wiki#readme",
+      repository: rootPackage.repository || {
+        type: "git",
+        url: "https://github.com/joe-broadhead/open-cowork.git",
+        directory: "products/wiki",
+      },
+      bugs: rootPackage.bugs || { url: "https://github.com/joe-broadhead/open-cowork/issues" },
+      keywords: ["openwiki", "wiki", "mcp", "agents", "knowledge-base", "cowork-wiki"],
       bin: {
         openwiki: "./openwiki.js",
         "cowork-wiki": "./openwiki.js",

@@ -18,4 +18,3 @@
     "status": { "enum": ["active", "stale", "disputed", "archived"] }
   }
 }
-

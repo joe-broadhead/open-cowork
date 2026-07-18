@@ -17,10 +17,14 @@ Open an issue first for large behavior or architecture changes.
 ## Development Setup
 
 ```bash
-git clone https://github.com/joe-broadhead/opencode-gateway.git
-cd opencode-gateway
-npm install
-npm run verify
+# From the open-cowork monorepo root (source of truth):
+git clone https://github.com/joe-broadhead/open-cowork.git
+cd open-cowork
+corepack enable && corepack prepare pnpm@10.32.1 --activate
+pnpm install --frozen-lockfile
+pnpm --filter cowork-gateway build
+pnpm --filter cowork-gateway test
+pnpm --filter cowork-gateway release:check
 ```
 
 ## Common Commands

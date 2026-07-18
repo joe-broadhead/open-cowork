@@ -103,4 +103,3 @@ describe('orchestration kernel timeline calculations', () => {
     })
   })
 })
-

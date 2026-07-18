@@ -8,4 +8,3 @@ const result = spawnSync("openwiki", [...rootArgs, "index", "--json"], {
 });
 
 process.exit(result.status ?? 1);
-

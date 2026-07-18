@@ -1,7 +1,7 @@
 # ADR: OpenCode workspaces vs Gateway environments (Phase 4)
 
-**Status:** Accepted (defer product ship)  
-**Date:** 2026-07-09  
+**Status:** Accepted (defer product ship)
+**Date:** 2026-07-09
 **Roadmap:** #217 / #212
 
 ## Context

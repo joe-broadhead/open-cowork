@@ -1,6 +1,6 @@
 /**
  * Live event stream for the gateway dashboard.
- * 
+ *
  * Forwards opencode server SSE events to connected dashboard clients.
  * Events: session.created, session.updated, message.updated, tool calls, etc.
  */

@@ -17,4 +17,3 @@ export function reviewOpenWikiWrite(path: string, mode: "client" | "maintainer")
   }
   return { allowed: true, reason: "Path is outside canonical wiki page content." };
 }
-

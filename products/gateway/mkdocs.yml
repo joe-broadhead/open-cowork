@@ -1,9 +1,9 @@
-site_name: OpenCode Gateway
+site_name: Gateway (Open Cowork)
 site_description: OpenCode-native durable work coordination for tasks, scheduler runs, channels, and service operations.
-site_url: https://joe-broadhead.github.io/opencode-gateway/
-repo_url: https://github.com/joe-broadhead/opencode-gateway
-repo_name: opencode-gateway
-edit_uri: edit/main/docs/
+site_url: https://joe-broadhead.github.io/open-cowork/opencode-gateway/
+repo_url: https://github.com/joe-broadhead/open-cowork
+repo_name: open-cowork
+edit_uri: edit/master/products/gateway/docs/
 
 theme:
   name: material
@@ -76,7 +76,7 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/joe-broadhead/opencode-gateway
+      link: https://github.com/joe-broadhead/open-cowork/tree/master/products/gateway
   generator: false
 
 extra_css:

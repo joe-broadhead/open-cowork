@@ -604,7 +604,7 @@ server.tool('observability', "Show full observability: Gateway sessions, token u
     return runTool(async () => {
       const fs = await import('node:fs')
       const path = await import('node:path')
-      
+
       const sessions = await fetchJSON('GET', '/session-state')
       const snapshot = await fetchJSON('GET', '/observability').catch(() => null)
       const obsDir = path.join(getConfigDir(), 'observability')
@@ -619,7 +619,7 @@ server.tool('observability', "Show full observability: Gateway sessions, token u
         const s = snapshot.supervisors.summary
         text += `**Supervisors**: ${s.total || 0} total | ${s.active || 0} active | ${s.due || 0} due | ${s.leased || 0} leased | ${s.stale || 0} stale\n`
       }
-      
+
       // Read executions
       const execFile = path.join(obsDir, 'executions.jsonl')
       if (fs.existsSync(execFile)) {
@@ -627,14 +627,14 @@ server.tool('observability', "Show full observability: Gateway sessions, token u
         const traces = lines.map(l => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
         const totalCost = traces.reduce((s: number, t: any) => s + t.cost, 0)
         const totalTokens = traces.reduce((s: number, t: any) => s + t.tokens.input + t.tokens.output + t.tokens.reasoning, 0)
-        
+
         text += `\n**Completed**: ${traces.length} | Total cost: $${totalCost.toFixed(4)} | Total tokens: ${totalTokens.toLocaleString()}\n`
         text += `\nLast 10 executions:\n`
         for (const t of traces.slice(-10)) {
           text += `- [${t.status}] ${t.stage || 'simple'} | ${t.title.substring(0, 40)} | $${t.cost.toFixed(4)} | ${t.tokens.input.toLocaleString()} tok\n`
         }
       }
-      
+
       // Read bottlenecks
       const bnFile = path.join(obsDir, 'bottlenecks.md')
       if (fs.existsSync(bnFile)) text += '\n---\n\n' + fs.readFileSync(bnFile, 'utf-8').substring(0, 2000)

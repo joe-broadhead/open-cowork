@@ -373,7 +373,7 @@ async function requestProviderJson(
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${config.apiKey}`,
-      ...(config.provider === "openrouter" ? { "http-referer": "https://github.com/joe-broadhead/open-wiki", "x-title": "OpenWiki Dream" } : {}),
+      ...(config.provider === "openrouter" ? { "http-referer": "https://github.com/joe-broadhead/open-cowork", "x-title": "Open Cowork Wiki Dream" } : {}),
     },
     body,
   });

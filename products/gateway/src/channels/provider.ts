@@ -1,7 +1,7 @@
 /**
  * Abstract channel adapter interface.
  * Channels convert external messages into OpenCode session prompts.
- * 
+ *
  * Adding a new channel: implement this interface, then wire the adapter from daemon startup
  * or the channel connector registry.
  */

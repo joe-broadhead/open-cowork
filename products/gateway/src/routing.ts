@@ -1,9 +1,9 @@
 /**
  * Agent routing table.
- * 
+ *
  * Maps incoming messages (from channels) to specific agents.
  * Configured via ~/.config/opencode-gateway/routing.json
- * 
+ *
  * Format:
  * {
  *   "default": "gateway-assistant",
@@ -61,7 +61,7 @@ export function resolveAgent(
   text: string,
 ): string {
   const config = loadRouting()
-  
+
   // Exact provider + chatId match
   for (const route of config.routes) {
     if (route.provider && route.chatId) {
@@ -70,7 +70,7 @@ export function resolveAgent(
       }
     }
   }
-  
+
   // Text pattern match
   for (const route of config.routes) {
     if (route.pattern) {
@@ -81,6 +81,6 @@ export function resolveAgent(
       } catch {}
     }
   }
-  
+
   return config.default
 }

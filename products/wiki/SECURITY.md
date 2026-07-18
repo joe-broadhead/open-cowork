@@ -5,8 +5,9 @@
 OpenWiki is early-stage software. Please report suspected vulnerabilities
 privately instead of opening a public issue.
 
-Preferred channel: GitHub private vulnerability reporting at
-<https://github.com/joe-broadhead/open-wiki/security/advisories/new>.
+Preferred channel: GitHub private vulnerability reporting on the monorepo at
+<https://github.com/joe-broadhead/open-cowork/security/advisories/new>
+(product path: `products/wiki`).
 
 If GitHub private reporting is unavailable, email
 <joseph.broadhead.dev@gmail.com> with `[OpenWiki Security]` in the subject.

@@ -1,9 +1,9 @@
 /**
  * Observability — full agent traceability for kaizen.
- * 
+ *
  * Writes structured observability artifacts to the Gateway config directory.
  * Each artifact is append-only — like event sourcing.
- * 
+ *
  * Artifacts:
  *   executions.jsonl  — one line per Gateway session completion (cost, tokens, pipeline stage, result)
  *   traces/            — full message trace dumps per Gateway session (optional, sampled)
@@ -67,7 +67,7 @@ export async function recordWorkerCompletion(client: OpencodeClient, workerInfo:
     for (const p of (msgList[msgList.length - 1]?.parts || [])) {
       if (p.type === 'text') lastText += p.text + ' '
     }
-    
+
     const trace: WorkerTrace = {
       id: workerInfo.id,
       title: workerInfo.title,
@@ -88,20 +88,20 @@ export async function recordWorkerCompletion(client: OpencodeClient, workerInfo:
       retries: workerInfo.retries,
       lastMessage: sanitizeTraceText(workerInfo.summary || lastText, 500),
     }
-    
+
     // Append to JSONL
     const obsDir = observabilityDir()
     ensurePrivateDir(obsDir)
     appendPrivateFile(path.join(obsDir, 'executions.jsonl'), JSON.stringify(trace) + '\n')
-    
+
     // Update bottleneck analysis
     await updateBottleneckAnalysis()
-    
+
     // Check for kaizen suggestions
     if (trace.status === 'failed' || trace.status === 'blocked') {
       await updateKaizenTasks(trace)
     }
-    
+
   } catch {}
 }
 
@@ -117,10 +117,10 @@ async function updateBottleneckAnalysis() {
     const obsDir = observabilityDir()
     const execFile = path.join(obsDir, 'executions.jsonl')
     if (!fs.existsSync(execFile)) return
-    
+
     const lines = fs.readFileSync(execFile, 'utf-8').split('\n').filter(Boolean)
     const traces = lines.map(l => JSON.parse(l)) as WorkerTrace[]
-    
+
     // Pipeline stage analysis
     const byStage = new Map<string, { total: number; failed: number; totalCost: number; totalTokens: number }>()
     for (const t of traces) {
@@ -132,10 +132,10 @@ async function updateBottleneckAnalysis() {
       stats.totalTokens += t.tokens.input + t.tokens.output + t.tokens.reasoning
       byStage.set(key, stats)
     }
-    
+
     const bottlenecks = Array.from(byStage.entries())
       .sort((a, b) => b[1].failed - a[1].failed)
-    
+
     writePrivateFile(path.join(obsDir, 'bottlenecks.md'), [
       '# Pipeline Bottleneck Analysis',
       '',
@@ -143,14 +143,14 @@ async function updateBottleneckAnalysis() {
       '',
       '| Stage | Total | Failed | Failure Rate | Cost | Tokens |',
       '|-------|-------|--------|-------------|------|--------|',
-      ...bottlenecks.map(([s, d]) => 
+      ...bottlenecks.map(([s, d]) =>
         `| ${s} | ${d.total} | ${d.failed} | ${((d.failed/d.total)*100).toFixed(0)}% | $${d.totalCost.toFixed(4)} | ${d.totalTokens.toLocaleString()} |`
       ),
       '',
       `**Most blocking stage**: ${bottlenecks[0]?.[0] || 'N/A'} (${bottlenecks[0]?.[1].failed || 0} failures)`,
       (bottlenecks[0]?.[1].failed ?? 0) > 5 ? '**Action**: Consider improving agent instructions for this stage.' : '',
     ].join('\n'))
-    
+
   } catch {}
 }
 
@@ -158,13 +158,13 @@ async function updateKaizenTasks(trace: WorkerTrace) {
   try {
     const kaizenFile = path.join(observabilityDir(), 'kaizen-tasks.md')
     const header = fs.existsSync(kaizenFile) ? '' : '# Kaizen Improvement Tasks\n\nTasks auto-generated from failed or blocked Gateway stages. Review and promote them to durable Gateway tasks when useful.\n\n'
-    
+
     appendPrivateFile(kaizenFile, [
       header ? header : '',
       `- [pending] MEDIUM: Improve ${trace.stage || 'stage'} agent — ${trace.title} failed after ${trace.retries} retries. Last: "${sanitizeTraceText(trace.lastMessage, 100)}..." (cost: $${trace.cost.toFixed(4)})`,
       '',
     ].filter(Boolean).join('\n'))
-    
+
   } catch {}
 }
 

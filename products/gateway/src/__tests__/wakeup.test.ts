@@ -31,7 +31,7 @@ describe('wakeup', () => {
     expect(events.length).toBeGreaterThan(0)
     expect(events[events.length - 1]).toContain('test event')
   })
-  
+
   it('caps at 100 events', () => {
     for (let i = 0; i < 150; i++) queueEvent('event ' + i)
     const events = getQueuedEvents()

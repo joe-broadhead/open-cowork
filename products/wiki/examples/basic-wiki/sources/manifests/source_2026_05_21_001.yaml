@@ -6,4 +6,3 @@ content_hash: sha256:example
 trust:
   reliability: medium
   sensitivity: public
-

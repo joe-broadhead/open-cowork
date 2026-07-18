@@ -1,11 +1,11 @@
 /**
  * Telegram channel adapter.
- * 
+ *
  * Setup:
  *   1. Create a bot via @BotFather → get BOT_TOKEN
  *   2. Set env: TELEGRAM_BOT_TOKEN=xxx
  *   3. Run: opencode-gateway start
- * 
+ *
  * The bot listens for messages and forwards them to the gateway.
  * Responses from OpenCode sessions are sent back to the user.
  */
@@ -86,7 +86,7 @@ export const telegramChannel: ChannelAdapter = {
     const token = getToken()
     if (!token) throw new Error('Telegram outbound delivery is not configured: bot token is missing')
     const api = getApi(token)
-     
+
     // Telegram max message length is 4096
     const chunks = chunk(text, 4000)
     for (const c of chunks) {
@@ -212,7 +212,7 @@ async function poll(token: string) {
     try {
       const res = await fetchWithTimeout(`${api}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`, {}, TELEGRAM_LONG_POLL_TIMEOUT_MS, 'Telegram getUpdates').then(r => r.json()) as any
       if (!res.ok || !res.result) { await sleep(1000); continue }
-      
+
       let deferBatch = false
       for (const update of res.result) {
         const updateId = normalizeUpdateId(update.update_id)

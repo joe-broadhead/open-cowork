@@ -61,7 +61,7 @@ describe('release contract', () => {
     expect(changelog).toContain('Issue (task)')
     expect(changelog).toContain('remain supported')
     expect(readme).not.toMatch(/SOUL|CFO|Chief of Staff|daily brief|cost-tracker|wiki|Planner Session|persistent Planner|Vision/i)
-    expect(mkdocs).toContain('site_name: OpenCode Gateway')
+    expect(mkdocs).toMatch(/site_name:\s*(OpenCode Gateway|Gateway \(Open Cowork\))/)
     expect(mkdocs).toContain('Product Contract')
     expect(mkdocs).toContain('concepts/gateway-method.md')
     expect(mkdocs).toContain('MCP Tools')

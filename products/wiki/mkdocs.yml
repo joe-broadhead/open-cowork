@@ -1,9 +1,9 @@
-site_name: OpenWiki
+site_name: Wiki (Open Cowork)
 site_description: Versioned, permissioned knowledge base for humans and agents.
-site_url: https://joe-broadhead.github.io/open-wiki/
-repo_url: https://github.com/joe-broadhead/open-wiki
-repo_name: joe-broadhead/open-wiki
-edit_uri: edit/master/docs/
+site_url: https://joe-broadhead.github.io/open-cowork/openwiki/
+repo_url: https://github.com/joe-broadhead/open-cowork
+repo_name: open-cowork
+edit_uri: edit/master/products/wiki/docs/
 strict: true
 
 theme:

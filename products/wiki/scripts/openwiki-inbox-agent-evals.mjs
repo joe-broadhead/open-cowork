@@ -57,7 +57,7 @@ async function main() {
     const report = {
       schema_version: "openwiki.inbox_agent_evals.v1",
       generated_at: new Date().toISOString(),
-      issue: "https://github.com/joe-broadhead/open-wiki/issues/139",
+      issue: "https://github.com/joe-broadhead/open-cowork/issues",
       deterministic: true,
       provider_model: "not_used_deterministic",
       failure_taxonomy: [

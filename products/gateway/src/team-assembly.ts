@@ -613,4 +613,3 @@ function stableId(prefix: string, parts: unknown[]): string {
 function shortHash(value: unknown): string {
   return createHash('sha256').update(typeof value === 'string' ? value : stableStringify(value)).digest('hex').slice(0, 16)
 }
-

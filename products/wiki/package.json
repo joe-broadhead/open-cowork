@@ -5,14 +5,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "homepage": "https://github.com/joe-broadhead/open-wiki#readme",
+  "homepage": "https://github.com/joe-broadhead/open-cowork/tree/master/products/wiki#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/joe-broadhead/open-cowork.git",
     "directory": "products/wiki"
   },
   "bugs": {
-    "url": "https://github.com/joe-broadhead/open-wiki/issues"
+    "url": "https://github.com/joe-broadhead/open-cowork/issues"
   },
   "keywords": [
     "knowledge-base",

@@ -10,8 +10,16 @@ const options = parseArgs(process.argv.slice(2));
 const packageJson = await readJson("package.json");
 const mkdocs = await fs.readFile(path.join(root, "mkdocs.yml"), "utf8").catch(() => "");
 const packageVersion = stringField(packageJson, "version") ?? "0.0.0";
-const repoUrl = options.repoUrl ?? stringField(packageJson, "homepage")?.replace(/#.*$/, "") ?? "https://github.com/joe-broadhead/open-wiki";
-const docsUrl = options.docsUrl ?? yamlScalar(mkdocs, "site_url") ?? "https://joe-broadhead.github.io/open-wiki/";
+const packageRepoUrl = typeof packageJson.repository === "object" && packageJson.repository
+  ? stringField(packageJson.repository, "url")
+  : typeof packageJson.repository === "string"
+    ? packageJson.repository
+    : undefined;
+const repoUrl = options.repoUrl
+  ?? packageRepoUrl
+  ?? stringField(packageJson, "homepage")?.replace(/#.*$/, "")
+  ?? "https://github.com/joe-broadhead/open-cowork";
+const docsUrl = options.docsUrl ?? yamlScalar(mkdocs, "site_url") ?? "https://joe-broadhead.github.io/open-cowork/openwiki/";
 const ref = options.ref ?? "master";
 const tag = options.tag ?? `v${packageVersion}`;
 const outPath = path.resolve(options.out ?? path.join(artifactsDir, "openwiki-public-release-check.json"));

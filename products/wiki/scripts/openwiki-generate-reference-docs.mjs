@@ -265,7 +265,7 @@ referenced, and static export machine artifacts.
 | Schema | \`$id\` | Required fields | Top-level properties |
 | --- | --- | --- | --- |
 ${schemas
-  .map((schema) => `| [\`${schema.file}\`](https://github.com/joe-broadhead/open-wiki/blob/master/${schema.file}) | \`${schema.id}\` | ${schema.required.map((field) => `\`${field}\``).join(", ") || "None"} | ${schema.properties.map((field) => `\`${field}\``).join(", ") || "None"} |`)
+  .map((schema) => `| [\`${schema.file}\`](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/${schema.file}) | \`${schema.id}\` | ${schema.required.map((field) => `\`${field}\``).join(", ") || "None"} | ${schema.properties.map((field) => `\`${field}\``).join(", ") || "None"} |`)
   .join("\n")}
 
 ## Static Export Artifacts
