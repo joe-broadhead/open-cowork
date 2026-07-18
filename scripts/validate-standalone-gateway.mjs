@@ -55,9 +55,15 @@ for (const phrase of [
 
 assertPublicSafeStandaloneEnv(read('deploy/standalone-gateway/standalone.env.example'))
 
+// Product wrapper owns OpenCode-facing wording; shared private-host policy owns
+// the generic wildcard / private-host checks (audit 2026-07-18 DRY).
 const networkPolicy = read('apps/standalone-gateway/src/network-policy.ts')
+const sharedHostPolicy = read('packages/shared/src/node/private-host-policy.ts')
+const networkPolicySurface = `${networkPolicy}\n${sharedHostPolicy}`
 for (const phrase of ['public OpenCode endpoint', 'wildcard address', 'loopback/private']) {
-  if (!networkPolicy.includes(phrase)) throw new Error(`Standalone network policy must guard ${phrase}`)
+  if (!networkPolicySurface.includes(phrase)) {
+    throw new Error(`Standalone network policy must guard ${phrase}`)
+  }
 }
 
 process.stdout.write('[standalone-gateway-validate] standalone gateway artifacts passed static validation\n')
