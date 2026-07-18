@@ -1,0 +1,16 @@
+{
+  "id": "search-company-wiki",
+  "label": "Search Company Wiki",
+  "description": "Search OpenWiki and answer with cited page and source IDs.",
+  "agent": "wiki-researcher",
+  "steps": [
+    {
+      "id": "ask",
+      "tool": "mcp__openwiki__wiki.ask",
+      "input": {
+        "question": "{{input.question}}",
+        "include_explain": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/openwiki.schema.json",
+  "title": "OpenWiki Workspace Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "workspace_id", "title", "repo_format", "created_at"],
+  "properties": {
+    "protocol_version": { "const": "0.1" },
+    "workspace_id": { "type": "string", "pattern": "^workspace:[a-z0-9][a-z0-9_-]*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "default_language": { "type": "string", "default": "en" },
+    "repo_format": { "const": "openwiki-repo-v0" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "enum": ["local", "team", "hosted", "static", "compose", "umbrel", "cloud", "enterprise"] },
+        "sync": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "remote": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+            "branch": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "mode": { "enum": ["manual", "auto"] },
+            "pull_on_start": { "type": "boolean" },
+            "push_after_commit": { "type": "boolean" },
+            "sync_after_events": {
+              "type": "array",
+              "items": { "enum": ["proposal.applied", "source.ingested", "inbox.proposed", "inbox.processed"] }
+            },
+            "debounce_seconds": { "type": "integer", "minimum": 0, "maximum": 86400 },
+            "max_attempts": { "type": "integer", "minimum": 1, "maximum": 20 },
+            "backoff_seconds": { "type": "integer", "minimum": 0, "maximum": 604800 },
+            "interval_seconds": { "type": "integer", "minimum": 60, "maximum": 604800 },
+            "conflict_policy": { "enum": ["stop"] }
+          }
+        },
+        "backups": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "enum": ["manual", "hourly", "daily", "weekly"] },
+            "backup_after_events": {
+              "type": "array",
+              "items": { "enum": ["proposal.applied", "source.ingested", "inbox.proposed", "inbox.processed"] }
+            },
+            "event_threshold": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "min_interval_seconds": { "type": "integer", "minimum": 0, "maximum": 604800 },
+            "default_destination_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "keep_last": { "type": "integer", "minimum": 1, "maximum": 10000 },
+                "keep_days": { "type": "integer", "minimum": 1, "maximum": 3650 }
+              }
+            },
+            "destinations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "kind"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+                  "kind": { "enum": ["local", "s3", "minio", "gcs", "google-drive", "webdav", "rclone"] },
+                  "path": { "type": "string", "minLength": 1 },
+                  "bucket": { "type": "string", "minLength": 1 },
+                  "prefix": { "type": "string" },
+                  "endpoint_url": { "type": "string", "minLength": 1 },
+                  "region": { "type": "string", "minLength": 1 },
+                  "remote": { "type": "string", "minLength": 1 },
+                  "credential_ref": { "type": "string", "pattern": "^cred:" },
+                  "credentials_env": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                  "access_key_id_env": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                  "secret_access_key_env": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                  "session_token_env": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                  "server_side_encryption": { "type": "string", "minLength": 1 },
+                  "kms_key_id": { "type": "string", "minLength": 1 },
+                  "kms_key_name": { "type": "string", "minLength": 1 },
+                  "force_path_style": { "type": "boolean" },
+                  "allow_insecure_http": { "type": "boolean" },
+                  "allow_workspace_relative": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "queue": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backend": { "enum": ["local", "postgres"] },
+            "poll_ms": { "type": "integer", "minimum": 0 },
+            "max_jobs_per_worker": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backend": { "enum": ["local", "s3", "minio"] },
+            "local_path": { "type": "string", "minLength": 1 },
+            "inline_max_bytes": { "type": "integer", "minimum": 0 },
+            "endpoint_url": { "type": "string", "minLength": 1 },
+            "bucket": { "type": "string", "minLength": 1 },
+            "region": { "type": "string", "minLength": 1 },
+            "prefix": { "type": "string" },
+            "force_path_style": { "type": "boolean" },
+            "access_key_id_env": { "type": "string", "minLength": 1 },
+            "secret_access_key_env": { "type": "string", "minLength": 1 },
+            "session_token_env": { "type": "string", "minLength": 1 }
+          }
+        },
+        "connectors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "http": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "allowed_hosts"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string" },
+                  "allowed_hosts": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "credential_refs": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "default_headers": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "github": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "allowed_repositories"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string" },
+                  "web_base_url": { "type": "string", "minLength": 1 },
+                  "api_base_url": { "type": "string", "minLength": 1 },
+                  "allowed_repositories": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "credential_refs": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            },
+            "gitlab": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "allowed_repositories"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string" },
+                  "web_base_url": { "type": "string", "minLength": 1 },
+                  "api_base_url": { "type": "string", "minLength": 1 },
+                  "allowed_repositories": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "credential_refs": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backend": { "enum": ["none", "env"] },
+            "env_prefix": { "type": "string", "minLength": 1 }
+          }
+        },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "remote": { "type": "string", "minLength": 1 },
+            "branch": { "type": "string", "minLength": 1 },
+            "remote_url": { "type": "string", "minLength": 1 },
+            "credential_ref": { "type": "string", "minLength": 1 }
+          }
+        },
+        "schema_pack": {
+          "type": "object",
+          "additionalProperties": false,
+          "oneOf": [
+            { "required": ["path"], "not": { "required": ["name"] } },
+            { "required": ["name"], "not": { "required": ["path"] } },
+            { "maxProperties": 0 }
+          ],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 }
+          }
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rate_limits": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "window_ms": { "type": "integer", "minimum": 1000, "maximum": 3600000 },
+                "default_limit": { "type": "integer", "minimum": 0 },
+                "mcp_limit": { "type": "integer", "minimum": 0 },
+                "search_limit": { "type": "integer", "minimum": 0 },
+                "ask_limit": { "type": "integer", "minimum": 0 },
+                "source_limit": { "type": "integer", "minimum": 0 },
+                "proposal_limit": { "type": "integer", "minimum": 0 },
+                "policy_limit": { "type": "integer", "minimum": 0 },
+                "inbox_limit": { "type": "integer", "minimum": 0 },
+                "job_limit": { "type": "integer", "minimum": 0 },
+                "auth_limit": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "source_fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "default_max_bytes": { "type": "integer", "minimum": 1 },
+                "max_bytes": { "type": "integer", "minimum": 1 },
+                "default_timeout_ms": { "type": "integer", "minimum": 1 },
+                "max_timeout_ms": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "operational_state": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "backend": { "enum": ["memory", "postgres"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service_accounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "actor_id"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "actor_id": { "type": "string", "pattern": "^actor:" },
+              "description": { "type": "string" },
+              "role": { "enum": ["viewer", "contributor", "researcher", "reviewer", "maintainer", "admin", "agent"] },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "wiki:read",
+                    "wiki:search",
+                    "wiki:ask",
+                    "wiki:inbox:read",
+                    "wiki:inbox:submit",
+                    "wiki:inbox:process",
+                    "wiki:inbox:admin",
+                    "wiki:propose",
+                    "wiki:ingest:draft",
+                    "wiki:review",
+                    "wiki:patch",
+                    "wiki:commit",
+                    "wiki:publish",
+                    "wiki:admin"
+                  ]
+                }
+              },
+              "principals": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "tokens": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "token_hash", "created_at"],
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "token_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                    "description": { "type": "string" },
+                    "created_at": { "type": "string", "format": "date-time" },
+                    "expires_at": { "type": "string", "format": "date-time" },
+                    "revoked_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              },
+              "token_hashes": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+              },
+              "created_at": { "type": "string", "format": "date-time" },
+              "updated_at": { "type": "string", "format": "date-time" },
+              "expires_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_persona": { "enum": ["default", "researcher", "editor", "reviewer", "governance"] },
+        "default_limit": { "type": "integer", "minimum": 1 },
+        "max_limit": { "type": "integer", "minimum": 1 },
+        "max_query_length": { "type": "integer", "minimum": 1 },
+        "overfetch": { "type": "integer", "minimum": 1 },
+        "rrf_k": { "type": "number", "minimum": 1 },
+        "ngram_min": { "type": "integer", "minimum": 1 },
+        "fuzzy_min_length": { "type": "integer", "minimum": 1 },
+        "fuzzy_mid_length": { "type": "integer", "minimum": 1 },
+        "fuzzy_max_distance": { "type": "integer", "minimum": 1 },
+        "enabled_retrievers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exact": { "type": "boolean" },
+            "bm25": { "type": "boolean" },
+            "ngram": { "type": "boolean" },
+            "fuzzy": { "type": "boolean" },
+            "graph": { "type": "boolean" },
+            "vector": { "type": "boolean" }
+          }
+        },
+        "embedding": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "provider": { "type": "string", "enum": ["local"] },
+            "model": { "type": "string", "minLength": 1 },
+            "dimensions": { "type": "integer", "minimum": 1 },
+            "max_chunk_characters": { "type": "integer", "minimum": 1 },
+            "chunk_overlap_characters": { "type": "integer", "minimum": 0 },
+            "batch_size": { "type": "integer", "minimum": 1 },
+            "rebuild": { "type": "string", "enum": ["manual", "index"] }
+          }
+        },
+        "persona_weights": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "exact": { "type": "number" },
+              "bm25": { "type": "number" },
+              "ngram": { "type": "number" },
+              "fuzzy": { "type": "number" },
+              "graph": { "type": "number" },
+              "vector": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

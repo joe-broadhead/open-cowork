@@ -1,0 +1,177 @@
+site_name: OpenWiki
+site_description: Versioned, permissioned knowledge base for humans and agents.
+site_url: https://joe-broadhead.github.io/open-wiki/
+repo_url: https://github.com/joe-broadhead/open-wiki
+repo_name: joe-broadhead/open-wiki
+edit_uri: edit/master/docs/
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.code.annotate
+    - content.code.copy
+    - navigation.indexes
+    - navigation.instant
+    - navigation.sections
+    - navigation.tabs
+    - search.highlight
+    - search.share
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_javascript:
+  - javascripts/mermaid-loader.js
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - First User Path: getting-started/first-user-path.md
+      - Concepts: getting-started/concepts.md
+      - First Wiki: getting-started/first-wiki.md
+  - Guides:
+      - Static Export: guides/static-export.md
+      - Server UI: guides/server-ui.md
+      - Proposals: guides/proposals.md
+      - Git Sync: guides/git-sync.md
+      - Local Folder Backups: guides/local-folder-backups.md
+      - Cloud Backups: guides/cloud-backups.md
+      - Personal Automation: guides/personal-automation.md
+      - Inbox Automation: guides/inbox.md
+      - Hosted Inbox Agents: guides/hosted-inbox-agents.md
+      - Meeting Knowledge: guides/meeting-knowledge.md
+      - Local Transcript Inbox Dogfood: guides/local-transcript-inbox-dogfood.md
+      - Spaces And Permissions: guides/policy-and-permissions.md
+      - MCP And Agents: guides/mcp-and-agents.md
+      - Skills, Schema Packs, And Typed Links: guides/skills-schema-packs-and-links.md
+      - Dogfood And Demo Corpus: guides/dogfood-and-demo-corpus.md
+      - Integrations: guides/integrations.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Command Inventory: reference/command-inventory.md
+      - Agent Provider Contract: reference/agent-providers.md
+      - HTTP API: reference/http-api.md
+      - MCP Tools: reference/mcp-tools.md
+      - Operation Contracts: reference/operations.md
+      - Schemas And Static Artifacts: reference/schemas.md
+      - Package APIs: reference/package-apis.md
+      - Error Model: reference/errors.md
+      - Compatibility Guarantees: reference/compatibility.md
+      - Distribution: reference/distribution.md
+      - Backup Adapter Contract: reference/backup-adapter-contract.md
+      - Repository Format: reference/repo-format.md
+      - Configuration: reference/configuration.md
+      - Package Map: reference/package-map.md
+      - Protocol v0.1:
+          - Overview: spec/openwiki-protocol-v0.1.md
+          - Repository Format: spec/protocol/repository-format.md
+          - Canonical Records: spec/protocol/records.md
+          - Operation Contract: spec/protocol/operation-contract.md
+          - Search: spec/protocol/search.md
+          - MCP Adapter: spec/protocol/mcp.md
+          - HTTP Adapter: spec/protocol/http.md
+          - CLI And Static Export: spec/protocol/cli-static-export.md
+          - Git, Permissions, And Security: spec/protocol/git-permissions-security.md
+          - Status And References: spec/protocol/status-and-references.md
+  - Deployment:
+      - Overview: deployment/overview.md
+      - Deployment Profiles:
+          - Decision Matrix: deployment/profiles.md
+          - Local Personal: deployment/profiles/local-personal.md
+          - Local Team: deployment/profiles/local-team.md
+          - Public Static: deployment/profiles/public-static.md
+          - Docker And Compose: deployment/profiles/docker-compose.md
+          - Kubernetes And Helm: deployment/profiles/kubernetes-helm.md
+          - AWS: deployment/profiles/aws.md
+          - GCP: deployment/profiles/gcp.md
+          - Cloud Run: deployment/profiles/cloud-run.md
+          - Umbrel: deployment/profiles/umbrel.md
+      - SSO And Reverse Proxy Auth: deployment/auth-boundaries.md
+      - Hosted Humans And Agents: deployment/hosted-human-agent.md
+      - Identity Mapping: deployment/identity-mapping.md
+      - Docker: deployment/docker.md
+      - Compose: deployment/compose.md
+      - GitHub Pages: deployment/github-pages.md
+      - Helm: deployment/helm.md
+      - Kubernetes: deployment/kubernetes.md
+      - Terraform: deployment/terraform.md
+      - Smoke Checks: deployment/smoke.md
+      - Rate Limiting: deployment/rate-limiting.md
+      - Observability: deployment/observability.md
+      - Operations:
+          - Overview: deployment/operations.md
+          - Operations Matrix: deployment/operations/matrix.md
+          - Monitoring And Abuse Controls: deployment/operations/monitoring.md
+          - Write Coordination: deployment/operations/write-coordination.md
+          - Backup And Restore: deployment/operations/backup-restore.md
+          - Postgres And Workers: deployment/operations/postgres-and-workers.md
+          - Upgrades: deployment/operations/upgrades.md
+          - Incident Response: deployment/operations/incidents.md
+      - Incident Runbooks: deployment/runbooks.md
+      - Performance And Scale: deployment/performance.md
+  - Development:
+      - Architecture: development/architecture.md
+      - Testing: development/testing.md
+      - Module Guide: development/module-guide.md
+      - Module Size Budget: development/module-size.md
+      - Contributing: development/contributing.md
+      - Release: development/release.md
+      - Release Notes Template: development/release-notes-template.md
+      - Public Release Docs Audit: development/public-release-docs-audit.md
+      - UI QA: testing/openwiki-ui-qa.md
+      - ADR 0001: adr/0001-language-and-runtime-strategy.md
+      - ADR 0002: adr/0002-git-ledger-and-derived-stores.md
+      - ADR 0003: adr/0003-mcp-agent-access-model.md
+      - ADR 0004: adr/0004-hosted-auth-boundary.md
+      - ADR 0005: adr/0005-postgres-runtime-and-queue.md
+      - ADR 0006: adr/0006-graph-index-and-search.md
+      - ADR 0007: adr/0007-consumer-backup-adapters.md
+      - ADR 0008: adr/0008-remote-mcp-oauth-and-policy-bounds.md
+      - ADR 0009: adr/0009-pglite-local-runtime-spike.md
+  - Security:
+      - Overview: security.md
+      - Threat Model: security/threat-model.md
+  - Troubleshooting: troubleshooting.md
+  - Changelog: https://github.com/joe-broadhead/open-wiki/blob/master/CHANGELOG.md

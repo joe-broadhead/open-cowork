@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+// OpenCode Gateway CLI — entry point. Kept CommonJS-parseable (dynamic imports
+// only) because extensionless bin files are ambiguous; logic lives in
+// bin/preflight.mjs so it is testable.
+import('./preflight.mjs')
+  .then(async preflight => {
+    const runtimeFailure = preflight.checkNodeSqliteRuntime(process.versions.node)
+    if (runtimeFailure) {
+      console.error(runtimeFailure)
+      process.exit(1)
+    }
+    try {
+      await import('../dist/cli.js')
+    } catch (err) {
+      console.error(preflight.describeCliStartupFailure(err))
+      process.exit(1)
+    }
+  })
+  .catch(err => {
+    console.error(err?.stack || String(err))
+    process.exit(1)
+  })

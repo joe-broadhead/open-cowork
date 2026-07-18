@@ -1,0 +1,153 @@
+services:
+  gateway:
+    image: opencode-gateway:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:4097:4097"
+    user: "0:0"
+    init: true
+    environment:
+      - GATEWAY_HTTP_PORT=4097
+      - GATEWAY_HTTP_HOST=0.0.0.0
+      - OPENCODE_GATEWAY_URL=http://host.docker.internal:4096
+      - OPENCODE_GATEWAY_ALLOW_NON_LOCAL_HTTP=true
+      - OPENCODE_GATEWAY_HTTP_READ_TOKEN_FILE=/run/opencode-gateway/secrets/gateway_http_read_token
+      - OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE=/run/opencode-gateway/secrets/gateway_http_operator_token
+      - OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE=/run/opencode-gateway/secrets/gateway_http_admin_token
+      - OPENCODE_GATEWAY_BOOTSTRAP_HTTP_READ_TOKEN_FILE=/run/secrets/gateway_http_read_token
+      - OPENCODE_GATEWAY_BOOTSTRAP_HTTP_OPERATOR_TOKEN_FILE=/run/secrets/gateway_http_operator_token
+      - OPENCODE_GATEWAY_BOOTSTRAP_HTTP_ADMIN_TOKEN_FILE=/run/secrets/gateway_http_admin_token
+    secrets:
+      - gateway_http_read_token
+      - gateway_http_operator_token
+      - gateway_http_admin_token
+    volumes:
+      - opencode-gateway-config:/home/nonroot/.config/opencode-gateway
+    tmpfs:
+      - /run/opencode-gateway:uid=65532,gid=65532,mode=0700
+    command:
+      - -e
+      - |
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const runtimeDir = '/run/opencode-gateway/secrets';
+        const nonrootUid = 65532;
+        const nonrootGid = 65532;
+        fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+        fs.chownSync(runtimeDir, nonrootUid, nonrootGid);
+        fs.chmodSync(runtimeDir, 0o700);
+        for (const [envName, sourceEnvName, secretName] of [
+          ['OPENCODE_GATEWAY_HTTP_READ_TOKEN_FILE', 'OPENCODE_GATEWAY_BOOTSTRAP_HTTP_READ_TOKEN_FILE', 'gateway_http_read_token'],
+          ['OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE', 'OPENCODE_GATEWAY_BOOTSTRAP_HTTP_OPERATOR_TOKEN_FILE', 'gateway_http_operator_token'],
+          ['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE', 'OPENCODE_GATEWAY_BOOTSTRAP_HTTP_ADMIN_TOKEN_FILE', 'gateway_http_admin_token'],
+        ]) {
+          const source = process.env[sourceEnvName] || '/run/secrets/' + secretName;
+          const token = fs.readFileSync(source, 'utf8').trim();
+          if (!token) throw new Error(envName + ' is empty');
+          const target = process.env[envName] || path.join(runtimeDir, secretName);
+          fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+          const tmp = target + '.tmp-' + process.pid;
+          fs.writeFileSync(tmp, token + '\n', { mode: 0o600 });
+          fs.chownSync(tmp, nonrootUid, nonrootGid);
+          fs.renameSync(tmp, target);
+          fs.chmodSync(target, 0o600);
+          fs.chownSync(target, nonrootUid, nonrootGid);
+          process.env[envName] = target;
+          delete process.env[sourceEnvName];
+        }
+        process.setgid(nonrootGid);
+        process.setuid(nonrootUid);
+        const child = require('node:child_process').spawn(process.execPath, ['dist/daemon.js'], { stdio: 'inherit', env: process.env });
+        const forward = signal => {
+          if (!child.killed) child.kill(signal);
+        };
+        process.on('SIGTERM', () => forward('SIGTERM'));
+        process.on('SIGINT', () => forward('SIGINT'));
+        child.on('exit', (code, signal) => {
+          if (signal) process.exit(128 + (signal === 'SIGINT' ? 2 : signal === 'SIGTERM' ? 15 : 1));
+          else process.exit(code || 0);
+        });
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    restart: "on-failure:5"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Opt in with `--profile deadman`. This process sends a heartbeat only after
+  # authenticated /readiness returns state=ready. The receiver must be off-host
+  # and configured to alert when heartbeats stop.
+  deadman:
+    image: opencode-gateway:local
+    profiles: [deadman]
+    depends_on:
+      gateway:
+        condition: service_started
+    user: "0:0"
+    read_only: true
+    healthcheck:
+      disable: true
+    environment:
+      - DEADMAN_INTERVAL_SECONDS=${OPENCODE_GATEWAY_DEADMAN_INTERVAL_SECONDS:-60}
+    secrets:
+      - gateway_http_read_token
+      - gateway_deadman_url
+    entrypoint: ["/nodejs/bin/node"]
+    command:
+      - -e
+      - |
+        const fs = require('node:fs');
+        const token = fs.readFileSync('/run/secrets/gateway_http_read_token', 'utf8').trim();
+        const pingUrl = fs.readFileSync('/run/secrets/gateway_deadman_url', 'utf8').trim();
+        process.setgid(65532);
+        process.setuid(65532);
+        const intervalSeconds = Number(process.env.DEADMAN_INTERVAL_SECONDS || 60);
+        if (!Number.isFinite(intervalSeconds) || !Number.isInteger(intervalSeconds) || intervalSeconds < 30 || intervalSeconds > 86400) {
+          throw new Error('DEADMAN_INTERVAL_SECONDS must be an integer from 30 through 86400');
+        }
+        const interval = intervalSeconds * 1000;
+        if (!token || !pingUrl.startsWith('https://')) throw new Error('dead-man token and HTTPS ping URL are required');
+        const tick = async () => {
+          try {
+            const ready = await fetch('http://gateway:4097/readiness', {
+              headers: { authorization: 'Bearer ' + token },
+              signal: AbortSignal.timeout(10000),
+            });
+            const report = ready.ok ? await ready.json() : undefined;
+            if (!ready.ok || report?.state !== 'ready') throw new Error('Gateway is not ready');
+            const ping = await fetch(pingUrl, { signal: AbortSignal.timeout(10000) });
+            if (!ping.ok) throw new Error('dead-man receiver returned HTTP ' + ping.status);
+          } catch (error) {
+            console.error('[deadman] heartbeat withheld: ' + error.message);
+          }
+        };
+        const run = async () => {
+          await tick();
+          setTimeout(() => void run(), interval);
+        };
+        void run();
+    restart: "on-failure:5"
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  opencode-gateway-config:
+
+secrets:
+  gateway_http_read_token:
+    file: ${OPENCODE_GATEWAY_HTTP_READ_TOKEN_FILE:-${HOME}/.config/opencode-gateway/compose-secrets/http-read-token}
+  gateway_http_operator_token:
+    file: ${OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE:-${HOME}/.config/opencode-gateway/compose-secrets/http-operator-token}
+  gateway_http_admin_token:
+    file: ${OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE:-${HOME}/.config/opencode-gateway/compose-secrets/http-admin-token}
+  gateway_deadman_url:
+    file: ${OPENCODE_GATEWAY_DEADMAN_URL_FILE:-${HOME}/.config/opencode-gateway/compose-secrets/deadman-url}

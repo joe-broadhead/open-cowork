@@ -1,0 +1,120 @@
+name: OpenWiki Lint
+
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        description: OpenWiki workspace root
+        required: false
+        default: examples/basic-wiki
+  pull_request:
+    paths:
+      - ".github/workflows/openwiki-lint.yml"
+      - "examples/**"
+      - "packages/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "docs/**"
+      - "templates/**"
+      - "tests/**"
+      - "knip.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/openwiki-lint.yml"
+      - "examples/**"
+      - "packages/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "docs/**"
+      - "templates/**"
+      - "tests/**"
+      - "knip.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install browser for screenshots
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Repository lint
+        run: pnpm lint
+      - name: Reference docs drift check
+        run: pnpm docs:reference -- --check
+      - name: Security boundary tests
+        run: pnpm test:security
+      - name: Test
+        run: pnpm test
+      - name: MCP conformance eval
+        run: pnpm eval:mcp-conformance
+      - name: Inbox agent orchestration eval
+        run: pnpm eval:inbox-agents -- --out artifacts/openwiki-inbox-agent-evals.json
+      - name: OpenCode tool eval setup smoke
+        run: pnpm eval:opencode-tools -- --setup-only --retries 0 --timeout-ms 60000
+      - name: Coverage
+        run: pnpm coverage
+      - name: UI smoke
+        run: pnpm test:ui
+      - name: UI quality gate
+        run: pnpm test:ui-quality
+      - name: Bundle size gate
+        run: pnpm check:bundle
+      - name: Screenshots
+        run: pnpm screenshots
+      - name: Run OpenWiki lint
+        env:
+          OPENWIKI_ROOT: ${{ github.event.inputs.root || 'examples/basic-wiki' }}
+        run: pnpm openwiki -- --root "$OPENWIKI_ROOT" run lint --json > openwiki-lint.json
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-screenshots
+          path: artifacts/openwiki-screenshots
+      - name: Upload UI quality report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-ui-quality
+          path: artifacts/openwiki-ui-quality.json
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-coverage
+          path: artifacts/coverage
+      - name: Upload inbox agent eval report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-inbox-agent-evals
+          path: artifacts/openwiki-inbox-agent-evals.json
+      - name: Upload lint report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-lint
+          path: openwiki-lint.json

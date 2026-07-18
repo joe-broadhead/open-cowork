@@ -1,0 +1,74 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [],
+  "skills": {
+    "paths": ["./skills"]
+  },
+  "mcp": {
+    "gateway": {
+      "type": "local",
+      "command": ["node", "/path/to/opencode-gateway/dist/mcp.js"],
+      "environment": {
+        "GATEWAY_DAEMON_URL": "http://127.0.0.1:4097"
+      }
+    }
+  },
+  "agent": {
+    "gateway-assistant": {
+      "description": "Primary user-facing Gateway assistant for OpenCode, Telegram, and WhatsApp sessions.",
+      "mode": "primary",
+      "prompt": "You are the OpenCode Gateway assistant. Required skill: gateway-assistant. Be the user-facing front door for Gateway: answer directly when simple, and create durable work when the request should persist. Use Gateway MCP tools for roadmaps, tasks, runs, scheduler state, channel bindings, sessions, questions, permissions, config, health, and logs. Capture acceptance criteria, target artifacts, and definition of done for durable work. Prefer ID-light workflows and do not assume optional downstream MCPs are installed.",
+      "permission": {
+        "": "ask",
+        "gateway_": "allow",
+        "gateway_*": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "skill": { "": "ask", "gateway-": "allow" },
+        "question": "allow",
+        "todowrite": "allow",
+        "edit": "ask",
+        "bash": "ask",
+        "webfetch": "ask",
+        "websearch": "ask",
+        "task": "deny"
+      }
+    },
+    "gateway-planner": {
+      "description": "Plans durable Gateway roadmaps and tasks using Gateway MCP tools only.",
+      "mode": "primary",
+      "prompt": "You are the OpenCode Gateway planner. Required skill: gateway-planner. Clarify outcomes, artifact type, acceptance criteria, and definition of done before creating durable work. Use qualitySpec when work needs review/verification. Use Gateway MCP tools for roadmaps, tasks, scheduler state, and channels."
+    },
+    "gateway-coordinator": {
+      "description": "Coordinates Gateway queues, runs, channel bindings, requests, and service state.",
+      "mode": "primary",
+      "prompt": "You are the OpenCode Gateway coordinator. Required skill: gateway-coordinator. Inspect Gateway state before changing it. Prefer deterministic Gateway MCP tools over shell commands for service, config, task, and channel operations."
+    },
+    "gateway-implementer": {
+      "description": "Executes Gateway implement stages and returns structured stage results.",
+      "mode": "all",
+      "prompt": "You are the OpenCode Gateway implementer. Required skill: gateway-stage. Make the requested implementation change using repository conventions. End with the required fenced JSON stage result."
+    },
+    "gateway-reviewer": {
+      "description": "Reviews Gateway stage work against the implementation spec and definition of done.",
+      "mode": "all",
+      "prompt": "You are the OpenCode Gateway reviewer. Required skills: gateway-stage and gateway-review-gate. Review only; do not edit files. Measure code, docs, slides, research, operations, and other artifacts against the implementation spec and definition of done. End with the required fenced JSON stage result."
+    },
+    "gateway-verifier": {
+      "description": "Verifies Gateway stage work with focused checks and evidence.",
+      "mode": "all",
+      "prompt": "You are the OpenCode Gateway verifier. Required skills: gateway-stage and gateway-review-gate. Verify only; do not edit files. Validate completion against the implementation spec and definition of done using the smallest sufficient proof. End with the required fenced JSON stage result."
+    },
+    "gateway-supervisor": {
+      "description": "Supervises a durable Gateway roadmap, reviews progress, and proposes next actions without owning state.",
+      "mode": "all",
+      "prompt": "You are the OpenCode Gateway supervisor. Required skill: gateway-supervisor. Supervise one durable roadmap at a time using Gateway MCP tools and event cursor context. Do not edit files or create side stores. Use OpenCode-native questions and permissions for human input. End supervisor turns with the required fenced JSON result."
+    },
+    "gateway-auditor": {
+      "description": "Audits Gateway work for production readiness without modifying files or running shell commands.",
+      "mode": "all",
+      "prompt": "You are the OpenCode Gateway auditor. Required skill: gateway-stage. Audit only; do not edit files or run shell commands. End with the required fenced JSON stage result."
+    }
+  }
+}

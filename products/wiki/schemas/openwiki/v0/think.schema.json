@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/think.schema.json",
+  "title": "OpenWiki Think Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["question", "answer", "citations", "evidence", "search", "gaps", "diagnostics"],
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string"
+    },
+    "citations": {
+      "type": "array",
+      "items": { "$ref": "answer.schema.json#/$defs/citation" }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "answer.schema.json#/$defs/evidence" }
+    },
+    "search": {
+      "$ref": "search.schema.json"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": { "type": "string" },
+          "query": { "type": "string" }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["synthesis", "retrieval"],
+      "properties": {
+        "synthesis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model", "available", "fallback"],
+          "properties": {
+            "provider": { "type": "string", "enum": ["deterministic"] },
+            "model": { "type": "string" },
+            "available": { "type": "boolean" },
+            "fallback": { "type": "boolean" }
+          }
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retrievers_used", "citations_required"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["lexical", "hybrid"] },
+            "retrievers_used": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "citations_required": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

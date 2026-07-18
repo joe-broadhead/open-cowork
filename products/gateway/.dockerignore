@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+dist
+site
+coverage
+.env
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+backups
+recovery-drills
+docs

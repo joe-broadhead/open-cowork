@@ -1,0 +1,7 @@
+@media print {
+  .ow-topbar, .ow-sidebar, .ow-rightrail, .ow-footer, .ow-palette, .ow-graph { display: none !important; }
+  body { background: #fff; color: #111; }
+  .ow-frame { display: block; max-width: none; padding: 0; }
+  .ow-panel { border: 0; box-shadow: none; }
+  .ow-prose { max-width: none; }
+}

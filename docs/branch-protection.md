@@ -38,3 +38,13 @@ protection in GitHub before merging the rename.
   for the tag commit are missing or red.
 - Keep administrator bypass exceptional and document any emergency merge in the
   release notes or incident notes.
+
+
+## Product partition CI (optional required checks)
+
+Path-filtered workflows (not always required on Desktop-only PRs):
+
+- `CI Gateway` (`.github/workflows/ci-gateway.yml`) — `products/gateway/**`
+- `CI Wiki` (`.github/workflows/ci-wiki.yml`) — `products/wiki/**`
+
+Core `CI` workflow remains the branch-protection baseline for monorepo master.

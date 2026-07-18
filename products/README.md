@@ -5,8 +5,8 @@ Open Cowork is the flagship monorepo product. Sibling products live under
 
 | Path | Public name | Installable bin (target) | Status |
 | --- | --- | --- | --- |
-| `products/gateway` | **Gateway** (durable work coordinator) | `cowork-gateway` | Stub until import (JOE-907) |
-| `products/wiki` | **Wiki** | `cowork-wiki` | Stub until import (JOE-906) |
+| `products/gateway` | **Gateway** (durable work coordinator) | `cowork-gateway` | Imported snapshot (JOE-907) |
+| `products/wiki` | **Wiki** | `cowork-wiki` | Imported snapshot (JOE-906); packages under `products/wiki/packages/*` |
 
 Related apps (not under `products/`):
 
@@ -30,7 +30,7 @@ See [docs/adr/product-partitions.md](../docs/adr/product-partitions.md).
 
 - Desktop / Cloud / Channel / Standalone surfaces → `apps/*` + `packages/*` + `mcps/*`
 - Durable Gateway daemon/CLI → `products/gateway`
-- Wiki CLI/web/MCP packages → `products/wiki` (and `products/wiki/packages/*` after import)
+- Wiki CLI/web/MCP packages → `products/wiki` and `products/wiki/packages/*`
 - Native third-party binaries only → `third_party/`
 
 Do not put durable Gateway source under `apps/channel-gateway` or `@open-cowork/channel-gateway`

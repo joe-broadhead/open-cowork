@@ -45,7 +45,7 @@
     "typecheck:standalone-gateway": "pnpm --filter @open-cowork/standalone-gateway typecheck",
     "typecheck:mcps": "pnpm --filter=./mcps/* typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
-    "lint": "eslint . --max-warnings 0 && pnpm design-tokens:check && node scripts/lint.mjs && node scripts/check-design-token-usage.mjs && node scripts/check-import-cycles.mjs && node scripts/build-docs-mermaid-vendor.mjs --check && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs && pnpm lint:dead-code",
+    "lint": "eslint . --max-warnings 0 && pnpm design-tokens:check && node scripts/lint.mjs && node scripts/check-design-token-usage.mjs && node scripts/check-import-cycles.mjs && node scripts/build-docs-mermaid-vendor.mjs --check && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs && pnpm lint:dead-code && pnpm boundaries:check",
     "lint:dead-code": "knip --production --files --exports",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'packages/app/src/**/*.tsx' 'packages/ui/src/**/*.tsx'",
     "audit:prod": "node scripts/pnpm-audit.mjs --prod --audit-level moderate",
@@ -114,7 +114,8 @@
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "build:channel-gateway": "pnpm --filter @open-cowork/channel-gateway build",
-    "typecheck:channel-gateway": "pnpm --filter @open-cowork/channel-gateway typecheck"
+    "typecheck:channel-gateway": "pnpm --filter @open-cowork/channel-gateway typecheck",
+    "boundaries:check": "node scripts/check-product-boundaries.mjs"
   },
   "engines": {
     "node": ">=22.13",

@@ -1,0 +1,186 @@
+x-openwiki-runtime-hardening: &openwiki-runtime-hardening
+  user: "1000:1000"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp
+
+services:
+  openwiki:
+    <<: *openwiki-runtime-hardening
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: openwiki/openwiki:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3030:3030"
+    environment:
+      OPENWIKI_ROOT: /data/wiki
+      OPENWIKI_TITLE: OpenWiki
+      OPENWIKI_HOST: 0.0.0.0
+      OPENWIKI_PORT: 3030
+      OPENWIKI_CORS_ORIGIN: "${OPENWIKI_CORS_ORIGIN:-}"
+      OPENWIKI_OAUTH_ENABLED: "${OPENWIKI_OAUTH_ENABLED:-}"
+      OPENWIKI_OAUTH_ISSUER: "${OPENWIKI_OAUTH_ISSUER:-}"
+      OPENWIKI_OAUTH_DYNAMIC_CLIENT_REGISTRATION: "${OPENWIKI_OAUTH_DYNAMIC_CLIENT_REGISTRATION:-}"
+      OPENWIKI_QUEUE_BACKEND: postgres
+      OPENWIKI_WRITE_COORDINATOR_BACKEND: postgres
+      OPENWIKI_READ_BACKEND: postgres
+      OPENWIKI_SEARCH_BACKEND: postgres
+      OPENWIKI_GIT_REMOTE_URL: "${OPENWIKI_GIT_REMOTE_URL:-}"
+      OPENWIKI_GIT_BRANCH: "${OPENWIKI_GIT_BRANCH:-}"
+      OPENWIKI_GIT_PULL_ON_BOOT: "${OPENWIKI_GIT_PULL_ON_BOOT:-0}"
+      OPENWIKI_SYNC_INTERVAL: "${OPENWIKI_SYNC_INTERVAL:-}"
+      OPENWIKI_SYNC_PULL_ON_START: "${OPENWIKI_SYNC_PULL_ON_START:-0}"
+      OPENWIKI_SYNC_PUSH_AFTER_COMMIT: "${OPENWIKI_SYNC_PUSH_AFTER_COMMIT:-0}"
+      DATABASE_URL: postgres://openwiki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openwiki
+    volumes:
+      - openwiki_data:/data/wiki
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3030/readyz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  openwiki-worker:
+    <<: *openwiki-runtime-hardening
+    image: openwiki/openwiki:local
+    depends_on:
+      openwiki:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "openwiki", "--", "--root", "/data/wiki", "worker", "--poll-ms", "1000"]
+    environment:
+      OPENWIKI_ROOT: /data/wiki
+      OPENWIKI_BOOTSTRAP_MODE: skip
+      OPENWIKI_QUEUE_BACKEND: postgres
+      OPENWIKI_WRITE_COORDINATOR_BACKEND: postgres
+      DATABASE_URL: postgres://openwiki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openwiki
+    volumes:
+      - openwiki_data:/data/wiki
+    restart: unless-stopped
+
+  openwiki-sync:
+    <<: *openwiki-runtime-hardening
+    image: openwiki/openwiki:local
+    profiles: ["sync"]
+    depends_on:
+      openwiki:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        if ! pnpm openwiki -- --root /data/wiki sync check-remote --json >/dev/null; then
+          echo "OPENWIKI_SYNC_INTERVAL is set for the sync profile, but no Git remote URL is configured. Set OPENWIKI_GIT_REMOTE_URL before relying on sync." >&2
+          exit 1
+        fi
+        exec pnpm openwiki -- --root /data/wiki sync watch --every "$${OPENWIKI_SYNC_INTERVAL:-15m}" --pull --push --json
+    environment:
+      OPENWIKI_ROOT: /data/wiki
+      OPENWIKI_BOOTSTRAP_MODE: skip
+      OPENWIKI_GIT_REMOTE: "${OPENWIKI_GIT_REMOTE:-origin}"
+      OPENWIKI_GIT_BRANCH: "${OPENWIKI_GIT_BRANCH:-}"
+      OPENWIKI_SYNC_INTERVAL: "${OPENWIKI_SYNC_INTERVAL:-15m}"
+      OPENWIKI_QUEUE_BACKEND: postgres
+      OPENWIKI_WRITE_COORDINATOR_BACKEND: postgres
+      DATABASE_URL: postgres://openwiki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openwiki
+    volumes:
+      - openwiki_data:/data/wiki
+    restart: unless-stopped
+
+  openwiki-backup:
+    <<: *openwiki-runtime-hardening
+    image: openwiki/openwiki:local
+    profiles: ["backup"]
+    depends_on:
+      openwiki:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        if [ -n "$${OPENWIKI_BACKUP_DESTINATION:-}" ]; then
+          exec pnpm openwiki -- --root /data/wiki backup watch --every "$${OPENWIKI_BACKUP_INTERVAL:-24h}" --destination "$${OPENWIKI_BACKUP_DESTINATION}" --json
+        fi
+        exec pnpm openwiki -- --root /data/wiki backup watch --every "$${OPENWIKI_BACKUP_INTERVAL:-24h}" --out-dir /data/backups --json
+    environment:
+      OPENWIKI_ROOT: /data/wiki
+      OPENWIKI_BOOTSTRAP_MODE: skip
+      OPENWIKI_BACKUP_INTERVAL: "${OPENWIKI_BACKUP_INTERVAL:-24h}"
+      OPENWIKI_BACKUP_DESTINATION: "${OPENWIKI_BACKUP_DESTINATION:-}"
+      OPENWIKI_QUEUE_BACKEND: postgres
+      OPENWIKI_WRITE_COORDINATOR_BACKEND: postgres
+      DATABASE_URL: postgres://openwiki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openwiki
+    volumes:
+      - openwiki_data:/data/wiki
+      - openwiki_backups:/data/backups
+    restart: unless-stopped
+
+  openwiki-postgres-backup:
+    <<: *openwiki-runtime-hardening
+    image: ${OPENWIKI_POSTGRES_IMAGE:-postgres:17@sha256:0027bef26712baaee437a4ea48fdf3d2d2e2bc5f0d81615374408ca320f3c7e3}
+    profiles: ["backup"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        while true; do
+          timestamp="$$(date -u +%Y%m%dT%H%M%SZ)"
+          pg_dump "$${DATABASE_URL}" --format=custom --file "/data/backups/postgres-$${timestamp}.dump"
+          sleep "$${OPENWIKI_POSTGRES_BACKUP_INTERVAL_SECONDS:-86400}"
+        done
+    environment:
+      DATABASE_URL: postgres://openwiki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openwiki
+      OPENWIKI_POSTGRES_BACKUP_INTERVAL_SECONDS: "${OPENWIKI_POSTGRES_BACKUP_INTERVAL_SECONDS:-86400}"
+    volumes:
+      - openwiki_backups:/data/backups
+    restart: unless-stopped
+
+  postgres:
+    image: ${OPENWIKI_POSTGRES_IMAGE:-postgres:17@sha256:0027bef26712baaee437a4ea48fdf3d2d2e2bc5f0d81615374408ca320f3c7e3}
+    environment:
+      POSTGRES_DB: openwiki
+      POSTGRES_USER: openwiki
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openwiki -d openwiki"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: ${OPENWIKI_MINIO_IMAGE:-quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e}
+    command: ["server", "/data", "--console-address", ":9001"]
+    profiles: ["object-storage"]
+    environment:
+      MINIO_ROOT_USER: "${OPENWIKI_MINIO_ACCESS_KEY:-}"
+      MINIO_ROOT_PASSWORD: "${OPENWIKI_MINIO_SECRET_KEY:-}"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+volumes:
+  openwiki_data:
+  openwiki_backups:
+  postgres_data:
+  minio_data:

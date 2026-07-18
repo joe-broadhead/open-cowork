@@ -18,6 +18,9 @@ const ignoredPaths = [
   '**/release/**',
   'node_modules/**',
   'site/**',
+  // Product partitions use product-local lint (Biome / package scripts) for now.
+  'products/gateway/**',
+  'products/wiki/**',
 ]
 
 const tsFiles = ['**/*.ts', '**/*.tsx']

@@ -1,0 +1,716 @@
+{
+ "schemaVersion": 1,
+ "title": "Module Boundary And Dependency Budget",
+ "generatedAt": "2026-07-04T12:00:00Z",
+ "claimBoundary": "Maintainability-only guardrail for the public local beta; no release-claim expansion.",
+ "sourceRoot": "src",
+ "dependencyBudget": {
+  "includeTests": false,
+  "maxModuleCount": 228,
+  "maxEdgeCount": 970,
+  "maxCycleComponents": 0,
+  "maxCycleComponentSize": 4,
+  "knownCycles": []
+ },
+ "domains": [
+  {
+   "id": "scheduler_replay",
+   "owner": "Scheduler and replay",
+   "changeRule": "Change orchestration calculations in the kernel before adapting scheduler or route execution code.",
+   "ownerModules": [
+    "src/scheduler.ts",
+    "src/orchestration-kernel.ts",
+    "src/capacity.ts"
+   ],
+   "edgeAdapters": [
+    "src/daemon-routes/work.ts",
+    "src/workflow.ts",
+    "src/environments.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/scheduler.test.ts",
+    "src/__tests__/orchestration-kernel.test.ts"
+   ],
+   "category": "runtime_scheduler"
+  },
+  {
+   "id": "work_store",
+   "owner": "Work-store and durable state",
+   "changeRule": "Route run, lease, binding, schema, and repository behavior through the work-store owner or port before adding new table-level callers.",
+   "ownerModules": [
+    "src/work-store.ts",
+    "src/work-store/schema.ts",
+    "src/work-store/repositories.ts",
+    "src/work-store/run-lease-port.ts",
+    "src/work-store/bindings-port.ts",
+    "src/work-store/promotions.ts",
+    "src/work-store/validators.ts",
+    "src/work-store/queries.ts",
+    "src/work-store/db.ts",
+    "src/work-store/row-mappers.ts"
+   ],
+   "edgeAdapters": [
+    "src/storage.ts",
+    "src/storage/types.ts",
+    "src/storage/internal.ts",
+    "src/storage/backup.ts",
+    "src/storage/restore.ts",
+    "src/storage/doctor.ts",
+    "src/storage/integrity.ts",
+    "src/storage/drills.ts",
+    "src/scheduler.ts",
+    "src/channel-commands.ts",
+    "src/agent-presence.ts",
+    "src/persona.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/work-store.test.ts",
+    "src/__tests__/work-store-invariants.test.ts",
+    "src/__tests__/work-store-run-lease-port.test.ts",
+    "src/__tests__/work-store-bindings-port.test.ts",
+    "src/__tests__/storage.test.ts",
+    "src/__tests__/agent-presence.test.ts"
+   ],
+   "category": "runtime_storage"
+  },
+  {
+   "id": "channels",
+   "owner": "Channel command, rendering, and provider contracts",
+   "changeRule": "Define provider-neutral commands, rendering, and capabilities first; concrete provider adapters only translate provider send/receive behavior.",
+   "ownerModules": [
+    "src/channel-actions.ts",
+    "src/channel-commands.ts",
+    "src/channels/capabilities.ts",
+    "src/channels/renderer.ts",
+    "src/channels/provider.ts"
+   ],
+   "edgeAdapters": [
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/channel-sync.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/channel-commands.test.ts",
+    "src/__tests__/channel-renderer.test.ts",
+    "src/__tests__/channel-capabilities.test.ts"
+   ],
+   "category": "channel_surface"
+  },
+  {
+   "id": "security_policy",
+   "owner": "Security policy and capability authorization",
+   "changeRule": "Reason-coded allow, deny, preview, and human-required decisions belong in the shared security policy or authorization model before callers render them.",
+   "ownerModules": [
+    "src/security-policy.ts",
+    "src/security.ts"
+   ],
+   "edgeAdapters": [
+    "src/daemon-router.ts",
+    "src/daemon-routes/system.ts",
+    "src/channel-commands.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/security-policy.test.ts",
+    "src/__tests__/security.test.ts"
+   ],
+   "category": "security_policy"
+  },
+  {
+   "id": "runtime_isolation",
+   "owner": "Runtime isolation and remote execution",
+   "changeRule": "Remote execution, sandbox, lease, cleanup, and result-acceptance behavior belongs in runtime isolation contracts before scheduler/worker surfaces consume it.",
+   "ownerModules": [
+    "src/runtime-isolation.ts",
+    "src/runtime-capability-grants.ts"
+   ],
+   "edgeAdapters": [
+    "src/runtime-isolation.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/runtime-isolation.test.ts",
+    "src/__tests__/runtime-capability-grants.test.ts"
+   ],
+   "category": "runtime_execution"
+  },
+  {
+   "id": "evidence_redaction",
+   "owner": "Evidence, redaction, and claim safety",
+   "changeRule": "Evidence exports, incident bundles, and release proof must use shared redaction and claim-safety helpers before docs or dashboards cite them.",
+   "ownerModules": [
+    "src/evidence-contract.ts",
+    "src/evidence-export.ts",
+    "src/incident-bundle.ts",
+    "src/operational-redaction.ts",
+    "src/review-gate-isolation.ts"
+   ],
+   "edgeAdapters": [
+    "src/readiness.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/evidence-contract.test.ts",
+    "src/__tests__/evidence-export.test.ts",
+    "src/__tests__/incident-bundle.test.ts",
+    "src/__tests__/review-gate-isolation.test.ts"
+   ],
+   "category": "evidence_redaction"
+  },
+  {
+   "id": "mission_control",
+   "owner": "Mission Control query and view model",
+   "changeRule": "Dashboard, MCP, and support surfaces consume typed Mission Control view models rather than reimplementing source-state policy.",
+   "ownerModules": [
+    "src/mission-control-view-model.ts",
+    "src/mission-data.ts",
+    "src/dashboard/html.ts",
+    "src/dashboard/format.ts",
+    "src/dashboard/types.ts",
+    "src/dashboard/components.ts",
+    "src/dashboard/document.ts",
+    "src/dashboard/model.ts",
+    "src/dashboard/views/shared.ts",
+    "src/dashboard/views/overview.ts",
+    "src/dashboard/views/operator.ts",
+    "src/dashboard/views/alpha-health.ts",
+    "src/dashboard/views/work-graph.ts",
+    "src/dashboard/views/agent-factory.ts",
+    "src/dashboard/views/arena.ts",
+    "src/dashboard/views/usage.ts",
+    "src/dashboard/views/pipeline.ts",
+    "src/dashboard/views/environments.ts",
+    "src/dashboard/views/channels.ts",
+    "src/dashboard/views/health.ts",
+    "src/dashboard/views/release.ts",
+    "src/dashboard/views/detail.ts"
+   ],
+   "edgeAdapters": [
+    "src/dashboard.ts",
+    "src/mcp.ts",
+    "src/daemon-routes/system.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/mission-control-view-model.test.ts",
+    "src/__tests__/dashboard.test.ts",
+    "src/__tests__/mcp.test.ts"
+   ],
+   "category": "dashboard_read_model"
+  },
+  {
+   "id": "cli_daemon_routes",
+   "owner": "CLI and daemon route edges",
+   "changeRule": "CLI and daemon routes stay edge-focused: parse input, call owner modules, render output, and avoid becoming policy or storage owners.",
+   "ownerModules": [
+    "src/cli.ts",
+    "src/cli/shared.ts",
+    "src/cli/commands/analytics.ts",
+    "src/cli/commands/backend.ts",
+    "src/cli/commands/backup.ts",
+    "src/cli/commands/environment.ts",
+    "src/cli/commands/evidence.ts",
+    "src/cli/commands/governance.ts",
+    "src/cli/commands/health.ts",
+    "src/cli/commands/lifecycle.ts",
+    "src/cli/commands/logs.ts",
+    "src/cli/commands/operator.ts",
+    "src/cli/commands/performance.ts",
+    "src/cli/commands/project.ts",
+    "src/cli/commands/quickstart.ts",
+    "src/cli/commands/release.ts",
+    "src/cli/commands/secrets.ts",
+    "src/cli/commands/service.ts",
+    "src/cli/commands/task.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/system.ts",
+    "src/daemon-routes/work.ts"
+   ],
+   "edgeAdapters": [
+    "src/daemon.ts",
+    "bin/opencode-gateway"
+   ],
+   "primaryTests": [
+    "src/__tests__/daemon-routes.test.ts",
+    "src/__tests__/daemon-progress.test.ts",
+    "src/__tests__/channel-cli.test.ts",
+    "src/__tests__/cli-setup.test.ts"
+   ],
+   "category": "daemon_cli_edge"
+  },
+  {
+   "id": "release_ops",
+   "owner": "Release operations and validation gates",
+   "changeRule": "Release checks must be scripted or have explicit skip semantics before release wording depends on them.",
+   "ownerModules": [
+    "scripts/check-release.mjs",
+    "scripts/check-release-artifacts.mjs",
+    "scripts/check-validation-gates.mjs",
+    "scripts/check-module-boundaries.mjs",
+    "docs/development/validation-gates.json",
+    "docs/development/testing-release.md",
+    "src/validation-gate-selector.ts",
+    "src/performance-budgets.ts"
+   ],
+   "edgeAdapters": [
+    "package.json",
+    ".github/workflows/ci.yml",
+    "src/cli.ts",
+    "src/validation-gate-selector-cli.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/release-contract.test.ts",
+    "src/__tests__/release-artifacts.test.ts",
+    "src/__tests__/performance-budgets.test.ts",
+    "src/__tests__/dependency-snapshot.test.ts",
+    "src/__tests__/module-boundaries.test.ts"
+   ],
+   "category": "release_validation"
+  },
+  {
+   "id": "support_operations",
+   "owner": "Support operations and operator handoff",
+   "changeRule": "Support output must preserve redaction, source freshness, failure class, and safe-next-action contracts before changing operator-facing copy.",
+   "ownerModules": [
+    "src/observability-snapshot.ts",
+    "src/incident-bundle.ts",
+    "src/operator-safety.ts"
+   ],
+   "edgeAdapters": [
+    "src/cli.ts",
+    "src/mission-data.ts",
+    "src/readiness.ts"
+   ],
+   "primaryTests": [
+    "src/__tests__/operator-safety.test.ts"
+   ],
+   "category": "support_operations"
+  }
+ ],
+ "forbiddenImports": [
+  {
+   "id": "shared_channel_contracts_do_not_import_provider_adapters",
+   "owner": "channels",
+   "reason": "Provider-neutral channel contracts must not depend on Telegram, WhatsApp, Discord, or future concrete adapters.",
+   "reviewCondition": "A new provider-specific capability must be expressed in channels/capabilities or channels/renderer first, then translated by the adapter.",
+   "from": [
+    "src/channel-actions.ts",
+    "src/channel-commands.ts",
+    "src/channels/capabilities.ts",
+    "src/channels/renderer.ts",
+    "src/channels/provider.ts"
+   ],
+   "blocked": [
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "provider_adapters_do_not_import_runtime_edges",
+   "owner": "channels",
+   "reason": "Provider adapters should translate inbound/outbound provider behavior; scheduler, dashboard, MCP, and daemon routes own runtime execution.",
+   "reviewCondition": "Route provider-neutral behavior through channel commands, channel sync, queue events, or a new narrow port.",
+   "from": [
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts"
+   ],
+   "blocked": [
+    "src/scheduler.ts",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**",
+    "src/dashboard.ts",
+    "src/mcp.ts",
+    "src/mission-data.ts"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "work_store_ports_do_not_import_edges",
+   "owner": "work_store",
+   "reason": "Work-store ports are storage-domain interfaces; they must not reach upward into scheduler, CLI, daemon, provider, dashboard, or MCP edges.",
+   "reviewCondition": "Add a work-store operation to the port or owner module, then call it from the edge.",
+   "from": [
+    "src/work-store.ts",
+    "src/work-store/**"
+   ],
+   "blocked": [
+    "src/scheduler.ts",
+    "src/cli.ts",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**",
+    "src/channels/**",
+    "src/channel-sync.ts",
+    "src/dashboard.ts",
+    "src/mcp.ts"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "orchestration_kernel_stays_io_free",
+   "owner": "scheduler_replay",
+   "reason": "The orchestration kernel is a pure calculation seam for retry/capacity timelines and must not directly own storage, HTTP, channel, or OpenCode side effects.",
+   "reviewCondition": "Return an explicit plan from the kernel and execute it in scheduler or an adapter.",
+   "from": [
+    "src/orchestration-kernel.ts"
+   ],
+   "blocked": [
+    "src/work-store.ts",
+    "src/work-store/**",
+    "src/scheduler.ts",
+    "src/storage.ts",
+    "src/wakeup.ts",
+    "src/workers.ts",
+    "src/opencode-*.ts",
+    "src/channels/**",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "mission_view_model_stays_adapter_free",
+   "owner": "mission_control",
+   "reason": "Mission Control view-model policy should stay deterministic and adapter-free; data collection and rendering edges belong elsewhere.",
+   "reviewCondition": "Add typed input data to the view model instead of importing a live adapter or storage edge.",
+   "from": [
+    "src/mission-control-view-model.ts"
+   ],
+   "blocked": [
+    "src/work-store.ts",
+    "src/work-store/**",
+    "src/scheduler.ts",
+    "src/storage.ts",
+    "src/channel-sync.ts",
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/dashboard.ts",
+    "src/mcp.ts",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "channel_sessions_stay_storage_port_only",
+   "owner": "channels",
+   "reason": "Channel session routing is the provider-neutral binding facade over durable bindings; it must not become a scheduler, daemon, dashboard, MCP, or provider-adapter owner.",
+   "reviewCondition": "Add a channel-session method or work-store bindings-port operation first, then call it from command, dashboard, MCP, or provider edges.",
+   "from": [
+    "src/channel-sessions.ts"
+   ],
+   "blocked": [
+    "src/scheduler.ts",
+    "src/capacity.ts",
+    "src/workers.ts",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**",
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/dashboard.ts",
+    "src/mcp.ts"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "dashboard_reads_mission_control_not_mutable_owners",
+   "owner": "mission_control",
+   "reason": "Dashboard rendering should consume Mission Control/read-model contracts and must not bypass them to mutate durable state, execute scheduler behavior, or depend on concrete provider adapters.",
+   "reviewCondition": "Add a typed Mission Control input or read-model field first, then render it in the dashboard.",
+   "from": [
+    "src/dashboard.ts",
+    "src/dashboard/**"
+   ],
+   "blocked": [
+    "src/work-store.ts",
+    "src/work-store/**",
+    "src/storage.ts",
+    "src/scheduler.ts",
+    "src/capacity.ts",
+    "src/workers.ts",
+    "src/channel-commands.ts",
+    "src/channel-sync.ts",
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**",
+    "src/mcp.ts"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "mcp_edges_use_daemon_and_view_models_not_mutable_owners",
+   "owner": "cli_mcp_edges",
+   "reason": "MCP tools are local edge surfaces; they must authorize, call daemon endpoints, and format typed view-model data rather than importing mutable storage, scheduler, dashboard, or provider-adapter owners.",
+   "reviewCondition": "Expose behavior through a daemon route, security policy, or Mission Control view model before wiring a new MCP tool.",
+   "from": [
+    "src/mcp.ts"
+   ],
+   "blocked": [
+    "src/work-store.ts",
+    "src/work-store/**",
+    "src/storage.ts",
+    "src/scheduler.ts",
+    "src/capacity.ts",
+    "src/workers.ts",
+    "src/channel-commands.ts",
+    "src/channel-sync.ts",
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/dashboard.ts",
+    "src/daemon-routes/**"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "evidence_redaction_stays_provider_free",
+   "owner": "evidence_redaction",
+   "reason": "Evidence and redaction helpers must not embed provider-adapter or scheduler behavior because release proof consumers need stable, source-agnostic contracts.",
+   "reviewCondition": "Record provider evidence through typed evidence inputs or incident-bundle sources, then redact through the shared helper.",
+   "from": [
+    "src/evidence-contract.ts",
+    "src/evidence-export.ts",
+    "src/incident-bundle.ts",
+    "src/operational-redaction.ts",
+    "src/review-gate-isolation.ts"
+   ],
+   "blocked": [
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/scheduler.ts",
+    "src/daemon-routes/**"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "validation_gate_selector_stays_release_ops_only",
+   "owner": "release_ops",
+   "reason": "JOE-495 validation gate selector maps changed repo paths to local validation commands and warning-only performance budgets; it must not become a runtime dependency or reach mutable storage, scheduler execution, daemon/dashboard/MCP/channel/provider adapters, hosted execution, registry/package execution, CI/network behavior, or release artifact side effects.",
+   "reviewCondition": "If selector recommendations need runtime or provider proof, route that proof to the owning runtime-proof issue first; keep JOE-495 limited to deterministic path classification, local command recommendations, full-verify escalation, and review-gate evidence.",
+   "from": [
+    "src/validation-gate-selector.ts",
+    "src/validation-gate-selector-cli.ts"
+   ],
+   "blocked": [
+    "src/work-store.ts",
+    "src/work-store/**",
+    "src/storage.ts",
+    "src/scheduler.ts",
+    "src/capacity.ts",
+    "src/workers.ts",
+    "src/daemon.ts",
+    "src/daemon-router.ts",
+    "src/daemon-routes/**",
+    "src/dashboard/**",
+    "src/dashboard.ts",
+    "src/mcp.ts",
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "scripts/check-release-artifacts.mjs",
+    ".github/**"
+   ],
+   "exceptions": []
+  },
+  {
+   "id": "security_policy_stays_provider_free",
+   "owner": "security_policy",
+   "reason": "Security and authorization policy should classify provider targets through typed inputs, not concrete provider adapters or channel-command handlers.",
+   "reviewCondition": "Add a reason-coded policy input or capability boundary entry before rendering provider-specific behavior.",
+   "from": [
+    "src/security.ts",
+    "src/security-policy.ts"
+   ],
+   "blocked": [
+    "src/channels/telegram.ts",
+    "src/channels/whatsapp.ts",
+    "src/channels/discord.ts",
+    "src/channel-commands.ts"
+   ],
+   "exceptions": []
+  }
+ ],
+ "growthPolicy": {
+  "schemaVersion": 1,
+  "ownerCategories": [
+   {
+    "id": "runtime_scheduler",
+    "risk": "runtime",
+    "description": "Scheduler, replay, quota, dispatch, and orchestration runtime behavior."
+   },
+   {
+    "id": "runtime_storage",
+    "risk": "runtime",
+    "description": "Work-store, durable state, repository, and persistence behavior."
+   },
+   {
+    "id": "runtime_execution",
+    "risk": "runtime",
+    "description": "Runtime isolation, remote execution, sandbox, and capability-grant behavior."
+   },
+   {
+    "id": "channel_surface",
+    "risk": "runtime",
+    "description": "Provider-neutral channel commands plus concrete provider adapter edges."
+   },
+   {
+    "id": "dashboard_read_model",
+    "risk": "runtime",
+    "description": "Mission Control dashboard, MCP, and support read-model surfaces."
+   },
+   {
+    "id": "daemon_cli_edge",
+    "risk": "runtime",
+    "description": "CLI and daemon route edges that execute or expose owner behavior."
+   },
+   {
+    "id": "security_policy",
+    "risk": "runtime",
+    "description": "Security, authorization, and capability policy."
+   },
+   {
+    "id": "evidence_redaction",
+    "risk": "evidence_only",
+    "description": "Evidence export, redaction, incident, proof-run, and receipt safety contracts."
+   },
+   {
+    "id": "release_validation",
+    "risk": "evidence_only",
+    "description": "Release checks, validation gates, generated evidence reports, and proof taxonomy."
+   },
+   {
+    "id": "support_operations",
+    "risk": "evidence_only",
+    "description": "Support diagnostics, readiness, and operator support evidence."
+   },
+   {
+    "id": "docs_surface",
+    "risk": "docs",
+    "description": "Documentation, MkDocs navigation, public wording, and release-claim prose."
+   },
+   {
+    "id": "validation_infrastructure",
+    "risk": "validation",
+    "description": "Validation selectors, review gates, release scripts, and CI/local gate orchestration."
+   }
+  ],
+  "evidenceOnlyGrowthPolicy": {
+   "allowedWhen": [
+    "a manifest entry or generated report cannot express the proof yet",
+    "the module is deterministic and has no runtime side effects",
+    "a forbidden-import rule keeps it out of runtime, channel, scheduler, storage, daemon, dashboard, MCP, CI, network, and package-execution surfaces",
+    "the budget increase includes owner category, metric, previous/current values, rationale, and consolidation path"
+   ],
+   "consolidateWhen": [
+    "two or more static reports duplicate manifest metadata, blocked wording, redaction checks, or validation gates",
+    "a new evidence module only renders a standard static report that the M58 template can generate",
+    "runtime proof can be represented as a receipt consumed by the taxonomy instead of bespoke report code"
+   ],
+   "failWhen": [
+    "the change lacks budget rationale or owner classification",
+    "evidence or release code imports mutable runtime/storage/scheduler/channel/daemon surfaces without an explicit owner-approved forbidden-import exception",
+    "the wording expands release/product claims beyond the attached proof class"
+   ]
+  },
+  "budgetIncreases": [
+   {
+    "id": "m58_7_runtime_proof_taxonomy_module",
+    "issue": "JOE-497",
+    "metric": "module_count",
+    "previous": 225,
+    "current": 226,
+    "delta": 1,
+    "ownerCategory": "release_validation",
+    "growthKind": "evidence_only",
+    "rationale": "Adds deterministic runtime-proof taxonomy and redacted receipt validation so static and fixture evidence cannot satisfy stronger runtime/live/soak/provider/production claims.",
+    "consolidationPath": "Use this taxonomy plus manifest entries to avoid future bespoke proof-class reports; migrate fixture/live/soak evidence to receipts before adding more modules."
+   },
+   {
+    "id": "m58_7_runtime_proof_taxonomy_edges",
+    "issue": "JOE-497",
+    "metric": "edge_count",
+    "previous": 958,
+    "current": 960,
+    "delta": 2,
+    "ownerCategory": "release_validation",
+    "growthKind": "evidence_only",
+    "rationale": "One edge lets the taxonomy reuse shared redaction scanning; one edge lets the manifest registry enforce claim-strength requirements with the taxonomy.",
+    "consolidationPath": "Keep future static evidence on the manifest/template path and attach runtime receipts instead of introducing new taxonomy imports."
+   },
+   {
+    "id": "m58_9_final_codebase_simplicity_decision_module",
+    "issue": "JOE-499",
+    "metric": "module_count",
+    "previous": 226,
+    "current": 227,
+    "delta": 1,
+    "ownerCategory": "release_validation",
+    "growthKind": "evidence_only",
+    "rationale": "M58-9 adds one deterministic final decision module that composes existing M58 evidence lanes, residual risks, M59 routing, module-boundary trend, and redaction checks without runtime behavior.",
+    "consolidationPath": "Keep this as the final M58 decision record; future milestone decisions should prefer manifest/template reuse or consolidate static report scaffolding before adding bespoke modules."
+   },
+   {
+    "id": "m58_9_final_codebase_simplicity_decision_edges",
+    "issue": "JOE-499",
+    "metric": "edge_count",
+    "previous": 960,
+    "current": 967,
+    "delta": 7,
+    "ownerCategory": "release_validation",
+    "growthKind": "evidence_only",
+    "rationale": "M58-9 composes M58 scope, manifest, template, validation selector, runtime-proof taxonomy, redaction scanner, and release CLI outputs through release-ops-only imports.",
+    "consolidationPath": "If final decision modules keep accumulating, consolidate shared decision composition helpers under the evidence report template or manifest registry."
+   },
+   {
+    "id": "m59_1_runtime_kernel_scope_gate_module",
+    "issue": "JOE-500",
+    "metric": "module_count",
+    "previous": 227,
+    "current": 228,
+    "delta": 1,
+    "ownerCategory": "release_validation",
+    "growthKind": "evidence_only",
+    "rationale": "M59-1 adds one deterministic runtime-kernel ownership and public-beta scope-gate module that maps owner surfaces, dogfood failures, dependency order, and claim boundaries without runtime behavior.",
+    "consolidationPath": "Use this as the opening M59 planning artifact; future M59 runtime proof should attach receipts or reuse manifest/template infrastructure before adding bespoke static modules."
+   },
+   {
+    "id": "m59_1_runtime_kernel_scope_gate_edges",
+    "issue": "JOE-500",
+    "metric": "edge_count",
+    "previous": 967,
+    "current": 970,
+    "delta": 3,
+    "ownerCategory": "release_validation",
+    "growthKind": "evidence_only",
+    "rationale": "M59-1 imports the M58 final decision, shared redaction scanning, and the release CLI edge so scope-gate evidence is generated, redacted, and operator-visible through release-ops-only paths.",
+    "consolidationPath": "If more M59 planning artifacts appear, consolidate static scope-gate composition into manifest/template helpers instead of adding new release-ops imports."
+   }
+  ],
+  "directionalImportPilots": [
+   {
+    "id": "validation_gate_selector_release_ops_runtime_block",
+    "ownerCategory": "release_validation",
+    "ruleId": "validation_gate_selector_stays_release_ops_only",
+    "blockedOwnerCategories": [
+     "runtime_scheduler",
+     "runtime_storage",
+     "runtime_execution",
+     "channel_surface",
+     "dashboard_read_model",
+     "daemon_cli_edge"
+    ],
+    "rationale": "The validation gate selector may classify changed repo paths but must not import mutable runtime, storage, scheduler, channel, daemon, dashboard, MCP, CI, or package side effects."
+   }
+  ]
+ }
+}

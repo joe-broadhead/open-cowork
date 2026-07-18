@@ -1,0 +1,366 @@
+{
+  "id": "eval:search-permissions:enterprise-sections:v0",
+  "title": "Enterprise Search Permission Corpus",
+  "description": "Deterministic corpus for validating permission-safe search, graph, source, proposal, and ask flows across common company sections.",
+  "version": "0.0.0",
+  "updated_at": "2026-05-26T00:00:00.000Z",
+  "common_term": "openwiki-enterprise-permission-sentinel",
+  "sections": [
+    {
+      "id": "section:public",
+      "title": "Public",
+      "paths": [
+        "wiki/concepts/**",
+        "wiki/public/**",
+        "sources/manifests/public/**"
+      ],
+      "visibility": "public",
+      "owner_principal": "group:knowledge-admins",
+      "default_reviewers": [
+        "group:knowledge-reviewers"
+      ],
+      "description": "Company-wide knowledge safe for every user and agent."
+    },
+    {
+      "id": "section:hr",
+      "title": "HR",
+      "paths": [
+        "wiki/hr/**",
+        "sources/manifests/hr/**"
+      ],
+      "visibility": "private",
+      "owner_principal": "group:hr-admins",
+      "default_reviewers": [
+        "group:hr-reviewers"
+      ],
+      "description": "Human resources knowledge."
+    },
+    {
+      "id": "section:finance",
+      "title": "Finance",
+      "paths": [
+        "wiki/finance/**",
+        "sources/manifests/finance/**"
+      ],
+      "visibility": "private",
+      "owner_principal": "group:finance-admins",
+      "default_reviewers": [
+        "group:finance-reviewers"
+      ],
+      "description": "Finance planning, controls, and reporting knowledge."
+    },
+    {
+      "id": "section:engineering",
+      "title": "Engineering",
+      "paths": [
+        "wiki/engineering/**",
+        "sources/manifests/engineering/**"
+      ],
+      "visibility": "internal",
+      "owner_principal": "group:engineering-admins",
+      "default_reviewers": [
+        "group:engineering-reviewers"
+      ],
+      "description": "Engineering runbooks and system design knowledge."
+    },
+    {
+      "id": "section:admin",
+      "title": "Admin",
+      "paths": [
+        "wiki/admin/**",
+        "sources/manifests/admin/**"
+      ],
+      "visibility": "private",
+      "owner_principal": "group:platform-admins",
+      "default_reviewers": [
+        "group:platform-admins"
+      ],
+      "description": "Operational administration and incident knowledge."
+    },
+    {
+      "id": "section:private",
+      "title": "Private Executive",
+      "paths": [
+        "wiki/private/**",
+        "sources/manifests/private/**"
+      ],
+      "visibility": "private",
+      "owner_principal": "group:executive-admins",
+      "default_reviewers": [
+        "group:executive-reviewers"
+      ],
+      "description": "Highly restricted private company knowledge."
+    }
+  ],
+  "grants": [
+    {
+      "principal": "group:all-users",
+      "section": "section:public",
+      "role": "viewer"
+    },
+    {
+      "principal": "group:knowledge-reviewers",
+      "section": "section:public",
+      "role": "reviewer"
+    },
+    {
+      "principal": "group:hr",
+      "section": "section:hr",
+      "role": "maintainer"
+    },
+    {
+      "principal": "group:finance",
+      "section": "section:finance",
+      "role": "maintainer"
+    },
+    {
+      "principal": "group:engineering",
+      "section": "section:engineering",
+      "role": "maintainer"
+    },
+    {
+      "principal": "group:executive",
+      "section": "section:private",
+      "role": "reviewer"
+    },
+    {
+      "principal": "group:platform-admins",
+      "section": "section:admin",
+      "role": "admin"
+    }
+  ],
+  "approval_rules": [
+    {
+      "id": "approval-rule:hr",
+      "paths": [
+        "wiki/hr/**"
+      ],
+      "required_reviewers": [
+        {
+          "principal": "group:hr",
+          "role": "reviewer"
+        }
+      ],
+      "require_separate_actor": true
+    },
+    {
+      "id": "approval-rule:finance",
+      "paths": [
+        "wiki/finance/**"
+      ],
+      "required_reviewers": [
+        {
+          "principal": "group:finance",
+          "role": "reviewer"
+        }
+      ],
+      "require_separate_actor": true
+    },
+    {
+      "id": "approval-rule:engineering",
+      "paths": [
+        "wiki/engineering/**"
+      ],
+      "required_reviewers": [
+        {
+          "principal": "group:engineering",
+          "role": "reviewer"
+        }
+      ],
+      "require_separate_actor": true
+    },
+    {
+      "id": "approval-rule:admin",
+      "paths": [
+        "wiki/admin/**",
+        "wiki/private/**"
+      ],
+      "required_reviewers": [
+        {
+          "principal": "group:platform-admins",
+          "role": "admin"
+        }
+      ],
+      "require_separate_actor": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "page:public:company-handbook",
+      "path": "wiki/public/company-handbook.md",
+      "page_type": "public",
+      "title": "Public Company Handbook",
+      "summary": "Public handbook content available to every employee and agent.",
+      "topics": [
+        "company",
+        "handbook"
+      ],
+      "source_id": "source:public:company-handbook",
+      "source_path": "sources/manifests/public/company-handbook.yaml",
+      "claim_id": "claim:public:company-handbook",
+      "unique_term": "public-sentinel-alpha",
+      "body": "The public company handbook uses public-sentinel-alpha and openwiki-enterprise-permission-sentinel. It deliberately links to [restricted people reference](../hr/benefits.md), [restricted planning reference](../finance/forecast.md), [restricted systems reference](../engineering/runbook.md), [restricted operations reference](../admin/incident-controls.md), and [restricted strategy reference](../private/executive-roadmap.md) so graph filters must hide unauthorized targets without exposing private node labels."
+    },
+    {
+      "id": "page:hr:benefits",
+      "path": "wiki/hr/benefits.md",
+      "page_type": "hr",
+      "title": "HR Benefits",
+      "summary": "Private HR benefits policy.",
+      "topics": [
+        "hr",
+        "benefits"
+      ],
+      "source_id": "source:hr:benefits",
+      "source_path": "sources/manifests/hr/benefits.yaml",
+      "claim_id": "claim:hr:benefits",
+      "unique_term": "hr-benefits-private-bravo",
+      "body": "HR benefits content uses hr-benefits-private-bravo and openwiki-enterprise-permission-sentinel. This page is only for HR agents and HR maintainers."
+    },
+    {
+      "id": "page:finance:forecast",
+      "path": "wiki/finance/forecast.md",
+      "page_type": "finance",
+      "title": "Finance Forecast",
+      "summary": "Private finance forecast controls.",
+      "topics": [
+        "finance",
+        "forecast"
+      ],
+      "source_id": "source:finance:forecast",
+      "source_path": "sources/manifests/finance/forecast.yaml",
+      "claim_id": "claim:finance:forecast",
+      "unique_term": "finance-forecast-private-charlie",
+      "body": "Finance forecast content uses finance-forecast-private-charlie and openwiki-enterprise-permission-sentinel. This forecast must not leak to HR, engineering, or public users."
+    },
+    {
+      "id": "page:engineering:runbook",
+      "path": "wiki/engineering/runbook.md",
+      "page_type": "engineering",
+      "title": "Engineering Runbook",
+      "summary": "Internal engineering runbook.",
+      "topics": [
+        "engineering",
+        "runbook"
+      ],
+      "source_id": "source:engineering:runbook",
+      "source_path": "sources/manifests/engineering/runbook.yaml",
+      "claim_id": "claim:engineering:runbook",
+      "unique_term": "engineering-runbook-internal-delta",
+      "body": "Engineering runbook content uses engineering-runbook-internal-delta and openwiki-enterprise-permission-sentinel. It links back to [[Public Company Handbook]] for general context."
+    },
+    {
+      "id": "page:admin:incident-controls",
+      "path": "wiki/admin/incident-controls.md",
+      "page_type": "admin",
+      "title": "Admin Incident Controls",
+      "summary": "Private admin incident response controls.",
+      "topics": [
+        "admin",
+        "incident"
+      ],
+      "source_id": "source:admin:incident-controls",
+      "source_path": "sources/manifests/admin/incident-controls.yaml",
+      "claim_id": "claim:admin:incident-controls",
+      "unique_term": "admin-incident-private-echo",
+      "body": "Admin incident control content uses admin-incident-private-echo and openwiki-enterprise-permission-sentinel. This page is restricted to platform administrators."
+    },
+    {
+      "id": "page:private:executive-roadmap",
+      "path": "wiki/private/executive-roadmap.md",
+      "page_type": "private",
+      "title": "Executive Roadmap",
+      "summary": "Highly restricted private roadmap.",
+      "topics": [
+        "executive",
+        "roadmap"
+      ],
+      "source_id": "source:private:executive-roadmap",
+      "source_path": "sources/manifests/private/executive-roadmap.yaml",
+      "claim_id": "claim:private:executive-roadmap",
+      "unique_term": "private-executive-roadmap-foxtrot",
+      "body": "Executive roadmap content uses private-executive-roadmap-foxtrot and openwiki-enterprise-permission-sentinel. This private page is visible only to executive reviewers or admins."
+    }
+  ],
+  "subjects": [
+    {
+      "id": "subject:public",
+      "label": "Public viewer",
+      "role": "viewer",
+      "actor_id": "actor:user:public-viewer",
+      "principals": [],
+      "visible_pages": [
+        "page:public:company-handbook"
+      ]
+    },
+    {
+      "id": "subject:hr",
+      "label": "HR maintainer",
+      "role": "maintainer",
+      "actor_id": "actor:user:hr-maintainer",
+      "principals": [
+        "group:hr"
+      ],
+      "visible_pages": [
+        "page:public:company-handbook",
+        "page:hr:benefits"
+      ]
+    },
+    {
+      "id": "subject:finance",
+      "label": "Finance maintainer",
+      "role": "maintainer",
+      "actor_id": "actor:user:finance-maintainer",
+      "principals": [
+        "group:finance"
+      ],
+      "visible_pages": [
+        "page:public:company-handbook",
+        "page:finance:forecast"
+      ]
+    },
+    {
+      "id": "subject:engineering",
+      "label": "Engineering maintainer",
+      "role": "maintainer",
+      "actor_id": "actor:user:engineering-maintainer",
+      "principals": [
+        "group:engineering"
+      ],
+      "visible_pages": [
+        "page:public:company-handbook",
+        "page:engineering:runbook"
+      ]
+    },
+    {
+      "id": "subject:executive",
+      "label": "Executive reviewer",
+      "role": "reviewer",
+      "actor_id": "actor:user:executive-reviewer",
+      "principals": [
+        "group:executive"
+      ],
+      "visible_pages": [
+        "page:public:company-handbook",
+        "page:private:executive-roadmap"
+      ]
+    },
+    {
+      "id": "subject:admin",
+      "label": "Platform admin",
+      "role": "admin",
+      "actor_id": "actor:user:platform-admin",
+      "principals": [
+        "group:platform-admins"
+      ],
+      "visible_pages": [
+        "page:public:company-handbook",
+        "page:hr:benefits",
+        "page:finance:forecast",
+        "page:engineering:runbook",
+        "page:admin:incident-controls",
+        "page:private:executive-roadmap"
+      ]
+    }
+  ]
+}

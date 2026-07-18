@@ -1,0 +1,17 @@
+{{- if and .Values.postgresBackup.enabled .Values.postgresBackup.persistence.enabled (not .Values.postgresBackup.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "openwiki.fullname" . }}-postgres-backups
+  labels:
+    {{- include "openwiki.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.postgresBackup.persistence.accessModes | nindent 4 }}
+  {{- if .Values.postgresBackup.persistence.storageClass }}
+  storageClassName: {{ .Values.postgresBackup.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgresBackup.persistence.size | quote }}
+{{- end }}

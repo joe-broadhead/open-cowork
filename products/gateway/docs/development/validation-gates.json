@@ -1,0 +1,711 @@
+{
+ "version": 1,
+ "updatedFor": "Validation evidence review-gate platform, production-agent validation matrix, suite reliability budget, and CI gate truth",
+ "claimBoundary": "No release-claim expansion. Gate results improve local public-beta execution evidence only; production, release-candidate, hosted/team, universal-channel, arbitrary-scale, compliance, managed-support, and unattended-operation claims require separate final decisions.",
+ "productionAgentSurfaces": [
+  {
+   "id": "channel",
+   "owner": "channels / provider UX",
+   "changedWhen": [
+    "channel adapter, Telegram, WhatsApp, Discord, slash/action/presence, session-link, trusted target, or connector behavior changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/channel-commands.test.ts src/__tests__/telegram.test.ts src/__tests__/channel-connectors.test.ts --reporter=dot",
+    "node scripts/check-evidence-safety.mjs --preset release"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "channel capability or waiver note"
+   ],
+   "safeNextAction": "Run the focused channel gate first, update capability or waiver evidence, then run full verify and the local-only review gate.",
+   "reviewGateRequired": true,
+   "redactionRequired": true
+  },
+  {
+   "id": "scheduler",
+   "owner": "scheduler / fleet / worker recovery",
+   "changedWhen": [
+    "scheduler, worker lease, capacity, queue, cancellation, cleanup, or backpressure behavior changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/scheduler.test.ts src/__tests__/stress-suite.test.ts --reporter=dot"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "scheduler recovery receipt",
+    "worker cleanup or capacity evidence"
+   ],
+   "safeNextAction": "Run focused scheduler/fleet tests, capture cleanup/backpressure evidence, then rerun npm run verify.",
+   "reviewGateRequired": true,
+   "redactionRequired": false
+  },
+  {
+   "id": "storage",
+   "owner": "storage / durable state",
+   "changedWhen": [
+    "work-store, storage repository, migration, backup, restore, or database adapter changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/storage.test.ts src/__tests__/work-store.test.ts src/__tests__/backend-cli.test.ts --reporter=dot",
+    "node scripts/check-module-boundaries.mjs --json"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "migration/round-trip result",
+    "backup/restore proof when touched"
+   ],
+   "safeNextAction": "Run focused storage and backend checks, preserve rollback-safe evidence, then rerun release checks.",
+   "reviewGateRequired": true,
+   "redactionRequired": false
+  },
+  {
+   "id": "mission_control",
+   "owner": "Mission Control / dashboard read models",
+   "changedWhen": [
+    "dashboard, Mission Control view-model, operator action, status, pagination, or source-state rendering changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/dashboard.test.ts src/__tests__/mission-control-view-model.test.ts --reporter=dot"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "screenshot or view-model fixture summary",
+    "source-state fixture coverage"
+   ],
+   "safeNextAction": "Prove the source-state view model with focused tests before broad dashboard or docs validation.",
+   "reviewGateRequired": true,
+   "redactionRequired": false
+  },
+  {
+   "id": "release_evidence",
+   "owner": "release evidence / claim boundaries",
+   "changedWhen": [
+    "release docs, machine-readable evidence, release copy, claim boundary, evidence safety, module-budget, or final decision changes"
+   ],
+   "focusedGates": [
+    "npm run validation:check",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "node scripts/check-module-boundaries.mjs --json"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "evidence summary JSON",
+    "release-check output",
+    "residual-risk note"
+   ],
+   "safeNextAction": "Run validation, release, evidence-safety, and module-boundary gates before full verify.",
+   "reviewGateRequired": true,
+   "redactionRequired": true
+  },
+  {
+   "id": "security",
+   "owner": "security / policy / redaction",
+   "changedWhen": [
+    "authz, security policy, runtime capability grants, secrets lifecycle, webhook verification, redaction, or exposed-mode behavior changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/security.test.ts src/__tests__/security-policy.test.ts --reporter=dot",
+    "npm run evidence:safety"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "denial matrix fixture",
+    "redaction scan output"
+   ],
+   "safeNextAction": "Run focused security and redaction tests, then evidence safety and the review gate before merge.",
+   "reviewGateRequired": true,
+   "redactionRequired": true
+  },
+  {
+   "id": "operations",
+   "owner": "operator operations / support",
+   "changedWhen": [
+    "setup, update, service lifecycle, diagnose, backup, restore, uninstall, incident bundle, support handoff, or release operations changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/service-manager.test.ts src/__tests__/service-lifecycle.test.ts src/__tests__/daemon-lifecycle.test.ts --reporter=dot",
+    "npm run release:check"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "diagnostic/safe-next-action evidence",
+    "incident/support redaction proof"
+   ],
+   "safeNextAction": "Keep support exports redacted, run operation-focused tests, then release and evidence-safety gates.",
+   "reviewGateRequired": true,
+   "redactionRequired": true
+  },
+  {
+   "id": "agent_factory",
+   "owner": "Agent Factory / skills / MCP / packages",
+   "changedWhen": [
+    "agent profile, team, skill, MCP, connector package, eval suite, promotion, rollback, or package governance changes"
+   ],
+   "focusedGates": [
+    "npx vitest run src/__tests__/team-assembly.test.ts src/__tests__/mcp-tool-tiers.test.ts --reporter=dot"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "capability manifest diff",
+    "arena/eval scorecard",
+    "review-gate result"
+   ],
+   "safeNextAction": "Prove exact grants, eval gates, rollback path, and review-gate ownership before promotion wording.",
+   "reviewGateRequired": true,
+   "redactionRequired": true
+  },
+  {
+   "id": "docs",
+   "owner": "docs / onboarding / release notes",
+   "changedWhen": [
+    "MkDocs navigation, README, production readiness, operator runbook, onboarding, release notes, or public wording changes"
+   ],
+   "focusedGates": [
+    "uv run --with-requirements docs/requirements.txt mkdocs build --strict",
+    "npm run evidence:safety",
+    "npm run release:check"
+   ],
+   "requiredGlobalGates": [
+    "npm run typecheck",
+    "npm run release:check",
+    "npm run evidence:safety",
+    "local-only read-only autoreview/review-gate PASS"
+   ],
+   "evidenceOutputs": [
+    "docs strict output",
+    "evidence-safety output",
+    "release wording state"
+   ],
+   "safeNextAction": "Run strict docs and evidence safety; keep supported, bounded, waived, blocked, and deferred wording explicit.",
+   "reviewGateRequired": true,
+   "redactionRequired": true
+  }
+ ],
+ "failureDiagnostics": [
+  {
+   "id": "slow_tests",
+   "failureClass": "suite_runtime",
+   "severity": "warning",
+   "detection": "A focused or full suite exceeds expected runtime but still completes deterministically.",
+   "safeNextAction": "Use the focused owner-surface gate to localize the change, then run npm run verify once the focused path is green.",
+   "forbiddenShortcut": "Do not skip full verify or raise timeouts without recording why the touched surface needs it.",
+   "evidenceRefs": [
+    "scripts/run-verify.mjs",
+    "docs/development/validation-gates.json"
+   ]
+  },
+  {
+   "id": "flaky_gate",
+   "failureClass": "suite_reliability",
+   "severity": "critical",
+   "detection": "A gate alternates pass/fail or depends on timing, external network, or uncontrolled state.",
+   "safeNextAction": "Reproduce with the smallest focused command, remove nondeterminism, rerun twice locally when useful, then run full verify.",
+   "forbiddenShortcut": "Do not mark flaky output as passed or hide it as an environment-only issue without evidence.",
+   "evidenceRefs": [
+    "src/__tests__/stress-suite.test.ts",
+    "scripts/run-verify.mjs"
+   ]
+  },
+  {
+   "id": "failed_release_check",
+   "failureClass": "release_contract",
+   "severity": "critical",
+   "detection": "npm run release:check names a failed release/evidence gate.",
+   "safeNextAction": "Run npm run release:check, inspect the named failed check, update docs/evidence/scripts, then rerun evidence:safety when public wording changed.",
+   "forbiddenShortcut": "Do not bypass release:check or weaken unsupported-claim checks to make release wording pass.",
+   "evidenceRefs": [
+    "scripts/check-release.mjs",
+    "scripts/check-validation-gates.mjs"
+   ]
+  },
+  {
+   "id": "evidence_safety_failure",
+   "failureClass": "redaction_or_unsupported_claim",
+   "severity": "critical",
+   "detection": "npm run evidence:safety reports unsafe text, invalid JSON evidence, unsupported claim wording, or missing required references.",
+   "safeNextAction": "Fix the named file and line, regenerate machine evidence when needed, then rerun npm run evidence:safety and npm run release:check.",
+   "forbiddenShortcut": "Do not commit raw private paths, tokens, targets, transcript text, or unsupported positive claims.",
+   "evidenceRefs": [
+    "scripts/check-evidence-safety.mjs"
+   ]
+  },
+  {
+   "id": "missing_review_gate_proof",
+   "failureClass": "review_gate_or_policy",
+   "severity": "critical",
+   "detection": "The final diff lacks local-only read-only autoreview/review-gate PASS evidence.",
+   "safeNextAction": "Stop PR review or merge, run the local-only read-only review gate against the final committed diff from latest main, and record PASS or a blocker.",
+   "forbiddenShortcut": "Do not merge or request PR review without review-gate PASS evidence.",
+   "evidenceRefs": [
+    "src/templates/skills/gateway-review-gate/SKILL.md",
+    "src/review-gate-isolation.ts"
+   ]
+  },
+  {
+   "id": "docs_strict_failure",
+   "failureClass": "documentation_contract",
+   "severity": "warning",
+   "detection": "Strict MkDocs fails on navigation, links, markdown structure, or docs build configuration.",
+   "safeNextAction": "Fix the named docs issue, rerun strict MkDocs, and rerun release:check when release docs or navigation changed.",
+   "forbiddenShortcut": "Do not omit changed docs from navigation or release discoverability checks.",
+   "evidenceRefs": [
+    "mkdocs.yml",
+    "docs/index.md"
+   ]
+  },
+  {
+   "id": "module_boundary_budget_failure",
+   "failureClass": "architecture_boundary",
+   "severity": "critical",
+   "detection": "node scripts/check-module-boundaries.mjs --json reports new modules, edges, cycles, unresolved imports, or forbidden imports.",
+   "safeNextAction": "Reduce the dependency first; if intentional, add budget rationale and a forbidden-import guard before rerunning the boundary check.",
+   "forbiddenShortcut": "Do not raise module or edge budgets without rationale and an owner-specific guardrail.",
+   "evidenceRefs": [
+    "docs/development/module-boundary-budget.json",
+    "docs/development/module-boundary-budget.md"
+   ]
+  }
+ ],
+ "evidenceTemplates": [
+  {
+   "id": "production_agent_brief",
+   "requiredFields": [
+    "issue",
+    "ownerSurface",
+    "changedFiles",
+    "focusedGates",
+    "globalGates",
+    "reviewGatePolicy",
+    "blockedClaims"
+   ],
+   "blockedFields": [
+    "tokens",
+    "privatePaths",
+    "rawChannelTargets",
+    "operatorMessageBody"
+   ],
+   "safeNextAction": "Copy the owner-surface row, add exact files and gates, and keep no-PR-review-before-PASS wording explicit.",
+   "exampleRef": "docs/development/validation-gates.json#productionAgentSurfaces"
+  },
+  {
+   "id": "completion_linear_comment",
+   "requiredFields": [
+    "commit",
+    "implemented",
+    "validation",
+    "reviewGateResult",
+    "residualRisks",
+    "nextSafeAction"
+   ],
+   "blockedFields": [
+    "rawLogs",
+    "secrets",
+    "privateNotes",
+    "unredactedProviderPayload"
+   ],
+   "safeNextAction": "Record the command names/results and residual risk boundary without raw private evidence.",
+   "exampleRef": "Completion comment pattern"
+  },
+  {
+   "id": "evidence_summary_json",
+   "requiredFields": [
+    "schemaVersion",
+    "issue",
+    "status",
+    "releaseClaimEffect",
+    "acceptance",
+    "issues",
+    "redaction"
+   ],
+   "blockedFields": [
+    "rawTranscript",
+    "credentialValue",
+    "absolutePrivatePath",
+    "unsupportedPositiveClaim"
+   ],
+   "safeNextAction": "Keep summary JSON deterministic and fail closed with issue codes when acceptance drifts.",
+   "exampleRef": "docs/development/testing-release.md"
+  },
+  {
+   "id": "review_gate_prompt",
+   "requiredFields": [
+    "scope",
+    "restrictions",
+    "validationEvidence",
+    "finalDiffRef",
+    "passFailFormat"
+   ],
+   "blockedFields": [
+    "webSearch",
+    "remoteContext",
+    "fileEditPermission",
+    "outOfRepoContext"
+   ],
+   "safeNextAction": "Ask the reviewer to inspect only local final diff and return REVIEW_GATE: PASS or FAIL with findings.",
+   "exampleRef": "src/templates/skills/gateway-review-gate/SKILL.md"
+  },
+  {
+   "id": "release_note_state",
+   "requiredFields": [
+    "capability",
+    "state",
+    "evidenceRefs",
+    "blockedClaims",
+    "safeNextAction"
+   ],
+   "blockedFields": [
+    "silentOmission",
+    "strongerClaimWithoutEvidence",
+    "providerPayload",
+    "privateTarget"
+   ],
+   "safeNextAction": "Classify each capability as supported, bounded, waived, blocked, or deferred before final release wording.",
+   "exampleRef": "docs/operations/operator-feedback-loop.md"
+  }
+ ],
+ "reviewGatePolicy": {
+  "finalDiffRequirement": "final_committed_diff_from_latest_main",
+  "requiredBefore": "pr_review_or_merge",
+  "mode": "local_only_read_only",
+  "requiredResult": "PASS",
+  "forbiddenCapabilities": [
+   "file edits",
+   "git state changes",
+   "web search",
+   "WebFetch",
+   "Browser tools",
+   "remote GitHub context",
+   "remote Linear context",
+   "out-of-repo reads",
+   "private notes",
+   "secrets"
+  ],
+  "allowedEvidenceCommands": [
+   "git status",
+   "git diff",
+   "git show",
+   "rg",
+   "sed",
+   "npm run typecheck",
+   "npm run release:check",
+   "npm run evidence:safety",
+   "npm run verify"
+  ],
+  "unavailableAction": "Record a precise blocker in Linear and stop PR review or merge until the review gate can run and pass.",
+  "requiredEvidenceFields": [
+   "invocation",
+   "result",
+   "finalDiffRef",
+   "validationSummary",
+   "findingsOrNoFindings"
+  ]
+ },
+ "gates": [
+  {
+   "id": "typecheck",
+   "title": "TypeScript contract check",
+   "category": "fast_deterministic",
+   "ownerCommand": "npm run typecheck",
+   "expectedRuntime": "fast",
+   "requiredEnvironment": "Node 22, installed npm dependencies, repo checkout",
+   "failureClass": "compile_contract",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "typescript",
+    "cli",
+    "daemon",
+    "scheduler",
+    "dashboard",
+    "shared-code"
+   ],
+   "evidenceKind": "local_or_ci_command",
+   "ci": {
+    "job": "test",
+    "pullRequest": "required",
+    "skipSemantics": "Not skipped on pull requests because it is part of npm run verify."
+   }
+  },
+  {
+   "id": "unit-full",
+   "title": "Full Vitest suite",
+   "category": "deterministic_regression",
+   "ownerCommand": "npm test",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "Node 22, installed npm dependencies, local temp directory access",
+   "failureClass": "regression_or_suite_reliability",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "runtime-behavior",
+    "scheduler",
+    "channels",
+    "storage",
+    "security",
+    "dashboard",
+    "shared-code"
+   ],
+   "evidenceKind": "local_or_ci_command",
+   "ci": {
+    "job": "test",
+    "pullRequest": "required",
+    "skipSemantics": "Not skipped on pull requests because it is part of npm run verify."
+   }
+  },
+  {
+   "id": "build",
+   "title": "Package build",
+   "category": "deterministic_release_artifact",
+   "ownerCommand": "npm run build",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "Node 22, installed npm dependencies, writable dist directory",
+   "failureClass": "release_artifact",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "cli",
+    "daemon",
+    "package",
+    "release-ops",
+    "http-api"
+   ],
+   "evidenceKind": "local_or_ci_command",
+   "ci": {
+    "job": "test",
+    "pullRequest": "required",
+    "skipSemantics": "Not skipped on pull requests because it is part of npm run verify."
+   }
+  },
+  {
+   "id": "release-contract",
+   "title": "Release contract check",
+   "category": "deterministic_release_contract",
+   "ownerCommand": "npm run release:check",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "Node 22, built dist artifacts for npm pack verification",
+   "failureClass": "release_contract",
+   "claimEffect": "blocks_release_claim_for_applicable_changes",
+   "requiredFor": [
+    "release-copy",
+    "package",
+    "docs-navigation",
+    "ci-workflow",
+    "public-contract"
+   ],
+   "evidenceKind": "local_or_ci_command",
+   "ci": {
+    "job": "test",
+    "pullRequest": "required",
+    "skipSemantics": "Not skipped on pull requests because it is part of npm run verify."
+   }
+  },
+  {
+   "id": "docs-strict",
+   "title": "Strict documentation build",
+   "category": "deterministic_docs",
+   "ownerCommand": "uv run --with-requirements docs/requirements.txt mkdocs build --strict",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "Python 3.12, uv, docs requirements, repo checkout",
+   "failureClass": "documentation_contract",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "docs",
+    "mkdocs-nav",
+    "release-copy",
+    "operator-runbook"
+   ],
+   "evidenceKind": "local_or_ci_command",
+   "ci": {
+    "job": "docs",
+    "pullRequest": "required",
+    "skipSemantics": "Not skipped on pull requests."
+   }
+  },
+  {
+   "id": "workflow-lint",
+   "title": "GitHub workflow lint",
+   "category": "deterministic_ci_contract",
+   "ownerCommand": "actionlint .github/workflows/ci.yml",
+   "expectedRuntime": "fast",
+   "requiredEnvironment": "Go/actionlint or CI workflow-lint job",
+   "failureClass": "ci_workflow_contract",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "ci-workflow",
+    "release-ops"
+   ],
+   "evidenceKind": "ci_command",
+   "ci": {
+    "job": "workflow-lint",
+    "pullRequest": "required",
+    "skipSemantics": "Not skipped on pull requests."
+   }
+  },
+  {
+   "id": "docker-pr-smoke",
+   "title": "Docker image build, auth smoke, and scan",
+   "category": "container_ci_contract",
+   "ownerCommand": "docker pull_request path in .github/workflows/ci.yml",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "GitHub Actions pull_request event with Docker Buildx",
+   "failureClass": "container_pr_smoke",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "docker",
+    "pull-request",
+    "container-auth-smoke"
+   ],
+   "evidenceKind": "ci_pull_request",
+   "ci": {
+    "job": "docker",
+    "pullRequest": "required",
+    "skipSemantics": "Runs on pull requests after workflow-lint, test, and docs pass; builds locally, smokes scoped HTTP auth, and scans the image without publishing."
+   }
+  },
+  {
+   "id": "docker-image",
+   "title": "Docker image publish, attest, sign, and scan",
+   "category": "release_artifact_ci",
+   "ownerCommand": "docker push path in .github/workflows/ci.yml",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "GitHub Actions push event with package write permission and Docker Buildx",
+   "failureClass": "container_release_artifact",
+   "claimEffect": "blocks_release_claim_for_applicable_changes",
+   "requiredFor": [
+    "docker",
+    "release-tag",
+    "published-image"
+   ],
+   "evidenceKind": "ci_push_only",
+   "ci": {
+    "job": "docker",
+    "pullRequest": "skipped_on_pull_request",
+    "skipSemantics": "Publish, provenance, signing, and pushed-image scan are skipped on pull requests by design; they run only on push after workflow-lint, test, and docs pass."
+   }
+  },
+  {
+   "id": "github-release",
+   "title": "GitHub release creation",
+   "category": "release_artifact_ci",
+   "ownerCommand": "release job in .github/workflows/ci.yml",
+   "expectedRuntime": "fast",
+   "requiredEnvironment": "GitHub Actions tag push matching refs/tags/v* after docker job succeeds",
+   "failureClass": "release_publication",
+   "claimEffect": "blocks_release_claim_for_applicable_changes",
+   "requiredFor": [
+    "release-tag",
+    "release-notes"
+   ],
+   "evidenceKind": "ci_tag_only",
+   "ci": {
+    "job": "release",
+    "pullRequest": "skipped_on_pull_request",
+    "skipSemantics": "Skipped on pull requests and branch pushes; tag-only after the Docker image gate succeeds."
+   }
+  },
+  {
+   "id": "local-readonly-review-gate",
+   "title": "Local-only read-only review gate",
+   "category": "human_agent_review",
+   "ownerCommand": "gateway-review-gate skill against the final committed diff from latest origin/main",
+   "expectedRuntime": "medium",
+   "requiredEnvironment": "Local repo checkout, no file edits, no network/web/remote context, no out-of-repo reads",
+   "failureClass": "review_gate_or_policy",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "all-prs",
+    "agent-worker-prs",
+    "docs",
+    "code",
+    "release-copy"
+   ],
+   "evidenceKind": "local_review_report",
+   "ci": {
+    "job": "none",
+    "pullRequest": "manual_or_local",
+    "skipSemantics": "Not a GitHub CI job; the worker/coordinator must record PASS evidence before PR review or merge."
+   }
+  },
+  {
+   "id": "validation-map",
+   "title": "Validation gate map schema check",
+   "category": "deterministic_validation_contract",
+   "ownerCommand": "npm run validation:check",
+   "expectedRuntime": "fast",
+   "requiredEnvironment": "Node 22 and repo checkout",
+   "failureClass": "validation_contract",
+   "claimEffect": "blocks_merge_for_applicable_changes",
+   "requiredFor": [
+    "validation-docs",
+    "ci-workflow",
+    "release-contract",
+    "worker-briefs"
+   ],
+   "evidenceKind": "local_or_ci_command",
+   "ci": {
+    "job": "test",
+    "pullRequest": "required",
+    "skipSemantics": "Covered by npm run release:check inside npm run verify."
+   }
+  },
+  {
+   "id": "elapsed-soak",
+   "title": "Elapsed beta operation",
+   "category": "elapsed_operator_soak",
+   "ownerCommand": "operator-run elapsed local beta operation with daily redacted evidence (readiness, health, backups, evidence export)",
+   "expectedRuntime": "days",
+   "requiredEnvironment": "Operator-owned local beta environment with daily redacted snapshots",
+   "failureClass": "elapsed_soak_incomplete",
+   "claimEffect": "cannot_advance_release_claim_alone",
+   "requiredFor": [
+    "production-certification",
+    "release-candidate-decision",
+    "local-beta-soak"
+   ],
+   "evidenceKind": "elapsed_soak_ledger",
+   "ci": {
+    "job": "none",
+    "pullRequest": "manual_or_local",
+    "skipSemantics": "Synthetic CI or local smoke cannot substitute for elapsed time."
+   }
+  }
+ ]
+}

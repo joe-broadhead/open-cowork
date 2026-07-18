@@ -1,13 +1,86 @@
 {
-  "name": "cowork-wiki",
+  "name": "cowork-wiki-workspace",
   "version": "0.0.0",
+  "description": "Git-backed, protocol-first knowledge substrate for humans, agents, and hosted applications.",
   "private": true,
-  "description": "Stub for Wiki (cowork-wiki). Source lands via JOE-906 import.",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/joe-broadhead/open-wiki#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "products/wiki"
+  },
+  "bugs": {
+    "url": "https://github.com/joe-broadhead/open-wiki/issues"
+  },
+  "keywords": [
+    "knowledge-base",
+    "git",
+    "mcp",
+    "agents",
+    "wiki",
+    "typescript"
+  ],
+  "dependencies": {
+    "tsx": "^4.22.4"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22.22.3"
+  },
   "scripts": {
-    "build": "node -e \"console.log('[cowork-wiki] stub: nothing to build until import')\"",
-    "test": "node -e \"console.log('[cowork-wiki] stub: nothing to test until import')\"",
-    "typecheck": "node -e \"console.log('[cowork-wiki] stub: nothing to typecheck until import')\""
+    "build": "pnpm build:cli",
+    "build:cli": "pnpm build:web && node packages/cli/scripts/build.mjs",
+    "build:web": "node --no-warnings --import tsx packages/web/scripts/build.mjs",
+    "check:bundle": "node --no-warnings --import tsx packages/web/scripts/check-bundle.mjs",
+    "check:dead-code": "knip --config knip.json --include files,dependencies --reporter compact --no-config-hints",
+    "check:deploy-docs": "node --no-warnings scripts/openwiki-validate-deploy-docs.mjs",
+    "check:modules": "node --no-warnings scripts/openwiki-module-size-report.mjs --check",
+    "coverage": "node --no-warnings scripts/openwiki-coverage.mjs",
+    "docs:build": "python3 -m mkdocs build --strict",
+    "docs:cli": "pnpm docs:reference",
+    "docs:reference": "node --no-warnings --import tsx scripts/openwiki-generate-reference-docs.mjs",
+    "deploy:cloud:evidence": "node --no-warnings --import tsx scripts/openwiki-cloud-apply-evidence.mjs",
+    "evidence:hosted-readiness": "node --no-warnings --import tsx scripts/openwiki-hosted-readiness-evidence.mjs",
+    "pack:cli": "pnpm build:cli && mkdir -p artifacts/npm && npm pack ./packages/cli/dist --pack-destination artifacts/npm",
+    "openwiki": "node --no-warnings --import tsx packages/cli/src/main.ts",
+    "demo:enterprise": "node --no-warnings --import tsx scripts/openwiki-enterprise-demo.mjs",
+    "eval:enterprise-demo": "node --no-warnings --import tsx scripts/openwiki-enterprise-demo-eval.mjs",
+    "eval:mcp-conformance": "node --no-warnings --import tsx scripts/openwiki-mcp-conformance.mjs",
+    "eval:inbox-agents": "node --no-warnings --import tsx scripts/openwiki-inbox-agent-evals.mjs",
+    "eval:opencode-tools": "node scripts/openwiki-opencode-tool-evals.mjs",
+    "perf:check": "node --no-warnings --import tsx scripts/openwiki-scale-perf.mjs",
+    "perf:postgres:hosted": "node --no-warnings --import tsx scripts/openwiki-postgres-scale-evidence.mjs",
+    "perf:scale:10k": "OPENWIKI_SCALE_MODE=benchmark OPENWIKI_SCALE_STAGE=10k node --no-warnings --import tsx scripts/openwiki-scale-perf.mjs",
+    "perf:scale:100k": "OPENWIKI_SCALE_MODE=benchmark OPENWIKI_SCALE_STAGE=100k node --no-warnings --import tsx scripts/openwiki-scale-perf.mjs",
+    "perf:scale:1m": "OPENWIKI_SCALE_MODE=benchmark OPENWIKI_SCALE_STAGE=1m node --no-warnings --import tsx scripts/openwiki-scale-perf.mjs",
+    "screenshots": "node --no-warnings --import tsx scripts/openwiki-screenshots.mjs",
+    "release:evidence": "node --no-warnings --import tsx scripts/openwiki-release-evidence.mjs",
+    "release:public-check": "node --no-warnings scripts/openwiki-public-release-check.mjs",
+    "release:smoke": "node --no-warnings --import tsx scripts/openwiki-release-smoke.mjs",
+    "release:status": "node --no-warnings scripts/openwiki-release-status.mjs",
+    "dogfood:personal": "node --no-warnings --import tsx scripts/openwiki-personal-inbox-smoke.mjs",
+    "smoke:kubernetes": "node --no-warnings scripts/openwiki-kind-smoke.mjs",
+    "backup:postgres:restore-drill": "node --no-warnings scripts/openwiki-postgres-restore-drill.mjs",
+    "audit:high": "pnpm audit --audit-level high",
+    "test:security": "node --no-warnings --import tsx --test tests/security-boundaries.test.ts",
+    "test:ui": "node --no-warnings --import tsx scripts/openwiki-ui-smoke.mjs",
+    "test:ui-quality": "node --no-warnings --import tsx scripts/openwiki-ui-quality.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm typecheck:js",
+    "typecheck:js": "tsc -p tsconfig.js.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters && pnpm typecheck:js && pnpm check:modules && pnpm check:dead-code && pnpm check:deploy-docs",
+    "test": "node --no-warnings --import tsx --test tests/*.test.ts packages/*/test/*.test.ts",
+    "validate": "pnpm typecheck && pnpm test",
+    "validate:prod": "pnpm lint && pnpm build && pnpm docs:build && pnpm check:bundle && pnpm test:ui && pnpm test:ui-quality && pnpm coverage && pnpm audit:high && pnpm test:postgres && pnpm release:public-check -- --allow-unpublished",
+    "test:postgres": "node --no-warnings --import tsx --test tests/postgres-runtime.integration.test.ts tests/postgres-search-conformance.integration.test.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0",
+    "@types/node": "^26.0.0",
+    "ajv": "^8.20.0",
+    "esbuild": "0.28.1",
+    "knip": "6.17.1",
+    "typescript": "^6.0.3"
   }
 }

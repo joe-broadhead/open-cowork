@@ -1,0 +1,564 @@
+name: OpenWiki Release Validation
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-version-tag:
+    name: verify version tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Verify tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          package_version="$(node -p "require('./package.json').version")"
+          expected_tag="v${package_version}"
+          if [ "$RELEASE_TAG" != "$expected_tag" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match package.json version ${expected_tag}."
+            exit 1
+          fi
+          echo "Release tag ${RELEASE_TAG} matches package.json."
+
+  local-personal:
+    name: local personal profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Validate local personal profile
+        run: pnpm release:smoke -- local-personal
+
+  static-export:
+    name: static export profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Validate static export profile
+        run: pnpm release:smoke -- static-export
+
+  security-basics:
+    name: release security basics
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Audit high severity dependencies
+        run: pnpm audit --audit-level high
+      - name: Run security boundary tests
+        run: pnpm test:security
+      - name: Validate security basics
+        run: pnpm release:smoke -- security-basics
+
+  scale-smoke:
+    name: scale smoke profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Run 1k scale smoke
+        run: pnpm perf:check
+      - name: Upload scale smoke report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-scale-smoke
+          path: artifacts/openwiki-scale-perf*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  compose:
+    name: compose profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      POSTGRES_PASSWORD: release-validation-postgres
+      OPENWIKI_MINIO_ACCESS_KEY: release-validation-minio
+      OPENWIKI_MINIO_SECRET_KEY: release-validation-minio-secret
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Validate Docker Compose config
+        run: docker compose -f deploy/compose/docker-compose.yml config --quiet
+
+  docker:
+    name: docker profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+      - name: Build release smoke image
+        run: docker build --tag openwiki/openwiki:release-smoke .
+      - name: Smoke test read-only root image
+        run: |
+          set -euo pipefail
+          container_id="$(docker run \
+            --detach \
+            --read-only \
+            --tmpfs /tmp:uid=1000,gid=1000,mode=1777 \
+            --tmpfs /data/wiki:uid=1000,gid=1000,mode=0770 \
+            --user 1000:1000 \
+            --publish 3030:3030 \
+            openwiki/openwiki:release-smoke)"
+          trap 'docker logs "$container_id"; docker rm --force "$container_id"' EXIT
+          for _ in $(seq 1 60); do
+            if curl --fail --silent --show-error http://127.0.0.1:3030/readyz >/dev/null; then
+              curl --fail --silent --show-error http://127.0.0.1:3030/mcp-manifest.json >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Scan release smoke image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: openwiki/openwiki:release-smoke
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  docs:
+    name: docs profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Install docs dependencies
+        run: python -m pip install -r docs/requirements.txt
+      - name: Build docs
+        run: mkdocs build --strict
+
+  postgres:
+    name: postgres profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17@sha256:0027bef26712baaee437a4ea48fdf3d2d2e2bc5f0d81615374408ca320f3c7e3
+        env:
+          POSTGRES_DB: openwiki
+          POSTGRES_USER: openwiki
+          POSTGRES_PASSWORD: openwiki
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openwiki -d openwiki"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://openwiki:openwiki@127.0.0.1:5432/openwiki
+      OPENWIKI_POSTGRES_TEST_DATABASE_URL: postgres://openwiki:openwiki@127.0.0.1:5432/openwiki
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Run Postgres runtime integration test
+        run: pnpm test:postgres
+
+  package-smoke:
+    name: package smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Pack CLI
+        run: pnpm pack:cli
+      - name: Resolve packed CLI tarball
+        id: packed-cli
+        run: |
+          set -euo pipefail
+          package_file="$(find artifacts/npm -maxdepth 1 -name '*.tgz' -print -quit)"
+          test -n "$package_file"
+          echo "tarball=$package_file" >> "$GITHUB_OUTPUT"
+      - name: Packaged CLI smoke
+        env:
+          OPENWIKI_CLI_PACKAGE_TARBALL: ${{ steps.packed-cli.outputs.tarball }}
+        run: node --no-warnings --import tsx --test tests/cli-package.test.ts
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-npm-package
+          path: artifacts/npm/*.tgz
+          if-no-files-found: error
+          retention-days: 30
+
+  release-evidence:
+    name: release evidence bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - local-personal
+      - static-export
+      - security-basics
+      - scale-smoke
+      - compose
+      - docker
+      - docs
+      - postgres
+      - package-smoke
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install release evidence tools
+        run: |
+          set -euo pipefail
+          helm_version="v3.17.3"
+          terraform_version="1.12.1"
+          kustomize_version="v5.6.0"
+
+          curl --fail --silent --show-error --location \
+            --output "helm-${helm_version}-linux-amd64.tar.gz" \
+            "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output helm.tar.gz.sha256sum \
+            "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz.sha256sum"
+          sha256sum --check helm.tar.gz.sha256sum
+          tar -xzf "helm-${helm_version}-linux-amd64.tar.gz"
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+
+          curl --fail --silent --show-error --location \
+            --output "terraform_${terraform_version}_linux_amd64.zip" \
+            "https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_amd64.zip"
+          curl --fail --silent --show-error --location \
+            --output terraform_SHA256SUMS \
+            "https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_SHA256SUMS"
+          grep " terraform_${terraform_version}_linux_amd64.zip$" terraform_SHA256SUMS | sha256sum --check -
+          unzip -q "terraform_${terraform_version}_linux_amd64.zip"
+          sudo install -m 0755 terraform /usr/local/bin/terraform
+
+          curl --fail --silent --show-error --location \
+            --output kustomize.tar.gz \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${kustomize_version}/kustomize_${kustomize_version}_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output kustomize_checksums.txt \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${kustomize_version}/checksums.txt"
+          grep " kustomize_${kustomize_version}_linux_amd64.tar.gz$" kustomize_checksums.txt | awk '{print $1 "  kustomize.tar.gz"}' | sha256sum --check -
+          tar -xzf kustomize.tar.gz
+          sudo install -m 0755 kustomize /usr/local/bin/kustomize
+
+          helm version --short
+          terraform version
+          kustomize version
+      - name: Download scale smoke artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: openwiki-scale-smoke
+          path: artifacts
+      - name: Generate release evidence
+        env:
+          OPENWIKI_RELEASE_EVIDENCE_STRICT: "1"
+        run: pnpm release:evidence
+      - name: Upload release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-release-evidence
+          path: artifacts/openwiki-release-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+
+  release-orchestrator:
+    name: release orchestrator
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - verify-version-tag
+      - local-personal
+      - static-export
+      - security-basics
+      - scale-smoke
+      - compose
+      - docker
+      - docs
+      - postgres
+      - package-smoke
+      - release-evidence
+    steps:
+      - name: Verify release train
+        env:
+          VERIFY_TAG_RESULT: ${{ needs.verify-version-tag.result }}
+          LOCAL_PERSONAL_RESULT: ${{ needs.local-personal.result }}
+          STATIC_EXPORT_RESULT: ${{ needs.static-export.result }}
+          SECURITY_BASICS_RESULT: ${{ needs.security-basics.result }}
+          SCALE_SMOKE_RESULT: ${{ needs.scale-smoke.result }}
+          COMPOSE_RESULT: ${{ needs.compose.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
+          PACKAGE_SMOKE_RESULT: ${{ needs.package-smoke.result }}
+          RELEASE_EVIDENCE_RESULT: ${{ needs.release-evidence.result }}
+        run: |
+          set -euo pipefail
+          for result in \
+            "$VERIFY_TAG_RESULT" \
+            "$LOCAL_PERSONAL_RESULT" \
+            "$STATIC_EXPORT_RESULT" \
+            "$SECURITY_BASICS_RESULT" \
+            "$SCALE_SMOKE_RESULT" \
+            "$COMPOSE_RESULT" \
+            "$DOCKER_RESULT" \
+            "$DOCS_RESULT" \
+            "$POSTGRES_RESULT" \
+            "$PACKAGE_SMOKE_RESULT" \
+            "$RELEASE_EVIDENCE_RESULT"; do
+            if [ "$result" != "success" ]; then
+              echo "Release train is not publishable; gate result: $result"
+              exit 1
+            fi
+          done
+          echo "Release train is publishable."
+
+  release-image:
+    name: release image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: ghcr-release
+    timeout-minutes: 30
+    needs:
+      - release-orchestrator
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+      - name: Build release image for pre-publish scan
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: .
+          load: true
+          tags: openwiki/openwiki:release-prepublish-scan
+      - name: Scan release image before publish
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: openwiki/openwiki:release-prepublish-scan
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        with:
+          images: ghcr.io/joe-broadhead/open-wiki
+          tags: |
+            type=raw,value=latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - id: publish
+        name: Push release candidate image digest
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: .
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=ghcr.io/joe-broadhead/open-wiki,push-by-digest=true,name-canonical=true,push=true
+          provenance: true
+          sbom: true
+      - name: Scan release candidate image digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ghcr.io/joe-broadhead/open-wiki@${{ steps.publish.outputs.digest }}
+          format: sarif
+          output: trivy-release-published-results.sarif
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+      - name: Sign image digest
+        run: cosign sign --yes ghcr.io/joe-broadhead/open-wiki@${{ steps.publish.outputs.digest }}
+      - name: Attest image provenance
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-name: ghcr.io/joe-broadhead/open-wiki
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+      - name: Promote scanned release image tags
+        env:
+          IMAGE_DIGEST: ghcr.io/joe-broadhead/open-wiki@${{ steps.publish.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          tag_args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              tag_args+=(--tag "$tag")
+            fi
+          done <<< "$IMAGE_TAGS"
+          if [ "${#tag_args[@]}" -eq 0 ]; then
+            echo "No release image tags were generated for promotion."
+            exit 1
+          fi
+          docker buildx imagetools create "${tag_args[@]}" "$IMAGE_DIGEST"
+
+  npm-cli:
+    name: npm CLI package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: npm-release
+    timeout-minutes: 15
+    needs:
+      - release-image
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # The packaged CLI smoke runs scripts/openwiki-packaged-cli-smoke.mjs from
+      # the repository, so the job needs a checkout (this job only runs on tag
+      # pushes, which is why the omission survived until the first real tag).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24.x"
+          registry-url: "https://registry.npmjs.org"
+      - name: Download smoke-tested npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: openwiki-npm-package
+          path: artifacts/npm
+      - name: Verify npm package metadata
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mapfile -t package_files < <(find artifacts/npm -maxdepth 1 -name '*.tgz' -print | sort)
+          if [ "${#package_files[@]}" -ne 1 ]; then
+            printf 'Expected exactly one smoke-tested npm package, found %s.\n' "${#package_files[@]}"
+            printf '%s\n' "${package_files[@]}"
+            exit 1
+          fi
+          package_file="${package_files[0]}"
+          inspect_dir="$(mktemp -d)"
+          trap 'rm -rf "$inspect_dir"' EXIT
+          tar -xzf "$package_file" -C "$inspect_dir" package/package.json
+          package_json="$inspect_dir/package/package.json"
+          package_name="$(node -e "const pkg = require(process.argv[1]); console.log(pkg.name);" "$package_json")"
+          package_version="$(node -e "const pkg = require(process.argv[1]); console.log(pkg.version);" "$package_json")"
+          expected_tag="v${package_version}"
+          if [ "$package_name" != "@openwiki/cli" ]; then
+            echo "Expected package @openwiki/cli, found ${package_name}."
+            exit 1
+          fi
+          if [ "$RELEASE_TAG" != "$expected_tag" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match npm package version ${expected_tag}."
+            exit 1
+          fi
+          if npm view "@openwiki/cli@${package_version}" version >/dev/null 2>&1; then
+            echo "@openwiki/cli@${package_version} is already published on npm."
+            exit 1
+          fi
+          checksum="$(sha256sum "$package_file" | awk '{print $1}')"
+          echo "OPENWIKI_NPM_PACKAGE=$package_file" >> "$GITHUB_ENV"
+          echo "OPENWIKI_NPM_PACKAGE_VERSION=$package_version" >> "$GITHUB_ENV"
+          echo "OpenWiki npm package: ${package_file}"
+          echo "OpenWiki npm package version: ${package_version}"
+          echo "OpenWiki npm package sha256: ${checksum}"
+      - name: Packaged CLI smoke
+        run: node scripts/openwiki-packaged-cli-smoke.mjs "$OPENWIKI_NPM_PACKAGE"
+      - name: Verify npm trusted publishing client
+        run: |
+          set -euo pipefail
+          node --version
+          npm_version="$(npm --version)"
+          echo "npm ${npm_version}"
+          node -e '
+            const [major = 0, minor = 0, patch = 0] = process.argv[1].split(".").map(Number);
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!ok) {
+              console.error(`npm ${process.argv[1]} is too old for trusted publishing; require >=11.5.1.`);
+              process.exit(1);
+            }
+          ' "$npm_version"
+      - name: npm publish dry-run
+        run: npm publish "$OPENWIKI_NPM_PACKAGE" --dry-run --access public
+      - name: Publish @openwiki/cli
+        run: npm publish "$OPENWIKI_NPM_PACKAGE" --access public

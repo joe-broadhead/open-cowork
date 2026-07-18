@@ -1,0 +1,54 @@
+name: OpenWiki Review Proposal
+
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        description: OpenWiki workspace root
+        required: false
+        default: examples/basic-wiki
+      proposal_id:
+        description: Proposal ID to inspect
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  review-proposal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Inspect proposal
+        env:
+          OPENWIKI_ROOT: ${{ inputs.root || 'examples/basic-wiki' }}
+          OPENWIKI_PROPOSAL_ID: ${{ inputs.proposal_id }}
+        run: |
+          set -eu
+          if [ -z "$OPENWIKI_PROPOSAL_ID" ]; then
+            echo "proposal_id is required" >&2
+            exit 1
+          fi
+          pnpm openwiki -- --root "$OPENWIKI_ROOT" proposal detail "$OPENWIKI_PROPOSAL_ID" --json > openwiki-proposal-detail.json
+          pnpm openwiki -- --root "$OPENWIKI_ROOT" proposal diff "$OPENWIKI_PROPOSAL_ID" --json > openwiki-proposal-diff.json
+          pnpm openwiki -- --root "$OPENWIKI_ROOT" proposal validation "$OPENWIKI_PROPOSAL_ID" --json > openwiki-proposal-validation.json
+      - name: Upload proposal review artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-proposal-review
+          path: |
+            openwiki-proposal-detail.json
+            openwiki-proposal-diff.json
+            openwiki-proposal-validation.json

@@ -1,0 +1,75 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openwiki-postgres-backup
+  labels:
+    app.kubernetes.io/name: openwiki
+    app.kubernetes.io/instance: openwiki
+    app.kubernetes.io/part-of: openwiki
+spec:
+  schedule: "17 2 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: openwiki-postgres-backup
+            app.kubernetes.io/instance: openwiki
+            app.kubernetes.io/part-of: openwiki
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: pg-dump
+              image: postgres:17-alpine@sha256:979c4379dd698aba0b890599a6104e082035f98ef31d9b9291ec22f2b13059ca
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: openwiki-postgres
+                      key: database-url
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  mkdir -p /backups
+                  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  sql_tmp="/tmp/openwiki-${timestamp}.sql"
+                  gzip_tmp="/backups/.openwiki-${timestamp}.sql.gz.tmp"
+                  final="/backups/openwiki-${timestamp}.sql.gz"
+                  trap 'rm -f "$sql_tmp" "$gzip_tmp"' EXIT
+                  pg_dump "$DATABASE_URL" > "$sql_tmp"
+                  test -s "$sql_tmp"
+                  gzip -c "$sql_tmp" > "$gzip_tmp"
+                  test -s "$gzip_tmp"
+                  mv "$gzip_tmp" "$final"
+                  find /backups -type f -name 'openwiki-*.sql.gz' -mtime +30 -delete
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: openwiki-postgres-backups
+            - name: tmp
+              emptyDir: {}

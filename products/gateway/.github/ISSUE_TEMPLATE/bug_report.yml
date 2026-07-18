@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible Gateway behavior, regression, or operations failure.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report vulnerabilities or include credentials, raw channel IDs, private messages, provider payloads, or unredacted local paths here. Use the private process in `.github/SECURITY.md` for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Output of `opencode-gateway --version` or the tested commit SHA.
+      placeholder: v1.3.0 or 0123456
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Installer or update
+        - Service lifecycle
+        - Scheduler or durable work
+        - Dashboard or HTTP API
+        - MCP or OpenCode integration
+        - Channel delivery
+        - Docker or release artifact
+        - Backup or restore
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: State what happened, including exit status or redacted error text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Provide the shortest deterministic sequence using disposable values.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Relevant `health`, `readiness`, `doctor`, or bounded log output. Remove secrets and private data.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, raw channel targets, private content, and machine-local sensitive paths.
+          required: true
+        - label: This is not a vulnerability report.
+          required: true

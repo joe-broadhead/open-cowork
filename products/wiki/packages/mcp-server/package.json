@@ -1,0 +1,21 @@
+{
+  "name": "@openwiki/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@openwiki/connectors": "workspace:*",
+    "@openwiki/core": "workspace:*",
+    "@openwiki/git": "workspace:*",
+    "@openwiki/index-store": "workspace:*",
+    "@openwiki/jobs": "workspace:*",
+    "@openwiki/policy": "workspace:*",
+    "@openwiki/postgres-runtime": "workspace:*",
+    "@openwiki/repo": "workspace:*",
+    "@openwiki/search": "workspace:*",
+    "@openwiki/static-export": "workspace:*",
+    "@openwiki/validation": "workspace:*",
+    "@openwiki/workflows": "workspace:*"
+  }
+}

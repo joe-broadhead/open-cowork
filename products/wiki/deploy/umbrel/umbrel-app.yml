@@ -1,0 +1,26 @@
+manifestVersion: 1
+id: openwiki
+name: OpenWiki
+tagline: Private versioned wiki for humans and local agents
+icon: https://raw.githubusercontent.com/joe-broadhead/open-wiki/HEAD/deploy/umbrel/icon.svg
+category: files
+version: "0.0.0"
+port: 3030
+description: >-
+  OpenWiki is a private, Git-backed knowledge base for humans and local agents.
+  This Umbrel package is intended for trusted home and LAN access, not direct
+  public internet write exposure.
+developer: OpenWiki
+website: https://github.com/joe-broadhead/open-wiki
+submitter: OpenWiki
+submission: https://github.com/joe-broadhead/open-wiki
+repo: https://github.com/joe-broadhead/open-wiki
+support: https://github.com/joe-broadhead/open-wiki/issues
+gallery: []
+releaseNotes: >-
+  Initial local-first OpenWiki package with HTTP API, MCP stdio, static export,
+  proposal workflow, and local workspace backup artifacts.
+dependencies: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""

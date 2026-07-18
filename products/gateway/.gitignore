@@ -1,0 +1,14 @@
+node_modules/
+dist/
+site/
+*.tsbuildinfo
+.env
+*.log
+.DS_Store
+dogfood-evidence/
+dogfood-traces/
+.claude/
+coverage/
+reports/
+.stryker-tmp/
+sbom.cyclonedx.json

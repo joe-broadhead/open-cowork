@@ -1,0 +1,90 @@
+{{- if .Values.workspaceBackup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "openwiki.fullname" . }}-workspace-backup
+  labels:
+    {{- include "openwiki.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.workspaceBackup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.workspaceBackup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.workspaceBackup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "openwiki.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: workspace-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: openwiki-backup
+              image: "{{ .Values.image.repository }}{{- if .Values.image.digest }}@{{ .Values.image.digest }}{{- else }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{- end }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: OPENWIKI_ROOT
+                  value: {{ .Values.openwiki.root | quote }}
+                - name: OPENWIKI_AUTOMATION_SERVICE
+                  value: "1"
+                {{- with .Values.workspaceBackup.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              {{- if or .Values.workspaceBackup.existingSecret .Values.workspaceBackup.envFrom }}
+              envFrom:
+                {{- if .Values.workspaceBackup.existingSecret }}
+                - secretRef:
+                    name: {{ .Values.workspaceBackup.existingSecret | quote }}
+                {{- end }}
+                {{- with .Values.workspaceBackup.envFrom }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              {{- end }}
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  {{ if .Values.workspaceBackup.destinationId }}
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup create --destination {{ .Values.workspaceBackup.destinationId | quote }} --json
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup verify latest --destination {{ .Values.workspaceBackup.destinationId | quote }} --json
+                  {{ else }}
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup create --out-dir {{ .Values.workspaceBackup.outDir | quote }} --json
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup verify latest --out-dir {{ .Values.workspaceBackup.outDir | quote }} --json
+                  {{ end }}
+                  {{ if or .Values.workspaceBackup.retention.keepLast .Values.workspaceBackup.retention.keepDays }}
+                  pnpm openwiki -- --root "$OPENWIKI_ROOT" backup prune {{ if .Values.workspaceBackup.destinationId }}--destination {{ .Values.workspaceBackup.destinationId | quote }}{{ else }}--out-dir {{ .Values.workspaceBackup.outDir | quote }}{{ end }}{{ if .Values.workspaceBackup.retention.keepLast }} --keep-last {{ .Values.workspaceBackup.retention.keepLast }}{{ end }}{{ if .Values.workspaceBackup.retention.keepDays }} --keep-days {{ .Values.workspaceBackup.retention.keepDays }}{{ end }} --json
+                  {{ end }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workspaceBackup.resources | nindent 16 }}
+              volumeMounts:
+                - name: wiki-data
+                  mountPath: {{ .Values.openwiki.root | quote }}
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: wiki-data
+              {{- if .Values.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "openwiki.claimName" . }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+            - name: backups
+              {{- if .Values.workspaceBackup.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "openwiki.workspaceBackupClaimName" . }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+            - name: tmp
+              emptyDir: {}
+{{- end }}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/mcp.ts",
+    "scripts/*.mjs",
+    "src/__tests__/**/*.test.ts",
+    "src/__tests__/helpers/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.mjs"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "includeEntryExports": false,
+  "ignoreDependencies": [],
+  "ignoreBinaries": [
+    "opencode",
+    "ps"
+  ]
+}

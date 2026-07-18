@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/event.schema.json",
+  "title": "OpenWiki Event Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "workspace_id", "occurred_at", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^event:" },
+    "uri": { "type": "string", "pattern": "^openwiki://event/" },
+    "type": { "type": "string", "minLength": 1 },
+    "workspace_id": { "type": "string", "pattern": "^workspace:" },
+    "actor_id": { "type": "string", "pattern": "^actor:" },
+    "operation": { "type": "string" },
+    "record_id": { "type": "string" },
+    "record_type": { "type": "string" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" },
+    "subject_ids": { "type": "array", "items": { "type": "string" } },
+    "subject_paths": { "type": "array", "items": { "type": "string" } },
+    "sensitivity": { "enum": ["public", "internal", "private"] },
+    "path": { "type": "string" }
+  }
+}

@@ -1,0 +1,519 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.25'
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - run: |
+          ACTIONLINT="$(go env GOPATH)/bin/actionlint"
+          "$ACTIONLINT"
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22.13.0', '23.4.0', '26']
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Rebuild audited native helper
+        run: npm rebuild esbuild --ignore-scripts=false
+      - run: npm run lint
+      - run: npm run knip
+      - run: npm run verify
+      # API docs drift gate: regenerate the committed OpenAPI from the
+      # documented HTTP route table and MCP docs from the live tool catalog
+      # (npm run docs:api builds first so the dist import resolves), then fail
+      # if the checked-in output has drifted.
+      - name: API docs drift gate
+        run: |
+          npm run docs:api
+          git diff --exit-code -- docs/api/
+      # Coverage ratchet: fails if statements/branches/functions/lines drop
+      # below the floors pinned in vitest.config.ts. Runs the full suite under
+      # the v8 instrumenter (separate from `npm run verify` so the plain suite
+      # stays fast and un-instrumented).
+      - run: npm run coverage
+      - run: npm run performance:budgets
+      # Supply-chain: fail on high/critical advisories. The tree is currently
+      # advisory-free; if an unfixable advisory lands, document it and adjust
+      # the threshold rather than silencing the step.
+      - run: npm audit --audit-level=high
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --sbom-format cyclonedx > sbom.cyclonedx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cyclonedx.json
+          if-no-files-found: error
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - run: uv venv
+      - run: uv pip install --require-hashes -r docs/requirements.txt
+      - run: uv run mkdocs build --strict
+
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Scan filesystem for vulnerabilities, secrets, and config issues
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+
+  docker-pr:
+    needs: [workflow-lint, test, docs, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Rebuild audited native helper
+        run: npm rebuild esbuild --ignore-scripts=false
+      - name: Build
+        run: npm run build && npm run release:check
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Build image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ci
+          cache-from: type=gha
+
+      - name: Smoke Docker scoped HTTP auth (PR)
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ci
+        run: node scripts/docker-auth-smoke.mjs
+      - name: Smoke Docker Compose file-token auth (PR)
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ci
+        run: node scripts/docker-compose-auth-smoke.mjs
+
+      - name: Scan image for vulnerabilities (PR)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ci
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+
+  required:
+    needs: [workflow-lint, test, docs, security-scan, docker-pr]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Enforce required CI results
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+          SECURITY_SCAN_RESULT: ${{ needs.security-scan.result }}
+          DOCKER_PR_RESULT: ${{ needs.docker-pr.result }}
+        run: |
+          [ "$WORKFLOW_LINT_RESULT" = success ] || { echo "workflow-lint: $WORKFLOW_LINT_RESULT" >&2; exit 1; }
+          [ "$TEST_RESULT" = success ] || { echo "test: $TEST_RESULT" >&2; exit 1; }
+          [ "$DOCS_RESULT" = success ] || { echo "docs: $DOCS_RESULT" >&2; exit 1; }
+          [ "$SECURITY_SCAN_RESULT" = success ] || { echo "security-scan: $SECURITY_SCAN_RESULT" >&2; exit 1; }
+          if [ "$EVENT_NAME" = pull_request ]; then
+            [ "$DOCKER_PR_RESULT" = success ] || { echo "docker-pr: $DOCKER_PR_RESULT" >&2; exit 1; }
+          else
+            [ "$DOCKER_PR_RESULT" = skipped ] || { echo "docker-pr unexpectedly ran with result: $DOCKER_PR_RESULT" >&2; exit 1; }
+          fi
+          echo "All required CI dependencies succeeded."
+
+  docker-publish:
+    needs: required
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production-release
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # cosign keyless (OIDC) image signing
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # tag binding needs protected-main ancestry and the tag object
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Rebuild audited native helper
+        run: npm rebuild esbuild --ignore-scripts=false
+      - name: Build and bind release tag to protected main
+        env:
+          RELEASE_MAIN_REF: refs/remotes/origin/main
+        run: |
+          npm run build
+          npm run release:check -- --require-tag --tag "$GITHUB_REF_NAME" --main-ref "$RELEASE_MAIN_REF"
+      - name: Release artifact gate
+        run: npm run release:artifacts
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Build release candidate image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:release-candidate
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke Docker scoped HTTP auth (release candidate)
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:release-candidate
+        run: node scripts/docker-auth-smoke.mjs
+      - name: Smoke Docker Compose file-token auth (release candidate)
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:release-candidate
+        run: node scripts/docker-compose-auth-smoke.mjs
+      - name: Scan release candidate image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:release-candidate
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+      - name: Login to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Push only by digest. The release job creates public tags only after this
+      # digest passes every gate and the signed release bundle exists as a
+      # validated GitHub draft.
+      - name: Stage release image by digest
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          provenance: mode=max # SLSA provenance attestation
+          sbom: true
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke staged digest
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: node scripts/docker-auth-smoke.mjs
+      - name: Smoke staged digest with Docker Compose file tokens
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: node scripts/docker-compose-auth-smoke.mjs
+
+      - name: Scan staged digest for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless (OIDC) signing via the job's id-token permission. This is a
+      # release gate: tags must not publish unsigned images.
+      - name: Sign image (cosign keyless)
+        env:
+          COSIGN_YES: 'true'
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify image signature and provenance
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}
+        run: |
+          IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+          cosign verify \
+            --certificate-identity "$CERT_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$IMAGE_REF"
+          cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity "$CERT_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$IMAGE_REF"
+
+  release:
+    needs: docker-publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production-release
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Compute mutable image aliases
+        id: mutable-meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - name: Build signed release bootstrap assets
+        env:
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}
+        run: |
+          ASSET_ROOT="opencode-gateway-${GITHUB_REF_NAME}"
+          mkdir release-assets
+          git archive --format=tar.gz --prefix="${ASSET_ROOT}/" --output="release-assets/${ASSET_ROOT}.tar.gz" "$GITHUB_SHA"
+          cp install.sh release-assets/install.sh
+          (
+            cd release-assets
+            sha256sum install.sh "${ASSET_ROOT}.tar.gz" > SHA256SUMS
+          )
+          cosign sign-blob --yes --bundle release-assets/SHA256SUMS.sigstore.json release-assets/SHA256SUMS
+          cosign verify-blob \
+            --bundle release-assets/SHA256SUMS.sigstore.json \
+            --certificate-identity "$CERT_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            release-assets/SHA256SUMS
+      - name: Refuse to mutate an existing published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          releases="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
+          matching="$(jq --arg tag "$GITHUB_REF_NAME" '[.[][] | select(.tag_name == $tag)]' <<<"$releases")"
+          count="$(jq 'length' <<<"$matching")"
+          [ "$count" -le 1 ] || { echo "Multiple releases unexpectedly use tag $GITHUB_REF_NAME" >&2; exit 1; }
+          if [ "$count" -eq 1 ]; then
+            [ "$(jq -r '.[0].draft' <<<"$matching")" = true ] || { echo "Release $GITHUB_REF_NAME is already published; refusing to replace its assets" >&2; exit 1; }
+          fi
+      - name: Create draft release with signed bundle
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        with:
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/install.sh
+            release-assets/SHA256SUMS
+            release-assets/SHA256SUMS.sigstore.json
+            release-assets/opencode-gateway-${{ github.ref_name }}.tar.gz
+      - name: Validate draft release bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}
+        run: |
+          ASSET_ROOT="opencode-gateway-${GITHUB_REF_NAME}"
+          VALIDATION_DIR="$(mktemp -d)"
+          trap 'rm -rf "$VALIDATION_DIR"' EXIT
+
+          release_json="$(gh release view "$GITHUB_REF_NAME" --json assets,isDraft,tagName)"
+          [ "$(jq -r '.isDraft' <<<"$release_json")" = true ] || { echo "Release must remain a draft until image aliases are promoted" >&2; exit 1; }
+          [ "$(jq -r '.tagName' <<<"$release_json")" = "$GITHUB_REF_NAME" ] || { echo "Draft release tag mismatch" >&2; exit 1; }
+          expected_assets="$(printf '%s\n' SHA256SUMS SHA256SUMS.sigstore.json install.sh "${ASSET_ROOT}.tar.gz" | LC_ALL=C sort)"
+          actual_assets="$(jq -r '.assets[].name' <<<"$release_json" | LC_ALL=C sort)"
+          [ "$actual_assets" = "$expected_assets" ] || { echo "Draft release assets are incomplete or unexpected" >&2; exit 1; }
+
+          gh release download "$GITHUB_REF_NAME" --dir "$VALIDATION_DIR"
+          for asset in SHA256SUMS SHA256SUMS.sigstore.json install.sh "${ASSET_ROOT}.tar.gz"; do
+            cmp "release-assets/${asset}" "${VALIDATION_DIR}/${asset}"
+          done
+          (
+            cd "$VALIDATION_DIR"
+            sha256sum --check SHA256SUMS
+          )
+          cosign verify-blob \
+            --bundle "${VALIDATION_DIR}/SHA256SUMS.sigstore.json" \
+            --certificate-identity "$CERT_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${VALIDATION_DIR}/SHA256SUMS"
+      - name: Login to GHCR for release promotion
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote immutable version image
+        env:
+          DIGEST: ${{ needs.docker-publish.outputs.digest }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$GITHUB_REF_NAME" == v* && "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || { echo "Invalid release version tag: $GITHUB_REF_NAME" >&2; exit 1; }
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid staged image digest: $DIGEST" >&2; exit 1; }
+          IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+          VERSION_TAG="${REGISTRY}/${IMAGE_NAME}:${VERSION}"
+          if observed="$(docker buildx imagetools inspect "$VERSION_TAG" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            [ "$observed" = "$DIGEST" ] || { echo "Refusing to overwrite immutable version tag $VERSION_TAG ($observed)" >&2; exit 1; }
+          else
+            docker buildx imagetools create --prefer-index=false --tag "$VERSION_TAG" "$IMAGE_REF"
+          fi
+          observed="$(docker buildx imagetools inspect "$VERSION_TAG" --format '{{.Manifest.Digest}}')"
+          [ "$observed" = "$DIGEST" ] || { echo "Promoted $VERSION_TAG to $observed instead of $DIGEST" >&2; exit 1; }
+      - name: Promote immutable commit image
+        env:
+          DIGEST: ${{ needs.docker-publish.outputs.digest }}
+        run: |
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid release commit SHA: $GITHUB_SHA" >&2; exit 1; }
+          IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+          COMMIT_TAG="${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA:0:7}"
+          if observed="$(docker buildx imagetools inspect "$COMMIT_TAG" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            [ "$observed" = "$DIGEST" ] || { echo "Refusing to overwrite immutable commit tag $COMMIT_TAG ($observed)" >&2; exit 1; }
+          else
+            docker buildx imagetools create --prefer-index=false --tag "$COMMIT_TAG" "$IMAGE_REF"
+          fi
+          observed="$(docker buildx imagetools inspect "$COMMIT_TAG" --format '{{.Manifest.Digest}}')"
+          [ "$observed" = "$DIGEST" ] || { echo "Promoted $COMMIT_TAG to $observed instead of $DIGEST" >&2; exit 1; }
+      - name: Promote mutable image aliases
+        env:
+          DIGEST: ${{ needs.docker-publish.outputs.digest }}
+          PROMOTION_TAGS: ${{ steps.mutable-meta.outputs.tags }}
+        run: |
+          IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+          VERSION_TAG="${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME#v}"
+          promoted=0
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            case "$tag" in
+              "${REGISTRY}/${IMAGE_NAME}:"*) ;;
+              *) echo "Refusing unexpected mutable tag: $tag" >&2; exit 1 ;;
+            esac
+            [ "$tag" != "$VERSION_TAG" ] || { echo "Immutable version tag leaked into mutable aliases" >&2; exit 1; }
+            docker buildx imagetools create --prefer-index=false --tag "$tag" "$IMAGE_REF"
+            observed="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
+            [ "$observed" = "$DIGEST" ] || { echo "Promoted $tag to $observed instead of $DIGEST" >&2; exit 1; }
+            promoted=$((promoted + 1))
+          done <<EOF
+          ${PROMOTION_TAGS}
+          EOF
+          echo "Promoted ${promoted} mutable image alias(es)."
+      - name: Publish validated GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}
+        run: |
+          ASSET_ROOT="opencode-gateway-${GITHUB_REF_NAME}"
+          VALIDATION_DIR="$(mktemp -d)"
+          trap 'rm -rf "$VALIDATION_DIR"' EXIT
+          release_json="$(gh release view "$GITHUB_REF_NAME" --json assets,isDraft,tagName)"
+          [ "$(jq -r '.isDraft' <<<"$release_json")" = true ] || { echo "Release is no longer the validated draft" >&2; exit 1; }
+          [ "$(jq -r '.tagName' <<<"$release_json")" = "$GITHUB_REF_NAME" ] || { echo "Draft release tag changed before publication" >&2; exit 1; }
+          expected_assets="$(printf '%s\n' SHA256SUMS SHA256SUMS.sigstore.json install.sh "${ASSET_ROOT}.tar.gz" | LC_ALL=C sort)"
+          actual_assets="$(jq -r '.assets[].name' <<<"$release_json" | LC_ALL=C sort)"
+          [ "$actual_assets" = "$expected_assets" ] || { echo "Draft release assets changed before publication" >&2; exit 1; }
+          gh release download "$GITHUB_REF_NAME" --dir "$VALIDATION_DIR"
+          for asset in SHA256SUMS SHA256SUMS.sigstore.json install.sh "${ASSET_ROOT}.tar.gz"; do
+            cmp "release-assets/${asset}" "${VALIDATION_DIR}/${asset}"
+          done
+          (
+            cd "$VALIDATION_DIR"
+            sha256sum --check SHA256SUMS
+          )
+          cosign verify-blob \
+            --bundle "${VALIDATION_DIR}/SHA256SUMS.sigstore.json" \
+            --certificate-identity "$CERT_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${VALIDATION_DIR}/SHA256SUMS"
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+          [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" = false ] || { echo "Release publication did not complete" >&2; exit 1; }

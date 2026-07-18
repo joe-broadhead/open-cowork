@@ -1,0 +1,42 @@
+name: Mutation Testing
+
+# Off the PR path because it is intentionally slower than merge gates, but
+# failures are blocking for this scheduled/manual workflow.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  stryker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Rebuild audited native helper
+        run: npm rebuild esbuild --ignore-scripts=false
+      # Thresholds in stryker.conf.json make this gate fail. The Stryker CLI is
+      # installed from package-lock so audit/Dependabot see the mutation toolchain.
+      - name: Run Stryker
+        run: ./node_modules/.bin/stryker run
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stryker-report
+          path: reports/mutation/
+          if-no-files-found: ignore

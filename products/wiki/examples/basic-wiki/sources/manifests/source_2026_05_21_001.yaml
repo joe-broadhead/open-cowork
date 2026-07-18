@@ -1,0 +1,9 @@
+id: source:2026-05-21-001
+title: OpenWiki Protocol v0.1
+source_type: manual
+retrieved_at: 2026-05-21T10:00:00.000Z
+content_hash: sha256:example
+trust:
+  reliability: medium
+  sensitivity: public
+

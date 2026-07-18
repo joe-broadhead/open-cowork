@@ -1,0 +1,82 @@
+name: OpenWiki Postgres Runtime
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/openwiki-postgres.yml"
+      - "packages/**"
+      - "tests/postgres-runtime.integration.test.ts"
+      - "tests/postgres-runtime.test.ts"
+      - "deploy/compose/**"
+      - "scripts/openwiki-coverage.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/openwiki-postgres.yml"
+      - "packages/**"
+      - "tests/postgres-runtime.integration.test.ts"
+      - "tests/postgres-runtime.test.ts"
+      - "deploy/compose/**"
+      - "scripts/openwiki-coverage.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17@sha256:0027bef26712baaee437a4ea48fdf3d2d2e2bc5f0d81615374408ca320f3c7e3
+        env:
+          POSTGRES_DB: openwiki
+          POSTGRES_USER: openwiki
+          POSTGRES_PASSWORD: openwiki
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openwiki -d openwiki"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://openwiki:openwiki@127.0.0.1:5432/openwiki
+      OPENWIKI_POSTGRES_TEST_DATABASE_URL: postgres://openwiki:openwiki@127.0.0.1:5432/openwiki
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Run Postgres runtime integration test
+        run: pnpm test:postgres
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Coverage with Postgres runtime
+        # DATABASE_URL is set at the job level, so the integration test runs (instead of skipping)
+        # and the Postgres write-lease / reaper / rate-limit concurrency paths are coverage-measured
+        # rather than only executed. Per-package floors are enforced by scripts/openwiki-coverage.mjs.
+        run: pnpm coverage
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-postgres-coverage
+          path: artifacts/coverage

@@ -1,0 +1,23 @@
+{
+  "name": "@openwiki/http-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@openwiki/core": "workspace:*",
+    "@openwiki/git": "workspace:*",
+    "@openwiki/index-store": "workspace:*",
+    "@openwiki/jobs": "workspace:*",
+    "@openwiki/mcp-server": "workspace:*",
+    "@openwiki/policy": "workspace:*",
+    "@openwiki/postgres-runtime": "workspace:*",
+    "@openwiki/repo": "workspace:*",
+    "@openwiki/search": "workspace:*",
+    "@openwiki/storage": "workspace:*",
+    "@openwiki/static-export": "workspace:*",
+    "@openwiki/validation": "workspace:*",
+    "@openwiki/web": "workspace:*",
+    "@openwiki/workflows": "workspace:*"
+  }
+}

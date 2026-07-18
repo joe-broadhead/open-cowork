@@ -1,0 +1,58 @@
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+enterprise:
+  enabled: true
+
+openwiki:
+  runtimeMode: enterprise
+  bootstrapMode: skip
+  publicOrigin: https://wiki.example.com
+  requireAuth: true
+  runtimeBackend: postgres
+  readBackend: postgres
+  searchBackend: postgres
+  queueBackend: postgres
+  operationalStateBackend: postgres
+  writeCoordinatorBackend: postgres
+  gitRemoteUrl: https://github.com/example/private-wiki.git
+  trustedAuthHeaders: true
+  trustedAuthHeadersSecret:
+    existingSecret: openwiki-trusted-headers
+    key: proxy-secret
+  envFrom:
+    - secretRef:
+        name: openwiki-postgres
+
+worker:
+  enabled: true
+
+queueReaper:
+  enabled: true
+
+networkPolicy:
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

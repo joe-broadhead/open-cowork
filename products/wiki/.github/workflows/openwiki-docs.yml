@@ -1,0 +1,41 @@
+name: OpenWiki Docs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/openwiki-docs.yml"
+      - "docs/**"
+      - "mkdocs.yml"
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/openwiki-docs.yml"
+      - "docs/**"
+      - "mkdocs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Install docs dependencies
+        run: python -m pip install -r docs/requirements.txt
+
+      - name: Build docs
+        run: mkdocs build --strict

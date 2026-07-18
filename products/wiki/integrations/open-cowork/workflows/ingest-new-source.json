@@ -1,0 +1,37 @@
+{
+  "id": "ingest-new-source",
+  "label": "Ingest New Source",
+  "description": "Turn an artifact into a source-backed OpenWiki edit proposal.",
+  "agent": "wiki-editor",
+  "steps": [
+    {
+      "id": "research-existing",
+      "tool": "mcp__openwiki__wiki.search",
+      "input": {
+        "query": "{{input.topic}}",
+        "include_explain": true
+      }
+    },
+    {
+      "id": "propose-source",
+      "tool": "mcp__openwiki__wiki.propose_source",
+      "input": {
+        "title": "{{input.source_title}}",
+        "source_type": "{{input.source_type}}",
+        "url": "{{input.source_url}}",
+        "content": "{{input.source_content}}",
+        "actor_id": "actor:agent:wiki-editor"
+      }
+    },
+    {
+      "id": "propose-page",
+      "tool": "mcp__openwiki__wiki.propose_edit",
+      "input": {
+        "page_id": "{{input.page_id}}",
+        "body": "{{input.body}}",
+        "rationale": "Ingested from {{input.source_title}}.",
+        "actor_id": "actor:agent:wiki-editor"
+      }
+    }
+  ]
+}

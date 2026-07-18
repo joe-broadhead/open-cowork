@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/fact.schema.json",
+  "title": "OpenWiki Fact Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "kind", "text", "subject_ids", "page_ids", "source_ids", "claim_ids", "confidence", "sensitivity", "status", "created_at", "updated_at", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^fact:" },
+    "uri": { "type": "string", "pattern": "^openwiki://fact/" },
+    "type": { "const": "fact" },
+    "kind": { "type": "string", "minLength": 1 },
+    "text": { "type": "string", "minLength": 1 },
+    "subject_ids": { "type": "array", "items": { "type": "string" } },
+    "page_ids": { "type": "array", "items": { "type": "string", "pattern": "^page:" } },
+    "source_ids": { "type": "array", "items": { "type": "string", "pattern": "^source:" } },
+    "claim_ids": { "type": "array", "items": { "type": "string", "pattern": "^claim:" } },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "sensitivity": { "enum": ["public", "internal", "private"] },
+    "status": { "enum": ["active", "stale", "disputed", "forgotten", "archived"] },
+    "valid_from": { "type": "string", "format": "date-time" },
+    "valid_to": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "path": { "type": "string", "minLength": 1 }
+  }
+}

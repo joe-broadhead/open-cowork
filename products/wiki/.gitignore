@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.openwiki/
+.claude/
+.DS_Store
+coverage/
+artifacts/
+site/
+*.log
+evals/*/latest.json
+**/.terraform/
+packages/web/assets/
+packages/web/preview/
+.opencode/node_modules/
+.opencode/package*.json
+.opencode/.gitignore
+.opencode/plugins/opencode_eval_recorder.ts

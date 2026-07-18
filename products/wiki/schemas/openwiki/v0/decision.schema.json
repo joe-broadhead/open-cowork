@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/decision.schema.json",
+  "title": "OpenWiki Decision Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "proposal_id", "decision", "actor_id", "rationale", "decided_at", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^decision:" },
+    "uri": { "type": "string", "pattern": "^openwiki://decision/" },
+    "type": { "const": "decision" },
+    "proposal_id": { "type": "string", "pattern": "^proposal:" },
+    "decision": { "enum": ["accepted", "rejected", "needs_changes"] },
+    "actor_id": { "type": "string", "pattern": "^actor:" },
+    "rationale": { "type": "string" },
+    "commit": { "type": "string" },
+    "decided_at": { "type": "string", "format": "date-time" },
+    "path": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "openwiki",
+  "type": "remote",
+  "description": "Company OpenWiki knowledge base exposed through hosted OpenWiki MCP proposal mode.",
+  "authMode": "api_token",
+  "url": "https://wiki.company.com/mcp?tools=proposal",
+  "headers": {
+    "MCP-Protocol-Version": "2025-11-25"
+  },
+  "headerSettings": [
+    {
+      "header": "Authorization",
+      "key": "proposalToken",
+      "prefix": "Bearer "
+    }
+  ],
+  "credentials": [
+    {
+      "key": "proposalToken",
+      "label": "OpenWiki proposal token",
+      "description": "Scoped service-account bearer token allowed to use OpenWiki proposal-mode MCP tools.",
+      "placeholder": "owk_agent_...",
+      "secret": true,
+      "required": true,
+      "env": "OPENWIKI_PROPOSAL_TOKEN"
+    }
+  ],
+  "credentialHelp": "Create a scoped OpenWiki service-account token for proposal-mode MCP access, store it as OPENWIKI_PROPOSAL_TOKEN or this bundle credential, and rotate it through OpenWiki auth token tooling.",
+  "allowPrivateNetwork": false
+}

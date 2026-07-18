@@ -1,0 +1,63 @@
+name: OpenWiki Scale Performance
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Smoke enforces budgets; benchmark records non-blocking evidence unless OPENWIKI_SCALE_ENFORCE=1.
+        required: false
+        default: benchmark
+        type: choice
+        options:
+          - smoke
+          - benchmark
+      stage:
+        description: Synthetic workspace size profile.
+        required: false
+        default: 10k
+        type: choice
+        options:
+          - 1k
+          - 10k
+          - 100k
+  pull_request:
+    paths:
+      - ".github/workflows/openwiki-perf.yml"
+      - "packages/**"
+      - "scripts/openwiki-scale-perf.mjs"
+      - "tests/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  scale-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OPENWIKI_SCALE_MODE: ${{ github.event_name == 'pull_request' && 'smoke' || github.event.inputs.mode || 'benchmark' }}
+      OPENWIKI_SCALE_STAGE: ${{ github.event_name == 'pull_request' && '1k' || github.event.inputs.stage || '10k' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build web assets
+        run: pnpm build:web
+      - name: Run scale performance profile
+        run: node --no-warnings --import tsx scripts/openwiki-scale-perf.mjs
+      - name: Upload scale performance report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwiki-scale-performance
+          path: artifacts/openwiki-scale-perf*.json

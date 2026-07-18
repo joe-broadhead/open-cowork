@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/open-wiki/v0.0.0/schemas/openwiki/v0/take.schema.json",
+  "title": "OpenWiki Take Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "statement", "rationale", "probability", "confidence", "status", "page_ids", "source_ids", "claim_ids", "created_at", "updated_at", "path"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^take:" },
+    "uri": { "type": "string", "pattern": "^openwiki://take/" },
+    "type": { "const": "take" },
+    "statement": { "type": "string", "minLength": 1 },
+    "rationale": { "type": "string" },
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "status": { "enum": ["open", "resolved", "archived"] },
+    "due_at": { "type": "string", "format": "date-time" },
+    "resolved_at": { "type": "string", "format": "date-time" },
+    "resolution": { "enum": ["correct", "incorrect", "partial", "unresolvable"] },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "page_ids": { "type": "array", "items": { "type": "string", "pattern": "^page:" } },
+    "source_ids": { "type": "array", "items": { "type": "string", "pattern": "^source:" } },
+    "claim_ids": { "type": "array", "items": { "type": "string", "pattern": "^claim:" } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "path": { "type": "string", "minLength": 1 }
+  }
+}

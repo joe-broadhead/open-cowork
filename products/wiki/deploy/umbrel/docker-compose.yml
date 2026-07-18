@@ -1,0 +1,58 @@
+services:
+  app_proxy:
+    environment:
+      APP_HOST: openwiki_server_1
+      APP_PORT: 3030
+
+  server:
+    image: ghcr.io/joe-broadhead/open-wiki:0.0.0
+    restart: on-failure
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    environment:
+      OPENWIKI_ROOT: /data/wiki
+      OPENWIKI_TITLE: OpenWiki
+      OPENWIKI_HOST: 0.0.0.0
+      OPENWIKI_PORT: 3030
+    volumes:
+      - ${APP_DATA_DIR}/data/wiki:/data/wiki
+      - ${APP_DATA_DIR}/data/backups:/data/backups
+
+  backup:
+    image: ghcr.io/joe-broadhead/open-wiki:0.0.0
+    restart: on-failure
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    depends_on:
+      - server
+    command:
+      - pnpm
+      - openwiki
+      - --
+      - --root
+      - /data/wiki
+      - backup
+      - watch
+      - --every
+      - 24h
+      - --out-dir
+      - /data/backups
+      - --json
+    environment:
+      OPENWIKI_ROOT: /data/wiki
+      OPENWIKI_AUTOMATION_SERVICE: "1"
+    volumes:
+      - ${APP_DATA_DIR}/data/wiki:/data/wiki
+      - ${APP_DATA_DIR}/data/backups:/data/backups

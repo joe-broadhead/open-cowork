@@ -1,0 +1,36 @@
+{
+  "id": "create-research-brief",
+  "label": "Create Research Brief",
+  "description": "Search OpenWiki, read cited records, and draft a brief artifact.",
+  "agent": "wiki-editor",
+  "steps": [
+    {
+      "id": "search",
+      "tool": "mcp__openwiki__wiki.search",
+      "input": {
+        "query": "{{input.topic}}",
+        "limit": 10,
+        "include_explain": true
+      }
+    },
+    {
+      "id": "trace",
+      "tool": "mcp__openwiki__wiki.trace_claim",
+      "input": {
+        "id": "{{input.claim_id}}"
+      }
+    },
+    {
+      "id": "propose_synthesis",
+      "tool": "mcp__openwiki__wiki.propose_synthesis",
+      "input": {
+        "title": "{{input.title}}",
+        "body": "{{artifact.markdown}}",
+        "page_type": "concept",
+        "topics": ["{{input.topic}}"],
+        "source_ids": ["{{input.source_id}}"],
+        "rationale": "Create a reviewable synthesis page from the research brief."
+      }
+    }
+  ]
+}

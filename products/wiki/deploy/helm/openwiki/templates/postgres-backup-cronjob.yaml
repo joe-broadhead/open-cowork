@@ -1,0 +1,79 @@
+{{- if .Values.postgresBackup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "openwiki.fullname" . }}-postgres-backup
+  labels:
+    {{- include "openwiki.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.postgresBackup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.postgresBackup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.postgresBackup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "openwiki.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: pg-dump
+              image: "{{ .Values.postgresBackup.image.repository }}{{ if .Values.postgresBackup.image.digest }}@{{ .Values.postgresBackup.image.digest }}{{ else }}:{{ .Values.postgresBackup.image.tag }}{{ end }}"
+              imagePullPolicy: {{ .Values.postgresBackup.image.pullPolicy }}
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ default (printf "%s-postgres" (include "openwiki.fullname" .)) .Values.postgresBackup.existingSecret | quote }}
+                      key: {{ .Values.postgresBackup.databaseUrlKey | quote }}
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  mkdir -p /backups
+                  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  sql_tmp="/tmp/openwiki-${timestamp}.sql"
+                  gzip_tmp="/backups/.openwiki-${timestamp}.sql.gz.tmp"
+                  final="/backups/openwiki-${timestamp}.sql.gz"
+                  trap 'rm -f "$sql_tmp" "$gzip_tmp"' EXIT
+                  pg_dump "$DATABASE_URL" > "$sql_tmp"
+                  test -s "$sql_tmp"
+                  gzip -c "$sql_tmp" > "$gzip_tmp"
+                  test -s "$gzip_tmp"
+                  mv "$gzip_tmp" "$final"
+                  find /backups -type f -name 'openwiki-*.sql.gz' -mtime +{{ .Values.postgresBackup.retentionDays }} -delete
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                {{- toYaml .Values.postgresBackup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backups
+              {{ if .Values.postgresBackup.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ default (printf "%s-postgres-backups" (include "openwiki.fullname" .)) .Values.postgresBackup.persistence.existingClaim }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+            - name: tmp
+              emptyDir: {}
+{{- end }}
