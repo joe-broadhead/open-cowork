@@ -57,10 +57,17 @@ test('isLoopbackOrPrivateHost covers RFC1918 and localhost', () => {
 })
 
 test('withDeadline rejects after timeout', async () => {
+  // Resolvable hang so the test file does not leave a forever-pending promise
+  // (node:test cancels siblings when the event loop drains with open handles).
+  let release!: () => void
+  const hang = new Promise<void>((resolve) => {
+    release = resolve
+  })
   await assert.rejects(
-    () => withDeadline(new Promise(() => {}), 20, 'slow'),
+    () => withDeadline(hang, 20, 'slow'),
     /timed out after 20ms/,
   )
+  release()
 })
 
 test('fetchWithTimeout is exported as a function', () => {
