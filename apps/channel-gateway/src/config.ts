@@ -885,10 +885,6 @@ export function redactGatewayDiagnosticText(value: string) {
     .replace(/[A-Z]:\\Users\\\[REDACTED_HOME\]/gi, 'C:\\Users\\[redacted]')
 }
 
-function redactUrlSecretsInText(value: string) {
-  return value.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, (url) => redactUrlSecrets(url))
-}
-
 function redactUrlSecrets(value: string) {
   let url: URL
   try {
