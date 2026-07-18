@@ -18,7 +18,7 @@ const releaseTag = await tagEvidence(expectedTag);
 const npmTarballs = await npmTarballEvidence();
 const releaseEvidence = await artifactEvidence("openwiki-release-evidence.json");
 const publicCheck = await publicReachabilityEvidence();
-const releaseScope = await readJson("release/openwiki-release-scope.json");
+const releaseScope = await readJson("config/openwiki-release-scope.json");
 const cloudEvidence = {
   aws: await cloudProviderEvidence("aws"),
   gcp: await cloudProviderEvidence("gcp"),

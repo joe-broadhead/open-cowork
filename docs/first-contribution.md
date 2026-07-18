@@ -7,7 +7,7 @@ a small change. Five minutes end-to-end.
 
 You need:
 
-- Node `>=22.13` (supported floor). For development and CI parity, use the
+- Node `>=22.22.3` (supported monorepo floor). For development and CI parity, use the
   exact version pinned in `.nvmrc`.
 - pnpm `10.32.1` (install via Corepack).
 - macOS, Linux, or Windows.

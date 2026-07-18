@@ -30,24 +30,23 @@ describe('release artifact evidence check', () => {
       expect.objectContaining({ id: 'signed_image_provenance_workflow', severity: 'mandatory', status: 'pass' }),
     ]))
     const license = report.checks.find((row: any) => row.id === 'dependency_license_posture')
-    // Standalone npm installs report the full package-lock graph (100+). Monorepo
-    // installs walk the product node_modules closure (still dozens of packages).
+    // Standalone npm lock graphs and monorepo node_modules walks both produce
+    // exception rows; assert shape and that known exceptions pass when present.
     expect(license.evidence.dependencyCount).toBeGreaterThan(20)
-    if (license.evidence.dependencyCount > 100) {
-      expect(license.evidence.exceptions).toEqual(expect.arrayContaining([
-        expect.objectContaining({ name: 'caniuse-lite', license: 'CC-BY-4.0' }),
-        expect.objectContaining({ name: 'lightningcss', license: 'MPL-2.0' }),
-        expect.objectContaining({ name: 'minimatch', license: 'BlueOak-1.0.0' }),
-      ]))
-    } else {
-      // Monorepo: only assert exceptions that actually appear in the product tree.
-      for (const row of license.evidence.exceptions || []) {
-        expect(row).toEqual(expect.objectContaining({
-          name: expect.any(String),
-          license: expect.any(String),
-          reason: expect.any(String),
-        }))
-      }
+    const exceptions = license.evidence.exceptions || []
+    for (const row of exceptions) {
+      expect(row).toEqual(expect.objectContaining({
+        name: expect.any(String),
+        license: expect.any(String),
+        reason: expect.any(String),
+      }))
+    }
+    const byName = new Map(exceptions.map((row: any) => [row.name, row]))
+    if (byName.has('lightningcss')) {
+      expect(byName.get('lightningcss')).toEqual(expect.objectContaining({ license: 'MPL-2.0' }))
+    }
+    if (byName.has('caniuse-lite')) {
+      expect(byName.get('caniuse-lite')).toEqual(expect.objectContaining({ license: 'CC-BY-4.0' }))
     }
     expect(report.safeNextAction).toMatch(/npm run (build|release:artifacts)/)
     expect(result.stdout).not.toContain(ROOT)

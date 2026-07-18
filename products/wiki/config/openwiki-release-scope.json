@@ -1,0 +1,16 @@
+{
+  "schema_version": "openwiki-release-scope-v1",
+  "version": "0.0.0",
+  "cloud_providers": {
+    "aws": {
+      "status": "required",
+      "issue": "https://github.com/joe-broadhead/open-cowork/issues",
+      "rationale": "AWS is the next live hosted proof for the 0.1 release candidate once an AWS account and credentials are ready. Track under monorepo open-cowork (products/wiki)."
+    },
+    "gcp": {
+      "status": "deferred",
+      "issue": "https://github.com/joe-broadhead/open-cowork/issues",
+      "rationale": "Wiki 0.1 is local-first; GCP Terraform remains maintained and render-validated, but live GCP apply/auth-boundary evidence is not part of the 0.1 release claim unless this status is changed to required."
+    }
+  }
+}

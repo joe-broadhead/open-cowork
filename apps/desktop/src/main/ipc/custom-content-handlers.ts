@@ -468,5 +468,3 @@ function validateProductMcpLinkRequest(
     wikiRoot: optional('wikiRoot'),
   }
 }
-
-
