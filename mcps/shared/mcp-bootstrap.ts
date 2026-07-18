@@ -1,9 +1,11 @@
 /**
- * Shared MCP server bootstrap helpers (audit 2026-07-18).
- * Prefer these over copy-pasted textResult / stdio connect in each MCP.
+ * Shared MCP response helpers (audit 2026-07-18).
+ *
+ * Like `bridge.ts`, this module is imported by relative path and esbuild-inlined
+ * into each MCP dist bundle. It must stay **dependency-free** — do not import
+ * `@modelcontextprotocol/sdk` here (typecheck runs with package-local node_modules
+ * only). Server construction / stdio connect stay in each MCP package.
  */
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
 export function textResult(payload: unknown): {
   content: Array<{ type: 'text'; text: string }>
@@ -11,13 +13,4 @@ export function textResult(payload: unknown): {
   return {
     content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }],
   }
-}
-
-export function createNamedMcpServer(name: string, version: string): McpServer {
-  return new McpServer({ name, version })
-}
-
-export async function connectStdioMcpServer(server: McpServer): Promise<void> {
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
 }

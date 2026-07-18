@@ -1,12 +1,10 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { createBridge } from '../../shared/bridge.js'
-import {
-  connectStdioMcpServer,
-  createNamedMcpServer,
-  textResult,
-} from '../../shared/mcp-bootstrap.js'
+import { textResult } from '../../shared/mcp-bootstrap.js'
 
-const server = createNamedMcpServer('agents', '1.0.0')
+const server = new McpServer({ name: 'agents', version: '1.0.0' })
 
 const agentColorSchema = z.enum(['primary', 'warning', 'accent', 'success', 'info', 'secondary'])
 const permissionActionSchema = z.enum(['allow', 'ask', 'deny'])
@@ -97,4 +95,5 @@ server.tool(
 )
 
 process.stderr.write('[agents-mcp] Server started\n')
-await connectStdioMcpServer(server)
+const transport = new StdioServerTransport()
+await server.connect(transport)
