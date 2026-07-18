@@ -19,7 +19,6 @@ test("standalone gateway redaction now catches the token families the local list
 });
 
 test("standalone gateway redaction still scrubs the structured forms it already handled (P2)", () => {
-  // The shared sanitizer collapses the whole header to its marker; still fully redacted.
   assert.match(redactSecretText("Authorization: Bearer sekret-value"), /REDACTED/i);
   assert.doesNotMatch(redactSecretText("Authorization: Bearer sekret-value"), /sekret-value/);
   assert.match(redactSecretText("postgres://user:hunter2@db:5432/x"), /:\[redacted\]@/);

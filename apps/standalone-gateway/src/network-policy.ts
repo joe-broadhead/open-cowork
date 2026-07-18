@@ -17,11 +17,23 @@ export function assertPrivateOpenCodeEndpoint(
   baseUrl: string,
   options: { allowPrivateDns?: boolean } = {},
 ): URL {
-  return assertPrivateHttpEndpoint(baseUrl, {
-    ...options,
-    purpose: "OpenCode base URL",
-    allowWildcardBind: false,
-  });
+  try {
+    return assertPrivateHttpEndpoint(baseUrl, {
+      ...options,
+      purpose: "OpenCode base URL",
+      allowWildcardBind: false,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Preserve product error contract used by config/doctor tests and ops docs.
+    if (message.includes("refuses public hosts")) {
+      throw new Error(
+        "Refusing public OpenCode endpoint; use loopback/private networking.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 }
 
 export function assertPrivateBindHost(host: string): void {
