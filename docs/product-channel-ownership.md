@@ -1,6 +1,6 @@
 # Channel stack ownership (products/gateway vs monorepo providers)
 
-**Status:** Frozen dual-stack policy (audit 2026-07-18)  
+**Status:** Frozen dual-stack policy (audit 2026-07-18)
 **Related:** `docs/evidence/opencode-sdk-duplication-audit-2026-07-18.md`
 
 ## Two stacks (intentional for this milestone close)

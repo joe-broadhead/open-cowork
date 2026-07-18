@@ -1,7 +1,7 @@
 # Audit: OpenCode SDK v2 + monorepo duplication
 
-**Date:** 2026-07-18  
-**Repo:** open-cowork monorepo (`master` post product partitions, `b3ca93f1`+)  
+**Date:** 2026-07-18
+**Repo:** open-cowork monorepo (`master` post product partitions, `b3ca93f1`+)
 **Scope:** Wide + deep — OpenCode SDK usage, modular boundaries, and cross-repo
 duplicate patterns. Read-only analysis; no code changes in this document.
 
@@ -350,7 +350,7 @@ mcps/shared
 | Classic residual control | **A** | exact allowlist |
 | Durable gateway on V2 | **D** | classic root + older pin |
 
-**Overall monorepo OpenCode posture: B+**  
+**Overall monorepo OpenCode posture: B+**
 **If products/gateway is in scope for “perfect V2”: B− until pin + V2 migration.**
 
 ---
