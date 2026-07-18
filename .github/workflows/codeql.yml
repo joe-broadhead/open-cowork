@@ -20,9 +20,10 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    # Monorepo product partitions (products/gateway + products/wiki) expanded the
-    # JS/TS graph; security-and-quality analysis routinely exceeds 45m.
-    timeout-minutes: 120
+    # Cost control: PR/default runs stay bounded. Deep security-and-quality is
+    # reserved for schedule + master (see queries below). Do not raise this to
+    # multi-hour budgets — monorepo product imports made full packs too expensive.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -46,7 +47,9 @@ jobs:
         uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           languages: ${{ matrix.language }}
-          queries: security-and-quality
+          # PRs: security-extended (actionable, bounded cost).
+          # master + weekly schedule: security-and-quality (deeper, once per merge/week).
+          queries: ${{ (github.event_name == 'pull_request' && 'security-extended') || 'security-and-quality' }}
 
       - name: Build
         run: pnpm build

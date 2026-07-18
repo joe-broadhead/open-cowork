@@ -69,5 +69,6 @@ against Linear milestone **Monorepo product partitions (Gateway + Wiki)**.
 
 - First post-push `validate` failed on monorepo trailing-whitespace gates applied to imported product trees. Fixed by whitespace cleanup + modular exclusion of `products/**` from monorepo style/`git diff --check`.
 - Subsequent `validate` failed on platform-variant `THIRD_PARTY_NOTICES.md` (macOS vs Linux optional `@esbuild/*` / `fsevents` metadata). Fixed by platform-stable notices generation (esbuild companion inheritance, license-file fallback, committed non-registry Source preserve).
-- Product CI (gateway/wiki), docs, coverage, packages, cloud-gates green on HEAD after fixes.
+- Product CI (gateway/wiki), docs, coverage, packages, cloud-gates, validate, macos/linux/windows package jobs green after monorepo install-docs + eslint fixes.
+- CodeQL `security-and-quality` on the expanded monorepo exceeded 45m and burned multi-hour Action minutes. Policy: **do not** raise PR budgets to 2h. PR CodeQL uses `security-extended` (45m cap); deep `security-and-quality` only on `master` push + weekly schedule.
 )
