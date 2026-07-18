@@ -81,7 +81,10 @@ describe('typed OpencodeClient fake conformance', () => {
     // Pin body: install must be >= 1.17.16 from Phase 0; monorepo may resolve 1.18.x+.
     const pkgPath = new URL('../../node_modules/@opencode-ai/sdk/package.json', import.meta.url)
     const pkg = JSON.parse(await (await import('node:fs/promises')).readFile(pkgPath, 'utf8')) as { version: string }
-    const [major, minor, patch] = String(pkg.version).split('.').map(n => Number(n))
+    const parts = String(pkg.version).split('.').map(n => Number(n))
+    const major = parts[0] ?? 0
+    const minor = parts[1] ?? 0
+    const patch = parts[2] ?? 0
     expect(major).toBeGreaterThanOrEqual(1)
     const atLeast11716 =
       major > 1

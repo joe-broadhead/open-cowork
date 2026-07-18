@@ -17,7 +17,7 @@ test("README references existing local spec documents", async () => {
 
 test("MkDocs site has a strict public-release documentation scaffold", async () => {
   const mkdocs = await readFile(path.join(process.cwd(), "mkdocs.yml"), "utf8");
-  assert.match(mkdocs, /site_name: OpenWiki/);
+  assert.match(mkdocs, /site_name:\s*(OpenWiki|Wiki \(Open Cowork\))/);
   assert.match(mkdocs, /strict: true/);
   assert.match(mkdocs, /theme:\n  name: material/);
   assert.match(mkdocs, /  - minify:/);

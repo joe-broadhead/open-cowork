@@ -76,11 +76,11 @@ Place at the **top** of each private repo `README.md` (see also templates under
 `docs/evidence/archive-plan/`):
 
 ```markdown
-> **DEVELOPMENT MOVED (frozen 2026-07-18)**  
-> Active development lives in the public **open-cowork** monorepo:  
-> - Gateway → [`products/gateway`](https://github.com/joe-broadhead/open-cowork/tree/master/products/gateway) (`cowork-gateway`)  
-> - Wiki → [`products/wiki`](https://github.com/joe-broadhead/open-cowork/tree/master/products/wiki) (`cowork-wiki`)  
-> Issues and PRs: [open-cowork](https://github.com/joe-broadhead/open-cowork) / Linear project open-cowork.  
+> **DEVELOPMENT MOVED (frozen 2026-07-18).**
+> Active development lives in the public **open-cowork** monorepo:
+> - Gateway → [`products/gateway`](https://github.com/joe-broadhead/open-cowork/tree/master/products/gateway) (`cowork-gateway`)
+> - Wiki → [`products/wiki`](https://github.com/joe-broadhead/open-cowork/tree/master/products/wiki) (`cowork-wiki`)
+> Issues and PRs: [open-cowork](https://github.com/joe-broadhead/open-cowork) / Linear project open-cowork.
 > This repository is frozen and will be archived. Do not land new features here.
 ```
 
