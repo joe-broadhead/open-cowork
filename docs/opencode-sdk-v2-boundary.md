@@ -34,6 +34,11 @@ registry shape; changing it is a compatibility review, not a snapshot refresh.
 - Standalone Gateway is a separate execution authority. Its SDK usage is
   limited to the documented private OpenCode adapter in
   `apps/standalone-gateway/src/opencode.ts`.
+- **Durable Gateway** (`products/gateway`, package `cowork-gateway`) is a
+  **product partition** that coordinates OpenCode via its own daemon/MCP and
+  may declare `@opencode-ai/sdk`. It is not part of the Desktop Electron
+  runtime-host path and must not be imported by `apps/desktop` or
+  `packages/app`.
 - Web, website, renderer, preload, and `@open-cowork/cloud-client` code must
   not import `@opencode-ai/sdk`.
 - Desktop and cloud runtime code may import the SDK only in the files listed

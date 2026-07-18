@@ -119,6 +119,9 @@ test('only runtime authority packages declare OpenCode runtime dependencies', ()
     'apps/standalone-gateway/package.json',
     'packages/cloud-server/package.json',
     'packages/runtime-host/package.json',
+    // Durable Gateway product partition coordinates OpenCode sessions via MCP/CLI
+    // (products/gateway); not Desktop Electron runtime-host.
+    'products/gateway/package.json',
   ])
 })
 
