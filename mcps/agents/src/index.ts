@@ -2,11 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { createBridge } from '../../shared/bridge.js'
+import { textResult } from '../../shared/mcp-bootstrap.js'
 
-const server = new McpServer({
-  name: 'agents',
-  version: '1.0.0',
-})
+const server = new McpServer({ name: 'agents', version: '1.0.0' })
 
 const agentColorSchema = z.enum(['primary', 'warning', 'accent', 'success', 'info', 'secondary'])
 const permissionActionSchema = z.enum(['allow', 'ask', 'deny'])
@@ -57,15 +55,6 @@ const bridge = createBridge<'/list' | '/get' | '/preview' | '/save' | '/delete'>
 
 async function postToBridge(path: '/list' | '/get' | '/preview' | '/save' | '/delete', body: AgentDraftInput | AgentTargetInput | { directory?: string | null }) {
   return bridge.postToBridge(path, body)
-}
-
-function textResult(value: unknown) {
-  return {
-    content: [{
-      type: 'text' as const,
-      text: JSON.stringify(value),
-    }],
-  }
 }
 
 server.tool(

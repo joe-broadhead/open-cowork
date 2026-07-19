@@ -9,6 +9,7 @@ import { normalizeEnvironmentSelector, normalizeGatewayEnvironmentConfig, type E
 import { ConfigError } from './errors.js'
 import { gatewayEnv, type EnvSource } from './env.js'
 import { setTrustedOpenCodePeerHosts } from './opencode-peer-hosts.js'
+import { writeFileAtomic } from '@open-cowork/shared/node'
 
 const zStringRecord = <Schema extends z.ZodTypeAny>(schema: Schema) => z.record(z.string(), schema)
 
@@ -1770,10 +1771,7 @@ function backupExistingFile(file: string): void {
 }
 
 function atomicWriteFile(file: string, content: string): void {
-  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
-  fs.writeFileSync(tmp, content, { mode: 0o600 })
-  fs.renameSync(tmp, file)
-  try { fs.chmodSync(file, 0o600) } catch {}
+  writeFileAtomic(file, content, { mode: 0o600 })
 }
 
 export function getConfigPath(): string { return configFile() }

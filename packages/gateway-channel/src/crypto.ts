@@ -3,12 +3,12 @@ import { timingSafeEqual } from "node:crypto";
 /**
  * Constant-time string comparison for secrets, signatures, and tokens.
  *
- * Single source of truth for the gateway daemon and every channel provider
- * (Slack/Telegram/webhook/email signature + shared-secret checks), which had
- * each carried a slightly drifted copy. Empty or non-string inputs return
- * false so a missing/blank expected secret can never authenticate, and a
- * length mismatch short-circuits before timingSafeEqual (which throws on
- * unequal-length buffers).
+ * Kept package-local (gateway-channel has no composite rootDir for shared/node
+ * source imports). Algorithm matches `@open-cowork/shared/node` `constantTimeEquals`
+ * — both must stay byte-compatible (audit 2026-07-18).
+ *
+ * Empty or non-string inputs return false so a missing/blank expected secret
+ * can never authenticate.
  */
 export function constantTimeStringEqual(
   left: string | null | undefined,

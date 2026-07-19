@@ -8,6 +8,8 @@
 // see the Node globals, keeping the rest of the package browser-safe.
 export * from './app-environment.js'
 export * from './constant-time.js'
+export * from './fetch-with-timeout.js'
+export * from './private-host-policy.js'
 export * from './safe-storage.js'
 export * from './desktop-shell.js'
 export * from './fs-atomic.js'

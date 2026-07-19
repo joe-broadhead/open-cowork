@@ -2,6 +2,8 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { getConfig, getConfigDir } from './config.js'
+import { writeFileAtomic } from '@open-cowork/shared/node'
+import { parseJsoncText } from '@open-cowork/shared'
 
 export interface OpenCodeAgentInput {
   name: string
@@ -257,78 +259,11 @@ function configPath(configDir: string): string {
 }
 
 function parseJsonc(text: string): any {
-  try { return JSON.parse(text) }
-  catch { return JSON.parse(stripJsonc(text)) }
-}
-
-function stripJsonc(text: string): string {
-  let out = ''
-  let inString = false
-  let quote = ''
-  let escaped = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    const next = text[i + 1]
-    if (inString) {
-      out += ch
-      if (escaped) escaped = false
-      else if (ch === '\\') escaped = true
-      else if (ch === quote) inString = false
-      continue
-    }
-    if (ch === '"' || ch === "'") {
-      inString = true
-      quote = ch
-      out += ch
-      continue
-    }
-    if (ch === '/' && next === '/') {
-      while (i < text.length && text[i] !== '\n') i++
-      out += '\n'
-      continue
-    }
-    if (ch === '/' && next === '*') {
-      i += 2
-      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
-        out += text[i] === '\n' ? '\n' : ' '
-        i++
-      }
-      i++
-      continue
-    }
-    out += ch
+  try {
+    return parseJsoncText(text)
+  } catch {
+    return JSON.parse(text)
   }
-  return removeTrailingCommas(out)
-}
-
-function removeTrailingCommas(text: string): string {
-  let out = ''
-  let inString = false
-  let quote = ''
-  let escaped = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inString) {
-      out += ch
-      if (escaped) escaped = false
-      else if (ch === '\\') escaped = true
-      else if (ch === quote) inString = false
-      continue
-    }
-    if (ch === '"' || ch === "'") {
-      inString = true
-      quote = ch
-      out += ch
-      continue
-    }
-    if (ch === ',') {
-      let j = i + 1
-      while (/\s/.test(text[j] || '')) j++
-      if (text[j] === '}' || text[j] === ']') continue
-    }
-    out += ch
-  }
-  return out
 }
 
 function backupExistingFile(file: string): void {
@@ -339,10 +274,7 @@ function backupExistingFile(file: string): void {
 }
 
 function atomicWriteFile(file: string, content: string): void {
-  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
-  fs.writeFileSync(tmp, content, { mode: 0o600 })
-  fs.renameSync(tmp, file)
-  try { fs.chmodSync(file, 0o600) } catch {}
+  writeFileAtomic(file, content, { mode: 0o600 })
 }
 
 function expandHome(value: string): string {
