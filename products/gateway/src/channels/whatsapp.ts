@@ -3,7 +3,8 @@ import { WHATSAPP_CAPABILITIES } from './capabilities.js'
 import { planNativeActionDelivery, renderStructuredMessage, type MessageAction, type NativeActionDeliveryItem, type StructuredGatewayMessage } from './renderer.js'
 import { getConfig } from '../config.js'
 import { queueEvent } from '../wakeup.js'
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { constantTimeEqualsDigest } from '@open-cowork/shared/node'
 import { appendChannelInboundDenialAudit } from '../channel-audit.js'
 import { appendWorkEvent } from '../work-store.js'
 import { isTransientInboundError, isTrustedChannelTarget, redactedChannelTargetLabel, redactSensitiveText } from '../security.js'
@@ -298,13 +299,8 @@ function cleanText(value: string, maxLength: number): string {
   return text.length <= maxLength ? text : text.substring(0, maxLength)
 }
 
-// Constant-time string comparison with length equalization: hash both sides to a
-// fixed-length digest before timingSafeEqual, matching the repo's bearer-token
-// comparison posture without leaking length via an early return.
 function constantTimeTextEquals(a: string, b: string): boolean {
-  const aDigest = createHash('sha256').update(String(a)).digest()
-  const bDigest = createHash('sha256').update(String(b)).digest()
-  return timingSafeEqual(aDigest, bDigest)
+  return constantTimeEqualsDigest(String(a), String(b))
 }
 
 function asArray(value: any): any[] {

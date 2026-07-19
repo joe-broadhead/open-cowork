@@ -56,7 +56,7 @@ On **every** OpenCode SDK/runtime pin change:
 
 1. Bump `@opencode-ai/sdk` and `opencode-ai` to the same version in all runtime
    authority packages (`apps/desktop`, `apps/standalone-gateway`,
-   `packages/cloud-server`, `packages/runtime-host`).
+   `packages/cloud-server`, `packages/runtime-host`, **`products/gateway`**).
 2. Run `node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts`.
 3. For each residual method above, probe whether a native `client.v2.*` route
    exists and works against a real OpenCode process (not a mock).

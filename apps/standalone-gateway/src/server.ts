@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { channelWebhookErrorCode, WebhookRateLimiter } from "@open-cowork/gateway-channel";
 import { resolveHttpClientSource } from "@open-cowork/shared";
+import { constantTimeEqualsDigest } from "@open-cowork/shared/node";
 
 import { renderStandaloneGatewayDashboard, renderStandaloneGatewayMetrics } from "./dashboard.js";
 import { runStandaloneGatewayDoctor, type StandaloneGatewayDoctorReport } from "./doctor.js";
@@ -252,10 +252,7 @@ function parseJsonBody(rawBody: string): unknown {
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
-  if (!left || !right) return false;
-  const leftHash = createHash("sha256").update(left).digest();
-  const rightHash = createHash("sha256").update(right).digest();
-  return timingSafeEqual(leftHash, rightHash);
+  return constantTimeEqualsDigest(left, right);
 }
 
 function httpError(statusCode: number, message: string, retryAfterMs?: number): StandaloneHttpError {

@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'products/gateway/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/ci-gateway.yml'
       - 'scripts/check-product-boundaries.mjs'
   push:
     branches: [master]
     paths:
       - 'products/gateway/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/ci-gateway.yml'
 
 concurrency:
@@ -37,6 +41,10 @@ jobs:
 
       - name: Product boundaries
         run: pnpm boundaries:check
+
+      # products/gateway depends on @open-cowork/shared (dist-only package exports).
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
 
       - name: Build Gateway
         run: pnpm --filter cowork-gateway build

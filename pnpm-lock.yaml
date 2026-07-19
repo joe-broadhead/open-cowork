@@ -690,8 +690,11 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@4.4.3)
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@opencode-ai/sdk':
-        specifier: ^1.17.18
+        specifier: 1.18.1
         version: 1.18.1
       zod:
         specifier: ^4.4.3

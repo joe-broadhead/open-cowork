@@ -62,13 +62,14 @@ try {
     tarballPath = path.resolve(providedTarball)
     if (!fs.existsSync(tarballPath)) fail(`tarball not found: ${tarballPath}`)
   } else {
-    // Build + pack from monorepo product package.
-    run('pnpm', ['--filter', 'cowork-gateway', 'build'], { cwd: monorepoRoot })
-    const pack = run('npm', ['pack', '--pack-destination', packDir], { cwd: productRoot })
+    // Build + pack from monorepo, vendoring private workspace deps (e.g. @open-cowork/shared).
+    const packScript = path.join(productRoot, 'scripts/pack-standalone.mjs')
+    const pack = run(process.execPath, [packScript, packDir], { cwd: monorepoRoot })
     const lines = (pack.stdout || '').trim().split('\n').filter(Boolean)
-    const filename = lines[lines.length - 1]
-    if (!filename?.endsWith('.tgz')) fail(`npm pack did not report a tarball: ${pack.stdout}`)
-    tarballPath = path.join(packDir, filename)
+    tarballPath = lines[lines.length - 1]
+    if (!tarballPath?.endsWith('.tgz') || !fs.existsSync(tarballPath)) {
+      fail(`pack-standalone did not produce a tarball: ${pack.stdout}`)
+    }
   }
 
   const base = path.basename(tarballPath)

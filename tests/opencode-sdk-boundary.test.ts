@@ -15,6 +15,7 @@ const ignoredDirectories = new Set([
   'node_modules',
   'release',
   'site',
+  '__tests__',
 ])
 
 const sourceRoots = [
@@ -24,6 +25,8 @@ const sourceRoots = [
   'apps/channel-gateway/src',
   'apps/standalone-gateway/src',
   'packages',
+  // Durable Gateway product partition (audit 2026-07-18) — must stay on V2 entry.
+  'products/gateway/src',
 ] as const
 
 const runtimeAuthoritySourceRoots = [
@@ -63,6 +66,15 @@ const allowedSdkImportPaths = new Set([
   'packages/runtime-host/src/runtime-state.ts',
   'packages/runtime-host/src/runtime.ts',
   'packages/runtime-host/src/session-history-loader.ts',
+  // products/gateway durable OpenCode client (classic residual session APIs on V2 client)
+  'products/gateway/src/opencode-client.ts',
+  'products/gateway/src/gateway-runtime.ts',
+  'products/gateway/src/channel-sync.ts',
+  'products/gateway/src/opencode-session-runtime.ts',
+  'products/gateway/src/live.ts',
+  'products/gateway/src/heartbeat.ts',
+  'products/gateway/src/scheduler.ts',
+  'products/gateway/src/observability.ts',
 ])
 
 test('OpenCode SDK imports stay inside documented runtime boundary modules', () => {

@@ -3,6 +3,9 @@
  * and optional trusted-peer Basic auth (never URL-embedded credentials).
  */
 import * as fs from 'node:fs'
+// Classic client entry at monorepo pin 1.18.1 (audit 2026-07-18).
+// Call-shape migration to client.v2.* (sessionID fields) is tracked separately;
+// this pin removes version skew with Desktop/Cloud without a full API rewrite.
 import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk'
 import { getConfig, type GatewayConfig } from './config.js'
 import { openCodeEndpointUrl, safeOpenCodeBaseUrlString } from './opencode-url-policy.js'

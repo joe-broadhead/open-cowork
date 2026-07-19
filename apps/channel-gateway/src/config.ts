@@ -5,6 +5,12 @@ import { isChannelProviderKind, normalizeChannelProviderIdentity, type ChannelPr
 import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode, splitTrustedProxyCidrs } from '@open-cowork/shared'
 import type { GatewayDeploymentConfig, GatewayProductMode, PublicBrandingConfig } from '@open-cowork/shared'
 
+export {
+  redactGatewayConfig,
+  redactGatewayDiagnosticText,
+  redactGatewayEnv,
+} from './config-redaction.js'
+
 import {
   assertGatewayConfigSafe,
   assertHttpsPublicUrl,
@@ -109,22 +115,6 @@ const defaultGatewayBranding: PublicBrandingConfig = {
     cloudUrl: 'Cloud URL',
   },
 }
-const secretEnvKeys = [
-  'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
-  'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
-  'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
-  'OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET',
-  'OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN',
-  'OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET',
-  'OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET',
-  'OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD',
-  'OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET',
-  'OPEN_COWORK_GATEWAY_DISCORD_SHARED_SECRET',
-  'OPEN_COWORK_GATEWAY_WHATSAPP_SHARED_SECRET',
-  'OPEN_COWORK_GATEWAY_SIGNAL_SHARED_SECRET',
-  'OPEN_COWORK_GATEWAY_PROVIDERS',
-]
-
 export function loadGatewayConfig(env: GatewayEnv = process.env): GatewayConfig {
   const raw = readRawConfig(env)
   return resolveGatewayConfig(raw, env)
@@ -195,36 +185,6 @@ export function resolveGatewayCloudConnection(env: GatewayEnv = process.env): Ga
     allowInsecureHttp,
     requestTimeoutMs: readBoundedInteger(env.OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS, defaultTimeouts.cloudRequestMs, 100, 120_000),
   }
-}
-
-export function redactGatewayConfig(config: GatewayConfig): Record<string, unknown> {
-  return {
-    ...config,
-    cloud: {
-      ...config.cloud,
-      serviceToken: redactSecret(config.cloud.serviceToken),
-    },
-    server: {
-      ...config.server,
-      adminToken: redactSecret(config.server.adminToken),
-    },
-    providers: config.providers.map((provider) => ({
-      ...provider,
-      credentials: redactCredentialRecord(provider.credentials),
-      settings: redactUnknown(provider.settings) as Record<string, unknown>,
-    })),
-  }
-}
-
-export function redactGatewayEnv(env: GatewayEnv): Record<string, string> {
-  const redacted: Record<string, string> = {}
-  for (const [key, value] of Object.entries(env)) {
-    if (value === undefined) continue
-    redacted[key] = secretEnvKeys.includes(key) || /token|secret|password|credential/i.test(key)
-      ? redactSecret(value) || '[redacted]'
-      : value
-  }
-  return redacted
 }
 
 function readRawConfig(env: GatewayEnv): GatewayRawConfig {
@@ -820,80 +780,4 @@ function cleanRecord(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return Object.fromEntries(Object.entries(value as Record<string, unknown>)
     .filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''))
-}
-
-function redactCredentialRecord(value: Record<string, string>) {
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
-    key,
-    redactSecret(entry),
-  ]))
-}
-
-function redactUnknown(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((entry) => redactUnknown(entry))
-  if (!value || typeof value !== 'object') return value
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-    key,
-    redactValue(key, entry),
-  ]))
-}
-
-function redactValue(key: string, value: unknown): unknown {
-  if (typeof value === 'string') {
-    if (/token|secret|password|credential|authorization|api[_-]?key|private[_-]?key|access[_-]?key/i.test(key)) return redactSecret(value)
-    return redactGatewayDiagnosticText(value)
-  }
-  return redactUnknown(value)
-}
-
-export function redactGatewayDiagnosticText(value: string) {
-  return redactLocalPaths(redactUrlSecretsInText(value)
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\b([A-Za-z0-9_-]{0,64}(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]{0,64})\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{16,}\2/gi, (_match, key: string) => {
-      return `${key}=[redacted]`
-    })
-    .replace(/\bya29\.[0-9A-Za-z._-]+\b/g, '[redacted-token]')
-    .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, '[redacted-token]')
-    .replace(/\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
-    .replace(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, '[redacted-token]')
-    .replace(/\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
-    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
-    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[redacted-token]')
-    .replace(/\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g, '[redacted-token]')
-    .replace(/\boc(?:c|gw|w)_[A-Za-z0-9_-]{20,}\b/g, '[redacted-token]')
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]'))
-}
-
-function redactUrlSecretsInText(value: string) {
-  return value.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, (url) => redactUrlSecrets(url))
-}
-
-function redactUrlSecrets(value: string) {
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    return value
-  }
-  if (url.username) url.username = '[redacted]'
-  if (url.password) url.password = '[redacted]'
-  for (const key of [...url.searchParams.keys()]) {
-    if (/token|secret|password|credential|authorization|api[_-]?key/i.test(key)) {
-      url.searchParams.set(key, '[redacted]')
-    }
-  }
-  return url.toString().replace(/%5Bredacted%5D/gi, '[redacted]')
-}
-
-function redactLocalPaths(value: string) {
-  return value
-    .replace(/\/Users\/[^\s"'`:]+/g, '/Users/[redacted]')
-    .replace(/\/home\/[^\s"'`:]+/g, '/home/[redacted]')
-    .replace(/[A-Z]:\\Users\\[^\s"'`:]+/gi, 'C:\\Users\\[redacted]')
-}
-
-function redactSecret(value: string | null | undefined) {
-  if (!value) return null
-  return value.length <= 8 ? '[redacted]' : `${value.slice(0, 4)}...[redacted]...${value.slice(-4)}`
 }
