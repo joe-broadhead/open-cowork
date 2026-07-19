@@ -1,9 +1,9 @@
 # Production-grade audit: PR #956
 
-**Date:** 2026-07-19  
-**PR:** https://github.com/joe-broadhead/open-cowork/pull/956  
-**HEAD audited:** `a0591630` (`fix/opencode-sdk-duplication-audit`)  
-**Base:** `master` (post product partitions)  
+**Date:** 2026-07-19
+**PR:** https://github.com/joe-broadhead/open-cowork/pull/956
+**HEAD audited:** `a0591630` (`fix/opencode-sdk-duplication-audit`)
+**Base:** `master` (post product partitions)
 **Method:** First-principles review of the full PR surface (diff + call sites + CI packaging + adversarial probes). Wide (all themes) and deep (security-critical paths exercised).
 
 **CI at audit time:** all required checks **green** (validate, coverage, cloud-gates, packages ×3, CodeQL, gateway, docs).
@@ -45,12 +45,12 @@
 
 ## 2. First principles: what “production grade” means here
 
-1. **Fail closed** on auth, host policy, empty secrets.  
-2. **No secret exfil** via logs/diagnostics/exports beyond intentional, access-controlled partial ops views.  
-3. **No supply-chain skew** across products that speak the same OpenCode protocol.  
-4. **DRY without false abstraction** — product contracts may differ; shared covers token families + crypto + host policy.  
-5. **Releaseable** — monorepo CI and standalone pack both work.  
-6. **Ratchets** — boundary tests prevent silent regression.  
+1. **Fail closed** on auth, host policy, empty secrets.
+2. **No secret exfil** via logs/diagnostics/exports beyond intentional, access-controlled partial ops views.
+3. **No supply-chain skew** across products that speak the same OpenCode protocol.
+4. **DRY without false abstraction** — product contracts may differ; shared covers token families + crypto + host policy.
+5. **Releaseable** — monorepo CI and standalone pack both work.
+6. **Ratchets** — boundary tests prevent silent regression.
 7. **Honest residuals** — dual channel stack and classic session APIs are freezes, not “done” migrations.
 
 ---
@@ -89,8 +89,8 @@
 
 Shared `assertPrivateHttpEndpoint`:
 
-- Rejects non-http(s), embedded credentials, wildcard bind (when configured).  
-- Allows RFC1918, loopback, CGNAT 100.64/10, **link-local 169.254/16**, ULA, fe80::/10.  
+- Rejects non-http(s), embedded credentials, wildcard bind (when configured).
+- Allows RFC1918, loopback, CGNAT 100.64/10, **link-local 169.254/16**, ULA, fe80::/10.
 - Optional private DNS suffixes only when `allowPrivateDns: true`.
 
 **Probes (executed in audit):**
@@ -106,7 +106,7 @@ Shared `assertPrivateHttpEndpoint`:
 
 **Finding SEC-4 (Medium — threat model):** Link-local includes **cloud instance metadata** (`169.254.169.254`). For **OpenCode base URL** configuration this means a misconfigured operator can point the gateway at the metadata service if the host policy is the only guard. Mitigations in practice:
 
-- products/gateway uses a **stricter** local host set (`127.0.0.1` / `localhost` / `::1`) + **explicit trusted peer list** for non-local OpenCode — better.  
+- products/gateway uses a **stricter** local host set (`127.0.0.1` / `localhost` / `::1`) + **explicit trusted peer list** for non-local OpenCode — better.
 - standalone uses shared private policy for OpenCode endpoint — **link-local is allowed**.
 
 **Recommendation (follow-up, not merge-blocker):** Optionally deny `169.254.169.254` / known metadata IPs in `assertPrivateHttpEndpoint`, or document “private OpenCode must not be the metadata endpoint” in standalone deploy docs. DNS rebinding on `.internal` names is accepted for lab/k8s; production should prefer IPs or pinned service discovery.
@@ -124,8 +124,8 @@ Shared `assertPrivateHttpEndpoint`:
 
 ### 3.5 AuthZ / surface exposure (PR-touched)
 
-- Standalone admin digest compare uses shared digest — good.  
-- No new public unauthenticated endpoints introduced.  
+- Standalone admin digest compare uses shared digest — good.
+- No new public unauthenticated endpoints introduced.
 - channel-gateway redaction only changes diagnostic **content**, not auth gates.
 
 ---
@@ -206,10 +206,10 @@ Shared `assertPrivateHttpEndpoint`:
 
 **Finding TEST-1 (Low):** Shared host-policy tests do **not** cover:
 
-- credential embedding deny  
-- wildcard bind deny  
-- `169.254.169.254` explicit stance  
-- private DNS flag  
+- credential embedding deny
+- wildcard bind deny
+- `169.254.169.254` explicit stance
+- private DNS flag
 
 Adding these would lock the threat model in CI.
 
@@ -247,10 +247,10 @@ Adding these would lock the threat model in CI.
 
 ## 10. What is **not** in this PR (and must not be confused with “incomplete security”)
 
-1. Full durable-gateway **V2 session field** migration.  
-2. Migrating `products/gateway/channels` onto `gateway-provider-*`.  
-3. Unifying all redaction **marker strings** monorepo-wide.  
-4. Removing classic SDK residual methods (OpenCode platform gap).  
+1. Full durable-gateway **V2 session field** migration.
+2. Migrating `products/gateway/channels` onto `gateway-provider-*`.
+3. Unifying all redaction **marker strings** monorepo-wide.
+4. Removing classic SDK residual methods (OpenCode platform gap).
 5. Desktop composition shell residual SDK seams (JOE-842).
 
 These are **program residuals**, not regressions introduced by #956.
@@ -289,10 +289,10 @@ These are **program residuals**, not regressions introduced by #956.
 
 Reviewed:
 
-- Full `origin/master...HEAD` file list and security-critical implementations  
-- Live probes of host policy and shared redaction  
-- Packaging scripts and CI workflow deltas  
-- Boundary tests and freeze docs  
-- Product layering correctness under CI-forced marker contracts  
+- Full `origin/master...HEAD` file list and security-critical implementations
+- Live probes of host policy and shared redaction
+- Packaging scripts and CI workflow deltas
+- Boundary tests and freeze docs
+- Product layering correctness under CI-forced marker contracts
 
 **Attestation:** Within the PR’s stated goals, the change set is **production-grade, CI-proven, and safe to merge** with the residual register above. No stone unturned within monorepo-local evidence available at HEAD `a0591630`.
