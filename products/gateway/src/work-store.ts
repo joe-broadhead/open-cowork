@@ -6,10 +6,10 @@ import { getConfig, type HumanGateTimeoutAction } from './config.js'
 import { cleanupFailedEnvironmentRun, environmentControllerForBackend, finalizeEnvironmentRun, normalizeEnvironmentSelector, redactEnvironmentRecord, type EnvironmentRunRecord, type EnvironmentSelector } from './environments.js'
 import { buildRuntimeLifecycleDiagnostics, summarizeRuntimeIsolationProfile } from './runtime-isolation.js'
 import { decideNextTaskState, defaultPipeline, normalizeTaskQualitySpec, type RunStatus, type StageResult, type WorkflowDecision, type WorkStatus } from './workflow.js'
-import { auditLedgerRecordFromWorkEvent, type AuditLedgerQueryOptions } from './audit-ledger.js'
+import { type AuditLedgerQueryOptions } from './audit-ledger.js'
 import { closeWorkDb, currentWorkDbLeadershipEpoch, getRow, markWorkDbActive, openWorkDb, parseJSON, queryRows, resetWorkDbInitState, unmarkWorkDbActive, withWorkDb, withWorkDbReadOnly, workStatePath } from './work-store/db.js'
-import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAlert, rowToAuditLedger, rowToChannelBinding, rowToChannelClaimCode, rowToDelegationReceipt, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
-import { normalizeAlertEvidence, normalizeHash, normalizeJsonObject, normalizeOptionalEventId, normalizeOptionalIdentifier, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeProviderId, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
+import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAlert, rowToAuditLedger, rowToDelegationReceipt, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
+import { normalizeJsonObject, normalizeOptionalEventId, normalizeOptionalIdentifier, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
 import { redactSensitiveText } from './security.js'
 import { isActiveRunStatus, isTaskActiveStatus, isTaskRunOwnershipTerminalStatus, shouldAbortActiveRunForTaskStatus } from './runtime-state-machine.js'
 import { writeRunArtifactManifest } from './artifacts.js'
@@ -25,7 +25,6 @@ export * from './work-store/types.js'
 import { assertNoStorageOperationInProgress } from './work-store/storage-lock.js'
 import {
   pruneWorkEvents,
-  readAuditLedgerRetentionAnchorHash,
 } from './work-store/retention.js'
 export { runWorkStoreRetentionMaintenance } from './work-store/retention.js'
 export type {
@@ -34,6 +33,27 @@ export type {
   WorkStoreRetentionMaintenanceOptions,
   WorkStoreRetentionMaintenanceResult,
 } from './work-store/retention.js'
+
+export {
+  listAlerts,
+  listAlertsReadOnly,
+  upsertAlert,
+  resolveAlertsNotInKeys,
+  updateAlertStatus,
+} from './work-store/alerts.js'
+export {
+  getChannelBinding,
+  upsertChannelBinding,
+  listChannelBindings,
+  listChannelBindingsReadOnly,
+  deleteChannelBinding,
+  createChannelClaimCodeRecord,
+  findChannelClaimCodeByHash,
+  listChannelClaimCodes,
+  listChannelClaimCodesReadOnly,
+  updateChannelClaimCodeStatus,
+  clearChannelBindingsForTest,
+} from './work-store/channel-bindings.js'
 
 import {
   INBOX_ROADMAP_ID,
@@ -47,23 +67,14 @@ import type {
   ActiveRunControlReason,
   ActiveRunControlResult,
   ActiveRunControlSnapshot,
-  AlertInput,
   AlertRecord,
-  AlertSeverity,
-  AlertStatus,
-  AlertUpsertResult,
   AuditEventInput,
   AuditLedgerRecord,
   ChannelBindingMode,
-  ChannelBindingRecord,
-  ChannelClaimAction,
-  ChannelClaimCodeRecord,
-  ChannelClaimStatus,
   DelegatedWorkMutationInput,
   DelegatedWorkProgressKind,
   DelegatedWorkReceipt,
   DelegationProgressRouteReceiptRecord,
-  DelegationProgressRouteReceiptState,
   HumanGateDecision,
   HumanGateDecisionInput,
   HumanGateDecisionResult,
@@ -428,127 +439,6 @@ export function timeoutHumanGate(id: string, action: HumanGateTimeoutAction, fil
   })
 }
 
-export function listAlerts(filter: { status?: AlertStatus | 'open'; source?: string } = {}, filePath = workStatePath()): AlertRecord[] {
-  return withWorkDb(filePath, db => listAlertsFromDb(db, filter))
-}
-
-export function listAlertsReadOnly(filter: { status?: AlertStatus | 'open'; source?: string } = {}, filePath = workStatePath()): AlertRecord[] {
-  return withWorkDbReadOnly(filePath, db => listAlertsFromDb(db, filter))
-}
-
-function listAlertsFromDb(db: DatabaseSync, filter: { status?: AlertStatus | 'open'; source?: string } = {}): AlertRecord[] {
-  // Filter in SQL so the indexed alert queries (idx_alerts_status_seen,
-  // idx_alerts_source) bound the work instead of materializing every alert row
-  // ever recorded on each 60s alert-engine pass and dashboard render.
-  const clauses: string[] = []
-  const params: unknown[] = []
-  if (filter.status === 'open') {
-    clauses.push("status IN ('active', 'acknowledged')")
-  } else if (filter.status) {
-    clauses.push('status = ?')
-    params.push(filter.status)
-  }
-  if (filter.source) {
-    clauses.push('source = ?')
-    params.push(filter.source)
-  }
-  const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''
-  const rows = queryRows(db, `SELECT * FROM alerts${where} ORDER BY last_seen_at DESC`, ...params)
-  return rows.map(rowToAlert).filter(Boolean) as AlertRecord[]
-}
-
-
-export function upsertAlert(input: AlertInput, options: { dedupeMs?: number; now?: number } = {}, filePath = workStatePath()): AlertUpsertResult {
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const nowMs = options.now || Date.now()
-      const now = new Date(nowMs).toISOString()
-      const key = normalizeRequiredString(input.key, 'alert.key', 240)
-      const source = normalizeRequiredString(input.source, 'alert.source', 120)
-      const severity = normalizeAlertSeverity(input.severity)
-      const summary = normalizeRequiredString(input.summary, 'alert.summary', 1000)
-      const nextAction = normalizeRequiredString(input.nextAction, 'alert.nextAction', 1000)
-      const target = normalizeOptionalString(input.target, 240)
-      const evidence = normalizeAlertEvidence(input.evidence || [])
-      const details = input.details && typeof input.details === 'object' && !Array.isArray(input.details) ? input.details : {}
-      const existing = rowToAlert(db.prepare("SELECT * FROM alerts WHERE key = ? AND status IN ('active', 'acknowledged', 'suppressed') ORDER BY last_seen_at DESC LIMIT 1").get(key))
-      if (existing) {
-        const suppressed = existing.status === 'suppressed' && Date.parse(existing.suppressedUntil || '') > nowMs
-        const notify = !suppressed && (!existing.lastNotifiedAt || nowMs - Date.parse(existing.lastNotifiedAt) >= (options.dedupeMs || 15 * 60 * 1000))
-        db.prepare(`UPDATE alerts SET severity = ?, source = ?, target = ?, summary = ?, evidence_json = ?, next_action = ?, last_seen_at = ?, last_notified_at = ?, dedupe_count = ?, details_json = ? WHERE id = ?`)
-          .run(severity, source, target || null, summary, JSON.stringify(evidence), nextAction, now, notify ? now : existing.lastNotifiedAt || null, existing.dedupeCount + 1, JSON.stringify(details), existing.id)
-        appendWorkEventRow(db, 'alert.detected', existing.id, { key, severity, source, target, notify, dedupeCount: existing.dedupeCount + 1 }, now)
-        const alert = rowToAlert(db.prepare('SELECT * FROM alerts WHERE id = ?').get(existing.id))!
-        db.exec('COMMIT')
-        return { alert, created: false, notify }
-      }
-      const id = `alert_${randomUUID()}`
-      db.prepare(`INSERT INTO alerts (id, key, status, severity, source, target, summary, evidence_json, next_action, first_seen_at, last_seen_at, last_notified_at, dedupe_count, details_json)
-        VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`)
-        .run(id, key, severity, source, target || null, summary, JSON.stringify(evidence), nextAction, now, now, now, JSON.stringify(details))
-      appendWorkEventRow(db, 'alert.detected', id, { key, severity, source, target, created: true }, now)
-      const alert = rowToAlert(db.prepare('SELECT * FROM alerts WHERE id = ?').get(id))!
-      db.exec('COMMIT')
-      return { alert, created: true, notify: true }
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-export function resolveAlertsNotInKeys(source: string, activeKeys: Set<string>, filePath = workStatePath(), nowMs = Date.now()): number {
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const now = new Date(nowMs).toISOString()
-      const rows = queryRows(db, "SELECT * FROM alerts WHERE source = ? AND status IN ('active', 'acknowledged')", source).map(rowToAlert).filter(Boolean) as AlertRecord[]
-      let resolved = 0
-      for (const alert of rows) {
-        if (activeKeys.has(alert.key)) continue
-        db.prepare("UPDATE alerts SET status = 'resolved', resolved_at = ?, last_seen_at = ? WHERE id = ?").run(now, now, alert.id)
-        appendWorkEventRow(db, 'alert.resolved', alert.id, { key: alert.key, source }, now)
-        resolved++
-      }
-      db.exec('COMMIT')
-      return resolved
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally { db.close() }
-}
-
-export function updateAlertStatus(id: string, action: 'acknowledge' | 'resolve' | 'suppress', input: { note?: string; suppressMs?: number } = {}, filePath = workStatePath()): AlertRecord | undefined {
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const existing = rowToAlert(db.prepare('SELECT * FROM alerts WHERE id = ?').get(id))
-      if (!existing) {
-        db.exec('ROLLBACK')
-        return undefined
-      }
-      const now = new Date().toISOString()
-      const note = normalizeOptionalString(input.note, 1000)
-      if (action === 'acknowledge') db.prepare("UPDATE alerts SET status = 'acknowledged', acknowledged_at = ?, last_seen_at = ? WHERE id = ?").run(now, now, id)
-      else if (action === 'resolve') db.prepare("UPDATE alerts SET status = 'resolved', resolved_at = ?, last_seen_at = ? WHERE id = ?").run(now, now, id)
-      else db.prepare("UPDATE alerts SET status = 'suppressed', suppressed_until = ?, last_seen_at = ? WHERE id = ?").run(new Date(Date.now() + (input.suppressMs || 60 * 60 * 1000)).toISOString(), now, id)
-      appendWorkEventRow(db, `alert.${action}`, id, { key: existing.key, note }, now)
-      const alert = rowToAlert(db.prepare('SELECT * FROM alerts WHERE id = ?').get(id))!
-      db.exec('COMMIT')
-      return alert
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally { db.close() }
-}
 
 export function addWorkDependency(input: WorkDependencyInput, filePath = workStatePath()): WorkDependencyRecord {
   return mutateWorkState(filePath, (state, db) => addWorkDependencyInState(state, db, input, new Date().toISOString()))
@@ -2780,213 +2670,6 @@ export function listAllWorkEventsByType(type: string, filePath = workStatePath()
   })
 }
 
-export function getChannelBinding(provider: string, chatId: string, threadId?: string, filePath = workStatePath()): ChannelBindingRecord | undefined {
-  return withWorkDb(filePath, db => {
-    const row = db.prepare('SELECT * FROM channel_bindings WHERE provider = ? AND chat_id = ? AND thread_id = ?')
-      .get(provider, chatId, normalizeThreadId(threadId)) as any
-    return row ? rowToChannelBinding(row) || undefined : undefined
-  })
-}
-
-export function upsertChannelBinding(input: {
-  provider: string
-  chatId: string
-  threadId?: string
-  sessionId: string
-  mode?: ChannelBindingMode
-  roadmapId?: string
-  taskId?: string
-  title?: string
-}, filePath = workStatePath()): ChannelBindingRecord {
-  assertNoStorageOperationInProgress(filePath)
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const provider = normalizeProviderId(input.provider, 'channelBinding.provider')
-      const chatId = normalizeRequiredString(input.chatId, 'channelBinding.chatId', 200)
-      const threadId = normalizeThreadId(input.threadId)
-      const sessionId = normalizeRequiredString(input.sessionId, 'channelBinding.sessionId', 200)
-      const mode = normalizeChannelBindingMode(input.mode)
-      const existingRow = db.prepare('SELECT * FROM channel_bindings WHERE provider = ? AND chat_id = ? AND thread_id = ?').get(provider, chatId, threadId)
-      const existing = existingRow ? rowToChannelBinding(existingRow) || undefined : undefined
-      const roadmapId = mode === 'roadmap' ? normalizeRequiredString(input.roadmapId, 'channelBinding.roadmapId', 120) : undefined
-      const taskId = mode === 'task' ? normalizeRequiredString(input.taskId, 'channelBinding.taskId', 120) : undefined
-      if (roadmapId) {
-        const roadmap = db.prepare('SELECT status FROM roadmaps WHERE id = ?').get(roadmapId) as { status?: unknown } | undefined
-        if (!roadmap) throw new Error(`roadmap not found: ${roadmapId}`)
-        if (roadmap.status === 'archived') throw new Error(`roadmap is archived: ${roadmapId}`)
-      }
-      if (taskId) {
-        const task = db.prepare('SELECT roadmap_id FROM tasks WHERE id = ?').get(taskId) as { roadmap_id?: unknown } | undefined
-        if (!task) throw new Error(`task not found: ${taskId}`)
-        if (!db.prepare('SELECT id FROM roadmaps WHERE id = ?').get(task.roadmap_id)) throw new Error(`task roadmap not found: ${String(task.roadmap_id || '')}`)
-      }
-      const now = new Date().toISOString()
-      const record: ChannelBindingRecord = {
-        provider,
-        chatId,
-        threadId: threadId || undefined,
-        sessionId,
-        mode,
-        roadmapId,
-        taskId,
-        title: normalizeOptionalString(input.title, 200),
-        createdAt: existing?.createdAt || now,
-        updatedAt: now,
-      }
-      upsertChannelBindingRow(db, record, now)
-      appendWorkEventRow(db, 'channel.binding.upserted', record.sessionId, { provider: record.provider, chatId: record.chatId, threadId: record.threadId, mode: record.mode, roadmapId: record.roadmapId, taskId: record.taskId }, now)
-      db.exec('COMMIT')
-      return record
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-export function listChannelBindings(filter: { provider?: string; chatId?: string; threadId?: string; sessionId?: string } = {}, filePath = workStatePath()): ChannelBindingRecord[] {
-  return withWorkDb(filePath, db => listChannelBindingsFromDb(db, filter))
-}
-
-export function listChannelBindingsReadOnly(filter: { provider?: string; chatId?: string; threadId?: string; sessionId?: string } = {}, filePath = workStatePath()): ChannelBindingRecord[] {
-  return withWorkDbReadOnly(filePath, db => listChannelBindingsFromDb(db, filter))
-}
-
-function listChannelBindingsFromDb(db: DatabaseSync, filter: { provider?: string; chatId?: string; threadId?: string; sessionId?: string } = {}): ChannelBindingRecord[] {
-  const clauses: string[] = []
-  const params: string[] = []
-  if (filter.provider) { clauses.push('provider = ?'); params.push(filter.provider) }
-  if (filter.chatId) { clauses.push('chat_id = ?'); params.push(filter.chatId) }
-  if (filter.threadId !== undefined) { clauses.push('thread_id = ?'); params.push(normalizeThreadId(filter.threadId)) }
-  if (filter.sessionId) { clauses.push('session_id = ?'); params.push(filter.sessionId) }
-  const sql = `SELECT * FROM channel_bindings${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY updated_at DESC`
-  return queryRows(db, sql, ...params).map(rowToChannelBinding).filter(Boolean) as ChannelBindingRecord[]
-}
-
-export function deleteChannelBinding(provider: string, chatId: string, threadId?: string, filePath = workStatePath()): boolean {
-  assertNoStorageOperationInProgress(filePath)
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const normalizedThreadId = normalizeThreadId(threadId)
-      const binding = rowToChannelBinding(db.prepare('SELECT * FROM channel_bindings WHERE provider = ? AND chat_id = ? AND thread_id = ?').get(provider, chatId, normalizedThreadId)) || undefined
-      if (!binding) {
-        db.exec('ROLLBACK')
-        return false
-      }
-      const result = db.prepare('DELETE FROM channel_bindings WHERE provider = ? AND chat_id = ? AND thread_id = ?')
-        .run(provider, chatId, normalizedThreadId) as any
-      const deleted = Number(result?.changes || 0) > 0
-      if (deleted) appendWorkEventRow(db, 'channel.binding.deleted', binding.sessionId, { provider, chatId, threadId: normalizedThreadId || undefined }, new Date().toISOString())
-      db.exec('COMMIT')
-      return deleted
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-export function createChannelClaimCodeRecord(input: {
-  id: string
-  provider: string
-  action: ChannelClaimAction
-  codeHash: string
-  codeFingerprint: string
-  createdBy?: string
-  createdAt?: string
-  expiresAt: string
-}, filePath = workStatePath()): ChannelClaimCodeRecord {
-  const now = normalizeOptionalIsoTime(input.createdAt, 'createdAt') || new Date().toISOString()
-  const record: ChannelClaimCodeRecord = {
-    id: normalizeRequiredString(input.id, 'claim.id', 120),
-    provider: normalizeProviderId(input.provider, 'claim.provider'),
-    action: normalizeChannelClaimAction(input.action),
-    codeHash: normalizeHash(input.codeHash, 'claim.codeHash'),
-    codeFingerprint: normalizeRequiredString(input.codeFingerprint, 'claim.codeFingerprint', 40),
-    status: 'pending',
-    createdBy: normalizeOptionalString(input.createdBy, 120) || 'operator',
-    createdAt: now,
-    expiresAt: normalizeOptionalIsoTime(input.expiresAt, 'expiresAt') || (() => { throw new Error('expiresAt must be an ISO timestamp') })(),
-  }
-  const db = openWorkDb(filePath)
-  try {
-    db.prepare(`INSERT INTO channel_claim_codes (
-      id, provider, action, code_hash, code_fingerprint, status, created_by, created_at, expires_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(record.id, record.provider, record.action, record.codeHash, record.codeFingerprint, record.status, record.createdBy, record.createdAt, record.expiresAt)
-  } finally {
-    db.close()
-  }
-  return record
-}
-
-export function findChannelClaimCodeByHash(codeHash: string, filePath = workStatePath()): ChannelClaimCodeRecord | undefined {
-  return withWorkDb(filePath, db => {
-    const row = db.prepare('SELECT * FROM channel_claim_codes WHERE code_hash = ? ORDER BY created_at DESC LIMIT 1')
-      .get(normalizeHash(codeHash, 'claim.codeHash')) as any
-    return row ? rowToChannelClaimCode(row) || undefined : undefined
-  })
-}
-
-export function listChannelClaimCodes(filter: { provider?: string; status?: ChannelClaimStatus; now?: Date } = {}, filePath = workStatePath()): ChannelClaimCodeRecord[] {
-  return withWorkDb(filePath, db => listChannelClaimCodesFromDb(db, filter))
-}
-
-export function listChannelClaimCodesReadOnly(filter: { provider?: string; status?: ChannelClaimStatus; now?: Date } = {}, filePath = workStatePath()): ChannelClaimCodeRecord[] {
-  return withWorkDbReadOnly(filePath, db => listChannelClaimCodesFromDb(db, filter))
-}
-
-function listChannelClaimCodesFromDb(db: DatabaseSync, filter: { provider?: string; status?: ChannelClaimStatus; now?: Date } = {}): ChannelClaimCodeRecord[] {
-  const clauses: string[] = []
-  const params: string[] = []
-  if (filter.provider) { clauses.push('provider = ?'); params.push(normalizeProviderId(filter.provider, 'claim.provider')) }
-  if (filter.status) { clauses.push('status = ?'); params.push(filter.status) }
-  if (filter.now) { clauses.push('expires_at > ?'); params.push(filter.now.toISOString()) }
-  const sql = `SELECT * FROM channel_claim_codes${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY created_at DESC`
-  return queryRows(db, sql, ...params).map(rowToChannelClaimCode).filter(Boolean) as ChannelClaimCodeRecord[]
-}
-
-export function updateChannelClaimCodeStatus(id: string, update: {
-  status: ChannelClaimStatus
-  acceptedAt?: string
-  acceptedTargetHash?: string
-  deniedAt?: string
-  denialReason?: string
-}, filePath = workStatePath()): ChannelClaimCodeRecord | undefined {
-  return withWorkDb(filePath, db => {
-    db.prepare(`UPDATE channel_claim_codes SET
-      status = ?,
-      accepted_at = COALESCE(?, accepted_at),
-      accepted_target_hash = COALESCE(?, accepted_target_hash),
-      denied_at = COALESCE(?, denied_at),
-      denial_reason = COALESCE(?, denial_reason)
-      WHERE id = ?`)
-      .run(
-        update.status,
-        update.acceptedAt || null,
-        normalizeOptionalString(update.acceptedTargetHash, 80) || null,
-        update.deniedAt || null,
-        normalizeOptionalString(update.denialReason, 120) || null,
-        normalizeRequiredString(id, 'claim.id', 120),
-      )
-    const row = db.prepare('SELECT * FROM channel_claim_codes WHERE id = ?').get(id) as any
-    return row ? rowToChannelClaimCode(row) || undefined : undefined
-  })
-}
-
-export function clearChannelBindingsForTest(filePath = workStatePath()): void {
-  const db = openWorkDb(filePath)
-  try { db.exec('DELETE FROM channel_bindings') }
-  finally { db.close() }
-}
 
 
 export function clearWorkStateForTest(filePath = workStatePath()): void {
@@ -3459,11 +3142,6 @@ function normalizeProjectNotificationMode(value: unknown): ProjectNotificationMo
   throw new Error(`project notification mode must be immediate, digest, or muted: ${String(value)}`)
 }
 
-function normalizeChannelBindingMode(value: unknown): ChannelBindingMode {
-  if (value === undefined || value === null || value === '') return 'chat'
-  if (value === 'chat' || value === 'task' || value === 'roadmap') return value
-  throw new Error(`channel binding mode must be chat, task, or roadmap: ${String(value)}`)
-}
 
 function normalizeProjectBindingChatId(value: unknown, scope: ProjectBindingScope): string | undefined {
   if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') return normalizeRequiredString(value, 'chatId', 200)
@@ -3552,7 +3230,7 @@ function scopeRank(scope: ProjectBindingScope): number {
   return 2
 }
 
-function upsertChannelBindingRow(db: DatabaseSync, input: { provider: string; chatId: string; threadId?: string; sessionId: string; mode?: ChannelBindingMode; roadmapId?: string; taskId?: string; title?: string; createdAt?: string }, now: string): void {
+export function upsertChannelBindingRow(db: DatabaseSync, input: { provider: string; chatId: string; threadId?: string; sessionId: string; mode?: ChannelBindingMode; roadmapId?: string; taskId?: string; title?: string; createdAt?: string }, now: string): void {
   db.prepare(`INSERT INTO channel_bindings (
     provider, chat_id, thread_id, session_id, mode, roadmap_id, task_id, title, created_at, updated_at
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -3710,10 +3388,6 @@ function normalizeManualGate(value: unknown): ManualGate | undefined {
   throw new Error(`manualGate must be approval_required, credentials_required, external_dependency, or waiting_for_user: ${String(value)}`)
 }
 
-function normalizeChannelClaimAction(value: unknown): ChannelClaimAction {
-  if (value === 'trust_target' || value === 'prove_denial') return value
-  throw new Error('claim.action must be trust_target or prove_denial')
-}
 
 function blockingDependenciesForTask(taskId: string, state: WorkState, indexes?: Pick<WorkTaskReadinessIndexes, 'dependenciesByTask'>): WorkDependencyRecord[] {
   const dependencies = indexes?.dependenciesByTask?.get(taskId) || state.dependencies || []
@@ -3811,12 +3485,12 @@ function normalizeHumanGateType(value: unknown): HumanGateType {
   throw new Error(`human gate type must be task_start, stage_transition, external_side_effect, budget_exception, destructive_action, credential_use, or manual: ${String(value)}`)
 }
 
-function normalizeHumanGateDecision(value: unknown): HumanGateDecision {
+export function normalizeHumanGateDecision(value: unknown): HumanGateDecision {
   if (value === 'approve' || value === 'reject') return value
   throw new Error(`human gate decision must be approve or reject: ${String(value)}`)
 }
 
-function normalizeHumanGateScope(value: unknown): HumanGateScope {
+export function normalizeHumanGateScope(value: unknown): HumanGateScope {
   if (value === undefined || value === null || value === '') return 'once'
   if (value === 'once' || value === 'always') return value
   throw new Error(`human gate scope must be once or always: ${String(value)}`)
@@ -3827,10 +3501,6 @@ function normalizeHumanGateTimeoutAction(value: unknown): HumanGateTimeoutAction
   throw new Error(`human gate timeout action must be remind, escalate, pause, or block: ${String(value)}`)
 }
 
-function normalizeAlertSeverity(value: unknown): AlertSeverity {
-  if (value === 'info' || value === 'warning' || value === 'critical') return value
-  throw new Error(`alert severity must be info, warning, or critical: ${String(value)}`)
-}
 
 function compareTaskReadiness(a: WorkTaskView, b: WorkTaskView): number {
   const readiness = readinessRank(a.readiness?.status) - readinessRank(b.readiness?.status)
@@ -3868,7 +3538,7 @@ function isBlockingDependency(dep: WorkDependencyRecord): boolean {
   return dep.type === 'blocks' || dep.type === 'blocked_by' || dep.type === 'parent'
 }
 
-function mutateWorkState<T>(filePath: string, fn: (state: WorkState, db: DatabaseSync) => T): T {
+export function mutateWorkState<T>(filePath: string, fn: (state: WorkState, db: DatabaseSync) => T): T {
   assertNoStorageOperationInProgress(filePath)
   const db = openWorkDb(filePath)
   const dbPath = path.resolve(filePath)
@@ -3899,194 +3569,8 @@ function mutateWorkState<T>(filePath: string, fn: (state: WorkState, db: Databas
   }
 }
 
-export function appendWorkEventRow(db: DatabaseSync, type: string, subjectId?: string, payload: Record<string, unknown> = {}, createdAt = new Date().toISOString()): number {
-  const result = db.prepare('INSERT INTO events (type, subject_id, payload_json, created_at) VALUES (?, ?, ?, ?)')
-    .run(type, subjectId || null, JSON.stringify(payload), createdAt) as any
-  const id = Number(result?.lastInsertRowid || 0)
-  const record = { id, type, subjectId, payload, createdAt }
-  appendAuditLedgerRowForWorkEvent(db, record)
-  upsertDelegationProgressRouteReceiptFromEvent(db, record)
-  pruneWorkEvents(db, createdAt)
-  return id
-}
-
-function upsertDelegationProgressRouteReceiptFromEvent(db: DatabaseSync, event: WorkEventRecord): void {
-  if (!isDelegationProgressRouteEvent(event.type)) return
-  const payload = event.payload || {}
-  const dedupeKey = typeof payload['dedupeKey'] === 'string' ? payload['dedupeKey'].trim() : ''
-  if (!dedupeKey) return
-
-  const previous = db.prepare('SELECT state, attempt_count FROM delegation_progress_route_receipts WHERE dedupe_key = ?').get(dedupeKey) as any
-  const state = routeReceiptStateFromEvent(event.type, payload, previous?.state)
-  const now = routeIso(event.createdAt) || new Date().toISOString()
-  db.prepare(`INSERT INTO delegation_progress_route_receipts (
-    dedupe_key, progress_key, idempotency_key, progress, target_key, provider, session_id,
-    delivery, state, reason, error, deferred_until, suppressed_until, progress_event_id,
-    attempt_count, last_event_id, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-  ON CONFLICT(dedupe_key) DO UPDATE SET
-    progress_key = COALESCE(excluded.progress_key, delegation_progress_route_receipts.progress_key),
-    idempotency_key = COALESCE(excluded.idempotency_key, delegation_progress_route_receipts.idempotency_key),
-    progress = COALESCE(excluded.progress, delegation_progress_route_receipts.progress),
-    target_key = COALESCE(excluded.target_key, delegation_progress_route_receipts.target_key),
-    provider = COALESCE(excluded.provider, delegation_progress_route_receipts.provider),
-    session_id = COALESCE(excluded.session_id, delegation_progress_route_receipts.session_id),
-    delivery = COALESCE(excluded.delivery, delegation_progress_route_receipts.delivery),
-    state = excluded.state,
-    reason = COALESCE(excluded.reason, delegation_progress_route_receipts.reason),
-    error = COALESCE(excluded.error, delegation_progress_route_receipts.error),
-    deferred_until = COALESCE(excluded.deferred_until, delegation_progress_route_receipts.deferred_until),
-    suppressed_until = COALESCE(excluded.suppressed_until, delegation_progress_route_receipts.suppressed_until),
-    progress_event_id = COALESCE(excluded.progress_event_id, delegation_progress_route_receipts.progress_event_id),
-    attempt_count = delegation_progress_route_receipts.attempt_count + 1,
-    last_event_id = COALESCE(excluded.last_event_id, delegation_progress_route_receipts.last_event_id),
-    updated_at = excluded.updated_at`)
-    .run(
-      dedupeKey,
-      routeString(payload['progressKey']) || null,
-      routeString(payload['idempotencyKey']) || null,
-      routeProgress(payload['progress']) || null,
-      routeString(payload['targetKey']) || null,
-      routeString(payload['provider']) || null,
-      routeString(payload['sessionId']) || null,
-      routeString(payload['delivery']) || null,
-      state,
-      routeReceiptText(payload['reason']) || null,
-      routeReceiptText(payload['error']) || null,
-      routeIso(payload['deferredUntil']) || null,
-      routeIso(payload['suppressedUntil']) || null,
-      routeNumber(payload['progressEventId']) ?? null,
-      event.id || null,
-      now,
-      now,
-    )
-}
-
-function rowToDelegationProgressRouteReceipt(row: any): DelegationProgressRouteReceiptRecord | undefined {
-  const dedupeKey = typeof row?.dedupe_key === 'string' && row.dedupe_key ? row.dedupe_key : ''
-  if (!dedupeKey) return undefined
-  const state = routeReceiptState(row.state)
-  const receipt: DelegationProgressRouteReceiptRecord = {
-    dedupeKey,
-    progressKey: routeString(row.progress_key),
-    idempotencyKey: routeString(row.idempotency_key),
-    progress: routeProgress(row.progress),
-    targetKey: routeString(row.target_key),
-    provider: routeString(row.provider),
-    sessionId: routeString(row.session_id),
-    delivery: routeString(row.delivery),
-    state,
-    reason: routeReceiptText(row.reason),
-    error: routeReceiptText(row.error),
-    deferredUntil: routeIso(row.deferred_until),
-    suppressedUntil: routeIso(row.suppressed_until),
-    progressEventId: routeNumber(row.progress_event_id),
-    attemptCount: Math.max(1, Number(row.attempt_count || 1)),
-    lastEventId: routeNumber(row.last_event_id),
-    createdAt: routeIso(row.created_at) || new Date(0).toISOString(),
-    updatedAt: routeIso(row.updated_at) || routeIso(row.created_at) || new Date(0).toISOString(),
-    nextAction: '',
-  }
-  receipt.nextAction = delegationProgressRouteReceiptNextAction(receipt)
-  return receipt
-}
-
-function isDelegationProgressRouteEvent(type: string): boolean {
-  return type === 'delegation.progress.attempting' || type === 'delegation.progress.notified' || type === 'delegation.progress.failed' || type === 'delegation.progress.suppressed'
-}
-
-function routeReceiptStateFromEvent(type: string, payload: Record<string, unknown>, previousState: unknown): DelegationProgressRouteReceiptState {
-  if (type === 'delegation.progress.attempting') return 'pending'
-  if (type === 'delegation.progress.notified') return previousState === 'failed' ? 'retried' : 'delivered'
-  if (type === 'delegation.progress.failed') return 'failed'
-  const delivery = routeString(payload['delivery'])
-  const reason = routeString(payload['reason'])?.toLowerCase() || ''
-  if (delivery === 'muted') return 'muted'
-  if (delivery === 'deferred' && reason.includes('missing parent session')) return 'orphaned'
-  if (delivery === 'deferred' && reason.includes('session client unavailable')) return 'stale_parent'
-  if (delivery === 'deferred') return 'deferred'
-  return 'suppressed'
-}
-
-function delegationProgressRouteReceiptNextAction(receipt: Pick<DelegationProgressRouteReceiptRecord, 'state' | 'error' | 'deferredUntil' | 'suppressedUntil' | 'provider' | 'sessionId'>): string {
-  if (receipt.state === 'delivered') return 'No action; delivery receipt is present.'
-  if (receipt.state === 'retried') return 'No action; delivery succeeded after a previous failed attempt.'
-  if (receipt.state === 'failed') {
-    if (receipt.error && /\btimed out after \d+ms\b/.test(receipt.error)) return 'Retry after the timeout cooldown, or repair the target adapter before rerunning progress delivery.'
-    return 'Repair the delivery target and rerun delegated progress delivery.'
-  }
-  if (receipt.state === 'stale_parent') return 'Reconnect the parent OpenCode session client, then rerun delegated progress delivery.'
-  if (receipt.state === 'orphaned') return 'Rebind the delegated work to a parent session or trusted channel before claiming delivery.'
-  if (receipt.state === 'muted') return 'Unmute the target or change notification policy before expecting delivery.'
-  if (receipt.state === 'deferred') return receipt.deferredUntil ? `Wait until ${receipt.deferredUntil}, then rerun delegated progress delivery.` : 'Resolve the deferral reason, then rerun delegated progress delivery.'
-  if (receipt.state === 'suppressed') return receipt.suppressedUntil ? `Suppressed until ${receipt.suppressedUntil}; inspect notification policy before retrying.` : 'Inspect notification policy and target binding before retrying.'
-  return 'Run delegated progress delivery for this pending route.'
-}
-
-function routeReceiptState(value: unknown): DelegationProgressRouteReceiptState {
-  return value === 'pending' || value === 'delivered' || value === 'failed' || value === 'retried' || value === 'suppressed' || value === 'deferred' || value === 'muted' || value === 'stale_parent' || value === 'orphaned' ? value : 'pending'
-}
-
-function routeProgress(value: unknown): DelegatedWorkProgressKind | undefined {
-  return value === 'created' || value === 'dispatched' || value === 'stage_advanced' || value === 'blocked' || value === 'gate_opened' || value === 'completed' || value === 'failed' || value === 'completion_proposed' ? value : undefined
-}
-
-function routeString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim().substring(0, 1000) : undefined
-}
-
-function routeReceiptText(value: unknown): string | undefined {
-  const text = routeString(value)
-  return text ? redactSensitiveText(text).substring(0, 1000) : undefined
-}
-
-function routeIso(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const time = Date.parse(value)
-  return Number.isFinite(time) ? new Date(time).toISOString() : undefined
-}
-
-function routeNumber(value: unknown): number | undefined {
-  const number = Number(value)
-  return Number.isFinite(number) && number > 0 ? number : undefined
-}
-
-function appendAuditLedgerRowForWorkEvent(db: DatabaseSync, event: WorkEventRecord): void {
-  if (!event.id) return
-  if (db.prepare('SELECT id FROM audit_ledger WHERE source_event_id = ?').get(event.id)) return
-  const previous = db.prepare('SELECT entry_hash FROM audit_ledger ORDER BY id DESC LIMIT 1').get() as any
-  // When retention has pruned the entire ledger, the chain continues from the
-  // recorded retention anchor instead of restarting at genesis.
-  const previousHash = previous?.entry_hash ? String(previous.entry_hash) : readAuditLedgerRetentionAnchorHash(db)
-  const record = auditLedgerRecordFromWorkEvent(event, previousHash)
-  if (!record) return
-  db.prepare(`INSERT INTO audit_ledger (
-    schema_version, event_id, source_event_id, source_event_type, class, actor_kind, actor_ref,
-    resource_kind, resource_ref, action, result, occurred_at, trace_id, correlation_id,
-    retention_class, evidence_refs_json, redacted_payload_json, previous_hash, entry_hash
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(
-      record.schemaVersion,
-      record.eventId,
-      record.sourceEventId || null,
-      record.sourceEventType || null,
-      record.class,
-      record.actorKind,
-      record.actorRef,
-      record.resourceKind,
-      record.resourceRef,
-      record.action,
-      record.result,
-      record.occurredAt,
-      record.traceId,
-      record.correlationId || null,
-      record.retentionClass,
-      JSON.stringify(record.evidenceRefs),
-      JSON.stringify(record.redactedPayload),
-      record.previousHash || null,
-      record.entryHash,
-    )
-}
+import { appendWorkEventRow, appendAuditLedgerRowForWorkEvent, upsertDelegationProgressRouteReceiptFromEvent, rowToDelegationProgressRouteReceipt } from './work-store/event-append.js'
+export { appendWorkEventRow } from './work-store/event-append.js'
 
 function findDelegationReceiptInDb(db: DatabaseSync, idempotencyKey: string): DelegatedWorkReceipt | undefined {
   const receiptRow = db.prepare('SELECT * FROM delegation_receipts WHERE idempotency_key = ?').get(idempotencyKey) as any
@@ -4331,7 +3815,7 @@ function activeRunControlNextAction(action: ActiveRunControlAction, reason: Acti
   return 'Refresh operator status and choose an active run before applying a control.'
 }
 
-function abortActiveRunInState(state: WorkState, db: DatabaseSync, task: WorkTaskRecord, action: string, note: string | undefined, now: string): string | undefined {
+export function abortActiveRunInState(state: WorkState, db: DatabaseSync, task: WorkTaskRecord, action: string, note: string | undefined, now: string): string | undefined {
   const activeRun = task.currentRunId ? state.runs.find(run => run.id === task.currentRunId && isActiveRunStatus(run.status)) : undefined
   if (!activeRun) return undefined
   activeRun.status = 'errored'
@@ -4490,7 +3974,7 @@ function applyStageResultInState(state: WorkState, task: WorkTaskRecord, run: Ru
   return decision
 }
 
-function recomputeRoadmapStatusInState(state: WorkState, roadmapId: string, now = new Date().toISOString()): RoadmapRecord | undefined {
+export function recomputeRoadmapStatusInState(state: WorkState, roadmapId: string, now = new Date().toISOString()): RoadmapRecord | undefined {
   const roadmap = state.roadmaps.find(row => row.id === roadmapId)
   if (!roadmap || roadmap.status === 'archived') return roadmap
   const tasks = state.tasks.filter(task => task.roadmapId === roadmapId && task.status !== 'archived')

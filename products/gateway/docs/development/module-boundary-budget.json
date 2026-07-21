@@ -740,9 +740,9 @@
  "fileLocBudgets": [
   {
    "path": "src/work-store.ts",
-   "maxLines": 5489,
+   "maxLines": 4900,
    "owner": "work_store",
-   "note": "Hard LOC budget (JOE-919); current 5382 lines; ratchet toward 2000"
+   "note": "Hard LOC budget (JOE-919/JOE-942); current 4866 after alerts/channel-bindings/event-append extract; toward 2000"
   },
   {
    "path": "src/environments.ts",
