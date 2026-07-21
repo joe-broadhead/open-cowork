@@ -746,9 +746,9 @@
   },
   {
    "path": "src/environments.ts",
-   "maxLines": 2320,
+   "maxLines": 1300,
    "owner": "environments",
-   "note": "Hard LOC budget (JOE-919); current 2275 lines; ratchet toward 2000"
+   "note": "Hard LOC budget (JOE-919/JOE-936); current ~1262 after util/lifecycle/local-container/remote-crabbox extract; ≤2000"
   },
   {
    "path": "src/config.ts",
