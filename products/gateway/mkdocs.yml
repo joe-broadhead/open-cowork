@@ -108,6 +108,7 @@ nav:
       - Identity Graph: concepts/identity-graph.md
       - Mission Control: concepts/mission-control.md
       - Multi Daemon Scaling: concepts/multi-daemon-scaling.md
+      - Distributed Ownership Design: concepts/distributed-ownership-design.md
       - Product Contract: concepts/product-contract.md
       - Progress Update Policy: concepts/progress-update-policy.md
       - Roadmap Supervision: concepts/roadmap-supervision.md

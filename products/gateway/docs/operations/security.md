@@ -114,7 +114,7 @@ The following surfaces are **operator high-sensitivity** and must never be expos
 
 ## Multi-writer / HA limits (operator)
 
-Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true`. Process-local stream/replay maps and JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`) are **not** multi-writer safe. See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md). Do not claim multi-AZ HA for Durable Gateway until distributed ownership is proven.
+Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true` (lab-only; not multi-AZ HA). Process-local stream/replay maps and JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`) are **not** multi-writer safe. See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md) and [Distributed ownership design](../concepts/distributed-ownership-design.md). Do not claim multi-AZ HA for Durable Gateway until the proving registry status is `ready` and migrate hazards are closed (JOE-949/963).
 
 Route, MCP, trusted-channel-command, and CLI capability classification is enforced in code by `src/security.ts` (`httpCapabilityForRequest`, `evaluateHttpRequestSecurity`) and `src/security-policy.ts`, covering local daemon routes, MCP groups, trusted-channel command groups, CLI groups, binding requirements, OpenCode-owned decision routing, and exposed-mode fail-closed invariants. Focused tests fail when a new surface is not classified. This is local evidence for the current single-operator boundary; it is not hosted/team RBAC certification.
 
