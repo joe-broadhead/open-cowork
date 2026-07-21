@@ -232,6 +232,13 @@ function writeIsolatedConfig(tempRoot: string) {
       required: false,
     }))
   }
+  // Secondary Studio surfaces are default-off in product config. Smoke/eval
+  // journeys exercise Approvals offline (synthetic permission requests), so
+  // enable that feature in the isolated harness config only.
+  config.features = {
+    ...(config.features && typeof config.features === 'object' ? config.features : {}),
+    approvals: true,
+  }
   const targetPath = join(tempRoot, 'open-cowork.smoke.config.json')
   writeFileSync(targetPath, JSON.stringify(config, null, 2))
   return targetPath

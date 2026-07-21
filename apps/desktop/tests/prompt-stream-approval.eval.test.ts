@@ -69,9 +69,24 @@ test('eval:prompt-approval — prompt streams and an approval resolves offline',
       await page.getByRole('heading', { name: 'Approvals' }).waitFor({ timeout: 10_000 })
       await captureEvidence(page, 'prompt-approval', '02-approval-pending')
 
-      const approveButton = page.getByRole('button', { name: /^(Approve|Allow once)$/ }).first()
-      await approveButton.waitFor({ timeout: 10_000 })
-      await approveButton.click()
+      // Studio queue labels the primary action "Allow once" (chat card uses
+      // "Approve"). Prefer the queue action; tolerate chat-card wording.
+      // Session streaming can remount queue rows mid-click, so use a
+      // DOM-stable click rather than Playwright's actionability retry loop.
+      await page.waitForFunction(() => {
+        return [...document.querySelectorAll('button')].some((button) => {
+          const label = (button.textContent || '').replace(/\s+/g, ' ').trim()
+          return label === 'Allow once' || label === 'Approve'
+        })
+      }, undefined, { timeout: 10_000 })
+      await page.evaluate(() => {
+        const button = [...document.querySelectorAll('button')].find((candidate) => {
+          const label = (candidate.textContent || '').replace(/\s+/g, ' ').trim()
+          return label === 'Allow once' || label === 'Approve'
+        }) as HTMLButtonElement | undefined
+        if (!button) throw new Error('approval action button not found')
+        button.click()
+      })
 
       await page.waitForFunction(() => {
         const evalApi = (window as unknown as {
