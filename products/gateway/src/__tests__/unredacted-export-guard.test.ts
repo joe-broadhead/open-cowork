@@ -1,93 +1,91 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_UNREDACTED_EXPORT_GUARD,
   evaluateUnredactedExportGuard,
   guardUnredactedExport,
   resetUnredactedExportGuardForTests,
   unredactedExportActorKey,
-} from '../unredacted-export-guard.ts'
+} from '../unredacted-export-guard.js'
 
-test.beforeEach(() => {
-  resetUnredactedExportGuardForTests()
-})
+describe('unredacted-export-guard (JOE-952)', () => {
+  beforeEach(() => {
+    resetUnredactedExportGuardForTests()
+  })
 
-test('evaluateUnredactedExportGuard allows up to maxRequests then rate-limits', () => {
-  const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 3, windowMs: 60_000 }
-  const now = 1_000_000
-  assert.equal(evaluateUnredactedExportGuard('actor-a', config, now).allowed, true)
-  assert.equal(evaluateUnredactedExportGuard('actor-a', config, now + 1).allowed, true)
-  assert.equal(evaluateUnredactedExportGuard('actor-a', config, now + 2).allowed, true)
-  const limited = evaluateUnredactedExportGuard('actor-a', config, now + 3)
-  assert.equal(limited.allowed, false)
-  if (!limited.allowed) assert.ok(limited.retryAfterSeconds >= 1)
-})
+  it('allows up to maxRequests then rate-limits', () => {
+    const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 3, windowMs: 60_000 }
+    const now = 1_000_000
+    expect(evaluateUnredactedExportGuard('actor-a', config, now).allowed).toBe(true)
+    expect(evaluateUnredactedExportGuard('actor-a', config, now + 1).allowed).toBe(true)
+    expect(evaluateUnredactedExportGuard('actor-a', config, now + 2).allowed).toBe(true)
+    const limited = evaluateUnredactedExportGuard('actor-a', config, now + 3)
+    expect(limited.allowed).toBe(false)
+    if (!limited.allowed) expect(limited.retryAfterSeconds).toBeGreaterThanOrEqual(1)
+  })
 
-test('evaluateUnredactedExportGuard scopes buckets per actor', () => {
-  const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 1, windowMs: 60_000 }
-  const now = 2_000_000
-  assert.equal(evaluateUnredactedExportGuard('actor-a', config, now).allowed, true)
-  assert.equal(evaluateUnredactedExportGuard('actor-a', config, now + 1).allowed, false)
-  assert.equal(evaluateUnredactedExportGuard('actor-b', config, now + 1).allowed, true)
-})
+  it('scopes buckets per actor', () => {
+    const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 1, windowMs: 60_000 }
+    const now = 2_000_000
+    expect(evaluateUnredactedExportGuard('actor-a', config, now).allowed).toBe(true)
+    expect(evaluateUnredactedExportGuard('actor-a', config, now + 1).allowed).toBe(false)
+    expect(evaluateUnredactedExportGuard('actor-b', config, now + 1).allowed).toBe(true)
+  })
 
-test('guardUnredactedExport is a no-op when redacted', () => {
-  const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } }
-  assert.equal(
-    guardUnredactedExport(req, { operation: 'evidence.export.unredacted', target: 'x', unredacted: false }),
-    null,
-  )
-})
+  it('is a no-op when redacted', () => {
+    const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } }
+    expect(
+      guardUnredactedExport(req, { operation: 'evidence.export.unredacted', target: 'x', unredacted: false }),
+    ).toBeNull()
+  })
 
-test('guardUnredactedExport returns 429 after the limit', () => {
-  const req = {
-    headers: { authorization: 'Bearer test-token-abcdef' },
-    socket: { remoteAddress: '10.0.0.5' },
-  }
-  const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 2, windowMs: 60_000 }
-  const now = 3_000_000
-  assert.equal(
-    guardUnredactedExport(req, {
+  it('returns 429 after the limit', () => {
+    const req = {
+      headers: { authorization: 'Bearer test-token-abcdef' },
+      socket: { remoteAddress: '10.0.0.5' },
+    }
+    const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 2, windowMs: 60_000 }
+    const now = 3_000_000
+    expect(
+      guardUnredactedExport(req, {
+        operation: 'config.read.unredacted',
+        target: 'config',
+        unredacted: true,
+        config,
+        now,
+      }),
+    ).toBeNull()
+    expect(
+      guardUnredactedExport(req, {
+        operation: 'config.read.unredacted',
+        target: 'config',
+        unredacted: true,
+        config,
+        now: now + 1,
+      }),
+    ).toBeNull()
+    const denied = guardUnredactedExport(req, {
       operation: 'config.read.unredacted',
       target: 'config',
       unredacted: true,
       config,
-      now,
-    }),
-    null,
-  )
-  assert.equal(
-    guardUnredactedExport(req, {
-      operation: 'config.read.unredacted',
-      target: 'config',
-      unredacted: true,
-      config,
-      now: now + 1,
-    }),
-    null,
-  )
-  const denied = guardUnredactedExport(req, {
-    operation: 'config.read.unredacted',
-    target: 'config',
-    unredacted: true,
-    config,
-    now: now + 2,
+      now: now + 2,
+    })
+    expect(denied).toBeTruthy()
+    expect(denied?.status).toBe(429)
+    expect((denied?.body as { error?: string })?.error).toBe('unredacted export rate limit exceeded')
   })
-  assert.ok(denied)
-  assert.equal(denied?.status, 429)
-  assert.equal((denied?.body as { error?: string })?.error, 'unredacted export rate limit exceeded')
-})
 
-test('unredactedExportActorKey uses bearer fingerprint when present', () => {
-  const withToken = unredactedExportActorKey({
-    headers: { authorization: 'Bearer abc' },
-    socket: { remoteAddress: '127.0.0.1' },
+  it('uses bearer fingerprint when present', () => {
+    const withToken = unredactedExportActorKey({
+      headers: { authorization: 'Bearer abc' },
+      socket: { remoteAddress: '127.0.0.1' },
+    })
+    const without = unredactedExportActorKey({
+      headers: {},
+      socket: { remoteAddress: '127.0.0.1' },
+    })
+    expect(withToken).toMatch(/^http-token:/)
+    expect(without).toMatch(/^http\|/)
+    expect(withToken).not.toEqual(without)
   })
-  const without = unredactedExportActorKey({
-    headers: {},
-    socket: { remoteAddress: '127.0.0.1' },
-  })
-  assert.match(withToken, /^http-token:/)
-  assert.match(without, /^http\|/)
-  assert.notEqual(withToken, without)
 })
