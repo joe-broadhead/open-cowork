@@ -13,7 +13,7 @@ const root = process.cwd()
 const ghost = join(root, 'apps', 'gateway')
 
 if (!existsSync(ghost)) {
-  console.log('[ghost-apps-gateway] ok — apps/gateway absent')
+  process.stdout.write('[ghost-apps-gateway] ok — apps/gateway absent\n')
   process.exit(0)
 }
 
