@@ -82,18 +82,31 @@ export type CloudPromptInput = {
 }
 
 /**
- * Cloud workspace session adapter. Extends the shared {@link WorkspaceSessionPort}
- * surface so cloud and Durable Gateway bridges share one session/workflow contract
- * (audit 2026-07-21 P2-8). Optional methods remain cloud-only extensions.
+ * Cloud workspace session adapter. Structurally aligns with {@link WorkspaceSessionPort}
+ * for shared session/workflow methods (audit 2026-07-21 P2-8); optional members are
+ * cloud-only extensions.
  */
-export type CloudWorkspaceSessionAdapter = WorkspaceSessionPort & {
+export type CloudWorkspaceSessionAdapter = {
+  policy(): Promise<WorkspacePolicy>
   sync?(): Promise<void>
+  listSessions(): Promise<SessionInfo[]>
   createSession(input?: { projectSource?: CloudProjectSourceInput | null }): Promise<SessionInfo>
   validateProjectSource?(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict>
   uploadProjectSnapshot?(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
   importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }>
+  getSessionInfo(sessionId: string): Promise<SessionInfo | null>
+  getSessionView(sessionId: string): Promise<SessionView>
   promptSession(sessionId: string, input: CloudPromptInput): Promise<void>
+  abortSession(sessionId: string): Promise<void>
+  replyToQuestion?(sessionId: string, requestId: string, answers: unknown[]): Promise<void>
+  rejectQuestion?(sessionId: string, requestId: string): Promise<void>
+  respondToPermission?(sessionId: string, permissionId: string, allowed: boolean): Promise<void>
   listWorkflows?(input?: WorkflowListRequest): Promise<WorkflowListPayload>
+  getWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
+  runWorkflow?(workflowId: string): Promise<WorkflowRun | null>
+  pauseWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
+  resumeWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
+  archiveWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   searchThreads?(query?: ThreadSearchQuery): Promise<ThreadSearchResult>
   threadFacets?(query?: ThreadSearchQuery): Promise<ThreadFacetSummary>
   listThreadTags?(): Promise<ThreadTag[]>

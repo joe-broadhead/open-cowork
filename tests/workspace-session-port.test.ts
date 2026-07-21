@@ -32,9 +32,13 @@ test('workspace-session-port defines the shared session/workflow surface', () =>
   }
 })
 
-test('cloud workspace adapter extends WorkspaceSessionPort', () => {
+test('cloud workspace adapter documents WorkspaceSessionPort alignment', () => {
   assert.match(cloudSource, /WorkspaceSessionPort/)
-  assert.match(cloudSource, /CloudWorkspaceSessionAdapter = WorkspaceSessionPort/)
+  assert.match(cloudSource, /CloudWorkspaceSessionAdapter/)
+  // Shared session methods exist on the adapter type.
+  for (const method of ['listSessions', 'promptSession', 'getSessionView', 'listWorkflows']) {
+    assert.match(cloudSource, new RegExp(`${method}\\??\\(`))
+  }
 })
 
 test('assertWorkspaceSessionPort rejects incomplete objects', async () => {

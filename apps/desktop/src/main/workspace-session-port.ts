@@ -8,6 +8,7 @@
  * transport.
  */
 import type {
+  MessageAttachment,
   SessionInfo,
   SessionView,
   WorkflowDetail,
@@ -16,12 +17,13 @@ import type {
   WorkspacePolicy,
 } from '@open-cowork/shared'
 
+/** Prompt payload shared by cloud and gateway workspace session ports. */
 export type WorkspaceSessionPromptInput = {
-  text?: string
-  agent?: string
+  text: string
+  agent?: string | null
   model?: string
   variant?: string
-  attachments?: unknown[]
+  attachments?: MessageAttachment[]
   [key: string]: unknown
 }
 
