@@ -205,3 +205,14 @@ export function scopeRank(scope: ProjectBindingScope): number {
   return 2
 }
 
+export function filterProjectBindings(bindings: ProjectBindingRecord[], filter: { alias?: string; roadmapId?: string; sessionId?: string; scope?: ProjectBindingScope; provider?: string; chatId?: string; threadId?: string } = {}): ProjectBindingRecord[] {
+  if (filter.alias) bindings = bindings.filter(binding => binding.alias === normalizeProjectAlias(filter.alias!))
+  if (filter.roadmapId) bindings = bindings.filter(binding => binding.roadmapId === filter.roadmapId)
+  if (filter.sessionId) bindings = bindings.filter(binding => binding.sessionId === filter.sessionId)
+  if (filter.scope) bindings = bindings.filter(binding => binding.scope === filter.scope)
+  if (filter.provider) bindings = bindings.filter(binding => binding.provider === filter.provider)
+  if (filter.chatId) bindings = bindings.filter(binding => binding.chatId === filter.chatId)
+  if (filter.threadId !== undefined) bindings = bindings.filter(binding => (binding.threadId || '') === normalizeThreadId(filter.threadId))
+  return bindings.slice().sort(compareProjectBindings)
+}
+

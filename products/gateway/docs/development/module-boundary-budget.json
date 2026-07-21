@@ -740,9 +740,9 @@
  "fileLocBudgets": [
   {
    "path": "src/work-store.ts",
-   "maxLines": 3000,
+   "maxLines": 2000,
    "owner": "work_store",
-   "note": "Hard LOC budget (JOE-919/JOE-942); current ~2954 after task-dispatch + delegation + run-helpers extract; toward 2000"
+   "note": "Hard LOC budget (JOE-919/JOE-942); current ~1956 after state-io + event-queries + final helper moves; at ≤2000 target"
   },
   {
    "path": "src/environments.ts",

@@ -541,3 +541,17 @@ export function upsertTaskDispatchReceiptRow(db: DatabaseSync, receipt: TaskDisp
     receipt.updatedAt,
   )
 }
+
+export function cleanupDeletedTaskReferences(db: DatabaseSync, taskIds: Set<string>): void {
+  const deleteDispatch = db.prepare('DELETE FROM task_dispatch_receipts WHERE task_id = ?')
+  const deleteBindings = db.prepare('DELETE FROM channel_bindings WHERE task_id = ?')
+  const deleteGates = db.prepare('DELETE FROM human_gates WHERE task_id = ?')
+  const clearAdmissions = db.prepare('UPDATE session_admissions SET task_id = NULL WHERE task_id = ?')
+  for (const taskId of taskIds) {
+    deleteDispatch.run(taskId)
+    deleteBindings.run(taskId)
+    deleteGates.run(taskId)
+    clearAdmissions.run(taskId)
+  }
+}
+

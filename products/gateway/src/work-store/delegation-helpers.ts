@@ -4,7 +4,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
-import { parseJSON } from './db.js'
+import { parseJSON, queryRows } from './db.js'
 import { rowToDelegationReceipt } from './row-mappers.js'
 import type {
   DelegatedWorkProgressKind,
@@ -12,6 +12,7 @@ import type {
   ProjectBindingRecord,
   RoadmapRecord,
   RoadmapSupervisorRecord,
+  WorkState,
   WorkTaskRecord,
 } from './types.js'
 import { appendWorkEventRow } from './event-append.js'
@@ -172,5 +173,55 @@ export function nextDelegationSchedulerAction(tasks: WorkTaskRecord[], superviso
   if (tasks.length) return 'dispatch_when_scheduler_runs'
   if (supervisor) return 'roadmap_supervisor_review_when_due'
   return 'none'
+}
+
+export function supervisedProjectResultFromReceipt(state: WorkState, receipt: DelegatedWorkReceipt): Omit<import('./types.js').SupervisedProjectCreateResult, 'idempotencyStatus'> {
+  const roadmap = receipt.roadmapId ? state.roadmaps.find(row => row.id === receipt.roadmapId) : undefined
+  if (!roadmap) throw new Error(`project create receipt references missing roadmap: ${receipt.idempotencyKey}`)
+  const supervisor = receipt.supervisorId
+    ? state.supervisors.find(row => row.supervisorId === receipt.supervisorId)
+    : state.supervisors.find(row => row.roadmapId === roadmap.id && row.isDefault)
+  if (!supervisor) throw new Error(`project create receipt references missing supervisor: ${receipt.idempotencyKey}`)
+  const binding = receipt.projectBindingId
+    ? state.projectBindings.find(row => row.id === receipt.projectBindingId)
+    : state.projectBindings.find(row => row.roadmapId === roadmap.id)
+  if (!binding) throw new Error(`project create receipt references missing project binding: ${receipt.idempotencyKey}`)
+  const taskIds = new Set(receipt.taskIds)
+  const tasks = state.tasks.filter(task => task.roadmapId === roadmap.id && (!taskIds.size || taskIds.has(task.id)))
+  return { roadmap, tasks, supervisor, binding }
+}
+
+export function updateDelegationReceiptsForDeletion(
+  db: DatabaseSync,
+  deletedTaskIds: Set<string>,
+  deleted: { roadmapId?: string; supervisorIds?: Set<string>; projectBindingIds?: Set<string> } = {},
+): void {
+  const rows = queryRows(db, 'SELECT idempotency_key, task_ids_json, roadmap_id, supervisor_id, project_binding_id FROM delegation_receipts')
+  const update = db.prepare(`UPDATE delegation_receipts
+    SET task_ids_json = ?,
+        roadmap_id = CASE WHEN roadmap_id = ? THEN NULL ELSE roadmap_id END,
+        supervisor_id = CASE WHEN supervisor_id = ? THEN NULL ELSE supervisor_id END,
+        project_binding_id = CASE WHEN project_binding_id = ? THEN NULL ELSE project_binding_id END,
+        updated_at = ?
+    WHERE idempotency_key = ?`)
+  const now = new Date().toISOString()
+  for (const row of rows) {
+    const taskIds = parseJSON<unknown[]>(row['task_ids_json'], []).map(String)
+    const remainingTaskIds = taskIds.filter(taskId => !deletedTaskIds.has(taskId))
+    const supervisorId = String(row['supervisor_id'] || '')
+    const projectBindingId = String(row['project_binding_id'] || '')
+    const roadmapMatches = Boolean(deleted.roadmapId && row['roadmap_id'] === deleted.roadmapId)
+    const supervisorMatches = Boolean(supervisorId && deleted.supervisorIds?.has(supervisorId))
+    const projectBindingMatches = Boolean(projectBindingId && deleted.projectBindingIds?.has(projectBindingId))
+    if (remainingTaskIds.length === taskIds.length && !roadmapMatches && !supervisorMatches && !projectBindingMatches) continue
+    update.run(
+      JSON.stringify(remainingTaskIds),
+      deleted.roadmapId || '',
+      supervisorMatches ? supervisorId : '',
+      projectBindingMatches ? projectBindingId : '',
+      now,
+      row['idempotency_key'],
+    )
+  }
 }
 

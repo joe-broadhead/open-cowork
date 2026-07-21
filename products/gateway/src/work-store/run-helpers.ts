@@ -12,11 +12,12 @@ import {
   redactEnvironmentRecord,
 } from '../environments.js'
 import { buildRuntimeLifecycleDiagnostics, summarizeRuntimeIsolationProfile } from '../runtime-isolation.js'
-import { decideNextTaskState, type StageResult, type WorkflowDecision } from '../workflow.js'
+import { decideNextTaskState, normalizeTaskQualitySpec, type StageResult, type WorkflowDecision } from '../workflow.js'
 import { isActiveRunStatus, isTaskActiveStatus, isTaskRunOwnershipTerminalStatus } from '../runtime-state-machine.js'
 import { redactSensitiveText } from '../security.js'
 import { appendWorkEventRow } from './event-append.js'
-import { recomputeRoadmapStatusInState } from './task-helpers.js'
+import { calculateTaskReadiness, createRun, recomputeRoadmapStatusInState } from './task-helpers.js'
+import { appendDelegationProgressForTask } from './delegation-helpers.js'
 import type {
   ActiveRunControlAction,
   ActiveRunControlReason,
@@ -362,3 +363,25 @@ export function applyStageResultInState(state: WorkState, task: WorkTaskRecord, 
   if (isTaskRunOwnershipTerminalStatus(task.status)) recomputeRoadmapStatusInState(state, task.roadmapId, now)
   return decision
 }
+
+export function startWorkTaskRunInState(state: WorkState, db: DatabaseSync, id: string, stage: string, sessionId: string, profile: string, lease: { owner?: string; leaseMs?: number; generation?: string } = {}, resolution: import('./types.js').RunResolutionInput = {}, nowDate = new Date()): import('./types.js').WorkTaskRunStartResult | undefined {
+  const task = state.tasks.find(row => row.id === id)
+  if (!task || task.status !== 'pending' || task.currentRunId) return undefined
+  const roadmap = state.roadmaps.find(row => row.id === task.roadmapId)
+  if (roadmap?.status === 'archived') return undefined
+  if (!task.pipeline.includes(stage)) return undefined
+  if ((task.currentStage || task.pipeline[0] || 'implement') !== stage) return undefined
+  if (calculateTaskReadiness(task, state).status !== 'runnable') return undefined
+  const now = nowDate.toISOString()
+  if (resolution.taskQualitySpec) task.qualitySpec = normalizeTaskQualitySpec(resolution.taskQualitySpec)
+  const run = createRun(task, stage, sessionId, profile, nowDate, lease, resolution)
+  state.runs.push(run)
+  task.status = 'running'
+  task.currentStage = stage
+  task.currentRunId = run.id
+  task.updatedAt = now
+  appendWorkEventRow(db, 'task.run.started', task.id, { runId: run.id, stage, sessionId, profile, agentTeam: run.agentTeam, agentTeamVersion: run.agentTeamVersion, resolvedProfile: run.resolvedProfile, resolvedAgent: run.resolvedAgent }, now)
+  appendDelegationProgressForTask(db, task, 'dispatched', { runId: run.id, stage, sessionId, profile, status: task.status, summary: `Delegated task dispatched to ${stage}: ${task.title}` }, now, run.id)
+  return { task, run }
+}
+
