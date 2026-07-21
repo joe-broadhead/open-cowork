@@ -20,9 +20,15 @@ on:
 
 permissions:
   contents: read
+  # JOE-926: open/comment GitHub issues on consecutive eval failures.
+  issues: write
+  actions: read
 
 env:
   TZ: UTC
+  # Consecutive completed failures before opening/commenting an alert issue.
+  # Silence: close the auto-opened issue after a green run or accepted risk.
+  OPEN_COWORK_EVAL_FAIL_STREAK: '2'
 
 concurrency:
   group: monthly-evals-${{ github.ref }}
@@ -57,7 +63,12 @@ jobs:
       # apps/desktop/test-artifacts/evals/<flow>/, and the visual-regression
       # flow diffs Home + Team (light + dark) against committed baselines
       # (seeding any that are missing on first run).
+      #
+      # Contract selectors (keep dual-updated if UI renames):
+      #   - Admin nav: [data-nav-view="admin"]  (Sidebar ADMIN_NAV_ITEM)
+      #   - Approvals nav: [data-nav-view="approvals"]
       - name: Run monthly UI eval flows + visual regression (xvfb)
+        id: evals
         run: xvfb-run -a pnpm test:e2e:evals
         env:
           OPEN_COWORK_EVAL_UPDATE_BASELINES: ${{ inputs.update_baselines && '1' || '0' }}
@@ -82,3 +93,12 @@ jobs:
           path: apps/desktop/tests/visual-baselines/**
           if-no-files-found: ignore
           retention-days: 30
+
+      # JOE-926: non-blocking quality signal — monthly evals are not a required
+      # release check, so open a GitHub issue after N consecutive red runs.
+      - name: Alert on consecutive monthly eval failures
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/monthly-eval-failure-alert.mjs
