@@ -96,7 +96,7 @@ export function assertWorkspaceSessionPort(
     ? WORKSPACE_SESSION_PORT_FULL_METHODS
     : WORKSPACE_SESSION_PORT_CORE_METHODS
   for (const method of methods) {
-    if (typeof (port as Record<string, unknown>)[method] !== 'function') {
+    if (typeof (port as unknown as Record<string, unknown>)[method] !== 'function') {
       throw new Error(`WorkspaceSessionPort missing method: ${method}`)
     }
   }
