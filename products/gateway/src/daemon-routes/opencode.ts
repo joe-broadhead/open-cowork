@@ -7,6 +7,7 @@ import { formatOpenCodeSessionLinks, formatOpenCodeUnavailableSessionLinks, gate
 import { listPendingPermissions, listPendingQuestions, rejectPermission, rejectQuestion, replyToPermission, replyToQuestion } from '../opencode-requests.js'
 import { deleteOpenCodeAgent, deleteOpenCodeMcp, deleteOpenCodeSkill, deleteOpenCodeTool, listOpenCodeAgents, listOpenCodeMcp, listOpenCodeSkills, listOpenCodeTools, upsertOpenCodeAgent, upsertOpenCodeMcp, upsertOpenCodeSkill, upsertOpenCodeTool } from '../opencode-assets.js'
 import { redactSensitiveObject } from '../security.js'
+import { guardUnredactedExport } from '../unredacted-export-guard.js'
 
 const zOpenCodeConfigDir = z.string().min(1).max(4096).optional()
 const zOpenCodeToolBody = z.object({
@@ -108,6 +109,12 @@ export function opencodeRoutes(): RouteHandler[] {
       const limit = boundedIntegerQuery(url, 'limit', 100, 500)
       const gatewayOnly = !(url.searchParams.get('all') === 'true' || url.searchParams.get('gatewayOnly') === 'false')
       const raw = url.searchParams.get('raw') === 'true' || url.searchParams.get('unredacted') === 'true'
+      const limited = guardUnredactedExport(req, {
+        operation: 'opencode.sessions.unredacted',
+        target: 'opencode/sessions',
+        unredacted: raw,
+      })
+      if (limited) return limited
       const config = getConfig()
       const sessions = ((await client.session.list()).data as any[] || [])
         .filter(session => !gatewayOnly || String(session.title || '').startsWith('GW:'))
@@ -146,6 +153,12 @@ export function opencodeRoutes(): RouteHandler[] {
       const config = getConfig()
       const gatewayBaseUrl = gatewayLocalBaseUrl(config.httpPort, config.security.httpHost)
       const raw = url.searchParams.get('raw') === 'true' || url.searchParams.get('unredacted') === 'true' || url.searchParams.get('redact') === 'false'
+      const limited = guardUnredactedExport(req, {
+        operation: 'opencode.session.unredacted',
+        target: sessionId,
+        unredacted: raw,
+      })
+      if (limited) return limited
       let session: any
       try {
         session = (await client.session.get({ path: { id: sessionId } })).data
@@ -187,6 +200,12 @@ export function opencodeRoutes(): RouteHandler[] {
 
     if (req.method === 'GET' && url.pathname === '/opencode/mcp') {
       const raw = url.searchParams.get('redact') === 'false' || url.searchParams.get('raw') === 'true' || url.searchParams.get('unredacted') === 'true'
+      const limited = guardUnredactedExport(req, {
+        operation: 'opencode.mcp.unredacted',
+        target: 'opencode/mcp',
+        unredacted: raw,
+      })
+      if (limited) return limited
       const mcp = listOpenCodeMcp(url.searchParams.get('configDir') || undefined)
       return json({ mcp: raw ? mcp : redactSensitiveObject(mcp, getConfig()) })
     }

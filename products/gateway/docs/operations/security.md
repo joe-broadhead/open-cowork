@@ -100,14 +100,17 @@ The following surfaces are **operator high-sensitivity** and must never be expos
 | Redacted config / evidence export | Safe for authenticated read | — |
 | `GET /config?redact=false` | Denied without admin | Admin (+ local intent where required) |
 | Evidence/session export `unredacted=true` / `redact=false` | Denied without admin | Admin; some paths also require `localAdmin=true` |
+| OpenCode sessions/MCP `raw` / `unredacted` / `redact=false` | Denied without admin | Admin |
+| Run/events `raw` / `unredacted` | Denied without admin; runs also require `localAdmin=true` | Admin + local intent |
 | Channel diagnostic credential fields | Length-only fingerprints | Never return live secret material |
 
 **Operator rules:**
 
-1. Treat admin tokens as production secrets (mTLS/VPN/localhost only for admin paths when possible).
+1. Treat admin tokens as production secrets. Prefer **mTLS, VPN, or localhost-only** for any admin / unredacted path. Never front Gateway admin HTTP on a public ingress without authenticating infrastructure.
 2. Prefer redacted evidence bundles for sharing; unredacted export is for private ops review only.
-3. Audit events record unredacted export intent — review them in incident response.
-4. Never put Gateway admin HTTP on a public ingress without authenticating infrastructure in front.
+3. Audit events record unredacted export intent (`*.unredacted` operations) — review them in incident response.
+4. **Rate limit (JOE-952):** unredacted/raw export paths are limited per actor fingerprint to **10 requests / 60s** by default (`unredacted-export-guard.ts`). Exceeding the limit returns HTTP 429 and an audited `denied` event. Redacted reads are not counted.
+5. Never put Gateway admin HTTP on a public ingress without authenticating infrastructure in front.
 
 ## Multi-writer / HA limits (operator)
 
